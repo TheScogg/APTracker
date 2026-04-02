@@ -3227,8 +3227,8 @@ window.toggleCard = id => {
 async function ensureMasonicRuntime() {
   if (masonicRuntime) return masonicRuntime;
   const ReactMod = await import('https://esm.sh/react@18.3.1');
-  const ReactDOMClientMod = await import('https://esm.sh/react-dom@18.3.1/client');
-  const MasonicMod = await import('https://esm.sh/masonic@3.5.0');
+  const ReactDOMClientMod = await import('https://esm.sh/react-dom@18.3.1/client?deps=react@18.3.1');
+  const MasonicMod = await import('https://esm.sh/masonic@3.5.0?external=react,react-dom');
   masonicRuntime = {
     React: ReactMod,
     createRoot: ReactDOMClientMod.createRoot,
