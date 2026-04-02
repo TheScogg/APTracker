@@ -1390,7 +1390,15 @@ let mapMode = 'log'; // 'log' | 'hist'
 let issuePeriod = 'today';
 let unsubscribe = null;
 let issueLogLayoutMode = 'masonic'; // 'masonic' | 'grid'
-let issueLogRelayoutTimer = null;
+let issueLogLayoutRaf = null;
+let issueLogDeferredRelayoutTimer = null;
+let issueLogResizeObserver = null;
+const issueLogMasonicState = {
+  columnWidth: 0,
+  columnCount: 1,
+  gutter: 8,
+  positions: new Map()
+};
 
 const MAX_DIM = 1200;
 const JPEG_QUALITY = 0.82;
@@ -3185,7 +3193,8 @@ function renderIssues() {
     });
   });
 
-  applyIssueLogLayout();
+  scheduleIssueLogRelayout();
+  scheduleIssueLogRelayout(40);
 }
 
 // ── STATUS BOTTOM SHEET ──
@@ -3231,68 +3240,113 @@ function resetIssueLogLayoutStyles(list) {
     row.style.top = '';
     row.style.left = '';
     row.style.width = '';
+    row.style.transform = '';
   });
+  issueLogMasonicState.positions.clear();
+}
+
+function getIssueLogColumnCount(listWidth, minColumnWidth = 300, gutter = 8) {
+  return Math.max(1, Math.floor((listWidth + gutter) / (minColumnWidth + gutter)));
+}
+
+function placeIssueLogRows(rows, columnCount, columnWidth, gutter) {
+  const colHeights = Array(columnCount).fill(0);
+  issueLogMasonicState.positions.clear();
+
+  rows.forEach(row => {
+    let targetCol = 0;
+    for (let i = 1; i < columnCount; i++) {
+      if (colHeights[i] < colHeights[targetCol]) targetCol = i;
+    }
+
+    const x = targetCol * (columnWidth + gutter);
+    const y = colHeights[targetCol];
+    issueLogMasonicState.positions.set(row.dataset.id || '', { x, y });
+
+    row.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+    colHeights[targetCol] += row.offsetHeight + gutter;
+  });
+
+  return Math.max(0, Math.max(...colHeights) - gutter);
+}
+
+function observeIssueLogRows(rows) {
+  if (!('ResizeObserver' in window)) return;
+  if (!issueLogResizeObserver) {
+    issueLogResizeObserver = new ResizeObserver(() => {
+      scheduleIssueLogRelayout(0);
+    });
+  }
+
+  issueLogResizeObserver.disconnect();
+  rows.forEach(row => issueLogResizeObserver.observe(row));
 }
 
 function applyIssueLogLayout() {
   const list = document.getElementById('issues-list');
   if (!list) return;
+
+  const rows = [...list.querySelectorAll(':scope > .issue-row')];
+  if (!rows.length) {
+    list.classList.remove('masonic-enabled');
+    list.style.height = '';
+    if (issueLogResizeObserver) issueLogResizeObserver.disconnect();
+    return;
+  }
+
   if (issueLogLayoutMode !== 'masonic' || window.innerWidth <= 480) {
     list.classList.remove('masonic-enabled');
+    if (issueLogResizeObserver) issueLogResizeObserver.disconnect();
     resetIssueLogLayoutStyles(list);
     return;
   }
 
-  const rows = [...list.querySelectorAll(':scope > .issue-row')];
-  if (!rows.length) {
-    list.style.height = '';
-    return;
-  }
-
-  const GUTTER = 8;
-  const MIN_COL_WIDTH = 300;
+  const gutter = issueLogMasonicState.gutter;
   const listWidth = list.clientWidth;
   if (!listWidth) return;
 
-  const colCount = Math.max(1, Math.floor((listWidth + GUTTER) / (MIN_COL_WIDTH + GUTTER)));
-  const colWidth = (listWidth - (GUTTER * (colCount - 1))) / colCount;
-  const colHeights = new Array(colCount).fill(0);
+  const columnCount = getIssueLogColumnCount(listWidth, 300, gutter);
+  const columnWidth = (listWidth - (gutter * (columnCount - 1))) / columnCount;
+
+  issueLogMasonicState.columnCount = columnCount;
+  issueLogMasonicState.columnWidth = columnWidth;
 
   list.classList.add('masonic-enabled');
 
   rows.forEach(row => {
     row.style.position = 'absolute';
-    row.style.width = `${colWidth}px`;
+    row.style.width = `${columnWidth}px`;
     row.style.top = '0px';
     row.style.left = '0px';
   });
 
-  rows.forEach(row => {
-    let targetCol = 0;
-    for (let i = 1; i < colCount; i++) {
-      if (colHeights[i] < colHeights[targetCol]) targetCol = i;
-    }
-    const x = targetCol * (colWidth + GUTTER);
-    const y = colHeights[targetCol];
-    row.style.left = `${x}px`;
-    row.style.top = `${y}px`;
-    colHeights[targetCol] += row.offsetHeight + GUTTER;
-  });
-
-  const maxHeight = Math.max(...colHeights) - GUTTER;
-  list.style.height = `${Math.max(0, maxHeight)}px`;
+  const maxHeight = placeIssueLogRows(rows, columnCount, columnWidth, gutter);
+  list.style.height = `${maxHeight}px`;
+  observeIssueLogRows(rows);
 }
 
-function scheduleIssueLogRelayout(delay = 180) {
+function scheduleIssueLogRelayout(delay = 0) {
   if (issueLogLayoutMode !== 'masonic') return;
-  clearTimeout(issueLogRelayoutTimer);
-  issueLogRelayoutTimer = setTimeout(() => {
-    applyIssueLogLayout();
-  }, delay);
+
+  if (issueLogDeferredRelayoutTimer) {
+    clearTimeout(issueLogDeferredRelayoutTimer);
+    issueLogDeferredRelayoutTimer = null;
+  }
+
+  const run = () => {
+    if (issueLogLayoutRaf) cancelAnimationFrame(issueLogLayoutRaf);
+    issueLogLayoutRaf = requestAnimationFrame(() => {
+      issueLogLayoutRaf = null;
+      applyIssueLogLayout();
+    });
+  };
+
+  if (delay > 0) issueLogDeferredRelayoutTimer = setTimeout(run, delay);
+  else run();
 }
 
 window.addEventListener('resize', () => {
-  scheduleIssueLogRelayout(60);
+  scheduleIssueLogRelayout(50);
 });
 
 function currentStatusKey(issue) {
