@@ -303,6 +303,9 @@
     gap: 8px;
     grid-auto-flow: dense; /* Automatically fills gaps */
   }
+  .issues-list.masonic-enabled {
+    display: block;
+  }
   
   @media (max-width: 480px) {
     .issues-list {
@@ -1385,6 +1388,9 @@ let issueScope = 'all';
 let mapMode = 'log'; // 'log' | 'hist'
 let issuePeriod = 'today';
 let unsubscribe = null;
+let issueLogLayoutMode = 'masonic-react'; // 'masonic-react' | 'grid'
+let masonicRuntime = null; // { React, createRoot, Masonry }
+let masonicRoot = null;
 
 const MAX_DIM = 1200;
 const JPEG_QUALITY = 0.82;
@@ -2708,6 +2714,12 @@ function renderIssues() {
   const list=document.getElementById('issues-list');
   document.getElementById('issue-count').textContent=filtered.length+' issue'+(filtered.length!==1?'s':'');
 
+  if (masonicRoot) {
+    try { masonicRoot.unmount(); } catch(e) {}
+    masonicRoot = null;
+  }
+  list.classList.remove('masonic-enabled');
+
   if (filtered.length===0) {
     list.innerHTML='<div class="empty-state"><div class="empty-state-icon">📋</div><div class="empty-state-text">No issues match your filters.</div></div>';
     return;
@@ -2739,7 +2751,7 @@ function renderIssues() {
   filtered.forEach(issue => {
     const wasOpen=expanded.has(issue.id);
     const isMyIssue=issue.userId===currentUser?.uid;
-    const row=document.createElement('div'); row.className='issue-row';
+    const row=document.createElement('div'); row.className='issue-row'; row.dataset.id = issue.id;
     const card=document.createElement('div');
     card.className='issue-card'+(issue.resolved?' resolved':'');;
 
@@ -3167,7 +3179,7 @@ function renderIssues() {
     });
   });
 
-  // CSS Grid handles layout automatically - no JavaScript needed!
+  applyIssueLogLayout();
 }
 
 // ── STATUS BOTTOM SHEET ──
@@ -3205,8 +3217,82 @@ window.toggleCard = id => {
   // CSS Grid handles reflow automatically!
 };
 
-// ── MASONRY LAYOUT ──
-// CSS Grid handles all layout automatically - no JavaScript masonry needed!
+// ── MASONRY LAYOUT (React Masonic) ──
+async function ensureMasonicRuntime() {
+  if (masonicRuntime) return masonicRuntime;
+  const ReactMod = await import('https://esm.sh/react@18.3.1');
+  const ReactDOMClientMod = await import('https://esm.sh/react-dom@18.3.1/client');
+  const MasonicMod = await import('https://esm.sh/masonic@3.5.0');
+  masonicRuntime = {
+    React: ReactMod,
+    createRoot: ReactDOMClientMod.createRoot,
+    Masonry: MasonicMod.Masonry
+  };
+  return masonicRuntime;
+}
+
+async function applyIssueLogLayout() {
+  const list = document.getElementById('issues-list');
+  if (!list) return;
+  if (issueLogLayoutMode !== 'masonic-react' || window.innerWidth <= 480) {
+    if (masonicRoot) {
+      try { masonicRoot.unmount(); } catch(e) {}
+      masonicRoot = null;
+    }
+    list.classList.remove('masonic-enabled');
+    return;
+  }
+
+  // Do not attempt masonic render for empty/error states.
+  const rows = [...list.querySelectorAll(':scope > .issue-row')];
+  if (!rows.length) return;
+
+  try {
+    const { React, createRoot, Masonry } = await ensureMasonicRuntime();
+    const items = rows.map((node, idx) => ({ id: node.dataset.id || String(idx), node }));
+
+    let mount = document.getElementById('issues-list-masonic-root');
+    if (!mount) {
+      mount = document.createElement('div');
+      mount.id = 'issues-list-masonic-root';
+    }
+    list.innerHTML = '';
+    list.classList.add('masonic-enabled');
+    list.appendChild(mount);
+
+    if (masonicRoot) {
+      try { masonicRoot.unmount(); } catch(e) {}
+    }
+    masonicRoot = createRoot(mount);
+
+    const IssueRowCell = ({ data }) => React.createElement('div', {
+      ref: el => {
+        if (el && data?.node && data.node.parentNode !== el) {
+          el.innerHTML = '';
+          el.appendChild(data.node);
+        }
+      }
+    });
+
+    masonicRoot.render(React.createElement(Masonry, {
+      key: 'masonic-' + items.length,
+      items,
+      columnWidth: 300,
+      columnGutter: 12,
+      overscanBy: 2,
+      render: IssueRowCell
+    }));
+  } catch (e) {
+    // Graceful fallback to grid if CDN or module loading fails.
+    console.warn('Masonic layout unavailable, using grid fallback.', e);
+    issueLogLayoutMode = 'grid';
+    if (masonicRoot) {
+      try { masonicRoot.unmount(); } catch(err) {}
+      masonicRoot = null;
+    }
+    list.classList.remove('masonic-enabled');
+  }
+}
 
 function currentStatusKey(issue) {
   if (issue.statusHistory && issue.statusHistory.length > 0) {

@@ -147,3 +147,19 @@ Phase 2 intent preserved:
 - No Firestore schema/path changes.
 - No statusHistory model changes.
 - No feature removal; this is a rendering/selector hardening step.
+
+## 7) Masonic React plugin integration (issue log)
+
+Implemented in this update:
+- Added a progressive-enhancement layout path for the issue log using the React `masonic` plugin.
+- Added runtime loader `ensureMasonicRuntime()` (React + ReactDOM Client + masonic via ESM CDN imports).
+- Added `applyIssueLogLayout()` that:
+  - falls back to existing grid layout on mobile (`<=480px`) or runtime load failures,
+  - mounts masonic for desktop issue rows,
+  - preserves existing issue-card behavior by reusing already-rendered DOM rows and moving them into masonic cells.
+- Updated `renderIssues()` to reset any previous masonic root before redraw, then apply masonic layout after cards are rendered.
+- Added `.issues-list.masonic-enabled` CSS mode and `data-id` on each `.issue-row` for stable item identity.
+
+Behavioral safety:
+- Existing grid path remains as fallback.
+- Issue card interactions remain intact because original DOM nodes and listeners are reused.
