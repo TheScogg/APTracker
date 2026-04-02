@@ -1391,6 +1391,7 @@ let unsubscribe = null;
 let issueLogLayoutMode = 'masonic-react'; // 'masonic-react' | 'grid'
 let masonicRuntime = null; // { React, createRoot, Masonry }
 let masonicRoot = null;
+let issueLogRelayoutTimer = null;
 
 const MAX_DIM = 1200;
 const JPEG_QUALITY = 0.82;
@@ -2968,6 +2969,7 @@ function renderIssues() {
       catPanel.classList.add('visible');
       if (openSwipeRow && openSwipeRow.card !== card) closeSwipeCard(openSwipeRow.card);
       openSwipeRow = { card, catPanel, subPanel };
+      scheduleIssueLogRelayout();
     };
 
     const closeSwipeCard = (c) => {
@@ -2979,6 +2981,7 @@ function renderIssues() {
       sp.classList.remove('visible');
       cp.querySelectorAll('.swipe-status-tile').forEach(t => t.classList.remove('selected'));
       if (openSwipeRow?.card === c) openSwipeRow = null;
+      scheduleIssueLogRelayout();
     };
 
     // Cancel button click
@@ -3038,6 +3041,7 @@ function renderIssues() {
           });
 
           subPanel.classList.add('visible');
+          scheduleIssueLogRelayout();
         } else {
           // Apply immediately (no subs)
           closeSwipeCard(card);
@@ -3207,6 +3211,7 @@ function closeSwipe() {
   subPanel.classList.remove('visible');
   catPanel.querySelectorAll('.swipe-status-tile').forEach(t => t.classList.remove('selected'));
   openSwipeRow = null;
+  scheduleIssueLogRelayout();
 }
 
 document.addEventListener('click', e => {
@@ -3220,7 +3225,7 @@ window.toggleCard = id => {
   if (openSwipeRow) return;
   document.getElementById('body-'+id)?.classList.toggle('visible');
   document.getElementById('chevron-'+id)?.classList.toggle('open');
-  // CSS Grid handles reflow automatically!
+  scheduleIssueLogRelayout();
 };
 
 // ── MASONRY LAYOUT (React Masonic) ──
@@ -3284,7 +3289,8 @@ async function applyIssueLogLayout() {
       key: 'masonic-' + items.length,
       items,
       columnWidth: 300,
-      columnGutter: 12,
+      columnGutter: 8,
+      rowGutter: 8,
       overscanBy: 2,
       render: IssueRowCell
     }));
@@ -3298,6 +3304,14 @@ async function applyIssueLogLayout() {
     }
     list.classList.remove('masonic-enabled');
   }
+}
+
+function scheduleIssueLogRelayout(delay = 180) {
+  if (issueLogLayoutMode !== 'masonic-react') return;
+  clearTimeout(issueLogRelayoutTimer);
+  issueLogRelayoutTimer = setTimeout(() => {
+    applyIssueLogLayout();
+  }, delay);
 }
 
 function currentStatusKey(issue) {
