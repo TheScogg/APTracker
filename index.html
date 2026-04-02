@@ -303,6 +303,9 @@
     gap: 8px;
     grid-auto-flow: dense; /* Automatically fills gaps */
   }
+  .issues-list.masonic-enabled {
+    display: block;
+  }
   
   @media (max-width: 480px) {
     .issues-list {
@@ -1056,6 +1059,19 @@ let ALL_MACHINES = Object.values(PRESSES).flat();
 function plantCol(colName) { return collection(db, 'plants', currentPlantId, colName); }
 function plantDoc(colName, docId) { return doc(db, 'plants', currentPlantId, colName, docId); }
 
+// ── APP LIFECYCLE HELPERS (Phase 1: structure-only refactor) ──
+function refreshVisibleData() {
+  renderIssues();
+  updatePressStates();
+  updateStats();
+}
+
+async function hydrateCurrentPlantView() {
+  await loadPlantPresses();
+  buildFloorMap();
+  await loadConfig();
+}
+
 // Load user's plant list
 async function loadUserPlants() {
   try {
@@ -1120,11 +1136,9 @@ async function switchPlant(plantId) {
   closePlantDropdown();
   issues = [];
   setSyncStatus('', 'Switching plant…');
-  await loadPlantPresses();
-  buildFloorMap();
-  await loadConfig();
+  await hydrateCurrentPlantView();
   startListener();
-  renderIssues(); updatePressStates(); updateStats();
+  refreshVisibleData();
 }
 
 // Add a new plant
@@ -1205,6 +1219,39 @@ let STATUSES = {
 // ALL_STATUSES is now managed via rebuildDerivedStatus() — access as ALL_STATUSES
 // ── CONFIG LOAD / SAVE ──
 
+const STATUS_FALLBACK = {
+  label: 'Unknown',
+  shortLabel: 'Unknown',
+  statLabel: 'Unknown',
+  icon: '❔',
+  cssColor: '#6b7280',
+  swipeColor: '#6b7280',
+  color: '#6b7280',
+  subs: [],
+  order: 999
+};
+
+function getStatusDef(statusKey) {
+  return STATUSES[statusKey] || STATUS_FALLBACK;
+}
+
+function getStatusColor(statusKey) {
+  const st = getStatusDef(statusKey);
+  return st.swipeColor || st.cssColor || st.color || STATUS_FALLBACK.swipeColor;
+}
+
+function getStatusLabel(statusKey, mode = 'label') {
+  const st = getStatusDef(statusKey);
+  if (mode === 'short') return st.shortLabel || st.label || STATUS_FALLBACK.shortLabel;
+  if (mode === 'stat') return st.statLabel || st.shortLabel || st.label || STATUS_FALLBACK.statLabel;
+  return st.label || STATUS_FALLBACK.label;
+}
+
+function getStatusSubs(statusKey) {
+  const st = getStatusDef(statusKey);
+  return Array.isArray(st.subs) ? st.subs : [];
+}
+
 async function loadConfig() {
   try {
     const snap = await getDoc(plantDoc('config', 'statuses'));
@@ -1268,11 +1315,11 @@ function buildStatusFilterPills() {
     // Skip if it's already one of the defaults we manually added above
     if (key === 'open' || key === 'resolved') return;
 
-    const config = STATUSES[key];
+    const col = getStatusColor(key);
     html += `
       <div class="stat-pill" id="pill-${key}" onclick="toggleStatFilter('${key}')">
-        <div class="dot" style="background:${config.color}"></div>
-        <span id="stat-${key}">0 ${config.statLabel || config.label}</span>
+        <div class="dot" style="background:${col}"></div>
+        <span id="stat-${key}">0 ${getStatusLabel(key, 'stat')}</span>
       </div>
     `;
   });
@@ -1296,14 +1343,13 @@ function rebuildDerivedStatus() {
     pillsRow.querySelectorAll('.stat-pill.dynamic-pill').forEach(el => el.remove());
     const resolvedPill = document.getElementById('pill-resolved');
     window._ALL_STATUSES.forEach(k => {
-      const st = STATUSES[k];
-      if (!st) return;
-      const col = st.swipeColor || st.cssColor || st.color;
+      const st = getStatusDef(k);
+      const col = getStatusColor(k);
       const pill = document.createElement('div');
       pill.className = 'stat-pill dynamic-pill';
       pill.id = 'pill-' + k;
       pill.onclick = () => toggleStatFilter(k);
-      pill.innerHTML = `<div class="dot" style="background:${col}"></div><span id="stat-${k}">0 ${st.statLabel || st.shortLabel || st.label}</span>`;
+      pill.innerHTML = `<div class="dot" style="background:${col}"></div><span id="stat-${k}">0 ${getStatusLabel(k, 'stat')}</span>`;
       // Insert before resolved pill
       if (resolvedPill) pillsRow.insertBefore(pill, resolvedPill);
       else pillsRow.appendChild(pill);
@@ -1318,11 +1364,9 @@ function rebuildDerivedStatus() {
     const curVal = sf.value;
     sf.innerHTML = '<option value="">All Status</option>';
     window._STATUS_ORDER.forEach(k => {
-      const st = STATUSES[k];
-      if (!st) return;
       const opt = document.createElement('option');
       opt.value = k;
-      opt.textContent = st.label;
+      opt.textContent = getStatusLabel(k);
       sf.appendChild(opt);
     });
     sf.value = curVal;
@@ -1344,6 +1388,9 @@ let issueScope = 'all';
 let mapMode = 'log'; // 'log' | 'hist'
 let issuePeriod = 'today';
 let unsubscribe = null;
+let issueLogLayoutMode = 'masonic-react'; // 'masonic-react' | 'grid'
+let masonicRuntime = null; // { React, createRoot, Masonry }
+let masonicRoot = null;
 
 const MAX_DIM = 1200;
 const JPEG_QUALITY = 0.82;
@@ -1367,26 +1414,39 @@ async function doSignOut() {
   await fbSignOut(auth);
 }
 
+async function bootstrapSignedInSession(user) {
+  currentUser = user;
+  document.getElementById('login-screen').classList.remove('visible');
+  document.getElementById('app').classList.add('visible');
+
+  const name = user.displayName || user.email || 'User';
+  const firstName = user.displayName ? user.displayName.split(' ')[0] : user.email;
+  document.getElementById('user-name-display').textContent = firstName;
+  document.getElementById('dropdown-full-name').textContent = user.displayName || user.email || 'User';
+  document.getElementById('dropdown-email').textContent = user.email || '';
+
+  const fallback = document.getElementById('user-avatar-fallback');
+  if (user.photoURL) {
+    fallback.style.backgroundImage = 'url('+user.photoURL+')';
+    fallback.style.backgroundSize = 'cover';
+    fallback.textContent = '';
+  } else {
+    fallback.style.backgroundImage = '';
+    fallback.textContent = name.charAt(0).toUpperCase();
+  }
+
+  // Build once before plant load to ensure machine controls exist,
+  // then hydrate with plant-specific config and rebuild.
+  buildFloorMap();
+  await loadUserPlants();
+  await hydrateCurrentPlantView();
+  startListener();
+  setTodayDate();
+}
+
 onAuthStateChanged(auth, async user => {
   if (user) {
-    currentUser = user;
-    document.getElementById('login-screen').classList.remove('visible');
-    document.getElementById('app').classList.add('visible');
-    const name = user.displayName || user.email || 'User';
-    const firstName = user.displayName ? user.displayName.split(' ')[0] : user.email;
-    document.getElementById('user-name-display').textContent = firstName;
-    document.getElementById('dropdown-full-name').textContent = user.displayName || user.email || 'User';
-    document.getElementById('dropdown-email').textContent = user.email || '';
-    const fallback = document.getElementById('user-avatar-fallback');
-    if (user.photoURL) { fallback.style.backgroundImage = 'url('+user.photoURL+')'; fallback.style.backgroundSize = 'cover'; fallback.textContent = ''; }
-    else { fallback.style.backgroundImage = ''; fallback.textContent = name.charAt(0).toUpperCase(); }
-    buildFloorMap();
-    await loadUserPlants();
-    await loadPlantPresses();
-    buildFloorMap();
-    await loadConfig();
-    startListener();
-    setTodayDate();
+    await bootstrapSignedInSession(user);
   } else {
     currentUser = null;
     document.getElementById('login-screen').classList.add('visible');
@@ -1409,7 +1469,7 @@ function startListener() {
   unsubscribe = onSnapshot(q, snap => {
     retryCount = 0; // reset on success
     issues = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    renderIssues(); updatePressStates(); updateStats();
+    refreshVisibleData();
     setSyncStatus('ok', 'Live — synced across all devices');
   }, err => {
     console.error('Snapshot error:', err);
@@ -1582,8 +1642,8 @@ window.handlePressClick = p => {
     top.appendChild(statusPill);
   } else if (openIssues.length === 1) {
     const sk = currentStatusKey(openIssues[0]);
-    const st = STATUSES[sk] || STATUSES.open;
-    const col = st.swipeColor || st.cssColor || st.color;
+    const st = getStatusDef(sk);
+    const col = getStatusColor(sk);
     const statusPill = document.createElement('span');
     statusPill.className = 'mc-status-pill';
     statusPill.style.cssText = 'color:'+col+';border-color:'+col+'66;background:'+col+'18;';
@@ -1604,8 +1664,8 @@ window.handlePressClick = p => {
     issuesList.className = 'mc-issues-list';
     openIssues.forEach(issue => {
       const sk = currentStatusKey(issue);
-      const st = STATUSES[sk] || STATUSES.open;
-      const col = st.swipeColor || st.cssColor || st.color;
+      const st = getStatusDef(sk);
+      const col = getStatusColor(sk);
       const item = document.createElement('div');
       item.className = 'mc-issue-item';
       item.onclick = () => { closeMiniCard(); scrollToIssue(issue.id); };
@@ -1818,7 +1878,7 @@ function renderRowPanels() {
   let scoped = issueScope==='mine' ? issues.filter(i=>i.userId===currentUser?.uid) : issues;
   scoped = scoped.filter(periodFilter);
 
-  const STATUS_PILL_LABELS = Object.fromEntries(Object.entries(STATUSES).map(([k,v])=>[k,v.icon+' '+v.shortLabel]));
+  const STATUS_PILL_LABELS = Object.fromEntries(Object.keys(STATUSES).map(k => [k, getStatusDef(k).icon + ' ' + getStatusLabel(k, 'short')]));
   const ORDER = window._STATUS_ORDER.filter(k=>k!=='resolved');
 
   const sortedPanelRowNames = Object.keys(PRESSES).sort((a, b) => {
@@ -1855,8 +1915,8 @@ function renderRowPanels() {
       if (!counts[sk]) return;
       const pill = document.createElement('span');
       pill.className = 'row-spill' + (expandedPill.row === rowName && expandedPill.status === sk ? ' active' : '');
-      const st = STATUSES[sk];
-      const col = st.swipeColor || st.cssColor || st.color;
+      const st = getStatusDef(sk);
+      const col = getStatusColor(sk);
       pill.style.color = col;
       pill.style.borderColor = col + '80';
       pill.style.background = col + '1e';
@@ -1971,12 +2031,7 @@ function renderRowPanels() {
       const statusColors = [];
       anyOpen.forEach(i => {
         const sk = currentStatusKey(i);
-        const st = STATUSES[sk];
-        if (st) {
-          statusColors.push(st.swipeColor || st.cssColor || st.color);
-        } else {
-          statusColors.push(STATUSES.open?.swipeColor || '#ef4444');
-        }
+        statusColors.push(getStatusColor(sk));
       });
 
       // Bar container
@@ -2006,8 +2061,7 @@ function renderRowPanels() {
         btn.classList.add('has-multi');
       } else if (statusColors.length === 1) {
         const sk = currentStatusKey(anyOpen[0]);
-        const st = STATUSES[sk];
-        const col = st?.swipeColor || st?.cssColor || st?.color || '#ef4444';
+        const col = getStatusColor(sk);
         btn.style.borderColor = col;
         btn.style.color = col;
       } else if (anyResolved.length > 0 && showResolvedRows.has(rowName)) {
@@ -2083,14 +2137,15 @@ function renderLogCatButtons() {
   // Use STATUS_ORDER for consistent ordering
   const ordered = window._STATUS_ORDER ? window._STATUS_ORDER : Object.keys(STATUSES);
   ordered.forEach(key => {
-    const st = STATUSES[key]; if (!st) return;
+    const st = getStatusDef(key);
     const btn = document.createElement('button'); btn.className = 'log-cat-btn'; btn.dataset.key = key;
-    btn.style.color = st.cssColor || st.swipeColor || st.color;
+    const col = getStatusColor(key);
+    btn.style.color = col;
     if (logCatKey === key) {
       btn.classList.add('selected');
-      btn.style.background = (st.cssColor||st.swipeColor||st.color)+'22';
+      btn.style.background = col+'22';
     }
-    btn.innerHTML = `<span class="log-cat-icon">${st.icon}</span><span class="log-cat-label">${st.shortLabel||st.label}</span>`;
+    btn.innerHTML = `<span class="log-cat-icon">${st.icon}</span><span class="log-cat-label">${getStatusLabel(key, 'short')}</span>`;
     addTapListener(btn, ()=>logCatSelectStatus(key));
     row.appendChild(btn);
   });
@@ -2099,15 +2154,15 @@ function renderLogCatButtons() {
 function renderLogSubChips() {
   const row = document.getElementById('log-sub-row'); if (!row) return;
   row.innerHTML = '';
-  if (!logCatKey || !STATUSES[logCatKey]?.subs?.length) { row.classList.remove('visible'); return; }
+  if (!logCatKey || !getStatusSubs(logCatKey).length) { row.classList.remove('visible'); return; }
   row.classList.add('visible');
-  const st = STATUSES[logCatKey];
+  const st = getStatusDef(logCatKey);
   const skip = document.createElement('div'); skip.className = 'log-sub-chip skip'; skip.textContent = 'Skip ›';
   addTapListener(skip, ()=>{logCatSub=null;renderLogSubChips();updateLogCatPill();});
   row.appendChild(skip);
-  (st.subs||[]).forEach(sub => {
+  getStatusSubs(logCatKey).forEach(sub => {
     const chip = document.createElement('div'); chip.className = 'log-sub-chip'+(logCatSub===sub?' selected':'');
-    const col = st.cssColor||st.swipeColor||st.color;
+    const col = getStatusColor(logCatKey);
     chip.style.color=col; chip.style.borderColor=col+'55';
     chip.style.background = logCatSub===sub ? col+'28' : col+'12';
     chip.textContent = sub;
@@ -2121,10 +2176,10 @@ function updateLogCatPill() {
   const pill = document.getElementById('log-cat-pill');
   if (!sel||!pill) return;
   if (!logCatKey) { sel.classList.remove('visible'); return; }
-  const st = STATUSES[logCatKey];
-  const col = st.cssColor||st.swipeColor||st.color;
+  const st = getStatusDef(logCatKey);
+  const col = getStatusColor(logCatKey);
   sel.classList.add('visible');
-  pill.textContent = st.icon+' '+(st.shortLabel||st.label)+(logCatSub?' › '+logCatSub:'');
+  pill.textContent = st.icon+' '+getStatusLabel(logCatKey, 'short')+(logCatSub?' › '+logCatSub:'');
   pill.style.color=col; pill.style.borderColor=col+'88'; pill.style.background=col+'15';
 }
 
@@ -2458,7 +2513,7 @@ window.startEditEntry = (id, idx) => {
 function updateEditStatusSubOptions() {
   const statusSelect = document.getElementById('edit-status-select');
   const selectedStatus = statusSelect.value;
-  const subs = STATUSES[selectedStatus]?.subs || [];
+  const subs = getStatusSubs(selectedStatus);
   const subWrap = document.getElementById('edit-status-sub-wrap');
   
   if (subs.length > 0) {
@@ -2659,6 +2714,12 @@ function renderIssues() {
   const list=document.getElementById('issues-list');
   document.getElementById('issue-count').textContent=filtered.length+' issue'+(filtered.length!==1?'s':'');
 
+  if (masonicRoot) {
+    try { masonicRoot.unmount(); } catch(e) {}
+    masonicRoot = null;
+  }
+  list.classList.remove('masonic-enabled');
+
   if (filtered.length===0) {
     list.innerHTML='<div class="empty-state"><div class="empty-state-icon">📋</div><div class="empty-state-text">No issues match your filters.</div></div>';
     return;
@@ -2690,7 +2751,7 @@ function renderIssues() {
   filtered.forEach(issue => {
     const wasOpen=expanded.has(issue.id);
     const isMyIssue=issue.userId===currentUser?.uid;
-    const row=document.createElement('div'); row.className='issue-row';
+    const row=document.createElement('div'); row.className='issue-row'; row.dataset.id = issue.id;
     const card=document.createElement('div');
     card.className='issue-card'+(issue.resolved?' resolved':'');;
 
@@ -2856,7 +2917,7 @@ function renderIssues() {
     teaser.className = 'swipe-teaser';
     // Build gradient from first few status colors
     const statusOrder = window._STATUS_ORDER || Object.keys(STATUSES);
-    const colors = statusOrder.slice(0, 5).map(k => STATUSES[k]?.swipeColor || STATUSES[k]?.cssColor || '#888').join(', ');
+    const colors = statusOrder.slice(0, 5).map(k => getStatusColor(k)).join(', ');
     teaser.style.background = `linear-gradient(to bottom, ${colors})`;
     card.appendChild(teaser);
 
@@ -2868,13 +2929,12 @@ function renderIssues() {
 
     // Build status tiles for ALL statuses (including open/resolved)
     statusOrder.forEach(key => {
-      const st = STATUSES[key];
-      if (!st) return;
+      const st = getStatusDef(key);
       const tile = document.createElement('div');
       tile.className = 'swipe-status-tile' + (currentStatusKey(issue) === key ? ' current' : '');
-      tile.style.color = st.swipeColor || st.cssColor || st.color;
+      tile.style.color = getStatusColor(key);
       tile.dataset.status = key;
-      tile.innerHTML = `<span class="swipe-tile-icon">${st.icon}</span><span class="swipe-tile-label">${st.shortLabel || st.label}</span>`;
+      tile.innerHTML = `<span class="swipe-tile-icon">${st.icon}</span><span class="swipe-tile-label">${getStatusLabel(key, 'short')}</span>`;
       catInner.appendChild(tile);
     });
 
@@ -2924,12 +2984,12 @@ function renderIssues() {
     catInner.querySelectorAll('.swipe-status-tile').forEach(tile => {
       const handleTileClick = () => {
         const statusKey = tile.dataset.status;
-        const statusDef = STATUSES[statusKey];
+        const statusDef = getStatusDef(statusKey);
 
         // Clear previous selection
         catInner.querySelectorAll('.swipe-status-tile').forEach(t => t.classList.remove('selected'));
 
-        if (statusDef.subs && statusDef.subs.length > 0) {
+        if (getStatusSubs(statusKey).length > 0) {
           // Show sub panel
           tile.classList.add('selected');
           catPanel.classList.add('has-subs');
@@ -2945,10 +3005,10 @@ function renderIssues() {
           subInner.appendChild(skipChip);
 
           // Sub chips
-          statusDef.subs.forEach(sub => {
+          getStatusSubs(statusKey).forEach(sub => {
             const chip = document.createElement('div');
             chip.className = 'swipe-sub-chip';
-            const col = statusDef.swipeColor || statusDef.cssColor || statusDef.color;
+            const col = getStatusColor(statusKey);
             chip.style.cssText = `background:${col}18;color:${col};border-color:${col}`;
             chip.textContent = sub;
             chip.dataset.sub = sub;
@@ -3119,7 +3179,7 @@ function renderIssues() {
     });
   });
 
-  // CSS Grid handles layout automatically - no JavaScript needed!
+  applyIssueLogLayout();
 }
 
 // ── STATUS BOTTOM SHEET ──
@@ -3157,8 +3217,82 @@ window.toggleCard = id => {
   // CSS Grid handles reflow automatically!
 };
 
-// ── MASONRY LAYOUT ──
-// CSS Grid handles all layout automatically - no JavaScript masonry needed!
+// ── MASONRY LAYOUT (React Masonic) ──
+async function ensureMasonicRuntime() {
+  if (masonicRuntime) return masonicRuntime;
+  const ReactMod = await import('https://esm.sh/react@18.3.1');
+  const ReactDOMClientMod = await import('https://esm.sh/react-dom@18.3.1/client');
+  const MasonicMod = await import('https://esm.sh/masonic@3.5.0');
+  masonicRuntime = {
+    React: ReactMod,
+    createRoot: ReactDOMClientMod.createRoot,
+    Masonry: MasonicMod.Masonry
+  };
+  return masonicRuntime;
+}
+
+async function applyIssueLogLayout() {
+  const list = document.getElementById('issues-list');
+  if (!list) return;
+  if (issueLogLayoutMode !== 'masonic-react' || window.innerWidth <= 480) {
+    if (masonicRoot) {
+      try { masonicRoot.unmount(); } catch(e) {}
+      masonicRoot = null;
+    }
+    list.classList.remove('masonic-enabled');
+    return;
+  }
+
+  // Do not attempt masonic render for empty/error states.
+  const rows = [...list.querySelectorAll(':scope > .issue-row')];
+  if (!rows.length) return;
+
+  try {
+    const { React, createRoot, Masonry } = await ensureMasonicRuntime();
+    const items = rows.map((node, idx) => ({ id: node.dataset.id || String(idx), node }));
+
+    let mount = document.getElementById('issues-list-masonic-root');
+    if (!mount) {
+      mount = document.createElement('div');
+      mount.id = 'issues-list-masonic-root';
+    }
+    list.innerHTML = '';
+    list.classList.add('masonic-enabled');
+    list.appendChild(mount);
+
+    if (masonicRoot) {
+      try { masonicRoot.unmount(); } catch(e) {}
+    }
+    masonicRoot = createRoot(mount);
+
+    const IssueRowCell = ({ data }) => React.createElement('div', {
+      ref: el => {
+        if (el && data?.node && data.node.parentNode !== el) {
+          el.innerHTML = '';
+          el.appendChild(data.node);
+        }
+      }
+    });
+
+    masonicRoot.render(React.createElement(Masonry, {
+      key: 'masonic-' + items.length,
+      items,
+      columnWidth: 300,
+      columnGutter: 12,
+      overscanBy: 2,
+      render: IssueRowCell
+    }));
+  } catch (e) {
+    // Graceful fallback to grid if CDN or module loading fails.
+    console.warn('Masonic layout unavailable, using grid fallback.', e);
+    issueLogLayoutMode = 'grid';
+    if (masonicRoot) {
+      try { masonicRoot.unmount(); } catch(err) {}
+      masonicRoot = null;
+    }
+    list.classList.remove('masonic-enabled');
+  }
+}
 
 function currentStatusKey(issue) {
   if (issue.statusHistory && issue.statusHistory.length > 0) {
@@ -3178,7 +3312,7 @@ function updateStats() {
       const el = document.getElementById('stat-' + key);
       if (el) {
         const count = scoped.filter(i => currentStatusKey(i) === key).length;
-        el.textContent = `${count} ${STATUSES[key].statLabel || STATUSES[key].label}`;
+        el.textContent = `${count} ${getStatusLabel(key, 'stat')}`;
       }
     });
 }
@@ -3377,8 +3511,8 @@ window.openSerialModal = (issueId, status, sub, dt) => {
   _serialPending = { issueId, status, sub, dateTime: dt || null };
   const issue = issues.find(i => i.id === issueId);
   document.getElementById('serial-modal-machine').textContent = issue ? issue.machine : '';
-  const st = STATUSES[status];
-  document.getElementById('serial-modal-status').textContent = (st ? st.icon + ' ' + st.label : status) + (sub ? ' › ' + sub : '');
+  const st = getStatusDef(status);
+  document.getElementById('serial-modal-status').textContent = st.icon + ' ' + getStatusLabel(status) + (sub ? ' › ' + sub : '');
   document.getElementById('serial-input').value = '';
   document.getElementById('serial-error').style.display = 'none';
   document.getElementById('serial-input').style.borderColor = '';
@@ -3847,4 +3981,3 @@ document.getElementById('admin-save-btn')?.addEventListener('click', saveAdminCo
 
 </body>
 </html>
-
