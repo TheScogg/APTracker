@@ -2670,7 +2670,13 @@ function renderIssues() {
     if (issueRowScope === 'active' && activeRows.size > 0 && !activeRowMachines.has(i.machine)) return false;
     if (mf && i.machine!==mf) return false;
     if (sf && currentStatusKey(i) !== sf) return false;
-    if (search && !i.machine.toLowerCase().includes(search) && !i.note.toLowerCase().includes(search) && !(i.resolveNote||'').toLowerCase().includes(search) && !(i.userName||'').toLowerCase().includes(search)) return false;
+    if (search) {
+      const machineText = String(i.machine || '').toLowerCase();
+      const noteText = String(i.note || '').toLowerCase();
+      const resolveText = String(i.resolveNote || '').toLowerCase();
+      const userText = String(i.userName || '').toLowerCase();
+      if (!machineText.includes(search) && !noteText.includes(search) && !resolveText.includes(search) && !userText.includes(search)) return false;
+    }
     return true;
   });
 
@@ -3561,7 +3567,13 @@ window.openExportModal = () => {
     if (issueRowScope === 'active' && activeRows.size > 0 && !activeRowMachines.has(i.machine)) return false;
     if (mf && i.machine !== mf) return false;
     if (sf && currentStatusKey(i) !== sf) return false;
-    if (search && !i.machine.toLowerCase().includes(search) && !i.note.toLowerCase().includes(search) && !(i.resolveNote||'').toLowerCase().includes(search) && !(i.userName||'').toLowerCase().includes(search)) return false;
+    if (search) {
+      const machineText = String(i.machine || '').toLowerCase();
+      const noteText = String(i.note || '').toLowerCase();
+      const resolveText = String(i.resolveNote || '').toLowerCase();
+      const userText = String(i.userName || '').toLowerCase();
+      if (!machineText.includes(search) && !noteText.includes(search) && !resolveText.includes(search) && !userText.includes(search)) return false;
+    }
     return true;
   });
 
