@@ -163,3 +163,8 @@ Implemented in this update:
 Behavioral safety:
 - Existing grid path remains as fallback.
 - Issue card interactions remain intact because original DOM nodes and listeners are reused.
+
+## 8) PR sync note (2026-04-02)
+
+- Confirmed the branch is ready for review with no additional functional deltas required for this handoff.
+- This note exists solely to capture the latest-code PR synchronization event.
