@@ -132,6 +132,8 @@
       <div class="controls">
         <input id="pdfInput" type="file" accept="application/pdf" />
         <button id="parseBtn" class="primary" disabled>Parse PDF</button>
+        <input id="imageInput" type="file" accept="image/*" capture="environment" />
+        <button id="ocrBtn" class="primary" disabled>Scan Image (OCR)</button>
         <button id="downloadBtn" disabled>Download JSON</button>
         <button id="copyBtn" disabled>Copy JSON</button>
       </div>
@@ -173,6 +175,8 @@
 
     const pdfInput = document.getElementById('pdfInput');
     const parseBtn = document.getElementById('parseBtn');
+    const imageInput = document.getElementById('imageInput');
+    const ocrBtn = document.getElementById('ocrBtn');
     const downloadBtn = document.getElementById('downloadBtn');
     const copyBtn = document.getElementById('copyBtn');
     const statusEl = document.getElementById('status');
@@ -182,13 +186,23 @@
     let parsedRows = [];
 
     pdfInput.addEventListener('change', () => {
-      parseBtn.disabled = !pdfInput.files?.length;
+      updateActionState();
+      statusEl.textContent = '';
+    });
+    imageInput.addEventListener('change', () => {
+      updateActionState();
       statusEl.textContent = '';
     });
 
     parseBtn.addEventListener('click', parsePdf);
+    ocrBtn.addEventListener('click', scanImageWithOcr);
     downloadBtn.addEventListener('click', downloadJson);
     copyBtn.addEventListener('click', copyJson);
+
+    function updateActionState() {
+      parseBtn.disabled = !pdfInput.files?.length;
+      ocrBtn.disabled = !imageInput.files?.length;
+    }
 
     function setStatus(message, isError = false) {
       statusEl.textContent = message;
@@ -203,6 +217,7 @@
       }
 
       parseBtn.disabled = true;
+      ocrBtn.disabled = true;
       downloadBtn.disabled = true;
       copyBtn.disabled = true;
       setStatus('Reading PDF…');
@@ -230,7 +245,50 @@
         console.error(error);
         setStatus('Could not parse this PDF. Try another schedule format.', true);
       } finally {
-        parseBtn.disabled = false;
+        updateActionState();
+      }
+    }
+
+    async function scanImageWithOcr() {
+      const file = imageInput.files?.[0];
+      if (!file) {
+        setStatus('Choose an image first.', true);
+        return;
+      }
+
+      parseBtn.disabled = true;
+      ocrBtn.disabled = true;
+      downloadBtn.disabled = true;
+      copyBtn.disabled = true;
+      setStatus('Running OCR on image…');
+
+      let worker;
+      try {
+        const { createWorker } = await import('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.esm.min.js');
+        worker = await createWorker('eng');
+        const {
+          data: { text }
+        } = await worker.recognize(file);
+
+        const lines = text
+          .split(/\r?\n/)
+          .map((line) => line.replace(/\s+/g, ' ').trim())
+          .filter(Boolean);
+
+        parsedRows = parseScheduleLines(lines);
+        renderResults(parsedRows);
+        jsonOutput.value = JSON.stringify(parsedRows, null, 2);
+
+        const found = parsedRows.length;
+        setStatus(`OCR complete. Parsed ${found} row${found === 1 ? '' : 's'}.`);
+        downloadBtn.disabled = found === 0;
+        copyBtn.disabled = found === 0;
+      } catch (error) {
+        console.error(error);
+        setStatus('OCR failed. Try a clearer image or parse the PDF directly.', true);
+      } finally {
+        if (worker) await worker.terminate();
+        updateActionState();
       }
     }
 
