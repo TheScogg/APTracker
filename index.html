@@ -296,24 +296,23 @@
   .sort-opt.active { color: var(--accent); }
   .sort-opt-check { width: 14px; font-size: 11px; flex-shrink: 0; text-align: center; }
   
-  /* CSS Grid layout - replaces JavaScript masonry */
+  /* CSS masonry fallback (no row gaps when card heights change) */
   .issues-list {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 8px;
-    grid-auto-flow: dense; /* Automatically fills gaps */
+    column-width: 300px;
+    column-gap: 8px;
   }
   .issues-list.masonic-enabled {
     display: block;
+    column-width: auto;
   }
   
   @media (max-width: 480px) {
     .issues-list {
-      grid-template-columns: 1fr; /* Single column on mobile */
+      column-count: 1;
     }
   }
 
-  .issue-row { display: flex; flex-direction: column; min-width: 0; }
+  .issue-row { display: inline-flex; flex-direction: column; min-width: 0; width: 100%; margin-bottom: 8px; break-inside: avoid; }
   .issue-card { display: block; width: 100%; background: #171a21; border: 1px solid rgba(55,65,81,0.5); border-radius: 18px; overflow: visible; animation: slideIn 0.25s ease; user-select: none; position: relative; z-index: 1; touch-action: manipulation; transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94); box-shadow: 0 4px 24px rgba(0,0,0,0.3); }
   .issue-card input, .issue-card select, .issue-card textarea { user-select: text !important; touch-action: auto !important; -webkit-user-select: text !important; }
   .issue-card.dragging { transition: none; }
