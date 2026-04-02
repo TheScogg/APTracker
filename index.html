@@ -1056,6 +1056,19 @@ let ALL_MACHINES = Object.values(PRESSES).flat();
 function plantCol(colName) { return collection(db, 'plants', currentPlantId, colName); }
 function plantDoc(colName, docId) { return doc(db, 'plants', currentPlantId, colName, docId); }
 
+// ── APP LIFECYCLE HELPERS (Phase 1: structure-only refactor) ──
+function refreshVisibleData() {
+  renderIssues();
+  updatePressStates();
+  updateStats();
+}
+
+async function hydrateCurrentPlantView() {
+  await loadPlantPresses();
+  buildFloorMap();
+  await loadConfig();
+}
+
 // Load user's plant list
 async function loadUserPlants() {
   try {
@@ -1120,11 +1133,9 @@ async function switchPlant(plantId) {
   closePlantDropdown();
   issues = [];
   setSyncStatus('', 'Switching plant…');
-  await loadPlantPresses();
-  buildFloorMap();
-  await loadConfig();
+  await hydrateCurrentPlantView();
   startListener();
-  renderIssues(); updatePressStates(); updateStats();
+  refreshVisibleData();
 }
 
 // Add a new plant
@@ -1367,26 +1378,39 @@ async function doSignOut() {
   await fbSignOut(auth);
 }
 
+async function bootstrapSignedInSession(user) {
+  currentUser = user;
+  document.getElementById('login-screen').classList.remove('visible');
+  document.getElementById('app').classList.add('visible');
+
+  const name = user.displayName || user.email || 'User';
+  const firstName = user.displayName ? user.displayName.split(' ')[0] : user.email;
+  document.getElementById('user-name-display').textContent = firstName;
+  document.getElementById('dropdown-full-name').textContent = user.displayName || user.email || 'User';
+  document.getElementById('dropdown-email').textContent = user.email || '';
+
+  const fallback = document.getElementById('user-avatar-fallback');
+  if (user.photoURL) {
+    fallback.style.backgroundImage = 'url('+user.photoURL+')';
+    fallback.style.backgroundSize = 'cover';
+    fallback.textContent = '';
+  } else {
+    fallback.style.backgroundImage = '';
+    fallback.textContent = name.charAt(0).toUpperCase();
+  }
+
+  // Build once before plant load to ensure machine controls exist,
+  // then hydrate with plant-specific config and rebuild.
+  buildFloorMap();
+  await loadUserPlants();
+  await hydrateCurrentPlantView();
+  startListener();
+  setTodayDate();
+}
+
 onAuthStateChanged(auth, async user => {
   if (user) {
-    currentUser = user;
-    document.getElementById('login-screen').classList.remove('visible');
-    document.getElementById('app').classList.add('visible');
-    const name = user.displayName || user.email || 'User';
-    const firstName = user.displayName ? user.displayName.split(' ')[0] : user.email;
-    document.getElementById('user-name-display').textContent = firstName;
-    document.getElementById('dropdown-full-name').textContent = user.displayName || user.email || 'User';
-    document.getElementById('dropdown-email').textContent = user.email || '';
-    const fallback = document.getElementById('user-avatar-fallback');
-    if (user.photoURL) { fallback.style.backgroundImage = 'url('+user.photoURL+')'; fallback.style.backgroundSize = 'cover'; fallback.textContent = ''; }
-    else { fallback.style.backgroundImage = ''; fallback.textContent = name.charAt(0).toUpperCase(); }
-    buildFloorMap();
-    await loadUserPlants();
-    await loadPlantPresses();
-    buildFloorMap();
-    await loadConfig();
-    startListener();
-    setTodayDate();
+    await bootstrapSignedInSession(user);
   } else {
     currentUser = null;
     document.getElementById('login-screen').classList.add('visible');
@@ -1409,7 +1433,7 @@ function startListener() {
   unsubscribe = onSnapshot(q, snap => {
     retryCount = 0; // reset on success
     issues = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    renderIssues(); updatePressStates(); updateStats();
+    refreshVisibleData();
     setSyncStatus('ok', 'Live — synced across all devices');
   }, err => {
     console.error('Snapshot error:', err);
@@ -3847,4 +3871,3 @@ document.getElementById('admin-save-btn')?.addEventListener('click', saveAdminCo
 
 </body>
 </html>
-
