@@ -305,6 +305,7 @@
   }
   .issues-list.masonic-enabled {
     display: block;
+    position: relative;
   }
   
   @media (max-width: 480px) {
@@ -1388,9 +1389,7 @@ let issueScope = 'all';
 let mapMode = 'log'; // 'log' | 'hist'
 let issuePeriod = 'today';
 let unsubscribe = null;
-let issueLogLayoutMode = 'grid'; // 'masonic-react' | 'grid'
-let masonicRuntime = null; // { React, createRoot, Masonry }
-let masonicRoot = null;
+let issueLogLayoutMode = 'masonic'; // 'masonic' | 'grid'
 let issueLogRelayoutTimer = null;
 
 const MAX_DIM = 1200;
@@ -2721,11 +2720,8 @@ function renderIssues() {
   const list=document.getElementById('issues-list');
   document.getElementById('issue-count').textContent=filtered.length+' issue'+(filtered.length!==1?'s':'');
 
-  if (masonicRoot) {
-    try { masonicRoot.unmount(); } catch(e) {}
-    masonicRoot = null;
-  }
   list.classList.remove('masonic-enabled');
+  list.style.height = '';
 
   if (filtered.length===0) {
     list.innerHTML='<div class="empty-state"><div class="empty-state-icon">📋</div><div class="empty-state-text">No issues match your filters.</div></div>';
@@ -3228,91 +3224,76 @@ window.toggleCard = id => {
   scheduleIssueLogRelayout();
 };
 
-// ── MASONRY LAYOUT (React Masonic) ──
-async function ensureMasonicRuntime() {
-  if (masonicRuntime) return masonicRuntime;
-  const ReactMod = await import('https://esm.sh/react@18.3.1');
-  const ReactDOMClientMod = await import('https://esm.sh/react-dom@18.3.1/client?deps=react@18.3.1');
-  const MasonicMod = await import('https://esm.sh/masonic@3.5.0?external=react,react-dom');
-  masonicRuntime = {
-    React: ReactMod,
-    createRoot: ReactDOMClientMod.createRoot,
-    Masonry: MasonicMod.Masonry
-  };
-  return masonicRuntime;
+function resetIssueLogLayoutStyles(list) {
+  list.style.height = '';
+  list.querySelectorAll(':scope > .issue-row').forEach(row => {
+    row.style.position = '';
+    row.style.top = '';
+    row.style.left = '';
+    row.style.width = '';
+  });
 }
 
-async function applyIssueLogLayout() {
+function applyIssueLogLayout() {
   const list = document.getElementById('issues-list');
   if (!list) return;
-  if (issueLogLayoutMode !== 'masonic-react' || window.innerWidth <= 480) {
-    if (masonicRoot) {
-      try { masonicRoot.unmount(); } catch(e) {}
-      masonicRoot = null;
-    }
+  if (issueLogLayoutMode !== 'masonic' || window.innerWidth <= 480) {
     list.classList.remove('masonic-enabled');
+    resetIssueLogLayoutStyles(list);
     return;
   }
 
-  // Do not attempt masonic render for empty/error states.
   const rows = [...list.querySelectorAll(':scope > .issue-row')];
-  if (!rows.length) return;
-
-  try {
-    const { React, createRoot, Masonry } = await ensureMasonicRuntime();
-    const items = rows.map((node, idx) => ({ id: node.dataset.id || String(idx), node }));
-
-    let mount = document.getElementById('issues-list-masonic-root');
-    if (!mount) {
-      mount = document.createElement('div');
-      mount.id = 'issues-list-masonic-root';
-    }
-    list.innerHTML = '';
-    list.classList.add('masonic-enabled');
-    list.appendChild(mount);
-
-    if (masonicRoot) {
-      try { masonicRoot.unmount(); } catch(e) {}
-    }
-    masonicRoot = createRoot(mount);
-
-    const IssueRowCell = ({ data }) => React.createElement('div', {
-      ref: el => {
-        if (el && data?.node && data.node.parentNode !== el) {
-          el.innerHTML = '';
-          el.appendChild(data.node);
-        }
-      }
-    });
-
-    masonicRoot.render(React.createElement(Masonry, {
-      key: 'masonic-' + items.length,
-      items,
-      columnWidth: 300,
-      columnGutter: 8,
-      rowGutter: 8,
-      overscanBy: 2,
-      render: IssueRowCell
-    }));
-  } catch (e) {
-    // Graceful fallback to grid if CDN or module loading fails.
-    console.warn('Masonic layout unavailable, using grid fallback.', e);
-    issueLogLayoutMode = 'grid';
-    if (masonicRoot) {
-      try { masonicRoot.unmount(); } catch(err) {}
-      masonicRoot = null;
-    }
-    list.classList.remove('masonic-enabled');
+  if (!rows.length) {
+    list.style.height = '';
+    return;
   }
+
+  const GUTTER = 8;
+  const MIN_COL_WIDTH = 300;
+  const listWidth = list.clientWidth;
+  if (!listWidth) return;
+
+  const colCount = Math.max(1, Math.floor((listWidth + GUTTER) / (MIN_COL_WIDTH + GUTTER)));
+  const colWidth = (listWidth - (GUTTER * (colCount - 1))) / colCount;
+  const colHeights = new Array(colCount).fill(0);
+
+  list.classList.add('masonic-enabled');
+
+  rows.forEach(row => {
+    row.style.position = 'absolute';
+    row.style.width = `${colWidth}px`;
+    row.style.top = '0px';
+    row.style.left = '0px';
+  });
+
+  rows.forEach(row => {
+    let targetCol = 0;
+    for (let i = 1; i < colCount; i++) {
+      if (colHeights[i] < colHeights[targetCol]) targetCol = i;
+    }
+    const x = targetCol * (colWidth + GUTTER);
+    const y = colHeights[targetCol];
+    row.style.left = `${x}px`;
+    row.style.top = `${y}px`;
+    colHeights[targetCol] += row.offsetHeight + GUTTER;
+  });
+
+  const maxHeight = Math.max(...colHeights) - GUTTER;
+  list.style.height = `${Math.max(0, maxHeight)}px`;
 }
 
 function scheduleIssueLogRelayout(delay = 180) {
-  if (issueLogLayoutMode !== 'masonic-react') return;
+  if (issueLogLayoutMode !== 'masonic') return;
   clearTimeout(issueLogRelayoutTimer);
   issueLogRelayoutTimer = setTimeout(() => {
     applyIssueLogLayout();
   }, delay);
 }
+
+window.addEventListener('resize', () => {
+  scheduleIssueLogRelayout(60);
+});
 
 function currentStatusKey(issue) {
   if (issue.statusHistory && issue.statusHistory.length > 0) {
