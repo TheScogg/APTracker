@@ -130,3 +130,20 @@ Not fully verified in this environment (manual browser-run needed):
 - Firestore realtime listener and retry display behavior.
 - Touch swipe gestures on physical mobile devices.
 - PDF generation rendering fidelity across browsers.
+
+## 6) Phase 2 Completed (Status selector extraction + unknown fallback hardening)
+
+Completed in this update:
+- Added centralized status selector helpers in `index.html`:
+  - `getStatusDef(statusKey)`
+  - `getStatusColor(statusKey)`
+  - `getStatusLabel(statusKey, mode)`
+  - `getStatusSubs(statusKey)`
+- Added `STATUS_FALLBACK` so deleted/unknown status keys render safely instead of surfacing `undefined` UI labels or crashing render paths.
+- Routed high-risk rendering paths through helpers (status pills, status dropdown labels, row-panel pills, press color bars, log-category/sub chips, swipe tiles/sub chips, stats labels, serial modal status badge).
+- Fixed the status filter pill color path to use canonical color resolution (`swipeColor || cssColor || color`) instead of `config.color` only.
+
+Phase 2 intent preserved:
+- No Firestore schema/path changes.
+- No statusHistory model changes.
+- No feature removal; this is a rendering/selector hardening step.
