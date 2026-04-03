@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Schedule Scan Parser</title>
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&family=Nunito:wght@400;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.2.67/pdf.min.mjs" type="module"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <link rel="stylesheet" href="./schedule-parser.css" />
+</head>
+<body>
+  <main class="wrap">
+    <h1>Schedule Scan Parser</h1>
+    <p class="sub">Upload a scanned PDF with photos of your daily schedule. This page runs OCR in the browser and parses press number, part number, part description, cavity, notes, and time blocks into a structured table.</p>
+
+    <section class="card">
+      <div class="upload-row">
+        <input id="pdfFile" type="file" accept="application/pdf" />
+        <button id="parseBtn" class="accent">Parse Schedule PDF</button>
+        <button id="copyJsonBtn" disabled>Copy JSON</button>
+        <button id="downloadCsvBtn" disabled>Download CSV</button>
+      </div>
+      <div class="progress hidden" id="progressWrap"><div class="bar" id="progressBar"></div></div>
+      <div class="status" id="status">Ready. Select a PDF to begin.</div>
+    </section>
+
+    <section class="card">
+      <h2 style="margin:0 0 10px;font-family:'Rajdhani',sans-serif;letter-spacing:.6px;">Parsed Schedule Entries</h2>
+      <div id="resultsWrap">
+        <p class="sub" style="margin:0;">No entries yet.</p>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2 style="margin:0 0 10px;font-family:'Rajdhani',sans-serif;letter-spacing:.6px;">Raw OCR Text</h2>
+      <textarea id="rawText" class="raw" placeholder="OCR output will appear here..."></textarea>
+      <p class="sub" style="margin:10px 0 0;">You can manually edit this text and press Parse again to re-run parsing quickly.</p>
+    </section>
+  </main>
+
+  <script type="module" src="./schedule-parser.js"></script>
+</body>
+</html>
