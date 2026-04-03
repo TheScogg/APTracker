@@ -23,17 +23,30 @@
       color: var(--text);
       padding: 20px;
     }
-    .container { max-width: 1100px; margin: 0 auto; display: grid; gap: 16px; }
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      display: grid;
+      gap: 16px;
+    }
     .card {
       background: color-mix(in srgb, var(--panel) 88%, black 12%);
       border: 1px solid var(--border);
       border-radius: 12px;
       padding: 16px;
     }
-    h1 { margin: 0 0 8px; font-size: 1.3rem; }
-    h2 { margin: 0 0 10px; font-size: 1.05rem; }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 1.3rem;
+    }
     p { margin: 0; color: var(--muted); }
-    .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 12px; }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin-top: 12px;
+    }
     input[type="file"] {
       color: var(--text);
       background: #0b1222;
@@ -50,40 +63,65 @@
       cursor: pointer;
       font-weight: 600;
     }
-    button.primary { background: var(--accent2); border-color: var(--accent); color: #022c22; }
+    button.primary {
+      background: var(--accent2);
+      border-color: var(--accent);
+      color: #022c22;
+    }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
-    .status { font-size: 0.9rem; color: var(--muted); margin-top: 8px; min-height: 1.2em; }
-    .progress { font-size: 0.78rem; color: #86efac; margin-top: 6px; min-height: 1em; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-    .grid { display: grid; gap: 16px; grid-template-columns: 1fr; }
-    @media (min-width: 950px) { .grid { grid-template-columns: 1.1fr 0.9fr; } }
-    table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+    .status {
+      font-size: 0.9rem;
+      color: var(--muted);
+      margin-top: 8px;
+      min-height: 1.2em;
+    }
+    .grid {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: 1fr;
+    }
+    @media (min-width: 950px) {
+      .grid {
+        grid-template-columns: 1.1fr 0.9fr;
+      }
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.92rem;
+    }
     th, td {
       border-bottom: 1px solid #2e3a4f;
       text-align: left;
       padding: 8px;
       vertical-align: top;
     }
-    th { color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; font-size: 0.78rem; }
+    th {
+      color: var(--muted);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      font-size: 0.78rem;
+    }
     textarea {
-      width: 100%; min-height: 420px; background: #030712; color: #bbf7d0;
-      border: 1px solid #2f3a4f; border-radius: 10px; padding: 12px;
+      width: 100%;
+      min-height: 420px;
+      background: #030712;
+      color: #bbf7d0;
+      border: 1px solid #2f3a4f;
+      border-radius: 10px;
+      padding: 12px;
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      font-size: 0.85rem; line-height: 1.4; resize: vertical;
+      font-size: 0.85rem;
+      line-height: 1.4;
+      resize: vertical;
     }
-    .hint { font-size: 0.83rem; color: var(--muted); margin-top: 10px; line-height: 1.35; }
-    .pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      border: 1px solid #3a4c66;
-      border-radius: 999px;
-      font-size: 0.74rem;
-      padding: 2px 9px;
-      color: #93c5fd;
-      margin-right: 6px;
-      margin-top: 8px;
+    .hint {
+      font-size: 0.83rem;
+      color: var(--muted);
+      margin-top: 10px;
+      line-height: 1.35;
     }
-    .pill.warn { color: #fcd34d; border-color: #6b4f1d; }
   </style>
 </head>
 <body>
@@ -94,15 +132,13 @@
       <div class="controls">
         <input id="pdfInput" type="file" accept="application/pdf" />
         <button id="parseBtn" class="primary" disabled>Parse PDF</button>
+        <input id="imageInput" type="file" accept="image/*" capture="environment" />
+        <button id="ocrBtn" class="primary" disabled>Scan Image (OCR)</button>
         <button id="downloadBtn" disabled>Download JSON</button>
         <button id="copyBtn" disabled>Copy JSON</button>
       </div>
-      <div>
-        <span class="pill warn">OCR Mode: scanned/photo PDF parsing</span>
-      </div>
       <div id="status" class="status"></div>
-      <div id="progress" class="progress"></div>
-      <div class="hint">If the PDF is a photo/scan, OCR may take 15–60 seconds per page depending on image quality.</div>
+      <div class="hint">Best results happen when your PDF has a table header with column names such as Press, Part #, Description, Cavity, and Notes.</div>
     </section>
 
     <section class="grid">
@@ -131,7 +167,7 @@
     </section>
   </main>
 
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs" type="module"></script>
   <script type="module">
     import * as pdfjsLib from 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs';
 
@@ -139,32 +175,38 @@
 
     const pdfInput = document.getElementById('pdfInput');
     const parseBtn = document.getElementById('parseBtn');
+    const imageInput = document.getElementById('imageInput');
+    const ocrBtn = document.getElementById('ocrBtn');
     const downloadBtn = document.getElementById('downloadBtn');
     const copyBtn = document.getElementById('copyBtn');
     const statusEl = document.getElementById('status');
-    const progressEl = document.getElementById('progress');
     const bodyEl = document.getElementById('resultsBody');
     const jsonOutput = document.getElementById('jsonOutput');
 
     let parsedRows = [];
 
     pdfInput.addEventListener('change', () => {
-      parseBtn.disabled = !pdfInput.files?.length;
+      updateActionState();
       statusEl.textContent = '';
-      progressEl.textContent = '';
+    });
+    imageInput.addEventListener('change', () => {
+      updateActionState();
+      statusEl.textContent = '';
     });
 
     parseBtn.addEventListener('click', parsePdf);
+    ocrBtn.addEventListener('click', scanImageWithOcr);
     downloadBtn.addEventListener('click', downloadJson);
     copyBtn.addEventListener('click', copyJson);
+
+    function updateActionState() {
+      parseBtn.disabled = !pdfInput.files?.length;
+      ocrBtn.disabled = !imageInput.files?.length;
+    }
 
     function setStatus(message, isError = false) {
       statusEl.textContent = message;
       statusEl.style.color = isError ? '#fca5a5' : '#9ca3af';
-    }
-
-    function setProgress(message = '') {
-      progressEl.textContent = message;
     }
 
     async function parsePdf() {
@@ -175,95 +217,101 @@
       }
 
       parseBtn.disabled = true;
+      ocrBtn.disabled = true;
       downloadBtn.disabled = true;
       copyBtn.disabled = true;
       setStatus('Reading PDF…');
-      setProgress('');
 
       try {
         const buffer = await file.arrayBuffer();
         const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+        const lines = [];
 
-        setStatus('Running OCR for scanned/photo PDF…');
-        const rows = await parseWithOcr(pdf);
+        for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+          const page = await pdf.getPage(pageNum);
+          const text = await page.getTextContent();
+          lines.push(...extractLinesFromPage(text.items));
+        }
 
-        parsedRows = rows;
+        parsedRows = parseScheduleLines(lines);
         renderResults(parsedRows);
         jsonOutput.value = JSON.stringify(parsedRows, null, 2);
 
         const found = parsedRows.length;
         setStatus(`Done. Parsed ${found} row${found === 1 ? '' : 's'}.`);
-        setProgress('');
         downloadBtn.disabled = found === 0;
         copyBtn.disabled = found === 0;
       } catch (error) {
         console.error(error);
-        setStatus('Could not parse this PDF. Try another schedule format or a clearer scan.', true);
-        setProgress('');
+        setStatus('Could not parse this PDF. Try another schedule format.', true);
       } finally {
-        parseBtn.disabled = false;
+        updateActionState();
       }
     }
 
-    async function parseWithOcr(pdf) {
-      if (!window.Tesseract) {
-        throw new Error('Tesseract.js failed to load');
+    async function scanImageWithOcr() {
+      const file = imageInput.files?.[0];
+      if (!file) {
+        setStatus('Choose an image first.', true);
+        return;
       }
 
-      const ocrLines = [];
-      for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-        setProgress(`OCR page ${pageNum}/${pdf.numPages}…`);
-        const page = await pdf.getPage(pageNum);
-        const viewport = page.getViewport({ scale: 2 });
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
+      parseBtn.disabled = true;
+      ocrBtn.disabled = true;
+      downloadBtn.disabled = true;
+      copyBtn.disabled = true;
+      setStatus('Running OCR on image…');
 
-        await page.render({ canvasContext: ctx, viewport }).promise;
-        preprocessForOcr(ctx, canvas.width, canvas.height);
+      let worker;
+      try {
+        const { createWorker } = await import('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.esm.min.js');
+        worker = await createWorker('eng');
+        const {
+          data: { text }
+        } = await worker.recognize(file);
 
-        const { data } = await window.Tesseract.recognize(canvas, 'eng', {
-          logger: (m) => {
-            if (m.status === 'recognizing text' && typeof m.progress === 'number') {
-              const pct = Math.round(m.progress * 100);
-              setProgress(`OCR page ${pageNum}/${pdf.numPages}: ${pct}%`);
-            }
-          }
-        });
-
-        const lines = data.text
+        const lines = text
           .split(/\r?\n/)
           .map((line) => line.replace(/\s+/g, ' ').trim())
           .filter(Boolean);
 
-        ocrLines.push(...lines);
-      }
+        parsedRows = parseScheduleLines(lines);
+        renderResults(parsedRows);
+        jsonOutput.value = JSON.stringify(parsedRows, null, 2);
 
-      return parseScheduleLines(ocrLines);
+        const found = parsedRows.length;
+        setStatus(`OCR complete. Parsed ${found} row${found === 1 ? '' : 's'}.`);
+        downloadBtn.disabled = found === 0;
+        copyBtn.disabled = found === 0;
+      } catch (error) {
+        console.error(error);
+        setStatus('OCR failed. Try a clearer image or parse the PDF directly.', true);
+      } finally {
+        if (worker) await worker.terminate();
+        updateActionState();
+      }
     }
 
+    function extractLinesFromPage(items) {
+      const byY = new Map();
 
-    function preprocessForOcr(ctx, width, height) {
-      const img = ctx.getImageData(0, 0, width, height);
-      const d = img.data;
-
-      for (let i = 0; i < d.length; i += 4) {
-        const gray = Math.round(0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]);
-        const bw = gray > 165 ? 255 : 0;
-        d[i] = bw;
-        d[i + 1] = bw;
-        d[i + 2] = bw;
+      for (const item of items) {
+        const raw = (item.str || '').trim();
+        if (!raw) continue;
+        const y = Math.round(item.transform[5]);
+        if (!byY.has(y)) byY.set(y, []);
+        byY.get(y).push({ text: raw, x: item.transform[4] });
       }
 
-      ctx.putImageData(img, 0, 0);
+      return [...byY.entries()]
+        .sort((a, b) => b[0] - a[0])
+        .map(([, row]) => row.sort((a, b) => a.x - b.x).map((chunk) => chunk.text).join('  '));
     }
 
     function parseScheduleLines(lines) {
       const cleaned = lines
         .map((line) => line.replace(/\s+/g, ' ').trim())
-        .filter(Boolean)
-        .filter((line) => line.length > 2);
+        .filter(Boolean);
 
       const headerIndex = cleaned.findIndex((line) => /press/i.test(line) && /part/i.test(line));
 
@@ -284,6 +332,7 @@
           const row = rowFromMappedColumns(cols, colMap);
           if (isUseful(row)) rows.push(row);
         }
+
         if (rows.length) return dedupe(rows);
       }
 
@@ -291,7 +340,7 @@
     }
 
     function splitCols(line) {
-      return line.split(/\s{2,}|\t+|\s\|\s/).map((c) => c.trim()).filter(Boolean);
+      return line.split(/\s{2,}|\t+/).map((c) => c.trim()).filter(Boolean);
     }
 
     function normalize(value) {
@@ -305,7 +354,6 @@
     function looksLikeDataRow(cols) {
       if (cols.length < 2) return false;
       const merged = cols.join(' ');
-      if (/^(page|date|shift|operator)\b/i.test(merged)) return false;
       return /\d/.test(merged) || /[A-Z]{2,}/.test(merged);
     }
 
@@ -347,7 +395,7 @@
       const cavity = cavityMatch ? cavityMatch[1] : '';
 
       let description = line;
-      if (press && pressMatch) description = description.replace(pressMatch[0], ' ');
+      if (press) description = description.replace(pressMatch[0], ' ');
       if (partNumber) description = description.replace(partNumber, ' ');
       if (cavityMatch) description = description.replace(cavityMatch[0], ' ');
       description = description.replace(/\s+/g, ' ').trim();
@@ -375,15 +423,13 @@
           cavity: (row.cavity || '').toString().trim(),
           notes: (row.notes || '').trim()
         };
-
-        if (!normalized.press && !normalized.partNumber) continue;
-
         const key = JSON.stringify(normalized);
         if (!seen.has(key)) {
           seen.add(key);
           out.push(normalized);
         }
       }
+
       return out;
     }
 
@@ -393,13 +439,15 @@
         return;
       }
 
-      bodyEl.innerHTML = rows.map((row) => `<tr>
-        <td>${escapeHtml(row.press)}</td>
-        <td>${escapeHtml(row.partNumber)}</td>
-        <td>${escapeHtml(row.description)}</td>
-        <td>${escapeHtml(row.cavity)}</td>
-        <td>${escapeHtml(row.notes)}</td>
-      </tr>`).join('');
+      bodyEl.innerHTML = rows
+        .map((row) => `<tr>
+          <td>${escapeHtml(row.press)}</td>
+          <td>${escapeHtml(row.partNumber)}</td>
+          <td>${escapeHtml(row.description)}</td>
+          <td>${escapeHtml(row.cavity)}</td>
+          <td>${escapeHtml(row.notes)}</td>
+        </tr>`)
+        .join('');
     }
 
     function escapeHtml(v) {
