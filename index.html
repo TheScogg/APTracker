@@ -456,10 +456,11 @@
   /* Issue Card Header - React design */
   .issue-card-header { padding: 16px 16px 0; cursor: pointer; user-select: none; }
   .issue-card-top { display: flex; align-items: flex-start; gap: 12px; }
-  .issue-card-bottom { display: flex; align-items: center; gap: 6px; padding: 8px 0 12px; flex-wrap: wrap; }
+  .issue-card-bottom { display: flex; align-items: flex-start; gap: 8px; padding: 8px 0 12px; }
+  .issue-status-wrap { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; flex: 1; min-width: 0; }
   
   /* Workflow pill */
-  .workflow-pill { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; padding: 5px 10px; border-radius: 9999px; border: 1px solid; flex-shrink: 0; margin-left: auto; text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; cursor: pointer; transition: all 0.15s; user-select: none; }
+  .workflow-pill { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; padding: 5px 10px; border-radius: 9999px; border: 1px solid; flex-shrink: 0; text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; cursor: pointer; transition: all 0.15s; user-select: none; }
   .workflow-pill:hover { filter: brightness(1.2); }
   .workflow-pill.called { background: rgba(234,179,8,0.15); color: #eab308; border-color: rgba(234,179,8,0.5); }
   .workflow-pill.in-progress { background: rgba(59,130,246,0.15); color: #3b82f6; border-color: rgba(59,130,246,0.5); }
@@ -472,7 +473,7 @@
   .issue-submitter { color: #9ca3af; }
   .issue-status { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 2px; font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 9999px; flex: 0 1 auto; width: fit-content; max-width: 100%; overflow: hidden; text-transform: uppercase; letter-spacing: 0.05em; }
   .issue-status-main { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; max-width: 100%; }
-  .issue-status-sub { display: block; max-width: 100%; font-size: 12px; font-weight: 500; opacity: 0.8; text-transform: none; letter-spacing: 0.02em; white-space: normal; overflow-wrap: anywhere; word-break: break-word; line-height: 1.25; }
+  .issue-status-sub { display: block; max-width: 100%; font-size: 12px; font-weight: 600; opacity: 0.9; text-transform: none; letter-spacing: 0.02em; white-space: normal; overflow-wrap: anywhere; word-break: break-word; line-height: 1.3; }
   .issue-sub-label { font-size: 11px; color: #848b98; font-family: 'Share Tech Mono', monospace; white-space: nowrap; margin-left: 4px; }
   .status-open       { background: rgba(239,68,68,0.1);  color: #f87171; border: 1px solid rgba(239,68,68,0.3); }
   .status-resolved   { background: rgba(34,197,94,0.1);  color: #4ade80; border: 1px solid rgba(34,197,94,0.3); }
@@ -2894,9 +2895,11 @@ function renderIssues() {
           <div class="issue-expand-icon ${wasOpen?'open':''}" id="chevron-${issue.id}">▼</div>
         </div>
         <div class="issue-card-bottom">
-          <div class="issue-status" style="color:${sc.color};border-color:${sc.color};background:${alphaColor(sc.color,0.12)}">
-            <span class="issue-status-main">${sc.icon} ${baseLabel}</span>
-            ${subLabel ? `<span class="issue-status-sub">${esc(subLabel)}</span>` : ''}
+          <div class="issue-status-wrap">
+            <div class="issue-status" style="color:${sc.color};border-color:${sc.color};background:${alphaColor(sc.color,0.12)}">
+              <span class="issue-status-main">${sc.icon} ${baseLabel}</span>
+            </div>
+            ${subLabel ? `<span class="issue-status-sub" style="color:${sc.color};">${esc(subLabel)}</span>` : ''}
           </div>
           <div class="workflow-pill ${wf.class}" onclick="event.stopPropagation(); cycleWorkflowState('${issue.id}')">${wf.icon} ${wf.label}</div>
         </div>
