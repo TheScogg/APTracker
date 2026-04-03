@@ -1243,6 +1243,11 @@ function getStatusColor(statusKey) {
   return st.swipeColor || st.cssColor || st.color || STATUS_FALLBACK.swipeColor;
 }
 
+function alphaColor(color, alpha = 0.12) {
+  const pct = Math.max(0, Math.min(1, Number(alpha))) * 100;
+  return `color-mix(in srgb, ${color} ${pct}%, transparent)`;
+}
+
 function getStatusLabel(statusKey, mode = 'label') {
   const st = getStatusDef(statusKey);
   if (mode === 'short') return st.shortLabel || st.label || STATUS_FALLBACK.shortLabel;
@@ -1657,7 +1662,7 @@ window.handlePressClick = p => {
     const col = getStatusColor(sk);
     const statusPill = document.createElement('span');
     statusPill.className = 'mc-status-pill';
-    statusPill.style.cssText = 'color:'+col+';border-color:'+col+'66;background:'+col+'18;';
+    statusPill.style.cssText = 'color:'+col+';border-color:'+alphaColor(col,0.4)+';background:'+alphaColor(col,0.1)+';';
     statusPill.textContent = st.label;
     top.appendChild(statusPill);
   } else {
@@ -1692,7 +1697,7 @@ window.handlePressClick = p => {
       if (lastEntry && lastEntry.subStatus) {
         const sub = document.createElement('span');
         sub.className = 'mc-issue-sub';
-        sub.style.cssText = 'color:'+col+';border-color:'+col+'66;';
+        sub.style.cssText = 'color:'+col+';border-color:'+alphaColor(col,0.4)+';';
         sub.textContent = lastEntry.subStatus;
         item.appendChild(sub);
       }
@@ -1929,8 +1934,8 @@ function renderRowPanels() {
       const st = getStatusDef(sk);
       const col = getStatusColor(sk);
       pill.style.color = col;
-      pill.style.borderColor = col + '80';
-      pill.style.background = col + '1e';
+      pill.style.borderColor = alphaColor(col, 0.5);
+      pill.style.background = alphaColor(col, 0.12);
       pill.textContent = counts[sk] + ' ' + STATUS_PILL_LABELS[sk];
       pill.onclick = (e) => {
         e.stopPropagation();
@@ -1988,7 +1993,7 @@ function renderRowPanels() {
           const sub = document.createElement('span');
           sub.className = 'mini-issue-sub';
           sub.style.color = col;
-          sub.style.borderColor = col + '66';
+          sub.style.borderColor = alphaColor(col, 0.4);
           sub.textContent = lastEntry.subStatus;
           mi.appendChild(sub);
         }
@@ -2154,7 +2159,7 @@ function renderLogCatButtons() {
     btn.style.color = col;
     if (logCatKey === key) {
       btn.classList.add('selected');
-      btn.style.background = col+'22';
+      btn.style.background = alphaColor(col, 0.13);
     }
     btn.innerHTML = `<span class="log-cat-icon">${st.icon}</span><span class="log-cat-label">${getStatusLabel(key, 'short')}</span>`;
     addTapListener(btn, ()=>logCatSelectStatus(key));
@@ -2174,8 +2179,8 @@ function renderLogSubChips() {
   getStatusSubs(logCatKey).forEach(sub => {
     const chip = document.createElement('div'); chip.className = 'log-sub-chip'+(logCatSub===sub?' selected':'');
     const col = getStatusColor(logCatKey);
-    chip.style.color=col; chip.style.borderColor=col+'55';
-    chip.style.background = logCatSub===sub ? col+'28' : col+'12';
+    chip.style.color=col; chip.style.borderColor=alphaColor(col,0.33);
+    chip.style.background = logCatSub===sub ? alphaColor(col,0.16) : alphaColor(col,0.07);
     chip.textContent = sub;
     addTapListener(chip, ()=>{logCatSub=logCatSub===sub?null:sub;renderLogSubChips();updateLogCatPill();});
     row.appendChild(chip);
@@ -2191,7 +2196,7 @@ function updateLogCatPill() {
   const col = getStatusColor(logCatKey);
   sel.classList.add('visible');
   pill.textContent = st.icon+' '+getStatusLabel(logCatKey, 'short')+(logCatSub?' › '+logCatSub:'');
-  pill.style.color=col; pill.style.borderColor=col+'88'; pill.style.background=col+'15';
+  pill.style.color=col; pill.style.borderColor=alphaColor(col,0.53); pill.style.background=alphaColor(col,0.08);
 }
 
 function logCatSelectStatus(key) {
@@ -2639,7 +2644,7 @@ function updateStatPillStyles() {
     const col = st.swipeColor || st.cssColor || st.color;
     if (sf === key) {
       pill.style.borderColor = col;
-      pill.style.background = col + '1e';
+      pill.style.background = alphaColor(col, 0.12);
       pill.style.color = col;
     } else {
       pill.style.borderColor = '';
@@ -2889,7 +2894,7 @@ function renderIssues() {
           <div class="issue-expand-icon ${wasOpen?'open':''}" id="chevron-${issue.id}">▼</div>
         </div>
         <div class="issue-card-bottom">
-          <div class="issue-status" style="color:${sc.color};border-color:${sc.color};background:${sc.color}1e">
+          <div class="issue-status" style="color:${sc.color};border-color:${sc.color};background:${alphaColor(sc.color,0.12)}">
             <span class="issue-status-main">${sc.icon} ${baseLabel}</span>
             ${subLabel ? `<span class="issue-status-sub">${esc(subLabel)}</span>` : ''}
           </div>
@@ -3659,8 +3664,8 @@ window.openExportModal = () => {
     const col = cfg.color || '#ef4444';
 
     // Status pill colors for print (light bg)
-    const pillBg = col + '18';
-    const pillBorder = col + '44';
+    const pillBg = alphaColor(col, 0.09);
+    const pillBorder = alphaColor(col, 0.27);
 
     // Photos
     const photosHtml = (issue.photos||[]).length
@@ -3810,7 +3815,7 @@ function renderAdminList() {
       const updateEditPreview = () => {
         const col = adminDraft[key].color || st.color;
         editPreviewPill.textContent = (adminDraft[key].icon||st.icon)+' '+(adminDraft[key].label||st.label);
-        editPreviewPill.style.color=col; editPreviewPill.style.borderColor=col+'88'; editPreviewPill.style.background=col+'18';
+        editPreviewPill.style.color=col; editPreviewPill.style.borderColor=alphaColor(col,0.53); editPreviewPill.style.background=alphaColor(col,0.09);
         iconEl.textContent = adminDraft[key].icon || st.icon;
       };
 
@@ -3944,7 +3949,7 @@ function renderAdminList() {
   const updateNewPreview = () => {
     const name = nameInput2.value.trim() || 'New Category';
     previewPill.textContent = newCatIcon + ' ' + name;
-    previewPill.style.color = newCatColor.hex; previewPill.style.borderColor = newCatColor.hex+'88'; previewPill.style.background = newCatColor.hex+'18';
+    previewPill.style.color = newCatColor.hex; previewPill.style.borderColor = alphaColor(newCatColor.hex,0.53); previewPill.style.background = alphaColor(newCatColor.hex,0.09);
   };
 
   nameInput2.addEventListener('input', updateNewPreview);
