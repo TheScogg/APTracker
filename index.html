@@ -3770,6 +3770,23 @@ let adminDraft = {};
 let newCatIcon = ADMIN_ICONS[0];
 let newCatColor = ADMIN_COLORS[0];
 
+function normalizeLabel(value) {
+  return String(value || '').trim().replace(/\s+/g, ' ');
+}
+
+function normalizeForCompare(value) {
+  return normalizeLabel(value).toLocaleLowerCase();
+}
+
+function slugifyStatusLabel(value) {
+  const slug = normalizeLabel(value).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return slug || 'custom-status';
+}
+
+function makeStatusKey() {
+  return `status_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+}
+
 function buildAdminIconPicker(container, getCurrent, onSelect) {
   container.innerHTML = '';
   ADMIN_ICONS.forEach(ic => {
@@ -3861,6 +3878,66 @@ function renderAdminList() {
       addInput.addEventListener('keydown', e => { if(e.key==='Enter') doAdd(); });
       addRowEl.appendChild(addInput); addRowEl.appendChild(addBtn); row.appendChild(addRowEl);
 
+      const bulkBtn = document.createElement('button');
+      bulkBtn.className = 'admin-edit-btn';
+      bulkBtn.style.marginTop = '6px';
+      bulkBtn.textContent = '📝 Bulk Edit Sub-statuses';
+      const bulkPanel = document.createElement('div');
+      bulkPanel.className = 'admin-edit-panel';
+      const bulkLabel = document.createElement('div');
+      bulkLabel.className = 'admin-edit-section-label';
+      bulkLabel.textContent = 'One sub-status per line';
+      const bulkInput = document.createElement('textarea');
+      bulkInput.style.width = '100%';
+      bulkInput.style.minHeight = '120px';
+      bulkInput.style.background = 'var(--bg2)';
+      bulkInput.style.border = '1px solid var(--border)';
+      bulkInput.style.borderRadius = '8px';
+      bulkInput.style.padding = '10px';
+      bulkInput.style.color = 'var(--text)';
+      bulkInput.style.fontFamily = "'Nunito', sans-serif";
+      bulkInput.style.fontSize = '13px';
+      const bulkActions = document.createElement('div');
+      bulkActions.style.display = 'flex';
+      bulkActions.style.gap = '8px';
+      bulkActions.style.marginTop = '8px';
+      const bulkCancel = document.createElement('button');
+      bulkCancel.className = 'admin-confirm-delete-no';
+      bulkCancel.textContent = 'Cancel';
+      const bulkApply = document.createElement('button');
+      bulkApply.className = 'admin-confirm-delete-yes';
+      bulkApply.textContent = 'Apply';
+      const openBulkEditor = () => {
+        bulkInput.value = (adminDraft[key].subs || []).join('\n');
+        bulkPanel.classList.add('visible');
+      };
+      const applyBulkEditor = () => {
+        const seen = new Set();
+        const parsed = bulkInput.value
+          .split('\n')
+          .map(v => normalizeLabel(v))
+          .filter(Boolean)
+          .filter(v => {
+            const cmp = normalizeForCompare(v);
+            if (seen.has(cmp)) return false;
+            seen.add(cmp);
+            return true;
+          });
+        adminDraft[key].subs = parsed;
+        renderSubs();
+        bulkPanel.classList.remove('visible');
+      };
+      addTapListener(bulkBtn, openBulkEditor);
+      addTapListener(bulkCancel, () => bulkPanel.classList.remove('visible'));
+      addTapListener(bulkApply, applyBulkEditor);
+      bulkActions.appendChild(bulkCancel);
+      bulkActions.appendChild(bulkApply);
+      bulkPanel.appendChild(bulkLabel);
+      bulkPanel.appendChild(bulkInput);
+      bulkPanel.appendChild(bulkActions);
+      row.appendChild(bulkBtn);
+      row.appendChild(bulkPanel);
+
       // Edit icon/color panel
       const editPanel = document.createElement('div'); editPanel.className = 'admin-edit-panel';
       const iconSecLabel = document.createElement('div'); iconSecLabel.className = 'admin-edit-section-label'; iconSecLabel.textContent = 'Icon';
@@ -3930,6 +4007,15 @@ function renderAdminList() {
   // Add category trigger + form
   const trigger = document.createElement('button'); trigger.className = 'add-cat-trigger'; trigger.textContent = '＋ Add Category';
   const form = document.createElement('div'); form.className = 'add-cat-form';
+  const addError = document.createElement('div');
+  addError.style.color = 'var(--red)';
+  addError.style.fontSize = '12px';
+  addError.style.marginBottom = '8px';
+  addError.style.display = 'none';
+  const setAddError = (msg = '') => {
+    addError.textContent = msg;
+    addError.style.display = msg ? 'block' : 'none';
+  };
 
   // Name
   const nameFieldLabel = document.createElement('div'); nameFieldLabel.className = 'add-cat-field-label'; nameFieldLabel.textContent = 'Category Name';
@@ -3964,7 +4050,7 @@ function renderAdminList() {
   };
 
   nameInput2.addEventListener('input', updateNewPreview);
-  addTapListener(trigger, () => { form.classList.add('visible'); trigger.style.display='none'; updateNewPreview(); });
+  addTapListener(trigger, () => { setAddError(''); form.classList.add('visible'); trigger.style.display='none'; updateNewPreview(); });
 
   buildAdminIconPicker(newIconPicker, () => newCatIcon, ic => { newCatIcon = ic; updateNewPreview(); });
   buildAdminColorPicker(newColorPicker, () => newCatColor.hex, c => { newCatColor = c; updateNewPreview(); });
@@ -3974,18 +4060,25 @@ function renderAdminList() {
   const formActions = document.createElement('div'); formActions.className = 'add-cat-actions';
   const cancelBtn2 = document.createElement('button'); cancelBtn2.className = 'add-cat-cancel'; cancelBtn2.textContent = 'Cancel';
   const confirmBtn = document.createElement('button'); confirmBtn.className = 'add-cat-confirm'; confirmBtn.textContent = 'Add Category';
-  const hideForm = () => { form.classList.remove('visible'); trigger.style.display=''; nameInput2.value=''; newCatIcon=ADMIN_ICONS[0]; newCatColor=ADMIN_COLORS[0]; buildAdminIconPicker(newIconPicker,()=>newCatIcon,ic=>{newCatIcon=ic;updateNewPreview();}); buildAdminColorPicker(newColorPicker,()=>newCatColor.hex,c=>{newCatColor=c;updateNewPreview();}); updateNewPreview(); };
+  const hideForm = () => { setAddError(''); form.classList.remove('visible'); trigger.style.display=''; nameInput2.value=''; newCatIcon=ADMIN_ICONS[0]; newCatColor=ADMIN_COLORS[0]; buildAdminIconPicker(newIconPicker,()=>newCatIcon,ic=>{newCatIcon=ic;updateNewPreview();}); buildAdminColorPicker(newColorPicker,()=>newCatColor.hex,c=>{newCatColor=c;updateNewPreview();}); updateNewPreview(); };
   const doAdd2 = () => {
-    const name = nameInput2.value.trim(); if (!name) { nameInput2.focus(); return; }
-    const key = name.toLowerCase().replace(/[^a-z0-9]/g,'');
-    if (adminDraft[key]) { return; }
+    const name = normalizeLabel(nameInput2.value); if (!name) { nameInput2.focus(); return; }
+    const duplicateLabel = Object.values(adminDraft).some(v => normalizeForCompare(v.label) === normalizeForCompare(name));
+    if (duplicateLabel) {
+      setAddError('A category with that name already exists.');
+      return;
+    }
+    let key = makeStatusKey();
+    while (adminDraft[key]) key = makeStatusKey();
+    const slug = slugifyStatusLabel(name);
     const maxOrder = Math.max(...Object.values(adminDraft).map(v=>v.order||0));
-    adminDraft[key] = { label:name, shortLabel:name, icon:newCatIcon, color:newCatColor.hex, swipeColor:newCatColor.hex, cssColor:newCatColor.hex, floorCls:'has-'+key, cls:'status-'+key, subs:[], order:maxOrder+1 };
+    adminDraft[key] = { label:name, shortLabel:name, icon:newCatIcon, color:newCatColor.hex, swipeColor:newCatColor.hex, cssColor:newCatColor.hex, floorCls:'has-'+slug, cls:'status-'+slug, subs:[], order:maxOrder+1 };
     hideForm(); renderAdminList();
   };
   addTapListener(cancelBtn2, hideForm);
   addTapListener(confirmBtn, doAdd2);
   formActions.appendChild(cancelBtn2); formActions.appendChild(confirmBtn);
+  form.appendChild(addError);
   form.appendChild(formActions);
   list.appendChild(trigger); list.appendChild(form);
 }
@@ -4033,6 +4126,34 @@ async function saveAdminConfig() {
   const btn = document.getElementById('admin-save-btn');
   btn.classList.add('admin-saving'); btn.textContent = 'Saving…';
   try {
+    const deletedStatusKeys = Object.keys(STATUSES).filter(k => k !== 'open' && k !== 'resolved' && !adminDraft[k]);
+    const deletedSubByStatus = {};
+    Object.entries(STATUSES)
+      .filter(([k]) => k !== 'open' && k !== 'resolved' && adminDraft[k])
+      .forEach(([k, v]) => {
+        const before = Array.isArray(v.subs) ? v.subs.map(normalizeForCompare) : [];
+        const after = new Set((adminDraft[k].subs || []).map(normalizeForCompare));
+        const removed = before.filter(sub => sub && !after.has(sub));
+        if (removed.length) deletedSubByStatus[k] = removed;
+      });
+    if (deletedStatusKeys.length || Object.keys(deletedSubByStatus).length) {
+      const impactedStatusCount = issues.filter(i => deletedStatusKeys.includes(i.status)).length;
+      let impactedSubsCount = 0;
+      Object.entries(deletedSubByStatus).forEach(([statusKey, removedSubs]) => {
+        const removedSet = new Set(removedSubs);
+        impactedSubsCount += issues.filter(i => i.status === statusKey && removedSet.has(normalizeForCompare(i.subStatus))).length;
+      });
+      const ok = confirm(
+        `Potential impact detected:\n` +
+        `• ${deletedStatusKeys.length} deleted categories affecting ${impactedStatusCount} issue(s)\n` +
+        `• ${Object.keys(deletedSubByStatus).length} categories with removed sub-statuses affecting ${impactedSubsCount} issue(s)\n\n` +
+        `Continue saving anyway?`
+      );
+      if (!ok) {
+        btn.textContent = 'Save cancelled';
+        return;
+      }
+    }
     // Apply draft to live STATUSES — preserve open/resolved
     const preserved = { open: STATUSES.open, resolved: STATUSES.resolved };
     STATUSES = { ...preserved };
