@@ -4,10 +4,52 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Kitty Page</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      transition: background-color 0.25s ease;
+      margin: 2rem;
+    }
+
+    .color-buttons {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 1rem;
+    }
+
+    button {
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      background: white;
+      padding: 0.5rem 0.75rem;
+      cursor: pointer;
+    }
+
+    button:hover {
+      border-color: #999;
+    }
+  </style>
 </head>
 <body>
   <h1>Kitty Corner</h1>
   <p>Whiskers, moonbeams, and mysterious tiny toe beans.</p>
   <p>This is some random text: cosmic tuna sandwiches on a Tuesday.</p>
+
+  <div class="color-buttons" aria-label="Background color controls">
+    <button type="button" data-color="#fff8e1">Sunny Cream</button>
+    <button type="button" data-color="#e3f2fd">Cool Sky</button>
+    <button type="button" data-color="#f3e5f5">Lavender Nap</button>
+    <button type="button" data-color="#ffffff">Reset</button>
+  </div>
+
+  <script>
+    const buttons = document.querySelectorAll('.color-buttons button');
+
+    buttons.forEach((button) => {
+      button.addEventListener('click', () => {
+        document.body.style.backgroundColor = button.dataset.color;
+      });
+    });
+  </script>
 </body>
 </html>
