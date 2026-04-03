@@ -1250,7 +1250,8 @@ function getStatusLabel(statusKey, mode = 'label') {
 
 function getStatusSubs(statusKey) {
   const st = getStatusDef(statusKey);
-  return Array.isArray(st.subs) ? st.subs : [];
+  if (!Array.isArray(st.subs)) return [];
+  return [...st.subs].sort((a, b) => String(a).localeCompare(String(b), undefined, { sensitivity: 'base' }));
 }
 
 async function loadConfig() {
