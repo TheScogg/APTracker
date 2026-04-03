@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Schedule Scan Parser</title>
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&family=Nunito:wght@400;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.2.67/pdf.min.mjs" type="module"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --panel: #161b22;
+      --panel2: #1f2733;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --accent: #f97316;
+      --green: #22c55e;
+      --red: #ef4444;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Nunito', sans-serif;
+      min-height: 100vh;
+      padding: 28px 18px 40px;
+    }
+    .wrap { max-width: 1050px; margin: 0 auto; }
+    h1 {
+      font-family: 'Rajdhani', sans-serif;
+      letter-spacing: 1px;
+      font-size: 34px;
+      margin: 0 0 8px;
+    }
+    .sub { color: var(--muted); margin: 0 0 22px; font-size: 14px; }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 14px;
+    }
+    .upload-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    input[type="file"] { color: var(--muted); }
+    button {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 9px 14px;
+      color: var(--text);
+      background: var(--panel2);
+      cursor: pointer;
+      font-family: 'Nunito', sans-serif;
+      font-weight: 700;
+      transition: all .15s ease;
+    }
+    button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+    .accent { background: var(--accent); color: #fff; border-color: transparent; }
+    .accent:hover:not(:disabled) { filter: brightness(1.05); color: #fff; }
+    .status {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 10px;
+      white-space: pre-wrap;
+    }
+    .progress {
+      height: 9px;
+      border-radius: 999px;
+      background: #0f141d;
+      border: 1px solid var(--border);
+      overflow: hidden;
+      margin-top: 12px;
+    }
+    .bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #fb923c, #f97316);
+      transition: width 0.2s ease;
+    }
+    .raw {
+      width: 100%;
+      min-height: 140px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: #0d141e;
+      color: var(--text);
+      padding: 10px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 12px;
+      resize: vertical;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+    th, td {
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+      padding: 10px 8px;
+      vertical-align: top;
+    }
+    th { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+    .pill {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      background: #251a13;
+      border: 1px solid #5c371f;
+      color: #ffb174;
+    }
+    .ok { color: var(--green); }
+    .err { color: var(--red); }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <h1>Schedule Scan Parser</h1>
+    <p class="sub">Upload a scanned PDF with photos of your daily schedule. This page runs OCR in the browser and parses time blocks into a structured table.</p>
+
+    <section class="card">
+      <div class="upload-row">
+        <input id="pdfFile" type="file" accept="application/pdf" />
+        <button id="parseBtn" class="accent">Parse Schedule PDF</button>
+        <button id="copyJsonBtn" disabled>Copy JSON</button>
+        <button id="downloadCsvBtn" disabled>Download CSV</button>
+      </div>
+      <div class="progress hidden" id="progressWrap"><div class="bar" id="progressBar"></div></div>
+      <div class="status" id="status">Ready. Select a PDF to begin.</div>
+    </section>
+
+    <section class="card">
+      <h2 style="margin:0 0 10px;font-family:'Rajdhani',sans-serif;letter-spacing:.6px;">Parsed Schedule Entries</h2>
+      <div id="resultsWrap">
+        <p class="sub" style="margin:0;">No entries yet.</p>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2 style="margin:0 0 10px;font-family:'Rajdhani',sans-serif;letter-spacing:.6px;">Raw OCR Text</h2>
+      <textarea id="rawText" class="raw" placeholder="OCR output will appear here..."></textarea>
+      <p class="sub" style="margin:10px 0 0;">You can manually edit this text and press Parse again to re-run parsing quickly.</p>
+    </section>
+  </main>
+
+  <script type="module">
+    import * as pdfjsLib from 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.2.67/pdf.min.mjs';
+
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.2.67/pdf.worker.min.mjs';
+
+    const fileInput = document.getElementById('pdfFile');
+    const parseBtn = document.getElementById('parseBtn');
+    const copyJsonBtn = document.getElementById('copyJsonBtn');
+    const downloadCsvBtn = document.getElementById('downloadCsvBtn');
+    const statusEl = document.getElementById('status');
+    const progressWrap = document.getElementById('progressWrap');
+    const progressBar = document.getElementById('progressBar');
+    const resultsWrap = document.getElementById('resultsWrap');
+    const rawText = document.getElementById('rawText');
+
+    let parsedEntries = [];
+
+    const dayRegex = /\b(Mon(?:day)?|Tue(?:s(?:day)?)?|Wed(?:nesday)?|Thu(?:rs(?:day)?)?|Fri(?:day)?|Sat(?:urday)?|Sun(?:day)?)\b/i;
+    const timeRangeRegex = /(\d{1,2}(?::\d{2})?\s?(?:AM|PM|A\.M\.|P\.M\.)?)\s?[-–—]\s?(\d{1,2}(?::\d{2})?\s?(?:AM|PM|A\.M\.|P\.M\.)?)/i;
+
+    parseBtn.addEventListener('click', async () => {
+      const file = fileInput.files[0];
+
+      if (!file && !rawText.value.trim()) {
+        setStatus('Please choose a PDF first or paste OCR text manually.', 'err');
+        return;
+      }
+
+      parseBtn.disabled = true;
+      copyJsonBtn.disabled = true;
+      downloadCsvBtn.disabled = true;
+      progressWrap.classList.remove('hidden');
+      setProgress(0);
+
+      try {
+        let textToParse = rawText.value.trim();
+
+        if (file) {
+          setStatus('Reading PDF and extracting page images...');
+          const pageCanvases = await renderPdfToCanvases(file);
+          setStatus(`Running OCR on ${pageCanvases.length} page(s)...`);
+          textToParse = await runOcr(pageCanvases);
+          rawText.value = textToParse;
+        }
+
+        setStatus('Parsing schedule entries...');
+        parsedEntries = parseScheduleText(textToParse);
+        renderEntries(parsedEntries);
+
+        copyJsonBtn.disabled = parsedEntries.length === 0;
+        downloadCsvBtn.disabled = parsedEntries.length === 0;
+
+        if (parsedEntries.length) {
+          setStatus(`Done. Parsed ${parsedEntries.length} schedule entries.`, 'ok');
+        } else {
+          setStatus('No entries matched expected schedule patterns. You may need a cleaner scan or manual text edits.', 'err');
+        }
+      } catch (err) {
+        console.error(err);
+        setStatus(`Failed: ${err.message}`, 'err');
+      } finally {
+        parseBtn.disabled = false;
+      }
+    });
+
+    copyJsonBtn.addEventListener('click', async () => {
+      if (!parsedEntries.length) return;
+      await navigator.clipboard.writeText(JSON.stringify(parsedEntries, null, 2));
+      setStatus('Copied parsed entries as JSON to clipboard.', 'ok');
+    });
+
+    downloadCsvBtn.addEventListener('click', () => {
+      if (!parsedEntries.length) return;
+      const headers = ['day', 'startTime', 'endTime', 'description', 'sourceLine'];
+      const lines = [headers.join(',')];
+
+      for (const entry of parsedEntries) {
+        lines.push(headers.map((h) => csvEscape(entry[h] || '')).join(','));
+      }
+
+      const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'parsed-daily-schedule.csv';
+      link.click();
+      URL.revokeObjectURL(url);
+      setStatus('Downloaded CSV.', 'ok');
+    });
+
+    async function renderPdfToCanvases(file) {
+      const buffer = await file.arrayBuffer();
+      const loadingTask = pdfjsLib.getDocument({ data: buffer });
+      const pdf = await loadingTask.promise;
+      const canvases = [];
+
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const viewport = page.getViewport({ scale: 2.1 });
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        canvases.push(canvas);
+        setProgress(Math.round((i / pdf.numPages) * 20));
+      }
+
+      return canvases;
+    }
+
+    async function runOcr(canvases) {
+      const chunks = [];
+
+      for (let i = 0; i < canvases.length; i++) {
+        const canvas = canvases[i];
+        const { data } = await Tesseract.recognize(canvas, 'eng', {
+          logger: ({ progress, status }) => {
+            if (!Number.isFinite(progress)) return;
+            const base = 20 + ((i + progress) / canvases.length) * 75;
+            setProgress(Math.min(98, Math.round(base)));
+            setStatus(`OCR page ${i + 1}/${canvases.length}: ${status || 'working'} (${Math.round(progress * 100)}%)`);
+          }
+        });
+
+        chunks.push(data.text);
+      }
+
+      setProgress(100);
+      return chunks.join('\n\n---- PAGE BREAK ----\n\n');
+    }
+
+    function parseScheduleText(text) {
+      const lines = text
+        .split(/\r?\n/)
+        .map((line) => line.replace(/\s+/g, ' ').trim())
+        .filter(Boolean);
+
+      const entries = [];
+      let currentDay = '';
+
+      for (const line of lines) {
+        const dayMatch = line.match(dayRegex);
+        if (dayMatch) {
+          currentDay = normalizeDay(dayMatch[1]);
+        }
+
+        const timeMatch = line.match(timeRangeRegex);
+        if (!timeMatch) continue;
+
+        const startTime = normalizeTime(timeMatch[1]);
+        const endTime = normalizeTime(timeMatch[2]);
+        const description = line
+          .replace(dayRegex, '')
+          .replace(timeRangeRegex, '')
+          .replace(/^[:\-–—\s]+/, '')
+          .trim();
+
+        entries.push({
+          day: currentDay || inferNearbyDay(lines, line) || 'Unknown',
+          startTime,
+          endTime,
+          description: description || 'Unlabeled Activity',
+          sourceLine: line
+        });
+      }
+
+      return entries;
+    }
+
+    function inferNearbyDay(lines, targetLine) {
+      const idx = lines.indexOf(targetLine);
+      if (idx === -1) return '';
+
+      for (let i = idx - 1; i >= Math.max(0, idx - 4); i--) {
+        const m = lines[i].match(dayRegex);
+        if (m) return normalizeDay(m[1]);
+      }
+      return '';
+    }
+
+    function normalizeDay(day) {
+      const key = day.toLowerCase().slice(0, 3);
+      const map = {
+        mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday',
+        fri: 'Friday', sat: 'Saturday', sun: 'Sunday'
+      };
+      return map[key] || day;
+    }
+
+    function normalizeTime(t) {
+      return t
+        .replace(/\./g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toUpperCase();
+    }
+
+    function renderEntries(entries) {
+      if (!entries.length) {
+        resultsWrap.innerHTML = '<p class="sub" style="margin:0;">No parsed entries found.</p>';
+        return;
+      }
+
+      const rows = entries.map((entry, idx) => `
+        <tr>
+          <td><span class="pill">#${idx + 1}</span></td>
+          <td>${escapeHtml(entry.day)}</td>
+          <td>${escapeHtml(entry.startTime)}</td>
+          <td>${escapeHtml(entry.endTime)}</td>
+          <td>${escapeHtml(entry.description)}</td>
+          <td><code style="font-family:'Share Tech Mono',monospace;font-size:11px;">${escapeHtml(entry.sourceLine)}</code></td>
+        </tr>
+      `).join('');
+
+      resultsWrap.innerHTML = `
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Day</th>
+              <th>Start</th>
+              <th>End</th>
+              <th>Description</th>
+              <th>Source line</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      `;
+    }
+
+    function csvEscape(value) {
+      return `"${String(value).replaceAll('"', '""')}"`;
+    }
+
+    function setProgress(value) {
+      progressBar.style.width = `${Math.max(0, Math.min(100, value))}%`;
+    }
+
+    function setStatus(message, tone = '') {
+      statusEl.textContent = message;
+      statusEl.className = `status ${tone}`.trim();
+    }
+
+    function escapeHtml(input) {
+      return input
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+    }
+  </script>
+</body>
+</html>
