@@ -1244,9 +1244,25 @@ function getStatusColor(statusKey) {
   return st.swipeColor || st.cssColor || st.color || STATUS_FALLBACK.swipeColor;
 }
 
+const __alphaCanvasCtx = document.createElement('canvas').getContext('2d');
+
 function alphaColor(color, alpha = 0.12) {
-  const pct = Math.max(0, Math.min(1, Number(alpha))) * 100;
-  return `color-mix(in srgb, ${color} ${pct}%, transparent)`;
+  const a = Math.max(0, Math.min(1, Number(alpha)));
+  if (!__alphaCanvasCtx || !color) return `rgba(0,0,0,${a})`;
+
+  __alphaCanvasCtx.fillStyle = '#000000';
+  __alphaCanvasCtx.fillStyle = String(color);
+  const normalized = __alphaCanvasCtx.fillStyle;
+  const m = normalized.match(/^#([\da-f]{3}|[\da-f]{6})$/i);
+  if (!m) return `rgba(0,0,0,${a})`;
+
+  let hex = m[1];
+  if (hex.length === 3) hex = hex.split('').map(ch => ch + ch).join('');
+  const n = parseInt(hex, 16);
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  return `rgba(${r},${g},${b},${a})`;
 }
 
 function getStatusLabel(statusKey, mode = 'label') {
