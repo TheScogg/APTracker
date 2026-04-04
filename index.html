@@ -3744,12 +3744,15 @@ window.closeExportModal = () => {
 
 window.downloadPDF = async () => {
   const btn = document.getElementById('export-dl-btn');
+  let wrapper = null;
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Generating…';
   try {
     const src = document.getElementById('pdf-content');
+    if (!src) throw new Error('PDF content not found');
+    closeExportModal();
     // Clone into a temp wrapper at position 0,0 to prevent html2pdf top-margin bug
-    const wrapper = document.createElement('div');
-    wrapper.style.cssText = 'position:fixed;top:0;left:0;width:816px;background:white;z-index:-9999;pointer-events:none;';
+    wrapper = document.createElement('div');
+    wrapper.style.cssText = 'position:fixed;top:0;left:-10000px;width:816px;background:white;opacity:0.01;pointer-events:none;';
     const clone = src.cloneNode(true);
     wrapper.appendChild(clone);
     document.body.appendChild(wrapper);
@@ -3762,10 +3765,10 @@ window.downloadPDF = async () => {
       pagebreak: { mode: ['avoid-all', 'css'] }
     };
     await html2pdf().set(opt).from(clone).save();
-    document.body.removeChild(wrapper);
   } catch(e) {
     console.error('PDF export error:', e);
   } finally {
+    if (wrapper && wrapper.parentNode) wrapper.parentNode.removeChild(wrapper);
     btn.disabled = false;
     btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v8M5 7l3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 12v1a1 1 0 001 1h8a1 1 0 001-1v-1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg> Download PDF';
   }
