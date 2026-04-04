@@ -473,9 +473,7 @@
   .issue-submitter { color: #9ca3af; }
   .issue-status { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 2px; font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 9999px; flex: 0 1 auto; width: fit-content; max-width: 100%; overflow: hidden; text-transform: uppercase; letter-spacing: 0.05em; }
   .issue-status-main { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; max-width: 100%; }
-  .issue-status-sub { display: inline-flex; align-items: flex-start; gap: 6px; max-width: 100%; font-size: 12px; font-weight: 600; opacity: 0.95; text-transform: none; letter-spacing: 0.02em; white-space: normal; overflow-wrap: anywhere; word-break: break-word; line-height: 1.35; padding: 4px 8px; border-radius: 10px; border: 1px solid transparent; }
-  .issue-status-sub::before { content: ''; width: 6px; height: 6px; border-radius: 9999px; background: currentColor; opacity: 0.75; margin-top: 0.45em; flex-shrink: 0; }
-  .issue-status-sub-text { min-width: 0; }
+  .issue-status-sub { display: inline-block; max-width: 100%; font-size: 11.5px; font-weight: 600; opacity: 0.9; text-transform: none; letter-spacing: 0.02em; white-space: normal; overflow-wrap: anywhere; word-break: break-word; line-height: 1.35; padding: 4px 10px; border-radius: 12px; border: 1px solid transparent; }
   .issue-sub-label { font-size: 11px; color: #848b98; font-family: 'Share Tech Mono', monospace; white-space: nowrap; margin-left: 4px; }
   .status-open       { background: rgba(239,68,68,0.1);  color: #f87171; border: 1px solid rgba(239,68,68,0.3); }
   .status-resolved   { background: rgba(34,197,94,0.1);  color: #4ade80; border: 1px solid rgba(34,197,94,0.3); }
@@ -2901,7 +2899,7 @@ function renderIssues() {
             <div class="issue-status" style="color:${sc.color};border-color:${sc.color};background:${alphaColor(sc.color,0.12)}">
               <span class="issue-status-main">${sc.icon} ${baseLabel}</span>
             </div>
-            ${subLabel ? `<span class="issue-status-sub" style="color:${sc.color};border-color:${alphaColor(sc.color,0.32)};background:${alphaColor(sc.color,0.1)};"><span class="issue-status-sub-text">${esc(subLabel)}</span></span>` : ''}
+            ${subLabel ? `<span class="issue-status-sub" style="color:${sc.color};border-color:${alphaColor(sc.color,0.26)};background:${alphaColor(sc.color,0.08)};">${esc(subLabel)}</span>` : ''}
           </div>
           <div class="workflow-pill ${wf.class}" onclick="event.stopPropagation(); cycleWorkflowState('${issue.id}')">${wf.icon} ${wf.label}</div>
         </div>
