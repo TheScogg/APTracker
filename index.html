@@ -1244,9 +1244,25 @@ function getStatusColor(statusKey) {
   return st.swipeColor || st.cssColor || st.color || STATUS_FALLBACK.swipeColor;
 }
 
+const __alphaCanvasCtx = document.createElement('canvas').getContext('2d');
+
 function alphaColor(color, alpha = 0.12) {
-  const pct = Math.max(0, Math.min(1, Number(alpha))) * 100;
-  return `color-mix(in srgb, ${color} ${pct}%, transparent)`;
+  const a = Math.max(0, Math.min(1, Number(alpha)));
+  if (!__alphaCanvasCtx || !color) return `rgba(0,0,0,${a})`;
+
+  __alphaCanvasCtx.fillStyle = '#000000';
+  __alphaCanvasCtx.fillStyle = String(color);
+  const normalized = __alphaCanvasCtx.fillStyle;
+  const m = normalized.match(/^#([\da-f]{3}|[\da-f]{6})$/i);
+  if (!m) return `rgba(0,0,0,${a})`;
+
+  let hex = m[1];
+  if (hex.length === 3) hex = hex.split('').map(ch => ch + ch).join('');
+  const n = parseInt(hex, 16);
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  return `rgba(${r},${g},${b},${a})`;
 }
 
 function getStatusLabel(statusKey, mode = 'label') {
@@ -3728,12 +3744,15 @@ window.closeExportModal = () => {
 
 window.downloadPDF = async () => {
   const btn = document.getElementById('export-dl-btn');
+  let wrapper = null;
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Generating…';
   try {
     const src = document.getElementById('pdf-content');
+    if (!src) throw new Error('PDF content not found');
+    closeExportModal();
     // Clone into a temp wrapper at position 0,0 to prevent html2pdf top-margin bug
-    const wrapper = document.createElement('div');
-    wrapper.style.cssText = 'position:fixed;top:0;left:0;width:816px;background:white;z-index:-9999;pointer-events:none;';
+    wrapper = document.createElement('div');
+    wrapper.style.cssText = 'position:fixed;top:0;left:-10000px;width:816px;background:white;opacity:0.01;pointer-events:none;';
     const clone = src.cloneNode(true);
     wrapper.appendChild(clone);
     document.body.appendChild(wrapper);
@@ -3746,10 +3765,10 @@ window.downloadPDF = async () => {
       pagebreak: { mode: ['avoid-all', 'css'] }
     };
     await html2pdf().set(opt).from(clone).save();
-    document.body.removeChild(wrapper);
   } catch(e) {
     console.error('PDF export error:', e);
   } finally {
+    if (wrapper && wrapper.parentNode) wrapper.parentNode.removeChild(wrapper);
     btn.disabled = false;
     btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v8M5 7l3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 12v1a1 1 0 001 1h8a1 1 0 001-1v-1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg> Download PDF';
   }
