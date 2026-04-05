@@ -1023,7 +1023,7 @@
 </div>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, collection, updateDoc, deleteDoc, doc, getDoc, setDoc, onSnapshot, serverTimestamp, query, orderBy, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, collection, updateDoc, deleteDoc, doc, getDoc, getDocs, setDoc, onSnapshot, serverTimestamp, query, orderBy, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut as fbSignOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getStorage, ref as storageRef, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
@@ -1221,6 +1221,51 @@ function queueAttachmentDocs(batch, issueId, photos = []) {
   });
 }
 
+const attachmentPhotoCache = new Map(); // issueId -> [{name,dataUrl,...}]
+let attachmentsHydrationToken = 0;
+
+async function fetchAttachmentPhotos(issueId) {
+  if (attachmentPhotoCache.has(issueId)) return attachmentPhotoCache.get(issueId);
+  const snap = await getDocs(issueAttachmentsCol(issueId));
+  if (snap.empty) {
+    attachmentPhotoCache.set(issueId, []);
+    return [];
+  }
+  const photos = [];
+  for (const d of snap.docs) {
+    const a = d.data() || {};
+    if (!a.storagePath) continue;
+    try {
+      const attStorage = a.storageBucket ? getStorage(app, `gs://${a.storageBucket}`) : storage;
+      const url = a.downloadURL || await getDownloadURL(storageRef(attStorage, a.storagePath));
+      photos.push({
+        name: a.fileName || d.id,
+        dataUrl: url,
+        storagePath: a.storagePath,
+        storageBucket: a.storageBucket || '',
+        contentType: a.contentType || '',
+        sizeBytes: Number(a.sizeBytes || 0)
+      });
+    } catch (_) {
+      // Ignore broken attachment references and keep going.
+    }
+  }
+  attachmentPhotoCache.set(issueId, photos);
+  return photos;
+}
+
+async function hydrateIssuePhotosFromAttachments(issueList) {
+  const myToken = ++attachmentsHydrationToken;
+  const targets = (issueList || []).filter(i => Number(i.photoCount || 0) > 0 || (i.photos || []).length > 0);
+  if (targets.length === 0) return;
+  await Promise.all(targets.map(async issue => {
+    const attPhotos = await fetchAttachmentPhotos(issue.id);
+    if (attPhotos.length > 0) issue.photos = attPhotos;
+  }));
+  if (myToken !== attachmentsHydrationToken) return;
+  renderIssues();
+}
+
 // ── APP LIFECYCLE HELPERS (Phase 1: structure-only refactor) ──
 function refreshVisibleData() {
   renderIssues();
@@ -1297,6 +1342,8 @@ async function switchPlant(plantId) {
   buildPlantDropdown();
   closePlantDropdown();
   issues = [];
+  attachmentPhotoCache.clear();
+  attachmentsHydrationToken++;
   setSyncStatus('', 'Switching plant…');
   await hydrateCurrentPlantView();
   startListener();
@@ -1643,6 +1690,8 @@ onAuthStateChanged(auth, async user => {
     document.getElementById('login-screen').classList.add('visible');
     document.getElementById('app').classList.remove('visible');
     issues = [];
+    attachmentPhotoCache.clear();
+    attachmentsHydrationToken++;
     const btn = document.getElementById('google-signin-btn');
     btn.disabled = false; btn.innerHTML = googleBtnHTML;
   }
@@ -1669,6 +1718,7 @@ function startListener() {
       };
     });
     refreshVisibleData();
+    hydrateIssuePhotosFromAttachments(issues);
     setSyncStatus('ok', 'Live — synced across all devices');
   }, err => {
     console.error('Snapshot error:', err);
@@ -2497,6 +2547,7 @@ window.submitIssue = async () => {
       note: ''
     });
     await batch.commit();
+    attachmentPhotoCache.set(issueRef.id, uploadedPhotos);
     closeModal();
   } catch(e) { setSyncStatus('err','Error saving: '+e.message); setSubmitting(false); }
 };
@@ -2555,6 +2606,7 @@ window.saveEdit = async () => {
       fieldsChanged: ['note', 'photos', 'dateTime', 'dateKey', 'timestamp']
     });
     await batch.commit();
+    attachmentPhotoCache.set(editTargetId, uploadedPhotos);
     closeEditModal();
   } catch(e) {
     setSyncStatus('err','Error saving: '+e.message);
