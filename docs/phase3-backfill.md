@@ -53,6 +53,7 @@ node scripts/backfill-attachments-v2.mjs --commit
 - Attachment backfill uploads legacy `photos[].dataUrl` images into Storage and creates `attachments` docs with `legacy_*` IDs.
 - Frontend new/edit issue flows now upload new `dataUrl` photos to Storage first, then persist URL-backed `photos[]` entries plus `attachments` docs.
 - Frontend issue rendering now hydrates photos from `attachments` first (with legacy `photos[]` fallback) to support incremental Phase 4 read cutover.
+- Frontend status resolution is now v2-first (`currentStatus` / `lifecycle`) with controlled legacy fallback while cutover is in progress.
 
 ## Troubleshooting (403 Permission denied on photo upload)
 
