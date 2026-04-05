@@ -2514,7 +2514,6 @@ window.submitIssue = async () => {
     const issuePayload = {
       machine: currentMachine, note,
       dateTime: fmtDate(d), dateKey: localDateStr(d), timestamp: d.getTime(),
-      resolved: false, resolveNote: '', resolveDateTime: '',
       userId: currentUser.uid, userName: currentUser.displayName||currentUser.email,
       statusHistory: [{ status: initialStatus, subStatus: initialSubStatus, note:'', dateTime: fmtDate(d), by: currentUser.displayName||currentUser.email }],
       workflowState: 'called',
@@ -2637,8 +2636,6 @@ window.confirmResolve = async () => {
     const last = currentStatus(issue || {});
     const resolvedAtText = fmtDate(new Date());
     const issuePatch = {
-      resolved:true, resolveNote:note||'Resolved (no details provided)',
-      resolveDateTime:resolvedAtText, resolvedBy:currentUser.displayName||currentUser.email,
       ...buildIssueV2Compat({
         machineCode: issue?.machine || '',
         statusKey: 'resolved',
@@ -2683,7 +2680,6 @@ window.confirmReopen = async () => {
     const history=issue.resolveHistory||[];
     history.push({resolveNote:issue.resolveNote,resolveDateTime:issue.resolveDateTime,resolvedBy:issue.resolvedBy||''});
     const issuePatch = {
-      resolved:false,resolveNote:'',resolveDateTime:'',resolvedBy:'',
       reopenNote:note||'',reopenDateTime:fmtDate(new Date()),
       reopenedBy:currentUser.displayName||currentUser.email,resolveHistory:history,
       ...buildIssueV2Compat({
@@ -2732,17 +2728,9 @@ window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
   const history = [...(issue.statusHistory||[])];
   const entry = { status, subStatus: subStatus||'', note: note||'', dateTime: dateTime || fmtDate(new Date()), by: currentUser.displayName||currentUser.email };
   history.push(entry);
-  const isResolved = status === 'resolved';
   try {
     const issuePatch = {
       statusHistory: history,
-      // keep legacy fields in sync for filtering
-      status: isResolved ? '' : status,
-      subStatus: subStatus||'',
-      resolved: isResolved,
-      resolveNote: isResolved ? (note||'Resolved') : '',
-      resolveDateTime: isResolved ? fmtDate(new Date()) : '',
-      resolvedBy: isResolved ? (currentUser.displayName||currentUser.email) : '',
       ...buildIssueV2Compat({
         machineCode: issue.machine || issue.machineCode || '',
         statusKey: status,
@@ -2775,13 +2763,9 @@ window.updateStatusEntry = async (id, idx, status, subStatus, note, dateTime) =>
   if (dateTime) history[idx].dateTime = dateTime;
   // Recalculate current status from last entry
   const last = history[history.length - 1];
-  const isResolved = last.status === 'resolved';
   try {
     const issuePatch = {
       statusHistory: history,
-      status: isResolved ? '' : last.status,
-      subStatus: last.subStatus||'',
-      resolved: isResolved,
       ...buildIssueV2Compat({
         machineCode: issue.machine || issue.machineCode || '',
         statusKey: last.status || 'open',
@@ -2815,13 +2799,9 @@ window.removeStatusEntry = async (id, idx) => {
   if (history.length <= 1) return;
   history.splice(idx, 1);
   const last = history[history.length - 1];
-  const isResolved = last.status === 'resolved';
   try {
     const issuePatch = {
       statusHistory: history,
-      status: isResolved ? '' : last.status,
-      subStatus: last.subStatus||'',
-      resolved: isResolved,
       ...buildIssueV2Compat({
         machineCode: issue.machine || issue.machineCode || '',
         statusKey: last.status || 'open',
@@ -3001,7 +2981,6 @@ window.setSubStatus = async (id, sub) => {
   try {
     const issuePatch = {
       statusHistory: history,
-      subStatus: sub,
       ...buildIssueV2Compat({
         machineCode: issue.machine || issue.machineCode || '',
         statusKey: last.status || 'open',

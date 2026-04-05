@@ -56,6 +56,7 @@ node scripts/backfill-attachments-v2.mjs --commit
 - Frontend issue rendering now hydrates photos from `attachments` first (with legacy `photos[]` fallback) to support incremental Phase 4 read cutover.
 - Frontend status resolution is now v2-first (`currentStatus` / `lifecycle`) with controlled legacy fallback while cutover is in progress.
 - Phase 4 PR3 cutover removes live legacy status fallback (`statusHistory`/`resolved`) and attachment hydration now relies on `photoCount` + `attachments` as source of truth.
+- Phase 5 cutover stops syncing legacy status summary fields (`status`, `subStatus`, `resolved`, `resolveNote`, `resolveDateTime`) on new writes; v2 `currentStatus` + `lifecycle` are canonical.
 
 ## Troubleshooting (403 Permission denied on photo upload)
 
