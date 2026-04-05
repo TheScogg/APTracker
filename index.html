@@ -2513,7 +2513,6 @@ window.submitIssue = async () => {
     const uploadedPhotos = await uploadIssuePhotosToStorage(issueRef.id, pendingPhotos);
     const issuePayload = {
       machine: currentMachine, note,
-      photos: uploadedPhotos.map(p=>({name:p.name,dataUrl:p.dataUrl,storagePath:p.storagePath||'',storageBucket:p.storageBucket||'',contentType:p.contentType||'',sizeBytes:Number(p.sizeBytes||0)})),
       dateTime: fmtDate(d), dateKey: localDateStr(d), timestamp: d.getTime(),
       resolved: false, resolveNote: '', resolveDateTime: '',
       userId: currentUser.uid, userName: currentUser.displayName||currentUser.email,
@@ -2553,11 +2552,16 @@ window.submitIssue = async () => {
 };
 
 // ── EDIT MODAL ──
-window.openEditModal = id => {
+window.openEditModal = async id => {
   const issue = issues.find(i=>i.id===id);
   if (!issue) return;
+  let photoList = issue.photos || [];
+  if (photoList.length === 0 && Number(issue.photoCount || 0) > 0) {
+    photoList = await fetchAttachmentPhotos(id);
+    issue.photos = photoList;
+  }
   editTargetId = id;
-  editPhotos = (issue.photos||[]).map(p=>({name:p.name,dataUrl:p.dataUrl}));
+  editPhotos = (photoList||[]).map(p=>({name:p.name,dataUrl:p.dataUrl,storagePath:p.storagePath||'',storageBucket:p.storageBucket||'',contentType:p.contentType||'',sizeBytes:Number(p.sizeBytes||0)}));
   document.getElementById('edit-machine-name').textContent = issue.machine;
   document.getElementById('edit-note').value = issue.note||'';
   // Parse existing date back into inputs
@@ -2586,7 +2590,7 @@ window.saveEdit = async () => {
     const last = currentStatus(issue || {});
     const uploadedPhotos = await uploadIssuePhotosToStorage(editTargetId, editPhotos);
     const issuePatch = {
-      note, photos: uploadedPhotos.map(p=>({name:p.name,dataUrl:p.dataUrl,storagePath:p.storagePath||'',storageBucket:p.storageBucket||'',contentType:p.contentType||'',sizeBytes:Number(p.sizeBytes||0)})),
+      note,
       dateTime: fmtDate(d), dateKey: localDateStr(d), timestamp: d.getTime(),
       photoCount: uploadedPhotos.length,
       editedAt: fmtDate(new Date()), editedBy: currentUser.displayName||currentUser.email,
