@@ -244,5 +244,17 @@ Edit the `openExportModal` function — the `cardsHtml` variable builds each iss
 
 ---
 
+## Firestore v2 migration docs
+Read these before making schema-related changes:
+
+- `docs/firestore-schema-v2.md`
+- `docs/security-rules-v2.md`
+- `firestore.indexes.json`
+
+For implementation work, start from:
+- `docs/codex-migration-prompt.txt`
+
+---
+
 ## TODO
 
