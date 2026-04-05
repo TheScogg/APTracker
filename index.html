@@ -3791,6 +3791,12 @@ function isIssueResolved(issue) {
   return issue?.currentStatus?.statusKey === 'resolved';
 }
 
+function isIssueResolved(issue) {
+  if (typeof issue?.lifecycle?.isResolved === 'boolean') return issue.lifecycle.isResolved;
+  if (issue?.currentStatus?.statusKey) return issue.currentStatus.statusKey === 'resolved';
+  return !!issue?.resolved;
+}
+
 function updateStats() {
   let scoped = issueScope==='mine' ? issues.filter(i=>i.userId===currentUser?.uid) : issues;
   scoped = scoped.filter(periodFilter);
