@@ -5,6 +5,7 @@ This script backfills legacy issue docs to the v2 compatibility shape and create
 ## Script
 
 - `scripts/backfill-issues-v2.mjs`
+- `scripts/backfill-attachments-v2.mjs`
 
 ## What it does
 
@@ -31,6 +32,7 @@ For each `issues` document found via `collectionGroup('issues')`:
 
 - Service account credentials via `GOOGLE_APPLICATION_CREDENTIALS`.
 - Optional: `FIREBASE_PROJECT_ID`.
+- Optional: `FIREBASE_STORAGE_BUCKET` (defaults to `<project-id>.firebasestorage.app`).
 - `firebase-admin` package available in the execution environment.
 
 ## Example
@@ -38,6 +40,9 @@ For each `issues` document found via `collectionGroup('issues')`:
 ```bash
 node scripts/backfill-issues-v2.mjs --dry-run
 node scripts/backfill-issues-v2.mjs --commit
+
+node scripts/backfill-attachments-v2.mjs --dry-run
+node scripts/backfill-attachments-v2.mjs --commit
 ```
 
 ## Notes
@@ -45,3 +50,4 @@ node scripts/backfill-issues-v2.mjs --commit
 - Row mapping is derived from each plant's legacy `plants/{plantId}/config/presses` document.
 - If an issue already has events, this script does not generate legacy historical events for it.
 - This script intentionally preserves legacy fields for phase-1/2 compatibility.
+- Attachment backfill uploads legacy `photos[].dataUrl` images into Storage and creates `attachments` docs with `legacy_*` IDs.
