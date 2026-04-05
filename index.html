@@ -3191,7 +3191,7 @@ function renderIssues() {
     const isMyIssue=issue.userId===currentUser?.uid;
     const row=document.createElement('div'); row.className='issue-row'; row.dataset.id = issue.id;
     const card=document.createElement('div');
-    card.className='issue-card'+(isIssueResolved(issue)?' resolved':'');;
+    card.className='issue-card'+(issueIsResolvedV2(issue)?' resolved':'');;
 
     const photosHtml=(issue.photos||[]).length
       ? `<div class="issue-photos">${issue.photos.map(p=>`<img class="issue-photo-thumb" src="${p.dataUrl}" loading="lazy" onclick="openLightbox('${p.dataUrl}')">`).join('')}</div>` : '';
@@ -3199,7 +3199,7 @@ function renderIssues() {
     // Current status from history
     const history = issue.statusHistory && issue.statusHistory.length > 0
       ? issue.statusHistory
-      : [{ status: isIssueResolved(issue) ? 'resolved' : (issue.status||'open'), subStatus: issue.subStatus||'', note:'', dateTime: issue.statusDateTime||issue.dateTime||'', by: issue.statusBy||issue.userName||'' }];
+      : [{ status: issueIsResolvedV2(issue) ? 'resolved' : (issue.status||'open'), subStatus: issue.subStatus||'', note:'', dateTime: issue.statusDateTime||issue.dateTime||'', by: issue.statusBy||issue.userName||'' }];
     const lastEntry = history[history.length-1];
     const lastKey = lastEntry.status || 'open';
     const scfg = STATUS_CONFIG_SAFE[lastKey];
@@ -3786,15 +3786,9 @@ function currentStatusKey(issue) {
   return issue?.lifecycle?.isResolved ? 'resolved' : 'open';
 }
 
-function isIssueResolved(issue) {
+function issueIsResolvedV2(issue) {
   if (typeof issue?.lifecycle?.isResolved === 'boolean') return issue.lifecycle.isResolved;
   return issue?.currentStatus?.statusKey === 'resolved';
-}
-
-function isIssueResolved(issue) {
-  if (typeof issue?.lifecycle?.isResolved === 'boolean') return issue.lifecycle.isResolved;
-  if (issue?.currentStatus?.statusKey) return issue.currentStatus.statusKey === 'resolved';
-  return !!issue?.resolved;
 }
 
 function updateStats() {
@@ -4085,7 +4079,7 @@ window.openExportModal = () => {
   filtered.forEach(issue => {
     const history = issue.statusHistory && issue.statusHistory.length > 0
       ? issue.statusHistory
-      : [{ status: isIssueResolved(issue)?'resolved':(issue.status||'open'), subStatus: issue.subStatus||'', note:'', dateTime: issue.dateTime||'', by: issue.userName||'' }];
+      : [{ status: issueIsResolvedV2(issue)?'resolved':(issue.status||'open'), subStatus: issue.subStatus||'', note:'', dateTime: issue.dateTime||'', by: issue.userName||'' }];
     const lastEntry = history[history.length-1];
     const lastKey = lastEntry.status || 'open';
     const cfg = STATUS_CONFIG_FALLBACK(lastKey);
