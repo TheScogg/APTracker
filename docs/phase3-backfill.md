@@ -52,3 +52,9 @@ node scripts/backfill-attachments-v2.mjs --commit
 - This script intentionally preserves legacy fields for phase-1/2 compatibility.
 - Attachment backfill uploads legacy `photos[].dataUrl` images into Storage and creates `attachments` docs with `legacy_*` IDs.
 - Frontend new/edit issue flows now upload new `dataUrl` photos to Storage first, then persist URL-backed `photos[]` entries plus `attachments` docs.
+
+## Troubleshooting (403 Permission denied on photo upload)
+
+- Ensure Firebase Storage Security Rules allow authenticated users to write to your issue photo path.
+- If your project uses an older default bucket (`<project-id>.appspot.com`) but frontend config points to `<project-id>.firebasestorage.app`, uploads can fail with 403.
+- The frontend now attempts upload to the configured bucket and falls back to `gs://<project-id>.appspot.com` on common bucket/permission errors.

@@ -1039,6 +1039,9 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const storage = getStorage(app);
+const storageFallback = firebaseConfig.storageBucket && firebaseConfig.storageBucket.includes('.appspot.com')
+  ? null
+  : getStorage(app, `gs://${firebaseConfig.projectId}.appspot.com`);
 const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
 provider.setCustomParameters({ prompt: "select_account" });
@@ -1172,13 +1175,24 @@ async function uploadIssuePhotosToStorage(issueId, photos) {
     const ext = extFromContentType(meta.contentType);
     const fileName = `${Date.now()}_${idx}.${ext}`;
     const path = `plants/${currentPlantId}/issues/${issueId}/photos/${fileName}`;
-    const sRef = storageRef(storage, path);
-    await uploadString(sRef, src, 'data_url');
-    const url = await getDownloadURL(sRef);
+    let sRef = storageRef(storage, path);
+    let url = '';
+    try {
+      await uploadString(sRef, src, 'data_url');
+      url = await getDownloadURL(sRef);
+    } catch (err) {
+      const msg = String(err?.message || '');
+      const shouldTryFallback = storageFallback && (msg.includes('Permission denied') || msg.includes('storage/unauthorized') || msg.includes('storage/bucket-not-found'));
+      if (!shouldTryFallback) throw err;
+      sRef = storageRef(storageFallback, path);
+      await uploadString(sRef, src, 'data_url');
+      url = await getDownloadURL(sRef);
+    }
     out.push({
       name: p.name || fileName,
       dataUrl: url, // keep existing UI field name for backward-compatible rendering
       storagePath: path,
+      storageBucket: sRef.bucket,
       contentType: meta.contentType,
       sizeBytes: meta.sizeBytes,
       source: 'storage'
@@ -1196,6 +1210,7 @@ function queueAttachmentDocs(batch, issueId, photos = []) {
       fileName: p.name || '',
       contentType: p.contentType || 'image/jpeg',
       storagePath: p.storagePath,
+      storageBucket: p.storageBucket || '',
       thumbnailPath: null,
       uploadedBy: currentActor(),
       uploadedAt: serverTimestamp(),
@@ -2448,7 +2463,7 @@ window.submitIssue = async () => {
     const uploadedPhotos = await uploadIssuePhotosToStorage(issueRef.id, pendingPhotos);
     const issuePayload = {
       machine: currentMachine, note,
-      photos: uploadedPhotos.map(p=>({name:p.name,dataUrl:p.dataUrl,storagePath:p.storagePath||'',contentType:p.contentType||'',sizeBytes:Number(p.sizeBytes||0)})),
+      photos: uploadedPhotos.map(p=>({name:p.name,dataUrl:p.dataUrl,storagePath:p.storagePath||'',storageBucket:p.storageBucket||'',contentType:p.contentType||'',sizeBytes:Number(p.sizeBytes||0)})),
       dateTime: fmtDate(d), dateKey: localDateStr(d), timestamp: d.getTime(),
       resolved: false, resolveNote: '', resolveDateTime: '',
       userId: currentUser.uid, userName: currentUser.displayName||currentUser.email,
@@ -2520,7 +2535,7 @@ window.saveEdit = async () => {
     const last = currentStatus(issue || {});
     const uploadedPhotos = await uploadIssuePhotosToStorage(editTargetId, editPhotos);
     const issuePatch = {
-      note, photos: uploadedPhotos.map(p=>({name:p.name,dataUrl:p.dataUrl,storagePath:p.storagePath||'',contentType:p.contentType||'',sizeBytes:Number(p.sizeBytes||0)})),
+      note, photos: uploadedPhotos.map(p=>({name:p.name,dataUrl:p.dataUrl,storagePath:p.storagePath||'',storageBucket:p.storageBucket||'',contentType:p.contentType||'',sizeBytes:Number(p.sizeBytes||0)})),
       dateTime: fmtDate(d), dateKey: localDateStr(d), timestamp: d.getTime(),
       photoCount: uploadedPhotos.length,
       editedAt: fmtDate(new Date()), editedBy: currentUser.displayName||currentUser.email,
