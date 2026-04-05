@@ -1023,7 +1023,7 @@
 </div>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, getDoc, setDoc, onSnapshot, serverTimestamp, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, collection, updateDoc, deleteDoc, doc, getDoc, setDoc, onSnapshot, serverTimestamp, query, orderBy, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut as fbSignOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 const firebaseConfig = {
@@ -1131,8 +1131,9 @@ function buildIssueV2Compat({ machineCode, statusKey, subStatus = '', statusDate
   };
 }
 
-async function appendIssueEvent(issueId, type, payload = {}) {
-  await addDoc(issueEventsCol(issueId), {
+function queueIssueEvent(batch, issueId, type, payload = {}) {
+  const evtRef = doc(issueEventsCol(issueId));
+  batch.set(evtRef, {
     type,
     eventAt: serverTimestamp(),
     actor: currentActor(),
@@ -2397,20 +2398,23 @@ window.submitIssue = async () => {
         note
       })
     };
-    const issueRef = await addDoc(plantCol('issues'), issuePayload);
-    await appendIssueEvent(issueRef.id, 'issue_created', {
+    const issueRef = doc(plantCol('issues'));
+    const batch = writeBatch(db);
+    batch.set(issueRef, issuePayload);
+    queueIssueEvent(batch, issueRef.id, 'issue_created', {
       machineCode: currentMachine,
       note,
       initialStatusKey: initialStatus,
       initialSubStatusKey: initialSubStatus
     });
-    await appendIssueEvent(issueRef.id, 'status_changed', {
+    queueIssueEvent(batch, issueRef.id, 'status_changed', {
       fromStatusKey: null,
       fromSubStatusKey: null,
       toStatusKey: initialStatus,
       toSubStatusKey: initialSubStatus,
       note: ''
     });
+    await batch.commit();
     closeModal();
   } catch(e) { setSyncStatus('err','Error saving: '+e.message); setSubmitting(false); }
 };
@@ -2447,7 +2451,7 @@ window.saveEdit = async () => {
     const d = getIssueDateFromInputs('edit-date','edit-time-input');
     const issue = issues.find(i=>i.id===editTargetId);
     const last = currentStatus(issue || {});
-    await updateDoc(plantDoc('issues',editTargetId), {
+    const issuePatch = {
       note, photos: editPhotos.map(p=>({name:p.name,dataUrl:p.dataUrl})),
       dateTime: fmtDate(d), dateKey: localDateStr(d), timestamp: d.getTime(),
       editedAt: fmtDate(new Date()), editedBy: currentUser.displayName||currentUser.email,
@@ -2459,10 +2463,13 @@ window.saveEdit = async () => {
         note,
         baseIssue: issue
       })
-    });
-    await appendIssueEvent(editTargetId, 'issue_edited', {
+    };
+    const batch = writeBatch(db);
+    batch.update(plantDoc('issues',editTargetId), issuePatch);
+    queueIssueEvent(batch, editTargetId, 'issue_edited', {
       fieldsChanged: ['note', 'photos', 'dateTime', 'dateKey', 'timestamp']
     });
+    await batch.commit();
     closeEditModal();
   } catch(e) {
     setSyncStatus('err','Error saving: '+e.message);
@@ -2488,7 +2495,7 @@ window.confirmResolve = async () => {
     const issue = issues.find(i=>i.id===resolveTargetId);
     const last = currentStatus(issue || {});
     const resolvedAtText = fmtDate(new Date());
-    await updateDoc(plantDoc('issues',resolveTargetId), {
+    const issuePatch = {
       resolved:true, resolveNote:note||'Resolved (no details provided)',
       resolveDateTime:resolvedAtText, resolvedBy:currentUser.displayName||currentUser.email,
       ...buildIssueV2Compat({
@@ -2499,15 +2506,18 @@ window.confirmResolve = async () => {
         note: note || 'Resolved (no details provided)',
         baseIssue: issue
       })
-    });
-    await appendIssueEvent(resolveTargetId, 'issue_resolved', { resolutionNote: note || 'Resolved (no details provided)' });
-    await appendIssueEvent(resolveTargetId, 'status_changed', {
+    };
+    const batch = writeBatch(db);
+    batch.update(plantDoc('issues',resolveTargetId), issuePatch);
+    queueIssueEvent(batch, resolveTargetId, 'issue_resolved', { resolutionNote: note || 'Resolved (no details provided)' });
+    queueIssueEvent(batch, resolveTargetId, 'status_changed', {
       fromStatusKey: last?.status || currentStatusKey(issue || {}),
       fromSubStatusKey: last?.subStatus || '',
       toStatusKey: 'resolved',
       toSubStatusKey: '',
       note: note || 'Resolved (no details provided)'
     });
+    await batch.commit();
     closeResolveModal();
   } catch(e) { setSyncStatus('err','Error: '+e.message); btn.disabled=false; btn.innerHTML='Mark Resolved'; }
 };
@@ -2531,7 +2541,7 @@ window.confirmReopen = async () => {
     const last = currentStatus(issue || {});
     const history=issue.resolveHistory||[];
     history.push({resolveNote:issue.resolveNote,resolveDateTime:issue.resolveDateTime,resolvedBy:issue.resolvedBy||''});
-    await updateDoc(plantDoc('issues',reopenTargetId),{
+    const issuePatch = {
       resolved:false,resolveNote:'',resolveDateTime:'',resolvedBy:'',
       reopenNote:note||'',reopenDateTime:fmtDate(new Date()),
       reopenedBy:currentUser.displayName||currentUser.email,resolveHistory:history,
@@ -2544,8 +2554,11 @@ window.confirmReopen = async () => {
         baseIssue: issue,
         forceReopenIncrement: true
       })
-    });
-    await appendIssueEvent(reopenTargetId, 'issue_reopened', { reason: note || '' });
+    };
+    const batch = writeBatch(db);
+    batch.update(plantDoc('issues',reopenTargetId), issuePatch);
+    queueIssueEvent(batch, reopenTargetId, 'issue_reopened', { reason: note || '' });
+    await batch.commit();
     closeReopenModal();
   } catch(e) { setSyncStatus('err','Error: '+e.message); btn.disabled=false; btn.innerHTML='Re-open Issue'; }
 };
@@ -2555,7 +2568,18 @@ window.confirmReopen = async () => {
 // Helper: get current status from history
 function currentStatus(issue) {
   const h = issue.statusHistory;
-  if (!h || h.length === 0) return { status: issue.status||'open', subStatus: issue.subStatus||'', note:'', dateTime:'', by:'' };
+  if (!h || h.length === 0) {
+    if (issue.currentStatus?.statusKey) {
+      return {
+        status: issue.currentStatus.statusKey,
+        subStatus: issue.currentStatus.subStatusKey || '',
+        note: issue.currentStatus.notePreview || '',
+        dateTime: issue.currentStatus.enteredDateTime || '',
+        by: issue.currentStatus.enteredBy?.name || ''
+      };
+    }
+    return { status: issue.status||'open', subStatus: issue.subStatus||'', note:'', dateTime:'', by:'' };
+  }
   return h[h.length - 1];
 }
 
@@ -2569,7 +2593,7 @@ window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
   history.push(entry);
   const isResolved = status === 'resolved';
   try {
-    await updateDoc(plantDoc('issues',id), {
+    const issuePatch = {
       statusHistory: history,
       // keep legacy fields in sync for filtering
       status: isResolved ? '' : status,
@@ -2586,14 +2610,17 @@ window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
         note: note || '',
         baseIssue: issue
       })
-    });
-    await appendIssueEvent(id, 'status_changed', {
+    };
+    const batch = writeBatch(db);
+    batch.update(plantDoc('issues',id), issuePatch);
+    queueIssueEvent(batch, id, 'status_changed', {
       fromStatusKey: prev?.status || currentStatusKey(issue),
       fromSubStatusKey: prev?.subStatus || '',
       toStatusKey: status,
       toSubStatusKey: subStatus || '',
       note: note || ''
     });
+    await batch.commit();
   } catch(e) { setSyncStatus('err','Error: '+e.message); }
 };
 
@@ -2609,7 +2636,7 @@ window.updateStatusEntry = async (id, idx, status, subStatus, note, dateTime) =>
   const last = history[history.length - 1];
   const isResolved = last.status === 'resolved';
   try {
-    await updateDoc(plantDoc('issues',id), {
+    const issuePatch = {
       statusHistory: history,
       status: isResolved ? '' : last.status,
       subStatus: last.subStatus||'',
@@ -2622,9 +2649,11 @@ window.updateStatusEntry = async (id, idx, status, subStatus, note, dateTime) =>
         note: last.note || '',
         baseIssue: issue
       })
-    });
+    };
+    const batch = writeBatch(db);
+    batch.update(plantDoc('issues',id), issuePatch);
     if ((prev?.status || 'open') !== (last.status || 'open') || (prev?.subStatus || '') !== (last.subStatus || '')) {
-      await appendIssueEvent(id, 'status_changed', {
+      queueIssueEvent(batch, id, 'status_changed', {
         fromStatusKey: prev?.status || currentStatusKey(issue),
         fromSubStatusKey: prev?.subStatus || '',
         toStatusKey: last.status || 'open',
@@ -2632,6 +2661,7 @@ window.updateStatusEntry = async (id, idx, status, subStatus, note, dateTime) =>
         note: last.note || ''
       });
     }
+    await batch.commit();
   } catch(e) { setSyncStatus('err','Error: '+e.message); }
 };
 
@@ -2646,7 +2676,7 @@ window.removeStatusEntry = async (id, idx) => {
   const last = history[history.length - 1];
   const isResolved = last.status === 'resolved';
   try {
-    await updateDoc(plantDoc('issues',id), {
+    const issuePatch = {
       statusHistory: history,
       status: isResolved ? '' : last.status,
       subStatus: last.subStatus||'',
@@ -2659,9 +2689,11 @@ window.removeStatusEntry = async (id, idx) => {
         note: last.note || '',
         baseIssue: issue
       })
-    });
+    };
+    const batch = writeBatch(db);
+    batch.update(plantDoc('issues',id), issuePatch);
     if ((prev?.status || 'open') !== (last.status || 'open') || (prev?.subStatus || '') !== (last.subStatus || '')) {
-      await appendIssueEvent(id, 'status_changed', {
+      queueIssueEvent(batch, id, 'status_changed', {
         fromStatusKey: prev?.status || currentStatusKey(issue),
         fromSubStatusKey: prev?.subStatus || '',
         toStatusKey: last.status || 'open',
@@ -2669,6 +2701,7 @@ window.removeStatusEntry = async (id, idx) => {
         note: 'Timeline entry removed'
       });
     }
+    await batch.commit();
   } catch(e) { setSyncStatus('err','Error: '+e.message); }
 };
 
@@ -2825,7 +2858,7 @@ window.setSubStatus = async (id, sub) => {
   if (history.length > 0) { history[history.length-1].subStatus = sub; }
   const last = history[history.length - 1] || { status: currentStatusKey(issue), subStatus: sub, note: '' };
   try {
-    await updateDoc(plantDoc('issues',id),{
+    const issuePatch = {
       statusHistory: history,
       subStatus: sub,
       ...buildIssueV2Compat({
@@ -2836,9 +2869,11 @@ window.setSubStatus = async (id, sub) => {
         note: last.note || '',
         baseIssue: issue
       })
-    });
+    };
+    const batch = writeBatch(db);
+    batch.update(plantDoc('issues',id), issuePatch);
     if ((prev?.subStatus || '') !== (sub || '')) {
-      await appendIssueEvent(id, 'status_changed', {
+      queueIssueEvent(batch, id, 'status_changed', {
         fromStatusKey: prev?.status || currentStatusKey(issue),
         fromSubStatusKey: prev?.subStatus || '',
         toStatusKey: last.status || prev?.status || 'open',
@@ -2846,6 +2881,7 @@ window.setSubStatus = async (id, sub) => {
         note: last.note || ''
       });
     }
+    await batch.commit();
   }
   catch(e) { setSyncStatus('err','Error updating: '+e.message); }
 };
