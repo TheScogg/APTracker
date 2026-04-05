@@ -51,8 +51,11 @@ node scripts/backfill-attachments-v2.mjs --commit
 - If an issue already has events, this script does not generate legacy historical events for it.
 - This script intentionally preserves legacy fields for phase-1/2 compatibility.
 - Attachment backfill uploads legacy `photos[].dataUrl` images into Storage and creates `attachments` docs with `legacy_*` IDs.
-- Frontend new/edit issue flows now upload new `dataUrl` photos to Storage first, then persist URL-backed `photos[]` entries plus `attachments` docs.
+- Frontend new/edit issue flows upload new `dataUrl` photos to Storage first and write `attachments` docs.
+- Phase 4 PR4 cutover removes frontend writes to legacy `issue.photos[]`; `attachments` + `photoCount` are now the canonical photo write path.
 - Frontend issue rendering now hydrates photos from `attachments` first (with legacy `photos[]` fallback) to support incremental Phase 4 read cutover.
+- Frontend status resolution is now v2-first (`currentStatus` / `lifecycle`) with controlled legacy fallback while cutover is in progress.
+- Phase 4 PR3 cutover removes live legacy status fallback (`statusHistory`/`resolved`) and attachment hydration now relies on `photoCount` + `attachments` as source of truth.
 
 ## Troubleshooting (403 Permission denied on photo upload)
 

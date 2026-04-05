@@ -1256,11 +1256,11 @@ async function fetchAttachmentPhotos(issueId) {
 
 async function hydrateIssuePhotosFromAttachments(issueList) {
   const myToken = ++attachmentsHydrationToken;
-  const targets = (issueList || []).filter(i => Number(i.photoCount || 0) > 0 || (i.photos || []).length > 0);
+  const targets = (issueList || []).filter(i => Number(i.photoCount || 0) > 0);
   if (targets.length === 0) return;
   await Promise.all(targets.map(async issue => {
     const attPhotos = await fetchAttachmentPhotos(issue.id);
-    if (attPhotos.length > 0) issue.photos = attPhotos;
+    issue.photos = attPhotos;
   }));
   if (myToken !== attachmentsHydrationToken) return;
   renderIssues();
@@ -2513,7 +2513,6 @@ window.submitIssue = async () => {
     const uploadedPhotos = await uploadIssuePhotosToStorage(issueRef.id, pendingPhotos);
     const issuePayload = {
       machine: currentMachine, note,
-      photos: uploadedPhotos.map(p=>({name:p.name,dataUrl:p.dataUrl,storagePath:p.storagePath||'',storageBucket:p.storageBucket||'',contentType:p.contentType||'',sizeBytes:Number(p.sizeBytes||0)})),
       dateTime: fmtDate(d), dateKey: localDateStr(d), timestamp: d.getTime(),
       resolved: false, resolveNote: '', resolveDateTime: '',
       userId: currentUser.uid, userName: currentUser.displayName||currentUser.email,
@@ -2553,11 +2552,16 @@ window.submitIssue = async () => {
 };
 
 // ── EDIT MODAL ──
-window.openEditModal = id => {
+window.openEditModal = async id => {
   const issue = issues.find(i=>i.id===id);
   if (!issue) return;
+  let photoList = issue.photos || [];
+  if (photoList.length === 0 && Number(issue.photoCount || 0) > 0) {
+    photoList = await fetchAttachmentPhotos(id);
+    issue.photos = photoList;
+  }
   editTargetId = id;
-  editPhotos = (issue.photos||[]).map(p=>({name:p.name,dataUrl:p.dataUrl}));
+  editPhotos = (photoList||[]).map(p=>({name:p.name,dataUrl:p.dataUrl,storagePath:p.storagePath||'',storageBucket:p.storageBucket||'',contentType:p.contentType||'',sizeBytes:Number(p.sizeBytes||0)}));
   document.getElementById('edit-machine-name').textContent = issue.machine;
   document.getElementById('edit-note').value = issue.note||'';
   // Parse existing date back into inputs
@@ -2586,7 +2590,7 @@ window.saveEdit = async () => {
     const last = currentStatus(issue || {});
     const uploadedPhotos = await uploadIssuePhotosToStorage(editTargetId, editPhotos);
     const issuePatch = {
-      note, photos: uploadedPhotos.map(p=>({name:p.name,dataUrl:p.dataUrl,storagePath:p.storagePath||'',storageBucket:p.storageBucket||'',contentType:p.contentType||'',sizeBytes:Number(p.sizeBytes||0)})),
+      note,
       dateTime: fmtDate(d), dateKey: localDateStr(d), timestamp: d.getTime(),
       photoCount: uploadedPhotos.length,
       editedAt: fmtDate(new Date()), editedBy: currentUser.displayName||currentUser.email,
@@ -3191,7 +3195,7 @@ function renderIssues() {
     const isMyIssue=issue.userId===currentUser?.uid;
     const row=document.createElement('div'); row.className='issue-row'; row.dataset.id = issue.id;
     const card=document.createElement('div');
-    card.className='issue-card'+(issue.resolved?' resolved':'');;
+    card.className='issue-card'+(issueIsResolvedV2(issue)?' resolved':'');;
 
     const photosHtml=(issue.photos||[]).length
       ? `<div class="issue-photos">${issue.photos.map(p=>`<img class="issue-photo-thumb" src="${p.dataUrl}" loading="lazy" onclick="openLightbox('${p.dataUrl}')">`).join('')}</div>` : '';
@@ -3199,7 +3203,7 @@ function renderIssues() {
     // Current status from history
     const history = issue.statusHistory && issue.statusHistory.length > 0
       ? issue.statusHistory
-      : [{ status: issue.resolved ? 'resolved' : (issue.status||'open'), subStatus: issue.subStatus||'', note:'', dateTime: issue.statusDateTime||issue.dateTime||'', by: issue.statusBy||issue.userName||'' }];
+      : [{ status: issueIsResolvedV2(issue) ? 'resolved' : (issue.status||'open'), subStatus: issue.subStatus||'', note:'', dateTime: issue.statusDateTime||issue.dateTime||'', by: issue.statusBy||issue.userName||'' }];
     const lastEntry = history[history.length-1];
     const lastKey = lastEntry.status || 'open';
     const scfg = STATUS_CONFIG_SAFE[lastKey];
@@ -3782,12 +3786,13 @@ window.addEventListener('resize', () => {
 });
 
 function currentStatusKey(issue) {
-  if (issue.currentStatus?.statusKey) return issue.currentStatus.statusKey;
-  if (issue.statusHistory && issue.statusHistory.length > 0) {
-    return issue.statusHistory[issue.statusHistory.length-1].status || 'open';
-  }
-  if (issue.resolved) return 'resolved';
-  return issue.status || 'open';
+  if (issue?.currentStatus?.statusKey) return issue.currentStatus.statusKey;
+  return issue?.lifecycle?.isResolved ? 'resolved' : 'open';
+}
+
+function issueIsResolvedV2(issue) {
+  if (typeof issue?.lifecycle?.isResolved === 'boolean') return issue.lifecycle.isResolved;
+  return issue?.currentStatus?.statusKey === 'resolved';
 }
 
 function updateStats() {
@@ -4078,7 +4083,7 @@ window.openExportModal = () => {
   filtered.forEach(issue => {
     const history = issue.statusHistory && issue.statusHistory.length > 0
       ? issue.statusHistory
-      : [{ status: issue.resolved?'resolved':(issue.status||'open'), subStatus: issue.subStatus||'', note:'', dateTime: issue.dateTime||'', by: issue.userName||'' }];
+      : [{ status: issueIsResolvedV2(issue)?'resolved':(issue.status||'open'), subStatus: issue.subStatus||'', note:'', dateTime: issue.dateTime||'', by: issue.userName||'' }];
     const lastEntry = history[history.length-1];
     const lastKey = lastEntry.status || 'open';
     const cfg = STATUS_CONFIG_FALLBACK(lastKey);
