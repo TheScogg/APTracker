@@ -1063,6 +1063,83 @@ let ALL_MACHINES = Object.values(PRESSES).flat();
 // Firestore path helpers — all data scoped under plants/{plantId}/
 function plantCol(colName) { return collection(db, 'plants', currentPlantId, colName); }
 function plantDoc(colName, docId) { return doc(db, 'plants', currentPlantId, colName, docId); }
+function issueEventsCol(issueId) { return collection(db, 'plants', currentPlantId, 'issues', issueId, 'events'); }
+
+function currentActor() {
+  return { uid: currentUser?.uid || '', name: currentUser?.displayName || currentUser?.email || 'Unknown' };
+}
+
+function toPressId(machineCode) {
+  return 'press_' + String(machineCode || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
+function toRowId(rowName) {
+  const m = String(rowName || '').match(/(\d+)/);
+  if (m) return 'row_' + String(m[1]).padStart(2, '0');
+  const norm = String(rowName || 'other').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  return norm ? ('row_' + norm) : 'row_other';
+}
+
+function findRowNameForMachine(machineCode) {
+  for (const [rowName, machines] of Object.entries(PRESSES || {})) {
+    if ((machines || []).includes(machineCode)) return rowName;
+  }
+  return 'Other';
+}
+
+function deriveLifecycle(statusKey, baseIssue = null, opts = {}) {
+  const isResolved = statusKey === 'resolved';
+  const wasResolved = !!(baseIssue?.lifecycle?.isResolved || baseIssue?.resolved);
+  const priorReopenCount = Number(baseIssue?.lifecycle?.reopenedCount || 0);
+  return {
+    isOpen: !isResolved,
+    isResolved,
+    openedAt: baseIssue?.lifecycle?.openedAt || baseIssue?.createdAt || serverTimestamp(),
+    resolvedAt: isResolved ? serverTimestamp() : null,
+    closedAt: isResolved ? serverTimestamp() : null,
+    reopenedCount: opts.forceReopenIncrement ? priorReopenCount + 1 : (wasResolved && !isResolved ? priorReopenCount + 1 : priorReopenCount)
+  };
+}
+
+function buildCurrentStatus(statusKey, subStatus = '', enteredDateTime = '', note = '') {
+  const def = getStatusDef(statusKey);
+  return {
+    statusKey: statusKey || 'open',
+    subStatusKey: subStatus || '',
+    label: def?.label || statusKey || 'Open',
+    subLabel: subStatus || '',
+    color: getStatusColor(statusKey),
+    enteredAt: serverTimestamp(),
+    enteredDateTime: enteredDateTime || fmtDate(new Date()),
+    enteredBy: currentActor(),
+    notePreview: note || ''
+  };
+}
+
+function buildIssueV2Compat({ machineCode, statusKey, subStatus = '', statusDateTime = '', note = '', baseIssue = null, forceReopenIncrement = false }) {
+  const rowName = findRowNameForMachine(machineCode);
+  return {
+    schemaVersion: 2,
+    plantId: currentPlantId,
+    pressId: toPressId(machineCode),
+    machineCode: machineCode || '',
+    rowId: toRowId(rowName),
+    currentStatus: buildCurrentStatus(statusKey, subStatus, statusDateTime, note),
+    lifecycle: deriveLifecycle(statusKey, baseIssue, { forceReopenIncrement }),
+    updatedAt: serverTimestamp(),
+    updatedBy: currentActor()
+  };
+}
+
+async function appendIssueEvent(issueId, type, payload = {}) {
+  await addDoc(issueEventsCol(issueId), {
+    type,
+    eventAt: serverTimestamp(),
+    actor: currentActor(),
+    payload,
+    schemaVersion: 2
+  });
+}
 
 // ── APP LIFECYCLE HELPERS (Phase 1: structure-only refactor) ──
 function refreshVisibleData() {
@@ -1502,7 +1579,15 @@ function startListener() {
   const q = query(plantCol('issues'), orderBy('createdAt', 'desc'));
   unsubscribe = onSnapshot(q, snap => {
     retryCount = 0; // reset on success
-    issues = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    issues = snap.docs.map(d => {
+      const data = d.data();
+      return {
+        id: d.id,
+        ...data,
+        machine: data.machine || data.machineCode || '',
+        resolved: typeof data.resolved === 'boolean' ? data.resolved : !!data.lifecycle?.isResolved
+      };
+    });
     refreshVisibleData();
     setSyncStatus('ok', 'Live — synced across all devices');
   }, err => {
@@ -2292,15 +2377,39 @@ window.submitIssue = async () => {
   setSubmitting(true);
   try {
     const d = getIssueDateFromInputs('issue-date','issue-time-input');
-    await addDoc(plantCol('issues'), {
+    const initialStatus = logCatKey || 'open';
+    const initialSubStatus = logCatSub || '';
+    const issuePayload = {
       machine: currentMachine, note,
       photos: pendingPhotos.map(p=>({name:p.name,dataUrl:p.dataUrl})),
       dateTime: fmtDate(d), dateKey: localDateStr(d), timestamp: d.getTime(),
       resolved: false, resolveNote: '', resolveDateTime: '',
       userId: currentUser.uid, userName: currentUser.displayName||currentUser.email,
-      statusHistory: [{ status: logCatKey||'open', subStatus: logCatSub||'', note:'', dateTime: fmtDate(d), by: currentUser.displayName||currentUser.email }],
+      statusHistory: [{ status: initialStatus, subStatus: initialSubStatus, note:'', dateTime: fmtDate(d), by: currentUser.displayName||currentUser.email }],
       workflowState: 'called',
-      createdAt: serverTimestamp()
+      createdAt: serverTimestamp(),
+      createdBy: currentActor(),
+      ...buildIssueV2Compat({
+        machineCode: currentMachine,
+        statusKey: initialStatus,
+        subStatus: initialSubStatus,
+        statusDateTime: fmtDate(d),
+        note
+      })
+    };
+    const issueRef = await addDoc(plantCol('issues'), issuePayload);
+    await appendIssueEvent(issueRef.id, 'issue_created', {
+      machineCode: currentMachine,
+      note,
+      initialStatusKey: initialStatus,
+      initialSubStatusKey: initialSubStatus
+    });
+    await appendIssueEvent(issueRef.id, 'status_changed', {
+      fromStatusKey: null,
+      fromSubStatusKey: null,
+      toStatusKey: initialStatus,
+      toSubStatusKey: initialSubStatus,
+      note: ''
     });
     closeModal();
   } catch(e) { setSyncStatus('err','Error saving: '+e.message); setSubmitting(false); }
@@ -2336,10 +2445,23 @@ window.saveEdit = async () => {
   btn.disabled=true; btn.innerHTML='<span class="spinner"></span> Saving…';
   try {
     const d = getIssueDateFromInputs('edit-date','edit-time-input');
+    const issue = issues.find(i=>i.id===editTargetId);
+    const last = currentStatus(issue || {});
     await updateDoc(plantDoc('issues',editTargetId), {
       note, photos: editPhotos.map(p=>({name:p.name,dataUrl:p.dataUrl})),
       dateTime: fmtDate(d), dateKey: localDateStr(d), timestamp: d.getTime(),
-      editedAt: fmtDate(new Date()), editedBy: currentUser.displayName||currentUser.email
+      editedAt: fmtDate(new Date()), editedBy: currentUser.displayName||currentUser.email,
+      ...buildIssueV2Compat({
+        machineCode: issue?.machine || currentMachine,
+        statusKey: last?.status || currentStatusKey(issue || {}),
+        subStatus: last?.subStatus || issue?.subStatus || '',
+        statusDateTime: last?.dateTime || issue?.dateTime || fmtDate(new Date()),
+        note,
+        baseIssue: issue
+      })
+    });
+    await appendIssueEvent(editTargetId, 'issue_edited', {
+      fieldsChanged: ['note', 'photos', 'dateTime', 'dateKey', 'timestamp']
     });
     closeEditModal();
   } catch(e) {
@@ -2363,9 +2485,28 @@ window.confirmResolve = async () => {
   const btn=document.getElementById('resolve-confirm-btn');
   btn.disabled=true; btn.innerHTML='<span class="spinner"></span> Saving…';
   try {
+    const issue = issues.find(i=>i.id===resolveTargetId);
+    const last = currentStatus(issue || {});
+    const resolvedAtText = fmtDate(new Date());
     await updateDoc(plantDoc('issues',resolveTargetId), {
       resolved:true, resolveNote:note||'Resolved (no details provided)',
-      resolveDateTime:fmtDate(new Date()), resolvedBy:currentUser.displayName||currentUser.email
+      resolveDateTime:resolvedAtText, resolvedBy:currentUser.displayName||currentUser.email,
+      ...buildIssueV2Compat({
+        machineCode: issue?.machine || '',
+        statusKey: 'resolved',
+        subStatus: '',
+        statusDateTime: resolvedAtText,
+        note: note || 'Resolved (no details provided)',
+        baseIssue: issue
+      })
+    });
+    await appendIssueEvent(resolveTargetId, 'issue_resolved', { resolutionNote: note || 'Resolved (no details provided)' });
+    await appendIssueEvent(resolveTargetId, 'status_changed', {
+      fromStatusKey: last?.status || currentStatusKey(issue || {}),
+      fromSubStatusKey: last?.subStatus || '',
+      toStatusKey: 'resolved',
+      toSubStatusKey: '',
+      note: note || 'Resolved (no details provided)'
     });
     closeResolveModal();
   } catch(e) { setSyncStatus('err','Error: '+e.message); btn.disabled=false; btn.innerHTML='Mark Resolved'; }
@@ -2387,13 +2528,24 @@ window.confirmReopen = async () => {
   btn.disabled=true; btn.innerHTML='<span class="spinner"></span> Saving…';
   try {
     const issue=issues.find(i=>i.id===reopenTargetId);
+    const last = currentStatus(issue || {});
     const history=issue.resolveHistory||[];
     history.push({resolveNote:issue.resolveNote,resolveDateTime:issue.resolveDateTime,resolvedBy:issue.resolvedBy||''});
     await updateDoc(plantDoc('issues',reopenTargetId),{
       resolved:false,resolveNote:'',resolveDateTime:'',resolvedBy:'',
       reopenNote:note||'',reopenDateTime:fmtDate(new Date()),
-      reopenedBy:currentUser.displayName||currentUser.email,resolveHistory:history
+      reopenedBy:currentUser.displayName||currentUser.email,resolveHistory:history,
+      ...buildIssueV2Compat({
+        machineCode: issue?.machine || '',
+        statusKey: last?.status && last.status !== 'resolved' ? last.status : 'open',
+        subStatus: last?.status && last.status !== 'resolved' ? (last.subStatus || '') : '',
+        statusDateTime: fmtDate(new Date()),
+        note: note || '',
+        baseIssue: issue,
+        forceReopenIncrement: true
+      })
     });
+    await appendIssueEvent(reopenTargetId, 'issue_reopened', { reason: note || '' });
     closeReopenModal();
   } catch(e) { setSyncStatus('err','Error: '+e.message); btn.disabled=false; btn.innerHTML='Re-open Issue'; }
 };
@@ -2411,6 +2563,7 @@ function currentStatus(issue) {
 window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
   const issue = issues.find(i=>i.id===id);
   if (!issue) return;
+  const prev = currentStatus(issue);
   const history = [...(issue.statusHistory||[])];
   const entry = { status, subStatus: subStatus||'', note: note||'', dateTime: dateTime || fmtDate(new Date()), by: currentUser.displayName||currentUser.email };
   history.push(entry);
@@ -2424,7 +2577,22 @@ window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
       resolved: isResolved,
       resolveNote: isResolved ? (note||'Resolved') : '',
       resolveDateTime: isResolved ? fmtDate(new Date()) : '',
-      resolvedBy: isResolved ? (currentUser.displayName||currentUser.email) : ''
+      resolvedBy: isResolved ? (currentUser.displayName||currentUser.email) : '',
+      ...buildIssueV2Compat({
+        machineCode: issue.machine || issue.machineCode || '',
+        statusKey: status,
+        subStatus: subStatus || '',
+        statusDateTime: entry.dateTime,
+        note: note || '',
+        baseIssue: issue
+      })
+    });
+    await appendIssueEvent(id, 'status_changed', {
+      fromStatusKey: prev?.status || currentStatusKey(issue),
+      fromSubStatusKey: prev?.subStatus || '',
+      toStatusKey: status,
+      toSubStatusKey: subStatus || '',
+      note: note || ''
     });
   } catch(e) { setSyncStatus('err','Error: '+e.message); }
 };
@@ -2434,6 +2602,7 @@ window.updateStatusEntry = async (id, idx, status, subStatus, note, dateTime) =>
   const issue = issues.find(i=>i.id===id);
   if (!issue) return;
   const history = [...(issue.statusHistory||[])];
+  const prev = currentStatus(issue);
   history[idx] = { ...history[idx], status, subStatus: subStatus||'', note: note||'' };
   if (dateTime) history[idx].dateTime = dateTime;
   // Recalculate current status from last entry
@@ -2444,8 +2613,25 @@ window.updateStatusEntry = async (id, idx, status, subStatus, note, dateTime) =>
       statusHistory: history,
       status: isResolved ? '' : last.status,
       subStatus: last.subStatus||'',
-      resolved: isResolved
+      resolved: isResolved,
+      ...buildIssueV2Compat({
+        machineCode: issue.machine || issue.machineCode || '',
+        statusKey: last.status || 'open',
+        subStatus: last.subStatus || '',
+        statusDateTime: last.dateTime || fmtDate(new Date()),
+        note: last.note || '',
+        baseIssue: issue
+      })
     });
+    if ((prev?.status || 'open') !== (last.status || 'open') || (prev?.subStatus || '') !== (last.subStatus || '')) {
+      await appendIssueEvent(id, 'status_changed', {
+        fromStatusKey: prev?.status || currentStatusKey(issue),
+        fromSubStatusKey: prev?.subStatus || '',
+        toStatusKey: last.status || 'open',
+        toSubStatusKey: last.subStatus || '',
+        note: last.note || ''
+      });
+    }
   } catch(e) { setSyncStatus('err','Error: '+e.message); }
 };
 
@@ -2454,6 +2640,7 @@ window.removeStatusEntry = async (id, idx) => {
   const issue = issues.find(i=>i.id===id);
   if (!issue) return;
   const history = [...(issue.statusHistory||[])];
+  const prev = currentStatus(issue);
   if (history.length <= 1) return;
   history.splice(idx, 1);
   const last = history[history.length - 1];
@@ -2463,8 +2650,25 @@ window.removeStatusEntry = async (id, idx) => {
       statusHistory: history,
       status: isResolved ? '' : last.status,
       subStatus: last.subStatus||'',
-      resolved: isResolved
+      resolved: isResolved,
+      ...buildIssueV2Compat({
+        machineCode: issue.machine || issue.machineCode || '',
+        statusKey: last.status || 'open',
+        subStatus: last.subStatus || '',
+        statusDateTime: last.dateTime || fmtDate(new Date()),
+        note: last.note || '',
+        baseIssue: issue
+      })
     });
+    if ((prev?.status || 'open') !== (last.status || 'open') || (prev?.subStatus || '') !== (last.subStatus || '')) {
+      await appendIssueEvent(id, 'status_changed', {
+        fromStatusKey: prev?.status || currentStatusKey(issue),
+        fromSubStatusKey: prev?.subStatus || '',
+        toStatusKey: last.status || 'open',
+        toSubStatusKey: last.subStatus || '',
+        note: 'Timeline entry removed'
+      });
+    }
   } catch(e) { setSyncStatus('err','Error: '+e.message); }
 };
 
@@ -2616,9 +2820,33 @@ window.toggleSubStatus = async (id, status) => { await addStatusEntry(id, status
 window.setSubStatus = async (id, sub) => {
   const issue = issues.find(i=>i.id===id);
   if (!issue) return;
+  const prev = currentStatus(issue);
   const history = [...(issue.statusHistory||[])];
   if (history.length > 0) { history[history.length-1].subStatus = sub; }
-  try { await updateDoc(plantDoc('issues',id),{ statusHistory: history, subStatus: sub }); }
+  const last = history[history.length - 1] || { status: currentStatusKey(issue), subStatus: sub, note: '' };
+  try {
+    await updateDoc(plantDoc('issues',id),{
+      statusHistory: history,
+      subStatus: sub,
+      ...buildIssueV2Compat({
+        machineCode: issue.machine || issue.machineCode || '',
+        statusKey: last.status || 'open',
+        subStatus: sub || '',
+        statusDateTime: last.dateTime || fmtDate(new Date()),
+        note: last.note || '',
+        baseIssue: issue
+      })
+    });
+    if ((prev?.subStatus || '') !== (sub || '')) {
+      await appendIssueEvent(id, 'status_changed', {
+        fromStatusKey: prev?.status || currentStatusKey(issue),
+        fromSubStatusKey: prev?.subStatus || '',
+        toStatusKey: last.status || prev?.status || 'open',
+        toSubStatusKey: sub || '',
+        note: last.note || ''
+      });
+    }
+  }
   catch(e) { setSyncStatus('err','Error updating: '+e.message); }
 };
 
@@ -3381,6 +3609,7 @@ window.addEventListener('resize', () => {
 });
 
 function currentStatusKey(issue) {
+  if (issue.currentStatus?.statusKey) return issue.currentStatus.statusKey;
   if (issue.statusHistory && issue.statusHistory.length > 0) {
     return issue.statusHistory[issue.statusHistory.length-1].status || 'open';
   }
