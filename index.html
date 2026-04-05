@@ -1223,6 +1223,8 @@ function queueAttachmentDocs(batch, issueId, photos = []) {
 
 const attachmentPhotoCache = new Map(); // issueId -> [{name,dataUrl,...}]
 let attachmentsHydrationToken = 0;
+const issueEventHistoryCache = new Map(); // issueId -> [{status,subStatus,note,dateTime,by}]
+let eventsHydrationToken = 0;
 
 async function fetchAttachmentPhotos(issueId) {
   if (attachmentPhotoCache.has(issueId)) return attachmentPhotoCache.get(issueId);
@@ -1263,6 +1265,54 @@ async function hydrateIssuePhotosFromAttachments(issueList) {
     issue.photos = attPhotos;
   }));
   if (myToken !== attachmentsHydrationToken) return;
+  renderIssues();
+}
+
+function normalizeEventHistory(issue, events) {
+  const out = [];
+  (events || []).forEach(ev => {
+    if (ev.type !== 'status_changed') return;
+    const toStatus = ev.payload?.toStatusKey || 'open';
+    const toSub = ev.payload?.toSubStatusKey || '';
+    const note = ev.payload?.note || '';
+    let dateTime = '';
+    try {
+      if (ev.eventAt?.toDate) dateTime = fmtDate(ev.eventAt.toDate());
+    } catch (_) {}
+    out.push({
+      status: toStatus,
+      subStatus: toSub,
+      note,
+      dateTime: dateTime || issue.dateTime || '',
+      by: ev.actor?.name || issue.userName || ''
+    });
+  });
+  return out;
+}
+
+async function fetchIssueEventHistory(issue) {
+  if (issueEventHistoryCache.has(issue.id)) return issueEventHistoryCache.get(issue.id);
+  const q = query(issueEventsCol(issue.id), orderBy('eventAt', 'asc'));
+  const snap = await getDocs(q);
+  if (snap.empty) {
+    issueEventHistoryCache.set(issue.id, []);
+    return [];
+  }
+  const events = snap.docs.map(d => d.data());
+  const history = normalizeEventHistory(issue, events);
+  issueEventHistoryCache.set(issue.id, history);
+  return history;
+}
+
+async function hydrateIssueHistoryFromEvents(issueList) {
+  const myToken = ++eventsHydrationToken;
+  const targets = (issueList || []).filter(i => i.schemaVersion === 2);
+  if (targets.length === 0) return;
+  await Promise.all(targets.map(async issue => {
+    const h = await fetchIssueEventHistory(issue);
+    if (h.length > 0) issue.eventHistory = h;
+  }));
+  if (myToken !== eventsHydrationToken) return;
   renderIssues();
 }
 
@@ -1343,7 +1393,9 @@ async function switchPlant(plantId) {
   closePlantDropdown();
   issues = [];
   attachmentPhotoCache.clear();
+  issueEventHistoryCache.clear();
   attachmentsHydrationToken++;
+  eventsHydrationToken++;
   setSyncStatus('', 'Switching plant…');
   await hydrateCurrentPlantView();
   startListener();
@@ -1691,7 +1743,9 @@ onAuthStateChanged(auth, async user => {
     document.getElementById('app').classList.remove('visible');
     issues = [];
     attachmentPhotoCache.clear();
+    issueEventHistoryCache.clear();
     attachmentsHydrationToken++;
+    eventsHydrationToken++;
     const btn = document.getElementById('google-signin-btn');
     btn.disabled = false; btn.innerHTML = googleBtnHTML;
   }
@@ -1719,6 +1773,7 @@ function startListener() {
     });
     refreshVisibleData();
     hydrateIssuePhotosFromAttachments(issues);
+    hydrateIssueHistoryFromEvents(issues);
     setSyncStatus('ok', 'Live — synced across all devices');
   }, err => {
     console.error('Snapshot error:', err);
@@ -2704,6 +2759,8 @@ window.confirmReopen = async () => {
 
 // Helper: get current status from history
 function currentStatus(issue) {
+  const evh = issue.eventHistory;
+  if (evh && evh.length > 0) return evh[evh.length - 1];
   const h = issue.statusHistory;
   if (!h || h.length === 0) {
     if (issue.currentStatus?.statusKey) {
@@ -3180,9 +3237,11 @@ function renderIssues() {
       ? `<div class="issue-photos">${issue.photos.map(p=>`<img class="issue-photo-thumb" src="${p.dataUrl}" loading="lazy" onclick="openLightbox('${p.dataUrl}')">`).join('')}</div>` : '';
 
     // Current status from history
-    const history = issue.statusHistory && issue.statusHistory.length > 0
-      ? issue.statusHistory
-      : [{ status: issueIsResolvedV2(issue) ? 'resolved' : (issue.status||'open'), subStatus: issue.subStatus||'', note:'', dateTime: issue.statusDateTime||issue.dateTime||'', by: issue.statusBy||issue.userName||'' }];
+    const history = issue.eventHistory && issue.eventHistory.length > 0
+      ? issue.eventHistory
+      : (issue.statusHistory && issue.statusHistory.length > 0
+          ? issue.statusHistory
+          : [{ status: issueIsResolvedV2(issue) ? 'resolved' : (issue.status||'open'), subStatus: issue.subStatus||'', note:'', dateTime: issue.statusDateTime||issue.dateTime||'', by: issue.statusBy||issue.userName||'' }]);
     const lastEntry = history[history.length-1];
     const lastKey = lastEntry.status || 'open';
     const scfg = STATUS_CONFIG_SAFE[lastKey];
@@ -4060,9 +4119,11 @@ window.openExportModal = () => {
 
   let cardsHtml = '';
   filtered.forEach(issue => {
-    const history = issue.statusHistory && issue.statusHistory.length > 0
-      ? issue.statusHistory
-      : [{ status: issueIsResolvedV2(issue)?'resolved':(issue.status||'open'), subStatus: issue.subStatus||'', note:'', dateTime: issue.dateTime||'', by: issue.userName||'' }];
+    const history = issue.eventHistory && issue.eventHistory.length > 0
+      ? issue.eventHistory
+      : (issue.statusHistory && issue.statusHistory.length > 0
+          ? issue.statusHistory
+          : [{ status: issueIsResolvedV2(issue)?'resolved':(issue.status||'open'), subStatus: issue.subStatus||'', note:'', dateTime: issue.dateTime||'', by: issue.userName||'' }]);
     const lastEntry = history[history.length-1];
     const lastKey = lastEntry.status || 'open';
     const cfg = STATUS_CONFIG_FALLBACK(lastKey);
