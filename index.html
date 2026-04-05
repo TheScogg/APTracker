@@ -2761,20 +2761,16 @@ window.confirmReopen = async () => {
 function currentStatus(issue) {
   const evh = issue.eventHistory;
   if (evh && evh.length > 0) return evh[evh.length - 1];
-  const h = issue.statusHistory;
-  if (!h || h.length === 0) {
-    if (issue.currentStatus?.statusKey) {
-      return {
-        status: issue.currentStatus.statusKey,
-        subStatus: issue.currentStatus.subStatusKey || '',
-        note: issue.currentStatus.notePreview || '',
-        dateTime: issue.currentStatus.enteredDateTime || '',
-        by: issue.currentStatus.enteredBy?.name || ''
-      };
-    }
-    return { status: issue.status||'open', subStatus: issue.subStatus||'', note:'', dateTime:'', by:'' };
+  if (issue.currentStatus?.statusKey) {
+    return {
+      status: issue.currentStatus.statusKey,
+      subStatus: issue.currentStatus.subStatusKey || '',
+      note: issue.currentStatus.notePreview || '',
+      dateTime: issue.currentStatus.enteredDateTime || '',
+      by: issue.currentStatus.enteredBy?.name || ''
+    };
   }
-  return h[h.length - 1];
+  return { status: currentStatusKey(issue), subStatus: '', note:'', dateTime:'', by:'' };
 }
 
 // Add a new status entry to history
@@ -3177,7 +3173,7 @@ function renderIssues() {
   }
   else if (sort==='recently-updated') {
     const lastUpdateTime = i => {
-      const h = i.statusHistory;
+      const h = i.eventHistory;
       if (!h || !h.length) return i.timestamp||0;
       const last = h[h.length-1];
       if (!last.dateTime) return i.timestamp||0;
@@ -3239,9 +3235,13 @@ function renderIssues() {
     // Current status from history
     const history = issue.eventHistory && issue.eventHistory.length > 0
       ? issue.eventHistory
-      : (issue.statusHistory && issue.statusHistory.length > 0
-          ? issue.statusHistory
-          : [{ status: issueIsResolvedV2(issue) ? 'resolved' : (issue.status||'open'), subStatus: issue.subStatus||'', note:'', dateTime: issue.statusDateTime||issue.dateTime||'', by: issue.statusBy||issue.userName||'' }]);
+      : [{
+          status: currentStatusKey(issue),
+          subStatus: issue.currentStatus?.subStatusKey || '',
+          note: issue.currentStatus?.notePreview || '',
+          dateTime: issue.currentStatus?.enteredDateTime || issue.dateTime || '',
+          by: issue.currentStatus?.enteredBy?.name || issue.userName || ''
+        }];
     const lastEntry = history[history.length-1];
     const lastKey = lastEntry.status || 'open';
     const scfg = STATUS_CONFIG_SAFE[lastKey];
@@ -4121,9 +4121,13 @@ window.openExportModal = () => {
   filtered.forEach(issue => {
     const history = issue.eventHistory && issue.eventHistory.length > 0
       ? issue.eventHistory
-      : (issue.statusHistory && issue.statusHistory.length > 0
-          ? issue.statusHistory
-          : [{ status: issueIsResolvedV2(issue)?'resolved':(issue.status||'open'), subStatus: issue.subStatus||'', note:'', dateTime: issue.dateTime||'', by: issue.userName||'' }]);
+      : [{
+          status: currentStatusKey(issue),
+          subStatus: issue.currentStatus?.subStatusKey || '',
+          note: issue.currentStatus?.notePreview || '',
+          dateTime: issue.currentStatus?.enteredDateTime || issue.dateTime || '',
+          by: issue.currentStatus?.enteredBy?.name || issue.userName || ''
+        }];
     const lastEntry = history[history.length-1];
     const lastKey = lastEntry.status || 'open';
     const cfg = STATUS_CONFIG_FALLBACK(lastKey);
