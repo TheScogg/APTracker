@@ -1256,11 +1256,11 @@ async function fetchAttachmentPhotos(issueId) {
 
 async function hydrateIssuePhotosFromAttachments(issueList) {
   const myToken = ++attachmentsHydrationToken;
-  const targets = (issueList || []).filter(i => Number(i.photoCount || 0) > 0 || (i.photos || []).length > 0);
+  const targets = (issueList || []).filter(i => Number(i.photoCount || 0) > 0);
   if (targets.length === 0) return;
   await Promise.all(targets.map(async issue => {
     const attPhotos = await fetchAttachmentPhotos(issue.id);
-    if (attPhotos.length > 0) issue.photos = attPhotos;
+    issue.photos = attPhotos;
   }));
   if (myToken !== attachmentsHydrationToken) return;
   renderIssues();
@@ -3782,12 +3782,13 @@ window.addEventListener('resize', () => {
 });
 
 function currentStatusKey(issue) {
-  if (issue.currentStatus?.statusKey) return issue.currentStatus.statusKey;
-  if (issue.statusHistory && issue.statusHistory.length > 0) {
-    return issue.statusHistory[issue.statusHistory.length-1].status || 'open';
-  }
-  if (isIssueResolved(issue)) return 'resolved';
-  return issue.status || 'open';
+  if (issue?.currentStatus?.statusKey) return issue.currentStatus.statusKey;
+  return issue?.lifecycle?.isResolved ? 'resolved' : 'open';
+}
+
+function isIssueResolved(issue) {
+  if (typeof issue?.lifecycle?.isResolved === 'boolean') return issue.lifecycle.isResolved;
+  return issue?.currentStatus?.statusKey === 'resolved';
 }
 
 function isIssueResolved(issue) {
