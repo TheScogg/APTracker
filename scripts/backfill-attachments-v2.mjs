@@ -9,7 +9,7 @@
  * Requirements:
  *   - GOOGLE_APPLICATION_CREDENTIALS set to a service account key file
  *   - FIREBASE_PROJECT_ID set (optional if present in service account)
- *   - FIREBASE_STORAGE_BUCKET set (optional; defaults to <project-id>.firebasestorage.app)
+ *   - FIREBASE_STORAGE_BUCKET set (optional; auto-detect tries <project-id>.appspot.com then <project-id>.firebasestorage.app)
  */
 
 import { readFileSync } from 'node:fs';
@@ -30,8 +30,13 @@ function parseServiceAccountFromEnv() {
   return JSON.parse(raw);
 }
 
-function inferDefaultBucket(projectId) {
-  return projectId ? `${projectId}.firebasestorage.app` : undefined;
+function inferBucketCandidates(projectId, serviceAccount) {
+  const candidates = [];
+  if (process.env.FIREBASE_STORAGE_BUCKET) candidates.push(process.env.FIREBASE_STORAGE_BUCKET);
+  if (serviceAccount?.storage_bucket) candidates.push(serviceAccount.storage_bucket);
+  if (projectId) candidates.push(`${projectId}.appspot.com`);
+  if (projectId) candidates.push(`${projectId}.firebasestorage.app`);
+  return [...new Set(candidates.filter(Boolean))];
 }
 
 function dataUrlToBuffer(dataUrl) {
@@ -56,26 +61,41 @@ function stablePhotoId(issueId, photo, idx) {
 
 const serviceAccount = parseServiceAccountFromEnv();
 const projectId = process.env.FIREBASE_PROJECT_ID || serviceAccount?.project_id;
-const storageBucket = process.env.FIREBASE_STORAGE_BUCKET || inferDefaultBucket(projectId);
+const storageBucketCandidates = inferBucketCandidates(projectId, serviceAccount);
 
 if (serviceAccount) {
   initializeApp({
     credential: cert(serviceAccount),
     projectId,
-    storageBucket
+    storageBucket: storageBucketCandidates[0]
   });
 } else {
   initializeApp({
     credential: applicationDefault(),
     projectId,
-    storageBucket
+    storageBucket: storageBucketCandidates[0]
   });
 }
 
 const db = getFirestore();
-const bucket = getStorage().bucket();
+const storage = getStorage();
+
+async function resolveBucket() {
+  const tries = storageBucketCandidates.length > 0 ? storageBucketCandidates : [undefined];
+  for (const bucketName of tries) {
+    const b = bucketName ? storage.bucket(bucketName) : storage.bucket();
+    try {
+      const [exists] = await b.exists();
+      if (exists) return b;
+    } catch (_) {
+      // Try next candidate.
+    }
+  }
+  throw new Error(`No accessible Storage bucket found. Tried: ${tries.filter(Boolean).join(', ') || '(default from credentials)'}`);
+}
 
 async function backfillAttachments() {
+  const bucket = await resolveBucket();
   const issuesSnap = await db.collectionGroup('issues').get();
 
   let scanned = 0;

@@ -32,7 +32,7 @@ For each `issues` document found via `collectionGroup('issues')`:
 
 - Service account credentials via `GOOGLE_APPLICATION_CREDENTIALS`.
 - Optional: `FIREBASE_PROJECT_ID`.
-- Optional: `FIREBASE_STORAGE_BUCKET` (defaults to `<project-id>.firebasestorage.app`).
+- Optional: `FIREBASE_STORAGE_BUCKET` (auto-detect tries `<project-id>.appspot.com` then `<project-id>.firebasestorage.app`).
 - `firebase-admin` package available in the execution environment.
 
 ## Example
