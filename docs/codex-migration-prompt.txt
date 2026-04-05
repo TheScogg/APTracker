@@ -1,0 +1,45 @@
+Read `CLAUDE.md` and `docs/firestore-schema-v2.md` first.
+Then read `docs/security-rules-v2.md` and `firestore.indexes.json`.
+
+Goal: implement Firestore schema v2 phase 1 for APTracker without breaking current behavior.
+
+Requirements:
+1. Preserve the current UI and current Firestore reads/writes until compatibility shims are in place.
+2. Add v2-compatible writes for new and updated issues:
+   - `schemaVersion: 2`
+   - `pressId`
+   - `rowId`
+   - `machineCode`
+   - `currentStatus`
+   - `lifecycle`
+3. Add append-only event writes under:
+   - `plants/{plantId}/issues/{issueId}/events/{eventId}`
+4. Do not remove legacy fields yet:
+   - `statusHistory`
+   - `resolved`
+   - `resolveNote`
+   - `resolveDateTime`
+   - legacy config docs
+5. Keep comments concise but add them where compatibility logic would otherwise be confusing.
+6. Prefer small, reversible changes over large rewrites.
+
+Deliverables:
+- phase 1 schema compatibility implementation
+- any helper functions needed for v2 issue shaping
+- notes in the final summary listing:
+  - files changed
+  - migration assumptions
+  - follow-up work for phase 2
+
+Suggested approach:
+1. find all Firestore read/write call sites
+2. centralize issue document shaping if practical
+3. dual-write current status updates into both legacy and v2 structures
+4. add event writes for status transitions
+5. leave UI reads mostly unchanged unless required for compatibility
+
+Avoid:
+- rewriting the whole app
+- changing unrelated UI styling
+- deleting legacy fields
+- introducing a framework or build step
