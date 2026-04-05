@@ -1025,6 +1025,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getFirestore, collection, updateDoc, deleteDoc, doc, getDoc, setDoc, onSnapshot, serverTimestamp, query, orderBy, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut as fbSignOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getStorage, ref as storageRef, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyABjasNBbJnsqq4M_UxKruKrN6-O2FXCwc",
@@ -1037,6 +1038,7 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
+const storage = getStorage(app);
 const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
 provider.setCustomParameters({ prompt: "select_account" });
@@ -1064,6 +1066,7 @@ let ALL_MACHINES = Object.values(PRESSES).flat();
 function plantCol(colName) { return collection(db, 'plants', currentPlantId, colName); }
 function plantDoc(colName, docId) { return doc(db, 'plants', currentPlantId, colName, docId); }
 function issueEventsCol(issueId) { return collection(db, 'plants', currentPlantId, 'issues', issueId, 'events'); }
+function issueAttachmentsCol(issueId) { return collection(db, 'plants', currentPlantId, 'issues', issueId, 'attachments'); }
 
 function currentActor() {
   return { uid: currentUser?.uid || '', name: currentUser?.displayName || currentUser?.email || 'Unknown' };
@@ -1139,6 +1142,67 @@ function queueIssueEvent(batch, issueId, type, payload = {}) {
     actor: currentActor(),
     payload,
     schemaVersion: 2
+  });
+}
+
+function extFromContentType(contentType) {
+  if (contentType === 'image/jpeg') return 'jpg';
+  if (contentType === 'image/png') return 'png';
+  if (contentType === 'image/webp') return 'webp';
+  return 'bin';
+}
+
+function parseDataUrlMeta(dataUrl) {
+  const m = String(dataUrl || '').match(/^data:([^;]+);base64,(.+)$/);
+  if (!m) return null;
+  const contentType = m[1] || 'application/octet-stream';
+  const base64Body = m[2] || '';
+  const sizeBytes = Math.max(0, Math.floor((base64Body.length * 3) / 4));
+  return { contentType, sizeBytes };
+}
+
+async function uploadIssuePhotosToStorage(issueId, photos) {
+  const out = [];
+  for (let idx = 0; idx < (photos || []).length; idx++) {
+    const p = photos[idx] || {};
+    const src = String(p.dataUrl || '');
+    if (!src.startsWith('data:')) { out.push(p); continue; }
+    const meta = parseDataUrlMeta(src);
+    if (!meta) { out.push(p); continue; }
+    const ext = extFromContentType(meta.contentType);
+    const fileName = `${Date.now()}_${idx}.${ext}`;
+    const path = `plants/${currentPlantId}/issues/${issueId}/photos/${fileName}`;
+    const sRef = storageRef(storage, path);
+    await uploadString(sRef, src, 'data_url');
+    const url = await getDownloadURL(sRef);
+    out.push({
+      name: p.name || fileName,
+      dataUrl: url, // keep existing UI field name for backward-compatible rendering
+      storagePath: path,
+      contentType: meta.contentType,
+      sizeBytes: meta.sizeBytes,
+      source: 'storage'
+    });
+  }
+  return out;
+}
+
+function queueAttachmentDocs(batch, issueId, photos = []) {
+  photos.forEach((p, idx) => {
+    if (!p?.storagePath) return;
+    const attachmentId = `photo_${String(idx).padStart(3, '0')}_${String(p.storagePath).split('/').pop().replace(/[^a-zA-Z0-9]+/g, '_')}`;
+    batch.set(doc(issueAttachmentsCol(issueId), attachmentId), {
+      type: 'photo',
+      fileName: p.name || '',
+      contentType: p.contentType || 'image/jpeg',
+      storagePath: p.storagePath,
+      thumbnailPath: null,
+      uploadedBy: currentActor(),
+      uploadedAt: serverTimestamp(),
+      sizeBytes: Number(p.sizeBytes || 0),
+      source: p.source || 'storage',
+      schemaVersion: 2
+    }, { merge: true });
   });
 }
 
@@ -2380,14 +2444,17 @@ window.submitIssue = async () => {
     const d = getIssueDateFromInputs('issue-date','issue-time-input');
     const initialStatus = logCatKey || 'open';
     const initialSubStatus = logCatSub || '';
+    const issueRef = doc(plantCol('issues'));
+    const uploadedPhotos = await uploadIssuePhotosToStorage(issueRef.id, pendingPhotos);
     const issuePayload = {
       machine: currentMachine, note,
-      photos: pendingPhotos.map(p=>({name:p.name,dataUrl:p.dataUrl})),
+      photos: uploadedPhotos.map(p=>({name:p.name,dataUrl:p.dataUrl,storagePath:p.storagePath||'',contentType:p.contentType||'',sizeBytes:Number(p.sizeBytes||0)})),
       dateTime: fmtDate(d), dateKey: localDateStr(d), timestamp: d.getTime(),
       resolved: false, resolveNote: '', resolveDateTime: '',
       userId: currentUser.uid, userName: currentUser.displayName||currentUser.email,
       statusHistory: [{ status: initialStatus, subStatus: initialSubStatus, note:'', dateTime: fmtDate(d), by: currentUser.displayName||currentUser.email }],
       workflowState: 'called',
+      photoCount: uploadedPhotos.length,
       createdAt: serverTimestamp(),
       createdBy: currentActor(),
       ...buildIssueV2Compat({
@@ -2398,9 +2465,9 @@ window.submitIssue = async () => {
         note
       })
     };
-    const issueRef = doc(plantCol('issues'));
     const batch = writeBatch(db);
     batch.set(issueRef, issuePayload);
+    queueAttachmentDocs(batch, issueRef.id, uploadedPhotos);
     queueIssueEvent(batch, issueRef.id, 'issue_created', {
       machineCode: currentMachine,
       note,
@@ -2451,9 +2518,11 @@ window.saveEdit = async () => {
     const d = getIssueDateFromInputs('edit-date','edit-time-input');
     const issue = issues.find(i=>i.id===editTargetId);
     const last = currentStatus(issue || {});
+    const uploadedPhotos = await uploadIssuePhotosToStorage(editTargetId, editPhotos);
     const issuePatch = {
-      note, photos: editPhotos.map(p=>({name:p.name,dataUrl:p.dataUrl})),
+      note, photos: uploadedPhotos.map(p=>({name:p.name,dataUrl:p.dataUrl,storagePath:p.storagePath||'',contentType:p.contentType||'',sizeBytes:Number(p.sizeBytes||0)})),
       dateTime: fmtDate(d), dateKey: localDateStr(d), timestamp: d.getTime(),
+      photoCount: uploadedPhotos.length,
       editedAt: fmtDate(new Date()), editedBy: currentUser.displayName||currentUser.email,
       ...buildIssueV2Compat({
         machineCode: issue?.machine || currentMachine,
@@ -2466,6 +2535,7 @@ window.saveEdit = async () => {
     };
     const batch = writeBatch(db);
     batch.update(plantDoc('issues',editTargetId), issuePatch);
+    queueAttachmentDocs(batch, editTargetId, uploadedPhotos);
     queueIssueEvent(batch, editTargetId, 'issue_edited', {
       fieldsChanged: ['note', 'photos', 'dateTime', 'dateKey', 'timestamp']
     });

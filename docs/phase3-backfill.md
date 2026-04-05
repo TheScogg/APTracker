@@ -51,3 +51,4 @@ node scripts/backfill-attachments-v2.mjs --commit
 - If an issue already has events, this script does not generate legacy historical events for it.
 - This script intentionally preserves legacy fields for phase-1/2 compatibility.
 - Attachment backfill uploads legacy `photos[].dataUrl` images into Storage and creates `attachments` docs with `legacy_*` IDs.
+- Frontend new/edit issue flows now upload new `dataUrl` photos to Storage first, then persist URL-backed `photos[]` entries plus `attachments` docs.
