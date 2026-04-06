@@ -2759,6 +2759,8 @@ window.confirmReopen = async () => {
 
 // Helper: get current status from history
 function currentStatus(issue) {
+  const statusHistory = issue.statusHistory;
+  if (statusHistory && statusHistory.length > 0) return statusHistory[statusHistory.length - 1];
   const evh = issue.eventHistory;
   if (evh && evh.length > 0) return evh[evh.length - 1];
   if (issue.currentStatus?.statusKey) {
@@ -2773,12 +2775,22 @@ function currentStatus(issue) {
   return { status: currentStatusKey(issue), subStatus: '', note:'', dateTime:'', by:'' };
 }
 
+function getMutableStatusHistory(issue) {
+  if (Array.isArray(issue.statusHistory) && issue.statusHistory.length > 0) {
+    return issue.statusHistory.map(entry => ({ ...entry }));
+  }
+  if (Array.isArray(issue.eventHistory) && issue.eventHistory.length > 0) {
+    return issue.eventHistory.map(entry => ({ ...entry }));
+  }
+  return [];
+}
+
 // Add a new status entry to history
 window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
   const issue = issues.find(i=>i.id===id);
   if (!issue) return;
   const prev = currentStatus(issue);
-  const history = [...(issue.statusHistory||[])];
+  const history = getMutableStatusHistory(issue);
   const entry = { status, subStatus: subStatus||'', note: note||'', dateTime: dateTime || fmtDate(new Date()), by: currentUser.displayName||currentUser.email };
   history.push(entry);
   try {
@@ -2803,6 +2815,7 @@ window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
       note: note || ''
     });
     await batch.commit();
+    issueEventHistoryCache.delete(id);
   } catch(e) { setSyncStatus('err','Error: '+e.message); }
 };
 
@@ -2810,7 +2823,8 @@ window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
 window.updateStatusEntry = async (id, idx, status, subStatus, note, dateTime) => {
   const issue = issues.find(i=>i.id===id);
   if (!issue) return;
-  const history = [...(issue.statusHistory||[])];
+  const history = getMutableStatusHistory(issue);
+  if (!history[idx]) return;
   const prev = currentStatus(issue);
   history[idx] = { ...history[idx], status, subStatus: subStatus||'', note: note||'' };
   if (dateTime) history[idx].dateTime = dateTime;
@@ -2840,6 +2854,7 @@ window.updateStatusEntry = async (id, idx, status, subStatus, note, dateTime) =>
       });
     }
     await batch.commit();
+    issueEventHistoryCache.delete(id);
   } catch(e) { setSyncStatus('err','Error: '+e.message); }
 };
 
@@ -2847,7 +2862,7 @@ window.updateStatusEntry = async (id, idx, status, subStatus, note, dateTime) =>
 window.removeStatusEntry = async (id, idx) => {
   const issue = issues.find(i=>i.id===id);
   if (!issue) return;
-  const history = [...(issue.statusHistory||[])];
+  const history = getMutableStatusHistory(issue);
   const prev = currentStatus(issue);
   if (history.length <= 1) return;
   history.splice(idx, 1);
@@ -2876,6 +2891,7 @@ window.removeStatusEntry = async (id, idx) => {
       });
     }
     await batch.commit();
+    issueEventHistoryCache.delete(id);
   } catch(e) { setSyncStatus('err','Error: '+e.message); }
 };
 
@@ -2920,7 +2936,8 @@ let editingStatusEntry = null;
 window.startEditEntry = (id, idx) => { 
   const issue = issues.find(i => i.id === id);
   if (!issue) return;
-  const entry = issue.statusHistory[idx];
+  const history = getMutableStatusHistory(issue);
+  const entry = history[idx];
   if (!entry) return;
   
   editingStatusEntry = { issueId: id, entryIndex: idx };
@@ -2933,7 +2950,7 @@ window.startEditEntry = (id, idx) => {
   
   // Handle sub-status
   updateEditStatusSubOptions();
-  statusSelect.addEventListener('change', updateEditStatusSubOptions);
+  statusSelect.onchange = updateEditStatusSubOptions;
   
   const subSelect = document.getElementById('edit-status-sub');
   if (subSelect && entry.subStatus) {
@@ -3028,7 +3045,7 @@ window.setSubStatus = async (id, sub) => {
   const issue = issues.find(i=>i.id===id);
   if (!issue) return;
   const prev = currentStatus(issue);
-  const history = [...(issue.statusHistory||[])];
+  const history = getMutableStatusHistory(issue);
   if (history.length > 0) { history[history.length-1].subStatus = sub; }
   const last = history[history.length - 1] || { status: currentStatusKey(issue), subStatus: sub, note: '' };
   try {
@@ -3233,7 +3250,9 @@ function renderIssues() {
       ? `<div class="issue-photos">${issue.photos.map(p=>`<img class="issue-photo-thumb" src="${p.dataUrl}" loading="lazy" onclick="openLightbox('${p.dataUrl}')">`).join('')}</div>` : '';
 
     // Current status from history
-    const history = issue.eventHistory && issue.eventHistory.length > 0
+    const history = issue.statusHistory && issue.statusHistory.length > 0
+      ? issue.statusHistory
+      : issue.eventHistory && issue.eventHistory.length > 0
       ? issue.eventHistory
       : [{
           status: currentStatusKey(issue),
@@ -3440,6 +3459,18 @@ function renderIssues() {
     list.appendChild(row);
 
     // Helper functions for this card
+    const scrollPanelBottomIntoView = (panelEl) => {
+      if (!panelEl) return;
+      requestAnimationFrame(() => {
+        const rect = panelEl.getBoundingClientRect();
+        const viewportHeight = window.visualViewport?.height || window.innerHeight;
+        const overflowBottom = rect.bottom - viewportHeight;
+        if (overflowBottom > 0) {
+          window.scrollBy({ top: overflowBottom, behavior: 'smooth' });
+        }
+      });
+    };
+
     const openCategoryPanel = () => {
       card.classList.remove('peeking', 'dragging');
       card.style.transform = '';
@@ -3448,6 +3479,8 @@ function renderIssues() {
       if (openSwipeRow && openSwipeRow.card !== card) closeSwipeCard(openSwipeRow.card);
       openSwipeRow = { card, catPanel, subPanel };
       scheduleIssueLogRelayout();
+      scrollPanelBottomIntoView(catPanel);
+      setTimeout(() => scrollPanelBottomIntoView(catPanel), 280);
     };
 
     const closeSwipeCard = (c) => {
@@ -3520,6 +3553,8 @@ function renderIssues() {
 
           subPanel.classList.add('visible');
           scheduleIssueLogRelayout();
+          scrollPanelBottomIntoView(subPanel);
+          setTimeout(() => scrollPanelBottomIntoView(subPanel), 240);
         } else {
           // Apply immediately (no subs)
           closeSwipeCard(card);
