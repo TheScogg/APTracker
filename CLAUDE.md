@@ -2,9 +2,9 @@
 
 ## Project overview
 
-AP Tracker is a single-file HTML/JS web application for tracking injection molding press issues across multiple manufacturing plants. It runs entirely client-side with Firebase (Firestore + Auth) as the backend. The app is used on the factory floor on phones, tablets, and desktop monitors.
+AP Tracker is a single-file HTML/JS web application for tracking injection molding press issues across multiple manufacturing plants. It runs entirely client-side with Firebase (Firestore + Auth + Storage) as the backend. The app is used on the factory floor on phones, tablets, and desktop monitors.
 
-**File:** `press-tracker.html` (~3,400 lines, single file containing all HTML, CSS, and JS)
+**File:** `index.html` (~4,700 lines, single file containing all HTML, CSS, and JS)
 
 **Stack:** Vanilla JS (no framework), Firebase 10.12.2 (ESM modules), html2pdf.js for PDF export
 
