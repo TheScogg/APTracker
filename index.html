@@ -1223,6 +1223,8 @@ function queueAttachmentDocs(batch, issueId, photos = []) {
 
 const attachmentPhotoCache = new Map(); // issueId -> [{name,dataUrl,...}]
 let attachmentsHydrationToken = 0;
+const issueEventHistoryCache = new Map(); // issueId -> [{status,subStatus,note,dateTime,by}]
+let eventsHydrationToken = 0;
 
 async function fetchAttachmentPhotos(issueId) {
   if (attachmentPhotoCache.has(issueId)) return attachmentPhotoCache.get(issueId);
@@ -1263,6 +1265,54 @@ async function hydrateIssuePhotosFromAttachments(issueList) {
     issue.photos = attPhotos;
   }));
   if (myToken !== attachmentsHydrationToken) return;
+  renderIssues();
+}
+
+function normalizeEventHistory(issue, events) {
+  const out = [];
+  (events || []).forEach(ev => {
+    if (ev.type !== 'status_changed') return;
+    const toStatus = ev.payload?.toStatusKey || 'open';
+    const toSub = ev.payload?.toSubStatusKey || '';
+    const note = ev.payload?.note || '';
+    let dateTime = '';
+    try {
+      if (ev.eventAt?.toDate) dateTime = fmtDate(ev.eventAt.toDate());
+    } catch (_) {}
+    out.push({
+      status: toStatus,
+      subStatus: toSub,
+      note,
+      dateTime: dateTime || issue.dateTime || '',
+      by: ev.actor?.name || issue.userName || ''
+    });
+  });
+  return out;
+}
+
+async function fetchIssueEventHistory(issue) {
+  if (issueEventHistoryCache.has(issue.id)) return issueEventHistoryCache.get(issue.id);
+  const q = query(issueEventsCol(issue.id), orderBy('eventAt', 'asc'));
+  const snap = await getDocs(q);
+  if (snap.empty) {
+    issueEventHistoryCache.set(issue.id, []);
+    return [];
+  }
+  const events = snap.docs.map(d => d.data());
+  const history = normalizeEventHistory(issue, events);
+  issueEventHistoryCache.set(issue.id, history);
+  return history;
+}
+
+async function hydrateIssueHistoryFromEvents(issueList) {
+  const myToken = ++eventsHydrationToken;
+  const targets = (issueList || []).filter(i => i.schemaVersion === 2);
+  if (targets.length === 0) return;
+  await Promise.all(targets.map(async issue => {
+    const h = await fetchIssueEventHistory(issue);
+    if (h.length > 0) issue.eventHistory = h;
+  }));
+  if (myToken !== eventsHydrationToken) return;
   renderIssues();
 }
 
@@ -1343,7 +1393,9 @@ async function switchPlant(plantId) {
   closePlantDropdown();
   issues = [];
   attachmentPhotoCache.clear();
+  issueEventHistoryCache.clear();
   attachmentsHydrationToken++;
+  eventsHydrationToken++;
   setSyncStatus('', 'Switching plant…');
   await hydrateCurrentPlantView();
   startListener();
@@ -1691,7 +1743,9 @@ onAuthStateChanged(auth, async user => {
     document.getElementById('app').classList.remove('visible');
     issues = [];
     attachmentPhotoCache.clear();
+    issueEventHistoryCache.clear();
     attachmentsHydrationToken++;
+    eventsHydrationToken++;
     const btn = document.getElementById('google-signin-btn');
     btn.disabled = false; btn.innerHTML = googleBtnHTML;
   }
@@ -1719,6 +1773,7 @@ function startListener() {
     });
     refreshVisibleData();
     hydrateIssuePhotosFromAttachments(issues);
+    hydrateIssueHistoryFromEvents(issues);
     setSyncStatus('ok', 'Live — synced across all devices');
   }, err => {
     console.error('Snapshot error:', err);
@@ -2514,7 +2569,6 @@ window.submitIssue = async () => {
     const issuePayload = {
       machine: currentMachine, note,
       dateTime: fmtDate(d), dateKey: localDateStr(d), timestamp: d.getTime(),
-      resolved: false, resolveNote: '', resolveDateTime: '',
       userId: currentUser.uid, userName: currentUser.displayName||currentUser.email,
       statusHistory: [{ status: initialStatus, subStatus: initialSubStatus, note:'', dateTime: fmtDate(d), by: currentUser.displayName||currentUser.email }],
       workflowState: 'called',
@@ -2637,8 +2691,6 @@ window.confirmResolve = async () => {
     const last = currentStatus(issue || {});
     const resolvedAtText = fmtDate(new Date());
     const issuePatch = {
-      resolved:true, resolveNote:note||'Resolved (no details provided)',
-      resolveDateTime:resolvedAtText, resolvedBy:currentUser.displayName||currentUser.email,
       ...buildIssueV2Compat({
         machineCode: issue?.machine || '',
         statusKey: 'resolved',
@@ -2683,7 +2735,6 @@ window.confirmReopen = async () => {
     const history=issue.resolveHistory||[];
     history.push({resolveNote:issue.resolveNote,resolveDateTime:issue.resolveDateTime,resolvedBy:issue.resolvedBy||''});
     const issuePatch = {
-      resolved:false,resolveNote:'',resolveDateTime:'',resolvedBy:'',
       reopenNote:note||'',reopenDateTime:fmtDate(new Date()),
       reopenedBy:currentUser.displayName||currentUser.email,resolveHistory:history,
       ...buildIssueV2Compat({
@@ -2708,20 +2759,18 @@ window.confirmReopen = async () => {
 
 // Helper: get current status from history
 function currentStatus(issue) {
-  const h = issue.statusHistory;
-  if (!h || h.length === 0) {
-    if (issue.currentStatus?.statusKey) {
-      return {
-        status: issue.currentStatus.statusKey,
-        subStatus: issue.currentStatus.subStatusKey || '',
-        note: issue.currentStatus.notePreview || '',
-        dateTime: issue.currentStatus.enteredDateTime || '',
-        by: issue.currentStatus.enteredBy?.name || ''
-      };
-    }
-    return { status: issue.status||'open', subStatus: issue.subStatus||'', note:'', dateTime:'', by:'' };
+  const evh = issue.eventHistory;
+  if (evh && evh.length > 0) return evh[evh.length - 1];
+  if (issue.currentStatus?.statusKey) {
+    return {
+      status: issue.currentStatus.statusKey,
+      subStatus: issue.currentStatus.subStatusKey || '',
+      note: issue.currentStatus.notePreview || '',
+      dateTime: issue.currentStatus.enteredDateTime || '',
+      by: issue.currentStatus.enteredBy?.name || ''
+    };
   }
-  return h[h.length - 1];
+  return { status: currentStatusKey(issue), subStatus: '', note:'', dateTime:'', by:'' };
 }
 
 // Add a new status entry to history
@@ -2732,17 +2781,9 @@ window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
   const history = [...(issue.statusHistory||[])];
   const entry = { status, subStatus: subStatus||'', note: note||'', dateTime: dateTime || fmtDate(new Date()), by: currentUser.displayName||currentUser.email };
   history.push(entry);
-  const isResolved = status === 'resolved';
   try {
     const issuePatch = {
       statusHistory: history,
-      // keep legacy fields in sync for filtering
-      status: isResolved ? '' : status,
-      subStatus: subStatus||'',
-      resolved: isResolved,
-      resolveNote: isResolved ? (note||'Resolved') : '',
-      resolveDateTime: isResolved ? fmtDate(new Date()) : '',
-      resolvedBy: isResolved ? (currentUser.displayName||currentUser.email) : '',
       ...buildIssueV2Compat({
         machineCode: issue.machine || issue.machineCode || '',
         statusKey: status,
@@ -2775,13 +2816,9 @@ window.updateStatusEntry = async (id, idx, status, subStatus, note, dateTime) =>
   if (dateTime) history[idx].dateTime = dateTime;
   // Recalculate current status from last entry
   const last = history[history.length - 1];
-  const isResolved = last.status === 'resolved';
   try {
     const issuePatch = {
       statusHistory: history,
-      status: isResolved ? '' : last.status,
-      subStatus: last.subStatus||'',
-      resolved: isResolved,
       ...buildIssueV2Compat({
         machineCode: issue.machine || issue.machineCode || '',
         statusKey: last.status || 'open',
@@ -2815,13 +2852,9 @@ window.removeStatusEntry = async (id, idx) => {
   if (history.length <= 1) return;
   history.splice(idx, 1);
   const last = history[history.length - 1];
-  const isResolved = last.status === 'resolved';
   try {
     const issuePatch = {
       statusHistory: history,
-      status: isResolved ? '' : last.status,
-      subStatus: last.subStatus||'',
-      resolved: isResolved,
       ...buildIssueV2Compat({
         machineCode: issue.machine || issue.machineCode || '',
         statusKey: last.status || 'open',
@@ -3001,7 +3034,6 @@ window.setSubStatus = async (id, sub) => {
   try {
     const issuePatch = {
       statusHistory: history,
-      subStatus: sub,
       ...buildIssueV2Compat({
         machineCode: issue.machine || issue.machineCode || '',
         statusKey: last.status || 'open',
@@ -3141,7 +3173,7 @@ function renderIssues() {
   }
   else if (sort==='recently-updated') {
     const lastUpdateTime = i => {
-      const h = i.statusHistory;
+      const h = i.eventHistory;
       if (!h || !h.length) return i.timestamp||0;
       const last = h[h.length-1];
       if (!last.dateTime) return i.timestamp||0;
@@ -3201,9 +3233,15 @@ function renderIssues() {
       ? `<div class="issue-photos">${issue.photos.map(p=>`<img class="issue-photo-thumb" src="${p.dataUrl}" loading="lazy" onclick="openLightbox('${p.dataUrl}')">`).join('')}</div>` : '';
 
     // Current status from history
-    const history = issue.statusHistory && issue.statusHistory.length > 0
-      ? issue.statusHistory
-      : [{ status: issueIsResolvedV2(issue) ? 'resolved' : (issue.status||'open'), subStatus: issue.subStatus||'', note:'', dateTime: issue.statusDateTime||issue.dateTime||'', by: issue.statusBy||issue.userName||'' }];
+    const history = issue.eventHistory && issue.eventHistory.length > 0
+      ? issue.eventHistory
+      : [{
+          status: currentStatusKey(issue),
+          subStatus: issue.currentStatus?.subStatusKey || '',
+          note: issue.currentStatus?.notePreview || '',
+          dateTime: issue.currentStatus?.enteredDateTime || issue.dateTime || '',
+          by: issue.currentStatus?.enteredBy?.name || issue.userName || ''
+        }];
     const lastEntry = history[history.length-1];
     const lastKey = lastEntry.status || 'open';
     const scfg = STATUS_CONFIG_SAFE[lastKey];
@@ -4081,9 +4119,15 @@ window.openExportModal = () => {
 
   let cardsHtml = '';
   filtered.forEach(issue => {
-    const history = issue.statusHistory && issue.statusHistory.length > 0
-      ? issue.statusHistory
-      : [{ status: issueIsResolvedV2(issue)?'resolved':(issue.status||'open'), subStatus: issue.subStatus||'', note:'', dateTime: issue.dateTime||'', by: issue.userName||'' }];
+    const history = issue.eventHistory && issue.eventHistory.length > 0
+      ? issue.eventHistory
+      : [{
+          status: currentStatusKey(issue),
+          subStatus: issue.currentStatus?.subStatusKey || '',
+          note: issue.currentStatus?.notePreview || '',
+          dateTime: issue.currentStatus?.enteredDateTime || issue.dateTime || '',
+          by: issue.currentStatus?.enteredBy?.name || issue.userName || ''
+        }];
     const lastEntry = history[history.length-1];
     const lastKey = lastEntry.status || 'open';
     const cfg = STATUS_CONFIG_FALLBACK(lastKey);
