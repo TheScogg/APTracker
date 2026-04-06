@@ -2332,11 +2332,21 @@ function currentStatus(issue) {
   return h[h.length - 1];
 }
 
+function getMutableStatusHistory(issue) {
+  if (Array.isArray(issue.statusHistory) && issue.statusHistory.length > 0) {
+    return issue.statusHistory.map(entry => ({ ...entry }));
+  }
+  if (Array.isArray(issue.eventHistory) && issue.eventHistory.length > 0) {
+    return issue.eventHistory.map(entry => ({ ...entry }));
+  }
+  return [];
+}
+
 // Add a new status entry to history
 window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
   const issue = issues.find(i=>i.id===id);
   if (!issue) return;
-  const history = [...(issue.statusHistory||[])];
+  const history = getMutableStatusHistory(issue);
   const entry = { status, subStatus: subStatus||'', note: note||'', dateTime: dateTime || fmtDate(new Date()), by: currentUser.displayName||currentUser.email };
   history.push(entry);
   const isResolved = status === 'resolved';
@@ -2358,7 +2368,8 @@ window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
 window.updateStatusEntry = async (id, idx, status, subStatus, note, dateTime) => {
   const issue = issues.find(i=>i.id===id);
   if (!issue) return;
-  const history = [...(issue.statusHistory||[])];
+  const history = getMutableStatusHistory(issue);
+  if (!history[idx]) return;
   history[idx] = { ...history[idx], status, subStatus: subStatus||'', note: note||'' };
   if (dateTime) history[idx].dateTime = dateTime;
   // Recalculate current status from last entry
@@ -2378,7 +2389,7 @@ window.updateStatusEntry = async (id, idx, status, subStatus, note, dateTime) =>
 window.removeStatusEntry = async (id, idx) => {
   const issue = issues.find(i=>i.id===id);
   if (!issue) return;
-  const history = [...(issue.statusHistory||[])];
+  const history = getMutableStatusHistory(issue);
   if (history.length <= 1) return;
   history.splice(idx, 1);
   const last = history[history.length - 1];
@@ -2434,7 +2445,8 @@ let editingStatusEntry = null;
 window.startEditEntry = (id, idx) => { 
   const issue = issues.find(i => i.id === id);
   if (!issue) return;
-  const entry = issue.statusHistory[idx];
+  const history = getMutableStatusHistory(issue);
+  const entry = history[idx];
   if (!entry) return;
   
   editingStatusEntry = { issueId: id, entryIndex: idx };
@@ -2447,7 +2459,7 @@ window.startEditEntry = (id, idx) => {
   
   // Handle sub-status
   updateEditStatusSubOptions();
-  statusSelect.addEventListener('change', updateEditStatusSubOptions);
+  statusSelect.onchange = updateEditStatusSubOptions;
   
   const subSelect = document.getElementById('edit-status-sub');
   if (subSelect && entry.subStatus) {
@@ -2541,7 +2553,7 @@ window.toggleSubStatus = async (id, status) => { await addStatusEntry(id, status
 window.setSubStatus = async (id, sub) => {
   const issue = issues.find(i=>i.id===id);
   if (!issue) return;
-  const history = [...(issue.statusHistory||[])];
+  const history = getMutableStatusHistory(issue);
   if (history.length > 0) { history[history.length-1].subStatus = sub; }
   try { await updateDoc(plantDoc('issues',id),{ statusHistory: history, subStatus: sub }); }
   catch(e) { setSyncStatus('err','Error updating: '+e.message); }
