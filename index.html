@@ -3459,6 +3459,18 @@ function renderIssues() {
     list.appendChild(row);
 
     // Helper functions for this card
+    const scrollPanelBottomIntoView = (panelEl) => {
+      if (!panelEl) return;
+      requestAnimationFrame(() => {
+        const rect = panelEl.getBoundingClientRect();
+        const viewportHeight = window.visualViewport?.height || window.innerHeight;
+        const overflowBottom = rect.bottom - viewportHeight;
+        if (overflowBottom > 0) {
+          window.scrollBy({ top: overflowBottom, behavior: 'smooth' });
+        }
+      });
+    };
+
     const openCategoryPanel = () => {
       card.classList.remove('peeking', 'dragging');
       card.style.transform = '';
@@ -3467,6 +3479,8 @@ function renderIssues() {
       if (openSwipeRow && openSwipeRow.card !== card) closeSwipeCard(openSwipeRow.card);
       openSwipeRow = { card, catPanel, subPanel };
       scheduleIssueLogRelayout();
+      scrollPanelBottomIntoView(catPanel);
+      setTimeout(() => scrollPanelBottomIntoView(catPanel), 280);
     };
 
     const closeSwipeCard = (c) => {
@@ -3539,6 +3553,8 @@ function renderIssues() {
 
           subPanel.classList.add('visible');
           scheduleIssueLogRelayout();
+          scrollPanelBottomIntoView(subPanel);
+          setTimeout(() => scrollPanelBottomIntoView(subPanel), 240);
         } else {
           // Apply immediately (no subs)
           closeSwipeCard(card);
