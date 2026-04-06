@@ -17,16 +17,39 @@ AP Tracker is a single-file HTML/JS web application for tracking injection moldi
 All data is scoped under plants for multi-plant support:
 
 ```
-plants/{plantId}/
+plants/{plantId}                      ← plant metadata doc { name, location, createdAt, isActive }
   issues/{issueId}                    ← individual issue documents (v2 schema)
     events/{eventId}                  ← append-only event log subcollection
     attachments/{attachmentId}        ← photo attachment metadata subcollection
   config/statuses                     ← status category definitions
   config/presses                      ← press/row layout for this plant
+  members/{userId}                    ← per-user role + permissions for this plant
 
 users/{userId}/
-  plants: [{id, name, location}]      ← which plants user can access
+  plantIds: ["plantId", ...]          ← IDs of plants the user can access (new structure)
+  plants: [{id, name, location}]      ← legacy array (still read during migration window)
   lastPlant: "plantId"                ← last-used plant
+```
+
+**Member document shape** (`plants/{plantId}/members/{userId}`):
+```js
+{
+  userId: "firebase-uid",
+  displayName: "James Scoggins",
+  email: "james@example.com",
+  role: "admin",           // "admin" | "editor" | "viewer"
+  isActive: true,
+  addedAt: serverTimestamp(),
+  permissions: {
+    canViewPlant: true,
+    canCreateIssue: true,
+    canEditIssue: true,
+    canResolveIssue: true,
+    canManageStatuses: true,  // controls admin panel visibility
+    canManagePresses: true,
+    canExport: true
+  }
+}
 ```
 
 **Firebase Storage path:** `plants/{plantId}/issues/{issueId}/photos/{fileName}`
@@ -123,10 +146,18 @@ Custom statuses can be added/edited/deleted via the admin panel (user menu → M
 ### Multi-plant system
 - `currentPlantId` tracks the active plant
 - Plant switcher dropdown in the header between logo and user pill
-- `switchPlant(id)` tears down the current listener, loads new plant's press layout + status config, rebuilds floor map, starts fresh Firestore listener
-- `loadUserPlants()` reads the user's plant list from `users/{userId}`
+- `switchPlant(id)` tears down the current listener, loads new plant's press layout + status config + member role, rebuilds floor map, starts fresh Firestore listener
+- `loadUserPlants()` reads the user's plant list — new structure reads `users/{userId}.plantIds` and fetches each `plants/{plantId}` doc for name/location; old structure (`plants` array) is auto-migrated on first load via `_migratePlantsToNewStructure()`
 - `loadPlantPresses()` reads press layout from `plants/{plantId}/config/presses`
-- First-time users get a "default" plant created automatically
+- First-time users get a "default" plant created automatically via `_initNewPlant()`
+- `addNewPlant()` writes a plant doc + member doc (admin) + appends to `users/{uid}.plantIds`
+
+### Role & permissions system
+- `currentUserRole` (`"admin"` | `"editor"` | `"viewer"`) and `currentUserPermissions` are set by `loadCurrentMember(plantId)` on every plant load
+- `loadCurrentMember()` reads `plants/{plantId}/members/{userId}`; defaults to admin if no doc found (backward compat during migration)
+- `applyRoleUI()` shows/hides the "Manage Statuses" admin button based on `canManageStatuses`
+- `DEFAULT_PERMISSIONS` is the full-access permission set used for admin/first-time users
+- Security rules in `firestore.rules` enforce membership at the Firestore level
 
 ### Status system
 - `STATUSES` object is the single source of truth, loaded from Firestore
@@ -153,6 +184,9 @@ Custom statuses can be added/edited/deleted via the admin panel (user menu → M
 
 ### Event log (v2)
 - Status changes write an event document to the `events` subcollection via `queueIssueEvent(batch, issueId, type, payload)`
+- New issues and `addStatusEntry` / `setSubStatus` no longer write to the `statusHistory` array on the issue doc — `events` subcollection is the canonical append-only source
+- `updateStatusEntry` and `removeStatusEntry` still write `statusHistory` as an "editable timeline" override (events are immutable; these functions allow correcting display history)
+- `getMutableStatusHistory(issue)` returns `statusHistory` if present, else falls back to in-memory `eventHistory`
 - `hydrateIssueHistoryFromEvents(issueList)` fetches events for v2 issues and normalizes them into the `statusHistory` shape for rendering
 - Events are cached in `issueEventHistoryCache` (Map keyed by issueId)
 - Hydration uses a token pattern (`attachmentsHydrationToken`, `eventsHydrationToken`) so stale async results are discarded when switching plants
@@ -338,6 +372,7 @@ Edit the `openExportModal` function — the `cardsHtml` variable builds each iss
 ## Companion tools
 
 - **migrate-to-plants.html** — One-time migration tool that copies root-level `issues/` and `config/` into `plants/default/` structure
+- **migration-plant-structure.html** — Migrates `users/{uid}.plants` array → `plants/{id}` docs + `plants/{id}/members/{uid}` subcollection + `users/{uid}.plantIds`. Run once after deploying the new `index.html`. Safe to re-run (all writes use merge).
 - **copy-statuses.html** — Copies status config from `plants/default/` to other plant IDs (AP1–AP5)
 
 ---
@@ -348,6 +383,7 @@ Read these before making schema-related changes:
 - `docs/firestore-schema-v2.md`
 - `docs/security-rules-v2.md`
 - `firestore.indexes.json`
+- `firestore.rules` — deployed security rules (member-based access control)
 
 For implementation work, start from:
 - `docs/codex-migration-prompt.txt`

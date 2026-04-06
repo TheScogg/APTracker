@@ -1023,7 +1023,7 @@
 </div>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, collection, updateDoc, deleteDoc, doc, getDoc, getDocs, setDoc, onSnapshot, serverTimestamp, query, orderBy, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, collection, updateDoc, deleteDoc, doc, getDoc, getDocs, setDoc, onSnapshot, serverTimestamp, query, orderBy, writeBatch, arrayUnion } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut as fbSignOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getStorage, ref as storageRef, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
@@ -1051,6 +1051,14 @@ let currentPlantId = null;
 let currentPlantName = '';
 let userPlants = []; // [{ id, name, location }]
 
+// ── ROLE / PERMISSIONS ──
+const DEFAULT_PERMISSIONS = {
+  canViewPlant: true, canCreateIssue: true, canEditIssue: true,
+  canResolveIssue: true, canManageStatuses: true, canManagePresses: true, canExport: true
+};
+let currentUserRole = 'admin'; // default until member doc loads
+let currentUserPermissions = { ...DEFAULT_PERMISSIONS };
+
 // Default press layout — used when creating a new plant or if Firestore has none
 const DEFAULT_PRESSES = {
   "Row 1": ["1.01","1.02","1.03","1.04","1.05","1.06","1.07","1.08","1.09","1.10","1.11","1.12","1.13","1.14","1.15","1.16","1.17"],
@@ -1070,6 +1078,7 @@ function plantCol(colName) { return collection(db, 'plants', currentPlantId, col
 function plantDoc(colName, docId) { return doc(db, 'plants', currentPlantId, colName, docId); }
 function issueEventsCol(issueId) { return collection(db, 'plants', currentPlantId, 'issues', issueId, 'events'); }
 function issueAttachmentsCol(issueId) { return collection(db, 'plants', currentPlantId, 'issues', issueId, 'attachments'); }
+function plantMemberDocRef(plantId, userId) { return doc(db, 'plants', plantId, 'members', userId); }
 
 function currentActor() {
   return { uid: currentUser?.uid || '', name: currentUser?.displayName || currentUser?.email || 'Unknown' };
@@ -1324,32 +1333,46 @@ function refreshVisibleData() {
 }
 
 async function hydrateCurrentPlantView() {
-  await loadPlantPresses();
+  await Promise.all([loadPlantPresses(), loadCurrentMember(currentPlantId)]);
   buildFloorMap();
   await loadConfig();
 }
 
-// Load user's plant list
+// Load user's plant list.
+// Supports new structure (plantIds array + plants/{id} docs + members subcollection)
+// and old structure (plants array on user doc). On first load with old structure,
+// self-migrates by writing plant docs + member docs and switching to plantIds.
 async function loadUserPlants() {
   try {
     const userSnap = await getDoc(doc(db, 'users', currentUser.uid));
-    if (userSnap.exists()) {
-      const data = userSnap.data();
-      userPlants = data.plants || [];
-      // Validate that lastPlant actually exists in the user's plants list
-      const lastPlantValid = data.lastPlant && userPlants.some(p => p.id === data.lastPlant);
-      currentPlantId = lastPlantValid ? data.lastPlant : (userPlants.length > 0 ? userPlants[0].id : null);
-    }
-    // If user has no plants, create a default one
-    if (!currentPlantId || userPlants.length === 0) {
-      const defaultPlant = { id: 'default', name: 'Main Plant', location: '' };
-      userPlants = [defaultPlant];
+    const userData = userSnap.exists() ? userSnap.data() : {};
+
+    if (Array.isArray(userData.plantIds) && userData.plantIds.length > 0) {
+      // ── New structure: fetch each plant doc for name/location ──
+      const plantDocs = await Promise.all(
+        userData.plantIds.map(id => getDoc(doc(db, 'plants', id)))
+      );
+      userPlants = plantDocs
+        .filter(s => s.exists())
+        .map(s => ({ id: s.id, name: s.data().name || s.id, location: s.data().location || '' }));
+      const lastPlantValid = userData.lastPlant && userPlants.some(p => p.id === userData.lastPlant);
+      currentPlantId = lastPlantValid ? userData.lastPlant : (userPlants[0]?.id || null);
+
+    } else if (Array.isArray(userData.plants) && userData.plants.length > 0) {
+      // ── Old structure: migrate plant metadata into plant docs + member docs ──
+      userPlants = userData.plants;
+      const lastPlantValid = userData.lastPlant && userPlants.some(p => p.id === userData.lastPlant);
+      currentPlantId = lastPlantValid ? userData.lastPlant : userPlants[0].id;
+      await _migratePlantsToNewStructure(userPlants);
+
+    } else {
+      // ── No plants yet: create default ──
       currentPlantId = 'default';
-      // Save to user doc
-      await setDoc(doc(db, 'users', currentUser.uid), { plants: userPlants, lastPlant: currentPlantId }, { merge: true });
-      // Initialize plant config
-      await setDoc(doc(db, 'plants', 'default', 'config', 'presses'), { presses: DEFAULT_PRESSES });
+      userPlants = [{ id: 'default', name: 'Main Plant', location: '' }];
+      await _initNewPlant('default', 'Main Plant', '');
+      await setDoc(doc(db, 'users', currentUser.uid), { plantIds: ['default'], lastPlant: 'default' }, { merge: true });
     }
+
     currentPlantName = (userPlants.find(p => p.id === currentPlantId) || {}).name || currentPlantId;
     document.getElementById('plant-name-display').textContent = currentPlantName;
     buildPlantDropdown();
@@ -1360,6 +1383,76 @@ async function loadUserPlants() {
     userPlants = [{ id: 'default', name: 'Main Plant', location: '' }];
     document.getElementById('plant-name-display').textContent = currentPlantName;
   }
+}
+
+// Write a plant doc + member doc for a brand new plant (no presses config yet)
+async function _initNewPlant(plantId, name, location) {
+  const batch = writeBatch(db);
+  batch.set(doc(db, 'plants', plantId), { name, location: location || '', createdAt: serverTimestamp(), isActive: true });
+  batch.set(plantMemberDocRef(plantId, currentUser.uid), {
+    userId: currentUser.uid,
+    displayName: currentUser.displayName || currentUser.email || '',
+    email: currentUser.email || '',
+    role: 'admin',
+    isActive: true,
+    addedAt: serverTimestamp(),
+    permissions: { ...DEFAULT_PERMISSIONS }
+  });
+  batch.set(doc(db, 'plants', plantId, 'config', 'presses'), { presses: DEFAULT_PRESSES });
+  await batch.commit();
+}
+
+// One-time self-migration: move old users/{uid}.plants array → plant docs + member docs + plantIds
+async function _migratePlantsToNewStructure(plants) {
+  try {
+    const batch = writeBatch(db);
+    for (const p of plants) {
+      // Write plant doc only if it doesn't already have one
+      batch.set(doc(db, 'plants', p.id), { name: p.name, location: p.location || '', isActive: true }, { merge: true });
+      // Write member doc — caller gets admin
+      batch.set(plantMemberDocRef(p.id, currentUser.uid), {
+        userId: currentUser.uid,
+        displayName: currentUser.displayName || currentUser.email || '',
+        email: currentUser.email || '',
+        role: 'admin',
+        isActive: true,
+        addedAt: serverTimestamp(),
+        permissions: { ...DEFAULT_PERMISSIONS }
+      }, { merge: true });
+    }
+    // Switch user doc from plants array to plantIds array
+    batch.set(doc(db, 'users', currentUser.uid), { plantIds: plants.map(p => p.id) }, { merge: true });
+    await batch.commit();
+  } catch(e) {
+    console.warn('Plant structure migration failed (non-fatal):', e);
+  }
+}
+
+// Load current user's member doc for the given plant; set role + permissions + update UI
+async function loadCurrentMember(plantId) {
+  try {
+    const snap = await getDoc(plantMemberDocRef(plantId, currentUser.uid));
+    if (snap.exists()) {
+      const d = snap.data();
+      currentUserRole = d.role || 'editor';
+      currentUserPermissions = { ...DEFAULT_PERMISSIONS, ...(d.permissions || {}) };
+    } else {
+      // No member doc yet — treat as admin (during migration window)
+      currentUserRole = 'admin';
+      currentUserPermissions = { ...DEFAULT_PERMISSIONS };
+    }
+  } catch(e) {
+    console.warn('Could not load member doc, defaulting to admin', e);
+    currentUserRole = 'admin';
+    currentUserPermissions = { ...DEFAULT_PERMISSIONS };
+  }
+  applyRoleUI();
+}
+
+// Show/hide UI elements based on current user's permissions
+function applyRoleUI() {
+  const adminBtn = document.getElementById('admin-panel-btn');
+  if (adminBtn) adminBtn.style.display = currentUserPermissions.canManageStatuses ? '' : 'none';
 }
 
 // Load press layout for current plant
@@ -1402,14 +1495,13 @@ async function switchPlant(plantId) {
   refreshVisibleData();
 }
 
-// Add a new plant
+// Add a new plant: writes plant doc + member doc + updates user's plantIds array
 async function addNewPlant(name, location) {
   const id = name.toLowerCase().replace(/[^a-z0-9]/g, '_') + '_' + Date.now().toString(36);
-  const plant = { id, name, location: location || '' };
-  userPlants.push(plant);
-  await setDoc(doc(db, 'users', currentUser.uid), { plants: userPlants }, { merge: true });
-  // Initialize plant config with defaults
-  await setDoc(doc(db, 'plants', id, 'config', 'presses'), { presses: DEFAULT_PRESSES });
+  await _initNewPlant(id, name, location);
+  // Add to user's plantIds (arrayUnion is safe if already present)
+  await setDoc(doc(db, 'users', currentUser.uid), { plantIds: arrayUnion(id) }, { merge: true });
+  userPlants.push({ id, name, location: location || '' });
   buildPlantDropdown();
   await switchPlant(id);
 }
@@ -2570,7 +2662,6 @@ window.submitIssue = async () => {
       machine: currentMachine, note,
       dateTime: fmtDate(d), dateKey: localDateStr(d), timestamp: d.getTime(),
       userId: currentUser.uid, userName: currentUser.displayName||currentUser.email,
-      statusHistory: [{ status: initialStatus, subStatus: initialSubStatus, note:'', dateTime: fmtDate(d), by: currentUser.displayName||currentUser.email }],
       workflowState: 'called',
       photoCount: uploadedPhotos.length,
       createdAt: serverTimestamp(),
@@ -2795,7 +2886,6 @@ window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
   history.push(entry);
   try {
     const issuePatch = {
-      statusHistory: history,
       ...buildIssueV2Compat({
         machineCode: issue.machine || issue.machineCode || '',
         statusKey: status,
@@ -3050,7 +3140,6 @@ window.setSubStatus = async (id, sub) => {
   const last = history[history.length - 1] || { status: currentStatusKey(issue), subStatus: sub, note: '' };
   try {
     const issuePatch = {
-      statusHistory: history,
       ...buildIssueV2Compat({
         machineCode: issue.machine || issue.machineCode || '',
         statusKey: last.status || 'open',

@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AP Tracker — Plant Structure Migration</title>
+<style>
+  body { font-family: monospace; background: #0d1117; color: #e6edf3; padding: 24px; max-width: 700px; margin: 0 auto; }
+  h1 { color: #f97316; font-size: 20px; margin-bottom: 4px; }
+  .sub { color: #8b949e; font-size: 13px; margin-bottom: 24px; }
+  button { background: #f97316; color: white; border: none; padding: 10px 22px; border-radius: 8px; cursor: pointer; font-size: 14px; font-family: monospace; }
+  button:disabled { opacity: 0.4; cursor: default; }
+  #log { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 14px; margin-top: 16px; min-height: 200px; font-size: 12px; line-height: 1.7; white-space: pre-wrap; overflow-y: auto; max-height: 500px; }
+  .ok  { color: #22c55e; }
+  .err { color: #ef4444; }
+  .warn { color: #eab308; }
+  .info { color: #8b949e; }
+  #signin-btn { background: #4285f4; margin-bottom: 16px; }
+</style>
+</head>
+<body>
+<h1>Plant Structure Migration</h1>
+<p class="sub">
+  Migrates <code>users/{uid}.plants</code> array → <code>plants/{id}</code> docs + <code>plants/{id}/members/{uid}</code> subcollection.<br>
+  Safe to run multiple times — uses <code>{ merge: true }</code> on all writes. All existing users get <strong>admin</strong> role.<br>
+  Run this once after deploying the updated <code>index.html</code>.
+</p>
+
+<button id="signin-btn">Sign in with Google</button>
+<button id="run-btn" disabled>Run Migration</button>
+
+<div id="log">Waiting for sign-in…</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {
+  getFirestore, collection, doc, getDoc, getDocs, setDoc, writeBatch, serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {
+  getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyABjasNBbJnsqq4M_UxKruKrN6-O2FXCwc",
+  authDomain: "press-tracker-9d9c9.firebaseapp.com",
+  projectId: "press-tracker-9d9c9",
+  storageBucket: "press-tracker-9d9c9.firebasestorage.app",
+  messagingSenderId: "943200266003",
+  appId: "1:943200266003:web:4d24eab551a3fb145c1ce6"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+const provider = new GoogleAuthProvider();
+provider.setCustomParameters({ prompt: 'select_account' });
+
+const logEl = document.getElementById('log');
+const runBtn = document.getElementById('run-btn');
+const signinBtn = document.getElementById('signin-btn');
+
+let currentUser = null;
+
+function log(msg, cls = '') {
+  logEl.textContent += (cls ? `[${cls.toUpperCase()}] ` : '') + msg + '\n';
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+const DEFAULT_PERMISSIONS = {
+  canViewPlant: true, canCreateIssue: true, canEditIssue: true,
+  canResolveIssue: true, canManageStatuses: true, canManagePresses: true, canExport: true
+};
+
+signinBtn.addEventListener('click', async () => {
+  try {
+    await signInWithPopup(auth, provider);
+  } catch(e) {
+    log('Sign-in failed: ' + e.message, 'err');
+  }
+});
+
+onAuthStateChanged(auth, user => {
+  if (user) {
+    currentUser = user;
+    logEl.textContent = '';
+    log(`Signed in as ${user.displayName || user.email}`, 'ok');
+    log('Click "Run Migration" to begin.', 'info');
+    runBtn.disabled = false;
+    signinBtn.disabled = true;
+  } else {
+    currentUser = null;
+    runBtn.disabled = true;
+    signinBtn.disabled = false;
+  }
+});
+
+runBtn.addEventListener('click', async () => {
+  if (!currentUser) return;
+  runBtn.disabled = true;
+  logEl.textContent = '';
+  log('Starting migration…\n', 'info');
+
+  try {
+    // Fetch all user documents
+    const usersSnap = await getDocs(collection(db, 'users'));
+    log(`Found ${usersSnap.size} user document(s).`, 'info');
+
+    let totalPlants = 0;
+    let totalMembers = 0;
+    let totalUsersUpdated = 0;
+    let skipped = 0;
+
+    for (const userSnap of usersSnap.docs) {
+      const uid = userSnap.id;
+      const data = userSnap.data();
+
+      // Skip users already on new structure
+      if (Array.isArray(data.plantIds) && data.plantIds.length > 0 && !Array.isArray(data.plants)) {
+        log(`  User ${uid}: already on new structure — skipping.`, 'info');
+        skipped++;
+        continue;
+      }
+
+      const plants = data.plants || [];
+      if (plants.length === 0) {
+        log(`  User ${uid}: no plants array — skipping.`, 'warn');
+        skipped++;
+        continue;
+      }
+
+      log(`\nUser ${uid} (${data.email || '?'}): ${plants.length} plant(s)`);
+
+      // Firestore batches are limited to 500 ops; unlikely to hit that here but chunk if needed
+      const batch = writeBatch(db);
+
+      for (const p of plants) {
+        if (!p.id) { log(`    Skipping malformed plant entry: ${JSON.stringify(p)}`, 'warn'); continue; }
+
+        // Write plant doc (merge so existing config/issues aren't affected)
+        batch.set(doc(db, 'plants', p.id), {
+          name: p.name || p.id,
+          location: p.location || '',
+          isActive: true
+        }, { merge: true });
+        log(`    plants/${p.id} → { name: "${p.name}", location: "${p.location || ''}" }`, 'ok');
+        totalPlants++;
+
+        // Write member doc for this user as admin
+        batch.set(doc(db, 'plants', p.id, 'members', uid), {
+          userId: uid,
+          displayName: data.displayName || data.email || '',
+          email: data.email || '',
+          role: 'admin',
+          isActive: true,
+          addedAt: serverTimestamp(),
+          permissions: { ...DEFAULT_PERMISSIONS }
+        }, { merge: true });
+        log(`    plants/${p.id}/members/${uid} → role: admin`, 'ok');
+        totalMembers++;
+      }
+
+      // Switch user doc from plants[] to plantIds[]
+      batch.set(doc(db, 'users', uid), {
+        plantIds: plants.filter(p => p.id).map(p => p.id)
+      }, { merge: true });
+      log(`  users/${uid}.plantIds updated.`, 'ok');
+      totalUsersUpdated++;
+
+      await batch.commit();
+      log(`  Batch committed for user ${uid}.`, 'ok');
+    }
+
+    log(`\n✓ Migration complete.`, 'ok');
+    log(`  Users updated:  ${totalUsersUpdated}`, 'ok');
+    log(`  Plant docs:     ${totalPlants}`, 'ok');
+    log(`  Member docs:    ${totalMembers}`, 'ok');
+    log(`  Users skipped:  ${skipped}`, 'info');
+    log(`\nNote: old users/{uid}.plants arrays were NOT deleted.`, 'warn');
+    log(`They are harmless but can be manually cleaned up once migration is confirmed.`, 'warn');
+
+  } catch(e) {
+    log('\nMigration failed: ' + e.message, 'err');
+    console.error(e);
+  }
+
+  runBtn.disabled = false;
+});
+</script>
+</body>
+</html>

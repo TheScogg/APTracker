@@ -1,0 +1,93 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function currentUid() {
+      return request.auth.uid;
+    }
+
+    function memberPath(plantId) {
+      return /databases/$(database)/documents/plants/$(plantId)/members/$(currentUid());
+    }
+
+    function memberDoc(plantId) {
+      return get(memberPath(plantId));
+    }
+
+    function isPlantMember(plantId) {
+      return signedIn()
+        && exists(memberPath(plantId))
+        && memberDoc(plantId).data.isActive == true;
+    }
+
+    function hasPermission(plantId, perm) {
+      return isPlantMember(plantId)
+        && memberDoc(plantId).data.permissions[perm] == true;
+    }
+
+    function isPlantAdmin(plantId) {
+      return isPlantMember(plantId)
+        && memberDoc(plantId).data.role == "admin";
+    }
+
+    function isSelf(userId) {
+      return signedIn() && currentUid() == userId;
+    }
+
+    // ── Users ──
+    // Users can only read/write their own document (plant preferences, plantIds list).
+    match /users/{userId} {
+      allow read, write: if isSelf(userId);
+    }
+
+    // ── Plants ──
+    match /plants/{plantId} {
+
+      // Plant metadata (name, location, isActive) — readable by members, writable by admins.
+      allow read: if isPlantMember(plantId);
+      allow create, update, delete: if isPlantAdmin(plantId);
+
+      // ── Members ──
+      // Members can read the members collection to see who has access.
+      // Only admins can grant or revoke access.
+      match /members/{userId} {
+        allow read: if isPlantMember(plantId);
+        allow create, update, delete: if isPlantAdmin(plantId);
+      }
+
+      // ── Config (statuses, presses) ──
+      match /config/{configId} {
+        allow read: if isPlantMember(plantId);
+        allow write: if hasPermission(plantId, "canManageStatuses")
+                     || hasPermission(plantId, "canManagePresses");
+      }
+
+      // ── Issues ──
+      match /issues/{issueId} {
+        allow read: if isPlantMember(plantId);
+        allow create: if hasPermission(plantId, "canCreateIssue");
+        allow update: if hasPermission(plantId, "canEditIssue");
+        allow delete: if isPlantAdmin(plantId);
+
+        // Events are append-only audit trail — no updates or deletes.
+        match /events/{eventId} {
+          allow read: if isPlantMember(plantId);
+          allow create: if hasPermission(plantId, "canEditIssue");
+          allow update, delete: if false;
+        }
+
+        // Attachments can be deleted by the uploader or an admin.
+        match /attachments/{attachmentId} {
+          allow read: if isPlantMember(plantId);
+          allow create: if hasPermission(plantId, "canEditIssue");
+          allow update, delete: if isPlantAdmin(plantId)
+                                || (signedIn() && resource.data.uploadedBy.uid == currentUid());
+        }
+      }
+    }
+  }
+}
