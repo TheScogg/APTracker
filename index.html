@@ -2759,6 +2759,8 @@ window.confirmReopen = async () => {
 
 // Helper: get current status from history
 function currentStatus(issue) {
+  const statusHistory = issue.statusHistory;
+  if (statusHistory && statusHistory.length > 0) return statusHistory[statusHistory.length - 1];
   const evh = issue.eventHistory;
   if (evh && evh.length > 0) return evh[evh.length - 1];
   if (issue.currentStatus?.statusKey) {
@@ -2803,6 +2805,7 @@ window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
       note: note || ''
     });
     await batch.commit();
+    issueEventHistoryCache.delete(id);
   } catch(e) { setSyncStatus('err','Error: '+e.message); }
 };
 
@@ -2840,6 +2843,7 @@ window.updateStatusEntry = async (id, idx, status, subStatus, note, dateTime) =>
       });
     }
     await batch.commit();
+    issueEventHistoryCache.delete(id);
   } catch(e) { setSyncStatus('err','Error: '+e.message); }
 };
 
@@ -2876,6 +2880,7 @@ window.removeStatusEntry = async (id, idx) => {
       });
     }
     await batch.commit();
+    issueEventHistoryCache.delete(id);
   } catch(e) { setSyncStatus('err','Error: '+e.message); }
 };
 
@@ -3233,7 +3238,9 @@ function renderIssues() {
       ? `<div class="issue-photos">${issue.photos.map(p=>`<img class="issue-photo-thumb" src="${p.dataUrl}" loading="lazy" onclick="openLightbox('${p.dataUrl}')">`).join('')}</div>` : '';
 
     // Current status from history
-    const history = issue.eventHistory && issue.eventHistory.length > 0
+    const history = issue.statusHistory && issue.statusHistory.length > 0
+      ? issue.statusHistory
+      : issue.eventHistory && issue.eventHistory.length > 0
       ? issue.eventHistory
       : [{
           status: currentStatusKey(issue),
