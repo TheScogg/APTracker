@@ -111,7 +111,7 @@ This becomes the source of truth for authorization and plant-specific roles.
   "userId": "uid_123",
   "displayName": "James Scoggins",
   "email": "james@example.com",
-  "role": "admin",
+  "role": "owner",
   "isActive": true,
   "permissions": {
     "canViewPlant": true,
@@ -129,9 +129,8 @@ This becomes the source of truth for authorization and plant-specific roles.
 
 ### Recommended roles
 
-- `admin`
-- `supervisor`
-- `operator`
+- `owner`
+- `editor`
 - `viewer`
 
 ### Notes
