@@ -1041,6 +1041,7 @@
     </div>
     <div style="padding:0 0 12px;">
       <div id="notes-list" class="notes-list"></div>
+      <div id="notes-error" style="display:none;font-size:11px;color:var(--red);margin-bottom:6px;"></div>
       <div class="notes-input-row">
         <textarea id="notes-textarea" class="notes-textarea" rows="1" placeholder="Add a note for this press…" oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"></textarea>
         <button class="notes-submit-btn" onclick="submitPressNote()" title="Post note">
@@ -4391,6 +4392,8 @@ window.submitPressNote = async () => {
   if (!text || !_notesModalPressId || !currentUser) return;
   const btn = document.querySelector('.notes-submit-btn');
   if (btn) btn.disabled = true;
+  const errEl = document.getElementById('notes-error');
+  if (errEl) errEl.style.display = 'none';
   try {
     await addDoc(plantCol('pressNotes'), {
       pressId: _notesModalPressId,
@@ -4403,6 +4406,7 @@ window.submitPressNote = async () => {
     ta.style.height = 'auto';
   } catch(e) {
     console.error('submitPressNote error', e);
+    if (errEl) { errEl.textContent = 'Could not save note: ' + (e.message || 'permission denied'); errEl.style.display = 'block'; }
   } finally {
     if (btn) btn.disabled = false;
   }
