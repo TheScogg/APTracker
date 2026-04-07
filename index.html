@@ -2653,8 +2653,7 @@ function setSubmitting(on) {
 
 // ── SUBMIT NEW ──
 window.submitIssue = async () => {
-  const note = document.getElementById('issue-note').value.trim();
-  if (!note) { document.getElementById('issue-note').focus(); return; }
+  const note = document.getElementById('issue-note').value.trim() || 'No description provided';
   setSubmitting(true);
   try {
     const d = getIssueDateFromInputs('issue-date','issue-time-input');
@@ -3615,10 +3614,32 @@ function renderIssues() {
     cancelBtn.addEventListener('click', handleCancel); // Mouse support
 
     // Tile clicks
+    let lastTileTap = null; // { key, stamp } — tracks last tap for double-click/double-tap detection
     catInner.querySelectorAll('.swipe-status-tile').forEach(tile => {
-      const handleTileClick = () => {
+      const handleTileClick = (e) => {
         const statusKey = tile.dataset.status;
         const statusDef = getStatusDef(statusKey);
+        const stamp = e ? e.timeStamp : Date.now();
+
+        // Detect double-click/double-tap:
+        // Two listener calls from the same event share the same timeStamp, so filter those out.
+        const prevTap = lastTileTap;
+        lastTileTap = { key: statusKey, stamp };
+        if (prevTap && prevTap.stamp === stamp) return; // duplicate call from same event
+
+        const isDoubleTap = prevTap
+          && prevTap.key === statusKey
+          && (stamp - prevTap.stamp) < 350;
+
+        if (isDoubleTap && getStatusSubs(statusKey).length > 0) {
+          // Double-click/tap on a category = apply immediately with no sub-status (Skip)
+          catInner.querySelectorAll('.swipe-status-tile').forEach(t => t.classList.remove('selected'));
+          subPanel.classList.remove('visible');
+          catPanel.classList.remove('has-subs');
+          closeSwipeCard(card);
+          addStatusEntry(issue.id, statusKey, '', '');
+          return;
+        }
 
         // Clear previous selection
         catInner.querySelectorAll('.swipe-status-tile').forEach(t => t.classList.remove('selected'));
