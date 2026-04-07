@@ -4399,9 +4399,15 @@ window.openNotesModal = (pressId, machineCode) => {
   document.getElementById('notes-modal').classList.add('visible');
   // Real-time listener
   if (_notesUnsubscribe) { _notesUnsubscribe(); _notesUnsubscribe = null; }
-  const q = query(plantCol('pressNotes'), where('pressId', '==', pressId), orderBy('createdAt', 'desc'));
+  const q = query(plantCol('pressNotes'), where('pressId', '==', pressId));
   _notesUnsubscribe = onSnapshot(q, snap => {
-    const notes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const notes = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => {
+        const at = a.createdAt?.toMillis?.() ?? a.createdAt?.seconds * 1000 ?? 0;
+        const bt = b.createdAt?.toMillis?.() ?? b.createdAt?.seconds * 1000 ?? 0;
+        return bt - at; // newest first
+      });
     _renderPressNotes(notes);
   }, err => { console.warn('pressNotes listener error', err); });
   setTimeout(() => document.getElementById('notes-textarea').focus(), 150);
