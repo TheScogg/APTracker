@@ -8,7 +8,7 @@ The design assumes:
 - each user must be an active member of a plant to access plant data
 - permissions are stored on `plants/{plantId}/members/{userId}`
 - issue timeline events are append-only
-- reporting documents are written only by trusted admins or backend code
+- reporting documents are written only by trusted owners or backend code
 
 ## Goals
 
@@ -35,7 +35,7 @@ Example:
   "userId": "uid_123",
   "displayName": "James Scoggins",
   "email": "james@example.com",
-  "role": "admin",
+  "role": "owner",
   "isActive": true,
   "permissions": {
     "canViewPlant": true,
@@ -87,9 +87,9 @@ service cloud.firestore {
         && memberDoc(plantId).data.permissions[perm] == true;
     }
 
-    function isPlantAdmin(plantId) {
+    function isPlantOwner(plantId) {
       return isPlantMember(plantId)
-        && memberDoc(plantId).data.role == "admin";
+        && memberDoc(plantId).data.role == "owner";
     }
 
     function isSelf(userId) {
@@ -122,7 +122,7 @@ This document stores profile and plant preference data, not plant authorization.
 - active plant members
 
 #### Write
-- plant admins only
+- plant owners + editors
 
 #### Reasoning
 Plant metadata should not be editable by general operators.
@@ -135,7 +135,7 @@ Plant metadata should not be editable by general operators.
 - active plant members
 
 #### Write
-- plant admins only
+- plant owners + editors
 
 #### Optional exception
 Allow a user to update only their own `lastSeenAt` if you want client-driven presence tracking.
@@ -226,10 +226,10 @@ Events are the audit trail and should be append-only.
 - users with `canEditIssue`
 
 #### Update
-- uploader or admin
+- uploader or owner
 
 #### Delete
-- uploader or admin
+- uploader or owner
 
 ---
 
@@ -239,7 +239,7 @@ Events are the audit trail and should be append-only.
 - active plant members
 
 #### Write
-- admin only or backend only
+- owner only or backend only
 
 ---
 
@@ -249,7 +249,7 @@ Events are the audit trail and should be append-only.
 - active plant members
 
 #### Write
-- admin only or backend only
+- owner only or backend only
 
 ---
 
@@ -289,9 +289,9 @@ service cloud.firestore {
         && memberDoc(plantId).data.permissions[perm] == true;
     }
 
-    function isPlantAdmin(plantId) {
+    function isPlantOwner(plantId) {
       return isPlantMember(plantId)
-        && memberDoc(plantId).data.role == "admin";
+        && memberDoc(plantId).data.role == "owner";
     }
 
     function isSelf(userId) {
@@ -369,7 +369,7 @@ Rules should stay reasonably simple. Use app logic for most shape validation, bu
 - user may only write their own document
 
 ### Memberships
-- only admins can change roles or permissions
+- only owners can change roles or permissions
 - app should avoid allowing members to self-escalate
 
 ### Issues
@@ -400,7 +400,7 @@ Use the starter rules above first. Do not try to encode every business rule in F
 ### Good split of responsibility
 - Firestore rules: membership and high-level authorization
 - app code: business workflow and detailed transitions
-- backend or admin tools: reporting aggregates
+- backend or owner tools: reporting aggregates
 
 ### Future tightening
 Once the v2 schema is live, you can tighten rules to distinguish:
