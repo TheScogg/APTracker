@@ -86,6 +86,16 @@ service cloud.firestore {
         allow write: if canEditPlant(plantId);
       }
 
+      // ── Press Notes ──
+      match /pressNotes/{noteId} {
+        allow read: if isPlantMember(plantId);
+        allow create: if isPlantMember(plantId) && signedIn()
+                      && request.resource.data.createdBy.uid == currentUid();
+        allow delete: if isPlantAdmin(plantId)
+                      || (signedIn() && resource.data.createdBy.uid == currentUid());
+        allow update: if false;
+      }
+
       // ── Issues ──
       match /issues/{issueId} {
         allow read: if isPlantMember(plantId);
