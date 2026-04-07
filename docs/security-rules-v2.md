@@ -135,7 +135,7 @@ Plant metadata should not be editable by general operators.
 - active plant members
 
 #### Write
-- plant owners + editors
+- plant owners only
 
 #### Optional exception
 Allow a user to update only their own `lastSeenAt` if you want client-driven presence tracking.
@@ -304,11 +304,11 @@ service cloud.firestore {
 
     match /plants/{plantId} {
       allow read: if isPlantMember(plantId);
-      allow create, update, delete: if isPlantAdmin(plantId);
+      allow create, update, delete: if isPlantOwner(plantId);
 
       match /members/{userId} {
         allow read: if isPlantMember(plantId);
-        allow create, update, delete: if isPlantAdmin(plantId);
+        allow create, update, delete: if isPlantOwner(plantId);
       }
 
       match /rows/{rowId} {
@@ -330,7 +330,7 @@ service cloud.firestore {
         allow read: if isPlantMember(plantId);
         allow create: if hasPermission(plantId, "canCreateIssue");
         allow update: if hasPermission(plantId, "canEditIssue");
-        allow delete: if isPlantAdmin(plantId);
+        allow delete: if isPlantOwner(plantId);
 
         match /events/{eventId} {
           allow read: if isPlantMember(plantId);
@@ -341,18 +341,18 @@ service cloud.firestore {
         match /attachments/{attachmentId} {
           allow read: if isPlantMember(plantId);
           allow create: if hasPermission(plantId, "canEditIssue");
-          allow update, delete: if isPlantAdmin(plantId);
+          allow update, delete: if isPlantOwner(plantId);
         }
       }
 
       match /pressStats/{pressId} {
         allow read: if isPlantMember(plantId);
-        allow write: if isPlantAdmin(plantId);
+        allow write: if isPlantOwner(plantId);
       }
 
       match /dailyStats/{dateKey} {
         allow read: if isPlantMember(plantId);
-        allow write: if isPlantAdmin(plantId);
+        allow write: if isPlantOwner(plantId);
       }
     }
   }
