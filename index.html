@@ -2857,7 +2857,14 @@ window.confirmResolve = async () => {
     const issue = issues.find(i=>i.id===resolveTargetId);
     const last = currentStatus(issue || {});
     const resolvedAtText = fmtDate(new Date());
+    const resolvedHistEntry = {
+      status: 'resolved', subStatus: '',
+      note: note || 'Resolved (no details provided)',
+      dateTime: resolvedAtText,
+      by: currentUser.displayName || currentUser.email
+    };
     const issuePatch = {
+      statusHistory: [...getMutableStatusHistory(issue || {}), resolvedHistEntry],
       ...buildIssueV2Compat({
         machineCode: issue?.machine || '',
         statusKey: 'resolved',
@@ -2990,6 +2997,17 @@ window.updateStatusEntry = async (id, idx, status, subStatus, note, dateTime) =>
   const issue = issues.find(i=>i.id===id);
   if (!issue) return;
   const history = getMutableStatusHistory(issue);
+  // idx beyond real history means editing a synthetic current-status entry — materialize it first
+  if (idx >= history.length) {
+    history.push({
+      status: currentStatusKey(issue),
+      subStatus: issue.currentStatus?.subStatusKey || '',
+      note: issue.currentStatus?.notePreview || '',
+      dateTime: issue.currentStatus?.enteredDateTime || '',
+      by: issue.currentStatus?.enteredBy?.name || ''
+    });
+    idx = history.length - 1;
+  }
   if (!history[idx]) return;
   const prev = currentStatus(issue);
   history[idx] = { ...history[idx], status, subStatus: subStatus||'', note: note||'' };
@@ -3099,11 +3117,18 @@ window.cancelAddEntry = (id) => { delete pendingEntry[id]; renderIssues(); };
 
 // Edit state per entry
 let editingStatusEntry = null;
-window.startEditEntry = (id, idx) => { 
+window.startEditEntry = (id, idx) => {
   const issue = issues.find(i => i.id === id);
   if (!issue) return;
   const history = getMutableStatusHistory(issue);
-  const entry = history[idx];
+  // idx may point beyond the real history when clicking Edit on a synthetic current-status entry
+  const entry = history[idx] || (idx >= history.length ? {
+    status: currentStatusKey(issue),
+    subStatus: issue.currentStatus?.subStatusKey || '',
+    note: issue.currentStatus?.notePreview || '',
+    dateTime: issue.currentStatus?.enteredDateTime || '',
+    by: issue.currentStatus?.enteredBy?.name || ''
+  } : null);
   if (!entry) return;
   
   editingStatusEntry = { issueId: id, entryIndex: idx };
@@ -3496,7 +3521,7 @@ function renderIssues() {
           <div class="tl-time">${entry.dateTime||''}${entry.by?' — '+esc(entry.by):''}</div>
           ${entry.note?`<div class="tl-note-text">"${esc(entry.note)}"</div>`:''}
           <div style="display:flex;gap:5px;margin-top:4px;">
-            <button class="tl-edit-btn" ${isSynthetic?'disabled':''} onclick="startEditEntry('${issue.id}',${trueIdx})">✏ Edit</button>
+            <button class="tl-edit-btn" onclick="startEditEntry('${issue.id}',${trueIdx})">✏ Edit</button>
             <button class="tl-remove-btn" onclick="removeStatusEntry('${issue.id}',${trueIdx})" ${isSynthetic||history.length<=1?'disabled':''}>🗑 Delete</button>
           </div>
         </div>
