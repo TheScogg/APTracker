@@ -1991,10 +1991,17 @@ function updateLogCatPill() {
   pill.style.color=col; pill.style.borderColor=col+'88'; pill.style.background=col+'15';
 }
 
+function scrollAddModalToBottom() {
+  const modal = document.querySelector('#add-modal .modal');
+  if (!modal) return;
+  requestAnimationFrame(() => modal.scrollTo({ top: modal.scrollHeight, behavior: 'smooth' }));
+}
+
 function logCatSelectStatus(key) {
   logCatKey = logCatKey===key ? null : key;
   logCatSub = null;
   renderLogCatButtons(); renderLogSubChips(); updateLogCatPill();
+  scrollAddModalToBottom();
 }
 
 document.getElementById('log-cat-clear')?.addEventListener('touchend', e=>{e.preventDefault();logCatKey=null;logCatSub=null;renderLogCatButtons();renderLogSubChips();updateLogCatPill();},{passive:false});
