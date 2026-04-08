@@ -685,6 +685,60 @@
 
   #app { display: none; }
   #app.visible { display: block; }
+
+  /* MEMBERS OVERLAY */
+  .members-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:900; }
+  .members-overlay.visible { display:flex; align-items:flex-start; justify-content:center; padding:20px 14px 40px; overflow-y:auto; }
+  .members-panel { background:var(--bg2); border:1px solid var(--border); border-radius:14px; width:100%; max-width:520px; padding:20px; }
+  .members-title { font-family:'Rajdhani',sans-serif; font-size:18px; font-weight:700; letter-spacing:1px; color:var(--accent); margin-bottom:4px; display:flex; align-items:center; justify-content:space-between; }
+  .members-subtitle { font-size:12px; color:var(--text3); font-family:'Share Tech Mono',monospace; margin-bottom:16px; }
+  .members-close { background:none; border:none; color:var(--text3); font-size:20px; cursor:pointer; padding:0; }
+  .members-close:hover { color:var(--text2); }
+  .member-row { display:flex; align-items:center; gap:10px; background:var(--bg3); border:1px solid var(--border); border-radius:10px; padding:10px 12px; margin-bottom:8px; }
+  .member-avatar { width:32px; height:32px; border-radius:50%; background:var(--accent); display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; color:white; flex-shrink:0; text-transform:uppercase; }
+  .member-info { flex:1; min-width:0; }
+  .member-name { font-size:13px; font-weight:700; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .member-email { font-size:11px; color:var(--text3); font-family:'Share Tech Mono',monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .member-you-badge { font-size:9px; font-weight:700; background:var(--accent-glow); color:var(--accent); border:1px solid var(--accent); border-radius:8px; padding:1px 6px; margin-left:5px; vertical-align:middle; flex-shrink:0; }
+  .member-role-select { background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:4px 8px; color:var(--text); font-family:'Nunito',sans-serif; font-size:12px; font-weight:700; outline:none; cursor:pointer; flex-shrink:0; }
+  .member-role-select:focus { border-color:var(--accent); }
+  .member-role-badge { font-size:10px; font-weight:700; padding:2px 8px; border-radius:8px; border:1px solid; white-space:nowrap; flex-shrink:0; }
+  .member-role-badge.admin   { color:var(--accent);  border-color:rgba(249,115,22,0.4);  background:var(--orange-dim); }
+  .member-role-badge.editor  { color:var(--blue);    border-color:rgba(59,130,246,0.4);   background:var(--blue-dim); }
+  .member-role-badge.viewer  { color:var(--text2);   border-color:var(--border);           background:var(--bg); }
+  .member-remove-btn { background:none; border:1px solid rgba(239,68,68,0.3); border-radius:6px; color:var(--red); font-size:11px; padding:3px 8px; cursor:pointer; font-family:'Nunito',sans-serif; font-weight:700; flex-shrink:0; transition:background 0.12s; }
+  .member-remove-btn:hover { background:var(--red-dim); }
+  .members-divider { height:1px; background:var(--border); margin:16px 0; }
+  .members-add-section { display:flex; flex-direction:column; gap:10px; }
+  .members-add-title { font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--text3); font-family:'Share Tech Mono',monospace; }
+  .members-add-row { display:flex; gap:8px; flex-wrap:wrap; }
+  .members-email-input { flex:1; min-width:180px; background:var(--bg3); border:1px solid var(--border); border-radius:8px; padding:8px 12px; color:var(--text); font-family:'Nunito',sans-serif; font-size:13px; outline:none; transition:border-color 0.2s; }
+  .members-email-input:focus { border-color:var(--accent); }
+  .members-role-pick { background:var(--bg3); border:1px solid var(--border); border-radius:8px; padding:8px 10px; color:var(--text); font-family:'Nunito',sans-serif; font-size:13px; font-weight:700; outline:none; cursor:pointer; }
+  .members-role-pick:focus { border-color:var(--accent); }
+  .members-add-btn { background:var(--accent); border:none; border-radius:8px; color:white; font-size:13px; font-weight:700; padding:8px 18px; cursor:pointer; font-family:'Nunito',sans-serif; white-space:nowrap; transition:opacity 0.15s; }
+  .members-add-btn:hover { opacity:0.88; }
+  .members-add-btn:disabled { opacity:0.5; cursor:not-allowed; }
+  .members-feedback { font-size:12px; padding:8px 12px; border-radius:8px; font-family:'Nunito',sans-serif; display:none; }
+  .members-feedback.error { display:block; color:var(--red); background:var(--red-dim); border:1px solid rgba(239,68,68,0.3); }
+  .members-feedback.success { display:block; color:var(--green); background:var(--green-dim); border:1px solid rgba(34,197,94,0.3); }
+  .members-perms-section { margin-top:12px; }
+  .members-perms-title { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--text3); font-family:'Share Tech Mono',monospace; margin-bottom:8px; }
+  .perm-row { display:flex; align-items:center; justify-content:space-between; padding:7px 0; border-bottom:1px solid var(--border); gap:8px; }
+  .perm-row:last-child { border-bottom:none; }
+  .perm-label { font-size:13px; color:var(--text2); font-family:'Nunito',sans-serif; }
+  .perm-toggle { position:relative; width:36px; height:20px; flex-shrink:0; }
+  .perm-toggle input { opacity:0; width:0; height:0; position:absolute; }
+  .perm-slider { position:absolute; inset:0; background:var(--bg3); border:1px solid var(--border); border-radius:20px; cursor:pointer; transition:background 0.2s; }
+  .perm-slider:before { content:''; position:absolute; width:14px; height:14px; left:2px; top:2px; background:var(--text3); border-radius:50%; transition:transform 0.2s, background 0.2s; }
+  .perm-toggle input:checked + .perm-slider { background:var(--accent); border-color:var(--accent); }
+  .perm-toggle input:checked + .perm-slider:before { transform:translateX(16px); background:white; }
+  .members-edit-perms-btn { font-size:11px; color:var(--text3); background:none; border:none; cursor:pointer; font-family:'Share Tech Mono',monospace; padding:0; margin-top:2px; display:block; transition:color 0.15s; }
+  .members-edit-perms-btn:hover { color:var(--text2); }
+  .members-perms-panel { display:none; margin-top:8px; padding:10px 12px; background:var(--bg); border:1px solid var(--border); border-radius:8px; }
+  .members-perms-panel.visible { display:block; }
+  .members-save-perms-btn { margin-top:10px; width:100%; padding:8px; border-radius:8px; background:var(--accent); border:none; color:white; font-size:13px; font-weight:700; font-family:'Nunito',sans-serif; cursor:pointer; }
+  .members-empty { text-align:center; padding:24px 0; color:var(--text3); font-size:13px; }
 </style>
 </head>
 <body>
@@ -732,6 +786,7 @@
           <div class="user-dropdown-name" id="dropdown-full-name">—</div>
           <div class="user-dropdown-email" id="dropdown-email">—</div>
         </div>
+        <button class="user-dropdown-item" id="members-btn" style="display:none">👥 Manage Members</button>
         <button class="user-dropdown-item" id="admin-panel-btn">⚙ Manage Statuses</button>
         <button class="user-dropdown-item" id="theme-toggle-btn">🌙 Dark Mode</button>
         <button class="user-dropdown-item danger" id="signout-btn">⏻ Sign Out</button>
@@ -1056,6 +1111,34 @@
 
 </div>
 
+<div class="members-overlay" id="members-overlay">
+  <div class="members-panel" id="members-panel-inner">
+    <div class="members-title">
+      Manage Members
+      <button class="members-close" id="members-close-btn">✕</button>
+    </div>
+    <div class="members-subtitle" id="members-panel-subtitle">Plant members</div>
+    <div id="members-list"></div>
+    <div class="members-divider"></div>
+    <div class="members-add-section">
+      <div class="members-add-title">Add member by email</div>
+      <div class="members-add-row">
+        <input type="email" class="members-email-input" id="members-email-input" placeholder="user@example.com">
+        <select class="members-role-pick" id="members-role-pick">
+          <option value="editor">Editor</option>
+          <option value="viewer">Viewer</option>
+          <option value="admin">Admin</option>
+        </select>
+        <button class="members-add-btn" id="members-add-btn" onclick="addMemberFromPanel()">Add</button>
+      </div>
+      <div class="members-feedback" id="members-feedback"></div>
+      <div style="font-size:11px;color:var(--text3);margin-top:2px;">
+        The user must have signed in to AP Tracker at least once before being added.
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="admin-overlay" id="admin-overlay">
   <div class="admin-panel" id="admin-panel-inner">
     <div class="admin-title">
@@ -1072,7 +1155,7 @@
 </div>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, collection, updateDoc, deleteDoc, doc, getDoc, getDocs, setDoc, addDoc, onSnapshot, serverTimestamp, query, orderBy, where, writeBatch, arrayUnion } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, collection, updateDoc, deleteDoc, doc, getDoc, getDocs, setDoc, addDoc, onSnapshot, serverTimestamp, query, orderBy, where, writeBatch, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut as fbSignOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getStorage, ref as storageRef, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
@@ -1500,8 +1583,275 @@ async function loadCurrentMember(plantId) {
 
 // Show/hide UI elements based on current user's permissions
 function applyRoleUI() {
+  const p = currentUserPermissions;
+  const isAdmin = currentUserRole === 'admin';
+
   const adminBtn = document.getElementById('admin-panel-btn');
-  if (adminBtn) adminBtn.style.display = currentUserPermissions.canManageStatuses ? '' : 'none';
+  if (adminBtn) adminBtn.style.display = p.canManageStatuses ? '' : 'none';
+
+  const membersBtn = document.getElementById('members-btn');
+  if (membersBtn) membersBtn.style.display = isAdmin ? '' : 'none';
+
+  const exportBtn = document.getElementById('export-pdf-btn');
+  if (exportBtn) exportBtn.style.display = p.canExport ? '' : 'none';
+}
+
+// ── MEMBER MANAGEMENT ──
+
+// Default permission set for each role
+function defaultPermsForRole(role) {
+  if (role === 'admin') return { ...DEFAULT_PERMISSIONS };
+  if (role === 'editor') return { canViewPlant: true, canCreateIssue: true, canEditIssue: true, canResolveIssue: true, canManageStatuses: false, canManagePresses: false, canExport: true };
+  // viewer
+  return { canViewPlant: true, canCreateIssue: false, canEditIssue: false, canResolveIssue: false, canManageStatuses: false, canManagePresses: false, canExport: false };
+}
+
+// Fetch all member docs for the current plant
+async function loadPlantMembers(plantId) {
+  const snap = await getDocs(collection(db, 'plants', plantId, 'members'));
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+// Add a member by email: look up userLookup, write member doc, add plantId to their user doc
+async function addMemberToPlant(email, role) {
+  const lookupSnap = await getDoc(doc(db, 'userLookup', email.toLowerCase()));
+  if (!lookupSnap.exists()) {
+    throw new Error('No user found with that email. They must sign in to AP Tracker first.');
+  }
+  const userData = lookupSnap.data();
+  const targetUid = userData.uid;
+
+  // Prevent adding yourself (already a member)
+  if (targetUid === currentUser.uid) {
+    throw new Error('You are already a member of this plant.');
+  }
+
+  // Check if already a member
+  const existingSnap = await getDoc(plantMemberDocRef(currentPlantId, targetUid));
+  if (existingSnap.exists() && existingSnap.data().isActive) {
+    throw new Error('This user is already a member of this plant.');
+  }
+
+  const perms = defaultPermsForRole(role);
+  const batch = writeBatch(db);
+
+  // Write/overwrite member doc
+  batch.set(plantMemberDocRef(currentPlantId, targetUid), {
+    userId: targetUid,
+    displayName: userData.displayName || '',
+    email: userData.email || email,
+    role,
+    isActive: true,
+    addedAt: serverTimestamp(),
+    addedBy: { uid: currentUser.uid, name: currentUser.displayName || currentUser.email || '' },
+    permissions: perms
+  });
+
+  // Add plantId to the target user's plantIds array
+  batch.set(doc(db, 'users', targetUid), { plantIds: arrayUnion(currentPlantId) }, { merge: true });
+
+  await batch.commit();
+}
+
+// Update a member's role (and reset permissions to role defaults)
+async function updateMemberRole(plantId, userId, newRole, customPerms) {
+  const perms = customPerms || defaultPermsForRole(newRole);
+  await updateDoc(plantMemberDocRef(plantId, userId), {
+    role: newRole,
+    permissions: perms,
+    updatedAt: serverTimestamp(),
+    updatedBy: { uid: currentUser.uid, name: currentUser.displayName || currentUser.email || '' }
+  });
+}
+
+// Remove a member from the current plant
+async function removeMemberFromPlant(plantId, userId) {
+  const batch = writeBatch(db);
+  // Delete the member doc
+  batch.delete(plantMemberDocRef(plantId, userId));
+  // Remove plantId from target user's plantIds array
+  batch.set(doc(db, 'users', userId), { plantIds: arrayRemove(plantId) }, { merge: true });
+  await batch.commit();
+}
+
+// ── MEMBERS PANEL UI ──
+
+let _membersData = []; // cached members list for current panel session
+
+async function openMembersPanel() {
+  document.getElementById('user-dropdown')?.classList.remove('visible');
+  document.getElementById('user-pill')?.classList.remove('open');
+  const overlay = document.getElementById('members-overlay');
+  overlay.classList.add('visible');
+  document.getElementById('members-panel-subtitle').textContent = currentPlantName;
+  document.getElementById('members-email-input').value = '';
+  document.getElementById('members-role-pick').value = 'editor';
+  hideMembersFeedback();
+  await refreshMembersList();
+}
+
+function closeMembersPanel() {
+  document.getElementById('members-overlay').classList.remove('visible');
+  _membersData = [];
+}
+
+async function refreshMembersList() {
+  const listEl = document.getElementById('members-list');
+  listEl.innerHTML = '<div class="members-empty" style="color:var(--text3);font-size:12px;">Loading…</div>';
+  try {
+    _membersData = await loadPlantMembers(currentPlantId);
+    renderMemberList(_membersData);
+  } catch(e) {
+    listEl.innerHTML = '<div class="members-empty" style="color:var(--red)">Failed to load members.</div>';
+  }
+}
+
+function renderMemberList(members) {
+  const listEl = document.getElementById('members-list');
+  listEl.innerHTML = '';
+  if (!members || members.length === 0) {
+    listEl.innerHTML = '<div class="members-empty">No members yet.</div>';
+    return;
+  }
+  // Sort: current user first, then by role priority, then alpha
+  const roleOrder = { admin: 0, editor: 1, viewer: 2 };
+  const sorted = [...members].sort((a, b) => {
+    if (a.userId === currentUser?.uid) return -1;
+    if (b.userId === currentUser?.uid) return 1;
+    return (roleOrder[a.role] ?? 3) - (roleOrder[b.role] ?? 3) || (a.displayName || '').localeCompare(b.displayName || '');
+  });
+
+  sorted.forEach(member => {
+    const isMe = member.userId === currentUser?.uid;
+    const initial = (member.displayName || member.email || '?').charAt(0).toUpperCase();
+    const perms = member.permissions || defaultPermsForRole(member.role);
+
+    const row = document.createElement('div');
+    row.className = 'member-row';
+
+    const permLabels = [
+      { key: 'canViewPlant',     label: 'View plant' },
+      { key: 'canCreateIssue',   label: 'Log issues' },
+      { key: 'canEditIssue',     label: 'Edit issues' },
+      { key: 'canResolveIssue',  label: 'Resolve issues' },
+      { key: 'canManageStatuses',label: 'Manage statuses' },
+      { key: 'canManagePresses', label: 'Manage presses' },
+      { key: 'canExport',        label: 'Export PDF' },
+    ];
+
+    const permsHtml = permLabels.map(p => `
+      <div class="perm-row">
+        <span class="perm-label">${p.label}</span>
+        <label class="perm-toggle">
+          <input type="checkbox" data-perm="${p.key}" ${perms[p.key] ? 'checked' : ''} ${isMe ? 'disabled' : ''}>
+          <span class="perm-slider"></span>
+        </label>
+      </div>`).join('');
+
+    row.innerHTML = `
+      <div class="member-avatar">${initial}</div>
+      <div class="member-info">
+        <div class="member-name">${esc(member.displayName || member.email || member.userId)}${isMe ? '<span class="member-you-badge">you</span>' : ''}</div>
+        <div class="member-email">${esc(member.email || '')}</div>
+        ${!isMe ? `<button class="members-edit-perms-btn" onclick="toggleMemberPerms(this)">▶ Edit permissions</button>
+        <div class="members-perms-panel">
+          <div class="members-perms-title">Permissions</div>
+          ${permsHtml}
+          <button class="members-save-perms-btn" onclick="saveMemberPerms(this, '${member.userId}')">Save Permissions</button>
+        </div>` : ''}
+      </div>
+      ${isMe
+        ? `<span class="member-role-badge ${member.role}">${member.role}</span>`
+        : `<select class="member-role-select" data-uid="${member.userId}" onchange="onRoleChange(this, '${member.userId}')">
+            <option value="admin"  ${member.role==='admin'  ?'selected':''}>Admin</option>
+            <option value="editor" ${member.role==='editor' ?'selected':''}>Editor</option>
+            <option value="viewer" ${member.role==='viewer' ?'selected':''}>Viewer</option>
+          </select>
+          <button class="member-remove-btn" onclick="confirmRemoveMember('${member.userId}', '${esc(member.displayName || member.email || member.userId)}')">Remove</button>`
+      }`;
+    listEl.appendChild(row);
+  });
+}
+
+// When role dropdown changes — update role and reset permissions to defaults for that role
+async function onRoleChange(selectEl, userId) {
+  const newRole = selectEl.value;
+  try {
+    await updateMemberRole(currentPlantId, userId, newRole);
+    // Refresh so permission toggles reflect new defaults
+    await refreshMembersList();
+  } catch(e) {
+    showMembersFeedback('error', 'Failed to update role: ' + e.message);
+    await refreshMembersList(); // revert UI
+  }
+}
+
+function toggleMemberPerms(btn) {
+  const panel = btn.nextElementSibling;
+  const isVisible = panel.classList.contains('visible');
+  panel.classList.toggle('visible', !isVisible);
+  btn.textContent = isVisible ? '▶ Edit permissions' : '▼ Edit permissions';
+}
+
+async function saveMemberPerms(btn, userId) {
+  const panel = btn.closest('.members-perms-panel');
+  const customPerms = {};
+  panel.querySelectorAll('[data-perm]').forEach(cb => {
+    customPerms[cb.dataset.perm] = cb.checked;
+  });
+  // Determine role from the select in the same row
+  const row = panel.closest('.member-row');
+  const roleSelect = row.querySelector('.member-role-select');
+  const role = roleSelect ? roleSelect.value : (_membersData.find(m => m.userId === userId)?.role || 'editor');
+  try {
+    await updateMemberRole(currentPlantId, userId, role, customPerms);
+    showMembersFeedback('success', 'Permissions saved.');
+    await refreshMembersList();
+  } catch(e) {
+    showMembersFeedback('error', 'Failed to save permissions: ' + e.message);
+  }
+}
+
+async function confirmRemoveMember(userId, displayName) {
+  if (!confirm(`Remove ${displayName} from ${currentPlantName}? They will lose access immediately.`)) return;
+  try {
+    await removeMemberFromPlant(currentPlantId, userId);
+    showMembersFeedback('success', `${displayName} removed from plant.`);
+    await refreshMembersList();
+  } catch(e) {
+    showMembersFeedback('error', 'Failed to remove member: ' + e.message);
+  }
+}
+
+window.addMemberFromPanel = async function() {
+  const emailRaw = document.getElementById('members-email-input').value.trim();
+  const role = document.getElementById('members-role-pick').value;
+  const btn = document.getElementById('members-add-btn');
+  if (!emailRaw) { showMembersFeedback('error', 'Please enter an email address.'); return; }
+  const email = emailRaw.toLowerCase();
+  btn.disabled = true; btn.textContent = 'Adding…';
+  hideMembersFeedback();
+  try {
+    await addMemberToPlant(email, role);
+    document.getElementById('members-email-input').value = '';
+    showMembersFeedback('success', `${emailRaw} added as ${role}.`);
+    await refreshMembersList();
+  } catch(e) {
+    showMembersFeedback('error', e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Add';
+  }
+};
+
+function showMembersFeedback(type, msg) {
+  const el = document.getElementById('members-feedback');
+  el.className = 'members-feedback ' + type;
+  el.textContent = msg;
+}
+function hideMembersFeedback() {
+  const el = document.getElementById('members-feedback');
+  el.className = 'members-feedback';
+  el.textContent = '';
 }
 
 // Load press layout for current plant
@@ -1867,6 +2217,17 @@ async function bootstrapSignedInSession(user) {
     fallback.textContent = name.charAt(0).toUpperCase();
   }
 
+  // Write user lookup record so admins can find this user by email when adding to plants.
+  // Fire-and-forget — failure is non-fatal.
+  if (user.email) {
+    setDoc(doc(db, 'userLookup', user.email.toLowerCase()), {
+      uid: user.uid,
+      displayName: user.displayName || '',
+      email: user.email,
+      lastSeen: serverTimestamp()
+    }, { merge: true }).catch(() => {});
+  }
+
   // Build once before plant load to ensure machine controls exist,
   // then hydrate with plant-specific config and rebuild.
   buildFloorMap();
@@ -2144,12 +2505,14 @@ window.handlePressClick = p => {
   // Toolbar footer
   const toolbar = document.createElement('div');
   toolbar.className = 'mc-toolbar';
-  const addBtn = document.createElement('button');
-  addBtn.className = 'mc-toolbar-btn';
-  addBtn.style.color = 'var(--accent)';
-  addBtn.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>' + (openIssues.length > 0 ? 'Add' : 'Report');
-  addBtn.onclick = () => { closeMiniCard(); openAddModal(p); };
-  toolbar.appendChild(addBtn);
+  if (currentUserPermissions.canCreateIssue) {
+    const addBtn = document.createElement('button');
+    addBtn.className = 'mc-toolbar-btn';
+    addBtn.style.color = 'var(--accent)';
+    addBtn.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>' + (openIssues.length > 0 ? 'Add' : 'Report');
+    addBtn.onclick = () => { closeMiniCard(); openAddModal(p); };
+    toolbar.appendChild(addBtn);
+  }
   // Notes button (middle)
   const pressId = toPressId(p);
   const notesBtn = document.createElement('button');
@@ -2583,6 +2946,7 @@ function resizeImage(file) {
 // ── ADD MODAL ──
 window.openAddModal = m => {
   if (!currentUser) return;
+  if (!currentUserPermissions.canCreateIssue) return;
   currentMachine=m; pendingPhotos=[];
   logCatKey=null; logCatSub=null;
   document.getElementById('issue-note').value='';
@@ -2726,6 +3090,7 @@ function setSubmitting(on) {
 
 // ── SUBMIT NEW ──
 window.submitIssue = async () => {
+  if (!currentUserPermissions.canCreateIssue) return;
   const note = document.getElementById('issue-note').value.trim() || 'No description provided';
   setSubmitting(true);
   try {
@@ -2774,6 +3139,7 @@ window.submitIssue = async () => {
 
 // ── EDIT MODAL ──
 window.openEditModal = async id => {
+  if (!currentUserPermissions.canEditIssue) return;
   const issue = issues.find(i=>i.id===id);
   if (!issue) return;
   let photoList = issue.photos || [];
@@ -2841,6 +3207,7 @@ window.saveEdit = async () => {
 
 // ── RESOLVE ──
 window.openResolveModal = id => {
+  if (!currentUserPermissions.canResolveIssue) return;
   resolveTargetId=id;
   const issue=issues.find(i=>i.id===id);
   document.getElementById('resolve-machine-label').textContent='Press '+issue.machine+' — logged '+issue.dateTime;
@@ -2857,7 +3224,14 @@ window.confirmResolve = async () => {
     const issue = issues.find(i=>i.id===resolveTargetId);
     const last = currentStatus(issue || {});
     const resolvedAtText = fmtDate(new Date());
+    const resolvedHistEntry = {
+      status: 'resolved', subStatus: '',
+      note: note || 'Resolved (no details provided)',
+      dateTime: resolvedAtText,
+      by: currentUser.displayName || currentUser.email
+    };
     const issuePatch = {
+      statusHistory: [...getMutableStatusHistory(issue || {}), resolvedHistEntry],
       ...buildIssueV2Compat({
         machineCode: issue?.machine || '',
         statusKey: 'resolved',
@@ -2884,6 +3258,7 @@ window.confirmResolve = async () => {
 
 // ── REOPEN ──
 window.openReopenModal = id => {
+  if (!currentUserPermissions.canResolveIssue) return;
   reopenTargetId=id;
   const issue=issues.find(i=>i.id===id);
   document.getElementById('reopen-machine-label').textContent='Press '+issue.machine;
@@ -2899,16 +3274,22 @@ window.confirmReopen = async () => {
   try {
     const issue=issues.find(i=>i.id===reopenTargetId);
     const last = currentStatus(issue || {});
-    const history=issue.resolveHistory||[];
-    history.push({resolveNote:issue.resolveNote,resolveDateTime:issue.resolveDateTime,resolvedBy:issue.resolvedBy||''});
+    const resolveHistory=issue.resolveHistory||[];
+    resolveHistory.push({resolveNote:issue.resolveNote,resolveDateTime:issue.resolveDateTime,resolvedBy:issue.resolvedBy||''});
+    const reopenStatusKey = last?.status && last.status !== 'resolved' ? last.status : 'open';
+    const reopenSubStatus = last?.status && last.status !== 'resolved' ? (last.subStatus || '') : '';
+    const reopenDateTime = fmtDate(new Date());
+    const statusHistory = getMutableStatusHistory(issue);
+    statusHistory.push({ status: reopenStatusKey, subStatus: reopenSubStatus, note: note || '', dateTime: reopenDateTime, by: currentUser.displayName || currentUser.email });
     const issuePatch = {
-      reopenNote:note||'',reopenDateTime:fmtDate(new Date()),
-      reopenedBy:currentUser.displayName||currentUser.email,resolveHistory:history,
+      reopenNote:note||'',reopenDateTime,
+      reopenedBy:currentUser.displayName||currentUser.email,resolveHistory,
+      statusHistory,
       ...buildIssueV2Compat({
         machineCode: issue?.machine || '',
-        statusKey: last?.status && last.status !== 'resolved' ? last.status : 'open',
-        subStatus: last?.status && last.status !== 'resolved' ? (last.subStatus || '') : '',
-        statusDateTime: fmtDate(new Date()),
+        statusKey: reopenStatusKey,
+        subStatus: reopenSubStatus,
+        statusDateTime: reopenDateTime,
         note: note || '',
         baseIssue: issue,
         forceReopenIncrement: true
@@ -2954,6 +3335,7 @@ function getMutableStatusHistory(issue) {
 
 // Add a new status entry to history
 window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
+  if (!currentUserPermissions.canEditIssue) return;
   const issue = issues.find(i=>i.id===id);
   if (!issue) return;
   const prev = currentStatus(issue);
@@ -2962,6 +3344,7 @@ window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
   history.push(entry);
   try {
     const issuePatch = {
+      statusHistory: history,
       ...buildIssueV2Compat({
         machineCode: issue.machine || issue.machineCode || '',
         statusKey: status,
@@ -2990,6 +3373,17 @@ window.updateStatusEntry = async (id, idx, status, subStatus, note, dateTime) =>
   const issue = issues.find(i=>i.id===id);
   if (!issue) return;
   const history = getMutableStatusHistory(issue);
+  // idx beyond real history means editing a synthetic current-status entry — materialize it first
+  if (idx >= history.length) {
+    history.push({
+      status: currentStatusKey(issue),
+      subStatus: issue.currentStatus?.subStatusKey || '',
+      note: issue.currentStatus?.notePreview || '',
+      dateTime: issue.currentStatus?.enteredDateTime || '',
+      by: issue.currentStatus?.enteredBy?.name || ''
+    });
+    idx = history.length - 1;
+  }
   if (!history[idx]) return;
   const prev = currentStatus(issue);
   history[idx] = { ...history[idx], status, subStatus: subStatus||'', note: note||'' };
@@ -3099,11 +3493,18 @@ window.cancelAddEntry = (id) => { delete pendingEntry[id]; renderIssues(); };
 
 // Edit state per entry
 let editingStatusEntry = null;
-window.startEditEntry = (id, idx) => { 
+window.startEditEntry = (id, idx) => {
   const issue = issues.find(i => i.id === id);
   if (!issue) return;
   const history = getMutableStatusHistory(issue);
-  const entry = history[idx];
+  // idx may point beyond the real history when clicking Edit on a synthetic current-status entry
+  const entry = history[idx] || (idx >= history.length ? {
+    status: currentStatusKey(issue),
+    subStatus: issue.currentStatus?.subStatusKey || '',
+    note: issue.currentStatus?.notePreview || '',
+    dateTime: issue.currentStatus?.enteredDateTime || '',
+    by: issue.currentStatus?.enteredBy?.name || ''
+  } : null);
   if (!entry) return;
   
   editingStatusEntry = { issueId: id, entryIndex: idx };
@@ -3216,6 +3617,7 @@ window.setSubStatus = async (id, sub) => {
   const last = history[history.length - 1] || { status: currentStatusKey(issue), subStatus: sub, note: '' };
   try {
     const issuePatch = {
+      statusHistory: history,
       ...buildIssueV2Compat({
         machineCode: issue.machine || issue.machineCode || '',
         statusKey: last.status || 'open',
@@ -3272,6 +3674,7 @@ window.togglePriority = async (id) => {
 
 // ── DELETE ──
 window.deleteIssue = async id => {
+  if (!currentUserPermissions.canEditIssue) return;
   if (!confirm('Delete this issue permanently?')) return;
   try { await deleteDoc(plantDoc('issues',id)); }
   catch(e) { setSyncStatus('err','Error deleting: '+e.message); }
@@ -3495,10 +3898,10 @@ function renderIssues() {
           </div>
           <div class="tl-time">${entry.dateTime||''}${entry.by?' — '+esc(entry.by):''}</div>
           ${entry.note?`<div class="tl-note-text">"${esc(entry.note)}"</div>`:''}
-          <div style="display:flex;gap:5px;margin-top:4px;">
-            <button class="tl-edit-btn" ${isSynthetic?'disabled':''} onclick="startEditEntry('${issue.id}',${trueIdx})">✏ Edit</button>
+          ${currentUserPermissions.canEditIssue ? `<div style="display:flex;gap:5px;margin-top:4px;">
+            <button class="tl-edit-btn" onclick="startEditEntry('${issue.id}',${trueIdx})">✏ Edit</button>
             <button class="tl-remove-btn" onclick="removeStatusEntry('${issue.id}',${trueIdx})" ${isSynthetic||history.length<=1?'disabled':''}>🗑 Delete</button>
-          </div>
+          </div>` : ''}
         </div>
       </div>`;
     }).join('');
@@ -3507,7 +3910,8 @@ function renderIssues() {
     const pend = pendingEntry[issue.id] || {};
     const pendSubs = STATUS_CONFIG[pend.status]?.subs || [];
     const pendNowDT = toLocalDTInputs(new Date());
-    const addRowHtml = pend.status !== undefined
+    const canEdit = currentUserPermissions.canEditIssue;
+    const addRowHtml = !canEdit ? '' : pend.status !== undefined
       ? `<div class="tl-add-row">
           <select class="tl-mini-select" onchange="setPendingStatus('${issue.id}','status',this.value)">
             <option value="">Status…</option>
@@ -3534,10 +3938,10 @@ function renderIssues() {
       </div>
       ${addRowHtml}
     </div>
-    <div class="action-row" style="justify-content:flex-end;margin-top:10px;">
+    ${canEdit ? `<div class="action-row" style="justify-content:flex-end;margin-top:10px;">
       <button class="btn btn-edit" onclick="openEditModal('${issue.id}')">✏️ Edit</button>
       <button class="btn btn-danger" onclick="deleteIssue('${issue.id}')">🗑 Delete</button>
-    </div>`;
+    </div>` : ''}`;
 
     const datePart = issue.dateTime ? issue.dateTime.replace(/,\s*\d{4}/, '') : '';
     const submitterHtml=issue.userName?`<span class="issue-submitter">${esc(issue.userName.split(' ')[0])}${isMyIssue?' (you)':''}</span>`:'';
@@ -3679,6 +4083,7 @@ function renderIssues() {
     };
 
     const openCategoryPanel = () => {
+      if (!currentUserPermissions.canEditIssue) return;
       card.classList.remove('peeking', 'dragging');
       card.style.transform = '';
       card.classList.add('swiped');
@@ -5057,6 +5462,14 @@ document.getElementById('admin-close-btn')?.addEventListener('touchend', e => { 
 document.getElementById('admin-close-btn')?.addEventListener('click', closeAdminPanel);
 document.getElementById('admin-save-btn')?.addEventListener('touchend', e => { e.preventDefault(); saveAdminConfig(); }, { passive: false });
 document.getElementById('admin-save-btn')?.addEventListener('click', saveAdminConfig);
+
+// Members panel
+document.getElementById('members-btn')?.addEventListener('touchend', e => { e.preventDefault(); e.stopPropagation(); openMembersPanel(); }, { passive: false });
+document.getElementById('members-btn')?.addEventListener('click', e => { e.stopPropagation(); openMembersPanel(); });
+document.getElementById('members-overlay')?.addEventListener('click', () => { closeMembersPanel(); });
+document.getElementById('members-panel-inner')?.addEventListener('click', e => { e.stopPropagation(); });
+document.getElementById('members-close-btn')?.addEventListener('touchend', e => { e.preventDefault(); closeMembersPanel(); }, { passive: false });
+document.getElementById('members-close-btn')?.addEventListener('click', closeMembersPanel);
 </script>
 
 </body>
