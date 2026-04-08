@@ -2857,7 +2857,14 @@ window.confirmResolve = async () => {
     const issue = issues.find(i=>i.id===resolveTargetId);
     const last = currentStatus(issue || {});
     const resolvedAtText = fmtDate(new Date());
+    const resolvedHistEntry = {
+      status: 'resolved', subStatus: '',
+      note: note || 'Resolved (no details provided)',
+      dateTime: resolvedAtText,
+      by: currentUser.displayName || currentUser.email
+    };
     const issuePatch = {
+      statusHistory: [...getMutableStatusHistory(issue || {}), resolvedHistEntry],
       ...buildIssueV2Compat({
         machineCode: issue?.machine || '',
         statusKey: 'resolved',
@@ -2990,6 +2997,17 @@ window.updateStatusEntry = async (id, idx, status, subStatus, note, dateTime) =>
   const issue = issues.find(i=>i.id===id);
   if (!issue) return;
   const history = getMutableStatusHistory(issue);
+  // idx beyond real history means editing a synthetic current-status entry — materialize it first
+  if (idx >= history.length) {
+    history.push({
+      status: currentStatusKey(issue),
+      subStatus: issue.currentStatus?.subStatusKey || '',
+      note: issue.currentStatus?.notePreview || '',
+      dateTime: issue.currentStatus?.enteredDateTime || '',
+      by: issue.currentStatus?.enteredBy?.name || ''
+    });
+    idx = history.length - 1;
+  }
   if (!history[idx]) return;
   const prev = currentStatus(issue);
   history[idx] = { ...history[idx], status, subStatus: subStatus||'', note: note||'' };
@@ -3099,11 +3117,18 @@ window.cancelAddEntry = (id) => { delete pendingEntry[id]; renderIssues(); };
 
 // Edit state per entry
 let editingStatusEntry = null;
-window.startEditEntry = (id, idx) => { 
+window.startEditEntry = (id, idx) => {
   const issue = issues.find(i => i.id === id);
   if (!issue) return;
   const history = getMutableStatusHistory(issue);
-  const entry = history[idx];
+  // idx may point beyond the real history when clicking Edit on a synthetic current-status entry
+  const entry = history[idx] || (idx >= history.length ? {
+    status: currentStatusKey(issue),
+    subStatus: issue.currentStatus?.subStatusKey || '',
+    note: issue.currentStatus?.notePreview || '',
+    dateTime: issue.currentStatus?.enteredDateTime || '',
+    by: issue.currentStatus?.enteredBy?.name || ''
+  } : null);
   if (!entry) return;
   
   editingStatusEntry = { issueId: id, entryIndex: idx };
@@ -3434,22 +3459,41 @@ function renderIssues() {
     const photosHtml=(issue.photos||[]).length
       ? `<div class="issue-photos">${issue.photos.map(p=>`<img class="issue-photo-thumb" src="${p.dataUrl}" loading="lazy" onclick="openLightbox('${p.dataUrl}')">`).join('')}</div>` : '';
 
-    // Current status from history
+    // Authoritative current status from issue.currentStatus (v2) or lifecycle fallback
+    const currentKey = currentStatusKey(issue);
+    const currentSubKey = issue.currentStatus?.subStatusKey || '';
+
+    // History for timeline display
     const history = issue.statusHistory && issue.statusHistory.length > 0
       ? issue.statusHistory
       : issue.eventHistory && issue.eventHistory.length > 0
       ? issue.eventHistory
       : [{
-          status: currentStatusKey(issue),
-          subStatus: issue.currentStatus?.subStatusKey || '',
+          status: currentKey,
+          subStatus: currentSubKey,
           note: issue.currentStatus?.notePreview || '',
           dateTime: issue.currentStatus?.enteredDateTime || issue.dateTime || '',
           by: issue.currentStatus?.enteredBy?.name || issue.userName || ''
         }];
-    const lastEntry = history[history.length-1];
-    const lastKey = lastEntry.status || 'open';
-    const scfg = STATUS_CONFIG_SAFE[lastKey];
-    const sc = { ...scfg, label: scfg.label + (lastEntry.subStatus ? ' › '+lastEntry.subStatus : '') };
+
+    // If the history's last entry doesn't reflect the actual current status
+    // (e.g. resolved via events subcollection without writing to statusHistory),
+    // append a synthetic display-only entry so the timeline shows the correct state.
+    const needsSynthetic = (history[history.length - 1]?.status || 'open') !== currentKey;
+    const displayHistory = needsSynthetic
+      ? [...history, {
+          status: currentKey,
+          subStatus: currentSubKey,
+          note: issue.currentStatus?.notePreview || '',
+          dateTime: issue.currentStatus?.enteredDateTime || '',
+          by: issue.currentStatus?.enteredBy?.name || '',
+          _synthetic: true
+        }]
+      : history;
+
+    const lastEntry = displayHistory[displayHistory.length-1];
+    const scfg = STATUS_CONFIG_SAFE[currentKey];
+    const sc = { ...scfg, label: scfg.label + (currentSubKey ? ' › '+currentSubKey : '') };
 
     const editedNote = issue.editedAt ? `<div style="font-size:10px;color:var(--text3);margin-top:3px;font-family:'Share Tech Mono',monospace">edited ${issue.editedAt}${issue.editedBy?' by '+esc(issue.editedBy):''}</div>` : '';
 
@@ -3461,11 +3505,12 @@ function renderIssues() {
     }
 
     // Build timeline entries HTML — reversed so newest is on top
-    const timelineEntries = [...history].reverse().map((entry, displayIdx) => {
-      const trueIdx = history.length - 1 - displayIdx; // real index in array for Firestore ops
-      const isCurrent = trueIdx === history.length - 1;
+    const timelineEntries = [...displayHistory].reverse().map((entry, displayIdx) => {
+      const trueIdx = displayHistory.length - 1 - displayIdx; // real index in array for Firestore ops
+      const isCurrent = trueIdx === displayHistory.length - 1;
+      const isSynthetic = !!entry._synthetic; // display-only entry; not stored in statusHistory
       const cfg = STATUS_CONFIG_SAFE[entry.status];
-      
+
       return `<div class="tl-entry">
         <div class="tl-dot${isCurrent?' current':''}" style="border-color:${cfg.color};${isCurrent?'background:'+cfg.color:'background:var(--bg2)'}"></div>
         <div>
@@ -3477,7 +3522,7 @@ function renderIssues() {
           ${entry.note?`<div class="tl-note-text">"${esc(entry.note)}"</div>`:''}
           <div style="display:flex;gap:5px;margin-top:4px;">
             <button class="tl-edit-btn" onclick="startEditEntry('${issue.id}',${trueIdx})">✏ Edit</button>
-            <button class="tl-remove-btn" onclick="removeStatusEntry('${issue.id}',${trueIdx})" ${history.length<=1?'disabled':''}>🗑 Delete</button>
+            <button class="tl-remove-btn" onclick="removeStatusEntry('${issue.id}',${trueIdx})" ${isSynthetic||history.length<=1?'disabled':''}>🗑 Delete</button>
           </div>
         </div>
       </div>`;
@@ -3541,12 +3586,8 @@ function renderIssues() {
     };
 
     // Split status label from sub-status for two-line display
-    const baseLabel = issue.statusHistory && issue.statusHistory.length > 0
-      ? (STATUS_CONFIG_SAFE[issue.statusHistory[issue.statusHistory.length-1].status]?.label || sc.label)
-      : sc.label.split(' › ')[0];
-    const subLabel = issue.statusHistory && issue.statusHistory.length > 0
-      ? (issue.statusHistory[issue.statusHistory.length-1].subStatus || '')
-      : (sc.label.includes(' › ') ? sc.label.split(' › ')[1] : '');
+    const baseLabel = scfg.label;
+    const subLabel = currentSubKey;
 
     card.innerHTML=`
       <div class="issue-card-header" onclick="toggleCard('${issue.id}')">
