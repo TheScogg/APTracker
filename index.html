@@ -3232,6 +3232,7 @@ window.confirmResolve = async () => {
     };
     const issuePatch = {
       statusHistory: [...getMutableStatusHistory(issue || {}), resolvedHistEntry],
+      workflowState: 'finished',
       ...buildIssueV2Compat({
         machineCode: issue?.machine || '',
         statusKey: 'resolved',
