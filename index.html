@@ -2906,16 +2906,22 @@ window.confirmReopen = async () => {
   try {
     const issue=issues.find(i=>i.id===reopenTargetId);
     const last = currentStatus(issue || {});
-    const history=issue.resolveHistory||[];
-    history.push({resolveNote:issue.resolveNote,resolveDateTime:issue.resolveDateTime,resolvedBy:issue.resolvedBy||''});
+    const resolveHistory=issue.resolveHistory||[];
+    resolveHistory.push({resolveNote:issue.resolveNote,resolveDateTime:issue.resolveDateTime,resolvedBy:issue.resolvedBy||''});
+    const reopenStatusKey = last?.status && last.status !== 'resolved' ? last.status : 'open';
+    const reopenSubStatus = last?.status && last.status !== 'resolved' ? (last.subStatus || '') : '';
+    const reopenDateTime = fmtDate(new Date());
+    const statusHistory = getMutableStatusHistory(issue);
+    statusHistory.push({ status: reopenStatusKey, subStatus: reopenSubStatus, note: note || '', dateTime: reopenDateTime, by: currentUser.displayName || currentUser.email });
     const issuePatch = {
-      reopenNote:note||'',reopenDateTime:fmtDate(new Date()),
-      reopenedBy:currentUser.displayName||currentUser.email,resolveHistory:history,
+      reopenNote:note||'',reopenDateTime,
+      reopenedBy:currentUser.displayName||currentUser.email,resolveHistory,
+      statusHistory,
       ...buildIssueV2Compat({
         machineCode: issue?.machine || '',
-        statusKey: last?.status && last.status !== 'resolved' ? last.status : 'open',
-        subStatus: last?.status && last.status !== 'resolved' ? (last.subStatus || '') : '',
-        statusDateTime: fmtDate(new Date()),
+        statusKey: reopenStatusKey,
+        subStatus: reopenSubStatus,
+        statusDateTime: reopenDateTime,
         note: note || '',
         baseIssue: issue,
         forceReopenIncrement: true
@@ -2969,6 +2975,7 @@ window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
   history.push(entry);
   try {
     const issuePatch = {
+      statusHistory: history,
       ...buildIssueV2Compat({
         machineCode: issue.machine || issue.machineCode || '',
         statusKey: status,
@@ -3241,6 +3248,7 @@ window.setSubStatus = async (id, sub) => {
   const last = history[history.length - 1] || { status: currentStatusKey(issue), subStatus: sub, note: '' };
   try {
     const issuePatch = {
+      statusHistory: history,
       ...buildIssueV2Compat({
         machineCode: issue.machine || issue.machineCode || '',
         statusKey: last.status || 'open',
