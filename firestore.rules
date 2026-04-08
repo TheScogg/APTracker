@@ -10,6 +10,10 @@ service cloud.firestore {
       return request.auth.uid;
     }
 
+    function isSelf(userId) {
+      return signedIn() && currentUid() == userId;
+    }
+
     function memberPath(plantId) {
       return /databases/$(database)/documents/plants/$(plantId)/members/$(currentUid());
     }
@@ -18,80 +22,89 @@ service cloud.firestore {
       return get(memberPath(plantId));
     }
 
+    // A user is a plant member if their member doc exists and isActive == true.
+    // Note: the app writes { isActive: true, role: "admin"|"editor"|"viewer" }.
     function isPlantMember(plantId) {
       return signedIn()
         && exists(memberPath(plantId))
-        && memberDoc(plantId).data.status == "active";
+        && memberDoc(plantId).data.isActive == true;
     }
 
-    function roleIs(plantId, role) {
-      return isPlantMember(plantId) && memberDoc(plantId).data.role == role;
+    function memberRole(plantId) {
+      return memberDoc(plantId).data.role;
     }
 
-    function isOwner(plantId) {
-      return roleIs(plantId, "owner");
+    function isAdmin(plantId) {
+      return isPlantMember(plantId) && memberRole(plantId) == "admin";
     }
 
-    function canEditPlant(plantId) {
-      return roleIs(plantId, "owner") || roleIs(plantId, "editor");
+    function isEditorOrAbove(plantId) {
+      return isPlantMember(plantId)
+        && (memberRole(plantId) == "admin" || memberRole(plantId) == "editor");
     }
 
-    function isSelf(userId) {
-      return signedIn() && currentUid() == userId;
+    // Only the plantIds field is being touched (used when adding/removing a user from a plant).
+    function onlyUpdatesPlantIds() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['plantIds']);
     }
 
-    // ── Users ──
+    // ── User profiles ──
     match /users/{userId} {
+      // Users can always read/write their own profile.
       allow read, write: if isSelf(userId);
+      // Any signed-in user may update another user's plantIds array
+      // (needed when an admin adds/removes someone from a plant).
+      allow update: if signedIn() && onlyUpdatesPlantIds();
+    }
+
+    // ── User lookup index (email → uid mapping, written on sign-in) ──
+    match /userLookup/{email} {
+      // Any signed-in user may read (needed for admin invite-by-email lookup).
+      allow read: if signedIn();
+      // A user may only write their own lookup record (uid in doc must match caller).
+      allow write: if signedIn() && request.resource.data.uid == currentUid();
     }
 
     // ── Plants ──
     match /plants/{plantId} {
-      // Plant metadata should be readable by active members.
+      // Any active member can read plant metadata.
       allow read: if isPlantMember(plantId);
 
-      // A signed-in user can create a plant if they are the creator.
-      allow create: if signedIn()
-                    && request.resource.data.createdBy == currentUid();
+      // Any signed-in user can create a plant (they will also create a member doc
+      // for themselves in the same batch via _initNewPlant).
+      allow create: if signedIn();
 
-      // Owners and editors can update plant-level metadata.
-      allow update: if canEditPlant(plantId);
-
-      // Deleting a plant is owner-only.
-      allow delete: if isOwner(plantId);
+      // Only admins can update or delete a plant.
+      allow update: if isAdmin(plantId);
+      allow delete: if isAdmin(plantId);
 
       // ── Members ──
       match /members/{userId} {
+        // Active members can see the full member list.
         allow read: if isPlantMember(plantId);
 
-        // Only owners can create/update/delete members, except that the plant
-        // creator can create their own owner membership in the same batch
-        // where the plant is created.
-        allow create: if (
-          isOwner(plantId)
-          || (
-            isSelf(userId)
-            && request.resource.data.role == "owner"
-            && request.resource.data.status == "active"
-            && getAfter(/databases/$(database)/documents/plants/$(plantId)).data.createdBy == currentUid()
-          )
-        );
+        // Admins can create/update/delete any member doc.
+        allow create, update, delete: if isAdmin(plantId);
 
-        allow update, delete: if isOwner(plantId);
+        // A user may create their own initial admin member doc when setting up
+        // a new plant (the plant create and member create happen in the same batch).
+        allow create: if isSelf(userId)
+          && request.resource.data.role == "admin"
+          && request.resource.data.isActive == true;
       }
 
-      // ── Config ──
+      // ── Config (statuses, presses) ──
       match /config/{configId} {
         allow read: if isPlantMember(plantId);
-        allow write: if canEditPlant(plantId);
+        allow write: if isAdmin(plantId);
       }
 
       // ── Press Notes ──
       match /pressNotes/{noteId} {
         allow read: if isPlantMember(plantId);
-        allow create: if isPlantMember(plantId) && signedIn()
+        allow create: if isEditorOrAbove(plantId)
                       && request.resource.data.createdBy.uid == currentUid();
-        allow delete: if isPlantAdmin(plantId)
+        allow delete: if isAdmin(plantId)
                       || (signedIn() && resource.data.createdBy.uid == currentUid());
         allow update: if false;
       }
@@ -99,21 +112,21 @@ service cloud.firestore {
       // ── Issues ──
       match /issues/{issueId} {
         allow read: if isPlantMember(plantId);
-        allow create, update: if canEditPlant(plantId);
-        allow delete: if isOwner(plantId);
+        allow create, update: if isEditorOrAbove(plantId);
+        allow delete: if isAdmin(plantId);
 
         // Events are append-only audit trail.
         match /events/{eventId} {
           allow read: if isPlantMember(plantId);
-          allow create: if canEditPlant(plantId);
+          allow create: if isEditorOrAbove(plantId);
           allow update, delete: if false;
         }
 
-        // Attachments can be removed by uploader or owner.
+        // Attachments
         match /attachments/{attachmentId} {
           allow read: if isPlantMember(plantId);
-          allow create, update: if canEditPlant(plantId);
-          allow delete: if isOwner(plantId)
+          allow create, update: if isEditorOrAbove(plantId);
+          allow delete: if isAdmin(plantId)
                         || (signedIn() && resource.data.uploadedBy.uid == currentUid());
         }
       }
