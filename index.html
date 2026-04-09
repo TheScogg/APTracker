@@ -787,6 +787,7 @@
           <div class="user-dropdown-email" id="dropdown-email">—</div>
         </div>
         <button class="user-dropdown-item" id="members-btn" style="display:none">👥 Manage Members</button>
+        <button class="user-dropdown-item" id="admin-page-btn" style="display:none">🛠 Admin Portal</button>
         <button class="user-dropdown-item" id="admin-panel-btn">⚙ Manage Statuses</button>
         <button class="user-dropdown-item" id="theme-toggle-btn">🌙 Dark Mode</button>
         <button class="user-dropdown-item danger" id="signout-btn">⏻ Sign Out</button>
@@ -1592,6 +1593,9 @@ function applyRoleUI() {
   const membersBtn = document.getElementById('members-btn');
   if (membersBtn) membersBtn.style.display = isAdmin ? '' : 'none';
 
+  const adminPageBtn = document.getElementById('admin-page-btn');
+  if (adminPageBtn) adminPageBtn.style.display = isAdmin ? '' : 'none';
+
   const exportBtn = document.getElementById('export-pdf-btn');
   if (exportBtn) exportBtn.style.display = p.canExport ? '' : 'none';
 }
@@ -1895,17 +1899,6 @@ async function switchPlant(plantId) {
   refreshVisibleData();
 }
 
-// Add a new plant: writes plant doc + member doc + updates user's plantIds array
-async function addNewPlant(name, location) {
-  const id = name.toLowerCase().replace(/[^a-z0-9]/g, '_') + '_' + Date.now().toString(36);
-  await _initNewPlant(id, name, location);
-  // Add to user's plantIds (arrayUnion is safe if already present)
-  await setDoc(doc(db, 'users', currentUser.uid), { plantIds: arrayUnion(id) }, { merge: true });
-  userPlants.push({ id, name, location: location || '' });
-  buildPlantDropdown();
-  await switchPlant(id);
-}
-
 // Plant dropdown UI
 function buildPlantDropdown() {
   const dd = document.getElementById('plant-dropdown');
@@ -1920,21 +1913,6 @@ function buildPlantDropdown() {
     btn.onclick = () => switchPlant(p.id);
     dd.appendChild(btn);
   });
-  const divider = document.createElement('div');
-  divider.className = 'plant-dropdown-divider';
-  dd.appendChild(divider);
-  const addBtn = document.createElement('button');
-  addBtn.className = 'plant-add-btn';
-  addBtn.textContent = '+ Add plant';
-  addBtn.onclick = () => { closePlantDropdown(); promptAddPlant(); };
-  dd.appendChild(addBtn);
-}
-
-function promptAddPlant() {
-  const name = prompt('Plant name (e.g. "Dallas Plant"):');
-  if (!name || !name.trim()) return;
-  const location = prompt('Location (optional, e.g. "Dallas, TX"):');
-  addNewPlant(name.trim(), location ? location.trim() : '');
 }
 
 window.togglePlantDropdown = () => {
@@ -5468,6 +5446,10 @@ document.getElementById('admin-save-btn')?.addEventListener('click', saveAdminCo
 // Members panel
 document.getElementById('members-btn')?.addEventListener('touchend', e => { e.preventDefault(); e.stopPropagation(); openMembersPanel(); }, { passive: false });
 document.getElementById('members-btn')?.addEventListener('click', e => { e.stopPropagation(); openMembersPanel(); });
+document.getElementById('admin-page-btn')?.addEventListener('click', e => {
+  e.stopPropagation();
+  window.location.href = 'admin.html';
+});
 document.getElementById('members-overlay')?.addEventListener('click', () => { closeMembersPanel(); });
 document.getElementById('members-panel-inner')?.addEventListener('click', e => { e.stopPropagation(); });
 document.getElementById('members-close-btn')?.addEventListener('touchend', e => { e.preventDefault(); closeMembersPanel(); }, { passive: false });
