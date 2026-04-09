@@ -267,22 +267,80 @@
   .mc-toolbar-btn svg { width: 14px; height: 14px; flex-shrink: 0; }
   .mc-notes-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--teal); flex-shrink: 0; }
 
-  /* NOTES MODAL */
-  .notes-list { max-height: 46vh; overflow-y: auto; padding: 0 0 8px; display: flex; flex-direction: column; gap: 8px; }
-  .notes-list:empty::after { content: 'No notes yet. Be the first to add one.'; display: block; text-align: center; color: var(--text3); font-size: 12px; padding: 24px 0 16px; }
-  .note-item { background: var(--bg3); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; position: relative; }
-  .note-item-text { font-size: 13px; color: var(--text); line-height: 1.5; white-space: pre-wrap; word-break: break-word; margin-bottom: 6px; }
-  .note-item-meta { display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--text3); font-family: 'Share Tech Mono', monospace; }
-  .note-item-author { color: var(--text2); font-weight: 700; font-family: 'Nunito', sans-serif; }
-  .note-delete-btn { background: none; border: none; color: var(--text3); font-size: 14px; cursor: pointer; padding: 2px 4px; line-height: 1; transition: color 0.15s; margin-left: auto; flex-shrink: 0; }
-  .note-delete-btn:hover { color: var(--red); }
-  .notes-input-row { display: flex; gap: 8px; align-items: flex-end; padding-top: 4px; border-top: 1px solid var(--border); margin-top: 4px; }
-  .notes-textarea { flex: 1; background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; color: var(--text); font-family: 'Nunito', sans-serif; font-size: 13px; resize: none; outline: none; min-height: 38px; max-height: 100px; overflow-y: auto; line-height: 1.4; }
-  .notes-textarea:focus { border-color: var(--teal); }
-  .notes-submit-btn { background: var(--teal); border: none; border-radius: 8px; color: white; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; transition: opacity 0.15s; }
-  .notes-submit-btn:hover { opacity: 0.85; }
-  .notes-submit-btn:active { transform: scale(0.95); }
-  .notes-submit-btn svg { width: 16px; height: 16px; }
+  /* NOTES MODAL — VARIANT A: LOGBOOK */
+  .notes-modal-a-wrap { display: flex; flex-direction: column; min-height: 0; }
+  .notes-modal-a-header { display: flex; align-items: stretch; justify-content: space-between; padding-bottom: 18px; border-bottom: 1px solid var(--border); margin-bottom: 0; }
+  .notes-modal-a-id-plate { display: flex; align-items: stretch; }
+  .notes-modal-a-plate-bar { width: 3px; border-radius: 2px; background: var(--teal); margin-right: 14px; flex-shrink: 0; }
+  .notes-modal-a-plate-text { display: flex; flex-direction: column; justify-content: center; gap: 3px; }
+  .notes-modal-a-subtitle { font-family: 'Share Tech Mono', monospace; font-size: 9px; letter-spacing: 2.5px; text-transform: uppercase; color: var(--teal); opacity: 0.85; }
+  .notes-modal-a-machine { font-family: 'Rajdhani', sans-serif; font-size: 30px; font-weight: 700; color: var(--text); letter-spacing: 1px; line-height: 1; }
+  .notes-modal-a-close { background: none; border: none; color: var(--text3); font-size: 16px; cursor: pointer; padding: 4px 6px; line-height: 1; align-self: flex-start; transition: color 0.15s; }
+  .notes-modal-a-close:hover { color: var(--text); }
+  .log-timeline { flex: 1; overflow-y: auto; max-height: 40vh; padding: 16px 0 8px; display: flex; flex-direction: column; }
+  .log-timeline:empty::after { content: '— No entries in this log —'; display: block; text-align: center; color: var(--text3); font-family: 'Share Tech Mono', monospace; font-size: 11px; padding: 32px 0 16px; letter-spacing: 1px; }
+  .log-entry { display: flex; gap: 0; position: relative; padding-bottom: 18px; }
+  .log-entry:last-child { padding-bottom: 2px; }
+  .log-entry-left { display: flex; flex-direction: column; align-items: center; width: 28px; flex-shrink: 0; }
+  .log-entry-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--teal); border: 2px solid var(--bg2); flex-shrink: 0; margin-top: 3px; z-index: 1; }
+  .log-entry-line { flex: 1; width: 2px; background: var(--border); margin-top: 5px; }
+  .log-entry:last-child .log-entry-line { display: none; }
+  .log-entry-body { flex: 1; min-width: 0; }
+  .log-entry-header { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; flex-wrap: wrap; }
+  .log-entry-author { font-family: 'Rajdhani', sans-serif; font-size: 14px; font-weight: 700; color: var(--text); }
+  .log-entry-time { font-family: 'Share Tech Mono', monospace; font-size: 10px; color: var(--text3); }
+  .log-entry-del { background: none; border: none; color: var(--text3); font-size: 10px; font-family: 'Share Tech Mono', monospace; cursor: pointer; padding: 0 2px; opacity: 0; transition: opacity 0.15s, color 0.15s; flex-shrink: 0; margin-left: auto; }
+  .log-entry:hover .log-entry-del { opacity: 1; }
+  .log-entry-del:hover { color: var(--red); }
+  .log-entry-text { font-family: 'Nunito', sans-serif; font-size: 13px; color: var(--text2); line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+  .log-compose { border-top: 1px solid var(--border); padding-top: 14px; margin-top: 10px; }
+  .log-compose-label { font-family: 'Share Tech Mono', monospace; font-size: 9px; letter-spacing: 2px; text-transform: uppercase; color: var(--text3); margin-bottom: 8px; }
+  .log-compose-row { display: flex; gap: 8px; align-items: flex-end; }
+  .log-compose-textarea { flex: 1; background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; color: var(--text); font-family: 'Nunito', sans-serif; font-size: 13px; resize: none; outline: none; min-height: 38px; max-height: 100px; overflow-y: auto; line-height: 1.4; }
+  .log-compose-textarea:focus { border-color: var(--teal); }
+  .log-compose-btn { background: var(--bg3); border: 1px solid var(--teal); border-radius: 8px; color: var(--teal); height: 36px; padding: 0 14px; font-family: 'Share Tech Mono', monospace; font-size: 11px; letter-spacing: 1px; cursor: pointer; flex-shrink: 0; transition: background 0.15s, color 0.15s; white-space: nowrap; }
+  .log-compose-btn:hover { background: var(--teal); color: #fff; }
+  .log-compose-btn:active { transform: scale(0.97); }
+  .log-compose-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* NOTES MODAL — VARIANT B: TEAM CHANNEL */
+  .notes-modal-b-header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+  .notes-modal-b-channel { display: flex; flex-direction: column; gap: 2px; }
+  .notes-modal-b-channel-name { display: flex; align-items: baseline; gap: 1px; }
+  .notes-modal-b-hash { font-family: 'Share Tech Mono', monospace; font-size: 22px; color: var(--teal); line-height: 1; }
+  .notes-modal-b-machine { font-family: 'Share Tech Mono', monospace; font-size: 22px; font-weight: 700; color: var(--text); line-height: 1; }
+  .notes-modal-b-label { font-family: 'Nunito', sans-serif; font-size: 11px; color: var(--text3); }
+  .notes-modal-b-close { background: var(--bg3); border: 1px solid var(--border); border-radius: 20px; color: var(--text2); font-size: 12px; font-family: 'Share Tech Mono', monospace; cursor: pointer; padding: 4px 12px; line-height: 1; transition: border-color 0.15s, color 0.15s; }
+  .notes-modal-b-close:hover { border-color: var(--text2); color: var(--text); }
+  .chat-list { flex: 1; overflow-y: auto; max-height: 40vh; padding: 12px 0 8px; display: flex; flex-direction: column; gap: 10px; }
+  .chat-empty { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 32px 0 16px; color: var(--text3); }
+  .chat-empty-icon { opacity: 0.35; }
+  .chat-empty-text { font-family: 'Nunito', sans-serif; font-size: 13px; }
+  .chat-msg { display: flex; gap: 8px; align-items: flex-end; }
+  .chat-msg.mine { flex-direction: row-reverse; }
+  .chat-avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--bg3); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700; color: var(--teal); flex-shrink: 0; }
+  .chat-msg.mine .chat-avatar { display: none; }
+  .chat-bubble-wrap { display: flex; flex-direction: column; gap: 4px; max-width: 78%; }
+  .chat-msg.mine .chat-bubble-wrap { align-items: flex-end; }
+  .chat-bubble { display: flex; align-items: flex-start; gap: 6px; }
+  .chat-bubble-text { font-family: 'Nunito', sans-serif; font-size: 13px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; padding: 9px 13px; border-radius: 16px; }
+  .chat-msg.mine .chat-bubble-text { background: var(--teal-dim); color: var(--text); border-bottom-right-radius: 4px; border: 1px solid rgba(20,184,166,0.25); }
+  .chat-msg:not(.mine) .chat-bubble-text { background: var(--bg3); color: var(--text); border-bottom-left-radius: 4px; border: 1px solid var(--border); }
+  .chat-del-btn { background: none; border: none; color: var(--text3); cursor: pointer; padding: 4px; opacity: 0; transition: opacity 0.15s, color 0.15s; flex-shrink: 0; align-self: center; }
+  .chat-msg:hover .chat-del-btn { opacity: 1; }
+  .chat-del-btn:hover { color: var(--red); }
+  .chat-del-btn svg { display: block; }
+  .chat-meta { font-family: 'Share Tech Mono', monospace; font-size: 10px; color: var(--text3); padding: 0 4px; }
+  .chat-msg.mine .chat-meta { text-align: right; }
+  .chat-compose { border-top: 1px solid var(--border); padding-top: 12px; margin-top: 8px; }
+  .chat-compose-row { display: flex; gap: 8px; align-items: flex-end; }
+  .chat-compose-textarea { flex: 1; background: var(--bg3); border: 1px solid var(--border); border-radius: 20px; padding: 9px 16px; color: var(--text); font-family: 'Nunito', sans-serif; font-size: 13px; resize: none; outline: none; min-height: 38px; max-height: 100px; overflow-y: auto; line-height: 1.4; }
+  .chat-compose-textarea:focus { border-color: var(--teal); }
+  .chat-send-btn { background: var(--teal); border: none; border-radius: 50%; color: white; width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; transition: opacity 0.15s, transform 0.1s; }
+  .chat-send-btn:hover { opacity: 0.85; }
+  .chat-send-btn:active { transform: scale(0.93); }
+  .chat-send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .chat-compose-hint { text-align: right; font-family: 'Share Tech Mono', monospace; font-size: 9px; color: var(--text3); margin-top: 5px; letter-spacing: 0.5px; }
 
   /* RIGHT-SWIPE NOTES TEASER */
   .swipe-notes-teaser { position: absolute; left: -4px; top: 50%; transform: translateY(-50%); width: 4px; height: 50px; border-radius: 4px 0 0 4px; background: var(--teal); opacity: 0; transition: opacity 0.15s, width 0.15s, left 0.15s; pointer-events: none; }
@@ -1084,25 +1142,55 @@
   </div>
 </div>
 
-<!-- PRESS NOTES MODAL -->
-<div class="modal-overlay" id="notes-modal">
+<!-- PRESS NOTES MODAL — VARIANT A: LOGBOOK -->
+<div class="modal-overlay" id="notes-modal-a">
   <div class="modal" style="max-width:480px;">
-    <div class="modal-title" style="display:flex;align-items:center;justify-content:space-between;">
-      <span style="display:flex;align-items:center;gap:8px;">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 2h10a1 1 0 011 1v8a1 1 0 01-1 1H5l-3 2V3a1 1 0 011-1z" stroke="var(--teal)" stroke-width="1.3" stroke-linejoin="round"/><path d="M5 6h6M5 9h4" stroke="var(--teal)" stroke-width="1.1" stroke-linecap="round"/></svg>
-        Press Notes &mdash; <span id="notes-modal-machine" style="color:var(--accent);font-family:'Share Tech Mono',monospace;margin-left:2px;"></span>
-      </span>
-      <button style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;" onclick="closeNotesModal()">&times;</button>
+    <div class="notes-modal-a-wrap">
+      <div class="notes-modal-a-header">
+        <div class="notes-modal-a-id-plate">
+          <div class="notes-modal-a-plate-bar"></div>
+          <div class="notes-modal-a-plate-text">
+            <div class="notes-modal-a-subtitle">PRESS NOTES</div>
+            <div class="notes-modal-a-machine" id="notes-modal-machine-a"></div>
+          </div>
+        </div>
+        <button class="notes-modal-a-close" onclick="closeNotesModal()">✕</button>
+      </div>
+      <div id="notes-list-a" class="log-timeline"></div>
+      <div id="notes-error-a" style="display:none;font-size:11px;color:var(--red);margin-top:4px;"></div>
+      <div class="log-compose">
+        <div class="log-compose-label">Append to Log</div>
+        <div class="log-compose-row">
+          <textarea id="notes-textarea-a" class="log-compose-textarea" rows="1" placeholder="Record an observation…" oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"></textarea>
+          <button id="notes-submit-btn-a" class="log-compose-btn" onclick="submitPressNote()">LOG IT</button>
+        </div>
+      </div>
     </div>
-    <div style="padding:0 0 12px;">
-      <div id="notes-list" class="notes-list"></div>
-      <div id="notes-error" style="display:none;font-size:11px;color:var(--red);margin-bottom:6px;"></div>
-      <div class="notes-input-row">
-        <textarea id="notes-textarea" class="notes-textarea" rows="1" placeholder="Add a note for this press…" oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"></textarea>
-        <button class="notes-submit-btn" onclick="submitPressNote()" title="Post note">
-          <svg viewBox="0 0 16 16" fill="none"><path d="M8 12V4M4 8l4-4 4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </div>
+</div>
+
+<!-- PRESS NOTES MODAL — VARIANT B: TEAM CHANNEL -->
+<div class="modal-overlay" id="notes-modal-b">
+  <div class="modal" style="max-width:480px;">
+    <div class="notes-modal-b-header">
+      <div class="notes-modal-b-channel">
+        <div class="notes-modal-b-channel-name">
+          <span class="notes-modal-b-hash">#</span><span class="notes-modal-b-machine" id="notes-modal-machine-b"></span>
+        </div>
+        <div class="notes-modal-b-label">Press Notes</div>
+      </div>
+      <button class="notes-modal-b-close" onclick="closeNotesModal()">✕ close</button>
+    </div>
+    <div id="notes-list-b" class="chat-list"></div>
+    <div id="notes-error-b" style="display:none;font-size:11px;color:var(--red);margin-top:4px;"></div>
+    <div class="chat-compose">
+      <div class="chat-compose-row">
+        <textarea id="notes-textarea-b" class="chat-compose-textarea" rows="1" placeholder="Add a note…" oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"></textarea>
+        <button id="notes-submit-btn-b" class="chat-send-btn" onclick="submitPressNote()" title="Send">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13.5 2.5L7 9M13.5 2.5L9 13.5 7 9l-4.5-2 9-4.5z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
       </div>
+      <div class="chat-compose-hint">Shift+Enter for new line</div>
     </div>
   </div>
 </div>
@@ -4757,9 +4845,15 @@ window.confirmSerialModal = async () => {
 document.getElementById('serial-modal')?.addEventListener('click', e => { if(e.target===document.getElementById('serial-modal')) closeSerialModal(); });
 
 // ── PRESS NOTES ──
+// Toggle between 'a' (Logbook) and 'b' (Team Channel) to switch prototypes
+const NOTES_VARIANT = 'a';
+
 let _notesUnsubscribe = null;
 let _notesModalPressId = null;
 let _notesModalMachineCode = null;
+
+function _nid(base) { return base + '-' + NOTES_VARIANT; }
+function _notesModalEl() { return document.getElementById('notes-modal-' + NOTES_VARIANT); }
 
 function _relativeTime(ts) {
   if (!ts) return '';
@@ -4776,51 +4870,110 @@ function _relativeTime(ts) {
 }
 
 function _renderPressNotes(notes) {
-  const list = document.getElementById('notes-list');
+  const list = document.getElementById(_nid('notes-list'));
   if (!list) return;
   list.innerHTML = '';
-  notes.forEach(n => {
-    const isOwn = n.createdBy?.uid === currentUser?.uid;
-    const isAdmin = currentUserRole === 'admin';
-    const item = document.createElement('div');
-    item.className = 'note-item';
-    const textEl = document.createElement('div');
-    textEl.className = 'note-item-text';
-    textEl.textContent = n.text;
-    const meta = document.createElement('div');
-    meta.className = 'note-item-meta';
-    const author = document.createElement('span');
-    author.className = 'note-item-author';
-    author.textContent = n.createdBy?.name || 'Unknown';
-    const dot = document.createTextNode(' · ');
-    const time = document.createElement('span');
-    time.textContent = _relativeTime(n.createdAt);
-    meta.appendChild(author);
-    meta.appendChild(dot);
-    meta.appendChild(time);
-    if (isOwn || isAdmin) {
-      const del = document.createElement('button');
-      del.className = 'note-delete-btn';
-      del.title = 'Delete note';
-      del.innerHTML = '<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3 4h10M6 4V2h4v2M5 4v9a1 1 0 001 1h4a1 1 0 001-1V4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-      del.onclick = () => _deletePressNote(n.id);
-      meta.appendChild(del);
+
+  if (NOTES_VARIANT === 'a') {
+    // ── Variant A: Logbook / timeline ──
+    notes.forEach(n => {
+      const isOwn = n.createdBy?.uid === currentUser?.uid;
+      const isAdmin = currentUserRole === 'admin';
+      const entry = document.createElement('div');
+      entry.className = 'log-entry';
+      const leftCol = document.createElement('div');
+      leftCol.className = 'log-entry-left';
+      const dot = document.createElement('div');
+      dot.className = 'log-entry-dot';
+      const line = document.createElement('div');
+      line.className = 'log-entry-line';
+      leftCol.appendChild(dot);
+      leftCol.appendChild(line);
+      const body = document.createElement('div');
+      body.className = 'log-entry-body';
+      const header = document.createElement('div');
+      header.className = 'log-entry-header';
+      const authorEl = document.createElement('span');
+      authorEl.className = 'log-entry-author';
+      authorEl.textContent = n.createdBy?.name || 'Unknown';
+      const timeEl = document.createElement('span');
+      timeEl.className = 'log-entry-time';
+      timeEl.textContent = _relativeTime(n.createdAt);
+      header.appendChild(authorEl);
+      header.appendChild(timeEl);
+      if (isOwn || isAdmin) {
+        const del = document.createElement('button');
+        del.className = 'log-entry-del';
+        del.title = 'Delete entry';
+        del.textContent = '✕';
+        del.onclick = () => _deletePressNote(n.id);
+        header.appendChild(del);
+      }
+      const textEl = document.createElement('div');
+      textEl.className = 'log-entry-text';
+      textEl.textContent = n.text;
+      body.appendChild(header);
+      body.appendChild(textEl);
+      entry.appendChild(leftCol);
+      entry.appendChild(body);
+      list.appendChild(entry);
+    });
+    list.scrollTop = list.scrollHeight;
+
+  } else {
+    // ── Variant B: Team Channel / chat bubbles ──
+    if (notes.length === 0) {
+      list.innerHTML = `<div class="chat-empty"><div class="chat-empty-icon"><svg width="36" height="36" viewBox="0 0 32 32" fill="none"><path d="M6 4h20a2 2 0 012 2v16a2 2 0 01-2 2H10l-6 4V6a2 2 0 012-2z" stroke="var(--text3)" stroke-width="1.5" stroke-linejoin="round"/><path d="M10 12h12M10 17h8" stroke="var(--text3)" stroke-width="1.3" stroke-linecap="round"/></svg></div><div class="chat-empty-text">Start the conversation</div></div>`;
+      return;
     }
-    item.appendChild(textEl);
-    item.appendChild(meta);
-    list.appendChild(item);
-  });
+    notes.forEach(n => {
+      const isOwn = n.createdBy?.uid === currentUser?.uid;
+      const isAdmin = currentUserRole === 'admin';
+      const msg = document.createElement('div');
+      msg.className = 'chat-msg' + (isOwn ? ' mine' : '');
+      if (!isOwn) {
+        const avatar = document.createElement('div');
+        avatar.className = 'chat-avatar';
+        avatar.textContent = (n.createdBy?.name || '?').charAt(0).toUpperCase();
+        msg.appendChild(avatar);
+      }
+      const wrap = document.createElement('div');
+      wrap.className = 'chat-bubble-wrap';
+      const bubble = document.createElement('div');
+      bubble.className = 'chat-bubble';
+      const textEl = document.createElement('div');
+      textEl.className = 'chat-bubble-text';
+      textEl.textContent = n.text;
+      bubble.appendChild(textEl);
+      if (isOwn || isAdmin) {
+        const del = document.createElement('button');
+        del.className = 'chat-del-btn';
+        del.title = 'Delete';
+        del.innerHTML = '<svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M3 4h10M6 4V2h4v2M5 4v9a1 1 0 001 1h4a1 1 0 001-1V4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+        del.onclick = () => _deletePressNote(n.id);
+        bubble.appendChild(del);
+      }
+      const meta = document.createElement('div');
+      meta.className = 'chat-meta';
+      meta.textContent = (isOwn ? 'You' : (n.createdBy?.name || 'Unknown')) + ' · ' + _relativeTime(n.createdAt);
+      wrap.appendChild(bubble);
+      wrap.appendChild(meta);
+      msg.appendChild(wrap);
+      list.appendChild(msg);
+    });
+    list.scrollTop = list.scrollHeight;
+  }
 }
 
 window.openNotesModal = (pressId, machineCode) => {
   _notesModalPressId = pressId;
   _notesModalMachineCode = machineCode;
-  document.getElementById('notes-modal-machine').textContent = machineCode;
-  document.getElementById('notes-textarea').value = '';
-  document.getElementById('notes-textarea').style.height = 'auto';
-  document.getElementById('notes-list').innerHTML = '';
-  document.getElementById('notes-modal').classList.add('visible');
-  // Real-time listener
+  document.getElementById(_nid('notes-modal-machine')).textContent = machineCode;
+  const ta = document.getElementById(_nid('notes-textarea'));
+  ta.value = '';
+  ta.style.height = 'auto';
+  document.getElementById(_nid('notes-list')).innerHTML = '';
+  _notesModalEl().classList.add('visible');
   if (_notesUnsubscribe) { _notesUnsubscribe(); _notesUnsubscribe = null; }
   const q = query(plantCol('pressNotes'), where('pressId', '==', pressId));
   _notesUnsubscribe = onSnapshot(q, snap => {
@@ -4829,27 +4982,27 @@ window.openNotesModal = (pressId, machineCode) => {
       .sort((a, b) => {
         const at = a.createdAt?.toMillis?.() ?? a.createdAt?.seconds * 1000 ?? 0;
         const bt = b.createdAt?.toMillis?.() ?? b.createdAt?.seconds * 1000 ?? 0;
-        return bt - at; // newest first
+        return at - bt; // oldest first (chronological)
       });
     _renderPressNotes(notes);
   }, err => { console.warn('pressNotes listener error', err); });
-  setTimeout(() => document.getElementById('notes-textarea').focus(), 150);
+  setTimeout(() => ta.focus(), 150);
 };
 
 window.closeNotesModal = () => {
-  document.getElementById('notes-modal').classList.remove('visible');
+  _notesModalEl()?.classList.remove('visible');
   if (_notesUnsubscribe) { _notesUnsubscribe(); _notesUnsubscribe = null; }
   _notesModalPressId = null;
   _notesModalMachineCode = null;
 };
 
 window.submitPressNote = async () => {
-  const ta = document.getElementById('notes-textarea');
+  const ta = document.getElementById(_nid('notes-textarea'));
   const text = ta.value.trim();
   if (!text || !_notesModalPressId || !currentUser) return;
-  const btn = document.querySelector('.notes-submit-btn');
+  const btn = document.getElementById(_nid('notes-submit-btn'));
   if (btn) btn.disabled = true;
-  const errEl = document.getElementById('notes-error');
+  const errEl = document.getElementById(_nid('notes-error'));
   if (errEl) errEl.style.display = 'none';
   try {
     await addDoc(plantCol('pressNotes'), {
@@ -4875,12 +5028,15 @@ async function _deletePressNote(noteId) {
   catch(e) { console.error('deletePressNote error', e); }
 }
 
-// Allow Enter to submit (Shift+Enter = newline)
-document.getElementById('notes-textarea')?.addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitPressNote(); }
+// Allow Enter to submit (Shift+Enter = newline) — wire up both variant textareas
+['a', 'b'].forEach(v => {
+  document.getElementById('notes-textarea-' + v)?.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitPressNote(); }
+  });
+  document.getElementById('notes-modal-' + v)?.addEventListener('click', e => {
+    if (e.target === document.getElementById('notes-modal-' + v)) closeNotesModal();
+  });
 });
-
-document.getElementById('notes-modal')?.addEventListener('click', e => { if (e.target === document.getElementById('notes-modal')) closeNotesModal(); });
 
 // ── EXPORT PDF ──
 window.openExportModal = () => {
