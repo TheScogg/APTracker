@@ -54,6 +54,21 @@
     .status-preview { font-size:12px; border:1px solid var(--border); border-radius:999px; padding:4px 9px; display:inline-flex; gap:5px; align-items:center; }
     .mono { font-family:'Share Tech Mono',monospace; font-size:11px; color:var(--text2); }
     .status-toolbar { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+    .status-panel { display:none; margin-top:8px; }
+    .status-panel.visible { display:block; }
+    .status-header-row { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+    .status-header-actions { display:flex; gap:6px; flex-wrap:wrap; }
+    .compact-btn { border:1px solid var(--border); background:transparent; color:var(--text2); border-radius:6px; padding:4px 8px; font-size:11px; cursor:pointer; }
+    .compact-btn:hover { border-color:var(--accent); color:var(--accent); }
+    .status-row-top { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; }
+    .status-row-actions { display:flex; gap:6px; align-items:center; }
+    .status-row-body { display:none; }
+    .status-row-body.visible { display:block; }
+    @media (max-width:640px) {
+      .status-grid { grid-template-columns:1fr; }
+      .status-row-top { align-items:flex-start; flex-direction:column; }
+      .status-row-actions { width:100%; justify-content:flex-end; }
+    }
   </style>
 </head>
 <body>
@@ -158,6 +173,8 @@ let userPlants = [];
 let adminPlantIds = [];
 let membersByPlant = new Map();
 let statusDraftByPlant = new Map();
+const statusPanelOpen = {};
+const statusRowOpen = {};
 
 function esc(v) {
   return String(v || '').replace(/[&<>'"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[ch]));
@@ -290,6 +307,7 @@ async function loadMembersAndStatusesForAdminPlants() {
 
 function renderStatusEditor(plantId, plantName) {
   const statuses = statusDraftByPlant.get(plantId) || deepCopy(DEFAULT_STATUSES);
+  const panelOpen = statusPanelOpen[plantId] ?? false;
   const keys = Object.entries(statuses).sort((a,b) => (a[1].order ?? 999) - (b[1].order ?? 999)).map(([k]) => k);
 
   const rows = keys.map(key => {
@@ -297,49 +315,64 @@ function renderStatusEditor(plantId, plantName) {
     const deleteBtn = (key === 'open' || key === 'resolved')
       ? `<span class="mono">Locked</span>`
       : `<button class="small-btn danger" onclick="window.deleteStatus('${plantId}','${key}')">Delete</button>`;
+    const rowKey = `${plantId}:${key}`;
+    const rowOpen = statusRowOpen[rowKey] ?? false;
 
     return `
       <div class="status-row">
-        <div class="status-grid">
-          <input value="${esc(s.label)}" placeholder="Label" onchange="window.patchStatus('${plantId}','${key}','label', this.value)">
-          <input value="${esc(s.icon || '●')}" placeholder="Icon" onchange="window.patchStatus('${plantId}','${key}','icon', this.value)">
-          <input value="${esc(s.cssColor || '#8b949e')}" placeholder="#hex color" onchange="window.patchStatus('${plantId}','${key}','cssColor', this.value)">
-          <div>${deleteBtn}</div>
-        </div>
-        <div class="row" style="margin-bottom:6px;">
+        <div class="status-row-top">
           <div class="status-preview" style="color:${esc(s.cssColor || '#8b949e')}; border-color:${esc(s.cssColor || '#8b949e')};">
             <span>${esc(s.icon || '●')}</span>
             <span>${esc(s.label || key)}</span>
           </div>
-          <span class="mono">key: ${esc(key)}</span>
+          <div class="status-row-actions">
+            <span class="mono">key: ${esc(key)}</span>
+            ${deleteBtn}
+            <button class="compact-btn" onclick="window.toggleStatusRow('${plantId}','${key}')">${rowOpen ? 'Hide' : 'Edit'}</button>
+          </div>
         </div>
-        <textarea placeholder="Sub-categories (one per line or comma-separated)" onchange="window.patchStatus('${plantId}','${key}','subsRaw', this.value)">${esc((s.subs || []).join('\n'))}</textarea>
+        <div class="status-row-body ${rowOpen ? 'visible' : ''}">
+          <div class="status-grid">
+            <input value="${esc(s.label)}" placeholder="Label" onchange="window.patchStatus('${plantId}','${key}','label', this.value)">
+            <input value="${esc(s.icon || '●')}" placeholder="Icon" onchange="window.patchStatus('${plantId}','${key}','icon', this.value)">
+            <input value="${esc(s.cssColor || '#8b949e')}" placeholder="#hex color" onchange="window.patchStatus('${plantId}','${key}','cssColor', this.value)">
+            <div></div>
+          </div>
+          <textarea placeholder="Sub-categories (one per line or comma-separated)" onchange="window.patchStatus('${plantId}','${key}','subsRaw', this.value)">${esc((s.subs || []).join('\n'))}</textarea>
+        </div>
       </div>`;
   }).join('');
 
   return `
     <div class="divider"></div>
-    <h3 style="font-family:'Rajdhani',sans-serif;letter-spacing:0.6px;margin-bottom:8px;">Manage Statuses — ${esc(plantName)}</h3>
-    <p class="muted" style="margin-bottom:8px;">Create, edit, delete categories/sub-categories. Import/export JSON for this plant.</p>
-    ${rows}
-
-    <div class="status-row">
-      <div class="mono" style="margin-bottom:6px;">Add new category</div>
-      <div class="status-grid">
-        <input id="new-status-label-${plantId}" placeholder="New category label">
-        <input id="new-status-icon-${plantId}" placeholder="Icon" value="●">
-        <input id="new-status-color-${plantId}" placeholder="#hex color" value="#8b949e">
-        <button class="small-btn" onclick="window.addStatus('${plantId}')">Add</button>
+    <div class="status-header-row">
+      <h3 style="font-family:'Rajdhani',sans-serif;letter-spacing:0.6px;">Manage Statuses — ${esc(plantName)}</h3>
+      <div class="status-header-actions">
+        <button class="compact-btn" onclick="window.toggleStatusPanel('${plantId}')">${panelOpen ? 'Minimize' : 'Expand'}</button>
       </div>
-      <textarea id="new-status-subs-${plantId}" placeholder="Optional sub-categories"></textarea>
     </div>
+    <p class="muted" style="margin:8px 0;">Create, edit, delete categories/sub-categories. Import/export JSON for this plant.</p>
+    <div class="status-panel ${panelOpen ? 'visible' : ''}">
+      ${rows}
 
-    <div class="status-toolbar">
-      <button class="small-btn" onclick="window.exportStatuses('${plantId}')">Export JSON</button>
-      <input type="file" id="import-file-${plantId}" accept="application/json" style="max-width:240px;padding:6px 8px;" />
-      <button class="small-btn" onclick="window.importStatuses('${plantId}')">Import JSON</button>
-      <button class="small-btn" onclick="window.resetStatuses('${plantId}')">Reset Defaults</button>
-      <button class="small-btn" style="border-color:var(--accent);color:var(--accent);" onclick="window.saveStatuses('${plantId}')">Save Statuses</button>
+      <div class="status-row">
+        <div class="mono" style="margin-bottom:6px;">Add new category</div>
+        <div class="status-grid">
+          <input id="new-status-label-${plantId}" placeholder="New category label">
+          <input id="new-status-icon-${plantId}" placeholder="Icon" value="●">
+          <input id="new-status-color-${plantId}" placeholder="#hex color" value="#8b949e">
+          <button class="small-btn" onclick="window.addStatus('${plantId}')">Add</button>
+        </div>
+        <textarea id="new-status-subs-${plantId}" placeholder="Optional sub-categories"></textarea>
+      </div>
+
+      <div class="status-toolbar">
+        <button class="small-btn" onclick="window.exportStatuses('${plantId}')">Export JSON</button>
+        <input type="file" id="import-file-${plantId}" accept="application/json" style="max-width:240px;padding:6px 8px;" />
+        <button class="small-btn" onclick="window.importStatuses('${plantId}')">Import JSON</button>
+        <button class="small-btn" onclick="window.resetStatuses('${plantId}')">Reset Defaults</button>
+        <button class="small-btn" style="border-color:var(--accent);color:var(--accent);" onclick="window.saveStatuses('${plantId}')">Save Statuses</button>
+      </div>
     </div>
     <div id="status-fb-${plantId}" class="feedback"></div>
   `;
@@ -658,6 +691,18 @@ window.saveStatuses = async function(plantId) {
     console.error(e);
     feedback(`status-fb-${plantId}`, 'error', e.message || 'Failed to save statuses.');
   }
+};
+
+window.toggleStatusPanel = function(plantId) {
+  statusPanelOpen[plantId] = !(statusPanelOpen[plantId] ?? false);
+  renderPlantsUsers();
+};
+
+window.toggleStatusRow = function(plantId, statusKey) {
+  const rowKey = `${plantId}:${statusKey}`;
+  statusRowOpen[rowKey] = !(statusRowOpen[rowKey] ?? false);
+  statusPanelOpen[plantId] = true;
+  renderPlantsUsers();
 };
 
 async function refreshAdminData() {
