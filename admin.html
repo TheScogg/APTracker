@@ -3,9 +3,428 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Admin</title>
+  <title>AP Tracker — Admin</title>
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&family=Share+Tech+Mono&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg:#0d1117; --bg2:#161b22; --bg3:#1c2333; --border:#30363d;
+      --accent:#f97316; --text:#e6edf3; --text2:#8b949e; --red:#ef4444; --green:#22c55e; --blue:#3b82f6;
+    }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { background:var(--bg); color:var(--text); font-family:'Nunito',sans-serif; min-height:100vh; }
+    .shell { max-width:1080px; margin:0 auto; padding:20px 16px 32px; }
+    .topbar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:space-between; margin-bottom:14px; }
+    .title { font-family:'Rajdhani',sans-serif; font-size:28px; letter-spacing:1px; }
+    .title span { color:var(--accent); }
+    .actions { display:flex; gap:8px; flex-wrap:wrap; }
+    .btn { border:1px solid var(--border); background:var(--bg3); color:var(--text2); border-radius:8px; padding:8px 12px; cursor:pointer; font-weight:700; font-family:'Nunito',sans-serif; }
+    .btn:hover { border-color:var(--accent); color:var(--accent); }
+    .btn-primary { background:var(--accent); border-color:var(--accent); color:white; }
+    .card { background:var(--bg2); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:12px; }
+    .card h2 { font-family:'Rajdhani',sans-serif; font-size:18px; letter-spacing:0.8px; margin-bottom:10px; }
+    .muted { color:var(--text2); font-size:13px; }
+    .grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    @media (max-width: 760px) { .grid-2 { grid-template-columns:1fr; } }
+    input, select { width:100%; background:var(--bg3); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:9px 10px; font-size:13px; font-family:'Nunito',sans-serif; }
+    input:focus, select:focus { outline:none; border-color:var(--accent); }
+    .row { display:flex; gap:8px; align-items:center; }
+    .row > * { flex:1; }
+    .feedback { margin-top:8px; font-size:12px; min-height:18px; }
+    .feedback.error { color:var(--red); }
+    .feedback.ok { color:var(--green); }
+    .plant-head { display:flex; gap:8px; align-items:center; justify-content:space-between; margin-bottom:8px; }
+    .plant-name { font-size:16px; font-weight:700; }
+    .pill { font-size:11px; border:1px solid rgba(59,130,246,0.35); color:var(--blue); border-radius:16px; padding:2px 9px; }
+    table { width:100%; border-collapse:collapse; }
+    th, td { text-align:left; padding:8px 6px; border-top:1px solid var(--border); font-size:12px; }
+    th { color:var(--text2); font-family:'Share Tech Mono',monospace; font-size:11px; }
+    .small-btn { border:1px solid var(--border); background:transparent; color:var(--text2); border-radius:6px; padding:5px 8px; cursor:pointer; font-size:12px; }
+    .small-btn:hover { color:var(--accent); border-color:var(--accent); }
+    .small-btn.danger { color:var(--red); border-color:rgba(239,68,68,0.3); }
+    .screen { display:none; }
+    .screen.visible { display:block; }
+    .login-wrap { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px; }
+    .login-card { width:360px; max-width:100%; background:var(--bg2); border:1px solid var(--border); border-radius:14px; padding:24px; text-align:center; }
+    .login-card h1 { font-family:'Rajdhani',sans-serif; margin-bottom:8px; }
+    .warn { color:#fbbf24; font-size:13px; margin-top:10px; }
+  </style>
 </head>
 <body>
-  <h1>Admin</h1>
+  <div id="login-screen" class="screen visible">
+    <div class="login-wrap">
+      <div class="login-card">
+        <h1>AP <span style="color:var(--accent)">TRACKER</span></h1>
+        <p class="muted" style="margin-bottom:14px;">Sign in to access Admin Portal.</p>
+        <button id="google-signin-btn" class="btn btn-primary" style="width:100%;">Sign in with Google</button>
+        <div id="login-feedback" class="feedback"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="app-screen" class="screen">
+    <div class="shell">
+      <div class="topbar">
+        <div>
+          <div class="title">ADMIN <span>PORTAL</span></div>
+          <div class="muted" id="whoami">—</div>
+        </div>
+        <div class="actions">
+          <button class="btn" onclick="window.location.href='index.html'">← Back to Tracker</button>
+          <button class="btn" id="signout-btn">Sign Out</button>
+        </div>
+      </div>
+
+      <div id="denied-card" class="card" style="display:none;">
+        <h2>Access denied</h2>
+        <p class="muted">Your account does not have admin access in any plant. Ask an existing plant admin to grant your role as <strong>admin</strong>.</p>
+      </div>
+
+      <div id="admin-content" style="display:none;">
+        <div class="card">
+          <h2>Add Plant</h2>
+          <p class="muted" style="margin-bottom:10px;">Plant creation has moved from the tracker page to this admin portal.</p>
+          <div class="grid-2">
+            <input id="new-plant-name" placeholder="Plant name (required)" />
+            <input id="new-plant-location" placeholder="Location (optional)" />
+          </div>
+          <div class="row" style="margin-top:8px;">
+            <button class="btn btn-primary" id="create-plant-btn" style="max-width:180px;">Create Plant</button>
+          </div>
+          <div id="plant-create-feedback" class="feedback"></div>
+        </div>
+
+        <div id="plants-users-container"></div>
+      </div>
+    </div>
+  </div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut as fbSignOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, serverTimestamp, writeBatch, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyABjasNBbJnsqq4M_UxKruKrN6-O2FXCwc",
+  authDomain: "press-tracker-9d9c9.firebaseapp.com",
+  projectId: "press-tracker-9d9c9",
+  storageBucket: "press-tracker-9d9c9.firebasestorage.app",
+  messagingSenderId: "943200266003",
+  appId: "1:943200266003:web:4d24eab551a3fb145c1ce6"
+};
+
+const DEFAULT_PERMISSIONS = {
+  canViewPlant: true, canCreateIssue: true, canEditIssue: true,
+  canResolveIssue: true, canManageStatuses: true, canManagePresses: true, canExport: true
+};
+
+const DEFAULT_PRESSES = {
+  "Row 1": ["1.01","1.02","1.03","1.04","1.05","1.06","1.07","1.08","1.09","1.10","1.11","1.12","1.13","1.14","1.15","1.16","1.17"],
+  "Row 2": ["2.01","2.02","2.03","2.04","2.05","2.06","2.07","2.08","2.09","2.10","2.11","2.12","2.13","2.14","2.15","2.16","2.17","2.18","2.19","2.20","2.21","2.22"],
+  "Row 3": ["3.01","3.02","3.03","3.04","3.05","3.06","3.07","3.08","3.09","3.10","3.12","3.13","3.14","3.15","3.16","3.17","3.18","3.19"],
+  "Row 4": ["4.01","4.02","4.03","4.04","4.05","4.06","4.07","4.08","4.09","4.10","4.11","4.12","4.13","4.14","4.15","4.16","4.17"],
+  "Row 5": ["5.01","5.02","5.03","5.04","5.05","5.06","5.07","5.08","5.09","5.10","5.11","5.12"],
+  "Row 6": ["6.01","6.02","6.03","6.05","6.06","6.07"],
+  "Other": ["Auto Cell","BR-1","CR-1","CR-2"]
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+const provider = new GoogleAuthProvider();
+provider.setCustomParameters({ prompt: 'select_account' });
+
+let currentUser = null;
+let userPlants = [];
+let adminPlantIds = [];
+let membersByPlant = new Map();
+
+function esc(v) {
+  return String(v || '').replace(/[&<>'"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[ch]));
+}
+
+function feedback(elId, type, message) {
+  const el = document.getElementById(elId);
+  el.className = `feedback ${type}`;
+  el.textContent = message || '';
+}
+
+function defaultPermsForRole(role) {
+  if (role === 'admin') return { ...DEFAULT_PERMISSIONS };
+  if (role === 'editor') return { canViewPlant: true, canCreateIssue: true, canEditIssue: true, canResolveIssue: true, canManageStatuses: false, canManagePresses: false, canExport: true };
+  return { canViewPlant: true, canCreateIssue: false, canEditIssue: false, canResolveIssue: false, canManageStatuses: false, canManagePresses: false, canExport: false };
+}
+
+async function signInWithGoogle() {
+  const btn = document.getElementById('google-signin-btn');
+  btn.disabled = true;
+  btn.textContent = 'Signing in…';
+  feedback('login-feedback', '', '');
+  try {
+    await signInWithPopup(auth, provider);
+  } catch (e) {
+    console.error(e);
+    feedback('login-feedback', 'error', e.message || 'Sign-in failed.');
+    btn.disabled = false;
+    btn.textContent = 'Sign in with Google';
+  }
+}
+
+async function doSignOut() {
+  await fbSignOut(auth);
+}
+
+async function loadUserPlants() {
+  const userSnap = await getDoc(doc(db, 'users', currentUser.uid));
+  const userData = userSnap.exists() ? userSnap.data() : {};
+  const plantIds = Array.isArray(userData.plantIds) ? userData.plantIds : [];
+
+  const plantDocs = await Promise.all(plantIds.map(id => getDoc(doc(db, 'plants', id))));
+  userPlants = plantDocs.filter(s => s.exists()).map(s => ({ id: s.id, name: s.data().name || s.id, location: s.data().location || '' }));
+
+  adminPlantIds = [];
+  for (const plant of userPlants) {
+    const meMember = await getDoc(doc(db, 'plants', plant.id, 'members', currentUser.uid));
+    if (meMember.exists() && meMember.data().isActive && meMember.data().role === 'admin') {
+      adminPlantIds.push(plant.id);
+    }
+  }
+}
+
+async function loadMembersForAdminPlants() {
+  membersByPlant.clear();
+  for (const plantId of adminPlantIds) {
+    const snap = await getDocs(collection(db, 'plants', plantId, 'members'));
+    membersByPlant.set(plantId, snap.docs.map(d => ({ id: d.id, ...d.data() })));
+  }
+}
+
+function renderPlantsUsers() {
+  const container = document.getElementById('plants-users-container');
+  container.innerHTML = '';
+
+  const sortedPlants = userPlants
+    .filter(p => adminPlantIds.includes(p.id))
+    .sort((a,b) => a.name.localeCompare(b.name));
+
+  for (const plant of sortedPlants) {
+    const members = (membersByPlant.get(plant.id) || []).sort((a,b) => (a.displayName || a.email || '').localeCompare(b.displayName || b.email || ''));
+    const card = document.createElement('div');
+    card.className = 'card';
+
+    const rows = members.map(member => {
+      const canEdit = member.userId !== currentUser.uid;
+      const label = member.displayName || member.email || member.userId || 'Unknown';
+      return `
+        <tr>
+          <td>${esc(label)}<div class="muted" style="font-size:11px;">${esc(member.email || '')}</div></td>
+          <td>
+            ${canEdit
+              ? `<select onchange="window.updateRole('${plant.id}','${member.userId}', this.value)">
+                  <option value="admin" ${member.role==='admin' ? 'selected' : ''}>admin</option>
+                  <option value="editor" ${member.role==='editor' ? 'selected' : ''}>editor</option>
+                  <option value="viewer" ${member.role==='viewer' ? 'selected' : ''}>viewer</option>
+                </select>`
+              : `<span class="pill">${esc(member.role || 'admin')} (you)</span>`
+            }
+          </td>
+          <td>
+            ${canEdit ? `<button class="small-btn danger" onclick="window.removeMember('${plant.id}','${member.userId}','${esc(label)}')">Remove</button>` : ''}
+          </td>
+        </tr>`;
+    }).join('');
+
+    card.innerHTML = `
+      <div class="plant-head">
+        <div>
+          <div class="plant-name">${esc(plant.name)}</div>
+          <div class="muted">${esc(plant.location || 'No location')} · ${esc(plant.id)}</div>
+        </div>
+        <span class="pill">admin</span>
+      </div>
+
+      <table>
+        <thead>
+          <tr><th>User</th><th>Role</th><th>Action</th></tr>
+        </thead>
+        <tbody>${rows || '<tr><td colspan="3" class="muted">No members found.</td></tr>'}</tbody>
+      </table>
+
+      <div style="margin-top:10px; border-top:1px solid var(--border); padding-top:10px;">
+        <div class="muted" style="margin-bottom:6px;">Add user to ${esc(plant.name)}</div>
+        <div class="row">
+          <input id="add-email-${plant.id}" placeholder="user@example.com" />
+          <select id="add-role-${plant.id}" style="max-width:120px;">
+            <option value="editor">editor</option>
+            <option value="viewer">viewer</option>
+            <option value="admin">admin</option>
+          </select>
+          <button class="small-btn" style="max-width:95px;" onclick="window.addMember('${plant.id}')">Add</button>
+        </div>
+        <div id="fb-${plant.id}" class="feedback"></div>
+      </div>
+    `;
+    container.appendChild(card);
+  }
+}
+
+async function createPlant() {
+  const btn = document.getElementById('create-plant-btn');
+  const name = document.getElementById('new-plant-name').value.trim();
+  const location = document.getElementById('new-plant-location').value.trim();
+  if (!name) {
+    feedback('plant-create-feedback', 'error', 'Plant name is required.');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Creating…';
+  feedback('plant-create-feedback', '', '');
+
+  try {
+    const id = name.toLowerCase().replace(/[^a-z0-9]/g, '_') + '_' + Date.now().toString(36);
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'plants', id), { name, location: location || '', createdAt: serverTimestamp(), isActive: true });
+    batch.set(doc(db, 'plants', id, 'members', currentUser.uid), {
+      userId: currentUser.uid,
+      displayName: currentUser.displayName || currentUser.email || '',
+      email: currentUser.email || '',
+      role: 'admin',
+      isActive: true,
+      addedAt: serverTimestamp(),
+      permissions: { ...DEFAULT_PERMISSIONS }
+    });
+    batch.set(doc(db, 'plants', id, 'config', 'presses'), { presses: DEFAULT_PRESSES });
+    batch.set(doc(db, 'users', currentUser.uid), { plantIds: arrayUnion(id) }, { merge: true });
+    await batch.commit();
+
+    document.getElementById('new-plant-name').value = '';
+    document.getElementById('new-plant-location').value = '';
+    feedback('plant-create-feedback', 'ok', `Created plant "${name}".`);
+    await refreshAdminData();
+  } catch (e) {
+    console.error(e);
+    feedback('plant-create-feedback', 'error', e.message || 'Failed to create plant.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Create Plant';
+  }
+}
+
+window.addMember = async function(plantId) {
+  const emailEl = document.getElementById(`add-email-${plantId}`);
+  const roleEl = document.getElementById(`add-role-${plantId}`);
+  const emailRaw = emailEl.value.trim();
+  const role = roleEl.value;
+  if (!emailRaw) {
+    feedback(`fb-${plantId}`, 'error', 'Email is required.');
+    return;
+  }
+  const email = emailRaw.toLowerCase();
+
+  try {
+    const lookupSnap = await getDoc(doc(db, 'userLookup', email));
+    if (!lookupSnap.exists()) throw new Error('User not found. They must sign in once first.');
+    const target = lookupSnap.data();
+
+    if (target.uid === currentUser.uid) throw new Error('You are already in this plant.');
+
+    const existing = await getDoc(doc(db, 'plants', plantId, 'members', target.uid));
+    if (existing.exists() && existing.data().isActive) throw new Error('User is already a member of this plant.');
+
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'plants', plantId, 'members', target.uid), {
+      userId: target.uid,
+      displayName: target.displayName || '',
+      email: target.email || email,
+      role,
+      isActive: true,
+      addedAt: serverTimestamp(),
+      addedBy: { uid: currentUser.uid, name: currentUser.displayName || currentUser.email || '' },
+      permissions: defaultPermsForRole(role)
+    });
+    batch.set(doc(db, 'users', target.uid), { plantIds: arrayUnion(plantId) }, { merge: true });
+    await batch.commit();
+
+    emailEl.value = '';
+    feedback(`fb-${plantId}`, 'ok', `Added ${emailRaw} as ${role}.`);
+    await refreshAdminData();
+  } catch (e) {
+    console.error(e);
+    feedback(`fb-${plantId}`, 'error', e.message || 'Failed to add member.');
+  }
+};
+
+window.updateRole = async function(plantId, userId, role) {
+  try {
+    await updateDoc(doc(db, 'plants', plantId, 'members', userId), {
+      role,
+      permissions: defaultPermsForRole(role),
+      updatedAt: serverTimestamp(),
+      updatedBy: { uid: currentUser.uid, name: currentUser.displayName || currentUser.email || '' }
+    });
+    await refreshAdminData();
+  } catch (e) {
+    console.error(e);
+    alert(e.message || 'Failed to update role.');
+  }
+};
+
+window.removeMember = async function(plantId, userId, label) {
+  if (!confirm(`Remove ${label} from this plant?`)) return;
+  try {
+    const batch = writeBatch(db);
+    batch.delete(doc(db, 'plants', plantId, 'members', userId));
+    batch.set(doc(db, 'users', userId), { plantIds: arrayRemove(plantId) }, { merge: true });
+    await batch.commit();
+    await refreshAdminData();
+  } catch (e) {
+    console.error(e);
+    alert(e.message || 'Failed to remove member.');
+  }
+};
+
+async function refreshAdminData() {
+  await loadUserPlants();
+  const hasAdminAccess = adminPlantIds.length > 0;
+  document.getElementById('denied-card').style.display = hasAdminAccess ? 'none' : '';
+  document.getElementById('admin-content').style.display = hasAdminAccess ? '' : 'none';
+  if (!hasAdminAccess) return;
+  await loadMembersForAdminPlants();
+  renderPlantsUsers();
+}
+
+onAuthStateChanged(auth, async user => {
+  if (!user) {
+    currentUser = null;
+    document.getElementById('login-screen').classList.add('visible');
+    document.getElementById('app-screen').classList.remove('visible');
+    const btn = document.getElementById('google-signin-btn');
+    btn.disabled = false;
+    btn.textContent = 'Sign in with Google';
+    return;
+  }
+
+  currentUser = user;
+
+  if (user.email) {
+    setDoc(doc(db, 'userLookup', user.email.toLowerCase()), {
+      uid: user.uid,
+      displayName: user.displayName || '',
+      email: user.email,
+      lastSeen: serverTimestamp()
+    }, { merge: true }).catch(() => {});
+  }
+
+  document.getElementById('login-screen').classList.remove('visible');
+  document.getElementById('app-screen').classList.add('visible');
+  document.getElementById('whoami').textContent = `${user.displayName || user.email} (${user.email || user.uid})`;
+
+  await refreshAdminData();
+});
+
+document.getElementById('google-signin-btn').addEventListener('click', signInWithGoogle);
+document.getElementById('signout-btn').addEventListener('click', doSignOut);
+document.getElementById('create-plant-btn').addEventListener('click', createPlant);
+</script>
 </body>
 </html>
