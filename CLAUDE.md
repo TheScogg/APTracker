@@ -4,7 +4,7 @@
 
 AP Tracker is a single-file HTML/JS web application for tracking injection molding press issues across multiple manufacturing plants. It runs entirely client-side with Firebase (Firestore + Auth + Storage) as the backend. The app is used on the factory floor on phones, tablets, and desktop monitors.
 
-**File:** `index.html` (~4,700 lines, single file containing all HTML, CSS, and JS)
+**File:** `index.html` (~5,600 lines, single file containing all HTML, CSS, and JS)
 
 **Stack:** Vanilla JS (no framework), Firebase 10.12.2 (ESM modules), html2pdf.js for PDF export
 
@@ -29,6 +29,9 @@ users/{userId}/
   plantIds: ["plantId", ...]          ← IDs of plants the user can access (new structure)
   plants: [{id, name, location}]      ← legacy array (still read during migration window)
   lastPlant: "plantId"                ← last-used plant
+
+userLookup/{email}                    ← global email→UID registry for member management
+  uid, displayName, email, lastSeen
 ```
 
 **Member document shape** (`plants/{plantId}/members/{userId}`):
@@ -89,6 +92,7 @@ users/{userId}/
     { status: "open", subStatus: "", note: "", dateTime: "...", by: "..." },
     { status: "maintenance", subStatus: "In Progress", note: "...", dateTime: "...", by: "..." }
   ],
+  workflowState: "called",     // "called" | "accepted" | "in-progress" | "finished"
   updatedAt: serverTimestamp(),
   updatedBy: { uid, name },
   createdAt: serverTimestamp()
@@ -191,6 +195,23 @@ Custom statuses can be added/edited/deleted via the admin panel (user menu → M
 - Events are cached in `issueEventHistoryCache` (Map keyed by issueId)
 - Hydration uses a token pattern (`attachmentsHydrationToken`, `eventsHydrationToken`) so stale async results are discarded when switching plants
 
+### Workflow state system
+- Each issue has a `workflowState` field tracking where it is in the response pipeline
+- States (in order): `'called'` → `'accepted'` → `'in-progress'` → `'finished'`
+- **Auto-transitions:** new issues start as `'called'`; resolving an issue (via resolve modal or swipe) auto-sets `'finished'`
+- **Workflow pill** in issue card header shows current state with colored badge (yellow=called, green=accepted, blue=in-progress, purple=finished); clicking cycles to the next state via `cycleWorkflowState(issueId)`
+- **Horizontal timeline** inside expanded cards shows all 4 steps with blue active dot, green completed dots, and connecting lines
+- State is stored on the issue doc and updated via `updateDoc(plantDoc('issues', id), { workflowState: nextState })`
+
+### Member management UI
+- Admins can manage plant members from the user dropdown → "Manage Members" (members overlay panel)
+- `loadPlantMembers(plantId)` — fetches all member docs for the current plant
+- `addMemberToPlant(email, role)` — looks up the user in `userLookup/{email}`, creates a member doc, appends `plantId` to their `users/{uid}.plantIds`
+- `removeMemberFromPlant(plantId, userId)` — deletes member doc and removes plantId from user's list
+- `changeUserRole(plantId, userId, newRole)` — updates role + full permissions map on the member doc
+- `userLookup/{email}` is written (fire-and-forget) every time a user signs in, so their UID is discoverable by email when an admin adds them to a plant
+- Editors can view the member list but cannot modify it; only admins can add/remove/change roles
+
 ### Press layout
 - `PRESSES` object maps row names to arrays of machine IDs
 - Loaded per-plant from Firestore (`plants/{plantId}/config/presses`)
@@ -201,19 +222,22 @@ Custom statuses can be added/edited/deleted via the admin panel (user menu → M
 
 ## File structure (within single HTML file)
 
-### CSS (~650 lines, lines 10–662)
+### CSS (~700 lines, lines 10–~700)
 - `:root` — dark mode color variables
 - `body.light` — light mode overrides
 - Layout: header, controls, floor map, issues section
 - Components: stat pills, row tabs, press buttons (split-bar style), issue cards, swipe panels, modals, mini-cards, masonry layout, sort dropdown, plant switcher, breadcrumb bar, admin panel, search box
+- Workflow: `.workflow-pill` (colored state badge), `.workflow-timeline-horizontal` (4-step progress bar with dots and connectors)
+- Members overlay: `.members-overlay`, `.members-panel` (fixed modal for per-plant member management)
 
-### HTML (~360 lines, lines 665–1023)
+### HTML (~400 lines)
 - Login screen (Google OAuth)
 - App shell: sync banner, header (logo, plant switcher, user pill), controls bar, filter drawer (with search input), floor map, issue log
 - Modals: add issue, edit issue, resolve, reopen, export PDF, serial number
 - Lightbox, admin overlay (with "Reset to Defaults" button)
+- Members overlay (manage plant membership)
 
-### JavaScript (~3,670 lines, lines 1024–4697)
+### JavaScript (~4,500 lines)
 
 **Initialization & auth**
 - Firebase init (App, Firestore, Storage — including fallback storage bucket), Google auth, `onAuthStateChanged` handler
@@ -297,7 +321,17 @@ Custom statuses can be added/edited/deleted via the admin panel (user menu → M
 - Each issue rendered as a card with full note, photos, timestamps, status timeline
 - `downloadPDF` — uses html2pdf.js to generate and download
 
-**Admin panel**
+**Workflow state**
+- `cycleWorkflowState(issueId)` — reads current `workflowState` (default `'called'`), advances to next in `['called','accepted','in-progress','finished']`, writes to Firestore
+- Auto-set to `'called'` in `submitIssue`; auto-set to `'finished'` in `confirmResolve` and when swipe sets status to `'resolved'`
+
+**Member management**
+- `loadPlantMembers(plantId)` — fetches `plants/{plantId}/members` collection
+- `addMemberToPlant(email, role)` — reads `userLookup/{email}`, writes member doc, updates `users/{uid}.plantIds`
+- `removeMemberFromPlant(plantId, userId)` — deletes member doc, removes plantId from user doc
+- `changeUserRole(plantId, userId, newRole)` — updates role + permissions map
+
+**Admin panel (in-app, index.html)**
 - Edit existing status categories (label, icon, color, sub-statuses)
 - Add new categories with icon picker (40 emoji) and color picker (20 colors)
 - Delete categories (with confirmation, shows impact count on affected issues)
@@ -354,6 +388,12 @@ Edit the `openExportModal` function — the `cardsHtml` variable builds each iss
 2. Add the sort logic in `renderIssues` (after the existing sort if/else chain)
 3. The sort dropdown and filter drawer select both rebuild from `SORT_OPTIONS`
 
+### Change the workflow state for an issue
+Call `cycleWorkflowState(issueId)` from the UI (bound to the workflow pill click). To add a new state, update the `WORKFLOW_STATES` order array and add a new entry to `workflowConfig` in the rendering section, plus a new `.workflow-pill.<state>` CSS class.
+
+### Add a member to a plant
+Call `addMemberToPlant(email, role)` — requires the user to have signed in at least once (so their `userLookup` entry exists). The function is surfaced in the Members overlay panel accessible from the user dropdown.
+
 ---
 
 ## External dependencies
@@ -369,11 +409,18 @@ Edit the `openExportModal` function — the `cardsHtml` variable builds each iss
 
 ---
 
-## Companion tools
+## Companion tools & other files
 
+- **admin.html** — Standalone admin portal (separate app, ~750 lines). Features: create new plants (auto-generates slug ID), manage members per plant (add by email, change roles, remove), manage status config with JSON import/export. Only accessible to users with at least one admin role. Shares the same Firebase project.
+- **debug.html** — Developer utility page for inspecting Firestore data and running ad-hoc queries (~1,300 lines).
+- **kitty.html** — Easter egg page. Not functional.
 - **migrate-to-plants.html** — One-time migration tool that copies root-level `issues/` and `config/` into `plants/default/` structure
 - **migration-plant-structure.html** — Migrates `users/{uid}.plants` array → `plants/{id}` docs + `plants/{id}/members/{uid}` subcollection + `users/{uid}.plantIds`. Run once after deploying the new `index.html`. Safe to re-run (all writes use merge).
 - **copy-statuses.html** — Copies status config from `plants/default/` to other plant IDs (AP1–AP5)
+- **scripts/backfill-issues-v2.mjs** — Node.js script to migrate issues to v2 schema
+- **scripts/backfill-attachments-v2.mjs** — Node.js script to migrate attachments to v2 schema
+- **scripts/cleanup-legacy-v1-fields.mjs** — Node.js script to remove old v1 fields after migration
+- **wrangler.jsonc** — Cloudflare Workers deployment config; serves the repo as static assets via `assets.directory: "."`
 
 ---
 
@@ -382,6 +429,7 @@ Read these before making schema-related changes:
 
 - `docs/firestore-schema-v2.md`
 - `docs/security-rules-v2.md`
+- `docs/manage-access-flow.md` — per-plant member management design (owner/editor/viewer role matrix, write operations, UI guardrails)
 - `firestore.indexes.json`
 - `firestore.rules` — deployed security rules (member-based access control)
 
