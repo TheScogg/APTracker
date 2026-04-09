@@ -3346,6 +3346,7 @@ window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
   try {
     const issuePatch = {
       statusHistory: history,
+      ...(status === 'resolved' ? { workflowState: 'finished' } : {}),
       ...buildIssueV2Compat({
         machineCode: issue.machine || issue.machineCode || '',
         statusKey: status,
