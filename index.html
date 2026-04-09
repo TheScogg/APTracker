@@ -846,7 +846,6 @@
         </div>
         <button class="user-dropdown-item" id="members-btn" style="display:none">👥 Manage Members</button>
         <button class="user-dropdown-item" id="admin-page-btn" style="display:none">🛠 Admin Portal</button>
-        <button class="user-dropdown-item" id="admin-panel-btn">⚙ Manage Statuses</button>
         <button class="user-dropdown-item" id="theme-toggle-btn">🌙 Dark Mode</button>
         <button class="user-dropdown-item danger" id="signout-btn">⏻ Sign Out</button>
       </div>
@@ -1672,11 +1671,7 @@ async function loadCurrentMember(plantId) {
 
 // Show/hide UI elements based on current user's permissions
 function applyRoleUI() {
-  const p = currentUserPermissions;
   const isAdmin = currentUserRole === 'admin';
-
-  const adminBtn = document.getElementById('admin-panel-btn');
-  if (adminBtn) adminBtn.style.display = p.canManageStatuses ? '' : 'none';
 
   const membersBtn = document.getElementById('members-btn');
   if (membersBtn) membersBtn.style.display = isAdmin ? '' : 'none';
@@ -1685,7 +1680,7 @@ function applyRoleUI() {
   if (adminPageBtn) adminPageBtn.style.display = isAdmin ? '' : 'none';
 
   const exportBtn = document.getElementById('export-pdf-btn');
-  if (exportBtn) exportBtn.style.display = p.canExport ? '' : 'none';
+  if (exportBtn) exportBtn.style.display = currentUserPermissions.canExport ? '' : 'none';
 }
 
 // ── MEMBER MANAGEMENT ──
