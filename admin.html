@@ -3,9 +3,750 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Admin</title>
+  <title>AP Tracker — Admin</title>
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&family=Share+Tech+Mono&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg:#0d1117; --bg2:#161b22; --bg3:#1c2333; --border:#30363d;
+      --accent:#f97316; --text:#e6edf3; --text2:#8b949e; --red:#ef4444; --green:#22c55e; --blue:#3b82f6;
+    }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { background:var(--bg); color:var(--text); font-family:'Nunito',sans-serif; min-height:100vh; }
+    .shell { max-width:1200px; margin:0 auto; padding:20px 16px 32px; }
+    .topbar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:space-between; margin-bottom:14px; }
+    .title { font-family:'Rajdhani',sans-serif; font-size:28px; letter-spacing:1px; }
+    .title span { color:var(--accent); }
+    .actions { display:flex; gap:8px; flex-wrap:wrap; }
+    .btn { border:1px solid var(--border); background:var(--bg3); color:var(--text2); border-radius:8px; padding:8px 12px; cursor:pointer; font-weight:700; font-family:'Nunito',sans-serif; }
+    .btn:hover { border-color:var(--accent); color:var(--accent); }
+    .btn-primary { background:var(--accent); border-color:var(--accent); color:white; }
+    .card { background:var(--bg2); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:12px; }
+    .card h2 { font-family:'Rajdhani',sans-serif; font-size:18px; letter-spacing:0.8px; margin-bottom:10px; }
+    .muted { color:var(--text2); font-size:13px; }
+    .grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    @media (max-width: 760px) { .grid-2 { grid-template-columns:1fr; } }
+    input, select, textarea { width:100%; background:var(--bg3); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:9px 10px; font-size:13px; font-family:'Nunito',sans-serif; }
+    textarea { resize:vertical; min-height:70px; }
+    input:focus, select:focus, textarea:focus { outline:none; border-color:var(--accent); }
+    .row { display:flex; gap:8px; align-items:center; }
+    .row > * { flex:1; }
+    .feedback { margin-top:8px; font-size:12px; min-height:18px; }
+    .feedback.error { color:var(--red); }
+    .feedback.ok { color:var(--green); }
+    .plant-head { display:flex; gap:8px; align-items:center; justify-content:space-between; margin-bottom:8px; }
+    .plant-name { font-size:16px; font-weight:700; }
+    .pill { font-size:11px; border:1px solid rgba(59,130,246,0.35); color:var(--blue); border-radius:16px; padding:2px 9px; }
+    table { width:100%; border-collapse:collapse; }
+    th, td { text-align:left; padding:8px 6px; border-top:1px solid var(--border); font-size:12px; vertical-align:top; }
+    th { color:var(--text2); font-family:'Share Tech Mono',monospace; font-size:11px; }
+    .small-btn { border:1px solid var(--border); background:transparent; color:var(--text2); border-radius:6px; padding:5px 8px; cursor:pointer; font-size:12px; }
+    .small-btn:hover { color:var(--accent); border-color:var(--accent); }
+    .small-btn.danger { color:var(--red); border-color:rgba(239,68,68,0.3); }
+    .screen { display:none; }
+    .screen.visible { display:block; }
+    .login-wrap { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px; }
+    .login-card { width:360px; max-width:100%; background:var(--bg2); border:1px solid var(--border); border-radius:14px; padding:24px; text-align:center; }
+    .login-card h1 { font-family:'Rajdhani',sans-serif; margin-bottom:8px; }
+    .divider { height:1px; background:var(--border); margin:12px 0; }
+    .status-row { border:1px solid var(--border); border-radius:10px; padding:10px; background:var(--bg3); margin-bottom:8px; }
+    .status-grid { display:grid; grid-template-columns: 1.3fr .8fr .8fr auto; gap:8px; align-items:center; margin-bottom:8px; }
+    @media (max-width:900px) { .status-grid { grid-template-columns:1fr 1fr; } .status-grid .full { grid-column:1 / -1; } }
+    .status-preview { font-size:12px; border:1px solid var(--border); border-radius:999px; padding:4px 9px; display:inline-flex; gap:5px; align-items:center; }
+    .mono { font-family:'Share Tech Mono',monospace; font-size:11px; color:var(--text2); }
+    .status-toolbar { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+    .status-panel { display:none; margin-top:8px; }
+    .status-panel.visible { display:block; }
+    .status-header-row { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+    .status-header-actions { display:flex; gap:6px; flex-wrap:wrap; }
+    .compact-btn { border:1px solid var(--border); background:transparent; color:var(--text2); border-radius:6px; padding:4px 8px; font-size:11px; cursor:pointer; }
+    .compact-btn:hover { border-color:var(--accent); color:var(--accent); }
+    .status-row-top { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; }
+    .status-row-actions { display:flex; gap:6px; align-items:center; }
+    .status-row-body { display:none; }
+    .status-row-body.visible { display:block; }
+    @media (max-width:640px) {
+      .status-grid { grid-template-columns:1fr; }
+      .status-row-top { align-items:flex-start; flex-direction:column; }
+      .status-row-actions { width:100%; justify-content:flex-end; }
+    }
+  </style>
 </head>
 <body>
-  <h1>Admin</h1>
+  <div id="login-screen" class="screen visible">
+    <div class="login-wrap">
+      <div class="login-card">
+        <h1>AP <span style="color:var(--accent)">TRACKER</span></h1>
+        <p class="muted" style="margin-bottom:14px;">Sign in to access Admin Portal.</p>
+        <button id="google-signin-btn" class="btn btn-primary" style="width:100%;">Sign in with Google</button>
+        <div id="login-feedback" class="feedback"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="app-screen" class="screen">
+    <div class="shell">
+      <div class="topbar">
+        <div>
+          <div class="title">ADMIN <span>PORTAL</span></div>
+          <div class="muted" id="whoami">—</div>
+        </div>
+        <div class="actions">
+          <button class="btn" onclick="window.location.href='index.html'">← Back to Tracker</button>
+          <button class="btn" id="signout-btn">Sign Out</button>
+        </div>
+      </div>
+
+      <div id="denied-card" class="card" style="display:none;">
+        <h2>Access denied</h2>
+        <p class="muted">Your account does not have admin access in any plant. Ask an existing plant admin to grant your role as <strong>admin</strong>.</p>
+      </div>
+
+      <div id="admin-content" style="display:none;">
+        <div class="card">
+          <h2>Add Plant</h2>
+          <p class="muted" style="margin-bottom:10px;">Plant creation has moved from the tracker page to this admin portal.</p>
+          <div class="grid-2">
+            <input id="new-plant-name" placeholder="Plant name (required)" />
+            <input id="new-plant-location" placeholder="Location (optional)" />
+          </div>
+          <div class="row" style="margin-top:8px;">
+            <button class="btn btn-primary" id="create-plant-btn" style="max-width:180px;">Create Plant</button>
+          </div>
+          <div id="plant-create-feedback" class="feedback"></div>
+        </div>
+
+        <div id="plants-users-container"></div>
+      </div>
+    </div>
+  </div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut as fbSignOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, serverTimestamp, writeBatch, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyABjasNBbJnsqq4M_UxKruKrN6-O2FXCwc",
+  authDomain: "press-tracker-9d9c9.firebaseapp.com",
+  projectId: "press-tracker-9d9c9",
+  storageBucket: "press-tracker-9d9c9.firebasestorage.app",
+  messagingSenderId: "943200266003",
+  appId: "1:943200266003:web:4d24eab551a3fb145c1ce6"
+};
+
+const DEFAULT_PERMISSIONS = {
+  canViewPlant: true, canCreateIssue: true, canEditIssue: true,
+  canResolveIssue: true, canManageStatuses: true, canManagePresses: true, canExport: true
+};
+
+const DEFAULT_PRESSES = {
+  "Row 1": ["1.01","1.02","1.03","1.04","1.05","1.06","1.07","1.08","1.09","1.10","1.11","1.12","1.13","1.14","1.15","1.16","1.17"],
+  "Row 2": ["2.01","2.02","2.03","2.04","2.05","2.06","2.07","2.08","2.09","2.10","2.11","2.12","2.13","2.14","2.15","2.16","2.17","2.18","2.19","2.20","2.21","2.22"],
+  "Row 3": ["3.01","3.02","3.03","3.04","3.05","3.06","3.07","3.08","3.09","3.10","3.12","3.13","3.14","3.15","3.16","3.17","3.18","3.19"],
+  "Row 4": ["4.01","4.02","4.03","4.04","4.05","4.06","4.07","4.08","4.09","4.10","4.11","4.12","4.13","4.14","4.15","4.16","4.17"],
+  "Row 5": ["5.01","5.02","5.03","5.04","5.05","5.06","5.07","5.08","5.09","5.10","5.11","5.12"],
+  "Row 6": ["6.01","6.02","6.03","6.05","6.06","6.07"],
+  "Other": ["Auto Cell","BR-1","CR-1","CR-2"]
+};
+
+const DEFAULT_STATUSES = {
+  open:            { label:'Open',             shortLabel:'Open',         icon:'●',  cssColor:'#ef4444', swipeColor:'#ef4444', floorCls:'has-open',            cls:'status-open',            subs:['New Fault / Issue','Pending Triage','Scheduled Mold Change','Re-opened'], statLabel:'Open', order:0 },
+  alert:           { label:'Alert',            shortLabel:'Alert',        icon:'🚨', cssColor:'#dc2626', swipeColor:'#dc2626', floorCls:'has-alert',           cls:'status-alert',           subs:['Mold Protection Fault','E-Stop / Safety Hazard','Press Down - Critical','Major Oil / Fluid Leak'], statLabel:'Alert', order:1 },
+  controlman:      { label:'Controlman',       shortLabel:'Controlman',   icon:'🎛️', cssColor:'#38bdf8', swipeColor:'#38bdf8', floorCls:'has-controlman',      cls:'status-controlman',      subs:['Robot / EOAT (End of Arm Tooling) Fault','Vision System / Camera Error','Conveyor / Auxiliary Comm Loss','PLC / HMI Error'], statLabel:'Controlman', order:2 },
+  maintenance:     { label:'Maintenance',      shortLabel:'Maintenance',  icon:'🔧', cssColor:'#eab308', swipeColor:'#eab308', floorCls:'has-maintenance',     cls:'status-maintenance',     subs:['Hydraulic Leak / Pressure Drop','Heater Band / Thermocouple Failure','Barrel / Screw / Check Ring Issue','Chiller / Thermolator Failure'], statLabel:'Maintenance', order:3 },
+  materials:       { label:'Materials',        shortLabel:'Materials',    icon:'📦', cssColor:'#8b5cf6', swipeColor:'#8b5cf6', floorCls:'has-materials',       cls:'status-materials',       subs:['Resin Moisture / Drying Issue','Colorant / Masterbatch Ratio Error','Vacuum / Material Loader Blockage','Wrong Resin / Regrind Issue'], statLabel:'Materials', order:4 },
+  processengineer: { label:'Process Engineer', shortLabel:'Process Eng.', icon:'⚙️', cssColor:'#a855f7', swipeColor:'#a855f7', floorCls:'has-processengineer', cls:'status-processengineer', subs:['Fill / Pack Pressure Adjustment','Temperature Profile Tuning','Cycle Time Optimization','Process Drift / Instability'], statLabel:'Process Eng.', order:5 },
+  quality:         { label:'Quality',          shortLabel:'Quality',      icon:'✨', cssColor:'#06b6d4', swipeColor:'#06b6d4', floorCls:'has-quality',         cls:'status-quality',         subs:['Short Shot / Non-fill','Flash / Burrs','Sink Marks / Voids','Splay / Silver Streaks','Burn Marks / Degradation','Warp / Dimensional Out-of-Spec'], statLabel:'Quality', order:6 },
+  startup:         { label:'Startup',          shortLabel:'Startup',      icon:'🚀', cssColor:'#14b8a6', swipeColor:'#14b8a6', floorCls:'has-startup',         cls:'status-startup',         subs:['Purging / Color Change','Mold Heat-Up / Stabilization','First Article Inspection (FAI)','Robot Homing / Path Setup'], statLabel:'Startup', order:7 },
+  tooldie:         { label:'Tool & Die',       shortLabel:'Tool & Die',   icon:'🔩', cssColor:'#f97316', swipeColor:'#f97316', floorCls:'has-tooldie',         cls:'status-tooldie',         subs:['Broken / Bent Ejector Pin','Hot Runner / Gate Issue','Water Leak in Mold','Stuck Part / Sprue','Mold Greasing / PM'], statLabel:'Tool & Die', order:8 },
+  resolved:        { label:'Resolved',         shortLabel:'Resolved',     icon:'✓',  cssColor:'#22c55e', swipeColor:'#22c55e', floorCls:'all-resolved',        cls:'status-resolved',        subs:['Process Parameter Adjusted','Mold Cleaned / Repaired','Hardware Replaced','Temporary Workaround'], statLabel:'Resolved', order:9 },
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+const provider = new GoogleAuthProvider();
+provider.setCustomParameters({ prompt: 'select_account' });
+
+let currentUser = null;
+let userPlants = [];
+let adminPlantIds = [];
+let membersByPlant = new Map();
+let statusDraftByPlant = new Map();
+const statusPanelOpen = {};
+const statusRowOpen = {};
+
+function esc(v) {
+  return String(v || '').replace(/[&<>'"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[ch]));
+}
+
+function deepCopy(obj) {
+  return JSON.parse(JSON.stringify(obj));
+}
+
+function feedback(elId, type, message) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  el.className = `feedback ${type}`;
+  el.textContent = message || '';
+}
+
+function defaultPermsForRole(role) {
+  if (role === 'admin') return { ...DEFAULT_PERMISSIONS };
+  if (role === 'editor') return { canViewPlant: true, canCreateIssue: true, canEditIssue: true, canResolveIssue: true, canManageStatuses: false, canManagePresses: false, canExport: true };
+  return { canViewPlant: true, canCreateIssue: false, canEditIssue: false, canResolveIssue: false, canManageStatuses: false, canManagePresses: false, canExport: false };
+}
+
+function normalizeSubsInput(value) {
+  return String(value || '')
+    .split(/\n|,/)
+    .map(v => v.trim())
+    .filter(Boolean);
+}
+
+function slugifyStatusLabel(label) {
+  return String(label || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '') || 'status';
+}
+
+function statusKeyFromLabel(label, statuses) {
+  const base = slugifyStatusLabel(label);
+  let key = base;
+  let n = 2;
+  while (statuses[key]) {
+    key = `${base}${n}`;
+    n += 1;
+  }
+  return key;
+}
+
+function normalizeStatusRecord(key, item, order) {
+  const safeLabel = String(item?.label || key || 'Status').trim() || key;
+  const slug = slugifyStatusLabel(safeLabel);
+  const color = String(item?.cssColor || item?.swipeColor || '#8b949e');
+  return {
+    label: safeLabel,
+    shortLabel: String(item?.shortLabel || safeLabel),
+    icon: String(item?.icon || '●'),
+    cssColor: color,
+    swipeColor: String(item?.swipeColor || color),
+    floorCls: String(item?.floorCls || (key === 'resolved' ? 'all-resolved' : `has-${slug}`)),
+    cls: String(item?.cls || `status-${slug}`),
+    subs: Array.isArray(item?.subs) ? item.subs.map(v => String(v).trim()).filter(Boolean) : [],
+    statLabel: String(item?.statLabel || safeLabel),
+    order: Number.isFinite(Number(item?.order)) ? Number(item.order) : order
+  };
+}
+
+function normalizeStatusesForSave(rawStatuses) {
+  const normalized = {};
+  const entries = Object.entries(rawStatuses || {}).sort((a,b) => (a[1]?.order ?? 999) - (b[1]?.order ?? 999));
+  entries.forEach(([key, item], idx) => {
+    normalized[key] = normalizeStatusRecord(key, item, idx);
+  });
+  if (!normalized.open) normalized.open = normalizeStatusRecord('open', DEFAULT_STATUSES.open, 0);
+  if (!normalized.resolved) normalized.resolved = normalizeStatusRecord('resolved', DEFAULT_STATUSES.resolved, Object.keys(normalized).length);
+  return normalized;
+}
+
+async function signInWithGoogle() {
+  const btn = document.getElementById('google-signin-btn');
+  btn.disabled = true;
+  btn.textContent = 'Signing in…';
+  feedback('login-feedback', '', '');
+  try {
+    await signInWithPopup(auth, provider);
+  } catch (e) {
+    console.error(e);
+    feedback('login-feedback', 'error', e.message || 'Sign-in failed.');
+    btn.disabled = false;
+    btn.textContent = 'Sign in with Google';
+  }
+}
+
+async function doSignOut() {
+  await fbSignOut(auth);
+}
+
+async function loadUserPlants() {
+  const userSnap = await getDoc(doc(db, 'users', currentUser.uid));
+  const userData = userSnap.exists() ? userSnap.data() : {};
+  const plantIds = Array.isArray(userData.plantIds) ? userData.plantIds : [];
+
+  const plantDocs = await Promise.all(plantIds.map(id => getDoc(doc(db, 'plants', id))));
+  userPlants = plantDocs.filter(s => s.exists()).map(s => ({ id: s.id, name: s.data().name || s.id, location: s.data().location || '' }));
+
+  adminPlantIds = [];
+  for (const plant of userPlants) {
+    const meMember = await getDoc(doc(db, 'plants', plant.id, 'members', currentUser.uid));
+    if (meMember.exists() && meMember.data().isActive && meMember.data().role === 'admin') {
+      adminPlantIds.push(plant.id);
+    }
+  }
+}
+
+async function loadMembersAndStatusesForAdminPlants() {
+  membersByPlant.clear();
+  statusDraftByPlant.clear();
+  for (const plantId of adminPlantIds) {
+    const [membersSnap, statusesSnap] = await Promise.all([
+      getDocs(collection(db, 'plants', plantId, 'members')),
+      getDoc(doc(db, 'plants', plantId, 'config', 'statuses'))
+    ]);
+
+    membersByPlant.set(plantId, membersSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+
+    const rawStatuses = statusesSnap.exists() && statusesSnap.data()?.statuses
+      ? statusesSnap.data().statuses
+      : deepCopy(DEFAULT_STATUSES);
+    statusDraftByPlant.set(plantId, normalizeStatusesForSave(rawStatuses));
+  }
+}
+
+function renderStatusEditor(plantId, plantName) {
+  const statuses = statusDraftByPlant.get(plantId) || deepCopy(DEFAULT_STATUSES);
+  const panelOpen = statusPanelOpen[plantId] ?? false;
+  const keys = Object.entries(statuses).sort((a,b) => (a[1].order ?? 999) - (b[1].order ?? 999)).map(([k]) => k);
+
+  const rows = keys.map(key => {
+    const s = statuses[key];
+    const deleteBtn = (key === 'open' || key === 'resolved')
+      ? `<span class="mono">Locked</span>`
+      : `<button class="small-btn danger" onclick="window.deleteStatus('${plantId}','${key}')">Delete</button>`;
+    const rowKey = `${plantId}:${key}`;
+    const rowOpen = statusRowOpen[rowKey] ?? false;
+
+    return `
+      <div class="status-row">
+        <div class="status-row-top">
+          <div class="status-preview" style="color:${esc(s.cssColor || '#8b949e')}; border-color:${esc(s.cssColor || '#8b949e')};">
+            <span>${esc(s.icon || '●')}</span>
+            <span>${esc(s.label || key)}</span>
+          </div>
+          <div class="status-row-actions">
+            <span class="mono">key: ${esc(key)}</span>
+            ${deleteBtn}
+            <button class="compact-btn" onclick="window.toggleStatusRow('${plantId}','${key}')">${rowOpen ? 'Hide' : 'Edit'}</button>
+          </div>
+        </div>
+        <div class="status-row-body ${rowOpen ? 'visible' : ''}">
+          <div class="status-grid">
+            <input value="${esc(s.label)}" placeholder="Label" onchange="window.patchStatus('${plantId}','${key}','label', this.value)">
+            <input value="${esc(s.icon || '●')}" placeholder="Icon" onchange="window.patchStatus('${plantId}','${key}','icon', this.value)">
+            <input value="${esc(s.cssColor || '#8b949e')}" placeholder="#hex color" onchange="window.patchStatus('${plantId}','${key}','cssColor', this.value)">
+            <div></div>
+          </div>
+          <textarea placeholder="Sub-categories (one per line or comma-separated)" onchange="window.patchStatus('${plantId}','${key}','subsRaw', this.value)">${esc((s.subs || []).join('\n'))}</textarea>
+        </div>
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="divider"></div>
+    <div class="status-header-row">
+      <h3 style="font-family:'Rajdhani',sans-serif;letter-spacing:0.6px;">Manage Statuses — ${esc(plantName)}</h3>
+      <div class="status-header-actions">
+        <button class="compact-btn" onclick="window.toggleStatusPanel('${plantId}')">${panelOpen ? 'Minimize' : 'Expand'}</button>
+      </div>
+    </div>
+    <p class="muted" style="margin:8px 0;">Create, edit, delete categories/sub-categories. Import/export JSON for this plant.</p>
+    <div class="status-panel ${panelOpen ? 'visible' : ''}">
+      ${rows}
+
+      <div class="status-row">
+        <div class="mono" style="margin-bottom:6px;">Add new category</div>
+        <div class="status-grid">
+          <input id="new-status-label-${plantId}" placeholder="New category label">
+          <input id="new-status-icon-${plantId}" placeholder="Icon" value="●">
+          <input id="new-status-color-${plantId}" placeholder="#hex color" value="#8b949e">
+          <button class="small-btn" onclick="window.addStatus('${plantId}')">Add</button>
+        </div>
+        <textarea id="new-status-subs-${plantId}" placeholder="Optional sub-categories"></textarea>
+      </div>
+
+      <div class="status-toolbar">
+        <button class="small-btn" onclick="window.exportStatuses('${plantId}')">Export JSON</button>
+        <input type="file" id="import-file-${plantId}" accept="application/json" style="max-width:240px;padding:6px 8px;" />
+        <button class="small-btn" onclick="window.importStatuses('${plantId}')">Import JSON</button>
+        <button class="small-btn" onclick="window.resetStatuses('${plantId}')">Reset Defaults</button>
+        <button class="small-btn" style="border-color:var(--accent);color:var(--accent);" onclick="window.saveStatuses('${plantId}')">Save Statuses</button>
+      </div>
+    </div>
+    <div id="status-fb-${plantId}" class="feedback"></div>
+  `;
+}
+
+function renderPlantsUsers() {
+  const container = document.getElementById('plants-users-container');
+  container.innerHTML = '';
+
+  const sortedPlants = userPlants
+    .filter(p => adminPlantIds.includes(p.id))
+    .sort((a,b) => a.name.localeCompare(b.name));
+
+  for (const plant of sortedPlants) {
+    const members = (membersByPlant.get(plant.id) || []).sort((a,b) => (a.displayName || a.email || '').localeCompare(b.displayName || b.email || ''));
+    const card = document.createElement('div');
+    card.className = 'card';
+
+    const rows = members.map(member => {
+      const canEdit = member.userId !== currentUser.uid;
+      const label = member.displayName || member.email || member.userId || 'Unknown';
+      return `
+        <tr>
+          <td>${esc(label)}<div class="muted" style="font-size:11px;">${esc(member.email || '')}</div></td>
+          <td>
+            ${canEdit
+              ? `<select onchange="window.updateRole('${plant.id}','${member.userId}', this.value)">
+                  <option value="admin" ${member.role==='admin' ? 'selected' : ''}>admin</option>
+                  <option value="editor" ${member.role==='editor' ? 'selected' : ''}>editor</option>
+                  <option value="viewer" ${member.role==='viewer' ? 'selected' : ''}>viewer</option>
+                </select>`
+              : `<span class="pill">${esc(member.role || 'admin')} (you)</span>`
+            }
+          </td>
+          <td>
+            ${canEdit ? `<button class="small-btn danger" onclick="window.removeMember('${plant.id}','${member.userId}','${esc(label)}')">Remove</button>` : ''}
+          </td>
+        </tr>`;
+    }).join('');
+
+    card.innerHTML = `
+      <div class="plant-head">
+        <div>
+          <div class="plant-name">${esc(plant.name)}</div>
+          <div class="muted">${esc(plant.location || 'No location')} · ${esc(plant.id)}</div>
+        </div>
+        <span class="pill">admin</span>
+      </div>
+
+      <table>
+        <thead>
+          <tr><th>User</th><th>Role</th><th>Action</th></tr>
+        </thead>
+        <tbody>${rows || '<tr><td colspan="3" class="muted">No members found.</td></tr>'}</tbody>
+      </table>
+
+      <div style="margin-top:10px; border-top:1px solid var(--border); padding-top:10px;">
+        <div class="muted" style="margin-bottom:6px;">Add user to ${esc(plant.name)}</div>
+        <div class="row">
+          <input id="add-email-${plant.id}" placeholder="user@example.com" />
+          <select id="add-role-${plant.id}" style="max-width:120px;">
+            <option value="editor">editor</option>
+            <option value="viewer">viewer</option>
+            <option value="admin">admin</option>
+          </select>
+          <button class="small-btn" style="max-width:95px;" onclick="window.addMember('${plant.id}')">Add</button>
+        </div>
+        <div id="fb-${plant.id}" class="feedback"></div>
+      </div>
+
+      ${renderStatusEditor(plant.id, plant.name)}
+    `;
+    container.appendChild(card);
+  }
+}
+
+async function createPlant() {
+  const btn = document.getElementById('create-plant-btn');
+  const name = document.getElementById('new-plant-name').value.trim();
+  const location = document.getElementById('new-plant-location').value.trim();
+  if (!name) {
+    feedback('plant-create-feedback', 'error', 'Plant name is required.');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Creating…';
+  feedback('plant-create-feedback', '', '');
+
+  try {
+    const id = name.toLowerCase().replace(/[^a-z0-9]/g, '_') + '_' + Date.now().toString(36);
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'plants', id), { name, location: location || '', createdAt: serverTimestamp(), isActive: true });
+    batch.set(doc(db, 'plants', id, 'members', currentUser.uid), {
+      userId: currentUser.uid,
+      displayName: currentUser.displayName || currentUser.email || '',
+      email: currentUser.email || '',
+      role: 'admin',
+      isActive: true,
+      addedAt: serverTimestamp(),
+      permissions: { ...DEFAULT_PERMISSIONS }
+    });
+    batch.set(doc(db, 'plants', id, 'config', 'presses'), { presses: DEFAULT_PRESSES });
+    batch.set(doc(db, 'plants', id, 'config', 'statuses'), { statuses: deepCopy(DEFAULT_STATUSES) });
+    batch.set(doc(db, 'users', currentUser.uid), { plantIds: arrayUnion(id) }, { merge: true });
+    await batch.commit();
+
+    document.getElementById('new-plant-name').value = '';
+    document.getElementById('new-plant-location').value = '';
+    feedback('plant-create-feedback', 'ok', `Created plant "${name}".`);
+    await refreshAdminData();
+  } catch (e) {
+    console.error(e);
+    feedback('plant-create-feedback', 'error', e.message || 'Failed to create plant.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Create Plant';
+  }
+}
+
+window.addMember = async function(plantId) {
+  const emailEl = document.getElementById(`add-email-${plantId}`);
+  const roleEl = document.getElementById(`add-role-${plantId}`);
+  const emailRaw = emailEl.value.trim();
+  const role = roleEl.value;
+  if (!emailRaw) {
+    feedback(`fb-${plantId}`, 'error', 'Email is required.');
+    return;
+  }
+  const email = emailRaw.toLowerCase();
+
+  try {
+    const lookupSnap = await getDoc(doc(db, 'userLookup', email));
+    if (!lookupSnap.exists()) throw new Error('User not found. They must sign in once first.');
+    const target = lookupSnap.data();
+
+    if (target.uid === currentUser.uid) throw new Error('You are already in this plant.');
+
+    const existing = await getDoc(doc(db, 'plants', plantId, 'members', target.uid));
+    if (existing.exists() && existing.data().isActive) throw new Error('User is already a member of this plant.');
+
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'plants', plantId, 'members', target.uid), {
+      userId: target.uid,
+      displayName: target.displayName || '',
+      email: target.email || email,
+      role,
+      isActive: true,
+      addedAt: serverTimestamp(),
+      addedBy: { uid: currentUser.uid, name: currentUser.displayName || currentUser.email || '' },
+      permissions: defaultPermsForRole(role)
+    });
+    batch.set(doc(db, 'users', target.uid), { plantIds: arrayUnion(plantId) }, { merge: true });
+    await batch.commit();
+
+    emailEl.value = '';
+    feedback(`fb-${plantId}`, 'ok', `Added ${emailRaw} as ${role}.`);
+    await refreshAdminData();
+  } catch (e) {
+    console.error(e);
+    feedback(`fb-${plantId}`, 'error', e.message || 'Failed to add member.');
+  }
+};
+
+window.updateRole = async function(plantId, userId, role) {
+  try {
+    await updateDoc(doc(db, 'plants', plantId, 'members', userId), {
+      role,
+      permissions: defaultPermsForRole(role),
+      updatedAt: serverTimestamp(),
+      updatedBy: { uid: currentUser.uid, name: currentUser.displayName || currentUser.email || '' }
+    });
+    await refreshAdminData();
+  } catch (e) {
+    console.error(e);
+    alert(e.message || 'Failed to update role.');
+  }
+};
+
+window.removeMember = async function(plantId, userId, label) {
+  if (!confirm(`Remove ${label} from this plant?`)) return;
+  try {
+    const batch = writeBatch(db);
+    batch.delete(doc(db, 'plants', plantId, 'members', userId));
+    batch.set(doc(db, 'users', userId), { plantIds: arrayRemove(plantId) }, { merge: true });
+    await batch.commit();
+    await refreshAdminData();
+  } catch (e) {
+    console.error(e);
+    alert(e.message || 'Failed to remove member.');
+  }
+};
+
+window.patchStatus = function(plantId, statusKey, field, value) {
+  const statuses = deepCopy(statusDraftByPlant.get(plantId) || {});
+  const item = statuses[statusKey];
+  if (!item) return;
+  if (field === 'subsRaw') {
+    item.subs = normalizeSubsInput(value);
+  } else if (field === 'cssColor') {
+    item.cssColor = String(value || '').trim() || item.cssColor;
+    item.swipeColor = item.cssColor;
+  } else if (field === 'label') {
+    item.label = String(value || '').trim() || item.label;
+    item.shortLabel = item.label;
+    item.statLabel = item.label;
+  } else if (field === 'icon') {
+    item.icon = String(value || '').trim() || '●';
+  }
+  statuses[statusKey] = item;
+  statusDraftByPlant.set(plantId, statuses);
+  renderPlantsUsers();
+};
+
+window.deleteStatus = function(plantId, statusKey) {
+  if (!confirm(`Delete status category "${statusKey}"?`)) return;
+  const statuses = deepCopy(statusDraftByPlant.get(plantId) || {});
+  if (statusKey === 'open' || statusKey === 'resolved') return;
+  delete statuses[statusKey];
+  statusDraftByPlant.set(plantId, statuses);
+  renderPlantsUsers();
+};
+
+window.addStatus = function(plantId) {
+  const label = (document.getElementById(`new-status-label-${plantId}`)?.value || '').trim();
+  const icon = (document.getElementById(`new-status-icon-${plantId}`)?.value || '●').trim() || '●';
+  const cssColor = (document.getElementById(`new-status-color-${plantId}`)?.value || '#8b949e').trim() || '#8b949e';
+  const subsRaw = document.getElementById(`new-status-subs-${plantId}`)?.value || '';
+  if (!label) {
+    feedback(`status-fb-${plantId}`, 'error', 'Category label is required.');
+    return;
+  }
+
+  const statuses = deepCopy(statusDraftByPlant.get(plantId) || {});
+  const existingSameLabel = Object.values(statuses).some(s => String(s.label || '').toLowerCase() === label.toLowerCase());
+  if (existingSameLabel) {
+    feedback(`status-fb-${plantId}`, 'error', 'A category with that label already exists.');
+    return;
+  }
+
+  const key = statusKeyFromLabel(label, statuses);
+  const maxOrder = Math.max(...Object.values(statuses).map(s => Number(s.order ?? 0)), 0);
+  statuses[key] = normalizeStatusRecord(key, {
+    label,
+    shortLabel: label,
+    statLabel: label,
+    icon,
+    cssColor,
+    swipeColor: cssColor,
+    subs: normalizeSubsInput(subsRaw),
+    order: maxOrder + 1
+  }, maxOrder + 1);
+
+  statusDraftByPlant.set(plantId, statuses);
+  renderPlantsUsers();
+  feedback(`status-fb-${plantId}`, 'ok', `Added ${label}.`);
+};
+
+window.resetStatuses = function(plantId) {
+  if (!confirm('Reset this plant to default status categories?')) return;
+  statusDraftByPlant.set(plantId, deepCopy(DEFAULT_STATUSES));
+  renderPlantsUsers();
+  feedback(`status-fb-${plantId}`, 'ok', 'Draft reset to defaults. Click Save Statuses to apply.');
+};
+
+window.exportStatuses = function(plantId) {
+  const statuses = normalizeStatusesForSave(statusDraftByPlant.get(plantId) || {});
+  const payload = {
+    plantId,
+    exportedAt: new Date().toISOString(),
+    statuses
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `aptracker-statuses-${plantId}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  feedback(`status-fb-${plantId}`, 'ok', 'Exported JSON file.');
+};
+
+window.importStatuses = async function(plantId) {
+  const input = document.getElementById(`import-file-${plantId}`);
+  const file = input?.files?.[0];
+  if (!file) {
+    feedback(`status-fb-${plantId}`, 'error', 'Choose a JSON file first.');
+    return;
+  }
+  try {
+    const text = await file.text();
+    const parsed = JSON.parse(text);
+    const candidate = parsed?.statuses || parsed;
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+      throw new Error('Invalid JSON format. Expected { statuses: { ... } } or a statuses object.');
+    }
+    const normalized = normalizeStatusesForSave(candidate);
+    statusDraftByPlant.set(plantId, normalized);
+    renderPlantsUsers();
+    feedback(`status-fb-${plantId}`, 'ok', 'Imported statuses into draft. Click Save Statuses to apply.');
+  } catch (e) {
+    console.error(e);
+    feedback(`status-fb-${plantId}`, 'error', e.message || 'Import failed.');
+  }
+};
+
+window.saveStatuses = async function(plantId) {
+  const statuses = normalizeStatusesForSave(statusDraftByPlant.get(plantId) || {});
+  try {
+    await setDoc(doc(db, 'plants', plantId, 'config', 'statuses'), { statuses }, { merge: true });
+    statusDraftByPlant.set(plantId, statuses);
+    feedback(`status-fb-${plantId}`, 'ok', 'Saved statuses to Firestore.');
+  } catch (e) {
+    console.error(e);
+    feedback(`status-fb-${plantId}`, 'error', e.message || 'Failed to save statuses.');
+  }
+};
+
+window.toggleStatusPanel = function(plantId) {
+  statusPanelOpen[plantId] = !(statusPanelOpen[plantId] ?? false);
+  renderPlantsUsers();
+};
+
+window.toggleStatusRow = function(plantId, statusKey) {
+  const rowKey = `${plantId}:${statusKey}`;
+  statusRowOpen[rowKey] = !(statusRowOpen[rowKey] ?? false);
+  statusPanelOpen[plantId] = true;
+  renderPlantsUsers();
+};
+
+async function refreshAdminData() {
+  await loadUserPlants();
+  const hasAdminAccess = adminPlantIds.length > 0;
+  document.getElementById('denied-card').style.display = hasAdminAccess ? 'none' : '';
+  document.getElementById('admin-content').style.display = hasAdminAccess ? '' : 'none';
+  if (!hasAdminAccess) return;
+  await loadMembersAndStatusesForAdminPlants();
+  renderPlantsUsers();
+}
+
+onAuthStateChanged(auth, async user => {
+  if (!user) {
+    currentUser = null;
+    document.getElementById('login-screen').classList.add('visible');
+    document.getElementById('app-screen').classList.remove('visible');
+    const btn = document.getElementById('google-signin-btn');
+    btn.disabled = false;
+    btn.textContent = 'Sign in with Google';
+    return;
+  }
+
+  currentUser = user;
+
+  if (user.email) {
+    setDoc(doc(db, 'userLookup', user.email.toLowerCase()), {
+      uid: user.uid,
+      displayName: user.displayName || '',
+      email: user.email,
+      lastSeen: serverTimestamp()
+    }, { merge: true }).catch(() => {});
+  }
+
+  document.getElementById('login-screen').classList.remove('visible');
+  document.getElementById('app-screen').classList.add('visible');
+  document.getElementById('whoami').textContent = `${user.displayName || user.email} (${user.email || user.uid})`;
+
+  await refreshAdminData();
+});
+
+document.getElementById('google-signin-btn').addEventListener('click', signInWithGoogle);
+document.getElementById('signout-btn').addEventListener('click', doSignOut);
+document.getElementById('create-plant-btn').addEventListener('click', createPlant);
+</script>
 </body>
 </html>
