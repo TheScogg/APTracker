@@ -1283,10 +1283,46 @@ function scheduleDateForLookup() {
 
 async function getPressScheduleLookup(machineCode, scheduleDate) {
   const pressId = toSchedulePressId(machineCode);
-  const cacheKey = `${scheduleDate}::${pressId}`;
+  const cacheKey = `${currentPlantId || 'no-plant'}::${scheduleDate}::${pressId}`;
   if (scheduleLookupCache.has(cacheKey)) return scheduleLookupCache.get(cacheKey);
-  const snap = await getDoc(doc(db, 'dailySchedules', scheduleDate, 'pressLookup', pressId));
-  const data = snap.exists() ? snap.data() : null;
+  if (!currentPlantId || !scheduleDate) {
+    scheduleLookupCache.set(cacheKey, null);
+    return null;
+  }
+
+  const machine = String(machineCode || '').trim();
+  const dailyRef = doc(db, 'plants', currentPlantId, 'dailySchedules', scheduleDate);
+  const dailySnap = await getDoc(dailyRef);
+  if (!dailySnap.exists()) {
+    scheduleLookupCache.set(cacheKey, null);
+    return null;
+  }
+
+  const sectionRows = async (section) => {
+    const sectionRef = collection(db, 'plants', currentPlantId, 'dailySchedules', scheduleDate, section);
+    const q = query(sectionRef, where('press', '==', machine));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({ id: d.id, ...d.data(), section }));
+  };
+
+  const [page1Rows, page2Rows, northChanges, southChanges] = await Promise.all([
+    sectionRows('page1'),
+    sectionRows('page2'),
+    sectionRows('northBayChanges'),
+    sectionRows('southBayChanges')
+  ]);
+
+  const sortByOrder = (a, b) => Number(a.displayOrder || 0) - Number(b.displayOrder || 0);
+  const mainCandidates = [...page1Rows, ...page2Rows].sort(sortByOrder);
+  const changeRows = [...northChanges, ...southChanges]
+    .sort(sortByOrder)
+    .map(row => ({ ...row, section: row.section === 'northBayChanges' ? 'North Bay Change' : 'South Bay Change' }));
+
+  const data = {
+    mainRow: mainCandidates[0] || null,
+    hasChanges: changeRows.length > 0,
+    changes: changeRows
+  };
   scheduleLookupCache.set(cacheKey, data);
   return data;
 }
