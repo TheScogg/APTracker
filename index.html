@@ -5242,7 +5242,7 @@ function renderAdminList() {
       // Declare editPreviewPill and updateEditPreview early so they can be referenced by name input
       const editPreviewPill = document.createElement('span'); editPreviewPill.className = 'admin-edit-preview-pill';
       const updateEditPreview = () => {
-        const col = adminDraft[key].color || st.color;
+        const col = st.color || st.swipeColor || st.cssColor;
         editPreviewPill.textContent = (adminDraft[key].icon||st.icon)+' '+(adminDraft[key].label||st.label);
         editPreviewPill.style.color=col; editPreviewPill.style.borderColor=alphaColor(col,0.53); editPreviewPill.style.background=alphaColor(col,0.09);
         iconEl.textContent = adminDraft[key].icon || st.icon;
@@ -5364,7 +5364,7 @@ function renderAdminList() {
       editPanel.appendChild(editPreviewLabel);
       editPanel.appendChild(editPreviewPill);
       buildAdminIconPicker(editIconPicker, ()=>adminDraft[key].icon||st.icon, ic => { adminDraft[key].icon=ic; updateEditPreview(); });
-      buildAdminColorPicker(editColorPicker, ()=>adminDraft[key].color||st.color, c => { adminDraft[key].color=c.hex; adminDraft[key].swipeColor=c.hex; adminDraft[key].cssColor=c.hex; updateEditPreview(); });
+      buildAdminColorPicker(editColorPicker, ()=>adminDraft[key].color||st.swipeColor||st.cssColor, c => { adminDraft[key].color=c.hex; adminDraft[key].swipeColor=c.hex; adminDraft[key].cssColor=c.hex; updateEditPreview(); });
       updateEditPreview();
       const doneBtn = document.createElement('button'); doneBtn.className = 'admin-edit-done'; doneBtn.textContent = '✓ Done';
       addTapListener(doneBtn, () => { editPanel.classList.remove('visible'); editBtnEl.textContent='✏️ Edit Icon & Color'; });

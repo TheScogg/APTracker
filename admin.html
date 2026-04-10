@@ -321,7 +321,7 @@ function renderStatusEditor(plantId, plantName) {
     return `
       <div class="status-row">
         <div class="status-row-top">
-          <div class="status-preview" style="color:${esc(s.cssColor || '#8b949e')}; border-color:${esc(s.cssColor || '#8b949e')};">
+          <div class="status-preview" style="color:${esc(s.swipeColor || s.cssColor || '#8b949e')}; border-color:${esc(s.swipeColor || s.cssColor || '#8b949e')};">
             <span>${esc(s.icon || '●')}</span>
             <span>${esc(s.label || key)}</span>
           </div>
