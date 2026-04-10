@@ -462,73 +462,6 @@
   .swipe-sub-chip.skip { background: transparent; border: 1px dashed #3a4150; color: #6e7685; font-weight: 500; }
   .swipe-sub-chip.skip:hover { color: #e6edf3; background: rgba(255,255,255,0.05); }
 
-  /* Admin panel */
-  .admin-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:900; }
-  .admin-overlay.visible { display:flex; align-items:flex-start; justify-content:center; padding:20px 14px 40px; overflow-y:auto; }
-  .admin-panel { background:var(--bg2); border:1px solid var(--border); border-radius:14px; width:100%; max-width:480px; padding:20px; }
-  .admin-title { font-family:'Rajdhani',sans-serif; font-size:18px; font-weight:700; letter-spacing:1px; color:var(--accent); margin-bottom:16px; display:flex; align-items:center; justify-content:space-between; }
-  .admin-close { background:none; border:none; color:var(--text3); font-size:20px; cursor:pointer; padding:0; }
-  .admin-status-row { background:var(--bg3); border:1px solid var(--border); border-radius:10px; padding:12px 14px; margin-bottom:8px; }
-  .admin-status-top { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
-  .admin-status-icon { font-size:16px; flex-shrink:0; }
-  .admin-status-name { font-size:14px; font-weight:700; color:var(--text); flex:1; }
-  .admin-label-input { background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:4px 9px; color:var(--text); font-size:13px; font-family:'Nunito',sans-serif; width:100%; margin-bottom:8px; outline:none; }
-  .admin-label-input:focus { border-color:var(--accent); }
-  .admin-subs-label { font-size:10px; font-family:'Share Tech Mono',monospace; letter-spacing:1px; color:var(--text3); margin-bottom:6px; text-transform:uppercase; }
-  .admin-subs-list { display:flex; flex-wrap:wrap; gap:5px; margin-bottom:8px; }
-  .admin-sub-chip { font-size:11px; font-weight:700; padding:3px 10px; border-radius:20px; border:1px solid var(--border); background:var(--bg); color:var(--text2); display:flex; align-items:center; gap:5px; }
-  .admin-sub-remove { background:none; border:none; color:var(--text3); cursor:pointer; font-size:13px; padding:0; line-height:1; }
-  .admin-sub-remove:hover { color:var(--red); }
-  .admin-add-sub { display:flex; gap:6px; }
-  .admin-add-input { background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:4px 9px; color:var(--text); font-size:12px; font-family:'Nunito',sans-serif; flex:1; outline:none; }
-  .admin-add-input:focus { border-color:var(--accent); }
-  .admin-add-btn { font-size:12px; padding:4px 12px; border-radius:6px; border:1px solid var(--accent); background:transparent; color:var(--accent); cursor:pointer; font-family:'Nunito',sans-serif; font-weight:700; }
-  .admin-save-btn { width:100%; margin-top:16px; padding:11px; border-radius:10px; background:var(--accent); border:none; color:white; font-size:14px; font-weight:700; font-family:'Nunito',sans-serif; cursor:pointer; }
-  .admin-save-btn:active { opacity:0.85; }
-  .admin-saving { opacity:0.6; pointer-events:none; }
-  .admin-row-actions { display:flex; gap:6px; margin-top:10px; padding-top:10px; border-top:1px solid var(--border); }
-  .admin-edit-btn { flex:1; font-size:12px; padding:5px; border-radius:7px; border:1px solid var(--border); background:transparent; color:var(--text2); cursor:pointer; font-family:'Nunito',sans-serif; font-weight:700; }
-  .admin-edit-btn:active { border-color:var(--accent); color:var(--accent); }
-  .admin-delete-btn { font-size:12px; padding:5px 12px; border-radius:7px; border:1px solid rgba(239,68,68,0.3); background:transparent; color:var(--red); cursor:pointer; font-family:'Nunito',sans-serif; font-weight:700; }
-  .admin-delete-btn:active { background:var(--red-dim); }
-  .admin-order-btn { font-size:14px; padding:4px 9px; border-radius:7px; border:1px solid var(--border); background:transparent; color:var(--text3); cursor:pointer; transition:all 0.12s; }
-  .admin-order-btn:active { border-color:var(--accent); color:var(--accent); }
-  .admin-order-btn:disabled { opacity:0.2; pointer-events:none; }
-  .admin-edit-panel { display:none; margin-top:10px; padding:10px; background:var(--bg); border-radius:8px; border:1px solid var(--border); flex-direction:column; gap:10px; }
-  .admin-edit-panel.visible { display:flex; }
-  .admin-edit-section-label { font-size:10px; font-family:'Share Tech Mono',monospace; letter-spacing:1px; color:var(--text3); text-transform:uppercase; margin-bottom:6px; }
-  .admin-edit-preview-pill { font-size:10px; font-weight:700; padding:3px 10px; border-radius:20px; border:1px solid; text-transform:uppercase; letter-spacing:0.5px; display:inline-block; margin-top:4px; }
-  .admin-edit-done { width:100%; padding:7px; border-radius:7px; background:var(--accent); border:none; color:white; font-size:12px; font-weight:700; font-family:'Nunito',sans-serif; cursor:pointer; margin-top:4px; }
-  .admin-confirm-delete { display:none; margin-top:8px; padding:10px 12px; background:var(--red-dim); border:1px solid rgba(239,68,68,0.3); border-radius:8px; flex-direction:column; gap:8px; }
-  .admin-confirm-delete.visible { display:flex; }
-  .admin-confirm-delete-text { font-size:12px; color:var(--red); font-family:'Nunito',sans-serif; }
-  .admin-confirm-delete-actions { display:flex; gap:6px; }
-  .admin-confirm-delete-yes { flex:1; padding:6px; border-radius:7px; background:var(--red); border:none; color:white; font-size:12px; font-weight:700; font-family:'Nunito',sans-serif; cursor:pointer; }
-  .admin-confirm-delete-no { flex:1; padding:6px; border-radius:7px; background:transparent; border:1px solid var(--border); color:var(--text2); font-size:12px; font-family:'Nunito',sans-serif; cursor:pointer; }
-  .add-cat-trigger { width:100%; margin-top:4px; padding:10px; border-radius:10px; border:1px dashed var(--border); background:transparent; color:var(--text3); font-size:13px; font-family:'Nunito',sans-serif; font-weight:700; cursor:pointer; transition:all 0.15s; display:flex; align-items:center; justify-content:center; gap:6px; }
-  .add-cat-trigger:active { border-color:var(--accent); color:var(--accent); }
-  .add-cat-form { background:var(--bg3); border:1px solid var(--accent); border-radius:10px; padding:14px; margin-top:8px; display:none; flex-direction:column; gap:12px; }
-  .add-cat-form.visible { display:flex; }
-  .add-cat-field-label { font-size:10px; font-family:'Share Tech Mono',monospace; letter-spacing:1px; color:var(--text3); text-transform:uppercase; margin-bottom:6px; }
-  .add-cat-name-input { background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:8px 12px; color:var(--text); font-size:14px; font-family:'Nunito',sans-serif; width:100%; outline:none; }
-  .add-cat-name-input:focus { border-color:var(--accent); }
-  .add-cat-preview { display:flex; align-items:center; gap:8px; padding:8px 12px; background:var(--bg); border-radius:8px; border:1px solid var(--border); }
-  .preview-label { font-size:10px; color:var(--text3); font-family:'Share Tech Mono',monospace; margin-right:4px; }
-  .preview-pill { font-size:10px; font-weight:700; padding:3px 10px; border-radius:20px; border:1px solid; text-transform:uppercase; letter-spacing:0.5px; }
-  .add-cat-actions { display:flex; gap:8px; }
-  .add-cat-confirm { flex:1; padding:9px; border-radius:8px; background:var(--accent); border:none; color:white; font-size:13px; font-weight:700; font-family:'Nunito',sans-serif; cursor:pointer; }
-  .add-cat-confirm:active { opacity:0.85; }
-  .add-cat-cancel { padding:9px 16px; border-radius:8px; background:transparent; border:1px solid var(--border); color:var(--text3); font-size:13px; font-family:'Nunito',sans-serif; cursor:pointer; }
-  .icon-picker { display:flex; flex-wrap:wrap; gap:8px; }
-  .icon-opt { font-size:22px; width:42px; height:42px; display:flex; align-items:center; justify-content:center; border-radius:10px; border:2px solid transparent; background:var(--bg); cursor:pointer; transition:all 0.12s; }
-  .icon-opt:active { transform:scale(0.9); }
-  .icon-opt.selected { border-color:var(--accent); background:var(--accent-glow); }
-  .color-picker { display:flex; flex-wrap:wrap; gap:8px; }
-  .color-opt { width:34px; height:34px; border-radius:50%; border:3px solid transparent; cursor:pointer; transition:all 0.12s; display:flex; align-items:center; justify-content:center; }
-  .color-opt:active { transform:scale(0.9); }
-  .color-opt.selected { border-color:white; box-shadow:0 0 0 2px var(--accent); }
-  .color-opt .check { font-size:14px; color:white; display:none; font-weight:900; }
-  .color-opt.selected .check { display:block; }
   @keyframes slideIn { from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)} }
   .issue-card:hover { border-color: rgba(75,85,99,0.6); }
   .issue-card.resolved { opacity: 0.65; border-color: rgba(34,197,94,0.3); }
@@ -744,59 +677,6 @@
   #app { display: none; }
   #app.visible { display: block; }
 
-  /* MEMBERS OVERLAY */
-  .members-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:900; }
-  .members-overlay.visible { display:flex; align-items:flex-start; justify-content:center; padding:20px 14px 40px; overflow-y:auto; }
-  .members-panel { background:var(--bg2); border:1px solid var(--border); border-radius:14px; width:100%; max-width:520px; padding:20px; }
-  .members-title { font-family:'Rajdhani',sans-serif; font-size:18px; font-weight:700; letter-spacing:1px; color:var(--accent); margin-bottom:4px; display:flex; align-items:center; justify-content:space-between; }
-  .members-subtitle { font-size:12px; color:var(--text3); font-family:'Share Tech Mono',monospace; margin-bottom:16px; }
-  .members-close { background:none; border:none; color:var(--text3); font-size:20px; cursor:pointer; padding:0; }
-  .members-close:hover { color:var(--text2); }
-  .member-row { display:flex; align-items:center; gap:10px; background:var(--bg3); border:1px solid var(--border); border-radius:10px; padding:10px 12px; margin-bottom:8px; }
-  .member-avatar { width:32px; height:32px; border-radius:50%; background:var(--accent); display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; color:white; flex-shrink:0; text-transform:uppercase; }
-  .member-info { flex:1; min-width:0; }
-  .member-name { font-size:13px; font-weight:700; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .member-email { font-size:11px; color:var(--text3); font-family:'Share Tech Mono',monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .member-you-badge { font-size:9px; font-weight:700; background:var(--accent-glow); color:var(--accent); border:1px solid var(--accent); border-radius:8px; padding:1px 6px; margin-left:5px; vertical-align:middle; flex-shrink:0; }
-  .member-role-select { background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:4px 8px; color:var(--text); font-family:'Nunito',sans-serif; font-size:12px; font-weight:700; outline:none; cursor:pointer; flex-shrink:0; }
-  .member-role-select:focus { border-color:var(--accent); }
-  .member-role-badge { font-size:10px; font-weight:700; padding:2px 8px; border-radius:8px; border:1px solid; white-space:nowrap; flex-shrink:0; }
-  .member-role-badge.admin   { color:var(--accent);  border-color:rgba(249,115,22,0.4);  background:var(--orange-dim); }
-  .member-role-badge.editor  { color:var(--blue);    border-color:rgba(59,130,246,0.4);   background:var(--blue-dim); }
-  .member-role-badge.viewer  { color:var(--text2);   border-color:var(--border);           background:var(--bg); }
-  .member-remove-btn { background:none; border:1px solid rgba(239,68,68,0.3); border-radius:6px; color:var(--red); font-size:11px; padding:3px 8px; cursor:pointer; font-family:'Nunito',sans-serif; font-weight:700; flex-shrink:0; transition:background 0.12s; }
-  .member-remove-btn:hover { background:var(--red-dim); }
-  .members-divider { height:1px; background:var(--border); margin:16px 0; }
-  .members-add-section { display:flex; flex-direction:column; gap:10px; }
-  .members-add-title { font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--text3); font-family:'Share Tech Mono',monospace; }
-  .members-add-row { display:flex; gap:8px; flex-wrap:wrap; }
-  .members-email-input { flex:1; min-width:180px; background:var(--bg3); border:1px solid var(--border); border-radius:8px; padding:8px 12px; color:var(--text); font-family:'Nunito',sans-serif; font-size:13px; outline:none; transition:border-color 0.2s; }
-  .members-email-input:focus { border-color:var(--accent); }
-  .members-role-pick { background:var(--bg3); border:1px solid var(--border); border-radius:8px; padding:8px 10px; color:var(--text); font-family:'Nunito',sans-serif; font-size:13px; font-weight:700; outline:none; cursor:pointer; }
-  .members-role-pick:focus { border-color:var(--accent); }
-  .members-add-btn { background:var(--accent); border:none; border-radius:8px; color:white; font-size:13px; font-weight:700; padding:8px 18px; cursor:pointer; font-family:'Nunito',sans-serif; white-space:nowrap; transition:opacity 0.15s; }
-  .members-add-btn:hover { opacity:0.88; }
-  .members-add-btn:disabled { opacity:0.5; cursor:not-allowed; }
-  .members-feedback { font-size:12px; padding:8px 12px; border-radius:8px; font-family:'Nunito',sans-serif; display:none; }
-  .members-feedback.error { display:block; color:var(--red); background:var(--red-dim); border:1px solid rgba(239,68,68,0.3); }
-  .members-feedback.success { display:block; color:var(--green); background:var(--green-dim); border:1px solid rgba(34,197,94,0.3); }
-  .members-perms-section { margin-top:12px; }
-  .members-perms-title { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--text3); font-family:'Share Tech Mono',monospace; margin-bottom:8px; }
-  .perm-row { display:flex; align-items:center; justify-content:space-between; padding:7px 0; border-bottom:1px solid var(--border); gap:8px; }
-  .perm-row:last-child { border-bottom:none; }
-  .perm-label { font-size:13px; color:var(--text2); font-family:'Nunito',sans-serif; }
-  .perm-toggle { position:relative; width:36px; height:20px; flex-shrink:0; }
-  .perm-toggle input { opacity:0; width:0; height:0; position:absolute; }
-  .perm-slider { position:absolute; inset:0; background:var(--bg3); border:1px solid var(--border); border-radius:20px; cursor:pointer; transition:background 0.2s; }
-  .perm-slider:before { content:''; position:absolute; width:14px; height:14px; left:2px; top:2px; background:var(--text3); border-radius:50%; transition:transform 0.2s, background 0.2s; }
-  .perm-toggle input:checked + .perm-slider { background:var(--accent); border-color:var(--accent); }
-  .perm-toggle input:checked + .perm-slider:before { transform:translateX(16px); background:white; }
-  .members-edit-perms-btn { font-size:11px; color:var(--text3); background:none; border:none; cursor:pointer; font-family:'Share Tech Mono',monospace; padding:0; margin-top:2px; display:block; transition:color 0.15s; }
-  .members-edit-perms-btn:hover { color:var(--text2); }
-  .members-perms-panel { display:none; margin-top:8px; padding:10px 12px; background:var(--bg); border:1px solid var(--border); border-radius:8px; }
-  .members-perms-panel.visible { display:block; }
-  .members-save-perms-btn { margin-top:10px; width:100%; padding:8px; border-radius:8px; background:var(--accent); border:none; color:white; font-size:13px; font-weight:700; font-family:'Nunito',sans-serif; cursor:pointer; }
-  .members-empty { text-align:center; padding:24px 0; color:var(--text3); font-size:13px; }
 </style>
 </head>
 <body>
@@ -844,7 +724,6 @@
           <div class="user-dropdown-name" id="dropdown-full-name">—</div>
           <div class="user-dropdown-email" id="dropdown-email">—</div>
         </div>
-        <button class="user-dropdown-item" id="members-btn" style="display:none">👥 Manage Members</button>
         <button class="user-dropdown-item" id="admin-page-btn" style="display:none">🛠 Admin Portal</button>
         <button class="user-dropdown-item" id="theme-toggle-btn">🌙 Dark Mode</button>
         <button class="user-dropdown-item danger" id="signout-btn">⏻ Sign Out</button>
@@ -1199,48 +1078,6 @@
 
 </div>
 
-<div class="members-overlay" id="members-overlay">
-  <div class="members-panel" id="members-panel-inner">
-    <div class="members-title">
-      Manage Members
-      <button class="members-close" id="members-close-btn">✕</button>
-    </div>
-    <div class="members-subtitle" id="members-panel-subtitle">Plant members</div>
-    <div id="members-list"></div>
-    <div class="members-divider"></div>
-    <div class="members-add-section">
-      <div class="members-add-title">Add member by email</div>
-      <div class="members-add-row">
-        <input type="email" class="members-email-input" id="members-email-input" placeholder="user@example.com">
-        <select class="members-role-pick" id="members-role-pick">
-          <option value="editor">Editor</option>
-          <option value="viewer">Viewer</option>
-          <option value="admin">Admin</option>
-        </select>
-        <button class="members-add-btn" id="members-add-btn" onclick="addMemberFromPanel()">Add</button>
-      </div>
-      <div class="members-feedback" id="members-feedback"></div>
-      <div style="font-size:11px;color:var(--text3);margin-top:2px;">
-        The user must have signed in to AP Tracker at least once before being added.
-      </div>
-    </div>
-  </div>
-</div>
-
-<div class="admin-overlay" id="admin-overlay">
-  <div class="admin-panel" id="admin-panel-inner">
-    <div class="admin-title">
-      Manage Statuses
-      <button class="admin-close" id="admin-close-btn">✕</button>
-    </div>
-    <div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:12px;font-size:12px;color:var(--text2);display:flex;align-items:center;justify-content:space-between;">
-      <span>Reset to comprehensive manufacturing categories</span>
-      <button onclick="resetToDefaults()" style="background:var(--accent);color:white;border:none;border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Nunito',sans-serif;">🔄 Reset to Defaults</button>
-    </div>
-    <div id="admin-status-list"></div>
-    <button class="admin-save-btn" id="admin-save-btn">💾 Save &amp; Apply</button>
-  </div>
-</div>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getFirestore, collection, updateDoc, deleteDoc, doc, getDoc, getDocs, setDoc, addDoc, onSnapshot, serverTimestamp, query, orderBy, where, writeBatch, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -1673,272 +1510,11 @@ async function loadCurrentMember(plantId) {
 function applyRoleUI() {
   const isAdmin = currentUserRole === 'admin';
 
-  const membersBtn = document.getElementById('members-btn');
-  if (membersBtn) membersBtn.style.display = isAdmin ? '' : 'none';
-
   const adminPageBtn = document.getElementById('admin-page-btn');
   if (adminPageBtn) adminPageBtn.style.display = isAdmin ? '' : 'none';
 
   const exportBtn = document.getElementById('export-pdf-btn');
   if (exportBtn) exportBtn.style.display = currentUserPermissions.canExport ? '' : 'none';
-}
-
-// ── MEMBER MANAGEMENT ──
-
-// Default permission set for each role
-function defaultPermsForRole(role) {
-  if (role === 'admin') return { ...DEFAULT_PERMISSIONS };
-  if (role === 'editor') return { canViewPlant: true, canCreateIssue: true, canEditIssue: true, canResolveIssue: true, canManageStatuses: false, canManagePresses: false, canExport: true };
-  // viewer
-  return { canViewPlant: true, canCreateIssue: false, canEditIssue: false, canResolveIssue: false, canManageStatuses: false, canManagePresses: false, canExport: false };
-}
-
-// Fetch all member docs for the current plant
-async function loadPlantMembers(plantId) {
-  const snap = await getDocs(collection(db, 'plants', plantId, 'members'));
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
-}
-
-// Add a member by email: look up userLookup, write member doc, add plantId to their user doc
-async function addMemberToPlant(email, role) {
-  const lookupSnap = await getDoc(doc(db, 'userLookup', email.toLowerCase()));
-  if (!lookupSnap.exists()) {
-    throw new Error('No user found with that email. They must sign in to AP Tracker first.');
-  }
-  const userData = lookupSnap.data();
-  const targetUid = userData.uid;
-
-  // Prevent adding yourself (already a member)
-  if (targetUid === currentUser.uid) {
-    throw new Error('You are already a member of this plant.');
-  }
-
-  // Check if already a member
-  const existingSnap = await getDoc(plantMemberDocRef(currentPlantId, targetUid));
-  if (existingSnap.exists() && existingSnap.data().isActive) {
-    throw new Error('This user is already a member of this plant.');
-  }
-
-  const perms = defaultPermsForRole(role);
-  const batch = writeBatch(db);
-
-  // Write/overwrite member doc
-  batch.set(plantMemberDocRef(currentPlantId, targetUid), {
-    userId: targetUid,
-    displayName: userData.displayName || '',
-    email: userData.email || email,
-    role,
-    isActive: true,
-    addedAt: serverTimestamp(),
-    addedBy: { uid: currentUser.uid, name: currentUser.displayName || currentUser.email || '' },
-    permissions: perms
-  });
-
-  // Add plantId to the target user's plantIds array
-  batch.set(doc(db, 'users', targetUid), { plantIds: arrayUnion(currentPlantId) }, { merge: true });
-
-  await batch.commit();
-}
-
-// Update a member's role (and reset permissions to role defaults)
-async function updateMemberRole(plantId, userId, newRole, customPerms) {
-  const perms = customPerms || defaultPermsForRole(newRole);
-  await updateDoc(plantMemberDocRef(plantId, userId), {
-    role: newRole,
-    permissions: perms,
-    updatedAt: serverTimestamp(),
-    updatedBy: { uid: currentUser.uid, name: currentUser.displayName || currentUser.email || '' }
-  });
-}
-
-// Remove a member from the current plant
-async function removeMemberFromPlant(plantId, userId) {
-  const batch = writeBatch(db);
-  // Delete the member doc
-  batch.delete(plantMemberDocRef(plantId, userId));
-  // Remove plantId from target user's plantIds array
-  batch.set(doc(db, 'users', userId), { plantIds: arrayRemove(plantId) }, { merge: true });
-  await batch.commit();
-}
-
-// ── MEMBERS PANEL UI ──
-
-let _membersData = []; // cached members list for current panel session
-
-async function openMembersPanel() {
-  document.getElementById('user-dropdown')?.classList.remove('visible');
-  document.getElementById('user-pill')?.classList.remove('open');
-  const overlay = document.getElementById('members-overlay');
-  overlay.classList.add('visible');
-  document.getElementById('members-panel-subtitle').textContent = currentPlantName;
-  document.getElementById('members-email-input').value = '';
-  document.getElementById('members-role-pick').value = 'editor';
-  hideMembersFeedback();
-  await refreshMembersList();
-}
-
-function closeMembersPanel() {
-  document.getElementById('members-overlay').classList.remove('visible');
-  _membersData = [];
-}
-
-async function refreshMembersList() {
-  const listEl = document.getElementById('members-list');
-  listEl.innerHTML = '<div class="members-empty" style="color:var(--text3);font-size:12px;">Loading…</div>';
-  try {
-    _membersData = await loadPlantMembers(currentPlantId);
-    renderMemberList(_membersData);
-  } catch(e) {
-    listEl.innerHTML = '<div class="members-empty" style="color:var(--red)">Failed to load members.</div>';
-  }
-}
-
-function renderMemberList(members) {
-  const listEl = document.getElementById('members-list');
-  listEl.innerHTML = '';
-  if (!members || members.length === 0) {
-    listEl.innerHTML = '<div class="members-empty">No members yet.</div>';
-    return;
-  }
-  // Sort: current user first, then by role priority, then alpha
-  const roleOrder = { admin: 0, editor: 1, viewer: 2 };
-  const sorted = [...members].sort((a, b) => {
-    if (a.userId === currentUser?.uid) return -1;
-    if (b.userId === currentUser?.uid) return 1;
-    return (roleOrder[a.role] ?? 3) - (roleOrder[b.role] ?? 3) || (a.displayName || '').localeCompare(b.displayName || '');
-  });
-
-  sorted.forEach(member => {
-    const isMe = member.userId === currentUser?.uid;
-    const initial = (member.displayName || member.email || '?').charAt(0).toUpperCase();
-    const perms = member.permissions || defaultPermsForRole(member.role);
-
-    const row = document.createElement('div');
-    row.className = 'member-row';
-
-    const permLabels = [
-      { key: 'canViewPlant',     label: 'View plant' },
-      { key: 'canCreateIssue',   label: 'Log issues' },
-      { key: 'canEditIssue',     label: 'Edit issues' },
-      { key: 'canResolveIssue',  label: 'Resolve issues' },
-      { key: 'canManageStatuses',label: 'Manage statuses' },
-      { key: 'canManagePresses', label: 'Manage presses' },
-      { key: 'canExport',        label: 'Export PDF' },
-    ];
-
-    const permsHtml = permLabels.map(p => `
-      <div class="perm-row">
-        <span class="perm-label">${p.label}</span>
-        <label class="perm-toggle">
-          <input type="checkbox" data-perm="${p.key}" ${perms[p.key] ? 'checked' : ''} ${isMe ? 'disabled' : ''}>
-          <span class="perm-slider"></span>
-        </label>
-      </div>`).join('');
-
-    row.innerHTML = `
-      <div class="member-avatar">${initial}</div>
-      <div class="member-info">
-        <div class="member-name">${esc(member.displayName || member.email || member.userId)}${isMe ? '<span class="member-you-badge">you</span>' : ''}</div>
-        <div class="member-email">${esc(member.email || '')}</div>
-        ${!isMe ? `<button class="members-edit-perms-btn" onclick="toggleMemberPerms(this)">▶ Edit permissions</button>
-        <div class="members-perms-panel">
-          <div class="members-perms-title">Permissions</div>
-          ${permsHtml}
-          <button class="members-save-perms-btn" onclick="saveMemberPerms(this, '${member.userId}')">Save Permissions</button>
-        </div>` : ''}
-      </div>
-      ${isMe
-        ? `<span class="member-role-badge ${member.role}">${member.role}</span>`
-        : `<select class="member-role-select" data-uid="${member.userId}" onchange="onRoleChange(this, '${member.userId}')">
-            <option value="admin"  ${member.role==='admin'  ?'selected':''}>Admin</option>
-            <option value="editor" ${member.role==='editor' ?'selected':''}>Editor</option>
-            <option value="viewer" ${member.role==='viewer' ?'selected':''}>Viewer</option>
-          </select>
-          <button class="member-remove-btn" onclick="confirmRemoveMember('${member.userId}', '${esc(member.displayName || member.email || member.userId)}')">Remove</button>`
-      }`;
-    listEl.appendChild(row);
-  });
-}
-
-// When role dropdown changes — update role and reset permissions to defaults for that role
-async function onRoleChange(selectEl, userId) {
-  const newRole = selectEl.value;
-  try {
-    await updateMemberRole(currentPlantId, userId, newRole);
-    // Refresh so permission toggles reflect new defaults
-    await refreshMembersList();
-  } catch(e) {
-    showMembersFeedback('error', 'Failed to update role: ' + e.message);
-    await refreshMembersList(); // revert UI
-  }
-}
-
-function toggleMemberPerms(btn) {
-  const panel = btn.nextElementSibling;
-  const isVisible = panel.classList.contains('visible');
-  panel.classList.toggle('visible', !isVisible);
-  btn.textContent = isVisible ? '▶ Edit permissions' : '▼ Edit permissions';
-}
-
-async function saveMemberPerms(btn, userId) {
-  const panel = btn.closest('.members-perms-panel');
-  const customPerms = {};
-  panel.querySelectorAll('[data-perm]').forEach(cb => {
-    customPerms[cb.dataset.perm] = cb.checked;
-  });
-  // Determine role from the select in the same row
-  const row = panel.closest('.member-row');
-  const roleSelect = row.querySelector('.member-role-select');
-  const role = roleSelect ? roleSelect.value : (_membersData.find(m => m.userId === userId)?.role || 'editor');
-  try {
-    await updateMemberRole(currentPlantId, userId, role, customPerms);
-    showMembersFeedback('success', 'Permissions saved.');
-    await refreshMembersList();
-  } catch(e) {
-    showMembersFeedback('error', 'Failed to save permissions: ' + e.message);
-  }
-}
-
-async function confirmRemoveMember(userId, displayName) {
-  if (!confirm(`Remove ${displayName} from ${currentPlantName}? They will lose access immediately.`)) return;
-  try {
-    await removeMemberFromPlant(currentPlantId, userId);
-    showMembersFeedback('success', `${displayName} removed from plant.`);
-    await refreshMembersList();
-  } catch(e) {
-    showMembersFeedback('error', 'Failed to remove member: ' + e.message);
-  }
-}
-
-window.addMemberFromPanel = async function() {
-  const emailRaw = document.getElementById('members-email-input').value.trim();
-  const role = document.getElementById('members-role-pick').value;
-  const btn = document.getElementById('members-add-btn');
-  if (!emailRaw) { showMembersFeedback('error', 'Please enter an email address.'); return; }
-  const email = emailRaw.toLowerCase();
-  btn.disabled = true; btn.textContent = 'Adding…';
-  hideMembersFeedback();
-  try {
-    await addMemberToPlant(email, role);
-    document.getElementById('members-email-input').value = '';
-    showMembersFeedback('success', `${emailRaw} added as ${role}.`);
-    await refreshMembersList();
-  } catch(e) {
-    showMembersFeedback('error', e.message);
-  } finally {
-    btn.disabled = false; btn.textContent = 'Add';
-  }
-};
-
-function showMembersFeedback(type, msg) {
-  const el = document.getElementById('members-feedback');
-  el.className = 'members-feedback ' + type;
-  el.textContent = msg;
-}
-function hideMembersFeedback() {
-  const el = document.getElementById('members-feedback');
-  el.className = 'members-feedback';
-  el.textContent = '';
 }
 
 // Load press layout for current plant
@@ -2115,7 +1691,6 @@ async function loadConfig() {
       // Trigger a UI refresh for the pills
       buildStatusFilterPills();
       renderIssues();
-      if (typeof renderAdminPanel === 'function') renderAdminPanel();
     } else {
       // No config exists - save the default comprehensive categories
       console.log('💾 Saving initial comprehensive ticket categories...');
@@ -4772,7 +4347,7 @@ document.querySelectorAll('.modal').forEach(modal => {
   modal.addEventListener('click', e => e.stopPropagation());
 });
 
-document.addEventListener('keydown', e=>{ if(e.key==='Escape'){closeModal();closeEditModal();closeResolveModal();closeReopenModal();closeLightbox();closeAdminPanel();closeSortDropdown();closeExportModal();closeSerialModal();closeEditStatusModal();closeNotesModal();} });
+document.addEventListener('keydown', e=>{ if(e.key==='Escape'){closeModal();closeEditModal();closeResolveModal();closeReopenModal();closeLightbox();closeSortDropdown();closeExportModal();closeSerialModal();closeEditStatusModal();closeNotesModal();} });
 
 // ── SERIAL NUMBER PROMPT ──
 // Define which status+sub combos require a serial number
@@ -5601,10 +5176,6 @@ document.getElementById('admin-page-btn')?.addEventListener('click', e => {
   e.stopPropagation();
   window.location.href = 'admin.html';
 });
-document.getElementById('members-overlay')?.addEventListener('click', () => { closeMembersPanel(); });
-document.getElementById('members-panel-inner')?.addEventListener('click', e => { e.stopPropagation(); });
-document.getElementById('members-close-btn')?.addEventListener('touchend', e => { e.preventDefault(); closeMembersPanel(); }, { passive: false });
-document.getElementById('members-close-btn')?.addEventListener('click', closeMembersPanel);
 </script>
 
 </body>
