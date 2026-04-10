@@ -125,6 +125,9 @@
   .user-dropdown-item { display: flex; align-items: center; gap: 8px; padding: 10px 14px; font-size: 13px; color: var(--text2); cursor: pointer; transition: background 0.1s; border: none; background: none; width: 100%; text-align: left; font-family: 'Nunito', sans-serif; }
   .user-dropdown-item:hover { background: var(--bg3); color: var(--text); }
   .user-dropdown-item.danger:hover { background: var(--red-dim); color: var(--red); }
+  .theme-select-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+  .theme-select-label { font-size: 13px; color: var(--text2); font-weight: 700; }
+  .theme-select { min-width: 112px; padding: 5px 8px; font-size: 12px; border-radius: 6px; }
 
   /* CONTROLS */
   .controls { padding: 10px 16px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; background: var(--bg2); border-bottom: 1px solid var(--border); }
@@ -725,7 +728,13 @@
           <div class="user-dropdown-email" id="dropdown-email">—</div>
         </div>
         <button class="user-dropdown-item" id="admin-page-btn" style="display:none">🛠 Admin Portal</button>
-        <button class="user-dropdown-item" id="theme-toggle-btn">🌙 Dark Mode</button>
+        <div class="theme-select-row">
+          <label class="theme-select-label" for="theme-select">🎨 Theme</label>
+          <select class="theme-select" id="theme-select">
+            <option value="dark">Dark</option>
+            <option value="light">Light</option>
+          </select>
+        </div>
         <button class="user-dropdown-item danger" id="signout-btn">⏻ Sign Out</button>
       </div>
     </div>
@@ -4211,23 +4220,22 @@ document.addEventListener('click', e => {
 const signoutBtn=document.getElementById('signout-btn');
 if (signoutBtn) signoutBtn.addEventListener('click', doSignOut);
 
-// ── THEME TOGGLE ──
+// ── THEME SELECTION ──
 function applyTheme(theme) {
   document.body.classList.toggle('light', theme === 'light');
-  const btn = document.getElementById('theme-toggle-btn');
-  if (btn) btn.textContent = theme === 'light' ? '🌙 Dark Mode' : '☀️ Light Mode';
+  const themeSelect = document.getElementById('theme-select');
+  if (themeSelect && themeSelect.value !== theme) themeSelect.value = theme;
   try { localStorage.setItem('pressTrackerTheme', theme); } catch(e) {}
 }
 
 // Load saved theme
 try {
   const saved = localStorage.getItem('pressTrackerTheme');
-  if (saved) applyTheme(saved);
+  applyTheme(saved === 'light' ? 'light' : 'dark');
 } catch(e) {}
 
-document.getElementById('theme-toggle-btn')?.addEventListener('click', () => {
-  const isLight = document.body.classList.contains('light');
-  applyTheme(isLight ? 'dark' : 'light');
+document.getElementById('theme-select')?.addEventListener('change', e => {
+  applyTheme(e.target.value === 'light' ? 'light' : 'dark');
 });
 
 // ── FILTER DRAWER ──
