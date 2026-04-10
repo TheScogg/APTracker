@@ -64,6 +64,8 @@
     .status-row-actions { display:flex; gap:6px; align-items:center; }
     .status-row-body { display:none; }
     .status-row-body.visible { display:block; }
+    .json-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:8px; }
+    .mono-input { font-family:'Share Tech Mono',monospace; }
     @media (max-width:640px) {
       .status-grid { grid-template-columns:1fr; }
       .status-row-top { align-items:flex-start; flex-direction:column; }
@@ -102,6 +104,22 @@
       </div>
 
       <div id="admin-content" style="display:none;">
+        <div class="card">
+          <h2>Daily Schedule Import</h2>
+          <p class="muted" style="margin-bottom:10px;">Upload or paste schedule JSON to import daily schedules into Firestore.</p>
+          <div class="grid-2">
+            <input id="schedule-date" class="mono-input" type="date" />
+            <input id="schedule-source-name" placeholder="Source file name (optional, e.g. Apr 10, 2026.pdf)" />
+          </div>
+          <div class="json-actions">
+            <input id="schedule-json-file" type="file" accept="application/json,.json" style="max-width:320px;padding:6px 8px;" />
+            <button class="btn" id="load-schedule-file-btn" style="max-width:220px;">Load JSON from file</button>
+            <button class="btn btn-primary" id="import-schedule-btn" style="max-width:240px;">Import Daily Schedule</button>
+          </div>
+          <textarea id="schedule-json-text" placeholder="Paste schedule JSON here" style="margin-top:10px;min-height:180px;"></textarea>
+          <div id="schedule-import-feedback" class="feedback"></div>
+        </div>
+
         <div class="card">
           <h2>Add Plant</h2>
           <p class="muted" style="margin-bottom:10px;">Plant creation has moved from the tracker page to this admin portal.</p>
@@ -175,6 +193,14 @@ let membersByPlant = new Map();
 let statusDraftByPlant = new Map();
 const statusPanelOpen = {};
 const statusRowOpen = {};
+const SCHEDULE_SECTIONS = [
+  { inputKey: 'page_1', section: 'page1', isChange: false },
+  { inputKey: 'page_2', section: 'page2', isChange: false },
+  { inputKey: 'north_bay_changes', section: 'northBayChanges', isChange: true },
+  { inputKey: 'south_bay_changes', section: 'southBayChanges', isChange: true }
+];
+const MAIN_SCHEDULE_SECTIONS = ['page1', 'page2'];
+const CHANGE_SCHEDULE_SECTIONS = ['northBayChanges', 'southBayChanges'];
 
 function esc(v) {
   return String(v || '').replace(/[&<>'"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[ch]));
@@ -238,6 +264,169 @@ function normalizeStatusRecord(key, item, order) {
     statLabel: String(item?.statLabel || safeLabel),
     order: Number.isFinite(Number(item?.order)) ? Number(item.order) : order
   };
+}
+
+function normalizeRowId(press, cavity, usedIds) {
+  const rawPress = String(press || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\./g, '_')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'row';
+  const safeCavity = String(cavity || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '');
+
+  const preferred = rawPress;
+  if (!usedIds.has(preferred)) {
+    usedIds.add(preferred);
+    return preferred;
+  }
+
+  if (safeCavity) {
+    const cavityCandidate = `${rawPress}_cav${safeCavity}`;
+    if (!usedIds.has(cavityCandidate)) {
+      usedIds.add(cavityCandidate);
+      return cavityCandidate;
+    }
+  }
+
+  let counter = 2;
+  let candidate = `${preferred}_${counter}`;
+  while (usedIds.has(candidate)) {
+    counter += 1;
+    candidate = `${preferred}_${counter}`;
+  }
+  usedIds.add(candidate);
+  return candidate;
+}
+
+function parseMaybeNumber(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+}
+
+function normalizeSchedulePayload(raw) {
+  if (!raw || typeof raw !== 'object') throw new Error('Schedule JSON must be an object.');
+  const info = raw.schedule_info || {};
+  const scheduleDate = String(info.date || '').trim();
+  if (!scheduleDate) throw new Error('schedule_info.date is required (yyyy-mm-dd).');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(scheduleDate)) throw new Error('schedule_info.date must use yyyy-mm-dd format.');
+
+  const normalizedSections = {};
+  for (const cfg of SCHEDULE_SECTIONS) {
+    const rows = Array.isArray(raw[cfg.inputKey]) ? raw[cfg.inputKey] : [];
+    const usedIds = new Set();
+    normalizedSections[cfg.section] = rows.map((row, idx) => {
+      const rowId = normalizeRowId(row?.press, row?.cavity, usedIds);
+      return {
+        rowId,
+        scheduleDate,
+        shift: Number(info.shift) || 1,
+        section: cfg.section,
+        press: String(row?.press || ''),
+        partStorageLocation: Array.isArray(row?.part_storage_location) ? row.part_storage_location.map(v => String(v ?? '')) : [],
+        partNumber: String(row?.part_number || ''),
+        description: String(row?.description || ''),
+        cavity: String(row?.cavity || ''),
+        doh: parseMaybeNumber(row?.doh),
+        labelsPerShift: parseMaybeNumber(row?.labels_per_shift),
+        mc: String(row?.mc || ''),
+        notes: String(row?.notes || ''),
+        displayOrder: idx + 1,
+        isChange: cfg.isChange
+      };
+    });
+  }
+
+  return {
+    scheduleDate,
+    shift: Number(info.shift) || 1,
+    lineSpeed: parseMaybeNumber(info.line_speed),
+    totalPlannedPcs: parseMaybeNumber(info.total_planned_pcs),
+    notes: String(info.note || ''),
+    sections: normalizedSections
+  };
+}
+
+function extractPressLookupRow(row) {
+  return {
+    section: row.section,
+    rowId: row.rowId,
+    partStorageLocation: row.partStorageLocation,
+    partNumber: row.partNumber,
+    description: row.description,
+    cavity: row.cavity,
+    doh: row.doh,
+    labelsPerShift: row.labelsPerShift,
+    mc: row.mc,
+    notes: row.notes
+  };
+}
+
+function buildPressLookupRows(scheduleDate, shift, sections) {
+  const lookup = new Map();
+  const orderedMainRows = [...MAIN_SCHEDULE_SECTIONS.flatMap(section => sections[section] || [])];
+  const orderedChangeRows = [...CHANGE_SCHEDULE_SECTIONS.flatMap(section => sections[section] || [])];
+
+  orderedMainRows.forEach(row => {
+    const pressId = normalizeRowId(row.press, '', new Set());
+    if (!lookup.has(pressId)) {
+      lookup.set(pressId, {
+        pressId,
+        press: row.press,
+        displayName: row.press,
+        scheduleDate,
+        shift,
+        mainRow: extractPressLookupRow(row),
+        changes: [],
+        hasChanges: false
+      });
+    }
+  });
+
+  orderedChangeRows.forEach(row => {
+    const pressId = normalizeRowId(row.press, '', new Set());
+    const existing = lookup.get(pressId) || {
+      pressId,
+      press: row.press,
+      displayName: row.press,
+      scheduleDate,
+      shift,
+      mainRow: null,
+      changes: [],
+      hasChanges: false
+    };
+    existing.changes.push(extractPressLookupRow(row));
+    existing.hasChanges = existing.changes.length > 0;
+    lookup.set(pressId, existing);
+  });
+
+  return [...lookup.values()];
+}
+
+function extractSchedulePayload(parsed) {
+  if (parsed?.schedule_info) return parsed;
+  if (parsed?.dailySchedules && typeof parsed.dailySchedules === 'object') {
+    const firstEntry = Object.values(parsed.dailySchedules)[0];
+    if (firstEntry && typeof firstEntry === 'object') return firstEntry;
+  }
+  return parsed;
+}
+
+async function commitInChunks(ops, maxPerBatch = 450) {
+  if (!ops.length) return;
+  for (let i = 0; i < ops.length; i += maxPerBatch) {
+    const batch = writeBatch(db);
+    const chunk = ops.slice(i, i + maxPerBatch);
+    chunk.forEach(op => {
+      if (op.type === 'delete') batch.delete(op.ref);
+      if (op.type === 'set') batch.set(op.ref, op.data, op.options);
+    });
+    await batch.commit();
+  }
 }
 
 function normalizeStatusesForSave(rawStatuses) {
@@ -490,6 +679,114 @@ async function createPlant() {
   } finally {
     btn.disabled = false;
     btn.textContent = 'Create Plant';
+  }
+}
+
+async function loadScheduleJsonFromFile() {
+  const fileInput = document.getElementById('schedule-json-file');
+  const textArea = document.getElementById('schedule-json-text');
+  const file = fileInput?.files?.[0];
+  if (!file) {
+    feedback('schedule-import-feedback', 'error', 'Choose a JSON file first.');
+    return;
+  }
+  try {
+    const text = await file.text();
+    textArea.value = text;
+    feedback('schedule-import-feedback', 'ok', `Loaded ${file.name}. Review and click Import Daily Schedule.`);
+  } catch (e) {
+    console.error(e);
+    feedback('schedule-import-feedback', 'error', e.message || 'Failed to read JSON file.');
+  }
+}
+
+async function importDailySchedule() {
+  const importBtn = document.getElementById('import-schedule-btn');
+  const dateInput = document.getElementById('schedule-date');
+  const sourceNameInput = document.getElementById('schedule-source-name');
+  const jsonInput = document.getElementById('schedule-json-text');
+  const selectedFile = document.getElementById('schedule-json-file')?.files?.[0];
+  const rawText = (jsonInput?.value || '').trim();
+
+  if (!rawText) {
+    feedback('schedule-import-feedback', 'error', 'Paste JSON (or load from file) before importing.');
+    return;
+  }
+
+  importBtn.disabled = true;
+  importBtn.textContent = 'Importing…';
+  feedback('schedule-import-feedback', '', '');
+
+  try {
+    const parsed = JSON.parse(rawText);
+    const payload = extractSchedulePayload(parsed);
+    const normalized = normalizeSchedulePayload(payload);
+    const scheduleDate = String(dateInput?.value || '').trim() || normalized.scheduleDate;
+    if (!scheduleDate) throw new Error('Schedule date is required.');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(scheduleDate)) throw new Error('Schedule date must use yyyy-mm-dd format.');
+
+    const dailyRef = doc(db, 'dailySchedules', scheduleDate);
+    const sections = normalized.sections;
+    const pressLookupRows = buildPressLookupRows(scheduleDate, normalized.shift, sections);
+    const existingDaily = await getDoc(dailyRef);
+    const deleteOps = [];
+    for (const cfg of SCHEDULE_SECTIONS) {
+      const sectionRef = collection(db, 'dailySchedules', scheduleDate, cfg.section);
+      const existingRows = await getDocs(sectionRef);
+      existingRows.forEach(rowDoc => deleteOps.push({ type: 'delete', ref: rowDoc.ref }));
+    }
+    const existingLookupRows = await getDocs(collection(db, 'dailySchedules', scheduleDate, 'pressLookup'));
+    existingLookupRows.forEach(rowDoc => deleteOps.push({ type: 'delete', ref: rowDoc.ref }));
+    await commitInChunks(deleteOps);
+
+    const setOps = [];
+    setOps.push({ type: 'set', ref: dailyRef, data: {
+      scheduleDate,
+      shift: normalized.shift,
+      lineSpeed: normalized.lineSpeed,
+      totalPlannedPcs: normalized.totalPlannedPcs,
+      sourceFileName: String(sourceNameInput?.value || selectedFile?.name || '').trim(),
+      sourceFileType: selectedFile?.type || (String(sourceNameInput?.value || '').toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'application/json'),
+      status: 'imported',
+      notes: normalized.notes,
+      page1Count: sections.page1.length,
+      page2Count: sections.page2.length,
+      northBayChangesCount: sections.northBayChanges.length,
+      southBayChangesCount: sections.southBayChanges.length,
+      updatedAt: serverTimestamp(),
+      createdAt: existingDaily.exists() ? (existingDaily.data().createdAt || serverTimestamp()) : serverTimestamp()
+    }, options: { merge: true } });
+
+    for (const cfg of SCHEDULE_SECTIONS) {
+      const sectionRows = sections[cfg.section];
+      sectionRows.forEach(row => {
+        setOps.push({ type: 'set', ref: doc(db, 'dailySchedules', scheduleDate, cfg.section, row.rowId), data: {
+          ...row,
+          scheduleDate,
+          shift: normalized.shift,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        }});
+      });
+    }
+
+    pressLookupRows.forEach(item => {
+      setOps.push({ type: 'set', ref: doc(db, 'dailySchedules', scheduleDate, 'pressLookup', item.pressId), data: {
+        ...item,
+        updatedAt: serverTimestamp(),
+        createdAt: serverTimestamp()
+      }});
+    });
+    await commitInChunks(setOps);
+
+    if (dateInput && !dateInput.value) dateInput.value = scheduleDate;
+    feedback('schedule-import-feedback', 'ok', `Imported ${scheduleDate}: ${sections.page1.length + sections.page2.length + sections.northBayChanges.length + sections.southBayChanges.length} rows.`);
+  } catch (e) {
+    console.error(e);
+    feedback('schedule-import-feedback', 'error', e.message || 'Failed to import schedule JSON.');
+  } finally {
+    importBtn.disabled = false;
+    importBtn.textContent = 'Import Daily Schedule';
   }
 }
 
@@ -747,6 +1044,8 @@ onAuthStateChanged(auth, async user => {
 document.getElementById('google-signin-btn').addEventListener('click', signInWithGoogle);
 document.getElementById('signout-btn').addEventListener('click', doSignOut);
 document.getElementById('create-plant-btn').addEventListener('click', createPlant);
+document.getElementById('load-schedule-file-btn').addEventListener('click', loadScheduleJsonFromFile);
+document.getElementById('import-schedule-btn').addEventListener('click', importDailySchedule);
 </script>
 </body>
 </html>
