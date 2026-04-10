@@ -276,10 +276,18 @@ function normalizeRowId(press, cavity, usedIds) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '');
 
-  const preferred = safeCavity ? `${rawPress}_cav${safeCavity}` : rawPress;
+  const preferred = rawPress;
   if (!usedIds.has(preferred)) {
     usedIds.add(preferred);
     return preferred;
+  }
+
+  if (safeCavity) {
+    const cavityCandidate = `${rawPress}_cav${safeCavity}`;
+    if (!usedIds.has(cavityCandidate)) {
+      usedIds.add(cavityCandidate);
+      return cavityCandidate;
+    }
   }
 
   let counter = 2;
@@ -303,6 +311,7 @@ function normalizeSchedulePayload(raw) {
   const info = raw.schedule_info || {};
   const scheduleDate = String(info.date || '').trim();
   if (!scheduleDate) throw new Error('schedule_info.date is required (yyyy-mm-dd).');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(scheduleDate)) throw new Error('schedule_info.date must use yyyy-mm-dd format.');
 
   const normalizedSections = {};
   for (const cfg of SCHEDULE_SECTIONS) {
@@ -338,6 +347,28 @@ function normalizeSchedulePayload(raw) {
     notes: String(info.note || ''),
     sections: normalizedSections
   };
+}
+
+function extractSchedulePayload(parsed) {
+  if (parsed?.schedule_info) return parsed;
+  if (parsed?.dailySchedules && typeof parsed.dailySchedules === 'object') {
+    const firstEntry = Object.values(parsed.dailySchedules)[0];
+    if (firstEntry && typeof firstEntry === 'object') return firstEntry;
+  }
+  return parsed;
+}
+
+async function commitInChunks(ops, maxPerBatch = 450) {
+  if (!ops.length) return;
+  for (let i = 0; i < ops.length; i += maxPerBatch) {
+    const batch = writeBatch(db);
+    const chunk = ops.slice(i, i + maxPerBatch);
+    chunk.forEach(op => {
+      if (op.type === 'delete') batch.delete(op.ref);
+      if (op.type === 'set') batch.set(op.ref, op.data, op.options);
+    });
+    await batch.commit();
+  }
 }
 
 function normalizeStatusesForSave(rawStatuses) {
@@ -630,29 +661,31 @@ async function importDailySchedule() {
 
   try {
     const parsed = JSON.parse(rawText);
-    const normalized = normalizeSchedulePayload(parsed);
+    const payload = extractSchedulePayload(parsed);
+    const normalized = normalizeSchedulePayload(payload);
     const scheduleDate = String(dateInput?.value || '').trim() || normalized.scheduleDate;
     if (!scheduleDate) throw new Error('Schedule date is required.');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(scheduleDate)) throw new Error('Schedule date must use yyyy-mm-dd format.');
 
     const dailyRef = doc(db, 'dailySchedules', scheduleDate);
     const sections = normalized.sections;
-
-    const cleanupBatch = writeBatch(db);
+    const existingDaily = await getDoc(dailyRef);
+    const deleteOps = [];
     for (const cfg of SCHEDULE_SECTIONS) {
       const sectionRef = collection(db, 'dailySchedules', scheduleDate, cfg.section);
       const existingRows = await getDocs(sectionRef);
-      existingRows.forEach(rowDoc => cleanupBatch.delete(rowDoc.ref));
+      existingRows.forEach(rowDoc => deleteOps.push({ type: 'delete', ref: rowDoc.ref }));
     }
-    await cleanupBatch.commit();
+    await commitInChunks(deleteOps);
 
-    const importBatch = writeBatch(db);
-    importBatch.set(dailyRef, {
+    const setOps = [];
+    setOps.push({ type: 'set', ref: dailyRef, data: {
       scheduleDate,
       shift: normalized.shift,
       lineSpeed: normalized.lineSpeed,
       totalPlannedPcs: normalized.totalPlannedPcs,
       sourceFileName: String(sourceNameInput?.value || selectedFile?.name || '').trim(),
-      sourceFileType: selectedFile?.type || 'application/json',
+      sourceFileType: selectedFile?.type || (String(sourceNameInput?.value || '').toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'application/json'),
       status: 'imported',
       notes: normalized.notes,
       page1Count: sections.page1.length,
@@ -660,22 +693,22 @@ async function importDailySchedule() {
       northBayChangesCount: sections.northBayChanges.length,
       southBayChangesCount: sections.southBayChanges.length,
       updatedAt: serverTimestamp(),
-      createdAt: serverTimestamp()
-    }, { merge: true });
+      createdAt: existingDaily.exists() ? (existingDaily.data().createdAt || serverTimestamp()) : serverTimestamp()
+    }, options: { merge: true } });
 
     for (const cfg of SCHEDULE_SECTIONS) {
       const sectionRows = sections[cfg.section];
       sectionRows.forEach(row => {
-        importBatch.set(doc(db, 'dailySchedules', scheduleDate, cfg.section, row.rowId), {
+        setOps.push({ type: 'set', ref: doc(db, 'dailySchedules', scheduleDate, cfg.section, row.rowId), data: {
           ...row,
           scheduleDate,
           shift: normalized.shift,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp()
-        });
+        }});
       });
     }
-    await importBatch.commit();
+    await commitInChunks(setOps);
 
     if (dateInput && !dateInput.value) dateInput.value = scheduleDate;
     feedback('schedule-import-feedback', 'ok', `Imported ${scheduleDate}: ${sections.page1.length + sections.page2.length + sections.northBayChanges.length + sections.southBayChanges.length} rows.`);
