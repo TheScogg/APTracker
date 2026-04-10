@@ -14,6 +14,21 @@ service cloud.firestore {
       return signedIn() && currentUid() == userId;
     }
 
+    function userPath() {
+      return /databases/$(database)/documents/users/$(currentUid());
+    }
+
+    function userDoc() {
+      return get(userPath());
+    }
+
+    function hasPlantAccess() {
+      return signedIn()
+        && exists(userPath())
+        && userDoc().data.plantIds is list
+        && userDoc().data.plantIds.size() > 0;
+    }
+
     function memberPath(plantId) {
       return /databases/$(database)/documents/plants/$(plantId)/members/$(currentUid());
     }
