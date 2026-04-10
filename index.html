@@ -310,6 +310,8 @@
   .row-panel-header { display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-bottom: 1px solid var(--border); }
   .row-resolved-toggle { font-size: 11px; font-weight: 700; font-family: 'Share Tech Mono', monospace; padding: 3px 9px; border-radius: 10px; border: 1px solid var(--border); background: transparent; color: var(--text3); cursor: pointer; white-space: nowrap; transition: all 0.15s; margin-left: auto; }
   .row-resolved-toggle.active { border-color: rgba(34,197,94,0.5); color: var(--green); background: var(--green-dim); }
+  .row-sched-toggle { margin-left: 4px; }
+  .row-sched-toggle.active { border-color: rgba(253,230,138,0.45); color: rgba(212,160,6,1.0); background: rgba(253,243,176,0.08); }
   .row-panel-name { font-family: 'Rajdhani', sans-serif; font-size: 14px; font-weight: 700; letter-spacing: 1px; color: var(--text2); text-transform: uppercase; }
   .row-status-pills { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
   .row-spill { font-size: 9px; font-family: 'Share Tech Mono', monospace; font-weight: 700; padding: 2px 7px; border-radius: 10px; border: 1px solid; white-space: nowrap; cursor: pointer; transition: all 0.15s; user-select: none; }
@@ -354,8 +356,8 @@
   .press-btn.has-controlman      { border-color: var(--babyblue); color: var(--babyblue); }
   .press-btn.all-resolved    { border-color: var(--green);    color: var(--green); }
   .press-btn.has-multi       { border-color: var(--accent);   color: var(--text); }
-  .press-btn.not-scheduled   { background: rgba(253,224,71,0.10); border-color: rgba(253,224,71,0.35); }
-  .press-btn.not-scheduled .press-btn-num { color: rgba(234,179,8,0.7); }
+  .press-btn.not-scheduled   { background: rgba(255,253,220,0.07); border-color: rgba(253,243,176,0.22); }
+  .press-btn.not-scheduled .press-btn-num { color: rgba(253,240,150,0.42); }
   .press-btn .badge { position: absolute; top: -5px; right: -5px; background: var(--red); color: white; font-size: 9px; width: 15px; height: 15px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: 'Nunito', sans-serif; font-weight: 700; }
   .press-btn.selected { box-shadow: 0 0 0 2px var(--accent); transform: translateY(-2px); }
 
@@ -2532,6 +2534,10 @@ let savedResolvedRows = [];
 try { savedResolvedRows = JSON.parse(localStorage.getItem('showResolvedRows') || '[]'); } catch(e) {}
 const showResolvedRows = new Set(savedResolvedRows);
 function saveResolvedRows() { try { localStorage.setItem('showResolvedRows', JSON.stringify([...showResolvedRows])); } catch(e) {} }
+let savedHideUnscheduledRows = [];
+try { savedHideUnscheduledRows = JSON.parse(localStorage.getItem('hideUnscheduledRows') || '[]'); } catch(e) {}
+const hideUnscheduledRows = new Set(savedHideUnscheduledRows);
+function saveHideUnscheduledRows() { try { localStorage.setItem('hideUnscheduledRows', JSON.stringify([...hideUnscheduledRows])); } catch(e) {} }
 
 function saveActiveRows() {
   try { localStorage.setItem('activeRows', JSON.stringify([...activeRows])); } catch(e) {}
@@ -2654,6 +2660,10 @@ function renderRowPanels() {
   for (const rowName of sortedPanelRowNames) {
     if (!activeRows.has(rowName)) continue;
     const presses = PRESSES[rowName];
+    // Determine unscheduled presses for the current date (null = no schedule loaded → don't highlight)
+    const _schedDate = scheduleDateForLookup();
+    const unscheduledSet = (scheduledPressesState && scheduledPressesState.date === _schedDate && scheduledPressesState.scheduled !== null)
+      ? scheduledPressesState.scheduled : null;
     const panel = document.createElement('div');
     panel.className = 'row-panel';
 
@@ -2771,15 +2781,31 @@ function renderRowPanels() {
       renderRowPanels();
     };
     header.appendChild(resTog);
+
+    // "No Schedule" toggle — only visible when a daily schedule is loaded for the active date
+    if (unscheduledSet !== null) {
+      const hiding = hideUnscheduledRows.has(rowName);
+      const schedTog = document.createElement('button');
+      schedTog.className = 'row-resolved-toggle row-sched-toggle' + (hiding ? ' active' : '');
+      schedTog.textContent = hiding ? '✓ Sched Only' : '⊘ No Sched';
+      schedTog.title = hiding ? 'Showing scheduled presses only — click to show all' : 'Click to hide unscheduled presses';
+      schedTog.onclick = () => {
+        if (hideUnscheduledRows.has(rowName)) hideUnscheduledRows.delete(rowName);
+        else hideUnscheduledRows.add(rowName);
+        saveHideUnscheduledRows();
+        renderRowPanels();
+      };
+      header.appendChild(schedTog);
+    }
+
     panel.appendChild(header);
 
-    // Presses — new split-bar layout
+    // Presses — new split-bar layout; filter out unscheduled if the toggle is active
+    const visiblePresses = (unscheduledSet && hideUnscheduledRows.has(rowName))
+      ? presses.filter(m => unscheduledSet.has(m))
+      : presses;
     const btns = document.createElement('div'); btns.className = 'row-presses';
-    // Determine unscheduled presses for the current date (null = no schedule loaded → don't highlight)
-    const _schedDate = scheduleDateForLookup();
-    const unscheduledSet = (scheduledPressesState && scheduledPressesState.date === _schedDate && scheduledPressesState.scheduled !== null)
-      ? scheduledPressesState.scheduled : null;
-    presses.forEach(m => {
+    visiblePresses.forEach(m => {
       const btn = document.createElement('button');
       btn.className = 'press-btn';
       btn.id = 'press-'+m.replace(/[\s.]/g,'_');
