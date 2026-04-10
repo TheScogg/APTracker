@@ -245,5 +245,26 @@ service cloud.firestore {
         allow delete: if hasPlantAccess() && validScheduleSection(section);
       }
     }
+
+    // ── Daily schedules ──
+    match /dailySchedules/{scheduleDate} {
+      allow read: if hasPlantAccess();
+      allow create, update: if hasPlantAccess()
+                            && isValidScheduleDate(scheduleDate)
+                            && validDailyScheduleDoc(scheduleDate);
+      allow delete: if false;
+
+      match /{section}/{rowId} {
+        allow read: if hasPlantAccess();
+        allow create, update: if hasPlantAccess()
+                              && isValidScheduleDate(scheduleDate)
+                              && validAnyScheduleSection(section)
+                              && (
+                                (section == 'pressLookup' && validPressLookupDoc(scheduleDate, rowId))
+                                || (section != 'pressLookup' && validScheduleRowDoc(scheduleDate, section, rowId))
+                              );
+        allow delete: if hasPlantAccess() && validAnyScheduleSection(section);
+      }
+    }
   }
 }
