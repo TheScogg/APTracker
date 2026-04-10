@@ -48,6 +48,69 @@ service cloud.firestore {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['plantIds']);
     }
 
+    function isValidScheduleDate(dateStr) {
+      return dateStr is string
+        && dateStr.matches('^\\d{4}-\\d{2}-\\d{2}$');
+    }
+
+    function validScheduleSection(section) {
+      return section in ['page1', 'page2', 'northBayChanges', 'southBayChanges'];
+    }
+
+    function validDailyScheduleDoc(scheduleDate, expectedPlantId) {
+      return request.resource.data.keys().hasAll([
+          'scheduleDate', 'shift', 'lineSpeed', 'totalPlannedPcs',
+          'sourceFileName', 'sourceFileType', 'status', 'notes',
+          'page1Count', 'page2Count', 'northBayChangesCount', 'southBayChangesCount',
+          'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.scheduleDate == scheduleDate
+        && isValidScheduleDate(request.resource.data.scheduleDate)
+        && request.resource.data.shift is number
+        && (request.resource.data.lineSpeed == null || request.resource.data.lineSpeed is number)
+        && (request.resource.data.totalPlannedPcs == null || request.resource.data.totalPlannedPcs is number)
+        && request.resource.data.sourceFileName is string
+        && request.resource.data.sourceFileType is string
+        && request.resource.data.status is string
+        && request.resource.data.notes is string
+        && (!request.resource.data.keys().hasAny(['plantId'])
+            || (request.resource.data.plantId is string
+                && (expectedPlantId == null || request.resource.data.plantId == expectedPlantId)))
+        && request.resource.data.page1Count is number
+        && request.resource.data.page2Count is number
+        && request.resource.data.northBayChangesCount is number
+        && request.resource.data.southBayChangesCount is number;
+    }
+
+    function validScheduleRowDoc(scheduleDate, section, rowId, expectedPlantId) {
+      return request.resource.data.keys().hasAll([
+          'rowId', 'scheduleDate', 'shift', 'section', 'press',
+          'partStorageLocation', 'partNumber', 'description', 'cavity',
+          'doh', 'labelsPerShift', 'mc', 'notes', 'displayOrder', 'isChange',
+          'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.rowId == rowId
+        && request.resource.data.scheduleDate == scheduleDate
+        && isValidScheduleDate(request.resource.data.scheduleDate)
+        && request.resource.data.section == section
+        && validScheduleSection(section)
+        && request.resource.data.shift is number
+        && request.resource.data.press is string
+        && request.resource.data.partStorageLocation is list
+        && request.resource.data.partNumber is string
+        && request.resource.data.description is string
+        && (!request.resource.data.keys().hasAny(['plantId'])
+            || (request.resource.data.plantId is string
+                && (expectedPlantId == null || request.resource.data.plantId == expectedPlantId)))
+        && request.resource.data.cavity is string
+        && (request.resource.data.doh == null || request.resource.data.doh is number)
+        && (request.resource.data.labelsPerShift == null || request.resource.data.labelsPerShift is number)
+        && request.resource.data.mc is string
+        && request.resource.data.notes is string
+        && request.resource.data.displayOrder is number
+        && request.resource.data.isChange is bool;
+    }
+
     // ── User profiles ──
     match /users/{userId} {
       // Users can always read/write their own profile.
@@ -130,6 +193,25 @@ service cloud.firestore {
                         || (signedIn() && resource.data.uploadedBy.uid == currentUid());
         }
       }
+
+      // ── Plant-scoped daily schedules ──
+      match /dailySchedules/{scheduleDate} {
+        allow read: if isPlantMember(plantId);
+        allow create, update: if isAdmin(plantId)
+                              && isValidScheduleDate(scheduleDate)
+                              && validDailyScheduleDoc(scheduleDate, plantId);
+        allow delete: if false;
+
+        match /{section}/{rowId} {
+          allow read: if isPlantMember(plantId);
+          allow create, update: if isAdmin(plantId)
+                                && isValidScheduleDate(scheduleDate)
+                                && validScheduleSection(section)
+                                && validScheduleRowDoc(scheduleDate, section, rowId, plantId);
+          allow delete: if isAdmin(plantId) && validScheduleSection(section);
+        }
+      }
     }
+
   }
 }
