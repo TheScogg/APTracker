@@ -354,6 +354,8 @@
   .press-btn.has-controlman      { border-color: var(--babyblue); color: var(--babyblue); }
   .press-btn.all-resolved    { border-color: var(--green);    color: var(--green); }
   .press-btn.has-multi       { border-color: var(--accent);   color: var(--text); }
+  .press-btn.not-scheduled   { background: rgba(253,224,71,0.10); border-color: rgba(253,224,71,0.35); }
+  .press-btn.not-scheduled .press-btn-num { color: rgba(234,179,8,0.7); }
   .press-btn .badge { position: absolute; top: -5px; right: -5px; background: var(--red); color: white; font-size: 9px; width: 15px; height: 15px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: 'Nunito', sans-serif; font-weight: 700; }
   .press-btn.selected { box-shadow: 0 0 0 2px var(--accent); transform: translateY(-2px); }
 
@@ -1233,6 +1235,10 @@ let currentPlantId = null;
 let currentPlantName = '';
 let userPlants = []; // [{ id, name, location }]
 const scheduleLookupCache = new Map();
+// Caches the set of scheduled machine codes for the current date.
+// { date: string, scheduled: Set<string> | null }
+// scheduled === null means no dailySchedules doc exists for that date → don't highlight.
+let scheduledPressesState = null;
 
 // ── ROLE / PERMISSIONS ──
 const DEFAULT_PERMISSIONS = {
@@ -1279,6 +1285,34 @@ function scheduleDateForLookup() {
   const dateFilter = document.getElementById('date-filter')?.value || '';
   if (issuePeriod === 'date' && dateFilter) return dateFilter;
   return localDateStr(new Date());
+}
+
+// Bulk-loads all scheduled machine codes for a given date from all 4 schedule sections.
+// Result is cached in scheduledPressesState. Calls updatePressStates() when done so
+// press buttons immediately reflect their scheduled/unscheduled state.
+async function loadDailyScheduledPresses(date) {
+  if (!currentPlantId || !date) { scheduledPressesState = null; return; }
+  if (scheduledPressesState && scheduledPressesState.date === date) return; // already cached
+  let scheduled = null;
+  try {
+    const dailyRef = doc(db, 'plants', currentPlantId, 'dailySchedules', date);
+    const dailySnap = await getDoc(dailyRef);
+    if (dailySnap.exists()) {
+      const sections = ['page1', 'page2', 'northBayChanges', 'southBayChanges'];
+      const snaps = await Promise.all(
+        sections.map(s => getDocs(collection(db, 'plants', currentPlantId, 'dailySchedules', date, s)))
+      );
+      scheduled = new Set();
+      snaps.forEach(snap => snap.docs.forEach(d => {
+        const press = d.data().press;
+        if (press) scheduled.add(String(press).trim());
+      }));
+    }
+  } catch(e) {
+    console.warn('loadDailyScheduledPresses failed:', e);
+  }
+  scheduledPressesState = { date, scheduled };
+  updatePressStates();
 }
 
 async function getPressScheduleLookup(machineCode, scheduleDate) {
@@ -1634,6 +1668,7 @@ async function hydrateCurrentPlantView() {
   await Promise.all([loadPlantPresses(), loadCurrentMember(currentPlantId)]);
   buildFloorMap();
   await loadConfig();
+  loadDailyScheduledPresses(scheduleDateForLookup()); // fire-and-forget; calls updatePressStates when done
 }
 
 // Load user's plant list.
@@ -1793,6 +1828,7 @@ async function switchPlant(plantId) {
   issueEventHistoryCache.clear();
   attachmentsHydrationToken++;
   eventsHydrationToken++;
+  scheduledPressesState = null; // clear so new plant reloads schedule
   setSyncStatus('', 'Switching plant…');
   await hydrateCurrentPlantView();
   startListener();
@@ -2199,6 +2235,7 @@ window.setPeriod = s => {
   }
   updateCalLabel(document.getElementById('date-filter').value || localDateStr(new Date()), false);
   renderIssues(); updatePressStates(); updateStats();
+  loadDailyScheduledPresses(scheduleDateForLookup());
 };
 
 window.onCalendarPick = val => {
@@ -2208,6 +2245,7 @@ window.onCalendarPick = val => {
   issuePeriod = 'date';
   updateCalLabel(val, true);
   renderIssues(); updatePressStates(); updateStats(); updateFilterBadge();
+  loadDailyScheduledPresses(val);
 };
 
 // ── DATE FILTER ──
@@ -2222,6 +2260,7 @@ window.clearDate = () => {
   issuePeriod = 'all';
   ['today','24h','week','month','all'].forEach(x => document.getElementById('period-'+x).classList.toggle('active', x==='all'));
   renderIssues(); updatePressStates(); updateStats();
+  loadDailyScheduledPresses(localDateStr(new Date()));
 };
 
 // Compute time window for period filter
@@ -2736,6 +2775,10 @@ function renderRowPanels() {
 
     // Presses — new split-bar layout
     const btns = document.createElement('div'); btns.className = 'row-presses';
+    // Determine unscheduled presses for the current date (null = no schedule loaded → don't highlight)
+    const _schedDate = scheduleDateForLookup();
+    const unscheduledSet = (scheduledPressesState && scheduledPressesState.date === _schedDate && scheduledPressesState.scheduled !== null)
+      ? scheduledPressesState.scheduled : null;
     presses.forEach(m => {
       const btn = document.createElement('button');
       btn.className = 'press-btn';
@@ -2796,6 +2839,11 @@ function renderRowPanels() {
 
       // hist-mode class if needed
       if (mapMode==='hist') btn.classList.add('hist-mode');
+      // Mark presses not appearing in today's daily schedule
+      if (unscheduledSet && !unscheduledSet.has(m)) {
+        btn.classList.add('not-scheduled');
+        btn.title = 'Not scheduled';
+      }
       btns.appendChild(btn);
     });
     panel.appendChild(btns);
