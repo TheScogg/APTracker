@@ -228,43 +228,5 @@ service cloud.firestore {
       }
     }
 
-    // ── Daily schedules ──
-    match /dailySchedules/{scheduleDate} {
-      allow read: if hasPlantAccess();
-      allow create, update: if hasPlantAccess()
-                            && isValidScheduleDate(scheduleDate)
-                            && validDailyScheduleDoc(scheduleDate, null);
-      allow delete: if false;
-
-      match /{section}/{rowId} {
-        allow read: if hasPlantAccess();
-        allow create, update: if hasPlantAccess()
-                              && isValidScheduleDate(scheduleDate)
-                              && validScheduleSection(section)
-                              && validScheduleRowDoc(scheduleDate, section, rowId, null);
-        allow delete: if hasPlantAccess() && validScheduleSection(section);
-      }
-    }
-
-    // ── Daily schedules ──
-    match /dailySchedules/{scheduleDate} {
-      allow read: if hasPlantAccess();
-      allow create, update: if hasPlantAccess()
-                            && isValidScheduleDate(scheduleDate)
-                            && validDailyScheduleDoc(scheduleDate);
-      allow delete: if false;
-
-      match /{section}/{rowId} {
-        allow read: if hasPlantAccess();
-        allow create, update: if hasPlantAccess()
-                              && isValidScheduleDate(scheduleDate)
-                              && validAnyScheduleSection(section)
-                              && (
-                                (section == 'pressLookup' && validPressLookupDoc(scheduleDate, rowId))
-                                || (section != 'pressLookup' && validScheduleRowDoc(scheduleDate, section, rowId))
-                              );
-        allow delete: if hasPlantAccess() && validAnyScheduleSection(section);
-      }
-    }
   }
 }
