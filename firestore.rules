@@ -72,6 +72,10 @@ service cloud.firestore {
       return section in ['page1', 'page2', 'northBayChanges', 'southBayChanges'];
     }
 
+    function validAnyScheduleSection(section) {
+      return section in ['page1', 'page2', 'northBayChanges', 'southBayChanges', 'pressLookup'];
+    }
+
     function validDailyScheduleDoc(scheduleDate) {
       return request.resource.data.keys().hasAll([
           'scheduleDate', 'shift', 'lineSpeed', 'totalPlannedPcs',
@@ -118,6 +122,22 @@ service cloud.firestore {
         && request.resource.data.notes is string
         && request.resource.data.displayOrder is number
         && request.resource.data.isChange is bool;
+    }
+
+    function validPressLookupDoc(scheduleDate, rowId) {
+      return request.resource.data.keys().hasAll([
+          'pressId', 'press', 'scheduleDate', 'shift', 'displayName',
+          'mainRow', 'changes', 'hasChanges', 'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.pressId == rowId
+        && request.resource.data.scheduleDate == scheduleDate
+        && isValidScheduleDate(request.resource.data.scheduleDate)
+        && request.resource.data.press is string
+        && request.resource.data.shift is number
+        && request.resource.data.displayName is string
+        && (request.resource.data.mainRow == null || request.resource.data.mainRow is map)
+        && request.resource.data.changes is list
+        && request.resource.data.hasChanges is bool;
     }
 
     // ── User profiles ──
@@ -216,9 +236,12 @@ service cloud.firestore {
         allow read: if hasPlantAccess();
         allow create, update: if hasPlantAccess()
                               && isValidScheduleDate(scheduleDate)
-                              && validScheduleSection(section)
-                              && validScheduleRowDoc(scheduleDate, section, rowId);
-        allow delete: if hasPlantAccess() && validScheduleSection(section);
+                              && validAnyScheduleSection(section)
+                              && (
+                                (section == 'pressLookup' && validPressLookupDoc(scheduleDate, rowId))
+                                || (section != 'pressLookup' && validScheduleRowDoc(scheduleDate, section, rowId))
+                              );
+        allow delete: if hasPlantAccess() && validAnyScheduleSection(section);
       }
     }
   }
