@@ -4742,6 +4742,436 @@ window.downloadPDF = async () => {
 // Close export modal on escape / overlay click
 document.getElementById('export-modal')?.addEventListener('click', e => { if(e.target===document.getElementById('export-modal')) closeExportModal(); });
 
+// ── ADMIN PANEL ──
+const ADMIN_ICONS = ['🔧','🔩','⚙️','🎛️','🚀','🔍','⚠️','🛠️','🔬','📋','🏭','💡','🔄','📦','🧪','🔑','⛽','🖨️','🤖','🧲','🔒','🔓','📡','🧯','🔌','💧','🌡️','🔋','🪛','🪚','📏','🧰','🔦','🚨','🛞','⚡','🧹','🪝','🗜️','📐'];
+const ADMIN_COLORS = [
+  {name:'Red',hex:'#ef4444'},{name:'Rose',hex:'#fb7185'},{name:'Orange',hex:'#f97316'},
+  {name:'Amber',hex:'#f59e0b'},{name:'Yellow',hex:'#eab308'},{name:'Lime',hex:'#84cc16'},
+  {name:'Green',hex:'#22c55e'},{name:'Emerald',hex:'#10b981'},{name:'Teal',hex:'#14b8a6'},
+  {name:'Cyan',hex:'#06b6d4'},{name:'Sky',hex:'#38bdf8'},{name:'Blue',hex:'#3b82f6'},
+  {name:'Indigo',hex:'#6366f1'},{name:'Violet',hex:'#8b5cf6'},{name:'Purple',hex:'#a855f7'},
+  {name:'Fuchsia',hex:'#d946ef'},{name:'Pink',hex:'#ec4899'},{name:'Slate',hex:'#64748b'},
+  {name:'Zinc',hex:'#71717a'},{name:'Stone',hex:'#78716c'},
+];
+let adminDraft = {};
+let newCatIcon = ADMIN_ICONS[0];
+let newCatColor = ADMIN_COLORS[0];
+
+function normalizeLabel(value) {
+  return String(value || '').trim().replace(/\s+/g, ' ');
+}
+
+function normalizeForCompare(value) {
+  return normalizeLabel(value).toLocaleLowerCase();
+}
+
+function slugifyStatusLabel(value) {
+  const slug = normalizeLabel(value).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return slug || 'custom-status';
+}
+
+function makeStatusKey() {
+  return `status_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function buildAdminIconPicker(container, getCurrent, onSelect) {
+  container.innerHTML = '';
+  ADMIN_ICONS.forEach(ic => {
+    const opt = document.createElement('div'); opt.className = 'icon-opt' + (ic === getCurrent() ? ' selected' : '');
+    opt.textContent = ic;
+    const sel = () => { onSelect(ic); container.querySelectorAll('.icon-opt').forEach(o => o.classList.remove('selected')); opt.classList.add('selected'); };
+    addTapListener(opt, sel);
+    container.appendChild(opt);
+  });
+}
+function buildAdminColorPicker(container, getCurrent, onSelect) {
+  container.innerHTML = '';
+  ADMIN_COLORS.forEach(c => {
+    const opt = document.createElement('div'); opt.className = 'color-opt' + (c.hex === getCurrent() ? ' selected' : '');
+    opt.style.background = c.hex; opt.title = c.name;
+    opt.innerHTML = '<span class="check">✓</span>';
+    const sel = () => { onSelect(c); container.querySelectorAll('.color-opt').forEach(o => o.classList.remove('selected')); opt.classList.add('selected'); };
+    addTapListener(opt, sel);
+    container.appendChild(opt);
+  });
+}
+
+function openAdminPanel() {
+  document.getElementById('user-dropdown').classList.remove('visible');
+  document.getElementById('user-pill').classList.remove('open');
+  adminDraft = JSON.parse(JSON.stringify(STATUSES));
+  newCatIcon = ADMIN_ICONS[0]; newCatColor = ADMIN_COLORS[0];
+  renderAdminList();
+  document.getElementById('admin-overlay').classList.add('visible');
+}
+
+function renderAdminList() {
+  const list = document.getElementById('admin-status-list'); list.innerHTML = '';
+
+  Object.entries(adminDraft)
+    .filter(([k]) => k !== 'open' && k !== 'resolved')
+    .sort((a,b) => (a[1].order||99) - (b[1].order||99))
+    .forEach(([key, st]) => {
+      const row = document.createElement('div'); row.className = 'admin-status-row';
+
+      // Declare editPreviewPill and updateEditPreview early so they can be referenced by name input
+      const editPreviewPill = document.createElement('span'); editPreviewPill.className = 'admin-edit-preview-pill';
+      const updateEditPreview = () => {
+        const col = st.color || st.swipeColor || st.cssColor;
+        editPreviewPill.textContent = (adminDraft[key].icon||st.icon)+' '+(adminDraft[key].label||st.label);
+        editPreviewPill.style.color=col; editPreviewPill.style.borderColor=alphaColor(col,0.53); editPreviewPill.style.background=alphaColor(col,0.09);
+        iconEl.textContent = adminDraft[key].icon || st.icon;
+      };
+
+      // Name row
+      const top = document.createElement('div'); top.className = 'admin-status-top';
+      const iconEl = document.createElement('span'); iconEl.className = 'admin-status-icon'; iconEl.textContent = st.icon;
+      const nameInput = document.createElement('input'); nameInput.className = 'admin-label-input';
+      nameInput.value = st.label; nameInput.placeholder = 'Status name';
+      nameInput.addEventListener('input', () => { adminDraft[key].label = nameInput.value; adminDraft[key].shortLabel = nameInput.value; updateEditPreview(); });
+      top.appendChild(iconEl); top.appendChild(nameInput); row.appendChild(top);
+
+      // Sub-statuses
+      const subsLabel = document.createElement('div'); subsLabel.className = 'admin-subs-label'; subsLabel.textContent = 'Sub-statuses';
+      row.appendChild(subsLabel);
+      const subsList = document.createElement('div'); subsList.className = 'admin-subs-list'; row.appendChild(subsList);
+      const renderSubs = () => {
+        subsList.innerHTML = '';
+        const sortedSubs = (adminDraft[key].subs || [])
+          .map((sub, idx) => ({ sub, idx }))
+          .sort((a, b) => a.sub.localeCompare(b.sub, undefined, { sensitivity: 'base' }));
+        sortedSubs.forEach(({ sub, idx }) => {
+          const chip = document.createElement('div'); chip.className = 'admin-sub-chip';
+          const span = document.createElement('span'); span.textContent = sub;
+          const rm = document.createElement('button'); rm.className = 'admin-sub-remove'; rm.textContent = '✕';
+          addTapListener(rm, () => { adminDraft[key].subs.splice(idx,1); renderSubs(); });
+          chip.appendChild(span); chip.appendChild(rm); subsList.appendChild(chip);
+        });
+      };
+      renderSubs();
+      const addRowEl = document.createElement('div'); addRowEl.className = 'admin-add-sub';
+      const addInput = document.createElement('input'); addInput.className = 'admin-add-input'; addInput.placeholder = 'Add sub-status…';
+      const addBtn = document.createElement('button'); addBtn.className = 'admin-add-btn'; addBtn.textContent = '+ Add';
+      const doAdd = () => {
+        const val = addInput.value.trim();
+        if (!val) return;
+        if (!adminDraft[key].subs) adminDraft[key].subs = [];
+        adminDraft[key].subs.push(val);
+        adminDraft[key].subs.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+        addInput.value = '';
+        renderSubs();
+      };
+      addTapListener(addBtn, doAdd);
+      addInput.addEventListener('keydown', e => { if(e.key==='Enter') doAdd(); });
+      addRowEl.appendChild(addInput); addRowEl.appendChild(addBtn); row.appendChild(addRowEl);
+
+      const bulkBtn = document.createElement('button');
+      bulkBtn.className = 'admin-edit-btn';
+      bulkBtn.style.marginTop = '6px';
+      bulkBtn.textContent = '📝 Bulk Edit Sub-statuses';
+      const bulkPanel = document.createElement('div');
+      bulkPanel.className = 'admin-edit-panel';
+      const bulkLabel = document.createElement('div');
+      bulkLabel.className = 'admin-edit-section-label';
+      bulkLabel.textContent = 'One sub-status per line';
+      const bulkInput = document.createElement('textarea');
+      bulkInput.style.width = '100%';
+      bulkInput.style.minHeight = '120px';
+      bulkInput.style.background = 'var(--bg2)';
+      bulkInput.style.border = '1px solid var(--border)';
+      bulkInput.style.borderRadius = '8px';
+      bulkInput.style.padding = '10px';
+      bulkInput.style.color = 'var(--text)';
+      bulkInput.style.fontFamily = "'Nunito', sans-serif";
+      bulkInput.style.fontSize = '13px';
+      const bulkActions = document.createElement('div');
+      bulkActions.style.display = 'flex';
+      bulkActions.style.gap = '8px';
+      bulkActions.style.marginTop = '8px';
+      const bulkCancel = document.createElement('button');
+      bulkCancel.className = 'admin-confirm-delete-no';
+      bulkCancel.textContent = 'Cancel';
+      const bulkApply = document.createElement('button');
+      bulkApply.className = 'admin-confirm-delete-yes';
+      bulkApply.textContent = 'Apply';
+      const openBulkEditor = () => {
+        bulkInput.value = (adminDraft[key].subs || []).join('\n');
+        bulkPanel.classList.add('visible');
+      };
+      const applyBulkEditor = () => {
+        const seen = new Set();
+        const parsed = bulkInput.value
+          .split('\n')
+          .map(v => normalizeLabel(v))
+          .filter(Boolean)
+          .filter(v => {
+            const cmp = normalizeForCompare(v);
+            if (seen.has(cmp)) return false;
+            seen.add(cmp);
+            return true;
+          });
+        adminDraft[key].subs = parsed;
+        renderSubs();
+        bulkPanel.classList.remove('visible');
+      };
+      addTapListener(bulkBtn, openBulkEditor);
+      addTapListener(bulkCancel, () => bulkPanel.classList.remove('visible'));
+      addTapListener(bulkApply, applyBulkEditor);
+      bulkActions.appendChild(bulkCancel);
+      bulkActions.appendChild(bulkApply);
+      bulkPanel.appendChild(bulkLabel);
+      bulkPanel.appendChild(bulkInput);
+      bulkPanel.appendChild(bulkActions);
+      row.appendChild(bulkBtn);
+      row.appendChild(bulkPanel);
+
+      // Edit icon/color panel
+      const editPanel = document.createElement('div'); editPanel.className = 'admin-edit-panel';
+      const iconSecLabel = document.createElement('div'); iconSecLabel.className = 'admin-edit-section-label'; iconSecLabel.textContent = 'Icon';
+      editPanel.appendChild(iconSecLabel);
+      const editIconPicker = document.createElement('div'); editIconPicker.className = 'icon-picker';
+      editPanel.appendChild(editIconPicker);
+      const colorSecLabel = document.createElement('div'); colorSecLabel.className = 'admin-edit-section-label'; colorSecLabel.style.marginTop='10px'; colorSecLabel.textContent = 'Color';
+      editPanel.appendChild(colorSecLabel);
+      const editColorPicker = document.createElement('div'); editColorPicker.className = 'color-picker';
+      editPanel.appendChild(editColorPicker);
+      const editPreviewLabel = document.createElement('div'); editPreviewLabel.className = 'admin-edit-section-label'; editPreviewLabel.style.marginTop='10px'; editPreviewLabel.textContent = 'Preview';
+      editPanel.appendChild(editPreviewLabel);
+      editPanel.appendChild(editPreviewPill);
+      buildAdminIconPicker(editIconPicker, ()=>adminDraft[key].icon||st.icon, ic => { adminDraft[key].icon=ic; updateEditPreview(); });
+      buildAdminColorPicker(editColorPicker, ()=>adminDraft[key].color||st.swipeColor||st.cssColor, c => { adminDraft[key].color=c.hex; adminDraft[key].swipeColor=c.hex; adminDraft[key].cssColor=c.hex; updateEditPreview(); });
+      updateEditPreview();
+      const doneBtn = document.createElement('button'); doneBtn.className = 'admin-edit-done'; doneBtn.textContent = '✓ Done';
+      addTapListener(doneBtn, () => { editPanel.classList.remove('visible'); editBtnEl.textContent='✏️ Edit Icon & Color'; });
+      editPanel.appendChild(doneBtn);
+      row.appendChild(editPanel);
+
+      // Confirm delete panel
+      const confirmDel = document.createElement('div'); confirmDel.className = 'admin-confirm-delete';
+      const confirmText = document.createElement('div'); confirmText.className = 'admin-confirm-delete-text'; confirmText.textContent = `Delete "${st.label}"? This cannot be undone.`;
+      const confirmActions = document.createElement('div'); confirmActions.className = 'admin-confirm-delete-actions';
+      const yesBtn = document.createElement('button'); yesBtn.className = 'admin-confirm-delete-yes'; yesBtn.textContent = 'Delete';
+      const noBtn = document.createElement('button'); noBtn.className = 'admin-confirm-delete-no'; noBtn.textContent = 'Cancel';
+      const doDelete = () => { delete adminDraft[key]; renderAdminList(); };
+      addTapListener(yesBtn, doDelete);
+      addTapListener(noBtn, () => confirmDel.classList.remove('visible'));
+      confirmActions.appendChild(noBtn); confirmActions.appendChild(yesBtn);
+      confirmDel.appendChild(confirmText); confirmDel.appendChild(confirmActions);
+      row.appendChild(confirmDel);
+
+      // Action buttons
+      const actionsRow = document.createElement('div'); actionsRow.className = 'admin-row-actions';
+
+      // Up/down reorder buttons
+      const upBtn = document.createElement('button'); upBtn.className = 'admin-order-btn'; upBtn.textContent = '▲';
+      const downBtn = document.createElement('button'); downBtn.className = 'admin-order-btn'; downBtn.textContent = '▼';
+      const moveOrder = (dir) => {
+        const keys = Object.entries(adminDraft)
+          .filter(([k]) => k !== 'open' && k !== 'resolved')
+          .sort((a,b) => (a[1].order||99) - (b[1].order||99))
+          .map(([k]) => k);
+        const idx = keys.indexOf(key);
+        const swapIdx = idx + dir;
+        if (swapIdx < 0 || swapIdx >= keys.length) return;
+        const swapKey = keys[swapIdx];
+        const tmpOrder = adminDraft[key].order;
+        adminDraft[key].order = adminDraft[swapKey].order;
+        adminDraft[swapKey].order = tmpOrder;
+        renderAdminList();
+      };
+      addTapListener(upBtn, () => moveOrder(-1));
+      addTapListener(downBtn, () => moveOrder(1));
+
+      const editBtnEl = document.createElement('button'); editBtnEl.className = 'admin-edit-btn'; editBtnEl.textContent = '✏️ Edit Icon & Color';
+      addTapListener(editBtnEl, () => { const open=editPanel.classList.toggle('visible'); editBtnEl.textContent=open?'▲ Close':'✏️ Edit Icon & Color'; if(open)confirmDel.classList.remove('visible'); });
+      const deleteBtnEl = document.createElement('button'); deleteBtnEl.className = 'admin-delete-btn'; deleteBtnEl.textContent = '🗑 Delete';
+      addTapListener(deleteBtnEl, () => { confirmDel.classList.toggle('visible'); if(confirmDel.classList.contains('visible'))editPanel.classList.remove('visible'); });
+      actionsRow.appendChild(upBtn); actionsRow.appendChild(downBtn); actionsRow.appendChild(editBtnEl); actionsRow.appendChild(deleteBtnEl);
+      row.appendChild(actionsRow);
+      list.appendChild(row);
+    });
+
+  // Add category trigger + form
+  const trigger = document.createElement('button'); trigger.className = 'add-cat-trigger'; trigger.textContent = '＋ Add Category';
+  const form = document.createElement('div'); form.className = 'add-cat-form';
+  const addError = document.createElement('div');
+  addError.style.color = 'var(--red)';
+  addError.style.fontSize = '12px';
+  addError.style.marginBottom = '8px';
+  addError.style.display = 'none';
+  const setAddError = (msg = '') => {
+    addError.textContent = msg;
+    addError.style.display = msg ? 'block' : 'none';
+  };
+
+  // Name
+  const nameFieldLabel = document.createElement('div'); nameFieldLabel.className = 'add-cat-field-label'; nameFieldLabel.textContent = 'Category Name';
+  const nameInput2 = document.createElement('input'); nameInput2.className = 'add-cat-name-input'; nameInput2.placeholder = 'e.g. Quality'; nameInput2.maxLength = 30;
+  const nameWrap = document.createElement('div'); nameWrap.appendChild(nameFieldLabel); nameWrap.appendChild(nameInput2);
+  form.appendChild(nameWrap);
+
+  // Icon picker
+  const iconFieldLabel = document.createElement('div'); iconFieldLabel.className = 'add-cat-field-label'; iconFieldLabel.textContent = 'Icon';
+  const newIconPicker = document.createElement('div'); newIconPicker.className = 'icon-picker';
+  const iconWrap = document.createElement('div'); iconWrap.appendChild(iconFieldLabel); iconWrap.appendChild(newIconPicker);
+  form.appendChild(iconWrap);
+
+  // Color picker
+  const colorFieldLabel = document.createElement('div'); colorFieldLabel.className = 'add-cat-field-label'; colorFieldLabel.textContent = 'Color';
+  const newColorPicker = document.createElement('div'); newColorPicker.className = 'color-picker';
+  const colorWrap = document.createElement('div'); colorWrap.appendChild(colorFieldLabel); colorWrap.appendChild(newColorPicker);
+  form.appendChild(colorWrap);
+
+  // Preview
+  const previewWrap = document.createElement('div'); previewWrap.className = 'add-cat-preview';
+  const previewLbl = document.createElement('span'); previewLbl.className = 'preview-label'; previewLbl.textContent = 'Pill →';
+  const previewPill = document.createElement('span'); previewPill.className = 'preview-pill';
+  previewWrap.appendChild(previewLbl); previewWrap.appendChild(previewPill);
+  form.appendChild(previewWrap);
+
+  // Declare updateNewPreview BEFORE any listeners that reference it
+  const updateNewPreview = () => {
+    const name = nameInput2.value.trim() || 'New Category';
+    previewPill.textContent = newCatIcon + ' ' + name;
+    previewPill.style.color = newCatColor.hex; previewPill.style.borderColor = alphaColor(newCatColor.hex,0.53); previewPill.style.background = alphaColor(newCatColor.hex,0.09);
+  };
+
+  nameInput2.addEventListener('input', updateNewPreview);
+  addTapListener(trigger, () => { setAddError(''); form.classList.add('visible'); trigger.style.display='none'; updateNewPreview(); });
+
+  buildAdminIconPicker(newIconPicker, () => newCatIcon, ic => { newCatIcon = ic; updateNewPreview(); });
+  buildAdminColorPicker(newColorPicker, () => newCatColor.hex, c => { newCatColor = c; updateNewPreview(); });
+  updateNewPreview();
+
+  // Actions
+  const formActions = document.createElement('div'); formActions.className = 'add-cat-actions';
+  const cancelBtn2 = document.createElement('button'); cancelBtn2.className = 'add-cat-cancel'; cancelBtn2.textContent = 'Cancel';
+  const confirmBtn = document.createElement('button'); confirmBtn.className = 'add-cat-confirm'; confirmBtn.textContent = 'Add Category';
+  const hideForm = () => { setAddError(''); form.classList.remove('visible'); trigger.style.display=''; nameInput2.value=''; newCatIcon=ADMIN_ICONS[0]; newCatColor=ADMIN_COLORS[0]; buildAdminIconPicker(newIconPicker,()=>newCatIcon,ic=>{newCatIcon=ic;updateNewPreview();}); buildAdminColorPicker(newColorPicker,()=>newCatColor.hex,c=>{newCatColor=c;updateNewPreview();}); updateNewPreview(); };
+  const doAdd2 = () => {
+    const name = normalizeLabel(nameInput2.value); if (!name) { nameInput2.focus(); return; }
+    const duplicateLabel = Object.values(adminDraft).some(v => normalizeForCompare(v.label) === normalizeForCompare(name));
+    if (duplicateLabel) {
+      setAddError('A category with that name already exists.');
+      return;
+    }
+    let key = makeStatusKey();
+    while (adminDraft[key]) key = makeStatusKey();
+    const slug = slugifyStatusLabel(name);
+    const maxOrder = Math.max(...Object.values(adminDraft).map(v=>v.order||0));
+    adminDraft[key] = { label:name, shortLabel:name, icon:newCatIcon, color:newCatColor.hex, swipeColor:newCatColor.hex, cssColor:newCatColor.hex, floorCls:'has-'+slug, cls:'status-'+slug, subs:[], order:maxOrder+1 };
+    hideForm(); renderAdminList();
+  };
+  addTapListener(cancelBtn2, hideForm);
+  addTapListener(confirmBtn, doAdd2);
+  formActions.appendChild(cancelBtn2); formActions.appendChild(confirmBtn);
+  form.appendChild(addError);
+  form.appendChild(formActions);
+  list.appendChild(trigger); list.appendChild(form);
+}
+
+function closeAdminPanel() {
+  document.getElementById('admin-overlay').classList.remove('visible');
+}
+
+window.resetToDefaults = async () => {
+  if (!confirm('Reset to comprehensive manufacturing categories? This will replace your current configuration.')) return;
+  
+  // Reset STATUSES to the comprehensive defaults from the code
+  STATUSES = {
+    open:            { label:'Open',             shortLabel:'Open',         icon:'●',  cssColor:'var(--red)',      swipeColor:'#ef4444', floorCls:'has-open',            cls:'status-open',            subs:['New Fault / Issue','Pending Triage','Scheduled Mold Change','Re-opened'],                                               statLabel:'Open',          order:0 },
+    alert:           { label:'Alert',            shortLabel:'Alert',        icon:'🚨', cssColor:'#dc2626',         swipeColor:'#dc2626', floorCls:'has-alert',           cls:'status-alert',           subs:['Mold Protection Fault','E-Stop / Safety Hazard','Press Down - Critical','Major Oil / Fluid Leak'],                   statLabel:'Alert',         order:1 },
+    controlman:      { label:'Controlman',       shortLabel:'Controlman',   icon:'🎛️', cssColor:'var(--babyblue)', swipeColor:'#38bdf8', floorCls:'has-controlman',      cls:'status-controlman',      subs:['Robot / EOAT (End of Arm Tooling) Fault','Vision System / Camera Error','Conveyor / Auxiliary Comm Loss','PLC / HMI Error'], statLabel:'Controlman',    order:2 },
+    maintenance:     { label:'Maintenance',      shortLabel:'Maintenance',  icon:'🔧', cssColor:'var(--yellow)',   swipeColor:'#eab308', floorCls:'has-maintenance',     cls:'status-maintenance',     subs:['Hydraulic Leak / Pressure Drop','Heater Band / Thermocouple Failure','Barrel / Screw / Check Ring Issue','Chiller / Thermolator Failure'], statLabel:'Maintenance',   order:3 },
+    materials:       { label:'Materials',        shortLabel:'Materials',    icon:'📦', cssColor:'#8b5cf6',         swipeColor:'#8b5cf6', floorCls:'has-materials',       cls:'status-materials',       subs:['Resin Moisture / Drying Issue','Colorant / Masterbatch Ratio Error','Vacuum / Material Loader Blockage','Wrong Resin / Regrind Issue'], statLabel:'Materials',     order:4 },
+    processengineer: { label:'Process Engineer', shortLabel:'Process Eng.', icon:'⚙️', cssColor:'var(--purple)',   swipeColor:'#a855f7', floorCls:'has-processengineer', cls:'status-processengineer', subs:['Fill / Pack Pressure Adjustment','Temperature Profile Tuning','Cycle Time Optimization','Process Drift / Instability'], statLabel:'Process Eng.',  order:5 },
+    quality:         { label:'Quality',          shortLabel:'Quality',      icon:'✨', cssColor:'#06b6d4',         swipeColor:'#06b6d4', floorCls:'has-quality',         cls:'status-quality',         subs:['Short Shot / Non-fill','Flash / Burrs','Sink Marks / Voids','Splay / Silver Streaks','Burn Marks / Degradation','Warp / Dimensional Out-of-Spec'], statLabel:'Quality',       order:6 },
+    startup:         { label:'Startup',          shortLabel:'Startup',      icon:'🚀', cssColor:'var(--teal)',     swipeColor:'#14b8a6', floorCls:'has-startup',         cls:'status-startup',         subs:['Purging / Color Change','Mold Heat-Up / Stabilization','First Article Inspection (FAI)','Robot Homing / Path Setup'], statLabel:'Startup',       order:7 },
+    tooldie:         { label:'Tool & Die',       shortLabel:'Tool & Die',   icon:'🔩', cssColor:'var(--orange)',   swipeColor:'#f97316', floorCls:'has-tooldie',         cls:'status-tooldie',         subs:['Broken / Bent Ejector Pin','Hot Runner / Gate Issue','Water Leak in Mold','Stuck Part / Sprue','Mold Greasing / PM'], statLabel:'Tool & Die',    order:8 },
+    resolved:        { label:'Resolved',         shortLabel:'Resolved',     icon:'✓',  cssColor:'var(--green)',    swipeColor:'#22c55e', floorCls:'all-resolved',        cls:'status-resolved',        subs:['Process Parameter Adjusted','Mold Cleaned / Repaired','Hardware Replaced','Temporary Workaround'],                      statLabel:'Resolved',      order:9 },
+  };
+  
+  // Save to Firestore
+  await saveConfig();
+  
+  // Rebuild UI
+  rebuildDerivedStatus();
+  buildStatusFilterPills();
+  updatePressStates();
+  renderIssues();
+  updateStats();
+  
+  // Refresh admin panel if open
+  if (document.getElementById('admin-overlay').classList.contains('visible')) {
+    renderAdminPanel();
+  }
+  
+  alert('✅ Reset complete! Comprehensive manufacturing categories have been restored.');
+};
+
+async function saveAdminConfig() {
+  const btn = document.getElementById('admin-save-btn');
+  btn.classList.add('admin-saving'); btn.textContent = 'Saving…';
+  try {
+    const deletedStatusKeys = Object.keys(STATUSES).filter(k => k !== 'open' && k !== 'resolved' && !adminDraft[k]);
+    const deletedSubByStatus = {};
+    Object.entries(STATUSES)
+      .filter(([k]) => k !== 'open' && k !== 'resolved' && adminDraft[k])
+      .forEach(([k, v]) => {
+        const before = Array.isArray(v.subs) ? v.subs.map(normalizeForCompare) : [];
+        const after = new Set((adminDraft[k].subs || []).map(normalizeForCompare));
+        const removed = before.filter(sub => sub && !after.has(sub));
+        if (removed.length) deletedSubByStatus[k] = removed;
+      });
+    if (deletedStatusKeys.length || Object.keys(deletedSubByStatus).length) {
+      const impactedStatusCount = issues.filter(i => deletedStatusKeys.includes(i.status)).length;
+      let impactedSubsCount = 0;
+      Object.entries(deletedSubByStatus).forEach(([statusKey, removedSubs]) => {
+        const removedSet = new Set(removedSubs);
+        impactedSubsCount += issues.filter(i => i.status === statusKey && removedSet.has(normalizeForCompare(i.subStatus))).length;
+      });
+      const ok = confirm(
+        `Potential impact detected:\n` +
+        `• ${deletedStatusKeys.length} deleted categories affecting ${impactedStatusCount} issue(s)\n` +
+        `• ${Object.keys(deletedSubByStatus).length} categories with removed sub-statuses affecting ${impactedSubsCount} issue(s)\n\n` +
+        `Continue saving anyway?`
+      );
+      if (!ok) {
+        btn.textContent = 'Save cancelled';
+        return;
+      }
+    }
+    // Apply draft to live STATUSES — preserve open/resolved
+    const preserved = { open: STATUSES.open, resolved: STATUSES.resolved };
+    STATUSES = { ...preserved };
+    Object.entries(adminDraft)
+      .filter(([k]) => k !== 'open' && k !== 'resolved')
+      .forEach(([k,v]) => { STATUSES[k] = v; });
+    await saveConfig();
+    rebuildDerivedStatus();
+    closeAdminPanel();
+    updatePressStates(); renderIssues(); updateStats();
+    btn.textContent = '✓ Saved!';
+  } catch(e) {
+    btn.textContent = '✕ Error — try again'; console.error(e);
+  } finally {
+    btn.classList.remove('admin-saving');
+    setTimeout(() => { btn.textContent = '💾 Save & Apply'; }, 2000);
+  }
+}
+
+document.getElementById('admin-panel-btn')?.addEventListener('touchend', e => { e.preventDefault(); e.stopPropagation(); openAdminPanel(); }, { passive: false });
+document.getElementById('admin-panel-btn')?.addEventListener('click', e => { e.stopPropagation(); openAdminPanel(); });
+document.getElementById('admin-overlay')?.addEventListener('click', () => { closeAdminPanel(); });
+document.getElementById('admin-panel-inner')?.addEventListener('click', e => { e.stopPropagation(); });
+document.getElementById('admin-close-btn')?.addEventListener('touchend', e => { e.preventDefault(); closeAdminPanel(); }, { passive: false });
+document.getElementById('admin-close-btn')?.addEventListener('click', closeAdminPanel);
+document.getElementById('admin-save-btn')?.addEventListener('touchend', e => { e.preventDefault(); saveAdminConfig(); }, { passive: false });
+document.getElementById('admin-save-btn')?.addEventListener('click', saveAdminConfig);
+
+// Members panel
+document.getElementById('members-btn')?.addEventListener('touchend', e => { e.preventDefault(); e.stopPropagation(); openMembersPanel(); }, { passive: false });
+document.getElementById('members-btn')?.addEventListener('click', e => { e.stopPropagation(); openMembersPanel(); });
 document.getElementById('admin-page-btn')?.addEventListener('click', e => {
   e.stopPropagation();
   window.location.href = 'admin.html';
