@@ -685,12 +685,6 @@ window.addEventListener('scroll', () => {
     setTimeout(tick, 900 + Math.random() * 900);
   }
   setTimeout(tick, 1200);
-
-  /* Scroll reveal */
-  const observer = new IntersectionObserver(entries => {
-    entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
-  }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
-  document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
 })();
 </script>
 
@@ -1732,6 +1726,16 @@ footer {
     </div>
   </div>
 </footer>
+
+<script>
+/* ── Global scroll reveal — runs after full DOM is parsed ── */
+(function () {
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+  }, { threshold: 0.08, rootMargin: '0px 0px -30px 0px' });
+  document.querySelectorAll('.reveal').forEach(el => obs.observe(el));
+})();
+</script>
 
 </body>
 </html>
