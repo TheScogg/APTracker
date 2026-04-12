@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AP Tracker — See It In Action</title>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&family=Nunito:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+
+/* ─── Reset & Base ─── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0d1117; --bg2: #161b22; --bg3: #1c2333; --border: #30363d;
+  --accent: #f97316; --accent2: #fb923c; --accent-glow: rgba(249,115,22,0.25);
+  --red: #ef4444;    --red-dim:    rgba(239,68,68,0.14);
+  --green: #22c55e;  --green-dim:  rgba(34,197,94,0.15);
+  --blue: #3b82f6;   --blue-dim:   rgba(59,130,246,0.13);
+  --yellow: #eab308; --yellow-dim: rgba(234,179,8,0.13);
+  --purple: #a855f7; --purple-dim: rgba(168,85,247,0.13);
+  --babyblue: #38bdf8; --babyblue-dim: rgba(56,189,248,0.13);
+  --teal: #14b8a6;   --teal-dim:   rgba(20,184,166,0.13);
+  --orange: #f97316; --orange-dim: rgba(249,115,22,0.13);
+  --pink: #ec4899;   --pink-dim:   rgba(236,72,153,0.13);
+  --gray: #6b7280;
+  --text: #e6edf3; --text2: #8b949e; --text3: #484f58;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Nunito', sans-serif;
+  overflow-x: hidden;
+  line-height: 1.6;
+}
+
+/* ─── Keyframes ─── */
+@keyframes pulse       { 0%,100%{opacity:1} 50%{opacity:0.3} }
+@keyframes float       { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-7px)} }
+@keyframes slideUp     { from{opacity:0;transform:translateY(28px)} to{opacity:1;transform:translateY(0)} }
+@keyframes heroFadeIn  { from{opacity:0} to{opacity:1} }
+@keyframes flashPress  { 0%{opacity:.5;transform:scale(.95)} 50%{opacity:1;transform:scale(1.04)} 100%{opacity:1;transform:scale(1)} }
+
+/* ─── Scroll reveal ─── */
+.reveal { opacity: 0; transform: translateY(36px); transition: opacity .7s ease, transform .7s ease; }
+.reveal.visible { opacity: 1; transform: translateY(0); }
+.d1 { transition-delay: .1s; } .d2 { transition-delay: .2s; }
+.d3 { transition-delay: .3s; } .d4 { transition-delay: .4s; }
+.d5 { transition-delay: .5s; }
+
+/* ─── Layout ─── */
+.container { max-width: 1180px; margin: 0 auto; padding: 0 24px; }
+section { padding: 88px 0; }
+
+/* ─────────────────────────── NAV ─────────────────────────── */
+nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 200;
+  padding: 0 28px;
+  height: 60px;
+  display: flex; align-items: center; justify-content: space-between;
+  background: rgba(13,17,23,0.82);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid rgba(48,54,61,0.55);
+  transition: box-shadow .25s;
+}
+nav.scrolled { box-shadow: 0 4px 28px rgba(0,0,0,0.45); border-bottom-color: rgba(48,54,61,0.9); }
+
+.nav-logo {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 21px; font-weight: 700; letter-spacing: .12em;
+  color: var(--text); text-decoration: none; display: flex; align-items: center; gap: 6px;
+}
+.nav-logo .bracket { color: var(--accent); }
+
+.nav-right { display: flex; align-items: center; gap: 12px; }
+
+.nav-pill {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px; letter-spacing: .1em;
+  padding: 5px 13px; border-radius: 99px;
+  background: rgba(249,115,22,0.1); color: var(--accent);
+  border: 1px solid rgba(249,115,22,0.28);
+}
+
+.nav-link {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 14px; font-weight: 600; letter-spacing: .05em;
+  color: var(--text2); text-decoration: none;
+  padding: 6px 14px; border-radius: 8px;
+  transition: color .2s, background .2s;
+}
+.nav-link:hover { color: var(--text); background: var(--bg3); }
+
+.nav-cta {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 14px; font-weight: 700; letter-spacing: .07em;
+  padding: 8px 22px; border-radius: 9px;
+  background: var(--accent); color: #fff;
+  border: none; cursor: pointer; text-decoration: none;
+  transition: background .2s, transform .15s, box-shadow .2s;
+}
+.nav-cta:hover { background: var(--accent2); transform: translateY(-1px); box-shadow: 0 6px 18px rgba(249,115,22,0.35); }
+
+/* ─────────────────────────── HERO ─────────────────────────── */
+.hero {
+  position: relative; min-height: 100vh;
+  display: flex; align-items: center;
+  overflow: hidden; padding-top: 60px;
+}
+
+/* Animated press grid background */
+.hero-bg-grid {
+  position: absolute; inset: 0;
+  display: grid; gap: 5px; padding: 40px;
+  opacity: 0; animation: heroFadeIn 1.4s ease .3s forwards;
+}
+
+.hero-press {
+  border-radius: 5px;
+  background: var(--bg3); border: 1px solid var(--border);
+  transition: background .7s ease, border-color .7s ease, box-shadow .7s ease;
+  min-height: 28px;
+}
+.hero-press.st-open        { background:rgba(239,68,68,.32);  border-color:rgba(239,68,68,.5); }
+.hero-press.st-alert       { background:rgba(239,68,68,.48);  border-color:rgba(239,68,68,.7); box-shadow:0 0 10px rgba(239,68,68,.25); }
+.hero-press.st-maintenance { background:rgba(234,179,8,.32);  border-color:rgba(234,179,8,.5); }
+.hero-press.st-controlman  { background:rgba(56,189,248,.28); border-color:rgba(56,189,248,.5); }
+.hero-press.st-tooldie     { background:rgba(249,115,22,.28); border-color:rgba(249,115,22,.5); }
+.hero-press.st-startup     { background:rgba(20,184,166,.28); border-color:rgba(20,184,166,.5); }
+.hero-press.st-processengineer { background:rgba(168,85,247,.25); border-color:rgba(168,85,247,.45); }
+.hero-press.st-materials   { background:rgba(107,114,128,.25); border-color:rgba(107,114,128,.45); }
+.hero-press.st-quality     { background:rgba(236,72,153,.25); border-color:rgba(236,72,153,.45); }
+.hero-press.st-resolved    { background:rgba(34,197,94,.14);  border-color:rgba(34,197,94,.28); }
+.hero-press.flash          { animation: flashPress .45s ease; }
+
+/* Gradient overlay so content is readable */
+.hero-overlay {
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse 65% 85% at 28% 55%, rgba(13,17,23,.75) 0%, rgba(13,17,23,.96) 100%);
+}
+
+/* Content */
+.hero-content {
+  position: relative; z-index: 2;
+  max-width: 1180px; margin: 0 auto; padding: 0 24px;
+  animation: slideUp .9s cubic-bezier(.22,1,.36,1) .2s both;
+}
+
+.hero-eyebrow {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 12px; letter-spacing: .22em; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 22px;
+  display: flex; align-items: center; gap: 14px;
+}
+.hero-eyebrow::before {
+  content: ''; display: inline-block;
+  width: 36px; height: 2px; background: var(--accent); border-radius: 2px;
+}
+
+.hero-title {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: clamp(52px, 9.5vw, 100px);
+  font-weight: 700; line-height: .93; letter-spacing: .04em;
+  margin-bottom: 30px;
+}
+.hero-title .hi  { display: block; }
+.hero-title .acc { color: var(--accent); text-shadow: 0 0 48px rgba(249,115,22,.45); }
+
+.hero-tagline {
+  font-size: clamp(15px, 2.2vw, 20px);
+  color: var(--text2); max-width: 480px;
+  line-height: 1.55; margin-bottom: 44px;
+}
+
+/* Quick-stat pills row */
+.hero-pills {
+  display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 48px;
+}
+.hero-pill {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px; letter-spacing: .07em;
+  padding: 7px 15px; border-radius: 99px;
+  border: 1px solid var(--border); color: var(--text2);
+  display: flex; align-items: center; gap: 8px;
+  background: rgba(22,27,34,.6);
+  backdrop-filter: blur(8px);
+}
+.hero-pill .dot {
+  width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+}
+.hero-pill .dot.live { animation: pulse 1.8s ease-in-out infinite; }
+
+/* CTA row */
+.hero-cta { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+
+.btn-primary {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 16px; font-weight: 700; letter-spacing: .07em;
+  padding: 14px 34px; border-radius: 11px;
+  background: var(--accent); color: #fff;
+  border: none; cursor: pointer; text-decoration: none; display: inline-block;
+  transition: background .2s, transform .15s, box-shadow .2s;
+}
+.btn-primary:hover { background: var(--accent2); transform: translateY(-2px); box-shadow: 0 8px 26px rgba(249,115,22,.38); }
+
+.btn-ghost {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 16px; font-weight: 600; letter-spacing: .05em;
+  padding: 14px 28px; border-radius: 11px;
+  background: transparent; color: var(--text);
+  border: 1px solid var(--border); cursor: pointer; text-decoration: none; display: inline-block;
+  transition: border-color .2s, color .2s;
+}
+.btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Scroll indicator */
+.scroll-hint {
+  position: absolute; bottom: 34px; left: 50%; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 9px;
+  color: var(--text3); font-family: 'Share Tech Mono', monospace;
+  font-size: 10px; letter-spacing: .14em; text-transform: uppercase;
+  opacity: 0; animation: heroFadeIn 1s ease 1.4s forwards;
+}
+.scroll-mouse {
+  width: 22px; height: 36px; border: 2px solid var(--text3); border-radius: 11px;
+  display: flex; justify-content: center; padding-top: 7px;
+}
+.scroll-mouse::before {
+  content: ''; width: 4px; height: 9px; background: var(--text3);
+  border-radius: 2px; animation: float 1.6s ease-in-out infinite;
+}
+
+/* ─── Responsive nav ─── */
+@media (max-width: 600px) {
+  .nav-link { display: none; }
+  .hero-title { font-size: 44px; }
+}
+
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════ NAV ══════════════════════════ -->
+<nav id="mainNav">
+  <a href="#" class="nav-logo">
+    <span class="bracket">[</span>AP<span class="bracket">]</span>TRACKER
+  </a>
+  <div class="nav-right">
+    <span class="nav-pill">DEMO</span>
+    <a href="#features" class="nav-link">Features</a>
+    <a href="#workflow" class="nav-link">Workflow</a>
+    <a href="index.html" class="nav-cta">Launch App →</a>
+  </div>
+</nav>
+
+<!-- ══════════════════════════ HERO ══════════════════════════ -->
+<section class="hero">
+
+  <!-- Animated press button background -->
+  <div class="hero-bg-grid" id="heroBgGrid"></div>
+  <div class="hero-overlay"></div>
+
+  <div class="hero-content">
+    <div class="hero-eyebrow">Manufacturing Intelligence Platform</div>
+
+    <h1 class="hero-title">
+      <span class="hi">FACTORY</span>
+      <span class="hi">FLOOR</span>
+      <span class="hi acc">COMMAND</span>
+    </h1>
+
+    <p class="hero-tagline">
+      Real-time injection molding press issue tracking across every plant, every shift — on any device.
+    </p>
+
+    <div class="hero-pills">
+      <div class="hero-pill"><span class="dot live" style="background:var(--green)"></span>Live Firestore Sync</div>
+      <div class="hero-pill"><span class="dot" style="background:var(--blue)"></span>Multi-Plant Support</div>
+      <div class="hero-pill"><span class="dot" style="background:var(--purple)"></span>Role-Based Access</div>
+      <div class="hero-pill"><span class="dot" style="background:var(--accent)"></span>Works on Any Device</div>
+      <div class="hero-pill"><span class="dot" style="background:var(--teal)"></span>10 Status Categories</div>
+    </div>
+
+    <div class="hero-cta">
+      <a href="index.html" class="btn-primary">Launch App</a>
+      <a href="#features" class="btn-ghost">Explore Features ↓</a>
+    </div>
+  </div>
+
+  <div class="scroll-hint">
+    <div class="scroll-mouse"></div>
+    <span>Scroll</span>
+  </div>
+
+</section>
+
+<script>
+/* ── Hero background press grid ── */
+(function () {
+  const grid = document.getElementById('heroBgGrid');
+  const COLS = 18, ROWS = 9;
+  grid.style.gridTemplateColumns = `repeat(${COLS}, 1fr)`;
+  grid.style.gridTemplateRows    = `repeat(${ROWS}, 1fr)`;
+
+  const ST = ['','','','','st-open','st-maintenance','st-controlman',
+              'st-alert','st-tooldie','st-startup','st-processengineer',
+              'st-materials','st-quality','st-resolved'];
+
+  const cells = Array.from({ length: COLS * ROWS }, () => {
+    const el = document.createElement('div');
+    el.className = 'hero-press';
+    const s = ST[Math.floor(Math.random() * ST.length)];
+    if (s) el.classList.add(s);
+    grid.appendChild(el);
+    return { el, s };
+  });
+
+  function tick() {
+    const n = Math.floor(Math.random() * 3) + 1;
+    for (let i = 0; i < n; i++) {
+      const c = cells[Math.floor(Math.random() * cells.length)];
+      if (c.s) c.el.classList.remove(c.s);
+      c.el.classList.remove('flash');
+      void c.el.offsetWidth; // force reflow to restart animation
+      const next = ST[Math.floor(Math.random() * ST.length)];
+      c.s = next;
+      if (next) { c.el.classList.add(next); c.el.classList.add('flash'); }
+    }
+    setTimeout(tick, 700 + Math.random() * 1100);
+  }
+  tick();
+})();
+
+/* ── Nav scroll shadow ── */
+window.addEventListener('scroll', () => {
+  document.getElementById('mainNav').classList.toggle('scrolled', window.scrollY > 12);
+});
+</script>
+
+</body>
+</html>
