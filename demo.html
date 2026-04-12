@@ -968,5 +968,285 @@ window.addEventListener('scroll', () => {
   </div>
 </section>
 
+<!-- ══════════════════════════ STATUS SHOWCASE ══════════════════════════ -->
+
+<style>
+.ss-section { background: var(--bg); }
+
+.ss-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 13px;
+  margin-top: 52px;
+}
+
+.ss-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  padding: 20px 18px 16px;
+  position: relative; overflow: hidden;
+  transition: transform .2s, box-shadow .2s;
+  cursor: default;
+}
+.ss-card:hover { transform: translateY(-4px); }
+
+/* Colored top bar */
+.ss-card::before {
+  content: ''; position: absolute;
+  top: 0; left: 0; right: 0; height: 3px;
+  border-radius: 15px 15px 0 0;
+}
+
+/* Subtle color wash behind the card */
+.ss-card::after {
+  content: ''; position: absolute;
+  inset: 0; border-radius: 15px;
+  opacity: 0; transition: opacity .25s;
+  pointer-events: none;
+}
+.ss-card:hover::after { opacity: 1; }
+
+.ss-icon { font-size: 26px; display: block; margin-bottom: 10px; line-height: 1; }
+
+.ss-name {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 15px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; margin-bottom: 10px;
+}
+
+.ss-subs {
+  display: flex; flex-direction: column; gap: 4px;
+  margin-bottom: 14px;
+}
+.ss-sub {
+  font-family: 'Nunito', sans-serif;
+  font-size: 11px; color: var(--text3); line-height: 1.4;
+  padding: 3px 8px; border-radius: 5px;
+  background: var(--bg3); border: 1px solid var(--border);
+  display: inline-block; width: fit-content;
+}
+
+.ss-badge {
+  position: absolute; top: 13px; right: 13px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px; letter-spacing: .07em;
+  padding: 3px 8px; border-radius: 99px;
+}
+
+/* Bottom order indicator */
+.ss-order {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px; color: var(--text3); letter-spacing: .1em;
+  margin-top: auto; padding-top: 10px;
+  border-top: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.ss-order-dots { display: flex; gap: 4px; align-items: center; }
+.ss-order-dot  { width: 6px; height: 6px; border-radius: 50%; background: var(--border); }
+.ss-order-dot.active { background: currentColor; }
+</style>
+
+<div class="section-divider"></div>
+
+<section class="ss-section">
+  <div class="container">
+    <div class="reveal" style="text-align:center; max-width:580px; margin:0 auto">
+      <div class="section-label" style="text-align:center">Status System</div>
+      <h2 class="section-heading" style="text-align:center">10 categories built<br>for manufacturing</h2>
+      <p class="section-sub" style="margin:0 auto; text-align:center">Every status maps to a real manufacturing function. Sub-statuses drill down for precision — 40+ built-in options, all fully customizable from the admin panel.</p>
+    </div>
+
+    <div class="ss-grid" id="ssGrid">
+
+      <!-- 1. Open -->
+      <div class="ss-card reveal d1" style="--c:#ef4444"
+           onmouseenter="this.style.boxShadow='0 8px 32px rgba(239,68,68,.15)'"
+           onmouseleave="this.style.boxShadow=''">
+        <div style="position:absolute;top:0;left:0;right:0;height:3px;background:#ef4444;border-radius:15px 15px 0 0"></div>
+        <div style="position:absolute;inset:0;border-radius:15px;background:rgba(239,68,68,.04);opacity:0;transition:opacity .25s" class="ss-wash"></div>
+        <div class="ss-badge" style="background:rgba(239,68,68,.12);color:#ef4444;border:1px solid rgba(239,68,68,.3)">ORDER 0</div>
+        <span class="ss-icon">🔴</span>
+        <div class="ss-name" style="color:#ef4444">Open</div>
+        <div class="ss-subs">
+          <span class="ss-sub">Equipment Down</span>
+          <span class="ss-sub">Needs Attention</span>
+          <span class="ss-sub">Pending Call</span>
+        </div>
+        <div class="ss-order"><span>INITIAL STATE</span><div class="ss-order-dots"><div class="ss-order-dot active" style="color:#ef4444"></div><div class="ss-order-dot"></div><div class="ss-order-dot"></div><div class="ss-order-dot"></div><div class="ss-order-dot"></div></div></div>
+      </div>
+
+      <!-- 2. Alert -->
+      <div class="ss-card reveal d2"
+           onmouseenter="this.style.boxShadow='0 8px 32px rgba(239,68,68,.2)'"
+           onmouseleave="this.style.boxShadow=''">
+        <div style="position:absolute;top:0;left:0;right:0;height:3px;background:#ef4444;border-radius:15px 15px 0 0"></div>
+        <div class="ss-badge" style="background:rgba(239,68,68,.15);color:#ef4444;border:1px solid rgba(239,68,68,.4)">ORDER 1</div>
+        <span class="ss-icon">🚨</span>
+        <div class="ss-name" style="color:#ef4444">Alert</div>
+        <div class="ss-subs">
+          <span class="ss-sub">Critical Fault</span>
+          <span class="ss-sub">E-Stop Triggered</span>
+          <span class="ss-sub">Safety Event</span>
+          <span class="ss-sub">Evacuation</span>
+        </div>
+        <div class="ss-order"><span>HIGH PRIORITY</span><div class="ss-order-dots"><div class="ss-order-dot active" style="color:#ef4444"></div><div class="ss-order-dot active" style="color:#ef4444"></div><div class="ss-order-dot"></div><div class="ss-order-dot"></div><div class="ss-order-dot"></div></div></div>
+      </div>
+
+      <!-- 3. Controlman -->
+      <div class="ss-card reveal d3"
+           onmouseenter="this.style.boxShadow='0 8px 32px rgba(56,189,248,.12)'"
+           onmouseleave="this.style.boxShadow=''">
+        <div style="position:absolute;top:0;left:0;right:0;height:3px;background:#38bdf8;border-radius:15px 15px 0 0"></div>
+        <div class="ss-badge" style="background:rgba(56,189,248,.12);color:#38bdf8;border:1px solid rgba(56,189,248,.3)">ORDER 2</div>
+        <span class="ss-icon">🕹️</span>
+        <div class="ss-name" style="color:#38bdf8">Controlman</div>
+        <div class="ss-subs">
+          <span class="ss-sub">Programming</span>
+          <span class="ss-sub">Robot Setup</span>
+          <span class="ss-sub">PLC Fault</span>
+          <span class="ss-sub">HMI Issue</span>
+        </div>
+        <div class="ss-order"><span>AUTOMATION</span><div class="ss-order-dots"><div class="ss-order-dot active" style="color:#38bdf8"></div><div class="ss-order-dot active" style="color:#38bdf8"></div><div class="ss-order-dot active" style="color:#38bdf8"></div><div class="ss-order-dot"></div><div class="ss-order-dot"></div></div></div>
+      </div>
+
+      <!-- 4. Maintenance -->
+      <div class="ss-card reveal d4"
+           onmouseenter="this.style.boxShadow='0 8px 32px rgba(234,179,8,.12)'"
+           onmouseleave="this.style.boxShadow=''">
+        <div style="position:absolute;top:0;left:0;right:0;height:3px;background:#eab308;border-radius:15px 15px 0 0"></div>
+        <div class="ss-badge" style="background:rgba(234,179,8,.12);color:#eab308;border:1px solid rgba(234,179,8,.3)">ORDER 3</div>
+        <span class="ss-icon">⚙️</span>
+        <div class="ss-name" style="color:#eab308">Maintenance</div>
+        <div class="ss-subs">
+          <span class="ss-sub">Hydraulic Leak</span>
+          <span class="ss-sub">Heater Band</span>
+          <span class="ss-sub">Thermocouple</span>
+          <span class="ss-sub">In Progress</span>
+          <span class="ss-sub">Complete</span>
+        </div>
+        <div class="ss-order"><span>MECHANICAL</span><div class="ss-order-dots"><div class="ss-order-dot active" style="color:#eab308"></div><div class="ss-order-dot active" style="color:#eab308"></div><div class="ss-order-dot active" style="color:#eab308"></div><div class="ss-order-dot active" style="color:#eab308"></div><div class="ss-order-dot"></div></div></div>
+      </div>
+
+      <!-- 5. Materials -->
+      <div class="ss-card reveal d1"
+           onmouseenter="this.style.boxShadow='0 8px 32px rgba(107,114,128,.12)'"
+           onmouseleave="this.style.boxShadow=''">
+        <div style="position:absolute;top:0;left:0;right:0;height:3px;background:#6b7280;border-radius:15px 15px 0 0"></div>
+        <div class="ss-badge" style="background:rgba(107,114,128,.12);color:#6b7280;border:1px solid rgba(107,114,128,.3)">ORDER 4</div>
+        <span class="ss-icon">📦</span>
+        <div class="ss-name" style="color:#6b7280">Materials</div>
+        <div class="ss-subs">
+          <span class="ss-sub">Shortage</span>
+          <span class="ss-sub">Wrong Material</span>
+          <span class="ss-sub">Contaminated</span>
+          <span class="ss-sub">Awaiting Delivery</span>
+        </div>
+        <div class="ss-order"><span>SUPPLY CHAIN</span><div class="ss-order-dots"><div class="ss-order-dot active" style="color:#6b7280"></div><div class="ss-order-dot active" style="color:#6b7280"></div><div class="ss-order-dot active" style="color:#6b7280"></div><div class="ss-order-dot active" style="color:#6b7280"></div><div class="ss-order-dot active" style="color:#6b7280"></div></div></div>
+      </div>
+
+      <!-- 6. Process Engineer -->
+      <div class="ss-card reveal d2"
+           onmouseenter="this.style.boxShadow='0 8px 32px rgba(168,85,247,.12)'"
+           onmouseleave="this.style.boxShadow=''">
+        <div style="position:absolute;top:0;left:0;right:0;height:3px;background:#a855f7;border-radius:15px 15px 0 0"></div>
+        <div class="ss-badge" style="background:rgba(168,85,247,.12);color:#a855f7;border:1px solid rgba(168,85,247,.3)">ORDER 5</div>
+        <span class="ss-icon">◈</span>
+        <div class="ss-name" style="color:#a855f7">Process Eng</div>
+        <div class="ss-subs">
+          <span class="ss-sub">Process Review</span>
+          <span class="ss-sub">Shot Weight</span>
+          <span class="ss-sub">Warpage</span>
+          <span class="ss-sub">Cycle Time</span>
+        </div>
+        <div class="ss-order"><span>ENGINEERING</span><div class="ss-order-dots"><div class="ss-order-dot active" style="color:#a855f7"></div><div class="ss-order-dot active" style="color:#a855f7"></div><div class="ss-order-dot active" style="color:#a855f7"></div><div class="ss-order-dot active" style="color:#a855f7"></div><div class="ss-order-dot active" style="color:#a855f7"></div></div></div>
+      </div>
+
+      <!-- 7. Quality -->
+      <div class="ss-card reveal d3"
+           onmouseenter="this.style.boxShadow='0 8px 32px rgba(236,72,153,.12)'"
+           onmouseleave="this.style.boxShadow=''">
+        <div style="position:absolute;top:0;left:0;right:0;height:3px;background:#ec4899;border-radius:15px 15px 0 0"></div>
+        <div class="ss-badge" style="background:rgba(236,72,153,.12);color:#ec4899;border:1px solid rgba(236,72,153,.3)">ORDER 6</div>
+        <span class="ss-icon">🔍</span>
+        <div class="ss-name" style="color:#ec4899">Quality</div>
+        <div class="ss-subs">
+          <span class="ss-sub">Flash</span>
+          <span class="ss-sub">Sink Marks</span>
+          <span class="ss-sub">Short Shot</span>
+          <span class="ss-sub">Dimensional Fail</span>
+        </div>
+        <div class="ss-order"><span>INSPECTION</span><div class="ss-order-dots"><div class="ss-order-dot active" style="color:#ec4899"></div><div class="ss-order-dot active" style="color:#ec4899"></div><div class="ss-order-dot active" style="color:#ec4899"></div><div class="ss-order-dot active" style="color:#ec4899"></div><div class="ss-order-dot active" style="color:#ec4899"></div></div></div>
+      </div>
+
+      <!-- 8. Startup -->
+      <div class="ss-card reveal d4"
+           onmouseenter="this.style.boxShadow='0 8px 32px rgba(20,184,166,.12)'"
+           onmouseleave="this.style.boxShadow=''">
+        <div style="position:absolute;top:0;left:0;right:0;height:3px;background:#14b8a6;border-radius:15px 15px 0 0"></div>
+        <div class="ss-badge" style="background:rgba(20,184,166,.12);color:#14b8a6;border:1px solid rgba(20,184,166,.3)">ORDER 7</div>
+        <span class="ss-icon">🚀</span>
+        <div class="ss-name" style="color:#14b8a6">Startup</div>
+        <div class="ss-subs">
+          <span class="ss-sub">Mold Change</span>
+          <span class="ss-sub">First Article</span>
+          <span class="ss-sub">Warm-Up</span>
+          <span class="ss-sub">Approval Pending</span>
+        </div>
+        <div class="ss-order"><span>CHANGEOVER</span><div class="ss-order-dots"><div class="ss-order-dot active" style="color:#14b8a6"></div><div class="ss-order-dot active" style="color:#14b8a6"></div><div class="ss-order-dot active" style="color:#14b8a6"></div><div class="ss-order-dot active" style="color:#14b8a6"></div><div class="ss-order-dot active" style="color:#14b8a6"></div></div></div>
+      </div>
+
+      <!-- 9. Tool & Die -->
+      <div class="ss-card reveal d1"
+           onmouseenter="this.style.boxShadow='0 8px 32px rgba(249,115,22,.12)'"
+           onmouseleave="this.style.boxShadow=''">
+        <div style="position:absolute;top:0;left:0;right:0;height:3px;background:#f97316;border-radius:15px 15px 0 0"></div>
+        <div class="ss-badge" style="background:rgba(249,115,22,.12);color:#f97316;border:1px solid rgba(249,115,22,.3)">ORDER 8</div>
+        <span class="ss-icon">🔩</span>
+        <div class="ss-name" style="color:#f97316">Tool &amp; Die</div>
+        <div class="ss-subs">
+          <span class="ss-sub">Tooling Wear</span>
+          <span class="ss-sub">Die Damage</span>
+          <span class="ss-sub">Gate Issue</span>
+          <span class="ss-sub">Flash</span>
+          <span class="ss-sub">Polish</span>
+        </div>
+        <div class="ss-order"><span>TOOLING</span><div class="ss-order-dots"><div class="ss-order-dot active" style="color:#f97316"></div><div class="ss-order-dot active" style="color:#f97316"></div><div class="ss-order-dot active" style="color:#f97316"></div><div class="ss-order-dot active" style="color:#f97316"></div><div class="ss-order-dot active" style="color:#f97316"></div></div></div>
+      </div>
+
+      <!-- 10. Resolved -->
+      <div class="ss-card reveal d2"
+           onmouseenter="this.style.boxShadow='0 8px 32px rgba(34,197,94,.15)'"
+           onmouseleave="this.style.boxShadow=''">
+        <div style="position:absolute;top:0;left:0;right:0;height:3px;background:#22c55e;border-radius:15px 15px 0 0"></div>
+        <div class="ss-badge" style="background:rgba(34,197,94,.12);color:#22c55e;border:1px solid rgba(34,197,94,.3)">ORDER 9</div>
+        <span class="ss-icon">✅</span>
+        <div class="ss-name" style="color:#22c55e">Resolved</div>
+        <div class="ss-subs">
+          <span class="ss-sub">Issue corrected</span>
+          <span class="ss-sub">Documented &amp; closed</span>
+          <span class="ss-sub">Press back online</span>
+        </div>
+        <div class="ss-order"><span>TERMINAL STATE</span><div class="ss-order-dots"><div class="ss-order-dot active" style="color:#22c55e"></div><div class="ss-order-dot active" style="color:#22c55e"></div><div class="ss-order-dot active" style="color:#22c55e"></div><div class="ss-order-dot active" style="color:#22c55e"></div><div class="ss-order-dot active" style="color:#22c55e"></div></div></div>
+      </div>
+
+    </div>
+
+    <!-- Custom status callout -->
+    <div class="reveal" style="margin-top:32px; padding:20px 24px; background:var(--bg2); border:1px solid var(--border); border-radius:14px; display:flex; align-items:center; gap:18px; flex-wrap:wrap;">
+      <div style="font-size:28px">⚙️</div>
+      <div style="flex:1; min-width:200px">
+        <div style="font-family:'Rajdhani',sans-serif; font-size:16px; font-weight:700; letter-spacing:.04em; margin-bottom:4px">Fully customizable via the Admin Panel</div>
+        <div style="font-size:13px; color:var(--text2); line-height:1.5">Add custom categories with any color, rename sub-statuses, reorder, or reset to manufacturing defaults — all without touching code.</div>
+      </div>
+      <a href="admin.html" style="font-family:'Rajdhani',sans-serif; font-size:14px; font-weight:700; letter-spacing:.06em; padding:10px 22px; border-radius:9px; background:transparent; color:var(--accent); border:1px solid rgba(249,115,22,.35); text-decoration:none; white-space:nowrap; transition:background .2s, color .2s;"
+         onmouseenter="this.style.background='rgba(249,115,22,.1)'" onmouseleave="this.style.background='transparent'">
+        Open Admin Panel →
+      </a>
+    </div>
+
+  </div>
+</section>
+
 </body>
 </html>
