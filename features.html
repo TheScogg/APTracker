@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AP Tracker — Feature Showcase</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;900&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #070b16;
+      --panel: rgba(13, 19, 35, 0.8);
+      --glass: rgba(255, 255, 255, 0.08);
+      --text: #f3f7ff;
+      --muted: #c3d1ff;
+      --cyan: #34d3ff;
+      --purple: #9b5cff;
+      --pink: #ff4eb4;
+      --lime: #b4ff47;
+      --orange: #ff9f43;
+      --shadow: 0 20px 45px rgba(0, 0, 0, 0.45);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'Nunito', system-ui, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 10% 10%, rgba(155, 92, 255, 0.3), transparent 35%),
+        radial-gradient(circle at 80% 0%, rgba(52, 211, 255, 0.25), transparent 30%),
+        radial-gradient(circle at 50% 100%, rgba(255, 78, 180, 0.2), transparent 45%),
+        var(--bg);
+      overflow-x: hidden;
+    }
+
+    .noise {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.06;
+      background-image: url("https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=600&q=60");
+      background-size: 320px;
+      mix-blend-mode: soft-light;
+      animation: drift 25s linear infinite;
+    }
+
+    .container {
+      width: min(1150px, 92vw);
+      margin: 0 auto;
+      padding: 2.5rem 0 4rem;
+      position: relative;
+      z-index: 1;
+    }
+
+    .hero {
+      text-align: center;
+      padding: 3rem 1rem;
+      border-radius: 28px;
+      background: linear-gradient(140deg, rgba(52, 211, 255, 0.15), rgba(155, 92, 255, 0.2), rgba(255, 78, 180, 0.15));
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      box-shadow: var(--shadow);
+      position: relative;
+      overflow: hidden;
+      isolation: isolate;
+    }
+
+    .hero::before,
+    .hero::after {
+      content: "";
+      position: absolute;
+      width: 300px;
+      height: 300px;
+      border-radius: 50%;
+      filter: blur(38px);
+      z-index: -1;
+      opacity: 0.6;
+    }
+
+    .hero::before {
+      background: var(--cyan);
+      top: -120px;
+      left: -80px;
+      animation: floatOrb 8s ease-in-out infinite;
+    }
+
+    .hero::after {
+      background: var(--pink);
+      bottom: -130px;
+      right: -80px;
+      animation: floatOrb 10s ease-in-out infinite reverse;
+    }
+
+    h1 {
+      margin: 0;
+      font-family: 'Rajdhani', sans-serif;
+      font-size: clamp(2rem, 5vw, 4.25rem);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      text-shadow: 0 0 26px rgba(52, 211, 255, 0.45);
+    }
+
+    .subtitle {
+      margin: 0.85rem auto 1.5rem;
+      max-width: 760px;
+      color: var(--muted);
+      font-size: clamp(1rem, 2.2vw, 1.3rem);
+      line-height: 1.5;
+    }
+
+    .hero-badges {
+      display: flex;
+      justify-content: center;
+      gap: 0.7rem;
+      flex-wrap: wrap;
+    }
+
+    .badge {
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      padding: 0.42rem 0.85rem;
+      border-radius: 999px;
+      font-size: 0.9rem;
+      background: rgba(7, 11, 22, 0.45);
+      backdrop-filter: blur(6px);
+      transform: translateY(0);
+      animation: badgePulse 3.2s ease-in-out infinite;
+    }
+
+    .grid {
+      margin-top: 2rem;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+    }
+
+    .card {
+      position: relative;
+      overflow: hidden;
+      background: var(--panel);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+      min-height: 200px;
+      transition: transform 0.35s ease, border-color 0.35s ease;
+      backdrop-filter: blur(8px);
+    }
+
+    .card:hover {
+      transform: translateY(-6px) scale(1.01);
+      border-color: rgba(180, 255, 71, 0.65);
+    }
+
+    .card .photo {
+      width: 100%;
+      height: 120px;
+      object-fit: cover;
+      display: block;
+      filter: saturate(1.1) contrast(1.03);
+    }
+
+    .card-content {
+      padding: 0.85rem 0.95rem 1rem;
+    }
+
+    .card h3 {
+      margin: 0 0 0.3rem;
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 1.3rem;
+      letter-spacing: 0.03em;
+    }
+
+    .card p {
+      margin: 0;
+      color: #d5e1ff;
+      font-size: 0.94rem;
+      line-height: 1.45;
+    }
+
+    .card .glow {
+      position: absolute;
+      inset: auto -35% -45% auto;
+      width: 190px;
+      height: 190px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(52, 211, 255, 0.6), transparent 70%);
+      animation: spin 12s linear infinite;
+      pointer-events: none;
+    }
+
+    .timeline {
+      margin-top: 2.5rem;
+      background: linear-gradient(135deg, rgba(180, 255, 71, 0.07), rgba(155, 92, 255, 0.14));
+      border-radius: 24px;
+      padding: 1.3rem;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+
+    .timeline h2 {
+      margin: 0 0 1rem;
+      font-family: 'Rajdhani', sans-serif;
+      letter-spacing: 0.04em;
+    }
+
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 0.8rem;
+    }
+
+    .step {
+      padding: 0.8rem;
+      border-radius: 14px;
+      background: rgba(7, 11, 22, 0.55);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .step::before {
+      content: "";
+      position: absolute;
+      top: -50%;
+      right: -20%;
+      width: 140px;
+      height: 140px;
+      background: radial-gradient(circle, rgba(255, 159, 67, 0.35), transparent 70%);
+      transform: rotate(25deg);
+      animation: breathe 4s ease-in-out infinite;
+    }
+
+    .step strong {
+      display: block;
+      margin-bottom: 0.22rem;
+      color: #fff;
+    }
+
+    .step span {
+      font-size: 0.92rem;
+      color: #cbd9ff;
+    }
+
+    .cta {
+      margin-top: 2rem;
+      text-align: center;
+    }
+
+    .cta button {
+      cursor: pointer;
+      border: 0;
+      color: #05101f;
+      font-weight: 900;
+      font-size: 1.02rem;
+      padding: 0.85rem 1.4rem;
+      border-radius: 14px;
+      background: linear-gradient(120deg, var(--lime), #7dffdd, var(--cyan));
+      box-shadow: 0 12px 26px rgba(52, 211, 255, 0.35);
+      transition: transform 0.25s ease, box-shadow 0.25s ease;
+    }
+
+    .cta button:hover {
+      transform: translateY(-3px) scale(1.02);
+      box-shadow: 0 16px 34px rgba(52, 211, 255, 0.45);
+    }
+
+    .flash {
+      animation: flashBg 0.9s ease;
+    }
+
+    @keyframes floatOrb {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      50% { transform: translate(18px, 12px) scale(1.08); }
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    @keyframes drift {
+      from { transform: translateX(0); }
+      to { transform: translateX(180px); }
+    }
+
+    @keyframes badgePulse {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-4px); }
+    }
+
+    @keyframes breathe {
+      0%, 100% { transform: scale(1) rotate(25deg); opacity: 0.6; }
+      50% { transform: scale(1.15) rotate(15deg); opacity: 0.9; }
+    }
+
+    @keyframes flashBg {
+      0% { filter: brightness(1); }
+      25% { filter: brightness(1.35); }
+      100% { filter: brightness(1); }
+    }
+
+    @media (max-width: 680px) {
+      .hero { padding: 2.2rem 0.8rem; }
+      .card .photo { height: 150px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="noise"></div>
+  <main class="container">
+    <section class="hero">
+      <h1>AP Tracker Feature Universe</h1>
+      <p class="subtitle">A high-energy showcase of your app’s best moments: visual dashboards, rapid issue flow, team collaboration, and live production confidence.</p>
+      <div class="hero-badges">
+        <span class="badge">⚡ Live Status Tracking</span>
+        <span class="badge">📸 Photo Attachments</span>
+        <span class="badge">🎯 Workflow States</span>
+        <span class="badge">📊 Instant Insights</span>
+      </div>
+    </section>
+
+    <section class="grid" aria-label="Feature highlights">
+      <article class="card">
+        <img class="photo" src="https://images.unsplash.com/photo-1567789884554-0b844b597180?auto=format&fit=crop&w=1200&q=80" alt="Industrial machine with bright control lights" loading="lazy" />
+        <div class="card-content">
+          <h3>Floor Map Visibility</h3>
+          <p>See every press at a glance with colorful status indicators that call attention to issues instantly.</p>
+        </div>
+        <span class="glow"></span>
+      </article>
+
+      <article class="card">
+        <img class="photo" src="https://images.unsplash.com/photo-1581092921461-eab62e97a780?auto=format&fit=crop&w=1200&q=80" alt="Team member reviewing workflow data" loading="lazy" />
+        <div class="card-content">
+          <h3>Smart Workflow Progress</h3>
+          <p>Track called → accepted → in-progress → finished with clear animated state transitions.</p>
+        </div>
+        <span class="glow"></span>
+      </article>
+
+      <article class="card">
+        <img class="photo" src="https://images.unsplash.com/photo-1518773553398-650c184e0bb3?auto=format&fit=crop&w=1200&q=80" alt="Circuit board macro detail" loading="lazy" />
+        <div class="card-content">
+          <h3>Photo-Driven Reporting</h3>
+          <p>Attach visuals to issues so technicians can diagnose fast and resolve with confidence.</p>
+        </div>
+        <span class="glow"></span>
+      </article>
+
+      <article class="card">
+        <img class="photo" src="https://images.unsplash.com/photo-1552664730-d307ca884978?auto=format&fit=crop&w=1200&q=80" alt="People collaborating in a planning session" loading="lazy" />
+        <div class="card-content">
+          <h3>Cross-Plant Collaboration</h3>
+          <p>Switch plants quickly and keep teams aligned with one shared source of operational truth.</p>
+        </div>
+        <span class="glow"></span>
+      </article>
+    </section>
+
+    <section class="timeline">
+      <h2>Issue Journey in Motion</h2>
+      <div class="steps">
+        <div class="step"><strong>1. Issue Called</strong><span>Operators log a problem in seconds from desktop or mobile.</span></div>
+        <div class="step"><strong>2. Team Accepts</strong><span>Owners take action and set expectations in real time.</span></div>
+        <div class="step"><strong>3. Work In Progress</strong><span>Status updates and photos keep every stakeholder in sync.</span></div>
+        <div class="step"><strong>4. Finished + Reviewed</strong><span>Close the loop with resolution notes and export-ready history.</span></div>
+      </div>
+    </section>
+
+    <div class="cta">
+      <button id="sparkButton" type="button">Launch Celebration Mode ✨</button>
+    </div>
+  </main>
+
+  <script>
+    const sparkButton = document.getElementById('sparkButton');
+    sparkButton?.addEventListener('click', () => {
+      document.body.classList.remove('flash');
+      void document.body.offsetWidth;
+      document.body.classList.add('flash');
+      sparkButton.textContent = 'Celebration Active 🚀';
+      setTimeout(() => {
+        sparkButton.textContent = 'Launch Celebration Mode ✨';
+      }, 1600);
+    });
+  </script>
+</body>
+</html>
