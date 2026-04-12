@@ -694,5 +694,279 @@ window.addEventListener('scroll', () => {
 })();
 </script>
 
+<!-- ══════════════════════════ ISSUE CARDS SECTION ══════════════════════════ -->
+
+<style>
+/* ─── Issue Cards section ─── */
+.ic-section { background: var(--bg2); }
+
+.ic-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+  margin-top: 52px;
+  align-items: start;
+}
+
+/* Card */
+.ic-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 17px;
+  overflow: hidden;
+  box-shadow: 0 4px 22px rgba(0,0,0,.32);
+  transition: transform .2s, box-shadow .2s;
+}
+.ic-card:hover { transform: translateY(-3px); box-shadow: 0 10px 36px rgba(0,0,0,.42); }
+.ic-card.priority { border-color: rgba(239,68,68,.4); box-shadow: 0 4px 22px rgba(239,68,68,.1); }
+.ic-card.resolved { opacity: .72; }
+
+/* Card header */
+.ic-head {
+  padding: 14px 16px 12px;
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.ic-machine {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 17px; letter-spacing: .05em; color: var(--text); line-height: 1;
+}
+.ic-row-label {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px; color: var(--text3); margin-top: 4px; letter-spacing: .04em;
+}
+.ic-status-pill {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px; font-weight: 600; letter-spacing: .06em;
+  padding: 4px 11px; border-radius: 99px; white-space: nowrap;
+}
+
+/* Card body */
+.ic-body { padding: 14px 16px 12px; }
+.ic-note {
+  font-size: 13px; color: var(--text); line-height: 1.55; margin-bottom: 13px;
+}
+
+/* Photo strip */
+.ic-photos { display: flex; gap: 6px; margin-bottom: 13px; }
+.ic-photo {
+  width: 62px; height: 54px; border-radius: 8px; overflow: hidden;
+  flex-shrink: 0; position: relative; cursor: zoom-in;
+  transition: transform .18s; border: 1px solid var(--border);
+}
+.ic-photo:hover { transform: scale(1.06); z-index: 2; }
+.ic-photo-inner {
+  width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center; font-size: 22px;
+}
+.ic-photo-more {
+  position: absolute; inset: 0; background: rgba(0,0,0,.55);
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Rajdhani', sans-serif; font-size: 15px; font-weight: 700; color: #fff;
+}
+
+/* Timeline */
+.ic-timeline { display: flex; flex-direction: column; }
+.ic-entry {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 5px 0; position: relative;
+}
+.ic-entry:not(:last-child)::before {
+  content: ''; position: absolute;
+  left: 6px; top: 17px; bottom: -5px;
+  width: 1px; background: var(--border);
+}
+.ic-dot {
+  width: 13px; height: 13px; border-radius: 50%; border: 2px solid;
+  background: var(--bg3); flex-shrink: 0; margin-top: 2px;
+}
+.ic-entry-status {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px; font-weight: 600; letter-spacing: .05em;
+}
+.ic-entry-meta { font-size: 11px; color: var(--text3); margin-top: 1px; }
+
+/* Card footer */
+.ic-foot {
+  padding: 9px 16px 12px;
+  display: flex; align-items: center; justify-content: space-between;
+  border-top: 1px solid rgba(48,54,61,.5);
+}
+.wf-pill {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+  padding: 4px 11px; border-radius: 99px;
+}
+.wf-called      { background:rgba(234,179,8,.12);  color:var(--yellow);   border:1px solid rgba(234,179,8,.3); }
+.wf-accepted    { background:rgba(34,197,94,.12);  color:var(--green);    border:1px solid rgba(34,197,94,.3); }
+.wf-in-progress { background:rgba(59,130,246,.12); color:var(--blue);     border:1px solid rgba(59,130,246,.3); }
+.wf-finished    { background:rgba(168,85,247,.12); color:var(--purple);   border:1px solid rgba(168,85,247,.3); }
+
+.ic-ts {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px; color: var(--text3); letter-spacing: .05em;
+}
+
+/* Swipe hint bar */
+.ic-swipe-hint {
+  font-family: 'Share Tech Mono', monospace; font-size: 9px; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--text3);
+  padding: 6px 16px; background: var(--bg3);
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.ic-swipe-hint span { color: var(--accent); }
+</style>
+
+<div class="section-divider"></div>
+
+<section class="ic-section">
+  <div class="container">
+    <div class="reveal" style="max-width:560px">
+      <div class="section-label">Issue Log</div>
+      <h2 class="section-heading">Every issue, captured instantly</h2>
+      <p class="section-sub">Detailed cards with photos, status timelines, workflow tracking, and full edit history. Swipe left or right for fast status updates right from the floor.</p>
+    </div>
+
+    <div class="ic-grid">
+
+      <!-- Card 1: Maintenance, in-progress -->
+      <div class="ic-card reveal d1">
+        <div class="ic-head">
+          <div>
+            <div class="ic-machine">3.04</div>
+            <div class="ic-row-label">ROW 03 · PRESS 04</div>
+          </div>
+          <div class="ic-status-pill" style="background:rgba(234,179,8,.12);color:var(--yellow);border:1px solid rgba(234,179,8,.3)">⚙ MAINTENANCE</div>
+        </div>
+        <div class="ic-body">
+          <div class="ic-note">Hydraulic leak on clamp unit — oil pooling under press. Shutdown initiated. Maintenance on site replacing high-pressure hose.</div>
+          <div class="ic-photos">
+            <div class="ic-photo"><div class="ic-photo-inner" style="background:linear-gradient(135deg,#1a0a00,#4a1500)">🔧</div></div>
+            <div class="ic-photo"><div class="ic-photo-inner" style="background:linear-gradient(135deg,#150800,#3a1000)">💧</div></div>
+            <div class="ic-photo">
+              <div class="ic-photo-inner" style="background:linear-gradient(135deg,#200a00,#500d00)">🛠️</div>
+              <div class="ic-photo-more">+3</div>
+            </div>
+          </div>
+          <div class="ic-timeline">
+            <div class="ic-entry">
+              <div class="ic-dot" style="border-color:var(--red);background:rgba(239,68,68,.18)"></div>
+              <div><div class="ic-entry-status" style="color:var(--red)">OPEN</div><div class="ic-entry-meta">J. Scoggins · Apr 12, 5:14 AM</div></div>
+            </div>
+            <div class="ic-entry">
+              <div class="ic-dot" style="border-color:var(--yellow);background:rgba(234,179,8,.18)"></div>
+              <div><div class="ic-entry-status" style="color:var(--yellow)">MAINTENANCE — In Progress</div><div class="ic-entry-meta">R. Torres · Apr 12, 5:31 AM</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="ic-foot">
+          <div class="wf-pill wf-in-progress">In Progress</div>
+          <div class="ic-ts">5:31 AM · APR 12</div>
+        </div>
+        <div class="ic-swipe-hint">← swipe for quick actions · <span>5 photos</span> attached →</div>
+      </div>
+
+      <!-- Card 2: Alert, priority border -->
+      <div class="ic-card priority reveal d2">
+        <div class="ic-head">
+          <div>
+            <div class="ic-machine">1.07</div>
+            <div class="ic-row-label">ROW 01 · PRESS 07</div>
+          </div>
+          <div class="ic-status-pill" style="background:rgba(239,68,68,.2);color:var(--red);border:1px solid rgba(239,68,68,.5)">🚨 ALERT</div>
+        </div>
+        <div class="ic-body">
+          <div class="ic-note">Robot arm E-stop — servo error 0x4E02. Area evacuated. Controlman and maintenance both called, awaiting response.</div>
+          <div class="ic-photos">
+            <div class="ic-photo"><div class="ic-photo-inner" style="background:linear-gradient(135deg,#1a0000,#3d0000)">🤖</div></div>
+            <div class="ic-photo"><div class="ic-photo-inner" style="background:linear-gradient(135deg,#200000,#4a0000)">⚠️</div></div>
+          </div>
+          <div class="ic-timeline">
+            <div class="ic-entry">
+              <div class="ic-dot" style="border-color:var(--red);background:rgba(239,68,68,.25)"></div>
+              <div><div class="ic-entry-status" style="color:var(--red)">ALERT — Critical Fault</div><div class="ic-entry-meta">D. Washington · Apr 12, 3:47 AM</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="ic-foot">
+          <div class="wf-pill wf-called">Called</div>
+          <div class="ic-ts">3:47 AM · APR 12</div>
+        </div>
+        <div class="ic-swipe-hint">← swipe for quick actions · <span>2 photos</span> attached →</div>
+      </div>
+
+      <!-- Card 3: Process Engineer, accepted -->
+      <div class="ic-card reveal d3">
+        <div class="ic-head">
+          <div>
+            <div class="ic-machine">2.09</div>
+            <div class="ic-row-label">ROW 02 · PRESS 09</div>
+          </div>
+          <div class="ic-status-pill" style="background:rgba(168,85,247,.12);color:var(--purple);border:1px solid rgba(168,85,247,.3)">◈ PROCESS ENG</div>
+        </div>
+        <div class="ic-body">
+          <div class="ic-note">Shot weight inconsistency — parts failing dimensional check. S/N: MLD-0291-B. Process engineer reviewing barrel temps and injection profiles.</div>
+          <div class="ic-photos">
+            <div class="ic-photo"><div class="ic-photo-inner" style="background:linear-gradient(135deg,#0e0020,#240045)">📊</div></div>
+            <div class="ic-photo"><div class="ic-photo-inner" style="background:linear-gradient(135deg,#120025,#2d0055)">🔬</div></div>
+          </div>
+          <div class="ic-timeline">
+            <div class="ic-entry">
+              <div class="ic-dot" style="border-color:var(--red);background:rgba(239,68,68,.18)"></div>
+              <div><div class="ic-entry-status" style="color:var(--red)">OPEN</div><div class="ic-entry-meta">K. Patel · Apr 12, 2:18 AM</div></div>
+            </div>
+            <div class="ic-entry">
+              <div class="ic-dot" style="border-color:var(--purple);background:rgba(168,85,247,.18)"></div>
+              <div><div class="ic-entry-status" style="color:var(--purple)">PROCESS ENG — Review</div><div class="ic-entry-meta">L. Chen · Apr 12, 2:44 AM</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="ic-foot">
+          <div class="wf-pill wf-accepted">Accepted</div>
+          <div class="ic-ts">2:44 AM · APR 12</div>
+        </div>
+        <div class="ic-swipe-hint">← swipe for quick actions · <span>2 photos</span> attached →</div>
+      </div>
+
+      <!-- Card 4: Resolved, finished -->
+      <div class="ic-card resolved reveal d4">
+        <div class="ic-head">
+          <div>
+            <div class="ic-machine">5.12</div>
+            <div class="ic-row-label">ROW 05 · PRESS 12</div>
+          </div>
+          <div class="ic-status-pill" style="background:rgba(34,197,94,.1);color:var(--green);border:1px solid rgba(34,197,94,.3)">✓ RESOLVED</div>
+        </div>
+        <div class="ic-body">
+          <div class="ic-note">Heater band failure zone 3. S/N: TB-4412-C. Replacement installed, temp curve verified, first-shot approved. Press back online.</div>
+          <div class="ic-photos">
+            <div class="ic-photo"><div class="ic-photo-inner" style="background:linear-gradient(135deg,#001800,#003500)">🌡️</div></div>
+          </div>
+          <div class="ic-timeline">
+            <div class="ic-entry">
+              <div class="ic-dot" style="border-color:var(--red);background:rgba(239,68,68,.18)"></div>
+              <div><div class="ic-entry-status" style="color:var(--red)">OPEN</div><div class="ic-entry-meta">M. Liu · Apr 11, 11:22 PM</div></div>
+            </div>
+            <div class="ic-entry">
+              <div class="ic-dot" style="border-color:var(--yellow);background:rgba(234,179,8,.18)"></div>
+              <div><div class="ic-entry-status" style="color:var(--yellow)">MAINTENANCE — Repair</div><div class="ic-entry-meta">S. Garcia · Apr 11, 11:45 PM</div></div>
+            </div>
+            <div class="ic-entry">
+              <div class="ic-dot" style="border-color:var(--green);background:rgba(34,197,94,.18)"></div>
+              <div><div class="ic-entry-status" style="color:var(--green)">RESOLVED</div><div class="ic-entry-meta">S. Garcia · Apr 12, 1:03 AM</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="ic-foot">
+          <div class="wf-pill wf-finished">Finished</div>
+          <div class="ic-ts">1:03 AM · APR 12</div>
+        </div>
+        <div class="ic-swipe-hint">← swipe for quick actions · <span>1 photo</span> attached →</div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
 </body>
 </html>
