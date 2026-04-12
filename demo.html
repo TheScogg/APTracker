@@ -339,5 +339,360 @@ window.addEventListener('scroll', () => {
 });
 </script>
 
+<!-- ══════════════════════════ FLOOR MAP SECTION ══════════════════════════ -->
+
+<style>
+/* ─── Section shared ─── */
+.section-label {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px; letter-spacing: .18em; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 13px;
+}
+.section-heading {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: clamp(26px, 4.5vw, 44px); font-weight: 700; line-height: 1.12;
+  margin-bottom: 16px;
+}
+.section-sub {
+  font-size: 15px; color: var(--text2); line-height: 1.72; max-width: 480px;
+}
+.section-divider {
+  height: 1px;
+  background: linear-gradient(to right, transparent, var(--border), transparent);
+}
+
+/* ─── Floor Map section ─── */
+.fm-section {
+  background: linear-gradient(180deg, var(--bg) 0%, var(--bg2) 100%);
+}
+
+.fm-layout {
+  display: grid;
+  grid-template-columns: 1fr 1.15fr;
+  gap: 64px; align-items: center;
+}
+@media (max-width: 820px) {
+  .fm-layout { grid-template-columns: 1fr; gap: 40px; }
+  .fm-demo-wrap { order: -1; }
+}
+
+/* Left — bullet list */
+.fm-bullets { display: flex; flex-direction: column; gap: 18px; margin-top: 36px; }
+.fm-bullet  { display: flex; align-items: flex-start; gap: 14px; }
+.fm-bullet-icon {
+  width: 38px; height: 38px; border-radius: 9px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; font-size: 16px;
+}
+.fm-bullet-title {
+  font-family: 'Rajdhani', sans-serif; font-size: 15px; font-weight: 700;
+  letter-spacing: .04em; margin-bottom: 2px;
+}
+.fm-bullet-desc { font-size: 13px; color: var(--text2); line-height: 1.5; }
+
+/* Right — demo card */
+.fm-demo-wrap {
+  background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 18px; padding: 20px;
+  box-shadow: 0 24px 64px rgba(0,0,0,.45);
+}
+
+.fm-card-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding-bottom: 14px; margin-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.fm-card-title {
+  font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--text);
+}
+.live-badge {
+  font-family: 'Share Tech Mono', monospace; font-size: 10px; letter-spacing: .1em;
+  padding: 3px 11px; border-radius: 99px;
+  background: rgba(34,197,94,.1); color: var(--green);
+  border: 1px solid rgba(34,197,94,.3);
+  display: flex; align-items: center; gap: 6px;
+}
+.live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: pulse 1.6s ease-in-out infinite; }
+
+/* Rows */
+.fm-rows { display: flex; flex-direction: column; gap: 7px; }
+.fm-row  { display: flex; align-items: center; gap: 8px; }
+
+.fm-row-tab {
+  font-family: 'Share Tech Mono', monospace; font-size: 9px; letter-spacing: .04em;
+  color: var(--text3); width: 32px; flex-shrink: 0; text-align: right;
+  padding-right: 2px;
+}
+.fm-row-tab.has-issue { color: var(--accent); }
+
+.fm-press-row { display: flex; gap: 4px; flex: 1; }
+
+.fm-press {
+  flex: 1; min-height: 34px; border-radius: 5px;
+  background: var(--bg2); border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Share Tech Mono', monospace; font-size: 8px; color: var(--text3);
+  cursor: pointer; transition: all .55s ease; position: relative; overflow: hidden;
+  user-select: none;
+}
+.fm-press:hover { border-color: var(--text2); color: var(--text); }
+
+/* Status colours */
+.fm-press.st-open        { background:rgba(239,68,68,.18);  border-color:rgba(239,68,68,.5);  color:var(--red); }
+.fm-press.st-alert       { background:rgba(239,68,68,.3);   border-color:rgba(239,68,68,.7);  color:var(--red); box-shadow:0 0 8px rgba(239,68,68,.25); }
+.fm-press.st-maintenance { background:rgba(234,179,8,.18);  border-color:rgba(234,179,8,.5);  color:var(--yellow); }
+.fm-press.st-controlman  { background:rgba(56,189,248,.18); border-color:rgba(56,189,248,.5); color:var(--babyblue); }
+.fm-press.st-tooldie     { background:rgba(249,115,22,.18); border-color:rgba(249,115,22,.5); color:var(--orange); }
+.fm-press.st-startup     { background:rgba(20,184,166,.18); border-color:rgba(20,184,166,.5); color:var(--teal); }
+.fm-press.st-processengineer { background:rgba(168,85,247,.16); border-color:rgba(168,85,247,.45); color:var(--purple); }
+.fm-press.st-materials   { background:rgba(107,114,128,.18); border-color:rgba(107,114,128,.45); color:var(--gray); }
+.fm-press.st-quality     { background:rgba(236,72,153,.16); border-color:rgba(236,72,153,.45); color:var(--pink); }
+.fm-press.st-resolved    { background:rgba(34,197,94,.09);  border-color:rgba(34,197,94,.28); color:var(--green); }
+
+.fm-press.flash { animation: flashPress .4s ease; }
+
+/* Issue count badge */
+.fm-badge {
+  position: absolute; top: 2px; right: 2px;
+  width: 11px; height: 11px; border-radius: 50%;
+  background: var(--red); font-size: 7px; font-weight: 700;
+  color: #fff; display: flex; align-items: center; justify-content: center;
+}
+
+/* Legend */
+.fm-legend {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  margin-top: 14px; padding-top: 13px; border-top: 1px solid var(--border);
+}
+.fm-legend-item {
+  display: flex; align-items: center; gap: 5px;
+  font-family: 'Share Tech Mono', monospace; font-size: 9px;
+  color: var(--text2); letter-spacing: .03em;
+}
+.fm-legend-swatch { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+
+/* Activity ticker below the grid */
+.fm-ticker {
+  margin-top: 13px; padding-top: 12px; border-top: 1px solid var(--border);
+  font-family: 'Share Tech Mono', monospace; font-size: 10px; color: var(--text3);
+  min-height: 18px; letter-spacing: .04em;
+  display: flex; align-items: center; gap: 8px;
+}
+.fm-ticker .tick-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+</style>
+
+<div class="section-divider"></div>
+
+<section class="fm-section" id="features">
+  <div class="container">
+    <div class="fm-layout">
+
+      <!-- Left: copy -->
+      <div class="reveal">
+        <div class="section-label">Floor Map</div>
+        <h2 class="section-heading">Your entire plant,<br>at a glance</h2>
+        <p class="section-sub">Every press is a live button. Color tells you what's happening without reading a single word. Tap any press to report an issue or view its history.</p>
+
+        <div class="fm-bullets">
+          <div class="fm-bullet">
+            <div class="fm-bullet-icon" style="background:var(--red-dim);border:1px solid rgba(239,68,68,.25)">🔴</div>
+            <div>
+              <div class="fm-bullet-title">Active Issues</div>
+              <div class="fm-bullet-desc">Open presses glow with their status color. Alerts pulse with a red shadow so nothing gets missed.</div>
+            </div>
+          </div>
+          <div class="fm-bullet">
+            <div class="fm-bullet-icon" style="background:var(--green-dim);border:1px solid rgba(34,197,94,.25)">✓</div>
+            <div>
+              <div class="fm-bullet-title">Resolved Presses</div>
+              <div class="fm-bullet-desc">Dim green means the issue was closed and documented — clear but accounted for.</div>
+            </div>
+          </div>
+          <div class="fm-bullet">
+            <div class="fm-bullet-icon" style="background:var(--bg3);border:1px solid var(--border)">⬛</div>
+            <div>
+              <div class="fm-bullet-title">Clear Presses</div>
+              <div class="fm-bullet-desc">Dark and quiet — no open issues, running normally. Tap to report if something comes up.</div>
+            </div>
+          </div>
+          <div class="fm-bullet">
+            <div class="fm-bullet-icon" style="background:var(--orange-dim);border:1px solid rgba(249,115,22,.25)">🗂️</div>
+            <div>
+              <div class="fm-bullet-title">Custom Layouts per Plant</div>
+              <div class="fm-bullet-desc">Each plant configures its own row and press layout in Firestore. No two floors look the same.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: live demo card -->
+      <div class="fm-demo-wrap reveal d2">
+        <div class="fm-card-header">
+          <div class="fm-card-title">AP Plant 1 — Floor Map</div>
+          <div class="live-badge"><span class="live-dot"></span>LIVE</div>
+        </div>
+
+        <div class="fm-rows" id="fmRows"></div>
+
+        <div class="fm-legend" id="fmLegend"></div>
+
+        <div class="fm-ticker" id="fmTicker">
+          <span class="tick-dot" style="background:var(--text3)"></span>
+          <span id="fmTickerText">Waiting for updates…</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<script>
+/* ── Floor Map Demo ── */
+(function () {
+  const ROWS = [
+    { label: '01', count: 10 },
+    { label: '02', count: 12 },
+    { label: '03', count:  9 },
+    { label: '04', count: 11 },
+    { label: '05', count:  8 },
+    { label: '06', count:  6 },
+  ];
+
+  const ST_LIST = [
+    { key: '',                  color: '#484f58', label: 'Clear' },
+    { key: '',                  color: '#484f58', label: 'Clear' },
+    { key: '',                  color: '#484f58', label: 'Clear' },
+    { key: 'st-open',           color: '#ef4444', label: 'Open' },
+    { key: 'st-alert',          color: '#ef4444', label: 'Alert' },
+    { key: 'st-maintenance',    color: '#eab308', label: 'Maintenance' },
+    { key: 'st-controlman',     color: '#38bdf8', label: 'Controlman' },
+    { key: 'st-tooldie',        color: '#f97316', label: 'Tool & Die' },
+    { key: 'st-startup',        color: '#14b8a6', label: 'Startup' },
+    { key: 'st-processengineer',color: '#a855f7', label: 'Process Eng' },
+    { key: 'st-materials',      color: '#6b7280', label: 'Materials' },
+    { key: 'st-quality',        color: '#ec4899', label: 'Quality' },
+    { key: 'st-resolved',       color: '#22c55e', label: 'Resolved' },
+  ];
+
+  const ACTIVE_ST = ST_LIST.filter(s => s.key && s.key !== 'st-resolved');
+  const ticker_msgs = [
+    (r,p,s) => `Press ${r}.${p} → ${s}`,
+    (r,p,s) => `Issue opened on ${r}.${p} [${s}]`,
+    (r,p,_) => `Press ${r}.${p} cleared`,
+    (r,p,s) => `Status update: ${r}.${p} now ${s}`,
+  ];
+
+  const container = document.getElementById('fmRows');
+  const allCells  = [];
+
+  ROWS.forEach(row => {
+    const rowEl = document.createElement('div');
+    rowEl.className = 'fm-row';
+
+    const tabEl = document.createElement('div');
+    tabEl.className = 'fm-row-tab';
+    tabEl.dataset.row = row.label;
+    tabEl.textContent = row.label;
+    rowEl.appendChild(tabEl);
+
+    const pressRow = document.createElement('div');
+    pressRow.className = 'fm-press-row';
+
+    for (let i = 1; i <= row.count; i++) {
+      const pNum   = String(i).padStart(2, '0');
+      const pLabel = `${row.label}.${pNum}`;
+      const btn    = document.createElement('div');
+      btn.className = 'fm-press';
+      btn.textContent = pLabel;
+      btn.title = `Press ${pLabel}`;
+
+      const init = ST_LIST[Math.floor(Math.random() * ST_LIST.length)];
+      if (init.key) {
+        btn.classList.add(init.key);
+        if (!init.key.includes('resolved')) {
+          const badge = document.createElement('div');
+          badge.className = 'fm-badge'; badge.textContent = '1';
+          btn.appendChild(badge);
+        }
+      }
+      pressRow.appendChild(btn);
+      allCells.push({ el: btn, st: init, row: row.label, press: pNum });
+    }
+
+    rowEl.appendChild(pressRow);
+    container.appendChild(rowEl);
+  });
+
+  /* Legend */
+  const legend = document.getElementById('fmLegend');
+  const legendKeys = ['st-open','st-alert','st-maintenance','st-controlman',
+                      'st-tooldie','st-startup','st-processengineer',
+                      'st-quality','st-resolved'];
+  legendKeys.forEach(k => {
+    const s = ST_LIST.find(x => x.key === k);
+    if (!s) return;
+    const item = document.createElement('div');
+    item.className = 'fm-legend-item';
+    item.innerHTML = `<div class="fm-legend-swatch" style="background:${s.color}"></div>${s.label}`;
+    legend.appendChild(item);
+  });
+
+  /* Update row tab highlight */
+  function refreshTabs() {
+    document.querySelectorAll('.fm-row-tab').forEach(tab => {
+      const r = tab.dataset.row;
+      const hasIssue = allCells.some(c => c.row === r && c.st.key && !c.st.key.includes('resolved'));
+      tab.classList.toggle('has-issue', hasIssue);
+    });
+  }
+  refreshTabs();
+
+  /* Ticker */
+  const tickerText = document.getElementById('fmTickerText');
+  const tickerDot  = document.querySelector('#fmTicker .tick-dot');
+
+  function setTicker(color, msg) {
+    tickerDot.style.background = color;
+    tickerText.textContent = msg;
+  }
+
+  /* Animate */
+  function tick() {
+    const cell = allCells[Math.floor(Math.random() * allCells.length)];
+    const next = ST_LIST[Math.floor(Math.random() * ST_LIST.length)];
+
+    if (cell.st.key) cell.el.classList.remove(cell.st.key);
+    cell.el.querySelector('.fm-badge')?.remove();
+    cell.el.classList.remove('flash');
+    void cell.el.offsetWidth;
+
+    cell.st = next;
+    if (next.key) {
+      cell.el.classList.add(next.key);
+      cell.el.classList.add('flash');
+      if (!next.key.includes('resolved')) {
+        const badge = document.createElement('div');
+        badge.className = 'fm-badge'; badge.textContent = '1';
+        cell.el.appendChild(badge);
+      }
+      const msg_fn = ticker_msgs[Math.floor(Math.random() * ticker_msgs.length)];
+      setTicker(next.color, msg_fn(cell.row, cell.press, next.label));
+    } else {
+      setTicker('#484f58', `Press ${cell.row}.${cell.press} cleared`);
+    }
+
+    refreshTabs();
+    setTimeout(tick, 900 + Math.random() * 900);
+  }
+  setTimeout(tick, 1200);
+
+  /* Scroll reveal */
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+  }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+  document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+})();
+</script>
+
 </body>
 </html>
