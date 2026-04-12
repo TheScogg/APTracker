@@ -599,6 +599,69 @@ window.addEventListener('scroll', () => {
 
       <!-- Screen (scenes will go here) -->
       <div class="vm-screen" id="vmScreen">
+
+        <!-- Scene 0: Floor Map -->
+        <div class="vm-scene" id="vmS0">
+          <div class="vm-s-header">
+            <div>
+              <div class="vm-s-title">AP PLANT 1 — FLOOR MAP</div>
+              <div style="display:flex;gap:12px;margin-top:3px">
+                <span class="vm-stat" style="color:var(--red)">● 7 OPEN</span>
+                <span class="vm-stat" style="color:var(--green)">● 24 RESOLVED</span>
+              </div>
+            </div>
+            <div class="vm-live-badge"><span class="vm-live-dot"></span>LIVE</div>
+          </div>
+          <div class="vm-floor" id="vmFloor"></div>
+          <div class="vm-ticker">
+            <span class="vm-ticker-dot" id="vmTickerDot"></span>
+            <span class="vm-ticker-text" id="vmTickerText">Waiting for updates…</span>
+          </div>
+        </div>
+
+        <!-- Scene 1: Issue Card -->
+        <div class="vm-scene" id="vmS1">
+          <div class="vm-card-wrap">
+            <div class="vm-mini-card">
+              <div class="vm-mc-head">
+                <div>
+                  <div class="vm-mc-machine">3.04</div>
+                  <div class="vm-mc-row">ROW 03 · PRESS 04</div>
+                </div>
+                <div class="vm-mc-pill" style="background:rgba(234,179,8,.12);color:var(--yellow);border:1px solid rgba(234,179,8,.3)">⚙ MAINTENANCE</div>
+              </div>
+              <div class="vm-mc-body">
+                <div class="vm-mc-note">Hydraulic leak on clamp unit. Oil pooling under press. Maintenance on site replacing high-pressure hose.</div>
+                <div class="vm-mc-timeline" id="vmTimeline"></div>
+              </div>
+              <div class="vm-mc-foot">
+                <span class="wf-pill wf-in-progress">In Progress</span>
+                <span class="vm-mc-ts">5:31 AM · APR 12</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Scene 2: Workflow Pipeline -->
+        <div class="vm-scene" id="vmS2">
+          <div class="vm-wf-wrap">
+            <div class="vm-wf-heading">Workflow Pipeline</div>
+            <div class="vm-wf-sub">Tap the pill on any card to advance</div>
+            <div class="vm-wf-row" id="vmWfRow"></div>
+            <div class="vm-wf-pill-row" id="vmWfPillRow">
+              <span class="wf-pill wf-called">Called</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Scene 3: Status Select -->
+        <div class="vm-scene" id="vmS3">
+          <div class="vm-ss-wrap">
+            <div class="vm-ss-heading">Update Status — Press <span style="font-family:'Share Tech Mono',monospace;color:var(--accent)">3.04</span></div>
+            <div class="vm-ss-grid" id="vmSsGrid"></div>
+          </div>
+        </div>
+
         <div class="vm-caption" id="vmCaption"></div>
       </div>
 
@@ -1866,6 +1929,316 @@ footer {
     </div>
   </div>
 </footer>
+
+<style>
+/* ── Shared scene base ── */
+.vm-scene {
+  position: absolute; inset: 0; opacity: 0;
+  transition: opacity .5s ease;
+  padding: 14px 18px 32px; display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.vm-scene.active { opacity: 1; }
+
+/* Scene header row */
+.vm-s-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 10px; flex-shrink: 0; }
+.vm-s-title  { font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700; letter-spacing: .1em; color: var(--text); }
+.vm-stat     { font-family: 'Share Tech Mono', monospace; font-size: 10px; letter-spacing: .05em; }
+.vm-live-badge { font-family: 'Share Tech Mono', monospace; font-size: 9px; letter-spacing: .1em; padding: 2px 9px; border-radius: 99px; background: rgba(34,197,94,.1); color: var(--green); border: 1px solid rgba(34,197,94,.3); display: flex; align-items: center; gap: 5px; }
+.vm-live-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--green); animation: pulse 1.5s infinite; }
+
+/* Scene 0: Floor */
+.vm-floor { flex: 1; display: flex; flex-direction: column; gap: 3px; }
+.vm-floor-row { display: flex; align-items: center; gap: 3px; }
+.vm-floor-rl  { font-family: 'Share Tech Mono', monospace; font-size: 8px; color: var(--text3); width: 20px; flex-shrink: 0; text-align: right; }
+.vm-floor-presses { display: flex; gap: 3px; flex: 1; }
+.vm-floor-press {
+  flex: 1; min-height: 0; border-radius: 3px; background: var(--bg2);
+  border: 1px solid var(--border); transition: all .55s ease;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Share Tech Mono', monospace; font-size: 6px; color: var(--text3);
+}
+.vm-floor-press.st-open        { background:rgba(239,68,68,.18);  border-color:rgba(239,68,68,.5);  color:var(--red); }
+.vm-floor-press.st-alert       { background:rgba(239,68,68,.3);   border-color:rgba(239,68,68,.7);  color:var(--red); box-shadow:0 0 6px rgba(239,68,68,.25); }
+.vm-floor-press.st-maintenance { background:rgba(234,179,8,.18);  border-color:rgba(234,179,8,.5);  color:var(--yellow); }
+.vm-floor-press.st-controlman  { background:rgba(56,189,248,.18); border-color:rgba(56,189,248,.5); color:var(--babyblue); }
+.vm-floor-press.st-tooldie     { background:rgba(249,115,22,.18); border-color:rgba(249,115,22,.5); color:var(--orange); }
+.vm-floor-press.st-startup     { background:rgba(20,184,166,.18); border-color:rgba(20,184,166,.5); color:var(--teal); }
+.vm-floor-press.st-processengineer { background:rgba(168,85,247,.16); border-color:rgba(168,85,247,.45); color:var(--purple); }
+.vm-floor-press.st-quality     { background:rgba(236,72,153,.16); border-color:rgba(236,72,153,.45); color:var(--pink); }
+.vm-floor-press.st-resolved    { background:rgba(34,197,94,.09);  border-color:rgba(34,197,94,.25); color:var(--green); }
+.vm-ticker { display:flex; align-items:center; gap:6px; font-family:'Share Tech Mono',monospace; font-size:9px; color:var(--text3); letter-spacing:.04em; padding-top:6px; border-top:1px solid var(--border); flex-shrink:0; margin-top:6px; }
+.vm-ticker-dot { width:5px; height:5px; border-radius:50%; background:var(--text3); flex-shrink:0; }
+
+/* Scene 1: Issue card */
+.vm-card-wrap { flex:1; display:flex; align-items:center; justify-content:center; }
+.vm-mini-card { width:100%; max-width:400px; background:var(--bg2); border:1px solid var(--border); border-radius:12px; overflow:hidden; box-shadow:0 4px 20px rgba(0,0,0,.35); }
+.vm-mc-head { padding:10px 13px 8px; display:flex; align-items:flex-start; justify-content:space-between; border-bottom:1px solid var(--border); }
+.vm-mc-machine { font-family:'Share Tech Mono',monospace; font-size:17px; color:var(--text); }
+.vm-mc-row { font-family:'Share Tech Mono',monospace; font-size:8px; color:var(--text3); margin-top:2px; }
+.vm-mc-pill { font-family:'Share Tech Mono',monospace; font-size:9px; font-weight:600; letter-spacing:.05em; padding:3px 9px; border-radius:99px; }
+.vm-mc-body { padding:10px 13px; }
+.vm-mc-note { font-size:11px; color:var(--text); line-height:1.45; margin-bottom:10px; }
+.vm-mc-timeline { display:flex; flex-direction:column; }
+.vm-tl-entry { display:flex; align-items:flex-start; gap:8px; padding:4px 0; position:relative; opacity:0; transform:translateX(-8px); transition:opacity .4s ease,transform .4s ease; }
+.vm-tl-entry.in { opacity:1; transform:translateX(0); }
+.vm-tl-entry:not(:last-child)::before { content:''; position:absolute; left:5px; top:14px; bottom:-4px; width:1px; background:var(--border); }
+.vm-tl-dot { width:11px; height:11px; border-radius:50%; border:2px solid; background:var(--bg3); flex-shrink:0; margin-top:1px; }
+.vm-tl-status { font-family:'Share Tech Mono',monospace; font-size:9px; font-weight:600; letter-spacing:.04em; }
+.vm-tl-meta { font-size:10px; color:var(--text3); }
+.vm-mc-foot { padding:7px 13px 9px; display:flex; align-items:center; justify-content:space-between; border-top:1px solid rgba(48,54,61,.5); }
+.vm-mc-ts { font-family:'Share Tech Mono',monospace; font-size:9px; color:var(--text3); }
+
+/* Scene 2: Workflow */
+.vm-wf-wrap { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; }
+.vm-wf-heading { font-family:'Rajdhani',sans-serif; font-size:18px; font-weight:700; letter-spacing:.06em; }
+.vm-wf-sub { font-size:11px; color:var(--text2); margin-top:-10px; }
+.vm-wf-row { display:flex; align-items:center; width:100%; max-width:500px; }
+.vm-wf-step { display:flex; flex-direction:column; align-items:center; gap:6px; flex:none; width:88px; }
+.vm-wf-conn { flex:1; height:3px; background:var(--border); position:relative; margin-bottom:26px; }
+.vm-wf-conn-fill { position:absolute; inset:0; width:0%; background:var(--green); border-radius:2px; transition:width .6s ease; }
+.vm-wf-circle { width:48px; height:48px; border-radius:50%; border:2px solid var(--border); background:var(--bg3); display:flex; align-items:center; justify-content:center; font-size:20px; transition:all .4s ease; }
+.vm-wf-lbl { font-family:'Rajdhani',sans-serif; font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; text-align:center; transition:color .4s; color:var(--text2); }
+.vm-wf-step[data-s="called"].active .vm-wf-circle      { border-color:#eab308; background:rgba(234,179,8,.14); box-shadow:0 0 16px rgba(234,179,8,.35); }
+.vm-wf-step[data-s="accepted"].active .vm-wf-circle    { border-color:#22c55e; background:rgba(34,197,94,.14); box-shadow:0 0 16px rgba(34,197,94,.35); }
+.vm-wf-step[data-s="in-progress"].active .vm-wf-circle { border-color:#3b82f6; background:rgba(59,130,246,.14); box-shadow:0 0 16px rgba(59,130,246,.35); }
+.vm-wf-step[data-s="finished"].active .vm-wf-circle    { border-color:#a855f7; background:rgba(168,85,247,.14); box-shadow:0 0 16px rgba(168,85,247,.35); }
+.vm-wf-step[data-s="called"].active .vm-wf-lbl         { color:#eab308; }
+.vm-wf-step[data-s="accepted"].active .vm-wf-lbl       { color:#22c55e; }
+.vm-wf-step[data-s="in-progress"].active .vm-wf-lbl    { color:#3b82f6; }
+.vm-wf-step[data-s="finished"].active .vm-wf-lbl       { color:#a855f7; }
+.vm-wf-step.done .vm-wf-circle { border-color:var(--green); background:rgba(34,197,94,.12); }
+.vm-wf-step.done .vm-wf-lbl    { color:var(--green); }
+.vm-wf-pill-row { display:flex; justify-content:center; }
+
+/* Scene 3: Status select */
+.vm-ss-wrap { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; }
+.vm-ss-heading { font-family:'Rajdhani',sans-serif; font-size:15px; font-weight:700; letter-spacing:.05em; }
+.vm-ss-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:7px; width:100%; max-width:350px; }
+.vm-ss-tile {
+  border-radius:9px; padding:9px 6px; text-align:center; border:1px solid;
+  font-family:'Rajdhani',sans-serif; font-size:12px; font-weight:700; letter-spacing:.04em;
+  opacity:0; transform:scale(.88); transition:opacity .22s ease, transform .22s ease, box-shadow .25s;
+}
+.vm-ss-tile.in       { opacity:1; transform:scale(1); }
+.vm-ss-tile.selected { box-shadow:0 0 0 2px currentColor,0 4px 14px rgba(0,0,0,.35); transform:scale(1.06); }
+.vm-ss-tile.dim      { opacity:.32; }
+.vm-tile-icon { font-size:17px; display:block; margin-bottom:3px; }
+</style>
+
+<script>
+/* ── Video Mockup Player ── */
+(function () {
+  const SCENE_DUR  = 3500;
+  const NUM_SCENES = 4;
+  const TOTAL      = SCENE_DUR * NUM_SCENES;
+
+  const scenes     = [0,1,2,3].map(i => document.getElementById('vmS' + i));
+  const fillEl     = document.getElementById('vmFill');
+  const timeEl     = document.getElementById('vmTimeEl');
+  const playBtn    = document.getElementById('vmPlayBtn');
+  const captionEl  = document.getElementById('vmCaption');
+  const sceneNameEl= document.getElementById('vmSceneName');
+
+  const SCENE_META = [
+    { name: 'Floor Map',     cap: '🗺  <span class="cap-hl">LIVE FLOOR MAP</span> · Real-time status at a glance' },
+    { name: 'Issue Log',     cap: '📋  <span class="cap-hl">ISSUE LOG</span> · Complete history, every press' },
+    { name: 'Workflow',      cap: '⚡  <span class="cap-hl">WORKFLOW PIPELINE</span> · Called → Accepted → In Progress → Finished' },
+    { name: 'Status Update', cap: '👆  <span class="cap-hl">STATUS UPDATE</span> · Tap or swipe to change status instantly' },
+  ];
+
+  /* ── Build Scene 0: floor grid ── */
+  const ROWS = [{l:'01',n:9},{l:'02',n:10},{l:'03',n:9},{l:'04',n:8}];
+  const ST   = ['','','','st-open','st-maintenance','st-controlman','st-alert','st-tooldie','st-startup','st-resolved','st-processengineer','st-quality'];
+  const ST_COLOR = { 'st-open':'#ef4444','st-alert':'#ef4444','st-maintenance':'#eab308','st-controlman':'#38bdf8','st-tooldie':'#f97316','st-startup':'#14b8a6','st-resolved':'#22c55e','st-processengineer':'#a855f7','st-quality':'#ec4899' };
+  const MSGS = [
+    (r,p,s) => `Press ${r}.${p} → ${s}`,
+    (r,p,_) => `Press ${r}.${p} cleared`,
+    (r,p,s) => `Issue opened: ${r}.${p} [${s}]`,
+  ];
+  const floorEl   = document.getElementById('vmFloor');
+  const tickDotEl = document.getElementById('vmTickerDot');
+  const tickTxtEl = document.getElementById('vmTickerText');
+  const vmCells   = [];
+
+  ROWS.forEach(row => {
+    const rowEl = document.createElement('div'); rowEl.className = 'vm-floor-row';
+    const lbl   = document.createElement('div'); lbl.className = 'vm-floor-rl'; lbl.textContent = row.l; rowEl.appendChild(lbl);
+    const pr    = document.createElement('div'); pr.className = 'vm-floor-presses';
+    for (let i = 1; i <= row.n; i++) {
+      const pn  = `${row.l}.${String(i).padStart(2,'0')}`;
+      const btn = document.createElement('div'); btn.className = 'vm-floor-press'; btn.textContent = pn;
+      const s0  = ST[Math.floor(Math.random() * ST.length)]; if (s0) btn.classList.add(s0);
+      pr.appendChild(btn);
+      vmCells.push({ el: btn, st: s0, row: row.l, p: String(i).padStart(2,'0') });
+    }
+    rowEl.appendChild(pr); floorEl.appendChild(rowEl);
+  });
+
+  /* ── Build Scene 1: timeline entries ── */
+  const TL_ENTRIES = [
+    { color:'#ef4444', status:'OPEN',                 meta:'J. Scoggins · 5:14 AM' },
+    { color:'#eab308', status:'MAINTENANCE — In Progress', meta:'R. Torres · 5:31 AM' },
+    { color:'#a855f7', status:'PROCESS ENG — Review', meta:'L. Chen · 5:48 AM' },
+  ];
+  const tlEl = document.getElementById('vmTimeline');
+  TL_ENTRIES.forEach(e => {
+    const d = document.createElement('div'); d.className = 'vm-tl-entry';
+    d.innerHTML = `<div class="vm-tl-dot" style="border-color:${e.color};background:${e.color}22"></div><div><div class="vm-tl-status" style="color:${e.color}">${e.status}</div><div class="vm-tl-meta">${e.meta}</div></div>`;
+    tlEl.appendChild(d);
+  });
+
+  /* ── Build Scene 2: mini workflow ── */
+  const WF_DEFS = [
+    {s:'called',icon:'📣',lbl:'Called'},{s:'accepted',icon:'👋',lbl:'Accepted'},
+    {s:'in-progress',icon:'🔧',lbl:'In Progress'},{s:'finished',icon:'✅',lbl:'Finished'},
+  ];
+  const wfRowEl = document.getElementById('vmWfRow');
+  const wfSteps = [], wfConns = [];
+  WF_DEFS.forEach((def, i) => {
+    const step = document.createElement('div'); step.className = 'vm-wf-step'; step.dataset.s = def.s;
+    step.innerHTML = `<div class="vm-wf-circle">${def.icon}</div><div class="vm-wf-lbl">${def.lbl}</div>`;
+    wfRowEl.appendChild(step); wfSteps.push(step);
+    if (i < WF_DEFS.length - 1) {
+      const conn = document.createElement('div'); conn.className = 'vm-wf-conn';
+      conn.innerHTML = '<div class="vm-wf-conn-fill"></div>';
+      wfRowEl.appendChild(conn); wfConns.push(conn);
+    }
+  });
+
+  /* ── Build Scene 3: status tiles ── */
+  const SS_DEFS = [
+    {icon:'🔴',name:'Open',c:'#ef4444'},{icon:'🚨',name:'Alert',c:'#ef4444'},
+    {icon:'⚙️',name:'Maintenance',c:'#eab308'},{icon:'🕹️',name:'Controlman',c:'#38bdf8'},
+    {icon:'◈',name:'Process Eng',c:'#a855f7'},{icon:'📦',name:'Materials',c:'#6b7280'},
+    {icon:'🔍',name:'Quality',c:'#ec4899'},{icon:'🚀',name:'Startup',c:'#14b8a6'},
+    {icon:'🔩',name:'Tool & Die',c:'#f97316'},
+  ];
+  const ssGridEl = document.getElementById('vmSsGrid');
+  const ssTiles  = [];
+  SS_DEFS.forEach(def => {
+    const t = document.createElement('div'); t.className = 'vm-ss-tile';
+    t.style.color = def.c; t.style.borderColor = def.c + '44'; t.style.background = def.c + '14';
+    t.innerHTML = `<span class="vm-tile-icon">${def.icon}</span>${def.name}`;
+    ssGridEl.appendChild(t); ssTiles.push(t);
+  });
+
+  /* ── Sub-scene timers ── */
+  let floorIv = null, s1Timers = [], s2Iv = null, s3Timers = [];
+
+  function clearSubs() {
+    clearInterval(floorIv); floorIv = null;
+    s1Timers.forEach(clearTimeout); s1Timers = [];
+    clearInterval(s2Iv); s2Iv = null;
+    s3Timers.forEach(clearTimeout); s3Timers = [];
+  }
+
+  function startS0() {
+    floorIv = setInterval(() => {
+      const c = vmCells[Math.floor(Math.random() * vmCells.length)];
+      if (c.st) c.el.classList.remove(c.st);
+      const next = ST[Math.floor(Math.random() * ST.length)]; c.st = next;
+      if (next) c.el.classList.add(next);
+      const col = ST_COLOR[next] || '#484f58';
+      tickDotEl.style.background = col;
+      const name = next ? next.replace('st-','').replace('-',' ') : 'cleared';
+      tickTxtEl.textContent = MSGS[Math.floor(Math.random() * MSGS.length)](c.row, c.p, name);
+    }, 720);
+  }
+
+  function startS1() {
+    tlEl.querySelectorAll('.vm-tl-entry').forEach(e => e.classList.remove('in'));
+    tlEl.querySelectorAll('.vm-tl-entry').forEach((e, i) => {
+      s1Timers.push(setTimeout(() => e.classList.add('in'), 500 + i * 950));
+    });
+  }
+
+  function startS2() {
+    wfSteps.forEach(s => s.classList.remove('active','done'));
+    wfConns.forEach(c => c.querySelector('.vm-wf-conn-fill').style.width = '0%');
+    const pillRow = document.getElementById('vmWfPillRow');
+    const PILL_CLS = ['wf-called','wf-accepted','wf-in-progress','wf-finished'];
+    const PILL_LBL = ['Called','Accepted','In Progress','Finished'];
+    let si = 0;
+    wfSteps[0].classList.add('active');
+    pillRow.innerHTML = `<span class="wf-pill wf-called">Called</span>`;
+    s2Iv = setInterval(() => {
+      if (si < wfSteps.length) { wfSteps[si].classList.remove('active'); wfSteps[si].classList.add('done'); }
+      if (wfConns[si]) wfConns[si].querySelector('.vm-wf-conn-fill').style.width = '100%';
+      si++;
+      if (si < wfSteps.length) {
+        wfSteps[si].classList.add('active');
+        pillRow.innerHTML = `<span class="wf-pill ${PILL_CLS[si]}">${PILL_LBL[si]}</span>`;
+      }
+    }, 820);
+  }
+
+  function startS3() {
+    ssTiles.forEach(t => { t.classList.remove('in','selected','dim'); t.style.opacity = ''; });
+    ssTiles.forEach((t, i) => s3Timers.push(setTimeout(() => t.classList.add('in'), i * 110)));
+    s3Timers.push(setTimeout(() => {
+      ssTiles.forEach(t => t.classList.add('dim'));
+      ssTiles[2].classList.remove('dim'); ssTiles[2].classList.add('selected'); // Maintenance
+    }, 1900));
+  }
+
+  /* ── Scene switcher ── */
+  let curScene = -1;
+  function goScene(idx) {
+    if (idx === curScene) return;
+    clearSubs();
+    scenes.forEach(s => s.classList.remove('active'));
+    if (scenes[idx]) scenes[idx].classList.add('active');
+    const meta = SCENE_META[idx] || {};
+    sceneNameEl.textContent = meta.name || '';
+    captionEl.innerHTML = (meta.cap || '').replace('cap-hl','cap-hl" style="color:var(--accent)');
+    curScene = idx;
+    if (idx === 0) startS0();
+    if (idx === 1) startS1();
+    if (idx === 2) startS2();
+    if (idx === 3) startS3();
+  }
+
+  /* ── Playback loop ── */
+  let playing = false, elapsed = 0, lastTs = null, raf = null;
+
+  function loop(ts) {
+    if (playing) {
+      if (lastTs !== null) elapsed = Math.min(elapsed + (ts - lastTs), TOTAL - 1);
+      lastTs = ts;
+    } else { lastTs = null; }
+
+    fillEl.style.width = ((elapsed / TOTAL) * 100).toFixed(2) + '%';
+    const s = Math.floor(elapsed / 1000), m = Math.floor(s / 60);
+    timeEl.textContent = `${m}:${String(s % 60).padStart(2,'0')}`;
+    goScene(Math.floor(elapsed / SCENE_DUR) % NUM_SCENES);
+
+    if (playing && elapsed >= TOTAL - 1) { elapsed = 0; lastTs = null; }
+    raf = requestAnimationFrame(loop);
+  }
+
+  playBtn.addEventListener('click', () => {
+    playing = !playing;
+    playBtn.textContent = playing ? '⏸' : '▶';
+  });
+
+  /* Click scrubber to seek */
+  document.querySelector('.vm-track-wrap').addEventListener('click', e => {
+    const rect = e.currentTarget.querySelector('.vm-track').getBoundingClientRect();
+    const pct  = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    elapsed = pct * TOTAL; lastTs = null;
+  });
+
+  /* Auto-play when player scrolls into view */
+  new IntersectionObserver(entries => {
+    if (entries[0].isIntersecting && !playing) {
+      playing = true; playBtn.textContent = '⏸';
+    }
+  }, { threshold: 0.5 }).observe(document.getElementById('vmScreen'));
+
+  raf = requestAnimationFrame(loop);
+})();
+</script>
 
 <script>
 /* ── Global scroll reveal — runs after full DOM is parsed ── */
