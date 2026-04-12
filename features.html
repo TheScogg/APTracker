@@ -11,7 +11,6 @@
     :root {
       --bg: #070b16;
       --panel: rgba(13, 19, 35, 0.8);
-      --glass: rgba(255, 255, 255, 0.08);
       --text: #f3f7ff;
       --muted: #c3d1ff;
       --cyan: #34d3ff;
@@ -19,6 +18,7 @@
       --pink: #ff4eb4;
       --lime: #b4ff47;
       --orange: #ff9f43;
+      --green: #52ffb2;
       --shadow: 0 20px 45px rgba(0, 0, 0, 0.45);
     }
 
@@ -190,6 +190,157 @@
       pointer-events: none;
     }
 
+    .demo {
+      margin-top: 2.5rem;
+      border-radius: 24px;
+      padding: 1.2rem;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      background: linear-gradient(145deg, rgba(26, 34, 62, 0.88), rgba(14, 18, 36, 0.88));
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .demo h2 {
+      margin: 0 0 0.35rem;
+      font-family: 'Rajdhani', sans-serif;
+      letter-spacing: 0.04em;
+      font-size: clamp(1.5rem, 3vw, 2rem);
+    }
+
+    .demo p {
+      margin: 0 0 1rem;
+      color: var(--muted);
+    }
+
+    .app-window {
+      border-radius: 18px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      background: #0b1328;
+    }
+
+    .app-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.65rem 0.85rem;
+      background: linear-gradient(90deg, rgba(52, 211, 255, 0.2), rgba(155, 92, 255, 0.2));
+      border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+    }
+
+    .dots {
+      display: flex;
+      gap: 0.35rem;
+    }
+
+    .dots span {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      display: block;
+    }
+
+    .dots span:nth-child(1) { background: #ff6f91; }
+    .dots span:nth-child(2) { background: #ffd166; }
+    .dots span:nth-child(3) { background: #7dff9e; }
+
+    .app-title {
+      font-size: 0.88rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #d9e6ff;
+      font-family: 'Rajdhani', sans-serif;
+    }
+
+    .app-content {
+      padding: 1rem;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.9rem;
+    }
+
+    .mini-board,
+    .mini-feed {
+      border-radius: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      background: rgba(12, 17, 34, 0.85);
+      padding: 0.75rem;
+      min-height: 200px;
+    }
+
+    .mini-board h3,
+    .mini-feed h3 {
+      margin: 0 0 0.6rem;
+      font-size: 1rem;
+      font-family: 'Rajdhani', sans-serif;
+      letter-spacing: 0.03em;
+    }
+
+    .press-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(70px, 1fr));
+      gap: 0.5rem;
+    }
+
+    .press {
+      padding: 0.55rem 0.4rem;
+      text-align: center;
+      border-radius: 10px;
+      font-size: 0.8rem;
+      background: rgba(255, 255, 255, 0.07);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      animation: pressCycle 7s infinite;
+    }
+
+    .press:nth-child(2) { animation-delay: 0.6s; }
+    .press:nth-child(4) { animation-delay: 1.2s; }
+    .press:nth-child(6) { animation-delay: 1.8s; }
+
+    .issue-card {
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 12px;
+      padding: 0.65rem;
+      margin-bottom: 0.55rem;
+      background: rgba(255, 255, 255, 0.04);
+      animation: slideIn 8s ease-in-out infinite;
+    }
+
+    .issue-card:nth-child(3) { animation-delay: 1.3s; }
+    .issue-card:nth-child(4) { animation-delay: 2.6s; }
+
+    .issue-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.83rem;
+      margin-bottom: 0.45rem;
+    }
+
+    .status-pill {
+      font-size: 0.72rem;
+      padding: 0.18rem 0.48rem;
+      border-radius: 999px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      animation: statusFlow 8s ease-in-out infinite;
+    }
+
+    .progress {
+      height: 7px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.12);
+      overflow: hidden;
+    }
+
+    .progress span {
+      display: block;
+      height: 100%;
+      width: 0;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--cyan), var(--purple), var(--green));
+      animation: progressMove 8s ease-in-out infinite;
+    }
+
     .timeline {
       margin-top: 2.5rem;
       background: linear-gradient(135deg, rgba(180, 255, 71, 0.07), rgba(155, 92, 255, 0.14));
@@ -242,41 +393,12 @@
       color: #cbd9ff;
     }
 
-    .cta {
-      margin-top: 2rem;
-      text-align: center;
-    }
-
-    .cta button {
-      cursor: pointer;
-      border: 0;
-      color: #05101f;
-      font-weight: 900;
-      font-size: 1.02rem;
-      padding: 0.85rem 1.4rem;
-      border-radius: 14px;
-      background: linear-gradient(120deg, var(--lime), #7dffdd, var(--cyan));
-      box-shadow: 0 12px 26px rgba(52, 211, 255, 0.35);
-      transition: transform 0.25s ease, box-shadow 0.25s ease;
-    }
-
-    .cta button:hover {
-      transform: translateY(-3px) scale(1.02);
-      box-shadow: 0 16px 34px rgba(52, 211, 255, 0.45);
-    }
-
-    .flash {
-      animation: flashBg 0.9s ease;
-    }
-
     @keyframes floatOrb {
       0%, 100% { transform: translate(0, 0) scale(1); }
       50% { transform: translate(18px, 12px) scale(1.08); }
     }
 
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
+    @keyframes spin { to { transform: rotate(360deg); } }
 
     @keyframes drift {
       from { transform: translateX(0); }
@@ -293,10 +415,36 @@
       50% { transform: scale(1.15) rotate(15deg); opacity: 0.9; }
     }
 
-    @keyframes flashBg {
-      0% { filter: brightness(1); }
-      25% { filter: brightness(1.35); }
-      100% { filter: brightness(1); }
+    @keyframes pressCycle {
+      0%, 100% { border-color: rgba(255,255,255,0.15); box-shadow: none; }
+      35% { border-color: rgba(255, 159, 67, 0.9); box-shadow: 0 0 0 2px rgba(255, 159, 67, 0.22); }
+      70% { border-color: rgba(82, 255, 178, 0.9); box-shadow: 0 0 0 2px rgba(82, 255, 178, 0.2); }
+    }
+
+    @keyframes slideIn {
+      0%, 100% { transform: translateX(0); opacity: 0.8; }
+      20% { transform: translateX(0); opacity: 1; }
+      45% { transform: translateX(10px); opacity: 1; }
+      70% { transform: translateX(0); opacity: 0.85; }
+    }
+
+    @keyframes progressMove {
+      0% { width: 8%; }
+      25% { width: 35%; }
+      50% { width: 64%; }
+      75% { width: 88%; }
+      100% { width: 100%; }
+    }
+
+    @keyframes statusFlow {
+      0% { background: rgba(255, 209, 102, 0.2); color: #ffd166; }
+      30% { background: rgba(82, 255, 178, 0.2); color: #52ffb2; }
+      65% { background: rgba(52, 211, 255, 0.2); color: #34d3ff; }
+      100% { background: rgba(180, 255, 71, 0.2); color: #b4ff47; }
+    }
+
+    @media (max-width: 820px) {
+      .app-content { grid-template-columns: 1fr; }
     }
 
     @media (max-width: 680px) {
@@ -357,6 +505,46 @@
       </article>
     </section>
 
+    <section class="demo" aria-label="Live website animation demo">
+      <h2>Live AP Tracker Motion Demo</h2>
+      <p>This animated mockup shows your app “in action” with moving issue cards, changing statuses, and real-time progress flow.</p>
+      <div class="app-window">
+        <div class="app-top">
+          <div class="dots"><span></span><span></span><span></span></div>
+          <div class="app-title">aptracker.local — Issue Dashboard</div>
+        </div>
+        <div class="app-content">
+          <div class="mini-board">
+            <h3>Floor Status Board</h3>
+            <div class="press-grid">
+              <div class="press">Press 1.01</div>
+              <div class="press">Press 1.02</div>
+              <div class="press">Press 1.03</div>
+              <div class="press">Press 2.01</div>
+              <div class="press">Press 2.02</div>
+              <div class="press">Press 2.03</div>
+            </div>
+          </div>
+
+          <div class="mini-feed">
+            <h3>Live Issue Feed</h3>
+            <div class="issue-card">
+              <div class="issue-head"><span>Press 5.10 · Robot Crash</span><span class="status-pill">In Progress</span></div>
+              <div class="progress"><span></span></div>
+            </div>
+            <div class="issue-card">
+              <div class="issue-head"><span>Press 3.02 · Heater Fault</span><span class="status-pill">Accepted</span></div>
+              <div class="progress"><span></span></div>
+            </div>
+            <div class="issue-card">
+              <div class="issue-head"><span>Press 4.08 · Material Delay</span><span class="status-pill">Called</span></div>
+              <div class="progress"><span></span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <section class="timeline">
       <h2>Issue Journey in Motion</h2>
       <div class="steps">
@@ -366,23 +554,19 @@
         <div class="step"><strong>4. Finished + Reviewed</strong><span>Close the loop with resolution notes and export-ready history.</span></div>
       </div>
     </section>
-
-    <div class="cta">
-      <button id="sparkButton" type="button">Launch Celebration Mode ✨</button>
-    </div>
   </main>
-
   <script>
-    const sparkButton = document.getElementById('sparkButton');
-    sparkButton?.addEventListener('click', () => {
-      document.body.classList.remove('flash');
-      void document.body.offsetWidth;
-      document.body.classList.add('flash');
-      sparkButton.textContent = 'Celebration Active 🚀';
-      setTimeout(() => {
-        sparkButton.textContent = 'Launch Celebration Mode ✨';
-      }, 1600);
-    });
+    const workflowStates = ['Called', 'Accepted', 'In Progress', 'Finished'];
+    const pills = Array.from(document.querySelectorAll('.status-pill'));
+
+    let stateIndex = 0;
+    setInterval(() => {
+      stateIndex = (stateIndex + 1) % workflowStates.length;
+      pills.forEach((pill, idx) => {
+        const next = workflowStates[(stateIndex + idx) % workflowStates.length];
+        pill.textContent = next;
+      });
+    }, 2000);
   </script>
 </body>
 </html>
