@@ -1491,11 +1491,13 @@ window.addEventListener('scroll', () => {
   function advance() {
     current++;
 
-    // Mark previous step done, fill connector
-    if (current > 0) {
+    // Mark previous step done, fill connector (conns has one fewer entry than steps)
+    if (current > 0 && steps[current - 1]) {
       steps[current - 1].classList.remove('active');
       steps[current - 1].classList.add('done');
-      conns[current - 1].querySelector('.wf-conn-fill').style.width = '100%';
+      if (conns[current - 1]) {
+        conns[current - 1].querySelector('.wf-conn-fill').style.width = '100%';
+      }
     }
 
     if (current < steps.length) {
