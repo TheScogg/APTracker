@@ -52,7 +52,7 @@ body {
 
 /* ─── Layout ─── */
 .container { max-width: 1180px; margin: 0 auto; padding: 0 24px; }
-section { padding: 88px 0; }
+section { padding: 60px 0; }
 
 /* ─────────────────────────── NAV ─────────────────────────── */
 nav {
@@ -377,7 +377,7 @@ window.addEventListener('scroll', () => {
 }
 
 /* Left — bullet list */
-.fm-bullets { display: flex; flex-direction: column; gap: 18px; margin-top: 36px; }
+.fm-bullets { display: flex; flex-direction: column; gap: 14px; margin-top: 24px; }
 .fm-bullet  { display: flex; align-items: flex-start; gap: 14px; }
 .fm-bullet-icon {
   width: 38px; height: 38px; border-radius: 9px; flex-shrink: 0;
@@ -704,7 +704,7 @@ window.addEventListener('scroll', () => {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 16px;
-  margin-top: 52px;
+  margin-top: 36px;
   align-items: start;
 }
 
@@ -1265,7 +1265,7 @@ window.addEventListener('scroll', () => {
 /* Pipeline row */
 .wf-pipeline {
   display: flex; align-items: center; justify-content: center;
-  gap: 0; margin-top: 64px; position: relative;
+  gap: 0; margin-top: 48px; position: relative;
   flex-wrap: nowrap;
 }
 
@@ -1364,7 +1364,7 @@ window.addEventListener('scroll', () => {
 /* Timing bar under pipeline */
 .wf-timing {
   display: flex; justify-content: center; gap: 32px;
-  margin-top: 52px; flex-wrap: wrap;
+  margin-top: 40px; flex-wrap: wrap;
 }
 .wf-timing-item {
   text-align: center;
@@ -1522,6 +1522,214 @@ window.addEventListener('scroll', () => {
   obs.observe(document.getElementById('wfPipeline'));
 })();
 </script>
+
+<!-- ══════════════════════════ FEATURES GRID ══════════════════════════ -->
+
+<style>
+.fg-section { background: var(--bg); }
+
+.fg-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  margin-top: 36px;
+}
+
+.fg-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  padding: 26px 22px;
+  transition: transform .2s, border-color .2s, box-shadow .2s;
+}
+.fg-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(249,115,22,.35);
+  box-shadow: 0 8px 28px rgba(249,115,22,.08);
+}
+
+.fg-icon {
+  width: 46px; height: 46px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 21px; margin-bottom: 15px; flex-shrink: 0;
+}
+.fg-name {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 19px; font-weight: 700; letter-spacing: .04em; margin-bottom: 7px;
+}
+.fg-desc { font-size: 13px; color: var(--text2); line-height: 1.62; }
+</style>
+
+<div class="section-divider"></div>
+
+<section class="fg-section">
+  <div class="container">
+    <div class="reveal" style="text-align:center; max-width:560px; margin:0 auto">
+      <div class="section-label" style="text-align:center">Built-In Tools</div>
+      <h2 class="section-heading" style="text-align:center">Everything your team needs</h2>
+      <p class="section-sub" style="margin:0 auto; text-align:center">A complete factory floor toolkit running entirely in the browser — no app to install, no server to manage.</p>
+    </div>
+
+    <div class="fg-grid">
+
+      <div class="fg-card reveal d1">
+        <div class="fg-icon" style="background:rgba(34,197,94,.12); border:1px solid rgba(34,197,94,.2)">📡</div>
+        <div class="fg-name">Real-Time Sync</div>
+        <div class="fg-desc">Firebase Firestore powers live updates across every device on the floor. Issues appear the moment they're logged — no refresh, no polling.</div>
+      </div>
+
+      <div class="fg-card reveal d2">
+        <div class="fg-icon" style="background:rgba(249,115,22,.12); border:1px solid rgba(249,115,22,.2)">📸</div>
+        <div class="fg-name">Photo Capture</div>
+        <div class="fg-desc">Attach photos straight from your phone's camera or gallery. Stored full-resolution in Firebase Storage, instantly viewable by the whole team.</div>
+      </div>
+
+      <div class="fg-card reveal d3">
+        <div class="fg-icon" style="background:rgba(59,130,246,.12); border:1px solid rgba(59,130,246,.2)">📄</div>
+        <div class="fg-name">PDF Export</div>
+        <div class="fg-desc">Export any filtered issue view to a formatted PDF report — photos, timelines, and timestamps included. Perfect for shift handoffs and audits.</div>
+      </div>
+
+      <div class="fg-card reveal d4">
+        <div class="fg-icon" style="background:rgba(168,85,247,.12); border:1px solid rgba(168,85,247,.2)">🔐</div>
+        <div class="fg-name">Role-Based Access</div>
+        <div class="fg-desc">Admin, Editor, and Viewer roles per plant. Granular permissions control who can create issues, resolve them, manage statuses, or export data.</div>
+      </div>
+
+      <div class="fg-card reveal d1">
+        <div class="fg-icon" style="background:rgba(20,184,166,.12); border:1px solid rgba(20,184,166,.2)">📱</div>
+        <div class="fg-name">Mobile-First Design</div>
+        <div class="fg-desc">Built for gloved hands and bright factory floors. Big touch targets, swipe gestures for fast status changes, and a layout that works on any screen.</div>
+      </div>
+
+      <div class="fg-card reveal d2">
+        <div class="fg-icon" style="background:rgba(234,179,8,.12); border:1px solid rgba(234,179,8,.2)">🎨</div>
+        <div class="fg-name">6 Themes</div>
+        <div class="fg-desc">Dark mode by default, plus Light, Forest, Ocean, Sunset, and Royal themes — toggle from the user menu to match your environment or preference.</div>
+      </div>
+
+      <div class="fg-card reveal d3">
+        <div class="fg-icon" style="background:rgba(239,68,68,.12); border:1px solid rgba(239,68,68,.2)">🏭</div>
+        <div class="fg-name">Multi-Plant</div>
+        <div class="fg-desc">Manage unlimited plants from one login. Each plant has its own press layout, status config, member list, and issue history. Switch with one tap.</div>
+      </div>
+
+      <div class="fg-card reveal d4">
+        <div class="fg-icon" style="background:rgba(56,189,248,.12); border:1px solid rgba(56,189,248,.2)">📋</div>
+        <div class="fg-name">Append-Only Event Log</div>
+        <div class="fg-desc">Every status change is written to an immutable events subcollection. Full audit trail from open to close — nothing gets overwritten or lost.</div>
+      </div>
+
+      <div class="fg-card reveal d5">
+        <div class="fg-icon" style="background:rgba(236,72,153,.12); border:1px solid rgba(236,72,153,.2)">⚡</div>
+        <div class="fg-name">Cloudflare Workers</div>
+        <div class="fg-desc">Deployed as a static site on Cloudflare's global edge network — loads instantly from anywhere on the plant floor, even on weak Wi-Fi.</div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════ FOOTER ══════════════════════════ -->
+
+<style>
+footer {
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+  padding: 48px 0 32px;
+}
+
+.footer-top {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  flex-wrap: wrap; gap: 32px; margin-bottom: 36px;
+}
+
+.footer-logo {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 24px; font-weight: 700; letter-spacing: .12em;
+  text-decoration: none; color: var(--text);
+}
+.footer-logo .bracket { color: var(--accent); }
+.footer-tagline {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px; color: var(--text3); letter-spacing: .07em;
+  margin-top: 6px; line-height: 1.6;
+}
+
+.footer-links {
+  display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-start;
+}
+.footer-link {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 14px; font-weight: 600; letter-spacing: .04em;
+  color: var(--text2); text-decoration: none;
+  padding: 6px 14px; border-radius: 8px;
+  transition: color .2s, background .2s;
+}
+.footer-link:hover { color: var(--text); background: var(--bg2); }
+
+.footer-tech {
+  display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 28px;
+}
+.tech-badge {
+  font-family: 'Share Tech Mono', monospace; font-size: 10px; letter-spacing: .07em;
+  padding: 5px 12px; border-radius: 6px;
+  background: var(--bg2); border: 1px solid var(--border); color: var(--text2);
+}
+
+.footer-bottom {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 12px;
+  padding-top: 24px; border-top: 1px solid var(--border);
+}
+.footer-copy {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px; color: var(--text3); letter-spacing: .05em;
+}
+.footer-status {
+  display: flex; align-items: center; gap: 7px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px; color: var(--green); letter-spacing: .07em;
+}
+.footer-status-dot {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--green);
+  animation: pulse 2s ease-in-out infinite;
+}
+</style>
+
+<footer>
+  <div class="container">
+    <div class="footer-top">
+      <div>
+        <a href="#" class="footer-logo"><span class="bracket">[</span>AP<span class="bracket">]</span>TRACKER</a>
+        <div class="footer-tagline">
+          Manufacturing floor intelligence<br>
+          Real-time · Reliable · Built for production
+        </div>
+      </div>
+      <div class="footer-links">
+        <a href="index.html"  class="footer-link">App</a>
+        <a href="admin.html"  class="footer-link">Admin</a>
+        <a href="debug.html"  class="footer-link">Debug</a>
+      </div>
+    </div>
+
+    <div class="footer-tech">
+      <span class="tech-badge">Firebase 10.12</span>
+      <span class="tech-badge">Firestore</span>
+      <span class="tech-badge">Firebase Auth</span>
+      <span class="tech-badge">Firebase Storage</span>
+      <span class="tech-badge">html2pdf.js</span>
+      <span class="tech-badge">Vanilla JS</span>
+      <span class="tech-badge">Cloudflare Workers</span>
+    </div>
+
+    <div class="footer-bottom">
+      <div class="footer-copy">© 2026 AP Tracker · All data stored securely in Firebase</div>
+      <div class="footer-status"><div class="footer-status-dot"></div>ALL SYSTEMS OPERATIONAL</div>
+    </div>
+  </div>
+</footer>
 
 </body>
 </html>
