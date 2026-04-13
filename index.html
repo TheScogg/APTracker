@@ -5117,9 +5117,18 @@ function fmtDate(d) {
 function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 // User dropdown
+function normalizeUserDropdownGamePill() {
+  const dropdown = document.getElementById('user-dropdown');
+  if (!dropdown) return;
+  const pills = Array.from(dropdown.querySelectorAll('.game-pill'));
+  if (pills.length <= 1) return;
+  pills.slice(0, -1).forEach(pill => pill.remove());
+}
+
 function toggleUserDropdown() {
   const pill=document.getElementById('user-pill');
   const dropdown=document.getElementById('user-dropdown');
+  normalizeUserDropdownGamePill();
   const isOpen=dropdown.classList.contains('visible');
   dropdown.classList.toggle('visible',!isOpen);
   pill.classList.toggle('open',!isOpen);
@@ -5140,6 +5149,7 @@ document.addEventListener('click', e => {
 });
 const signoutBtn=document.getElementById('signout-btn');
 if (signoutBtn) signoutBtn.addEventListener('click', doSignOut);
+normalizeUserDropdownGamePill();
 
 // ── THEME SELECTION ──
 const THEME_OPTIONS = [
