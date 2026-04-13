@@ -217,6 +217,7 @@
   .game-pill:hover { border-color: var(--purple); color: var(--text); }
   .game-pill .game-pill-xp { color: var(--purple); font-weight: 800; }
   .game-pill .game-pill-mission { color: var(--babyblue); }
+  .user-dropdown .game-pill { width: calc(100% - 20px); margin: 10px; justify-content: center; }
   .game-drawer { position: fixed; top: 0; right: -380px; width: 360px; max-width: 96vw; height: 100vh; background: var(--bg2); border-left: 1px solid var(--border); z-index: 450; box-shadow: -20px 0 50px rgba(0,0,0,0.45); transition: right 0.24s ease; display: flex; flex-direction: column; }
   .game-drawer.open { right: 0; }
   .game-drawer-header { padding: 14px 14px 10px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
@@ -252,14 +253,19 @@
   .user-dropdown-item { display: flex; align-items: center; gap: 8px; padding: 10px 14px; font-size: 13px; color: var(--text2); cursor: pointer; transition: background 0.1s; border: none; background: none; width: 100%; text-align: left; font-family: 'Nunito', sans-serif; }
   .user-dropdown-item:hover { background: var(--bg3); color: var(--text); }
   .user-dropdown-item.danger:hover { background: var(--red-dim); color: var(--red); }
-  .theme-select-row { padding: 10px 14px; border-bottom: 1px solid var(--border); }
-  .theme-select-label { display:block; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text3); margin-bottom: 8px; font-weight: 700; }
-  .theme-select-current { font-size: 12px; color: var(--text2); margin-bottom: 8px; font-weight: 600; }
-  .theme-select-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
-  .theme-choice { border: 1px solid var(--border); background: var(--bg3); border-radius: 8px; padding: 7px; cursor: pointer; text-align: left; transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s; }
+  .theme-select-row { padding: 8px 14px; border-bottom: 1px solid var(--border); }
+  .theme-select-toggle { width: 100%; border: 1px solid var(--border); border-radius: 8px; background: var(--bg3); color: var(--text2); display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 9px; font-size: 11px; font-weight: 700; cursor: pointer; font-family: 'Nunito', sans-serif; transition: border-color 0.15s, color 0.15s; }
+  .theme-select-toggle:hover { border-color: var(--text2); color: var(--text); }
+  .theme-select-toggle.open { border-color: var(--accent); color: var(--accent); }
+  .theme-select-current { font-size: 11px; color: var(--text3); font-weight: 700; }
+  .theme-select-chevron { font-size: 9px; transition: transform 0.2s; color: var(--text3); }
+  .theme-select-toggle.open .theme-select-chevron { transform: rotate(180deg); }
+  .theme-select-grid { display: none; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }
+  .theme-select-grid.open { display: grid; }
+  .theme-choice { border: 1px solid var(--border); background: var(--bg3); border-radius: 8px; padding: 6px; cursor: pointer; text-align: left; transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s; }
   .theme-choice:hover { border-color: var(--text2); transform: translateY(-1px); }
   .theme-choice.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent-glow); }
-  .theme-choice-name { display: block; font-size: 11px; font-weight: 700; color: var(--text); line-height: 1.2; margin-bottom: 6px; }
+  .theme-choice-name { display: block; font-size: 10px; font-weight: 700; color: var(--text); line-height: 1.2; margin-bottom: 4px; }
   .theme-choice-swatches { display: flex; gap: 4px; }
   .theme-swatch { flex: 1; height: 12px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.15); }
 
@@ -659,6 +665,18 @@
   .issue-status { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 2px; font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 9999px; flex: 0 1 auto; width: fit-content; max-width: 100%; overflow: hidden; text-transform: uppercase; letter-spacing: 0.05em; }
   .issue-status-main { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; max-width: 100%; }
   .issue-status-sub { display: block; max-width: 100%; font-size: 11.5px; font-weight: 600; opacity: 0.9; text-transform: none; letter-spacing: 0.02em; white-space: normal; overflow-wrap: anywhere; word-break: break-word; line-height: 1.35; margin-left: 12px; }
+  /* ── SECONDARY STATUS DOTS (card header) ── */
+  .secondary-status-dots { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+  .secondary-dot { display: inline-flex; align-items: center; gap: 3px; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 9999px; border: 1px solid; text-transform: uppercase; letter-spacing: 0.04em; }
+  /* ── ALSO WAITING ON (card body) ── */
+  .also-needs-section { padding: 10px 0 6px; }
+  .also-needs-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text3); margin-bottom: 7px; }
+  .also-needs-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .also-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; padding: 5px 12px; border-radius: 9999px; border: 1px solid; cursor: pointer; transition: all 0.15s; user-select: none; }
+  .also-chip.inactive { opacity: 0.35; }
+  .also-chip.inactive:hover { opacity: 0.65; }
+  .also-chip.active { box-shadow: 0 0 8px color-mix(in srgb, currentColor 50%, transparent); }
+  .also-chip.active::after { content: ' ✓'; font-size: 9px; opacity: 0.8; }
   .issue-sub-label { font-size: 11px; color: var(--text3); font-family: 'Share Tech Mono', monospace; white-space: nowrap; margin-left: 4px; }
   .status-open       { background: rgba(239,68,68,0.1);  color: #f87171; border: 1px solid rgba(239,68,68,0.3); }
   .status-resolved   { background: rgba(34,197,94,0.1);  color: #4ade80; border: 1px solid rgba(34,197,94,0.3); }
@@ -892,10 +910,6 @@
       <div class="plant-dropdown" id="plant-dropdown"></div>
     </div>
 
-    <button class="game-pill" id="game-pill" onclick="toggleGameDrawer()" title="Open gamification">
-      🏆 <span class="game-pill-xp" id="game-pill-xp">0 XP</span> <span>•</span> <span class="game-pill-mission" id="game-pill-mission">0 missions</span>
-    </button>
-
     <div class="user-pill-wrap" id="user-pill-wrap">
       <div class="user-pill" id="user-pill">
         <div class="user-avatar-fallback" id="user-avatar-fallback">?</div>
@@ -907,12 +921,21 @@
           <div class="user-dropdown-name" id="dropdown-full-name">—</div>
           <div class="user-dropdown-email" id="dropdown-email">—</div>
         </div>
+        <button class="game-pill" id="game-pill" onclick="toggleGameDrawer()" title="Open gamification">
+          🏆 <span class="game-pill-xp" id="game-pill-xp">0 XP</span> <span>•</span> <span class="game-pill-mission" id="game-pill-mission">0 missions</span>
+        </button>
         <button class="user-dropdown-item" id="admin-page-btn" style="display:none">🛠 Admin Portal</button>
         <div class="theme-select-row">
-          <div class="theme-select-label">🎨 Choose Theme</div>
-          <div class="theme-select-current" id="theme-select-current">Current: Midnight</div>
+          <button class="theme-select-toggle" id="theme-select-toggle" type="button">
+            <span>🎨 Theme</span>
+            <span class="theme-select-current" id="theme-select-current">Midnight</span>
+            <span class="theme-select-chevron">▼</span>
+          </button>
           <div class="theme-select-grid" id="theme-select-grid"></div>
         </div>
+        <button class="game-pill" onclick="toggleGameDrawer()" title="Open gamification">
+          🏆 <span class="game-pill-xp">0 XP</span> <span>•</span> <span class="game-pill-mission">0 missions</span>
+        </button>
         <button class="user-dropdown-item danger" id="signout-btn">⏻ Sign Out</button>
       </div>
     </div>
@@ -1557,6 +1580,51 @@ function buildCurrentStatus(statusKey, subStatus = '', enteredDateTime = '', not
   };
 }
 
+// ── SECONDARY STATUS HELPERS ──
+// An issue has one primary status (currentStatus) plus an optional array of
+// lightweight secondary department flags (no sub-statuses, stored as string keys).
+
+function getSecondaryStatuses(issue) {
+  if (Array.isArray(issue?.secondaryStatuses)) return issue.secondaryStatuses;
+  return [];
+}
+
+// Returns all active status keys: primary + secondary (resolved overrides everything)
+function getActiveStatuses(issue) {
+  if (issue?.lifecycle?.isResolved || issue?.currentStatus?.statusKey === 'resolved') {
+    return [{ statusKey: 'resolved', subStatusKey: '' }];
+  }
+  const primary = { statusKey: currentStatusKey(issue), subStatusKey: issue.currentStatus?.subStatusKey || '' };
+  const secondary = getSecondaryStatuses(issue)
+    .filter(k => k !== 'resolved' && k !== currentStatusKey(issue))
+    .map(k => ({ statusKey: k, subStatusKey: '' }));
+  return [primary, ...secondary];
+}
+
+// True if the issue has this status as primary OR secondary
+function issueHasActiveStatus(issue, statusKey) {
+  return getActiveStatuses(issue).some(s => s.statusKey === statusKey);
+}
+
+// Toggle a secondary status tag on/off (does NOT touch the primary status)
+window.toggleSecondaryStatus = async (id, statusKey) => {
+  if (!currentUserPermissions.canEditIssue) return;
+  const issue = issues.find(i => i.id === id);
+  if (!issue) return;
+  const current = getSecondaryStatuses(issue);
+  const updated = current.includes(statusKey)
+    ? current.filter(k => k !== statusKey)
+    : [...current, statusKey];
+  try {
+    await updateDoc(plantDoc('issues', id), {
+      secondaryStatuses: updated,
+      updatedAt: serverTimestamp(),
+      updatedBy: currentActor()
+    });
+  } catch(e) { setSyncStatus('err', 'Error: ' + e.message); }
+};
+// ── END SECONDARY STATUS HELPERS ──
+
 function buildIssueV2Compat({ machineCode, statusKey, subStatus = '', statusDateTime = '', note = '', baseIssue = null, forceReopenIncrement = false }) {
   const rowName = findRowNameForMachine(machineCode);
   return {
@@ -1965,8 +2033,9 @@ document.addEventListener('click', e => {
   const wrap = document.getElementById('plant-switcher-wrap');
   if (wrap && !wrap.contains(e.target)) closePlantDropdown();
   const drawer = document.getElementById('game-drawer');
-  const pill = document.getElementById('game-pill');
-  if (drawer && gameDrawerOpen && !drawer.contains(e.target) && pill && !pill.contains(e.target)) {
+  const gamePills = Array.from(document.querySelectorAll('.game-pill'));
+  const clickedPill = gamePills.some(pill => pill.contains(e.target));
+  if (drawer && gameDrawerOpen && !drawer.contains(e.target) && !clickedPill) {
     toggleGameDrawer(false);
   }
 });
@@ -2183,10 +2252,8 @@ function renderGamePanel() {
   const streak = Number(gameUserStats?.streaks?.current || 0);
   const missionCount = gameMissions.length;
   const progressPct = gameLevelProgress(xp);
-  const xpPill = document.getElementById('game-pill-xp');
-  const missionPill = document.getElementById('game-pill-mission');
-  if (xpPill) xpPill.textContent = `${xp} XP`;
-  if (missionPill) missionPill.textContent = `${missionCount} missions`;
+  document.querySelectorAll('.game-pill .game-pill-xp').forEach(el => { el.textContent = `${xp} XP`; });
+  document.querySelectorAll('.game-pill .game-pill-mission').forEach(el => { el.textContent = `${missionCount} missions`; });
   const totalXpEl = document.getElementById('game-total-xp');
   const levelEl = document.getElementById('game-level');
   const streakEl = document.getElementById('game-streak');
@@ -3047,12 +3114,13 @@ function renderRowPanels() {
     nameLbl.className = 'row-panel-name'; nameLbl.textContent = rowName;
     header.appendChild(nameLbl);
 
-    // Compute and render status pills inline
+    // Compute and render status pills inline (secondary statuses also counted)
     const counts = {};
     presses.forEach(m => {
       scoped.filter(i=>i.machine===m).forEach(i => {
-        const sk = currentStatusKey(i);
-        counts[sk] = (counts[sk]||0) + 1;
+        getActiveStatuses(i).forEach(as => {
+          counts[as.statusKey] = (counts[as.statusKey]||0) + 1;
+        });
       });
     });
     const pillsWrap = document.createElement('div');
@@ -3083,7 +3151,7 @@ function renderRowPanels() {
       // Build expand area for this status
       const matchingIssues = [];
       presses.forEach(m => {
-        scoped.filter(i => i.machine === m && currentStatusKey(i) === sk).forEach(i => matchingIssues.push(i));
+        scoped.filter(i => i.machine === m && issueHasActiveStatus(i, sk)).forEach(i => matchingIssues.push(i));
       });
       const area = document.createElement('div');
       area.className = 'row-pill-expand' + (expandedPill.row === rowName && expandedPill.status === sk ? ' visible' : '');
@@ -3195,11 +3263,12 @@ function renderRowPanels() {
       const anyOpen = mi.filter(i=>currentStatusKey(i)!=='resolved');
       const anyResolved = mi.filter(i=>currentStatusKey(i)==='resolved');
 
-      // Build status color list for bar segments
+      // Build status color list for bar segments — primary + secondary per issue
       const statusColors = [];
       anyOpen.forEach(i => {
-        const sk = currentStatusKey(i);
-        statusColors.push(getStatusColor(sk));
+        getActiveStatuses(i).forEach(as => {
+          if (as.statusKey !== 'resolved') statusColors.push(getStatusColor(as.statusKey));
+        });
       });
 
       // Bar container
@@ -3582,6 +3651,7 @@ window.confirmResolve = async () => {
       statusHistory: [...getMutableStatusHistory(issue || {}), resolvedHistEntry],
       workflowState: 'finished',
       'workflowStateHistory.finished': { by: currentActor(), at: serverTimestamp() },
+      secondaryStatuses: [], // clear all secondary tags on resolve
       ...buildIssueV2Compat({
         machineCode: issue?.machine || '',
         statusKey: 'resolved',
@@ -4108,7 +4178,7 @@ function renderIssues() {
     if (!periodFilter(i)) return false;
     if (issueRowScope === 'active' && activeRows.size > 0 && !activeRowMachines.has(i.machine)) return false;
     if (mf && i.machine!==mf) return false;
-    if (sf && currentStatusKey(i) !== sf) return false;
+    if (sf && !issueHasActiveStatus(i, sf)) return false;
     if (search) {
       const machineText = String(i.machine || '').toLowerCase();
       const noteText = String(i.note || '').toLowerCase();
@@ -4355,6 +4425,31 @@ function renderIssues() {
     const baseLabel = scfg.label;
     const subLabel = currentSubKey;
 
+    // Secondary status dots (card header indicator strip)
+    const secKeys = getSecondaryStatuses(issue).filter(k => k !== 'resolved');
+    const secDotsHtml = secKeys.length > 0
+      ? `<div class="secondary-status-dots">${secKeys.map(k => {
+          const cfg = STATUS_CONFIG_SAFE[k];
+          const col = getStatusColor(k);
+          return `<span class="secondary-dot" style="color:${col};border-color:${col};background:${alphaColor(col,0.12)}">${cfg.icon} ${cfg.label}</span>`;
+        }).join('')}</div>`
+      : '';
+
+    // "Also Waiting On" toggle chips for expanded card body
+    const alsoNeedsOrder = (window._STATUS_ORDER || Object.keys(STATUSES))
+      .filter(k => k !== 'open' && k !== 'resolved' && k !== currentKey);
+    const alsoNeedsHtml = currentUserPermissions.canEditIssue || secKeys.length > 0
+      ? `<div class="also-needs-section">
+          <div class="also-needs-label">Also Waiting On</div>
+          <div class="also-needs-chips">${alsoNeedsOrder.map(k => {
+            const cfg = STATUS_CONFIG_SAFE[k];
+            const col = getStatusColor(k);
+            const isActive = secKeys.includes(k);
+            return `<div class="also-chip ${isActive ? 'active' : 'inactive'}" style="color:${col};border-color:${col};background:${alphaColor(col, isActive ? 0.15 : 0.05)}" onclick="event.stopPropagation(); toggleSecondaryStatus('${issue.id}','${k}')">${cfg.icon} ${cfg.label}</div>`;
+          }).join('')}</div>
+        </div>`
+      : '';
+
     card.innerHTML=`
       <div class="issue-card-header" onclick="toggleCard('${issue.id}')">
         <div class="issue-card-top">
@@ -4372,6 +4467,7 @@ function renderIssues() {
               <span class="issue-status-main">${sc.icon} ${baseLabel}</span>
             </div>
             ${subLabel ? `<span class="issue-status-sub" style="color:${sc.color};">${esc(subLabel)}</span>` : ''}
+            ${secDotsHtml}
           </div>
           ${wfHeaderHtml}
         </div>
@@ -4382,6 +4478,7 @@ function renderIssues() {
         <div class="issue-full-note">${esc(issue.note)}</div>
         ${editedNote}
         ${photosHtml}
+        ${alsoNeedsHtml}
         <div class="divider"></div>
         ${resolveHtml}
       </div>`;
@@ -4882,13 +4979,13 @@ function issueIsResolvedV2(issue) {
 function updateStats() {
   let scoped = issueScope==='mine' ? issues.filter(i=>i.userId===currentUser?.uid) : issues;
   scoped = scoped.filter(periodFilter);
-  document.getElementById('stat-open').textContent              = scoped.filter(i=>currentStatusKey(i)==='open').length+' Open';
-  document.getElementById('stat-resolved').textContent          = scoped.filter(i=>currentStatusKey(i)==='resolved').length+' Resolved';
+  document.getElementById('stat-open').textContent              = scoped.filter(i=>issueHasActiveStatus(i,'open')).length+' Open';
+  document.getElementById('stat-resolved').textContent          = scoped.filter(i=>issueHasActiveStatus(i,'resolved')).length+' Resolved';
   // Loop through every key currently in the database-driven STATUSES object
     Object.keys(STATUSES).forEach(key => {
       const el = document.getElementById('stat-' + key);
       if (el) {
-        const count = scoped.filter(i => currentStatusKey(i) === key).length;
+        const count = scoped.filter(i => issueHasActiveStatus(i, key)).length;
         el.textContent = `${count} ${getStatusLabel(key, 'stat')}`;
       }
     });
@@ -4990,6 +5087,10 @@ function toggleUserDropdown() {
   const isOpen=dropdown.classList.contains('visible');
   dropdown.classList.toggle('visible',!isOpen);
   pill.classList.toggle('open',!isOpen);
+  if (isOpen) {
+    document.getElementById('theme-select-grid')?.classList.remove('open');
+    document.getElementById('theme-select-toggle')?.classList.remove('open');
+  }
 }
 document.getElementById('user-pill').addEventListener('click', toggleUserDropdown);
 document.addEventListener('click', e => {
@@ -4997,6 +5098,8 @@ document.addEventListener('click', e => {
   if (wrap && !wrap.contains(e.target)) {
     document.getElementById('user-dropdown')?.classList.remove('visible');
     document.getElementById('user-pill')?.classList.remove('open');
+    document.getElementById('theme-select-grid')?.classList.remove('open');
+    document.getElementById('theme-select-toggle')?.classList.remove('open');
   }
 });
 const signoutBtn=document.getElementById('signout-btn');
@@ -5035,7 +5138,7 @@ function renderThemeChoices() {
 function updateActiveThemeChoice(theme) {
   const currentTheme = THEME_OPTIONS.find(opt => opt.key === theme) || THEME_OPTIONS[0];
   const currentLabel = document.getElementById('theme-select-current');
-  if (currentLabel) currentLabel.textContent = `Current: ${currentTheme.label.replace(/^[^\s]+\s/, '')}`;
+  if (currentLabel) currentLabel.textContent = currentTheme.label.replace(/^[^\s]+\s/, '');
   document.querySelectorAll('.theme-choice').forEach(btn => {
     const isActive = btn.dataset.theme === theme;
     btn.classList.toggle('active', isActive);
@@ -5066,6 +5169,14 @@ document.getElementById('theme-select-grid')?.addEventListener('click', e => {
   const btn = e.target.closest('.theme-choice');
   if (!btn?.dataset?.theme) return;
   applyTheme(btn.dataset.theme);
+});
+
+document.getElementById('theme-select-toggle')?.addEventListener('click', () => {
+  const toggle = document.getElementById('theme-select-toggle');
+  const grid = document.getElementById('theme-select-grid');
+  const isOpen = grid?.classList.contains('open');
+  grid?.classList.toggle('open', !isOpen);
+  toggle?.classList.toggle('open', !isOpen);
 });
 
 // ── FILTER DRAWER ──
@@ -5443,7 +5554,7 @@ window.openExportModal = () => {
     if (!periodFilter(i)) return false;
     if (issueRowScope === 'active' && activeRows.size > 0 && !activeRowMachines.has(i.machine)) return false;
     if (mf && i.machine !== mf) return false;
-    if (sf && currentStatusKey(i) !== sf) return false;
+    if (sf && !issueHasActiveStatus(i, sf)) return false;
     if (search) {
       const machineText = String(i.machine || '').toLowerCase();
       const noteText = String(i.note || '').toLowerCase();
