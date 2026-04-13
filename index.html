@@ -602,13 +602,16 @@
   .issue-card-bottom { display: flex; align-items: flex-start; gap: 8px; padding: 8px 0 12px; }
   .issue-status-wrap { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; flex: 1; min-width: 0; }
   
-  /* Workflow pill */
-  .workflow-pill { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; padding: 5px 10px; border-radius: 9999px; border: 1px solid; flex-shrink: 0; text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; cursor: pointer; transition: all 0.15s; user-select: none; }
-  .workflow-pill:hover { filter: brightness(1.2); }
-  .workflow-pill.called { background: rgba(234,179,8,0.15); color: #eab308; border-color: rgba(234,179,8,0.5); }
-  .workflow-pill.in-progress { background: rgba(59,130,246,0.15); color: #3b82f6; border-color: rgba(59,130,246,0.5); }
-  .workflow-pill.finished { background: rgba(168,85,247,0.15); color: #a855f7; border-color: rgba(168,85,247,0.5); }
-  .workflow-pill.accepted { background: rgba(34,197,94,0.15); color: #22c55e; border-color: rgba(34,197,94,0.5); }
+  /* Compact workflow step buttons (card header) */
+  .wf-steps { display: flex; align-items: center; gap: 3px; flex-shrink: 0; }
+  .wf-step-btn { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--border); background: var(--bg3); cursor: pointer; transition: all 0.15s; user-select: none; font-size: 13px; padding: 0; }
+  .wf-step-btn:hover { filter: brightness(1.2); transform: scale(1.08); }
+  .wf-step-btn.pending { opacity: 0.3; }
+  .wf-step-btn.completed { background: rgba(34,197,94,0.15); border-color: rgba(34,197,94,0.5); }
+  .wf-step-btn.active.called { background: rgba(234,179,8,0.2); border-color: #eab308; box-shadow: 0 0 8px rgba(234,179,8,0.45); }
+  .wf-step-btn.active.accepted { background: rgba(34,197,94,0.2); border-color: #22c55e; box-shadow: 0 0 8px rgba(34,197,94,0.45); }
+  .wf-step-btn.active.in-progress { background: rgba(59,130,246,0.2); border-color: #3b82f6; box-shadow: 0 0 8px rgba(59,130,246,0.45); }
+  .wf-step-btn.active.finished { background: rgba(168,85,247,0.2); border-color: #a855f7; box-shadow: 0 0 8px rgba(168,85,247,0.45); }
   .issue-machine-tag { font-family: 'Rajdhani', sans-serif; font-size: 17px; font-weight: 700; letter-spacing: 1px; background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; color: var(--accent); white-space: nowrap; flex-shrink: 0; line-height: 1; margin-top: 4px; }
   .issue-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; }
   .issue-note-preview { font-size: 17px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; letter-spacing: 0.025em; }
@@ -649,17 +652,24 @@
     outline: 2px solid var(--accent) !important;
   }
   
-  /* Compact horizontal workflow timeline */
-  .workflow-timeline-horizontal { display: flex; gap: 6px; padding: 10px 12px; background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; align-items: center; margin-bottom: 12px; }
-  .workflow-h-step { display: flex; flex-direction: column; align-items: center; gap: 3px; flex: 1; }
-  .workflow-h-dot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--border); background: var(--bg2); transition: all 0.2s; }
-  .workflow-h-dot.active { background: #3b82f6; border-color: #3b82f6; box-shadow: 0 0 6px rgba(59,130,246,0.5); }
-  .workflow-h-dot.completed { background: #22c55e; border-color: #22c55e; }
-  .workflow-h-label { font-size: 8px; color: var(--text3); text-transform: uppercase; font-weight: 600; text-align: center; letter-spacing: 0.3px; }
-  .workflow-h-label.active { color: #3b82f6; font-weight: 700; }
-  .workflow-h-label.completed { color: #22c55e; }
-  .workflow-h-connector { flex: 0 0 12px; height: 2px; background: var(--border); margin: 0 -3px; align-self: center; margin-top: -12px; }
-  .workflow-h-connector.completed { background: #22c55e; }
+  /* Workflow state grid (expanded card body) */
+  .wf-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+  .wf-grid-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 12px 8px 10px; border-radius: 12px; border: 2px solid var(--border); background: var(--bg3); cursor: pointer; transition: all 0.18s; user-select: none; text-align: center; }
+  .wf-grid-btn:hover { filter: brightness(1.15); transform: scale(1.02); }
+  .wf-grid-btn .wf-icon { font-size: 22px; line-height: 1; }
+  .wf-grid-btn .wf-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text3); margin-top: 1px; }
+  .wf-grid-btn .wf-actor { font-size: 10px; color: var(--text3); font-family: 'Nunito', sans-serif; font-weight: 600; opacity: 0.85; }
+  .wf-grid-btn.pending { opacity: 0.3; }
+  .wf-grid-btn.completed { background: rgba(34,197,94,0.1); border-color: rgba(34,197,94,0.4); }
+  .wf-grid-btn.completed .wf-label { color: #22c55e; }
+  .wf-grid-btn.active.called { background: rgba(234,179,8,0.15); border-color: rgba(234,179,8,0.65); box-shadow: 0 0 14px rgba(234,179,8,0.2); }
+  .wf-grid-btn.active.called .wf-label { color: #eab308; }
+  .wf-grid-btn.active.accepted { background: rgba(34,197,94,0.15); border-color: rgba(34,197,94,0.65); box-shadow: 0 0 14px rgba(34,197,94,0.2); }
+  .wf-grid-btn.active.accepted .wf-label { color: #22c55e; }
+  .wf-grid-btn.active.in-progress { background: rgba(59,130,246,0.15); border-color: rgba(59,130,246,0.65); box-shadow: 0 0 14px rgba(59,130,246,0.2); }
+  .wf-grid-btn.active.in-progress .wf-label { color: #3b82f6; }
+  .wf-grid-btn.active.finished { background: rgba(168,85,247,0.15); border-color: rgba(168,85,247,0.65); box-shadow: 0 0 14px rgba(168,85,247,0.2); }
+  .wf-grid-btn.active.finished .wf-label { color: #a855f7; }
   .issue-full-note { font-size: 14px; line-height: 1.6; color: var(--text); margin-bottom: 10px; white-space: pre-wrap; word-break: break-word; }
   .issue-photos { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
   .issue-photo-thumb { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); cursor: pointer; transition: transform 0.15s; }
@@ -3083,6 +3093,7 @@ window.submitIssue = async () => {
       dateTime: fmtDate(d), dateKey: localDateStr(d), timestamp: d.getTime(),
       userId: currentUser.uid, userName: currentUser.displayName||currentUser.email,
       workflowState: 'called',
+      workflowStateHistory: { called: { by: currentActor(), at: serverTimestamp() } },
       photoCount: uploadedPhotos.length,
       createdAt: serverTimestamp(),
       createdBy: currentActor(),
@@ -3212,6 +3223,7 @@ window.confirmResolve = async () => {
     const issuePatch = {
       statusHistory: [...getMutableStatusHistory(issue || {}), resolvedHistEntry],
       workflowState: 'finished',
+      'workflowStateHistory.finished': { by: currentActor(), at: serverTimestamp() },
       ...buildIssueV2Compat({
         machineCode: issue?.machine || '',
         statusKey: 'resolved',
@@ -3325,7 +3337,7 @@ window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
   try {
     const issuePatch = {
       statusHistory: history,
-      ...(status === 'resolved' ? { workflowState: 'finished' } : {}),
+      ...(status === 'resolved' ? { workflowState: 'finished', 'workflowStateHistory.finished': { by: currentActor(), at: serverTimestamp() } } : {}),
       ...buildIssueV2Compat({
         machineCode: issue.machine || issue.machineCode || '',
         statusKey: status,
@@ -3624,22 +3636,30 @@ window.setSubStatus = async (id, sub) => {
   catch(e) { setSyncStatus('err','Error updating: '+e.message); }
 };
 
-// ── WORKFLOW STATE CYCLING ──
-window.cycleWorkflowState = async (id) => {
-  const issue = issues.find(i => i.id === id);
-  if (!issue) return;
-  
-  const states = ['called', 'accepted', 'in-progress', 'finished'];
-  const currentState = issue.workflowState || 'called';
-  const currentIndex = states.indexOf(currentState);
-  const nextIndex = (currentIndex + 1) % states.length;
-  const nextState = states[nextIndex];
-  
+// ── WORKFLOW STATE ──
+window.setWorkflowState = async (id, state) => {
+  const validStates = ['called', 'accepted', 'in-progress', 'finished'];
+  if (!validStates.includes(state)) return;
+  const actor = currentActor();
   try {
-    await updateDoc(plantDoc('issues', id), { workflowState: nextState });
+    await updateDoc(plantDoc('issues', id), {
+      workflowState: state,
+      [`workflowStateHistory.${state}`]: { by: actor, at: serverTimestamp() },
+      updatedAt: serverTimestamp(),
+      updatedBy: actor
+    });
   } catch(e) {
     setSyncStatus('err', 'Error updating workflow: ' + e.message);
   }
+};
+
+window.cycleWorkflowState = async (id) => {
+  const issue = issues.find(i => i.id === id);
+  if (!issue) return;
+  const states = ['called', 'accepted', 'in-progress', 'finished'];
+  const currentState = issue.workflowState || 'called';
+  const nextState = states[(states.indexOf(currentState) + 1) % states.length];
+  await window.setWorkflowState(id, nextState);
 };
 
 // ── PRIORITY TOGGLE ──
@@ -3933,20 +3953,32 @@ function renderIssues() {
     // Workflow state configuration
     const workflowState = issue.workflowState || 'called';
     const workflowConfig = {
-      called: { icon: '📞', label: 'Called', class: 'called' },
-      accepted: { icon: '✓', label: 'Accepted', class: 'accepted' },
-      'in-progress': { icon: '⚙️', label: 'In Progress', class: 'in-progress' },
-      finished: { icon: '🔨', label: 'Finished', class: 'finished' }
+      called:      { icon: '📣', label: 'Called',      cssState: 'called' },
+      accepted:    { icon: '👋', label: 'Accepted',    cssState: 'accepted' },
+      'in-progress': { icon: '🔧', label: 'In Progress', cssState: 'in-progress' },
+      finished:    { icon: '✅', label: 'Finished',    cssState: 'finished' }
     };
-    const wf = workflowConfig[workflowState] || workflowConfig.called;
+    const wfOrder = ['called', 'accepted', 'in-progress', 'finished'];
+    const wfCurrentIdx = wfOrder.indexOf(workflowState);
+    const isCompleted = (state) => wfOrder.indexOf(state) < wfCurrentIdx;
+    const wfStateHistory = issue.workflowStateHistory || {};
 
-    // Helper function to determine if a state is completed based on workflow order
-    const isCompleted = (state) => {
-      const order = ['called', 'accepted', 'in-progress', 'finished'];
-      const currentIndex = order.indexOf(workflowState);
-      const stateIndex = order.indexOf(state);
-      return stateIndex < currentIndex;
-    };
+    // Build compact 4-step header buttons
+    const wfHeaderHtml = `<div class="wf-steps" onclick="event.stopPropagation()">${wfOrder.map(state => {
+      const cfg = workflowConfig[state];
+      const cls = state === workflowState ? `active ${cfg.cssState}` : isCompleted(state) ? 'completed' : 'pending';
+      return `<button class="wf-step-btn ${cls}" onclick="setWorkflowState('${issue.id}','${state}')" title="${cfg.label}">${cfg.icon}</button>`;
+    }).join('')}</div>`;
+
+    // Build 2x2 body grid with actor tracking
+    const wfGridHtml = `<div class="wf-grid">${wfOrder.map(state => {
+      const cfg = workflowConfig[state];
+      const cls = state === workflowState ? `active ${cfg.cssState}` : isCompleted(state) ? 'completed' : 'pending';
+      const entry = wfStateHistory[state];
+      const actorName = entry?.by?.name ? entry.by.name.split(' ')[0] : '';
+      const actorHtml = actorName ? `<span class="wf-actor">by ${esc(actorName)}</span>` : '';
+      return `<button class="wf-grid-btn ${cls}" onclick="setWorkflowState('${issue.id}','${state}')"><span class="wf-icon">${cfg.icon}</span><span class="wf-label">${cfg.label}</span>${actorHtml}</button>`;
+    }).join('')}</div>`;
 
     // Split status label from sub-status for two-line display
     const baseLabel = scfg.label;
@@ -3970,33 +4002,11 @@ function renderIssues() {
             </div>
             ${subLabel ? `<span class="issue-status-sub" style="color:${sc.color};">${esc(subLabel)}</span>` : ''}
           </div>
-          <div class="workflow-pill ${wf.class}" onclick="event.stopPropagation(); cycleWorkflowState('${issue.id}')">${wf.icon} ${wf.label}</div>
+          ${wfHeaderHtml}
         </div>
       </div>
       <div class="issue-body ${wasOpen?'visible':''}" id="body-${issue.id}">
-        <!-- Horizontal workflow timeline -->
-        <div class="workflow-timeline-horizontal">
-          <div class="workflow-h-step">
-            <div class="workflow-h-dot ${workflowState === 'called' ? 'active' : isCompleted('called') ? 'completed' : ''}"></div>
-            <div class="workflow-h-label ${workflowState === 'called' ? 'active' : isCompleted('called') ? 'completed' : ''}">Called</div>
-          </div>
-          <div class="workflow-h-connector ${isCompleted('accepted') ? 'completed' : ''}"></div>
-          <div class="workflow-h-step">
-            <div class="workflow-h-dot ${workflowState === 'accepted' ? 'active' : isCompleted('accepted') ? 'completed' : ''}"></div>
-            <div class="workflow-h-label ${workflowState === 'accepted' ? 'active' : isCompleted('accepted') ? 'completed' : ''}">Accepted</div>
-          </div>
-          <div class="workflow-h-connector ${isCompleted('in-progress') ? 'completed' : ''}"></div>
-          <div class="workflow-h-step">
-            <div class="workflow-h-dot ${workflowState === 'in-progress' ? 'active' : isCompleted('in-progress') ? 'completed' : ''}"></div>
-            <div class="workflow-h-label ${workflowState === 'in-progress' ? 'active' : isCompleted('in-progress') ? 'completed' : ''}">In Prog.</div>
-          </div>
-          <div class="workflow-h-connector ${isCompleted('finished') ? 'completed' : ''}"></div>
-          <div class="workflow-h-step">
-            <div class="workflow-h-dot ${workflowState === 'finished' ? 'active' : ''}"></div>
-            <div class="workflow-h-label ${workflowState === 'finished' ? 'active' : ''}">Finished</div>
-          </div>
-        </div>
-        
+        ${wfGridHtml}
         <!-- Full width content -->
         <div class="issue-full-note">${esc(issue.note)}</div>
         ${editedNote}
