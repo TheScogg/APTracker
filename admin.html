@@ -146,7 +146,7 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut as fbSignOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, serverTimestamp, writeBatch, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyABjasNBbJnsqq4M_UxKruKrN6-O2FXCwc",
@@ -185,6 +185,14 @@ const DEFAULT_STATUSES = {
   resolved:        { label:'Resolved',         shortLabel:'Resolved',     icon:'✓',  cssColor:'#22c55e', swipeColor:'#22c55e', floorCls:'all-resolved',        cls:'status-resolved',        subs:['Process Parameter Adjusted','Mold Cleaned / Repaired','Hardware Replaced','Temporary Workaround'], statLabel:'Resolved', order:9 },
 };
 
+const DEFAULT_GAME_CONFIG = {
+  enabled: true,
+  weights: { issue_created_complete: 5, status_changed_valid: 2, workflow_step_advance: 3, issue_resolved: 8, photo_attached: 2, serial_captured_when_required: 4 },
+  penalties: { issue_reopened: -6, missing_required_serial: -5, invalid_status_bounce: -2 },
+  caps: { photo_attached_per_issue: 1, status_changed_valid_per_issue_per_hour: 3 },
+  customRules: []
+};
+
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
@@ -195,7 +203,10 @@ let currentUser = null;
 let userPlants = [];
 let adminPlantIds = [];
 let membersByPlant = new Map();
+let userDirectory = [];
 let statusDraftByPlant = new Map();
+let gameDraftByPlant = new Map();
+let missionDraftByPlant = new Map();
 const statusPanelOpen = {};
 const statusRowOpen = {};
 const SCHEDULE_SECTIONS = [
@@ -426,10 +437,14 @@ async function loadUserPlants() {
 async function loadMembersAndStatusesForAdminPlants() {
   membersByPlant.clear();
   statusDraftByPlant.clear();
+  gameDraftByPlant.clear();
+  missionDraftByPlant.clear();
   for (const plantId of adminPlantIds) {
-    const [membersSnap, statusesSnap] = await Promise.all([
+    const [membersSnap, statusesSnap, gameConfigSnap, missionsSnap] = await Promise.all([
       getDocs(collection(db, 'plants', plantId, 'members')),
-      getDoc(doc(db, 'plants', plantId, 'config', 'statuses'))
+      getDoc(doc(db, 'plants', plantId, 'config', 'statuses')),
+      getDoc(doc(db, 'plants', plantId, 'gamificationConfig', 'main')),
+      getDocs(collection(db, 'plants', plantId, 'missions'))
     ]);
 
     membersByPlant.set(plantId, membersSnap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -438,7 +453,35 @@ async function loadMembersAndStatusesForAdminPlants() {
       ? statusesSnap.data().statuses
       : deepCopy(DEFAULT_STATUSES);
     statusDraftByPlant.set(plantId, normalizeStatusesForSave(rawStatuses));
+
+    const gameConfig = gameConfigSnap.exists() ? gameConfigSnap.data() : deepCopy(DEFAULT_GAME_CONFIG);
+    gameDraftByPlant.set(plantId, {
+      enabled: gameConfig.enabled !== false,
+      weights: { ...deepCopy(DEFAULT_GAME_CONFIG.weights), ...(gameConfig.weights || {}) },
+      penalties: { ...deepCopy(DEFAULT_GAME_CONFIG.penalties), ...(gameConfig.penalties || {}) },
+      caps: { ...deepCopy(DEFAULT_GAME_CONFIG.caps), ...(gameConfig.caps || {}) },
+      customRules: Array.isArray(gameConfig.customRules) ? gameConfig.customRules.map(r => ({ ...r })) : []
+    });
+    missionDraftByPlant.set(plantId, missionsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
   }
+}
+
+async function loadUserDirectory() {
+  const usersSnap = await getDocs(collection(db, 'userLookup'));
+  const deduped = new Map();
+  usersSnap.forEach(d => {
+    const data = d.data() || {};
+    const uid = String(data.uid || '').trim();
+    if (!uid || deduped.has(uid)) return;
+    deduped.set(uid, {
+      uid,
+      displayName: String(data.displayName || '').trim(),
+      email: String(data.email || d.id || '').trim().toLowerCase()
+    });
+  });
+  userDirectory = Array.from(deduped.values()).sort((a, b) =>
+    (a.displayName || a.email || a.uid).localeCompare(b.displayName || b.email || b.uid)
+  );
 }
 
 function renderStatusEditor(plantId, plantName) {
@@ -514,6 +557,93 @@ function renderStatusEditor(plantId, plantName) {
   `;
 }
 
+function renderGamificationEditor(plantId, plantName) {
+  const cfg = gameDraftByPlant.get(plantId) || deepCopy(DEFAULT_GAME_CONFIG);
+  const missions = missionDraftByPlant.get(plantId) || [];
+  const customRules = Array.isArray(cfg.customRules) ? cfg.customRules : [];
+  const weightRows = Object.keys(cfg.weights || {}).map(k => `
+    <div class="row" style="margin-bottom:6px;">
+      <div class="mono">${esc(k)}</div>
+      <input type="number" value="${Number(cfg.weights[k] || 0)}" onchange="window.patchGameField('${plantId}','weights','${k}', this.value)" />
+    </div>
+  `).join('');
+  const penaltyRows = Object.keys(cfg.penalties || {}).map(k => `
+    <div class="row" style="margin-bottom:6px;">
+      <div class="mono">${esc(k)}</div>
+      <input type="number" value="${Number(cfg.penalties[k] || 0)}" onchange="window.patchGameField('${plantId}','penalties','${k}', this.value)" />
+    </div>
+  `).join('');
+  const capRows = Object.keys(cfg.caps || {}).map(k => `
+    <div class="row" style="margin-bottom:6px;">
+      <div class="mono">${esc(k)}</div>
+      <input type="number" value="${Number(cfg.caps[k] || 0)}" onchange="window.patchGameField('${plantId}','caps','${k}', this.value)" />
+    </div>
+  `).join('');
+
+  const customRows = customRules.map((r, idx) => `
+    <tr>
+      <td><input value="${esc(r.label || '')}" onchange="window.patchCustomRule('${plantId}',${idx},'label',this.value)" /></td>
+      <td><input value="${esc(r.triggerKey || '')}" onchange="window.patchCustomRule('${plantId}',${idx},'triggerKey',this.value)" /></td>
+      <td><input type="number" value="${Number(r.points || 0)}" onchange="window.patchCustomRule('${plantId}',${idx},'points',this.value)" /></td>
+      <td><select onchange="window.patchCustomRule('${plantId}',${idx},'isEnabled',this.value)"><option value="true" ${r.isEnabled !== false ? 'selected':''}>enabled</option><option value="false" ${r.isEnabled===false?'selected':''}>disabled</option></select></td>
+      <td><button class="small-btn danger" onclick="window.removeCustomRule('${plantId}',${idx})">Remove</button></td>
+    </tr>
+  `).join('');
+
+  const missionRows = missions.map((m, idx) => `
+    <tr>
+      <td><input value="${esc(m.name || '')}" onchange="window.patchMission('${plantId}',${idx},'name',this.value)" /></td>
+      <td><input value="${esc(m.objective?.type || '')}" onchange="window.patchMission('${plantId}',${idx},'objectiveType',this.value)" /></td>
+      <td><input type="number" value="${Number(m.objective?.threshold || 1)}" onchange="window.patchMission('${plantId}',${idx},'threshold',this.value)" /></td>
+      <td><input type="number" value="${Number(m.rewards?.xp || 0)}" onchange="window.patchMission('${plantId}',${idx},'rewardXp',this.value)" /></td>
+      <td><select onchange="window.patchMission('${plantId}',${idx},'isActive',this.value)"><option value="true" ${m.isActive!==false?'selected':''}>active</option><option value="false" ${m.isActive===false?'selected':''}>inactive</option></select></td>
+      <td><button class="small-btn danger" onclick="window.removeMission('${plantId}',${idx})">Remove</button></td>
+    </tr>
+  `).join('');
+
+  return `
+    <div class="divider"></div>
+    <h3 style="font-family:'Rajdhani',sans-serif;letter-spacing:0.6px;">Gamification — ${esc(plantName)}</h3>
+    <p class="muted" style="margin:8px 0;">Modify points, build missions, and create additional gain/loss rules using trigger keys.</p>
+    <div class="status-row">
+      <div class="row" style="margin-bottom:8px;">
+        <div class="mono">Enabled</div>
+        <select onchange="window.patchGameEnabled('${plantId}', this.value)"><option value="true" ${cfg.enabled!==false?'selected':''}>true</option><option value="false" ${cfg.enabled===false?'selected':''}>false</option></select>
+      </div>
+      <div class="grid-2">
+        <div><div class="mono" style="margin-bottom:6px;">Weights</div>${weightRows}</div>
+        <div><div class="mono" style="margin-bottom:6px;">Penalties</div>${penaltyRows}</div>
+      </div>
+      <div style="margin-top:8px;"><div class="mono" style="margin-bottom:6px;">Caps</div>${capRows}</div>
+    </div>
+    <div class="status-row">
+      <div class="mono" style="margin-bottom:6px;">Custom Trigger Rules (trigger examples: <code>status:maintenance</code>, <code>workflow:finished</code>, <code>issue_created_complete</code>)</div>
+      <table><thead><tr><th>Label</th><th>Trigger Key</th><th>Points</th><th>State</th><th></th></tr></thead><tbody>${customRows || '<tr><td colspan="5" class="muted">No custom rules.</td></tr>'}</tbody></table>
+      <div class="row" style="margin-top:8px;">
+        <input id="new-rule-label-${plantId}" placeholder="Rule label" />
+        <input id="new-rule-trigger-${plantId}" placeholder="trigger key" />
+        <input id="new-rule-points-${plantId}" type="number" placeholder="points" />
+        <button class="small-btn" onclick="window.addCustomRule('${plantId}')">Add Rule</button>
+      </div>
+    </div>
+    <div class="status-row">
+      <div class="mono" style="margin-bottom:6px;">Missions</div>
+      <table><thead><tr><th>Name</th><th>Objective Type</th><th>Target</th><th>XP</th><th>State</th><th></th></tr></thead><tbody>${missionRows || '<tr><td colspan="6" class="muted">No missions.</td></tr>'}</tbody></table>
+      <div class="row" style="margin-top:8px;">
+        <input id="new-mission-name-${plantId}" placeholder="Mission name" />
+        <input id="new-mission-type-${plantId}" placeholder="objective type" />
+        <input id="new-mission-threshold-${plantId}" type="number" placeholder="target" value="5" />
+        <input id="new-mission-xp-${plantId}" type="number" placeholder="reward xp" value="100" />
+        <button class="small-btn" onclick="window.addMission('${plantId}')">Add Mission</button>
+      </div>
+    </div>
+    <div class="status-toolbar">
+      <button class="small-btn" style="border-color:var(--accent);color:var(--accent);" onclick="window.saveGamification('${plantId}')">Save Gamification</button>
+    </div>
+    <div id="game-fb-${plantId}" class="feedback"></div>
+  `;
+}
+
 function renderPlantsUsers() {
   const container = document.getElementById('plants-users-container');
   container.innerHTML = '';
@@ -524,6 +654,12 @@ function renderPlantsUsers() {
 
   for (const plant of sortedPlants) {
     const members = (membersByPlant.get(plant.id) || []).sort((a,b) => (a.displayName || a.email || '').localeCompare(b.displayName || b.email || ''));
+    const memberIds = new Set(members.map(m => m.userId || m.id));
+    const availableUsers = userDirectory.filter(u => u.uid !== currentUser.uid && !memberIds.has(u.uid));
+    const userOptions = availableUsers.map(u => {
+      const label = `${u.displayName || u.email || u.uid}${u.email ? ` (${u.email})` : ''}`;
+      return `<option value="${esc(u.uid)}">${esc(label)}</option>`;
+    }).join('');
     const card = document.createElement('div');
     card.className = 'card';
 
@@ -568,7 +704,9 @@ function renderPlantsUsers() {
       <div style="margin-top:10px; border-top:1px solid var(--border); padding-top:10px;">
         <div class="muted" style="margin-bottom:6px;">Add user to ${esc(plant.name)}</div>
         <div class="row">
-          <input id="add-email-${plant.id}" placeholder="user@example.com" />
+          <select id="add-user-${plant.id}">
+            ${userOptions || '<option value="">No available users</option>'}
+          </select>
           <select id="add-role-${plant.id}" style="max-width:120px;">
             <option value="editor">editor</option>
             <option value="viewer">viewer</option>
@@ -580,6 +718,7 @@ function renderPlantsUsers() {
       </div>
 
       ${renderStatusEditor(plant.id, plant.name)}
+      ${renderGamificationEditor(plant.id, plant.name)}
     `;
     container.appendChild(card);
   }
@@ -636,6 +775,7 @@ async function createPlant() {
     });
     batch.set(doc(db, 'plants', id, 'config', 'presses'), { presses: DEFAULT_PRESSES });
     batch.set(doc(db, 'plants', id, 'config', 'statuses'), { statuses: deepCopy(DEFAULT_STATUSES) });
+    batch.set(doc(db, 'plants', id, 'gamificationConfig', 'main'), { ...deepCopy(DEFAULT_GAME_CONFIG), updatedAt: serverTimestamp() }, { merge: true });
     batch.set(doc(db, 'users', currentUser.uid), { plantIds: arrayUnion(id) }, { merge: true });
     await batch.commit();
 
@@ -758,21 +898,22 @@ async function importDailySchedule() {
 }
 
 window.addMember = async function(plantId) {
-  const emailEl = document.getElementById(`add-email-${plantId}`);
+  const userEl = document.getElementById(`add-user-${plantId}`);
   const roleEl = document.getElementById(`add-role-${plantId}`);
-  const emailRaw = emailEl.value.trim();
+  const selectedUid = String(userEl?.value || '').trim();
   const role = roleEl.value;
-  if (!emailRaw) {
-    feedback(`fb-${plantId}`, 'error', 'Email is required.');
+  if (!selectedUid) {
+    feedback(`fb-${plantId}`, 'error', 'Select a user.');
     return;
   }
-  const email = emailRaw.toLowerCase();
+  const target = userDirectory.find(u => u.uid === selectedUid);
+  if (!target) {
+    feedback(`fb-${plantId}`, 'error', 'Selected user is no longer available. Refresh and try again.');
+    return;
+  }
+  const email = String(target.email || '').toLowerCase();
 
   try {
-    const lookupSnap = await getDoc(doc(db, 'userLookup', email));
-    if (!lookupSnap.exists()) throw new Error('User not found. They must sign in once first.');
-    const target = lookupSnap.data();
-
     if (target.uid === currentUser.uid) throw new Error('You are already in this plant.');
 
     const existing = await getDoc(doc(db, 'plants', plantId, 'members', target.uid));
@@ -792,8 +933,8 @@ window.addMember = async function(plantId) {
     batch.set(doc(db, 'users', target.uid), { plantIds: arrayUnion(plantId) }, { merge: true });
     await batch.commit();
 
-    emailEl.value = '';
-    feedback(`fb-${plantId}`, 'ok', `Added ${emailRaw} as ${role}.`);
+    if (userEl) userEl.value = '';
+    feedback(`fb-${plantId}`, 'ok', `Added ${target.displayName || target.email || target.uid} as ${role}.`);
     await refreshAdminData();
   } catch (e) {
     console.error(e);
@@ -957,6 +1098,140 @@ window.saveStatuses = async function(plantId) {
   }
 };
 
+window.patchGameEnabled = function(plantId, value) {
+  const cfg = deepCopy(gameDraftByPlant.get(plantId) || DEFAULT_GAME_CONFIG);
+  cfg.enabled = value === 'true';
+  gameDraftByPlant.set(plantId, cfg);
+};
+
+window.patchGameField = function(plantId, section, key, value) {
+  const cfg = deepCopy(gameDraftByPlant.get(plantId) || DEFAULT_GAME_CONFIG);
+  if (!cfg[section]) cfg[section] = {};
+  cfg[section][key] = Number(value || 0);
+  gameDraftByPlant.set(plantId, cfg);
+};
+
+window.patchCustomRule = function(plantId, idx, field, value) {
+  const cfg = deepCopy(gameDraftByPlant.get(plantId) || DEFAULT_GAME_CONFIG);
+  cfg.customRules = Array.isArray(cfg.customRules) ? cfg.customRules : [];
+  if (!cfg.customRules[idx]) return;
+  if (field === 'points') cfg.customRules[idx][field] = Number(value || 0);
+  else if (field === 'isEnabled') cfg.customRules[idx][field] = value === 'true';
+  else cfg.customRules[idx][field] = String(value || '');
+  gameDraftByPlant.set(plantId, cfg);
+};
+
+window.addCustomRule = function(plantId) {
+  const label = (document.getElementById(`new-rule-label-${plantId}`)?.value || '').trim();
+  const triggerKey = (document.getElementById(`new-rule-trigger-${plantId}`)?.value || '').trim();
+  const points = Number(document.getElementById(`new-rule-points-${plantId}`)?.value || 0);
+  if (!label || !triggerKey) {
+    feedback(`game-fb-${plantId}`, 'error', 'Rule label and trigger key are required.');
+    return;
+  }
+  const cfg = deepCopy(gameDraftByPlant.get(plantId) || DEFAULT_GAME_CONFIG);
+  cfg.customRules = Array.isArray(cfg.customRules) ? cfg.customRules : [];
+  cfg.customRules.push({ id: `rule_${Date.now().toString(36)}`, label, triggerKey, points, isEnabled: true });
+  gameDraftByPlant.set(plantId, cfg);
+  renderPlantsUsers();
+};
+
+window.removeCustomRule = function(plantId, idx) {
+  const cfg = deepCopy(gameDraftByPlant.get(plantId) || DEFAULT_GAME_CONFIG);
+  cfg.customRules = Array.isArray(cfg.customRules) ? cfg.customRules : [];
+  cfg.customRules.splice(idx, 1);
+  gameDraftByPlant.set(plantId, cfg);
+  renderPlantsUsers();
+};
+
+window.patchMission = function(plantId, idx, field, value) {
+  const missions = deepCopy(missionDraftByPlant.get(plantId) || []);
+  const item = missions[idx];
+  if (!item) return;
+  item.objective = item.objective || {};
+  item.rewards = item.rewards || {};
+  if (field === 'objectiveType') item.objective.type = String(value || '').trim();
+  else if (field === 'threshold') item.objective.threshold = Math.max(1, Number(value || 1));
+  else if (field === 'rewardXp') item.rewards.xp = Number(value || 0);
+  else if (field === 'isActive') item.isActive = value === 'true';
+  else item[field] = String(value || '').trim();
+  missions[idx] = item;
+  missionDraftByPlant.set(plantId, missions);
+};
+
+window.addMission = function(plantId) {
+  const name = (document.getElementById(`new-mission-name-${plantId}`)?.value || '').trim();
+  const objectiveType = (document.getElementById(`new-mission-type-${plantId}`)?.value || '').trim();
+  const threshold = Math.max(1, Number(document.getElementById(`new-mission-threshold-${plantId}`)?.value || 1));
+  const rewardXp = Number(document.getElementById(`new-mission-xp-${plantId}`)?.value || 0);
+  if (!name || !objectiveType) {
+    feedback(`game-fb-${plantId}`, 'error', 'Mission name and objective type are required.');
+    return;
+  }
+  const missions = deepCopy(missionDraftByPlant.get(plantId) || []);
+  missions.push({
+    id: `mission_${Date.now().toString(36)}`,
+    name,
+    objective: { type: objectiveType, threshold },
+    rewards: { xp: rewardXp },
+    isActive: true,
+    startsAt: new Date().toISOString(),
+    createdAt: null,
+    updatedAt: null
+  });
+  missionDraftByPlant.set(plantId, missions);
+  renderPlantsUsers();
+};
+
+window.removeMission = function(plantId, idx) {
+  const missions = deepCopy(missionDraftByPlant.get(plantId) || []);
+  missions.splice(idx, 1);
+  missionDraftByPlant.set(plantId, missions);
+  renderPlantsUsers();
+};
+
+window.saveGamification = async function(plantId) {
+  const cfg = deepCopy(gameDraftByPlant.get(plantId) || DEFAULT_GAME_CONFIG);
+  const missions = deepCopy(missionDraftByPlant.get(plantId) || []);
+  try {
+    await setDoc(doc(db, 'plants', plantId, 'gamificationConfig', 'main'), {
+      enabled: cfg.enabled !== false,
+      weights: cfg.weights || {},
+      penalties: cfg.penalties || {},
+      caps: cfg.caps || {},
+      customRules: Array.isArray(cfg.customRules) ? cfg.customRules : [],
+      updatedAt: serverTimestamp(),
+      updatedBy: { uid: currentUser.uid, name: currentUser.displayName || currentUser.email || '' }
+    }, { merge: true });
+
+    const existingSnap = await getDocs(collection(db, 'plants', plantId, 'missions'));
+    const desiredIds = new Set(missions.map(m => m.id));
+    for (const docSnap of existingSnap.docs) {
+      if (!desiredIds.has(docSnap.id)) await deleteDoc(docSnap.ref);
+    }
+    for (const mission of missions) {
+      const id = mission.id || `mission_${Date.now().toString(36)}`;
+      await setDoc(doc(db, 'plants', plantId, 'missions', id), {
+        name: mission.name || 'Mission',
+        objective: {
+          type: String(mission.objective?.type || '').trim(),
+          threshold: Math.max(1, Number(mission.objective?.threshold || 1))
+        },
+        rewards: { xp: Number(mission.rewards?.xp || 0) },
+        isActive: mission.isActive !== false,
+        startsAt: mission.startsAt || new Date().toISOString(),
+        updatedAt: serverTimestamp(),
+        updatedBy: { uid: currentUser.uid, name: currentUser.displayName || currentUser.email || '' }
+      }, { merge: true });
+    }
+    feedback(`game-fb-${plantId}`, 'ok', 'Saved gamification config and missions.');
+    await refreshAdminData();
+  } catch (e) {
+    console.error(e);
+    feedback(`game-fb-${plantId}`, 'error', e.message || 'Failed to save gamification settings.');
+  }
+};
+
 window.toggleStatusPanel = function(plantId) {
   statusPanelOpen[plantId] = !(statusPanelOpen[plantId] ?? false);
   renderPlantsUsers();
@@ -971,6 +1246,7 @@ window.toggleStatusRow = function(plantId, statusKey) {
 
 async function refreshAdminData() {
   await loadUserPlants();
+  await loadUserDirectory();
   const hasAdminAccess = adminPlantIds.length > 0;
   document.getElementById('denied-card').style.display = hasAdminAccess ? 'none' : '';
   document.getElementById('admin-content').style.display = hasAdminAccess ? '' : 'none';
