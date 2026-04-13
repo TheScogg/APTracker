@@ -333,6 +333,8 @@
   .row-panel-header { display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-bottom: 1px solid var(--border); }
   .row-resolved-toggle { font-size: 11px; font-weight: 700; font-family: 'Share Tech Mono', monospace; padding: 3px 9px; border-radius: 10px; border: 1px solid var(--border); background: transparent; color: var(--text3); cursor: pointer; white-space: nowrap; transition: all 0.15s; margin-left: auto; }
   .row-resolved-toggle.active { border-color: rgba(34,197,94,0.5); color: var(--green); background: var(--green-dim); }
+  .row-sched-toggle { margin-left: 4px; }
+  .row-sched-toggle.active { border-color: rgba(253,230,138,0.45); color: rgba(212,160,6,1.0); background: rgba(253,243,176,0.08); }
   .row-panel-name { font-family: 'Rajdhani', sans-serif; font-size: 14px; font-weight: 700; letter-spacing: 1px; color: var(--text2); text-transform: uppercase; }
   .row-status-pills { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
   .row-spill { font-size: 9px; font-family: 'Share Tech Mono', monospace; font-weight: 700; padding: 2px 7px; border-radius: 10px; border: 1px solid; white-space: nowrap; cursor: pointer; transition: all 0.15s; user-select: none; }
@@ -377,6 +379,8 @@
   .press-btn.has-controlman      { border-color: var(--babyblue); color: var(--babyblue); }
   .press-btn.all-resolved    { border-color: var(--green);    color: var(--green); }
   .press-btn.has-multi       { border-color: var(--accent);   color: var(--text); }
+  .press-btn.not-scheduled   { background: rgba(255,253,220,0.07); border-color: rgba(253,243,176,0.22); }
+  .press-btn.not-scheduled .press-btn-num { color: rgba(253,240,150,0.42); }
   .press-btn .badge { position: absolute; top: -5px; right: -5px; background: var(--red); color: white; font-size: 9px; width: 15px; height: 15px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: 'Nunito', sans-serif; font-weight: 700; }
   .press-btn.selected { box-shadow: 0 0 0 2px var(--accent); transform: translateY(-2px); }
 
@@ -637,13 +641,16 @@
   .issue-card-bottom { display: flex; align-items: flex-start; gap: 8px; padding: 8px 0 12px; }
   .issue-status-wrap { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; flex: 1; min-width: 0; }
   
-  /* Workflow pill */
-  .workflow-pill { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; padding: 5px 10px; border-radius: 9999px; border: 1px solid; flex-shrink: 0; text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; cursor: pointer; transition: all 0.15s; user-select: none; }
-  .workflow-pill:hover { filter: brightness(1.2); }
-  .workflow-pill.called { background: rgba(234,179,8,0.15); color: #eab308; border-color: rgba(234,179,8,0.5); }
-  .workflow-pill.in-progress { background: rgba(59,130,246,0.15); color: #3b82f6; border-color: rgba(59,130,246,0.5); }
-  .workflow-pill.finished { background: rgba(168,85,247,0.15); color: #a855f7; border-color: rgba(168,85,247,0.5); }
-  .workflow-pill.accepted { background: rgba(34,197,94,0.15); color: #22c55e; border-color: rgba(34,197,94,0.5); }
+  /* Compact workflow step buttons (card header) */
+  .wf-steps { display: flex; align-items: center; gap: 3px; flex-shrink: 0; }
+  .wf-step-btn { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--border); background: var(--bg3); cursor: pointer; transition: all 0.15s; user-select: none; font-size: 13px; padding: 0; }
+  .wf-step-btn:hover { filter: brightness(1.2); transform: scale(1.08); }
+  .wf-step-btn.pending { opacity: 0.3; }
+  .wf-step-btn.completed { background: rgba(34,197,94,0.15); border-color: rgba(34,197,94,0.5); }
+  .wf-step-btn.active.called { background: rgba(234,179,8,0.2); border-color: #eab308; box-shadow: 0 0 8px rgba(234,179,8,0.45); }
+  .wf-step-btn.active.accepted { background: rgba(34,197,94,0.2); border-color: #22c55e; box-shadow: 0 0 8px rgba(34,197,94,0.45); }
+  .wf-step-btn.active.in-progress { background: rgba(59,130,246,0.2); border-color: #3b82f6; box-shadow: 0 0 8px rgba(59,130,246,0.45); }
+  .wf-step-btn.active.finished { background: rgba(168,85,247,0.2); border-color: #a855f7; box-shadow: 0 0 8px rgba(168,85,247,0.45); }
   .issue-machine-tag { font-family: 'Rajdhani', sans-serif; font-size: 17px; font-weight: 700; letter-spacing: 1px; background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; color: var(--accent); white-space: nowrap; flex-shrink: 0; line-height: 1; margin-top: 4px; }
   .issue-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; }
   .issue-note-preview { font-size: 17px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; letter-spacing: 0.025em; }
@@ -684,17 +691,24 @@
     outline: 2px solid var(--accent) !important;
   }
   
-  /* Compact horizontal workflow timeline */
-  .workflow-timeline-horizontal { display: flex; gap: 6px; padding: 10px 12px; background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; align-items: center; margin-bottom: 12px; }
-  .workflow-h-step { display: flex; flex-direction: column; align-items: center; gap: 3px; flex: 1; }
-  .workflow-h-dot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--border); background: var(--bg2); transition: all 0.2s; }
-  .workflow-h-dot.active { background: #3b82f6; border-color: #3b82f6; box-shadow: 0 0 6px rgba(59,130,246,0.5); }
-  .workflow-h-dot.completed { background: #22c55e; border-color: #22c55e; }
-  .workflow-h-label { font-size: 8px; color: var(--text3); text-transform: uppercase; font-weight: 600; text-align: center; letter-spacing: 0.3px; }
-  .workflow-h-label.active { color: #3b82f6; font-weight: 700; }
-  .workflow-h-label.completed { color: #22c55e; }
-  .workflow-h-connector { flex: 0 0 12px; height: 2px; background: var(--border); margin: 0 -3px; align-self: center; margin-top: -12px; }
-  .workflow-h-connector.completed { background: #22c55e; }
+  /* Workflow state row (expanded card body) */
+  .wf-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 12px; }
+  .wf-grid-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 7px 4px 6px; border-radius: 10px; border: 2px solid var(--border); background: var(--bg3); cursor: pointer; transition: all 0.18s; user-select: none; text-align: center; }
+  .wf-grid-btn:hover { filter: brightness(1.15); transform: scale(1.02); }
+  .wf-grid-btn .wf-icon { font-size: 16px; line-height: 1; }
+  .wf-grid-btn .wf-label { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text3); margin-top: 1px; }
+  .wf-grid-btn .wf-actor { font-size: 8px; color: var(--text3); font-family: 'Nunito', sans-serif; font-weight: 600; opacity: 0.85; }
+  .wf-grid-btn.pending { opacity: 0.3; }
+  .wf-grid-btn.completed { background: rgba(34,197,94,0.1); border-color: rgba(34,197,94,0.4); }
+  .wf-grid-btn.completed .wf-label { color: #22c55e; }
+  .wf-grid-btn.active.called { background: rgba(234,179,8,0.15); border-color: rgba(234,179,8,0.65); box-shadow: 0 0 14px rgba(234,179,8,0.2); }
+  .wf-grid-btn.active.called .wf-label { color: #eab308; }
+  .wf-grid-btn.active.accepted { background: rgba(34,197,94,0.15); border-color: rgba(34,197,94,0.65); box-shadow: 0 0 14px rgba(34,197,94,0.2); }
+  .wf-grid-btn.active.accepted .wf-label { color: #22c55e; }
+  .wf-grid-btn.active.in-progress { background: rgba(59,130,246,0.15); border-color: rgba(59,130,246,0.65); box-shadow: 0 0 14px rgba(59,130,246,0.2); }
+  .wf-grid-btn.active.in-progress .wf-label { color: #3b82f6; }
+  .wf-grid-btn.active.finished { background: rgba(168,85,247,0.15); border-color: rgba(168,85,247,0.65); box-shadow: 0 0 14px rgba(168,85,247,0.2); }
+  .wf-grid-btn.active.finished .wf-label { color: #a855f7; }
   .issue-full-note { font-size: 14px; line-height: 1.6; color: var(--text); margin-bottom: 10px; white-space: pre-wrap; word-break: break-word; }
   .issue-photos { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
   .issue-photo-thumb { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); cursor: pointer; transition: transform 0.15s; }
@@ -821,8 +835,13 @@
   /* LIGHTBOX */
   .lightbox { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 2000; align-items: center; justify-content: center; }
   .lightbox.visible { display: flex; }
-  .lightbox img { max-width: 90vw; max-height: 90vh; border-radius: 8px; }
-  .lightbox-close { position: absolute; top: 20px; right: 24px; font-size: 30px; color: white; cursor: pointer; }
+  .lightbox img { max-width: 90vw; max-height: 90vh; border-radius: 8px; user-select: none; -webkit-user-drag: none; }
+  .lightbox-close { position: absolute; top: 20px; right: 24px; font-size: 30px; color: white; cursor: pointer; z-index: 1; }
+  .lightbox-nav { position: absolute; top: 50%; transform: translateY(-50%); background: rgba(255,255,255,0.15); border: none; color: white; font-size: 22px; width: 44px; height: 44px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.15s; }
+  .lightbox-nav:hover { background: rgba(255,255,255,0.28); }
+  .lightbox-nav.prev { left: 16px; }
+  .lightbox-nav.next { right: 16px; }
+  .lightbox-counter { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); color: rgba(255,255,255,0.75); font-family: 'Share Tech Mono', monospace; font-size: 13px; pointer-events: none; }
 
   .empty-state { text-align: center; padding: 50px 20px; color: var(--text3); width: 100%; }
   .empty-state-icon { font-size: 36px; margin-bottom: 10px; }
@@ -1134,9 +1153,12 @@
 </div>
 
 <!-- LIGHTBOX -->
-<div class="lightbox" id="lightbox" onclick="closeLightbox()">
-  <span class="lightbox-close">✕</span>
+<div class="lightbox" id="lightbox">
+  <span class="lightbox-close" onclick="closeLightbox()">✕</span>
+  <button class="lightbox-nav prev" id="lightbox-prev" onclick="lightboxNav(-1)">&#8249;</button>
   <img id="lightbox-img" src="" alt="">
+  <button class="lightbox-nav next" id="lightbox-next" onclick="lightboxNav(1)">&#8250;</button>
+  <div class="lightbox-counter" id="lightbox-counter"></div>
 </div>
 
 <!-- EXPORT PDF MODAL -->
@@ -1301,6 +1323,10 @@ let currentPlantId = null;
 let currentPlantName = '';
 let userPlants = []; // [{ id, name, location }]
 const scheduleLookupCache = new Map();
+// Caches the set of scheduled machine codes for the current date.
+// { date: string, scheduled: Set<string> | null }
+// scheduled === null means no dailySchedules doc exists for that date → don't highlight.
+let scheduledPressesState = null;
 
 // ── ROLE / PERMISSIONS ──
 const DEFAULT_PERMISSIONS = {
@@ -1353,6 +1379,34 @@ function scheduleDateForLookup() {
   const dateFilter = document.getElementById('date-filter')?.value || '';
   if (issuePeriod === 'date' && dateFilter) return dateFilter;
   return localDateStr(new Date());
+}
+
+// Bulk-loads all scheduled machine codes for a given date from all 4 schedule sections.
+// Result is cached in scheduledPressesState. Calls updatePressStates() when done so
+// press buttons immediately reflect their scheduled/unscheduled state.
+async function loadDailyScheduledPresses(date) {
+  if (!currentPlantId || !date) { scheduledPressesState = null; return; }
+  if (scheduledPressesState && scheduledPressesState.date === date) return; // already cached
+  let scheduled = null;
+  try {
+    const dailyRef = doc(db, 'plants', currentPlantId, 'dailySchedules', date);
+    const dailySnap = await getDoc(dailyRef);
+    if (dailySnap.exists()) {
+      const sections = ['page1', 'page2', 'northBayChanges', 'southBayChanges'];
+      const snaps = await Promise.all(
+        sections.map(s => getDocs(collection(db, 'plants', currentPlantId, 'dailySchedules', date, s)))
+      );
+      scheduled = new Set();
+      snaps.forEach(snap => snap.docs.forEach(d => {
+        const press = d.data().press;
+        if (press) scheduled.add(String(press).trim());
+      }));
+    }
+  } catch(e) {
+    console.warn('loadDailyScheduledPresses failed:', e);
+  }
+  scheduledPressesState = { date, scheduled };
+  updatePressStates();
 }
 
 async function getPressScheduleLookup(machineCode, scheduleDate) {
@@ -1708,6 +1762,7 @@ async function hydrateCurrentPlantView() {
   await Promise.all([loadPlantPresses(), loadCurrentMember(currentPlantId)]);
   buildFloorMap();
   await loadConfig();
+  loadDailyScheduledPresses(scheduleDateForLookup()); // fire-and-forget; calls updatePressStates when done
 }
 
 // Load user's plant list.
@@ -1867,6 +1922,7 @@ async function switchPlant(plantId) {
   issueEventHistoryCache.clear();
   attachmentsHydrationToken++;
   eventsHydrationToken++;
+  scheduledPressesState = null; // clear so new plant reloads schedule
   setSyncStatus('', 'Switching plant…');
   await hydrateCurrentPlantView();
   gameConfig = null;
@@ -2554,6 +2610,7 @@ window.setPeriod = s => {
   }
   updateCalLabel(document.getElementById('date-filter').value || localDateStr(new Date()), false);
   renderIssues(); updatePressStates(); updateStats();
+  loadDailyScheduledPresses(scheduleDateForLookup());
 };
 
 window.onCalendarPick = val => {
@@ -2563,6 +2620,7 @@ window.onCalendarPick = val => {
   issuePeriod = 'date';
   updateCalLabel(val, true);
   renderIssues(); updatePressStates(); updateStats(); updateFilterBadge();
+  loadDailyScheduledPresses(val);
 };
 
 // ── DATE FILTER ──
@@ -2577,6 +2635,7 @@ window.clearDate = () => {
   issuePeriod = 'all';
   ['today','24h','week','month','all'].forEach(x => document.getElementById('period-'+x).classList.toggle('active', x==='all'));
   renderIssues(); updatePressStates(); updateStats();
+  loadDailyScheduledPresses(localDateStr(new Date()));
 };
 
 // Compute time window for period filter
@@ -2848,6 +2907,10 @@ let savedResolvedRows = [];
 try { savedResolvedRows = JSON.parse(localStorage.getItem('showResolvedRows') || '[]'); } catch(e) {}
 const showResolvedRows = new Set(savedResolvedRows);
 function saveResolvedRows() { try { localStorage.setItem('showResolvedRows', JSON.stringify([...showResolvedRows])); } catch(e) {} }
+let savedHideUnscheduledRows = [];
+try { savedHideUnscheduledRows = JSON.parse(localStorage.getItem('hideUnscheduledRows') || '[]'); } catch(e) {}
+const hideUnscheduledRows = new Set(savedHideUnscheduledRows);
+function saveHideUnscheduledRows() { try { localStorage.setItem('hideUnscheduledRows', JSON.stringify([...hideUnscheduledRows])); } catch(e) {} }
 
 function saveActiveRows() {
   try { localStorage.setItem('activeRows', JSON.stringify([...activeRows])); } catch(e) {}
@@ -2970,6 +3033,10 @@ function renderRowPanels() {
   for (const rowName of sortedPanelRowNames) {
     if (!activeRows.has(rowName)) continue;
     const presses = PRESSES[rowName];
+    // Determine unscheduled presses for the current date (null = no schedule loaded → don't highlight)
+    const _schedDate = scheduleDateForLookup();
+    const unscheduledSet = (scheduledPressesState && scheduledPressesState.date === _schedDate && scheduledPressesState.scheduled !== null)
+      ? scheduledPressesState.scheduled : null;
     const panel = document.createElement('div');
     panel.className = 'row-panel';
 
@@ -3087,11 +3154,31 @@ function renderRowPanels() {
       renderRowPanels();
     };
     header.appendChild(resTog);
+
+    // "No Schedule" toggle — only visible when a daily schedule is loaded for the active date
+    if (unscheduledSet !== null) {
+      const hiding = hideUnscheduledRows.has(rowName);
+      const schedTog = document.createElement('button');
+      schedTog.className = 'row-resolved-toggle row-sched-toggle' + (hiding ? ' active' : '');
+      schedTog.textContent = hiding ? '✓ Sched Only' : '⊘ No Sched';
+      schedTog.title = hiding ? 'Showing scheduled presses only — click to show all' : 'Click to hide unscheduled presses';
+      schedTog.onclick = () => {
+        if (hideUnscheduledRows.has(rowName)) hideUnscheduledRows.delete(rowName);
+        else hideUnscheduledRows.add(rowName);
+        saveHideUnscheduledRows();
+        renderRowPanels();
+      };
+      header.appendChild(schedTog);
+    }
+
     panel.appendChild(header);
 
-    // Presses — new split-bar layout
+    // Presses — new split-bar layout; filter out unscheduled if the toggle is active
+    const visiblePresses = (unscheduledSet && hideUnscheduledRows.has(rowName))
+      ? presses.filter(m => unscheduledSet.has(m))
+      : presses;
     const btns = document.createElement('div'); btns.className = 'row-presses';
-    presses.forEach(m => {
+    visiblePresses.forEach(m => {
       const btn = document.createElement('button');
       btn.className = 'press-btn';
       btn.id = 'press-'+m.replace(/[\s.]/g,'_');
@@ -3151,6 +3238,11 @@ function renderRowPanels() {
 
       // hist-mode class if needed
       if (mapMode==='hist') btn.classList.add('hist-mode');
+      // Mark presses not appearing in today's daily schedule
+      if (unscheduledSet && !unscheduledSet.has(m)) {
+        btn.classList.add('not-scheduled');
+        btn.title = 'Not scheduled';
+      }
       btns.appendChild(btn);
     });
     panel.appendChild(btns);
@@ -3356,6 +3448,7 @@ window.submitIssue = async () => {
       dateTime: fmtDate(d), dateKey: localDateStr(d), timestamp: d.getTime(),
       userId: currentUser.uid, userName: currentUser.displayName||currentUser.email,
       workflowState: 'called',
+      workflowStateHistory: { called: { by: currentActor(), at: serverTimestamp() } },
       photoCount: uploadedPhotos.length,
       createdAt: serverTimestamp(),
       createdBy: currentActor(),
@@ -3488,6 +3581,7 @@ window.confirmResolve = async () => {
     const issuePatch = {
       statusHistory: [...getMutableStatusHistory(issue || {}), resolvedHistEntry],
       workflowState: 'finished',
+      'workflowStateHistory.finished': { by: currentActor(), at: serverTimestamp() },
       ...buildIssueV2Compat({
         machineCode: issue?.machine || '',
         statusKey: 'resolved',
@@ -3603,7 +3697,7 @@ window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
   try {
     const issuePatch = {
       statusHistory: history,
-      ...(status === 'resolved' ? { workflowState: 'finished' } : {}),
+      ...(status === 'resolved' ? { workflowState: 'finished', 'workflowStateHistory.finished': { by: currentActor(), at: serverTimestamp() } } : {}),
       ...buildIssueV2Compat({
         machineCode: issue.machine || issue.machineCode || '',
         statusKey: status,
@@ -3905,11 +3999,26 @@ window.setSubStatus = async (id, sub) => {
   catch(e) { setSyncStatus('err','Error updating: '+e.message); }
 };
 
-// ── WORKFLOW STATE CYCLING ──
+// ── WORKFLOW STATE ──
+window.setWorkflowState = async (id, state) => {
+  const validStates = ['called', 'accepted', 'in-progress', 'finished'];
+  if (!validStates.includes(state)) return;
+  const actor = currentActor();
+  try {
+    await updateDoc(plantDoc('issues', id), {
+      workflowState: state,
+      [`workflowStateHistory.${state}`]: { by: actor, at: serverTimestamp() },
+      updatedAt: serverTimestamp(),
+      updatedBy: actor
+    });
+  } catch(e) {
+    setSyncStatus('err', 'Error updating workflow: ' + e.message);
+  }
+};
+
 window.cycleWorkflowState = async (id) => {
   const issue = issues.find(i => i.id === id);
   if (!issue) return;
-  
   const states = ['called', 'accepted', 'in-progress', 'finished'];
   const currentState = issue.workflowState || 'called';
   const currentIndex = states.indexOf(currentState);
@@ -4097,8 +4206,11 @@ function renderIssues() {
     const card=document.createElement('div');
     card.className='issue-card'+(issueIsResolvedV2(issue)?' resolved':'')+(issue.highPriority?' high-priority':'');
 
-    const photosHtml=(issue.photos||[]).length
-      ? `<div class="issue-photos">${issue.photos.map(p=>`<img class="issue-photo-thumb" src="${p.dataUrl}" loading="lazy" onclick="openLightbox('${p.dataUrl}')">`).join('')}</div>` : '';
+    const _photoList = (issue.photos||[]).map(p => p.dataUrl);
+    if (_photoList.length) window._issuePhotos = window._issuePhotos || {};
+    if (_photoList.length) window._issuePhotos[issue.id] = _photoList;
+    const photosHtml=_photoList.length
+      ? `<div class="issue-photos">${_photoList.map((url,i)=>`<img class="issue-photo-thumb" src="${url}" loading="lazy" onclick="openLightbox(${i},'${issue.id}')">`).join('')}</div>` : '';
 
     // Authoritative current status from issue.currentStatus (v2) or lifecycle fallback
     const currentKey = currentStatusKey(issue);
@@ -4212,20 +4324,32 @@ function renderIssues() {
     // Workflow state configuration
     const workflowState = issue.workflowState || 'called';
     const workflowConfig = {
-      called: { icon: '📞', label: 'Called', class: 'called' },
-      accepted: { icon: '✓', label: 'Accepted', class: 'accepted' },
-      'in-progress': { icon: '⚙️', label: 'In Progress', class: 'in-progress' },
-      finished: { icon: '🔨', label: 'Finished', class: 'finished' }
+      called:      { icon: '📣', label: 'Called',      cssState: 'called' },
+      accepted:    { icon: '👋', label: 'Accepted',    cssState: 'accepted' },
+      'in-progress': { icon: '🔧', label: 'In Progress', cssState: 'in-progress' },
+      finished:    { icon: '✅', label: 'Finished',    cssState: 'finished' }
     };
-    const wf = workflowConfig[workflowState] || workflowConfig.called;
+    const wfOrder = ['called', 'accepted', 'in-progress', 'finished'];
+    const wfCurrentIdx = wfOrder.indexOf(workflowState);
+    const isCompleted = (state) => wfOrder.indexOf(state) < wfCurrentIdx;
+    const wfStateHistory = issue.workflowStateHistory || {};
 
-    // Helper function to determine if a state is completed based on workflow order
-    const isCompleted = (state) => {
-      const order = ['called', 'accepted', 'in-progress', 'finished'];
-      const currentIndex = order.indexOf(workflowState);
-      const stateIndex = order.indexOf(state);
-      return stateIndex < currentIndex;
-    };
+    // Build compact 4-step header buttons
+    const wfHeaderHtml = `<div class="wf-steps" onclick="event.stopPropagation()">${wfOrder.map(state => {
+      const cfg = workflowConfig[state];
+      const cls = state === workflowState ? `active ${cfg.cssState}` : isCompleted(state) ? 'completed' : 'pending';
+      return `<button class="wf-step-btn ${cls}" onclick="setWorkflowState('${issue.id}','${state}')" title="${cfg.label}">${cfg.icon}</button>`;
+    }).join('')}</div>`;
+
+    // Build 2x2 body grid with actor tracking
+    const wfGridHtml = `<div class="wf-grid">${wfOrder.map(state => {
+      const cfg = workflowConfig[state];
+      const cls = state === workflowState ? `active ${cfg.cssState}` : isCompleted(state) ? 'completed' : 'pending';
+      const entry = wfStateHistory[state];
+      const actorName = entry?.by?.name ? entry.by.name.split(' ')[0] : '';
+      const actorHtml = actorName ? `<span class="wf-actor">by ${esc(actorName)}</span>` : '';
+      return `<button class="wf-grid-btn ${cls}" onclick="setWorkflowState('${issue.id}','${state}')"><span class="wf-icon">${cfg.icon}</span><span class="wf-label">${cfg.label}</span>${actorHtml}</button>`;
+    }).join('')}</div>`;
 
     // Split status label from sub-status for two-line display
     const baseLabel = scfg.label;
@@ -4249,33 +4373,11 @@ function renderIssues() {
             </div>
             ${subLabel ? `<span class="issue-status-sub" style="color:${sc.color};">${esc(subLabel)}</span>` : ''}
           </div>
-          <div class="workflow-pill ${wf.class}" onclick="event.stopPropagation(); cycleWorkflowState('${issue.id}')">${wf.icon} ${wf.label}</div>
+          ${wfHeaderHtml}
         </div>
       </div>
       <div class="issue-body ${wasOpen?'visible':''}" id="body-${issue.id}">
-        <!-- Horizontal workflow timeline -->
-        <div class="workflow-timeline-horizontal">
-          <div class="workflow-h-step">
-            <div class="workflow-h-dot ${workflowState === 'called' ? 'active' : isCompleted('called') ? 'completed' : ''}"></div>
-            <div class="workflow-h-label ${workflowState === 'called' ? 'active' : isCompleted('called') ? 'completed' : ''}">Called</div>
-          </div>
-          <div class="workflow-h-connector ${isCompleted('accepted') ? 'completed' : ''}"></div>
-          <div class="workflow-h-step">
-            <div class="workflow-h-dot ${workflowState === 'accepted' ? 'active' : isCompleted('accepted') ? 'completed' : ''}"></div>
-            <div class="workflow-h-label ${workflowState === 'accepted' ? 'active' : isCompleted('accepted') ? 'completed' : ''}">Accepted</div>
-          </div>
-          <div class="workflow-h-connector ${isCompleted('in-progress') ? 'completed' : ''}"></div>
-          <div class="workflow-h-step">
-            <div class="workflow-h-dot ${workflowState === 'in-progress' ? 'active' : isCompleted('in-progress') ? 'completed' : ''}"></div>
-            <div class="workflow-h-label ${workflowState === 'in-progress' ? 'active' : isCompleted('in-progress') ? 'completed' : ''}">In Prog.</div>
-          </div>
-          <div class="workflow-h-connector ${isCompleted('finished') ? 'completed' : ''}"></div>
-          <div class="workflow-h-step">
-            <div class="workflow-h-dot ${workflowState === 'finished' ? 'active' : ''}"></div>
-            <div class="workflow-h-label ${workflowState === 'finished' ? 'active' : ''}">Finished</div>
-          </div>
-        </div>
-        
+        ${wfGridHtml}
         <!-- Full width content -->
         <div class="issue-full-note">${esc(issue.note)}</div>
         ${editedNote}
@@ -4792,8 +4894,72 @@ function updateStats() {
     });
 }
 
-window.openLightbox = src => { document.getElementById('lightbox-img').src=src; document.getElementById('lightbox').classList.add('visible'); };
-window.closeLightbox = () => document.getElementById('lightbox').classList.remove('visible');
+// ── LIGHTBOX ──
+let _lbPhotos = [], _lbIndex = 0;
+
+function _lbShow(idx) {
+  _lbIndex = (idx % _lbPhotos.length + _lbPhotos.length) % _lbPhotos.length;
+  document.getElementById('lightbox-img').src = _lbPhotos[_lbIndex];
+  const multi = _lbPhotos.length > 1;
+  document.getElementById('lightbox-prev').style.display = multi ? '' : 'none';
+  document.getElementById('lightbox-next').style.display = multi ? '' : 'none';
+  document.getElementById('lightbox-counter').textContent = multi ? `${_lbIndex + 1} / ${_lbPhotos.length}` : '';
+}
+
+window.openLightbox = (indexOrSrc, issueIdOrPhotos) => {
+  if (typeof issueIdOrPhotos === 'string') {
+    // Called as openLightbox(index, issueId)
+    _lbPhotos = (window._issuePhotos && window._issuePhotos[issueIdOrPhotos]) || [];
+    _lbIndex = indexOrSrc;
+  } else if (Array.isArray(issueIdOrPhotos)) {
+    // Legacy array call
+    _lbPhotos = issueIdOrPhotos;
+    _lbIndex = indexOrSrc;
+  } else {
+    // Legacy single-src call
+    _lbPhotos = [indexOrSrc];
+    _lbIndex = 0;
+  }
+  _lbShow(_lbIndex);
+  document.getElementById('lightbox').classList.add('visible');
+};
+
+window.closeLightbox = () => {
+  document.getElementById('lightbox').classList.remove('visible');
+  _lbPhotos = [];
+};
+
+window.lightboxNav = dir => _lbShow(_lbIndex + dir);
+
+// Close on backdrop click (not on nav buttons or img)
+document.getElementById('lightbox').addEventListener('click', e => {
+  if (!e.target.closest('.lightbox-nav') && !e.target.matches('#lightbox-img') && !e.target.matches('.lightbox-close')) {
+    closeLightbox();
+  }
+});
+
+// Keyboard navigation
+document.addEventListener('keydown', e => {
+  if (!document.getElementById('lightbox').classList.contains('visible')) return;
+  if (e.key === 'ArrowRight') lightboxNav(1);
+  else if (e.key === 'ArrowLeft') lightboxNav(-1);
+  else if (e.key === 'Escape') closeLightbox();
+});
+
+// Touch swipe in lightbox
+{
+  let lx0 = 0, lTracking = false;
+  const lb = document.getElementById('lightbox');
+  lb.addEventListener('touchstart', e => {
+    if (e.target.closest('.lightbox-nav, .lightbox-close')) return;
+    lx0 = e.touches[0].clientX; lTracking = true;
+  }, { passive: true });
+  lb.addEventListener('touchend', e => {
+    if (!lTracking) return; lTracking = false;
+    const dx = e.changedTouches[0].clientX - lx0;
+    if (Math.abs(dx) > 40) lightboxNav(dx < 0 ? 1 : -1);
+  }, { passive: true });
+}
 
 function fmtShortDate(val) {
   const d = new Date(val + 'T00:00:00');
