@@ -921,8 +921,8 @@
           </button>
           <div class="theme-select-grid" id="theme-select-grid"></div>
         </div>
-        <button class="game-pill" id="game-pill" onclick="toggleGameDrawer()" title="Open gamification">
-          🏆 <span class="game-pill-xp" id="game-pill-xp">0 XP</span> <span>•</span> <span class="game-pill-mission" id="game-pill-mission">0 missions</span>
+        <button class="game-pill" onclick="toggleGameDrawer()" title="Open gamification">
+          🏆 <span class="game-pill-xp">0 XP</span> <span>•</span> <span class="game-pill-mission">0 missions</span>
         </button>
         <button class="user-dropdown-item danger" id="signout-btn">⏻ Sign Out</button>
       </div>
@@ -1976,8 +1976,9 @@ document.addEventListener('click', e => {
   const wrap = document.getElementById('plant-switcher-wrap');
   if (wrap && !wrap.contains(e.target)) closePlantDropdown();
   const drawer = document.getElementById('game-drawer');
-  const pill = document.getElementById('game-pill');
-  if (drawer && gameDrawerOpen && !drawer.contains(e.target) && pill && !pill.contains(e.target)) {
+  const gamePills = Array.from(document.querySelectorAll('.game-pill'));
+  const clickedPill = gamePills.some(pill => pill.contains(e.target));
+  if (drawer && gameDrawerOpen && !drawer.contains(e.target) && !clickedPill) {
     toggleGameDrawer(false);
   }
 });
@@ -2194,10 +2195,8 @@ function renderGamePanel() {
   const streak = Number(gameUserStats?.streaks?.current || 0);
   const missionCount = gameMissions.length;
   const progressPct = gameLevelProgress(xp);
-  const xpPill = document.getElementById('game-pill-xp');
-  const missionPill = document.getElementById('game-pill-mission');
-  if (xpPill) xpPill.textContent = `${xp} XP`;
-  if (missionPill) missionPill.textContent = `${missionCount} missions`;
+  document.querySelectorAll('.game-pill .game-pill-xp').forEach(el => { el.textContent = `${xp} XP`; });
+  document.querySelectorAll('.game-pill .game-pill-mission').forEach(el => { el.textContent = `${missionCount} missions`; });
   const totalXpEl = document.getElementById('game-total-xp');
   const levelEl = document.getElementById('game-level');
   const streakEl = document.getElementById('game-streak');
