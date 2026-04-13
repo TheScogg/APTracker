@@ -203,6 +203,7 @@ let currentUser = null;
 let userPlants = [];
 let adminPlantIds = [];
 let membersByPlant = new Map();
+let userDirectory = [];
 let statusDraftByPlant = new Map();
 let gameDraftByPlant = new Map();
 let missionDraftByPlant = new Map();
@@ -465,6 +466,24 @@ async function loadMembersAndStatusesForAdminPlants() {
   }
 }
 
+async function loadUserDirectory() {
+  const usersSnap = await getDocs(collection(db, 'userLookup'));
+  const deduped = new Map();
+  usersSnap.forEach(d => {
+    const data = d.data() || {};
+    const uid = String(data.uid || '').trim();
+    if (!uid || deduped.has(uid)) return;
+    deduped.set(uid, {
+      uid,
+      displayName: String(data.displayName || '').trim(),
+      email: String(data.email || d.id || '').trim().toLowerCase()
+    });
+  });
+  userDirectory = Array.from(deduped.values()).sort((a, b) =>
+    (a.displayName || a.email || a.uid).localeCompare(b.displayName || b.email || b.uid)
+  );
+}
+
 function renderStatusEditor(plantId, plantName) {
   const statuses = statusDraftByPlant.get(plantId) || deepCopy(DEFAULT_STATUSES);
   const panelOpen = statusPanelOpen[plantId] ?? false;
@@ -635,6 +654,12 @@ function renderPlantsUsers() {
 
   for (const plant of sortedPlants) {
     const members = (membersByPlant.get(plant.id) || []).sort((a,b) => (a.displayName || a.email || '').localeCompare(b.displayName || b.email || ''));
+    const memberIds = new Set(members.map(m => m.userId || m.id));
+    const availableUsers = userDirectory.filter(u => u.uid !== currentUser.uid && !memberIds.has(u.uid));
+    const userOptions = availableUsers.map(u => {
+      const label = `${u.displayName || u.email || u.uid}${u.email ? ` (${u.email})` : ''}`;
+      return `<option value="${esc(u.uid)}">${esc(label)}</option>`;
+    }).join('');
     const card = document.createElement('div');
     card.className = 'card';
 
@@ -679,7 +704,9 @@ function renderPlantsUsers() {
       <div style="margin-top:10px; border-top:1px solid var(--border); padding-top:10px;">
         <div class="muted" style="margin-bottom:6px;">Add user to ${esc(plant.name)}</div>
         <div class="row">
-          <input id="add-email-${plant.id}" placeholder="user@example.com" />
+          <select id="add-user-${plant.id}">
+            ${userOptions || '<option value="">No available users</option>'}
+          </select>
           <select id="add-role-${plant.id}" style="max-width:120px;">
             <option value="editor">editor</option>
             <option value="viewer">viewer</option>
@@ -871,21 +898,22 @@ async function importDailySchedule() {
 }
 
 window.addMember = async function(plantId) {
-  const emailEl = document.getElementById(`add-email-${plantId}`);
+  const userEl = document.getElementById(`add-user-${plantId}`);
   const roleEl = document.getElementById(`add-role-${plantId}`);
-  const emailRaw = emailEl.value.trim();
+  const selectedUid = String(userEl?.value || '').trim();
   const role = roleEl.value;
-  if (!emailRaw) {
-    feedback(`fb-${plantId}`, 'error', 'Email is required.');
+  if (!selectedUid) {
+    feedback(`fb-${plantId}`, 'error', 'Select a user.');
     return;
   }
-  const email = emailRaw.toLowerCase();
+  const target = userDirectory.find(u => u.uid === selectedUid);
+  if (!target) {
+    feedback(`fb-${plantId}`, 'error', 'Selected user is no longer available. Refresh and try again.');
+    return;
+  }
+  const email = String(target.email || '').toLowerCase();
 
   try {
-    const lookupSnap = await getDoc(doc(db, 'userLookup', email));
-    if (!lookupSnap.exists()) throw new Error('User not found. They must sign in once first.');
-    const target = lookupSnap.data();
-
     if (target.uid === currentUser.uid) throw new Error('You are already in this plant.');
 
     const existing = await getDoc(doc(db, 'plants', plantId, 'members', target.uid));
@@ -905,8 +933,8 @@ window.addMember = async function(plantId) {
     batch.set(doc(db, 'users', target.uid), { plantIds: arrayUnion(plantId) }, { merge: true });
     await batch.commit();
 
-    emailEl.value = '';
-    feedback(`fb-${plantId}`, 'ok', `Added ${emailRaw} as ${role}.`);
+    if (userEl) userEl.value = '';
+    feedback(`fb-${plantId}`, 'ok', `Added ${target.displayName || target.email || target.uid} as ${role}.`);
     await refreshAdminData();
   } catch (e) {
     console.error(e);
@@ -1218,6 +1246,7 @@ window.toggleStatusRow = function(plantId, statusKey) {
 
 async function refreshAdminData() {
   await loadUserPlants();
+  await loadUserDirectory();
   const hasAdminAccess = adminPlantIds.length > 0;
   document.getElementById('denied-card').style.display = hasAdminAccess ? 'none' : '';
   document.getElementById('admin-content').style.display = hasAdminAccess ? '' : 'none';
