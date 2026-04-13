@@ -2234,6 +2234,7 @@ function missionReasonMatches(mission, reason) {
   if (type === 'serial_captures') return reason === 'serial_captured_when_required';
   if (type === 'photo_attachments') return reason === 'photo_attached';
   if (type === 'issues_created') return reason === 'issue_created_complete';
+  if (type.startsWith('trigger:')) return type.slice(8) === reason;
   return false;
 }
 
@@ -2275,7 +2276,17 @@ async function awardGamification(reason, context = {}) {
     }
     if (!gameConfig?.enabled) return;
     const base = Number(gameConfig.weights?.[reason] || gameConfig.penalties?.[reason] || 0);
-    if (!base) return;
+    const tags = Array.isArray(context.tags) ? context.tags.map(t => String(t || '').trim()).filter(Boolean) : [];
+    const customRules = Array.isArray(gameConfig.customRules) ? gameConfig.customRules : [];
+    const matchingCustomRules = customRules.filter(rule => {
+      if (rule?.isEnabled === false) return false;
+      const trigger = String(rule?.triggerKey || '').trim();
+      if (!trigger) return false;
+      return trigger === reason || tags.includes(trigger);
+    });
+    const customDelta = matchingCustomRules.reduce((sum, rule) => sum + Number(rule?.points || 0), 0);
+    const totalDelta = base + customDelta;
+    if (!totalDelta) return;
     const issueId = context.issueId || 'none';
     const dedupeKey = `${currentUser.uid}:${issueId}:${reason}:${context.dedupeSuffix || ''}`;
     const dedupeSnap = await getDocs(query(gameEventsCol(), where('dedupeKey', '==', dedupeKey), limit(1)));
@@ -2299,19 +2310,29 @@ async function awardGamification(reason, context = {}) {
     const evtRef = doc(gameEventsCol());
     const statsRef = gameUserStatsDoc(currentUser.uid);
     const batch = writeBatch(db);
-    batch.set(evtRef, { type: 'xp_awarded', eventAt: serverTimestamp(), actor: currentActor(), source: { issueId, action: reason }, delta: { xp: base }, reason, dedupeKey, schemaVersion: 1 });
+    batch.set(evtRef, {
+      type: 'xp_awarded',
+      eventAt: serverTimestamp(),
+      actor: currentActor(),
+      source: { issueId, action: reason, tags },
+      delta: { xp: totalDelta, baseXp: base, customXp: customDelta },
+      appliedRules: matchingCustomRules.map(rule => ({ id: rule?.id || '', label: rule?.label || '', triggerKey: rule?.triggerKey || '', points: Number(rule?.points || 0) })),
+      reason,
+      dedupeKey,
+      schemaVersion: 1
+    });
     batch.set(statsRef, {
       userId: currentUser.uid,
       displayName: currentUser.displayName || currentUser.email || 'User',
-      totals: { xp: increment(base) },
-      streaks: { current: increment(base > 0 ? 1 : 0) },
+      totals: { xp: increment(totalDelta) },
+      streaks: { current: increment(totalDelta > 0 ? 1 : 0) },
       lastEventAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       schemaVersion: 1
     }, { merge: true });
     await batch.commit();
 
-    const currentXp = Number(gameUserStats?.totals?.xp || 0) + base;
+    const currentXp = Number(gameUserStats?.totals?.xp || 0) + totalDelta;
     const nextLevel = gameLevelFromXp(currentXp);
     await setDoc(statsRef, { totals: { level: nextLevel } }, { merge: true });
     await setDoc(gameLeaderboardDoc('weekly'), {
@@ -2333,7 +2354,7 @@ async function awardGamification(reason, context = {}) {
       gameCapTracker.set(statusCapKey, Number(gameCapTracker.get(statusCapKey) || 0) + 1);
     }
     await updateMissionProgress(reason);
-    showGameToast(`${base > 0 ? '+' : ''}${base} XP • ${reason.replaceAll('_', ' ')}`);
+    showGameToast(`${totalDelta > 0 ? '+' : ''}${totalDelta} XP • ${reason.replaceAll('_', ' ')}`);
   } catch (e) {
     console.warn('Gamification award skipped:', e?.message || e);
   }
@@ -2370,7 +2391,8 @@ const GAME_DEFAULT_CONFIG = {
   enabled: true,
   weights: { issue_created_complete: 5, status_changed_valid: 2, workflow_step_advance: 3, issue_resolved: 8, photo_attached: 2, serial_captured_when_required: 4 },
   penalties: { issue_reopened: -6, missing_required_serial: -5, invalid_status_bounce: -2 },
-  caps: { photo_attached_per_issue: 1, status_changed_valid_per_issue_per_hour: 3 }
+  caps: { photo_attached_per_issue: 1, status_changed_valid_per_issue_per_hour: 3 },
+  customRules: []
 };
 renderGamePanel();
 const issueLogMasonicState = {
@@ -3363,8 +3385,8 @@ window.submitIssue = async () => {
     });
     await batch.commit();
     attachmentPhotoCache.set(issueRef.id, uploadedPhotos);
-    await awardGamification('issue_created_complete', { issueId: issueRef.id, dedupeSuffix: 'issue-created' });
-    if (uploadedPhotos.length > 0) await awardGamification('photo_attached', { issueId: issueRef.id, dedupeSuffix: 'photo' });
+    await awardGamification('issue_created_complete', { issueId: issueRef.id, dedupeSuffix: 'issue-created', tags: ['issue:create', `status:${initialStatus}`] });
+    if (uploadedPhotos.length > 0) await awardGamification('photo_attached', { issueId: issueRef.id, dedupeSuffix: 'photo', tags: ['photo:attached'] });
     closeModal();
   } catch(e) { setSyncStatus('err','Error saving: '+e.message); setSubmitting(false); }
 };
@@ -3430,7 +3452,7 @@ window.saveEdit = async () => {
     });
     await batch.commit();
     attachmentPhotoCache.set(editTargetId, uploadedPhotos);
-    if (uploadedPhotos.length > 0) await awardGamification('photo_attached', { issueId: editTargetId, dedupeSuffix: 'photo' });
+    if (uploadedPhotos.length > 0) await awardGamification('photo_attached', { issueId: editTargetId, dedupeSuffix: 'photo', tags: ['photo:attached'] });
     closeEditModal();
   } catch(e) {
     setSyncStatus('err','Error saving: '+e.message);
@@ -3486,7 +3508,7 @@ window.confirmResolve = async () => {
       note: note || 'Resolved (no details provided)'
     });
     await batch.commit();
-    await awardGamification('issue_resolved', { issueId: resolveTargetId, dedupeSuffix: resolvedAtText });
+    await awardGamification('issue_resolved', { issueId: resolveTargetId, dedupeSuffix: resolvedAtText, tags: ['issue:resolved', 'status:resolved'] });
     closeResolveModal();
   } catch(e) { setSyncStatus('err','Error: '+e.message); btn.disabled=false; btn.innerHTML='Mark Resolved'; }
 };
@@ -3534,7 +3556,7 @@ window.confirmReopen = async () => {
     batch.update(plantDoc('issues',reopenTargetId), issuePatch);
     queueIssueEvent(batch, reopenTargetId, 'issue_reopened', { reason: note || '' });
     await batch.commit();
-    await awardGamification('issue_reopened', { issueId: reopenTargetId, dedupeSuffix: reopenDateTime });
+    await awardGamification('issue_reopened', { issueId: reopenTargetId, dedupeSuffix: reopenDateTime, tags: ['issue:reopened', `status:${reopenStatusKey}`] });
     closeReopenModal();
   } catch(e) { setSyncStatus('err','Error: '+e.message); btn.disabled=false; btn.innerHTML='Re-open Issue'; }
 };
@@ -3602,8 +3624,8 @@ window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
     });
     await batch.commit();
     issueEventHistoryCache.delete(id);
-    await awardGamification('status_changed_valid', { issueId: id, dedupeSuffix: entry.dateTime || String(Date.now()) });
-    if (status === 'resolved') await awardGamification('issue_resolved', { issueId: id, dedupeSuffix: 'status-resolved' });
+    await awardGamification('status_changed_valid', { issueId: id, dedupeSuffix: entry.dateTime || String(Date.now()), tags: ['status:changed', `status:${status}`] });
+    if (status === 'resolved') await awardGamification('issue_resolved', { issueId: id, dedupeSuffix: 'status-resolved', tags: ['issue:resolved', 'status:resolved'] });
   } catch(e) { setSyncStatus('err','Error: '+e.message); }
 };
 
@@ -3878,7 +3900,7 @@ window.setSubStatus = async (id, sub) => {
       });
     }
     await batch.commit();
-    await awardGamification('status_changed_valid', { issueId: id, dedupeSuffix: 'set-sub' });
+    await awardGamification('status_changed_valid', { issueId: id, dedupeSuffix: 'set-sub', tags: ['status:changed', `status:${last.status || 'open'}`, `sub:${sub || ''}`] });
   }
   catch(e) { setSyncStatus('err','Error updating: '+e.message); }
 };
@@ -3896,7 +3918,7 @@ window.cycleWorkflowState = async (id) => {
   
   try {
     await updateDoc(plantDoc('issues', id), { workflowState: nextState });
-    await awardGamification('workflow_step_advance', { issueId: id, dedupeSuffix: `${currentState}->${nextState}` });
+    await awardGamification('workflow_step_advance', { issueId: id, dedupeSuffix: `${currentState}->${nextState}`, tags: ['workflow:advance', `workflow:${nextState}`] });
   } catch(e) {
     setSyncStatus('err', 'Error updating workflow: ' + e.message);
   }
@@ -5036,7 +5058,7 @@ window.confirmSerialModal = async () => {
   }
   const note = 'S/N: ' + sn;
   await addStatusEntry(_serialPending.issueId, _serialPending.status, _serialPending.sub, note, _serialPending.dateTime);
-  await awardGamification('serial_captured_when_required', { issueId: _serialPending.issueId, dedupeSuffix: sn });
+  await awardGamification('serial_captured_when_required', { issueId: _serialPending.issueId, dedupeSuffix: sn, tags: ['serial:captured'] });
   closeSerialModal();
 };
 
