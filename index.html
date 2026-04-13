@@ -213,6 +213,29 @@
   .plant-dropdown-divider { height: 1px; background: var(--border); }
   .plant-add-btn { display: flex; align-items: center; gap: 8px; padding: 10px 14px; font-size: 12px; color: var(--accent); cursor: pointer; transition: background 0.1s; border: none; background: none; width: 100%; text-align: left; font-family: 'Nunito', sans-serif; font-weight: 700; }
   .plant-add-btn:hover { background: var(--bg3); }
+  .game-pill { display: flex; align-items: center; gap: 6px; background: linear-gradient(135deg, var(--bg3), rgba(168,85,247,0.13)); border: 1px solid var(--border); border-radius: 999px; padding: 5px 10px; cursor: pointer; color: var(--text2); font-size: 11px; font-weight: 700; font-family: 'Share Tech Mono', monospace; transition: all 0.15s; white-space: nowrap; }
+  .game-pill:hover { border-color: var(--purple); color: var(--text); }
+  .game-pill .game-pill-xp { color: var(--purple); font-weight: 800; }
+  .game-pill .game-pill-mission { color: var(--babyblue); }
+  .game-drawer { position: fixed; top: 0; right: -380px; width: 360px; max-width: 96vw; height: 100vh; background: var(--bg2); border-left: 1px solid var(--border); z-index: 450; box-shadow: -20px 0 50px rgba(0,0,0,0.45); transition: right 0.24s ease; display: flex; flex-direction: column; }
+  .game-drawer.open { right: 0; }
+  .game-drawer-header { padding: 14px 14px 10px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+  .game-drawer-title { font-family: 'Rajdhani', sans-serif; font-size: 18px; letter-spacing: 0.8px; font-weight: 700; }
+  .game-drawer-close { border: 1px solid var(--border); background: var(--bg3); color: var(--text2); border-radius: 8px; padding: 4px 8px; cursor: pointer; }
+  .game-drawer-body { padding: 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+  .game-card { background: var(--bg3); border: 1px solid var(--border); border-radius: 12px; padding: 10px; }
+  .game-card-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text3); margin-bottom: 8px; font-weight: 800; }
+  .game-metric-row { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--text2); margin-bottom: 6px; }
+  .game-metric-row strong { color: var(--text); font-size: 14px; }
+  .game-progress { height: 7px; border-radius: 999px; background: rgba(255,255,255,0.08); overflow: hidden; margin-top: 4px; }
+  .game-progress > span { display: block; height: 100%; background: linear-gradient(90deg, var(--purple), var(--blue)); }
+  .game-mission-item { padding: 8px; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px; background: rgba(255,255,255,0.01); }
+  .game-mission-head { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--text); margin-bottom: 5px; }
+  .game-mission-meta { font-size: 10px; color: var(--text3); }
+  .game-leader-row { display: flex; justify-content: space-between; font-size: 12px; color: var(--text2); padding: 5px 0; border-bottom: 1px dashed rgba(255,255,255,0.08); }
+  .game-leader-row:last-child { border-bottom: none; }
+  .game-toast { position: fixed; bottom: 16px; right: 16px; z-index: 470; background: var(--bg2); border: 1px solid rgba(168,85,247,0.45); color: var(--text); border-radius: 10px; padding: 8px 10px; font-size: 12px; box-shadow: 0 10px 32px rgba(0,0,0,0.35); opacity: 0; transform: translateY(8px); pointer-events: none; transition: all 0.2s; }
+  .game-toast.show { opacity: 1; transform: translateY(0); }
   .user-pill { display: flex; align-items: center; gap: 7px; background: var(--bg3); border: 1px solid var(--border); border-radius: 20px; padding: 3px 9px 3px 3px; cursor: pointer; transition: border-color 0.15s; user-select: none; }
   .user-pill:hover { border-color: var(--text2); }
   .user-pill.open { border-color: var(--accent); }
@@ -513,6 +536,22 @@
   @media (max-width: 480px) {
     .issues-list {
       grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 700px) {
+    header {
+      flex-wrap: wrap;
+      justify-content: flex-start;
+      row-gap: 8px;
+    }
+    .user-pill-wrap {
+      margin-left: auto;
+    }
+    .game-pill {
+      order: 10;
+      flex: 1 1 100%;
+      justify-content: center;
     }
   }
 
@@ -833,6 +872,10 @@
       </button>
       <div class="plant-dropdown" id="plant-dropdown"></div>
     </div>
+
+    <button class="game-pill" id="game-pill" onclick="toggleGameDrawer()" title="Open gamification">
+      🏆 <span class="game-pill-xp" id="game-pill-xp">0 XP</span> <span>•</span> <span class="game-pill-mission" id="game-pill-mission">0 missions</span>
+    </button>
 
     <div class="user-pill-wrap" id="user-pill-wrap">
       <div class="user-pill" id="user-pill">
@@ -1203,9 +1246,34 @@
 
 </div>
 
+<aside class="game-drawer" id="game-drawer" aria-label="Gamification drawer">
+  <div class="game-drawer-header">
+    <div class="game-drawer-title">🏆 Progress</div>
+    <button class="game-drawer-close" onclick="toggleGameDrawer(false)">✕</button>
+  </div>
+  <div class="game-drawer-body">
+    <div class="game-card">
+      <div class="game-card-title">Your Stats</div>
+      <div class="game-metric-row"><span>Total XP</span><strong id="game-total-xp">0</strong></div>
+      <div class="game-metric-row"><span>Level</span><strong id="game-level">1</strong></div>
+      <div class="game-metric-row"><span>Current Streak</span><strong id="game-streak">0</strong></div>
+      <div class="game-progress"><span id="game-level-progress" style="width:0%"></span></div>
+    </div>
+    <div class="game-card">
+      <div class="game-card-title">Missions</div>
+      <div id="game-missions-list"></div>
+    </div>
+    <div class="game-card">
+      <div class="game-card-title">Leaderboard</div>
+      <div id="game-leaderboard-list"></div>
+    </div>
+  </div>
+</aside>
+<div class="game-toast" id="game-toast"></div>
+
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, collection, updateDoc, deleteDoc, doc, getDoc, getDocs, setDoc, addDoc, onSnapshot, serverTimestamp, query, orderBy, where, writeBatch, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, collection, updateDoc, deleteDoc, doc, getDoc, getDocs, setDoc, addDoc, onSnapshot, serverTimestamp, query, orderBy, where, writeBatch, arrayUnion, arrayRemove, increment, limit } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut as fbSignOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getStorage, ref as storageRef, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
@@ -1262,6 +1330,12 @@ function plantDoc(colName, docId) { return doc(db, 'plants', currentPlantId, col
 function issueEventsCol(issueId) { return collection(db, 'plants', currentPlantId, 'issues', issueId, 'events'); }
 function issueAttachmentsCol(issueId) { return collection(db, 'plants', currentPlantId, 'issues', issueId, 'attachments'); }
 function plantMemberDocRef(plantId, userId) { return doc(db, 'plants', plantId, 'members', userId); }
+function gameConfigDoc() { return doc(db, 'plants', currentPlantId, 'gamificationConfig', 'main'); }
+function gameUserStatsDoc(userId) { return doc(db, 'plants', currentPlantId, 'userGameStats', userId); }
+function gameMissionsCol() { return collection(db, 'plants', currentPlantId, 'missions'); }
+function gameLeaderboardDoc(boardId = 'weekly') { return doc(db, 'plants', currentPlantId, 'leaderboards', boardId); }
+function gameEventsCol() { return collection(db, 'plants', currentPlantId, 'gameEvents'); }
+function missionProgressDoc(missionId, subjectId) { return doc(db, 'plants', currentPlantId, 'missions', missionId, 'progress', subjectId); }
 
 function currentActor() {
   return { uid: currentUser?.uid || '', name: currentUser?.displayName || currentUser?.email || 'Unknown' };
@@ -1795,6 +1869,9 @@ async function switchPlant(plantId) {
   eventsHydrationToken++;
   setSyncStatus('', 'Switching plant…');
   await hydrateCurrentPlantView();
+  gameConfig = null;
+  await ensureGamificationConfig();
+  startGamificationListeners();
   startListener();
   refreshVisibleData();
 }
@@ -1831,6 +1908,11 @@ function closePlantDropdown() {
 document.addEventListener('click', e => {
   const wrap = document.getElementById('plant-switcher-wrap');
   if (wrap && !wrap.contains(e.target)) closePlantDropdown();
+  const drawer = document.getElementById('game-drawer');
+  const pill = document.getElementById('game-pill');
+  if (drawer && gameDrawerOpen && !drawer.contains(e.target) && pill && !pill.contains(e.target)) {
+    toggleGameDrawer(false);
+  }
 });
 // ── SINGLE SOURCE OF TRUTH FOR STATUSES ──
 // Loaded from Firestore config doc on startup. Edit via the admin panel (user menu → Manage Statuses).
@@ -2026,6 +2108,258 @@ function rebuildDerivedStatus() {
 }
 rebuildDerivedStatus();
 
+function gameLevelFromXp(xp) {
+  const safeXp = Math.max(0, Number(xp || 0));
+  return Math.max(1, Math.floor(Math.sqrt(safeXp / 100)) + 1);
+}
+
+function gameLevelProgress(xp) {
+  const level = gameLevelFromXp(xp);
+  const prevLevelFloor = Math.pow(level - 1, 2) * 100;
+  const nextLevelFloor = Math.pow(level, 2) * 100;
+  const span = Math.max(1, nextLevelFloor - prevLevelFloor);
+  return Math.max(0, Math.min(100, Math.round(((xp - prevLevelFloor) / span) * 100)));
+}
+
+function renderGamePanel() {
+  const xp = Number(gameUserStats?.totals?.xp || 0);
+  const level = Number(gameUserStats?.totals?.level || gameLevelFromXp(xp));
+  const streak = Number(gameUserStats?.streaks?.current || 0);
+  const missionCount = gameMissions.length;
+  const progressPct = gameLevelProgress(xp);
+  const xpPill = document.getElementById('game-pill-xp');
+  const missionPill = document.getElementById('game-pill-mission');
+  if (xpPill) xpPill.textContent = `${xp} XP`;
+  if (missionPill) missionPill.textContent = `${missionCount} missions`;
+  const totalXpEl = document.getElementById('game-total-xp');
+  const levelEl = document.getElementById('game-level');
+  const streakEl = document.getElementById('game-streak');
+  const progressEl = document.getElementById('game-level-progress');
+  if (totalXpEl) totalXpEl.textContent = String(xp);
+  if (levelEl) levelEl.textContent = String(level);
+  if (streakEl) streakEl.textContent = String(streak);
+  if (progressEl) progressEl.style.width = `${progressPct}%`;
+
+  const missionsList = document.getElementById('game-missions-list');
+  if (missionsList) {
+    if (!gameMissions.length) missionsList.innerHTML = `<div class="game-mission-meta">No active missions for this plant.</div>`;
+    else {
+      missionsList.innerHTML = gameMissions.map(m => {
+        const current = Number(m.progress?.current || 0);
+        const target = Number(m.objective?.threshold || 1);
+        const pct = Math.max(0, Math.min(100, Math.round((current / Math.max(1, target)) * 100)));
+        return `<div class="game-mission-item">
+          <div class="game-mission-head"><span>${esc(m.name || 'Mission')}</span><strong>${pct}%</strong></div>
+          <div class="game-progress"><span style="width:${pct}%"></span></div>
+          <div class="game-mission-meta">${current}/${target} • Reward ${Number(m.rewards?.xp || 0)} XP</div>
+        </div>`;
+      }).join('');
+    }
+  }
+
+  const lbList = document.getElementById('game-leaderboard-list');
+  if (lbList) {
+    if (!gameLeaderboard.length) lbList.innerHTML = `<div class="game-mission-meta">Leaderboard is warming up…</div>`;
+    else {
+      lbList.innerHTML = gameLeaderboard.slice(0, 8).map((entry, idx) =>
+        `<div class="game-leader-row"><span>${idx + 1}. ${esc(entry.displayName || entry.name || 'User')}</span><strong>${Number(entry.xp || 0)} XP</strong></div>`
+      ).join('');
+    }
+  }
+}
+
+window.toggleGameDrawer = (forceOpen) => {
+  const drawer = document.getElementById('game-drawer');
+  if (!drawer) return;
+  gameDrawerOpen = typeof forceOpen === 'boolean' ? forceOpen : !gameDrawerOpen;
+  drawer.classList.toggle('open', gameDrawerOpen);
+};
+
+function showGameToast(message) {
+  const el = document.getElementById('game-toast');
+  if (!el) return;
+  el.textContent = message;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 1700);
+}
+
+async function ensureGamificationConfig() {
+  if (!currentPlantId) return;
+  const ref = gameConfigDoc();
+  const snap = await getDoc(ref);
+  if (!snap.exists()) await setDoc(ref, { ...GAME_DEFAULT_CONFIG, schemaVersion: 1, updatedAt: serverTimestamp() }, { merge: true });
+}
+
+function stopGamificationListeners() {
+  if (gameStatsUnsubscribe) { gameStatsUnsubscribe(); gameStatsUnsubscribe = null; }
+  if (gameMissionsUnsubscribe) { gameMissionsUnsubscribe(); gameMissionsUnsubscribe = null; }
+  if (gameLeaderboardUnsubscribe) { gameLeaderboardUnsubscribe(); gameLeaderboardUnsubscribe = null; }
+}
+
+function startGamificationListeners() {
+  stopGamificationListeners();
+  if (!currentPlantId || !currentUser?.uid) return;
+  gameStatsUnsubscribe = onSnapshot(gameUserStatsDoc(currentUser.uid), snap => {
+    gameUserStats = snap.exists() ? snap.data() : { totals: { xp: 0, level: 1 }, streaks: { current: 0 } };
+    renderGamePanel();
+  });
+  gameMissionsUnsubscribe = onSnapshot(query(gameMissionsCol(), where('isActive', '==', true), orderBy('startsAt', 'desc'), limit(6)), async snap => {
+    const missionRows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const progressRows = await Promise.all(missionRows.map(async mission => {
+      const progressSnap = await getDoc(missionProgressDoc(mission.id, currentUser.uid));
+      return { missionId: mission.id, progress: progressSnap.exists() ? progressSnap.data() : null };
+    }));
+    const progressMap = new Map(progressRows.map(row => [row.missionId, row.progress]));
+    gameMissions = missionRows.map(m => ({ ...m, progress: progressMap.get(m.id) || null }));
+    renderGamePanel();
+  });
+  gameLeaderboardUnsubscribe = onSnapshot(gameLeaderboardDoc('weekly'), snap => {
+    const data = snap.exists() ? snap.data() : {};
+    if (Array.isArray(data.entries)) {
+      gameLeaderboard = data.entries;
+    } else if (data.entriesByUid && typeof data.entriesByUid === 'object') {
+      gameLeaderboard = Object.values(data.entriesByUid).sort((a, b) => Number(b?.xp || 0) - Number(a?.xp || 0));
+    } else {
+      gameLeaderboard = [];
+    }
+    renderGamePanel();
+  });
+}
+
+function missionReasonMatches(mission, reason) {
+  const type = mission?.objective?.type || '';
+  if (type === 'resolve_issues_older_than_hours') return reason === 'issue_resolved';
+  if (type === 'status_changes') return reason === 'status_changed_valid';
+  if (type === 'workflow_advances') return reason === 'workflow_step_advance';
+  if (type === 'serial_captures') return reason === 'serial_captured_when_required';
+  if (type === 'photo_attachments') return reason === 'photo_attached';
+  if (type === 'issues_created') return reason === 'issue_created_complete';
+  if (type.startsWith('trigger:')) return type.slice(8) === reason;
+  return false;
+}
+
+async function updateMissionProgress(reason) {
+  if (!currentUser?.uid || !Array.isArray(gameMissions) || gameMissions.length === 0) return;
+  for (const mission of gameMissions) {
+    if (!missionReasonMatches(mission, reason)) continue;
+    const threshold = Math.max(1, Number(mission?.objective?.threshold || 1));
+    const progressRef = missionProgressDoc(mission.id, currentUser.uid);
+    const progressSnap = await getDoc(progressRef);
+    const current = Number(progressSnap.exists() ? (progressSnap.data().current || 0) : 0);
+    const next = Math.min(threshold, current + 1);
+    const completed = next >= threshold;
+    const pct = Math.round((next / threshold) * 100);
+    await setDoc(progressRef, {
+      subjectId: currentUser.uid,
+      subjectType: 'user',
+      current: next,
+      target: threshold,
+      percent: pct,
+      completed,
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+    if (completed && !progressSnap.data()?.completed) {
+      await setDoc(gameUserStatsDoc(currentUser.uid), {
+        totals: { missionsCompleted: increment(1) },
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+    }
+  }
+}
+
+async function awardGamification(reason, context = {}) {
+  if (!currentPlantId || !currentUser?.uid) return;
+  try {
+    if (!gameConfig) {
+      const cfgSnap = await getDoc(gameConfigDoc());
+      gameConfig = cfgSnap.exists() ? cfgSnap.data() : GAME_DEFAULT_CONFIG;
+    }
+    if (!gameConfig?.enabled) return;
+    const base = Number(gameConfig.weights?.[reason] || gameConfig.penalties?.[reason] || 0);
+    const tags = Array.isArray(context.tags) ? context.tags.map(t => String(t || '').trim()).filter(Boolean) : [];
+    const customRules = Array.isArray(gameConfig.customRules) ? gameConfig.customRules : [];
+    const matchingCustomRules = customRules.filter(rule => {
+      if (rule?.isEnabled === false) return false;
+      const trigger = String(rule?.triggerKey || '').trim();
+      if (!trigger) return false;
+      return trigger === reason || tags.includes(trigger);
+    });
+    const customDelta = matchingCustomRules.reduce((sum, rule) => sum + Number(rule?.points || 0), 0);
+    const totalDelta = base + customDelta;
+    if (!totalDelta) return;
+    const issueId = context.issueId || 'none';
+    const dedupeKey = `${currentUser.uid}:${issueId}:${reason}:${context.dedupeSuffix || ''}`;
+    const dedupeSnap = await getDocs(query(gameEventsCol(), where('dedupeKey', '==', dedupeKey), limit(1)));
+    if (!dedupeSnap.empty) return;
+
+    if (reason === 'photo_attached') {
+      const photoCapKey = `photo:${issueId}`;
+      const priorPhotoCount = Number(gameCapTracker.get(photoCapKey) || 0);
+      const maxPhotos = Number(gameConfig?.caps?.photo_attached_per_issue || 0);
+      if (maxPhotos > 0 && priorPhotoCount >= maxPhotos) return;
+    }
+
+    if (reason === 'status_changed_valid') {
+      const hourBucket = Math.floor(Date.now() / 3600000);
+      const statusCapKey = `status:${issueId}:${hourBucket}`;
+      const priorStatusCount = Number(gameCapTracker.get(statusCapKey) || 0);
+      const maxStatusPerHour = Number(gameConfig?.caps?.status_changed_valid_per_issue_per_hour || 0);
+      if (maxStatusPerHour > 0 && priorStatusCount >= maxStatusPerHour) return;
+    }
+
+    const evtRef = doc(gameEventsCol());
+    const statsRef = gameUserStatsDoc(currentUser.uid);
+    const batch = writeBatch(db);
+    batch.set(evtRef, {
+      type: 'xp_awarded',
+      eventAt: serverTimestamp(),
+      actor: currentActor(),
+      source: { issueId, action: reason, tags },
+      delta: { xp: totalDelta, baseXp: base, customXp: customDelta },
+      appliedRules: matchingCustomRules.map(rule => ({ id: rule?.id || '', label: rule?.label || '', triggerKey: rule?.triggerKey || '', points: Number(rule?.points || 0) })),
+      reason,
+      dedupeKey,
+      schemaVersion: 1
+    });
+    batch.set(statsRef, {
+      userId: currentUser.uid,
+      displayName: currentUser.displayName || currentUser.email || 'User',
+      totals: { xp: increment(totalDelta) },
+      streaks: { current: increment(totalDelta > 0 ? 1 : 0) },
+      lastEventAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      schemaVersion: 1
+    }, { merge: true });
+    await batch.commit();
+
+    const currentXp = Number(gameUserStats?.totals?.xp || 0) + totalDelta;
+    const nextLevel = gameLevelFromXp(currentXp);
+    await setDoc(statsRef, { totals: { level: nextLevel } }, { merge: true });
+    await setDoc(gameLeaderboardDoc('weekly'), {
+      [`entriesByUid.${currentUser.uid}`]: {
+        uid: currentUser.uid,
+        displayName: currentUser.displayName || currentUser.email || 'User',
+        xp: currentXp,
+        updatedAt: serverTimestamp()
+      },
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+    if (reason === 'photo_attached') {
+      const photoCapKey = `photo:${issueId}`;
+      gameCapTracker.set(photoCapKey, Number(gameCapTracker.get(photoCapKey) || 0) + 1);
+    }
+    if (reason === 'status_changed_valid') {
+      const hourBucket = Math.floor(Date.now() / 3600000);
+      const statusCapKey = `status:${issueId}:${hourBucket}`;
+      gameCapTracker.set(statusCapKey, Number(gameCapTracker.get(statusCapKey) || 0) + 1);
+    }
+    await updateMissionProgress(reason);
+    showGameToast(`${totalDelta > 0 ? '+' : ''}${totalDelta} XP • ${reason.replaceAll('_', ' ')}`);
+  } catch (e) {
+    console.warn('Gamification award skipped:', e?.message || e);
+  }
+}
+
 let issues = [];
 let pendingPhotos = [];   // for add modal
 let logCatKey = null;
@@ -2044,6 +2378,23 @@ let issueLogLayoutMode = 'masonic'; // 'masonic' | 'grid'
 let issueLogLayoutRaf = null;
 let issueLogDeferredRelayoutTimer = null;
 let issueLogResizeObserver = null;
+let gameDrawerOpen = false;
+let gameConfig = null;
+let gameUserStats = { totals: { xp: 0, level: 1 }, streaks: { current: 0 } };
+let gameMissions = [];
+let gameLeaderboard = [];
+let gameStatsUnsubscribe = null;
+let gameMissionsUnsubscribe = null;
+let gameLeaderboardUnsubscribe = null;
+const gameCapTracker = new Map();
+const GAME_DEFAULT_CONFIG = {
+  enabled: true,
+  weights: { issue_created_complete: 5, status_changed_valid: 2, workflow_step_advance: 3, issue_resolved: 8, photo_attached: 2, serial_captured_when_required: 4 },
+  penalties: { issue_reopened: -6, missing_required_serial: -5, invalid_status_bounce: -2 },
+  caps: { photo_attached_per_issue: 1, status_changed_valid_per_issue_per_hour: 3 },
+  customRules: []
+};
+renderGamePanel();
 const issueLogMasonicState = {
   columnWidth: 0,
   columnCount: 1,
@@ -2070,6 +2421,7 @@ document.getElementById('google-signin-btn').addEventListener('click', signInWit
 
 async function doSignOut() {
   if (unsubscribe) { unsubscribe(); unsubscribe = null; }
+  stopGamificationListeners();
   await fbSignOut(auth);
 }
 
@@ -2110,6 +2462,9 @@ async function bootstrapSignedInSession(user) {
   buildFloorMap();
   await loadUserPlants();
   await hydrateCurrentPlantView();
+  gameConfig = null;
+  await ensureGamificationConfig();
+  startGamificationListeners();
   startListener();
   setTodayDate();
 }
@@ -3030,6 +3385,8 @@ window.submitIssue = async () => {
     });
     await batch.commit();
     attachmentPhotoCache.set(issueRef.id, uploadedPhotos);
+    await awardGamification('issue_created_complete', { issueId: issueRef.id, dedupeSuffix: 'issue-created', tags: ['issue:create', `status:${initialStatus}`] });
+    if (uploadedPhotos.length > 0) await awardGamification('photo_attached', { issueId: issueRef.id, dedupeSuffix: 'photo', tags: ['photo:attached'] });
     closeModal();
   } catch(e) { setSyncStatus('err','Error saving: '+e.message); setSubmitting(false); }
 };
@@ -3095,6 +3452,7 @@ window.saveEdit = async () => {
     });
     await batch.commit();
     attachmentPhotoCache.set(editTargetId, uploadedPhotos);
+    if (uploadedPhotos.length > 0) await awardGamification('photo_attached', { issueId: editTargetId, dedupeSuffix: 'photo', tags: ['photo:attached'] });
     closeEditModal();
   } catch(e) {
     setSyncStatus('err','Error saving: '+e.message);
@@ -3150,6 +3508,7 @@ window.confirmResolve = async () => {
       note: note || 'Resolved (no details provided)'
     });
     await batch.commit();
+    await awardGamification('issue_resolved', { issueId: resolveTargetId, dedupeSuffix: resolvedAtText, tags: ['issue:resolved', 'status:resolved'] });
     closeResolveModal();
   } catch(e) { setSyncStatus('err','Error: '+e.message); btn.disabled=false; btn.innerHTML='Mark Resolved'; }
 };
@@ -3197,6 +3556,7 @@ window.confirmReopen = async () => {
     batch.update(plantDoc('issues',reopenTargetId), issuePatch);
     queueIssueEvent(batch, reopenTargetId, 'issue_reopened', { reason: note || '' });
     await batch.commit();
+    await awardGamification('issue_reopened', { issueId: reopenTargetId, dedupeSuffix: reopenDateTime, tags: ['issue:reopened', `status:${reopenStatusKey}`] });
     closeReopenModal();
   } catch(e) { setSyncStatus('err','Error: '+e.message); btn.disabled=false; btn.innerHTML='Re-open Issue'; }
 };
@@ -3264,6 +3624,8 @@ window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
     });
     await batch.commit();
     issueEventHistoryCache.delete(id);
+    await awardGamification('status_changed_valid', { issueId: id, dedupeSuffix: entry.dateTime || String(Date.now()), tags: ['status:changed', `status:${status}`] });
+    if (status === 'resolved') await awardGamification('issue_resolved', { issueId: id, dedupeSuffix: 'status-resolved', tags: ['issue:resolved', 'status:resolved'] });
   } catch(e) { setSyncStatus('err','Error: '+e.message); }
 };
 
@@ -3538,6 +3900,7 @@ window.setSubStatus = async (id, sub) => {
       });
     }
     await batch.commit();
+    await awardGamification('status_changed_valid', { issueId: id, dedupeSuffix: 'set-sub', tags: ['status:changed', `status:${last.status || 'open'}`, `sub:${sub || ''}`] });
   }
   catch(e) { setSyncStatus('err','Error updating: '+e.message); }
 };
@@ -3555,6 +3918,7 @@ window.cycleWorkflowState = async (id) => {
   
   try {
     await updateDoc(plantDoc('issues', id), { workflowState: nextState });
+    await awardGamification('workflow_step_advance', { issueId: id, dedupeSuffix: `${currentState}->${nextState}`, tags: ['workflow:advance', `workflow:${nextState}`] });
   } catch(e) {
     setSyncStatus('err', 'Error updating workflow: ' + e.message);
   }
@@ -4694,6 +5058,7 @@ window.confirmSerialModal = async () => {
   }
   const note = 'S/N: ' + sn;
   await addStatusEntry(_serialPending.issueId, _serialPending.status, _serialPending.sub, note, _serialPending.dateTime);
+  await awardGamification('serial_captured_when_required', { issueId: _serialPending.issueId, dedupeSuffix: sn, tags: ['serial:captured'] });
   closeSerialModal();
 };
 

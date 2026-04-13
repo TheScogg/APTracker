@@ -187,6 +187,45 @@ service cloud.firestore {
         allow update: if false;
       }
 
+      // ── Gamification config ──
+      match /gamificationConfig/{configId} {
+        allow read: if isPlantMember(plantId);
+        allow write: if isAdmin(plantId);
+      }
+
+      // ── User game stats ──
+      match /userGameStats/{userId} {
+        allow read: if isPlantMember(plantId);
+        allow create, update: if isEditorOrAbove(plantId) && userId == request.resource.data.userId;
+        allow delete: if isAdmin(plantId);
+      }
+
+      // ── Missions ──
+      match /missions/{missionId} {
+        allow read: if isPlantMember(plantId);
+        allow write: if isAdmin(plantId);
+
+        match /progress/{subjectId} {
+          allow read: if isPlantMember(plantId);
+          allow create, update: if isEditorOrAbove(plantId)
+                                && request.resource.data.subjectId == currentUid();
+          allow delete: if isAdmin(plantId);
+        }
+      }
+
+      // ── Leaderboards ──
+      match /leaderboards/{boardId} {
+        allow read: if isPlantMember(plantId);
+        allow write: if isAdmin(plantId);
+      }
+
+      // ── Game events (append-only) ──
+      match /gameEvents/{eventId} {
+        allow read: if isPlantMember(plantId);
+        allow create: if isEditorOrAbove(plantId);
+        allow update, delete: if false;
+      }
+
       // ── Issues ──
       match /issues/{issueId} {
         allow read: if isPlantMember(plantId);
