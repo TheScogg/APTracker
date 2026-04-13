@@ -709,24 +709,20 @@
     outline: 2px solid var(--accent) !important;
   }
   
-  /* Workflow state row (expanded card body) */
-  .wf-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 12px; }
-  .wf-grid-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 7px 4px 6px; border-radius: 10px; border: 2px solid var(--border); background: var(--bg3); cursor: pointer; transition: all 0.18s; user-select: none; text-align: center; }
-  .wf-grid-btn:hover { filter: brightness(1.15); transform: scale(1.02); }
-  .wf-grid-btn .wf-icon { font-size: 16px; line-height: 1; }
-  .wf-grid-btn .wf-label { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text3); margin-top: 1px; }
-  .wf-grid-btn .wf-actor { font-size: 8px; color: var(--text3); font-family: 'Nunito', sans-serif; font-weight: 600; opacity: 0.85; }
-  .wf-grid-btn.pending { opacity: 0.3; }
-  .wf-grid-btn.completed { background: rgba(34,197,94,0.1); border-color: rgba(34,197,94,0.4); }
-  .wf-grid-btn.completed .wf-label { color: #22c55e; }
-  .wf-grid-btn.active.called { background: rgba(234,179,8,0.15); border-color: rgba(234,179,8,0.65); box-shadow: 0 0 14px rgba(234,179,8,0.2); }
-  .wf-grid-btn.active.called .wf-label { color: #eab308; }
-  .wf-grid-btn.active.accepted { background: rgba(34,197,94,0.15); border-color: rgba(34,197,94,0.65); box-shadow: 0 0 14px rgba(34,197,94,0.2); }
-  .wf-grid-btn.active.accepted .wf-label { color: #22c55e; }
-  .wf-grid-btn.active.in-progress { background: rgba(59,130,246,0.15); border-color: rgba(59,130,246,0.65); box-shadow: 0 0 14px rgba(59,130,246,0.2); }
-  .wf-grid-btn.active.in-progress .wf-label { color: #3b82f6; }
-  .wf-grid-btn.active.finished { background: rgba(168,85,247,0.15); border-color: rgba(168,85,247,0.65); box-shadow: 0 0 14px rgba(168,85,247,0.2); }
-  .wf-grid-btn.active.finished .wf-label { color: #a855f7; }
+  /* Header workflow wrap — small buttons + state label below */
+  .wf-steps-wrap { display: flex; flex-direction: column; align-items: center; gap: 3px; flex-shrink: 0; }
+  .wf-state-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+  .wf-state-label.called      { color: #eab308; }
+  .wf-state-label.accepted    { color: #22c55e; }
+  .wf-state-label.in-progress { color: #3b82f6; }
+  .wf-state-label.finished    { color: #a855f7; }
+
+  /* Per-status workflow rows (expanded card body) */
+  .wf-status-rows { display: flex; flex-direction: column; gap: 7px; margin-bottom: 12px; }
+  .wf-status-row { display: flex; align-items: center; gap: 8px; }
+  .wf-status-row-info { flex: 1; min-width: 0; display: flex; align-items: center; gap: 5px; }
+  .wf-status-row-icon { font-size: 14px; flex-shrink: 0; }
+  .wf-status-row-name { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .issue-full-note { font-size: 14px; line-height: 1.6; color: var(--text); margin-bottom: 10px; white-space: pre-wrap; word-break: break-word; }
   .issue-photos { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
   .issue-photo-thumb { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); cursor: pointer; transition: transform 0.15s; }
@@ -4086,6 +4082,29 @@ window.setWorkflowState = async (id, state) => {
   }
 };
 
+window.setWorkflowStateForStatus = async (issueId, statusKey, state) => {
+  const validStates = ['called', 'accepted', 'in-progress', 'finished'];
+  if (!validStates.includes(state)) return;
+  const actor = currentActor();
+  const issue = issues.find(i => i.id === issueId);
+  const primaryKey = issue ? currentStatusKey(issue) : null;
+  try {
+    const patch = {
+      [`workflowStateByStatus.${statusKey}`]: state,
+      updatedAt: serverTimestamp(),
+      updatedBy: actor
+    };
+    if (statusKey === primaryKey) {
+      patch.workflowState = state;
+      patch[`workflowStateHistory.${state}`] = { by: actor, at: serverTimestamp() };
+    }
+    await updateDoc(plantDoc('issues', issueId), patch);
+    await awardGamification('workflow_step_advance', { issueId, dedupeSuffix: `${statusKey}:${state}`, tags: ['workflow:advance', `workflow:${state}`] });
+  } catch(e) {
+    setSyncStatus('err', 'Error updating workflow: ' + e.message);
+  }
+};
+
 window.cycleWorkflowState = async (id) => {
   const issue = issues.find(i => i.id === id);
   if (!issue) return;
@@ -4391,6 +4410,9 @@ function renderIssues() {
     const datePart = issue.dateTime ? issue.dateTime.replace(/,\s*\d{4}/, '') : '';
     const submitterHtml=issue.userName?`<span class="issue-submitter">${esc(issue.userName.split(' ')[0])}${isMyIssue?' (you)':''}</span>`:'';
 
+    // Secondary status keys (needed by workflow rows below)
+    const secKeys = getSecondaryStatuses(issue).filter(k => k !== 'resolved');
+
     // Workflow state configuration
     const workflowState = issue.workflowState || 'called';
     const workflowConfig = {
@@ -4404,21 +4426,36 @@ function renderIssues() {
     const isCompleted = (state) => wfOrder.indexOf(state) < wfCurrentIdx;
     const wfStateHistory = issue.workflowStateHistory || {};
 
-    // Build compact 4-step header buttons
-    const wfHeaderHtml = `<div class="wf-steps" onclick="event.stopPropagation()">${wfOrder.map(state => {
-      const cfg = workflowConfig[state];
-      const cls = state === workflowState ? `active ${cfg.cssState}` : isCompleted(state) ? 'completed' : 'pending';
-      return `<button class="wf-step-btn ${cls}" onclick="setWorkflowState('${issue.id}','${state}')" title="${cfg.label}">${cfg.icon}</button>`;
-    }).join('')}</div>`;
+    // Build compact 4-step header buttons with state label below
+    const wfHeaderHtml = `<div class="wf-steps-wrap" onclick="event.stopPropagation()">
+      <div class="wf-steps">${wfOrder.map(state => {
+        const cfg = workflowConfig[state];
+        const cls = state === workflowState ? `active ${cfg.cssState}` : isCompleted(state) ? 'completed' : 'pending';
+        return `<button class="wf-step-btn ${cls}" onclick="setWorkflowStateForStatus('${issue.id}','${currentKey}','${state}')" title="${cfg.label}">${cfg.icon}</button>`;
+      }).join('')}</div>
+      <div class="wf-state-label ${workflowConfig[workflowState].cssState}">${workflowConfig[workflowState].label}</div>
+    </div>`;
 
-    // Build 2x2 body grid with actor tracking
-    const wfGridHtml = `<div class="wf-grid">${wfOrder.map(state => {
-      const cfg = workflowConfig[state];
-      const cls = state === workflowState ? `active ${cfg.cssState}` : isCompleted(state) ? 'completed' : 'pending';
-      const entry = wfStateHistory[state];
-      const actorName = entry?.by?.name ? entry.by.name.split(' ')[0] : '';
-      const actorHtml = actorName ? `<span class="wf-actor">by ${esc(actorName)}</span>` : '';
-      return `<button class="wf-grid-btn ${cls}" onclick="setWorkflowState('${issue.id}','${state}')"><span class="wf-icon">${cfg.icon}</span><span class="wf-label">${cfg.label}</span>${actorHtml}</button>`;
+    // Per-status workflow rows for expanded card body
+    const wfByStatus = issue.workflowStateByStatus || {};
+    const activeStatKeys = [currentKey, ...secKeys.filter(k => k !== currentKey)];
+    const wfStatusRowsHtml = `<div class="wf-status-rows">${activeStatKeys.map(sKey => {
+      const sCfg = STATUS_CONFIG_SAFE[sKey];
+      const sColor = getStatusColor(sKey);
+      const sState = wfByStatus[sKey] || (sKey === currentKey ? workflowState : 'called');
+      const sCurrentIdx = wfOrder.indexOf(sState);
+      const btnHtml = wfOrder.map(st => {
+        const cfg = workflowConfig[st];
+        const cls = st === sState ? `active ${cfg.cssState}` : wfOrder.indexOf(st) < sCurrentIdx ? 'completed' : 'pending';
+        return `<button class="wf-step-btn ${cls}" onclick="event.stopPropagation(); setWorkflowStateForStatus('${issue.id}','${sKey}','${st}')" title="${cfg.label}">${cfg.icon}</button>`;
+      }).join('');
+      return `<div class="wf-status-row">
+        <div class="wf-status-row-info" style="color:${sColor}">
+          <span class="wf-status-row-icon">${sCfg.icon}</span>
+          <span class="wf-status-row-name">${esc(sCfg.label)}</span>
+        </div>
+        <div class="wf-steps" onclick="event.stopPropagation()">${btnHtml}</div>
+      </div>`;
     }).join('')}</div>`;
 
     // Split status label from sub-status for two-line display
@@ -4426,7 +4463,6 @@ function renderIssues() {
     const subLabel = currentSubKey;
 
     // Secondary status dots (card header indicator strip)
-    const secKeys = getSecondaryStatuses(issue).filter(k => k !== 'resolved');
     const secDotsHtml = secKeys.length > 0
       ? `<div class="secondary-status-dots">${secKeys.map(k => {
           const cfg = STATUS_CONFIG_SAFE[k];
@@ -4473,7 +4509,7 @@ function renderIssues() {
         </div>
       </div>
       <div class="issue-body ${wasOpen?'visible':''}" id="body-${issue.id}">
-        ${wfGridHtml}
+        ${wfStatusRowsHtml}
         <!-- Full width content -->
         <div class="issue-full-note">${esc(issue.note)}</div>
         ${editedNote}
