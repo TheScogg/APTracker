@@ -1319,6 +1319,7 @@ function gameUserStatsDoc(userId) { return doc(db, 'plants', currentPlantId, 'us
 function gameMissionsCol() { return collection(db, 'plants', currentPlantId, 'missions'); }
 function gameLeaderboardDoc(boardId = 'weekly') { return doc(db, 'plants', currentPlantId, 'leaderboards', boardId); }
 function gameEventsCol() { return collection(db, 'plants', currentPlantId, 'gameEvents'); }
+function missionProgressDoc(missionId, subjectId) { return doc(db, 'plants', currentPlantId, 'missions', missionId, 'progress', subjectId); }
 
 function currentActor() {
   return { uid: currentUser?.uid || '', name: currentUser?.displayName || currentUser?.email || 'Unknown' };
@@ -2186,8 +2187,14 @@ function startGamificationListeners() {
     gameUserStats = snap.exists() ? snap.data() : { totals: { xp: 0, level: 1 }, streaks: { current: 0 } };
     renderGamePanel();
   });
-  gameMissionsUnsubscribe = onSnapshot(query(gameMissionsCol(), where('isActive', '==', true), orderBy('startsAt', 'desc'), limit(6)), snap => {
-    gameMissions = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  gameMissionsUnsubscribe = onSnapshot(query(gameMissionsCol(), where('isActive', '==', true), orderBy('startsAt', 'desc'), limit(6)), async snap => {
+    const missionRows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const progressRows = await Promise.all(missionRows.map(async mission => {
+      const progressSnap = await getDoc(missionProgressDoc(mission.id, currentUser.uid));
+      return { missionId: mission.id, progress: progressSnap.exists() ? progressSnap.data() : null };
+    }));
+    const progressMap = new Map(progressRows.map(row => [row.missionId, row.progress]));
+    gameMissions = missionRows.map(m => ({ ...m, progress: progressMap.get(m.id) || null }));
     renderGamePanel();
   });
   gameLeaderboardUnsubscribe = onSnapshot(gameLeaderboardDoc('weekly'), snap => {
@@ -2203,6 +2210,46 @@ function startGamificationListeners() {
   });
 }
 
+function missionReasonMatches(mission, reason) {
+  const type = mission?.objective?.type || '';
+  if (type === 'resolve_issues_older_than_hours') return reason === 'issue_resolved';
+  if (type === 'status_changes') return reason === 'status_changed_valid';
+  if (type === 'workflow_advances') return reason === 'workflow_step_advance';
+  if (type === 'serial_captures') return reason === 'serial_captured_when_required';
+  if (type === 'photo_attachments') return reason === 'photo_attached';
+  if (type === 'issues_created') return reason === 'issue_created_complete';
+  return false;
+}
+
+async function updateMissionProgress(reason) {
+  if (!currentUser?.uid || !Array.isArray(gameMissions) || gameMissions.length === 0) return;
+  for (const mission of gameMissions) {
+    if (!missionReasonMatches(mission, reason)) continue;
+    const threshold = Math.max(1, Number(mission?.objective?.threshold || 1));
+    const progressRef = missionProgressDoc(mission.id, currentUser.uid);
+    const progressSnap = await getDoc(progressRef);
+    const current = Number(progressSnap.exists() ? (progressSnap.data().current || 0) : 0);
+    const next = Math.min(threshold, current + 1);
+    const completed = next >= threshold;
+    const pct = Math.round((next / threshold) * 100);
+    await setDoc(progressRef, {
+      subjectId: currentUser.uid,
+      subjectType: 'user',
+      current: next,
+      target: threshold,
+      percent: pct,
+      completed,
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+    if (completed && !progressSnap.data()?.completed) {
+      await setDoc(gameUserStatsDoc(currentUser.uid), {
+        totals: { missionsCompleted: increment(1) },
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+    }
+  }
+}
+
 async function awardGamification(reason, context = {}) {
   if (!currentPlantId || !currentUser?.uid) return;
   try {
@@ -2215,6 +2262,24 @@ async function awardGamification(reason, context = {}) {
     if (!base) return;
     const issueId = context.issueId || 'none';
     const dedupeKey = `${currentUser.uid}:${issueId}:${reason}:${context.dedupeSuffix || ''}`;
+    const dedupeSnap = await getDocs(query(gameEventsCol(), where('dedupeKey', '==', dedupeKey), limit(1)));
+    if (!dedupeSnap.empty) return;
+
+    if (reason === 'photo_attached') {
+      const photoCapKey = `photo:${issueId}`;
+      const priorPhotoCount = Number(gameCapTracker.get(photoCapKey) || 0);
+      const maxPhotos = Number(gameConfig?.caps?.photo_attached_per_issue || 0);
+      if (maxPhotos > 0 && priorPhotoCount >= maxPhotos) return;
+    }
+
+    if (reason === 'status_changed_valid') {
+      const hourBucket = Math.floor(Date.now() / 3600000);
+      const statusCapKey = `status:${issueId}:${hourBucket}`;
+      const priorStatusCount = Number(gameCapTracker.get(statusCapKey) || 0);
+      const maxStatusPerHour = Number(gameConfig?.caps?.status_changed_valid_per_issue_per_hour || 0);
+      if (maxStatusPerHour > 0 && priorStatusCount >= maxStatusPerHour) return;
+    }
+
     const evtRef = doc(gameEventsCol());
     const statsRef = gameUserStatsDoc(currentUser.uid);
     const batch = writeBatch(db);
@@ -2242,6 +2307,16 @@ async function awardGamification(reason, context = {}) {
       },
       updatedAt: serverTimestamp()
     }, { merge: true });
+    if (reason === 'photo_attached') {
+      const photoCapKey = `photo:${issueId}`;
+      gameCapTracker.set(photoCapKey, Number(gameCapTracker.get(photoCapKey) || 0) + 1);
+    }
+    if (reason === 'status_changed_valid') {
+      const hourBucket = Math.floor(Date.now() / 3600000);
+      const statusCapKey = `status:${issueId}:${hourBucket}`;
+      gameCapTracker.set(statusCapKey, Number(gameCapTracker.get(statusCapKey) || 0) + 1);
+    }
+    await updateMissionProgress(reason);
     showGameToast(`${base > 0 ? '+' : ''}${base} XP • ${reason.replaceAll('_', ' ')}`);
   } catch (e) {
     console.warn('Gamification award skipped:', e?.message || e);
@@ -2274,6 +2349,7 @@ let gameLeaderboard = [];
 let gameStatsUnsubscribe = null;
 let gameMissionsUnsubscribe = null;
 let gameLeaderboardUnsubscribe = null;
+const gameCapTracker = new Map();
 const GAME_DEFAULT_CONFIG = {
   enabled: true,
   weights: { issue_created_complete: 5, status_changed_valid: 2, workflow_step_advance: 3, issue_resolved: 8, photo_attached: 2, serial_captured_when_required: 4 },
@@ -3271,8 +3347,8 @@ window.submitIssue = async () => {
     });
     await batch.commit();
     attachmentPhotoCache.set(issueRef.id, uploadedPhotos);
-    await awardGamification('issue_created_complete', { issueId: issueRef.id, dedupeSuffix: String(Date.now()) });
-    if (uploadedPhotos.length > 0) await awardGamification('photo_attached', { issueId: issueRef.id, dedupeSuffix: 'create-photo' });
+    await awardGamification('issue_created_complete', { issueId: issueRef.id, dedupeSuffix: 'issue-created' });
+    if (uploadedPhotos.length > 0) await awardGamification('photo_attached', { issueId: issueRef.id, dedupeSuffix: 'photo' });
     closeModal();
   } catch(e) { setSyncStatus('err','Error saving: '+e.message); setSubmitting(false); }
 };
@@ -3338,7 +3414,7 @@ window.saveEdit = async () => {
     });
     await batch.commit();
     attachmentPhotoCache.set(editTargetId, uploadedPhotos);
-    if (uploadedPhotos.length > 0) await awardGamification('photo_attached', { issueId: editTargetId, dedupeSuffix: 'edit-photo' });
+    if (uploadedPhotos.length > 0) await awardGamification('photo_attached', { issueId: editTargetId, dedupeSuffix: 'photo' });
     closeEditModal();
   } catch(e) {
     setSyncStatus('err','Error saving: '+e.message);
@@ -3394,7 +3470,7 @@ window.confirmResolve = async () => {
       note: note || 'Resolved (no details provided)'
     });
     await batch.commit();
-    await awardGamification('issue_resolved', { issueId: resolveTargetId, dedupeSuffix: String(Date.now()) });
+    await awardGamification('issue_resolved', { issueId: resolveTargetId, dedupeSuffix: resolvedAtText });
     closeResolveModal();
   } catch(e) { setSyncStatus('err','Error: '+e.message); btn.disabled=false; btn.innerHTML='Mark Resolved'; }
 };
@@ -3442,7 +3518,7 @@ window.confirmReopen = async () => {
     batch.update(plantDoc('issues',reopenTargetId), issuePatch);
     queueIssueEvent(batch, reopenTargetId, 'issue_reopened', { reason: note || '' });
     await batch.commit();
-    await awardGamification('issue_reopened', { issueId: reopenTargetId, dedupeSuffix: String(Date.now()) });
+    await awardGamification('issue_reopened', { issueId: reopenTargetId, dedupeSuffix: reopenDateTime });
     closeReopenModal();
   } catch(e) { setSyncStatus('err','Error: '+e.message); btn.disabled=false; btn.innerHTML='Re-open Issue'; }
 };

@@ -204,6 +204,13 @@ service cloud.firestore {
       match /missions/{missionId} {
         allow read: if isPlantMember(plantId);
         allow write: if isAdmin(plantId);
+
+        match /progress/{subjectId} {
+          allow read: if isPlantMember(plantId);
+          allow create, update: if isEditorOrAbove(plantId)
+                                && request.resource.data.subjectId == currentUid();
+          allow delete: if isAdmin(plantId);
+        }
       }
 
       // ── Leaderboards ──
