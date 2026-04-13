@@ -719,11 +719,9 @@
 
   /* Per-status workflow rows (always-visible, inside card header) */
   .wf-status-rows { display: flex; flex-direction: column; gap: 0; margin-top: 8px; border-top: 1px solid var(--border); }
-  .wf-status-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .wf-status-row { display: flex; align-items: flex-start; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--border); }
   .wf-status-row:last-child { border-bottom: none; }
-  .wf-status-row-info { flex: 1; min-width: 0; display: flex; align-items: center; gap: 5px; }
-  .wf-status-row-icon { font-size: 14px; flex-shrink: 0; }
-  .wf-status-row-name { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .wf-status-row-info { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
   .issue-full-note { font-size: 14px; line-height: 1.6; color: var(--text); margin-bottom: 10px; white-space: pre-wrap; word-break: break-word; }
   .issue-photos { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
   .issue-photo-thumb { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); cursor: pointer; transition: transform 0.15s; }
@@ -4451,17 +4449,24 @@ function renderIssues() {
           const sColor = getStatusColor(sKey);
           const sState = wfByStatus[sKey] || 'called';
           const sCurrentIdx = wfOrder.indexOf(sState);
+          const lastEntry = [...displayHistory].reverse().find(e => e.status === sKey);
+          const sSubLabel = lastEntry?.subStatus || '';
           const btnHtml = wfOrder.map(st => {
             const cfg = workflowConfig[st];
             const cls = st === sState ? `active ${cfg.cssState}` : wfOrder.indexOf(st) < sCurrentIdx ? 'completed' : 'pending';
             return `<button class="wf-step-btn ${cls}" onclick="event.stopPropagation(); setWorkflowStateForStatus('${issue.id}','${sKey}','${st}')" title="${cfg.label}">${cfg.icon}</button>`;
           }).join('');
           return `<div class="wf-status-row">
-            <div class="wf-status-row-info" style="color:${sColor}">
-              <span class="wf-status-row-icon">${sCfg.icon}</span>
-              <span class="wf-status-row-name">${esc(sCfg.label)}</span>
+            <div class="wf-status-row-info">
+              <div class="issue-status" style="color:${sColor};border-color:${sColor};background:${alphaColor(sColor,0.12)}">
+                <span class="issue-status-main">${sCfg.icon} ${esc(sCfg.label)}</span>
+              </div>
+              ${sSubLabel ? `<span class="issue-status-sub" style="color:${sColor};">${esc(sSubLabel)}</span>` : ''}
             </div>
-            <div class="wf-steps" onclick="event.stopPropagation()">${btnHtml}</div>
+            <div class="wf-steps-wrap" onclick="event.stopPropagation()">
+              <div class="wf-steps">${btnHtml}</div>
+              <div class="wf-state-label ${workflowConfig[sState].cssState}">${workflowConfig[sState].label}</div>
+            </div>
           </div>`;
         }).join('')}</div>`
       : '';
