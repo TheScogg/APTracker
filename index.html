@@ -717,9 +717,10 @@
   .wf-state-label.in-progress { color: #3b82f6; }
   .wf-state-label.finished    { color: #a855f7; }
 
-  /* Per-status workflow rows (expanded card body) */
-  .wf-status-rows { display: flex; flex-direction: column; gap: 7px; margin-bottom: 12px; }
-  .wf-status-row { display: flex; align-items: center; gap: 8px; }
+  /* Per-status workflow rows (always-visible, inside card header) */
+  .wf-status-rows { display: flex; flex-direction: column; gap: 0; margin-top: 8px; border-top: 1px solid var(--border); }
+  .wf-status-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .wf-status-row:last-child { border-bottom: none; }
   .wf-status-row-info { flex: 1; min-width: 0; display: flex; align-items: center; gap: 5px; }
   .wf-status-row-icon { font-size: 14px; flex-shrink: 0; }
   .wf-status-row-name { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -4445,7 +4446,7 @@ function renderIssues() {
     )].filter(k => wfByStatus[k] !== 'finished');
 
     const wfStatusRowsHtml = histStatKeys.length > 0
-      ? `<div class="wf-status-rows">${histStatKeys.map(sKey => {
+      ? `<div class="wf-status-rows" onclick="event.stopPropagation()">${histStatKeys.map(sKey => {
           const sCfg = STATUS_CONFIG_SAFE[sKey];
           const sColor = getStatusColor(sKey);
           const sState = wfByStatus[sKey] || 'called';
@@ -4499,9 +4500,9 @@ function renderIssues() {
           </div>
           ${wfHeaderHtml}
         </div>
+        ${wfStatusRowsHtml}
       </div>
       <div class="issue-body ${wasOpen?'visible':''}" id="body-${issue.id}">
-        ${wfStatusRowsHtml}
         <!-- Full width content -->
         <div class="issue-full-note">${esc(issue.note)}</div>
         ${editedNote}
