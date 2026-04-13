@@ -741,8 +741,9 @@
   .tl-line { position: absolute; left: 5px; top: 6px; bottom: 6px; width: 1px; background: var(--border); }
   .tl-entry { position: relative; padding-bottom: 10px; }
   .tl-entry:last-child { padding-bottom: 0; }
-  .tl-dot { position: absolute; left: -16px; top: 3px; width: 10px; height: 10px; border-radius: 50%; border: 2px solid; background: var(--bg2); }
-  .tl-dot.current { width: 12px; height: 12px; left: -17px; top: 2px; }
+  .tl-dot { position: absolute; left: -20px; top: -1px; width: 18px; height: 18px; border-radius: 999px; border: 2px solid; background: var(--bg2); display:flex; align-items:center; justify-content:center; font-size:10px; line-height:1; padding:0; color: var(--text); }
+  .tl-dot.current { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent); }
+  .tl-dot.is-button { cursor: pointer; }
   .tl-header { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
   .tl-status-label { font-size: 15px; font-weight: 700; }
   .tl-current-tag { font-size: 9px; background: var(--accent-glow); color: var(--accent); border: 1px solid rgba(249,115,22,0.4); border-radius: 8px; padding: 1px 6px; font-family: 'Share Tech Mono', monospace; }
@@ -4436,9 +4437,17 @@ function renderIssues() {
       const entryWorkflowState = isResolvedEntry
         ? 'finished'
         : (entry.status === currentKey ? workflowState : (wfByStatus[entry.status] || 'called'));
+      const wfCfg = workflowConfig[entryWorkflowState] || workflowConfig.called;
+      const wfColor = entryWorkflowState === 'called' ? '#16a34a'
+        : entryWorkflowState === 'accepted' ? '#16a34a'
+        : entryWorkflowState === 'in-progress' ? '#3b82f6'
+        : '#a855f7';
+      const dotEl = !isResolvedEntry
+        ? `<button class="tl-dot is-button${isCurrent?' current':''}" style="border-color:${wfColor};background:${alphaColor(wfColor,0.18)};color:${wfColor};" onclick="event.stopPropagation(); cycleWorkflowStateForStatus('${issue.id}','${entry.status}')" title="Workflow: ${wfCfg.label}. Tap to change.">${wfCfg.icon}</button>`
+        : `<div class="tl-dot${isCurrent?' current':''}" style="border-color:${cfg.color};background:${cfg.color};color:#111;">${cfg.icon}</div>`;
 
       return `<div class="tl-entry">
-        <div class="tl-dot${isCurrent?' current':''}" style="border-color:${cfg.color};${isCurrent?'background:'+cfg.color:'background:var(--bg2)'}"></div>
+        ${dotEl}
         <div>
           <div class="tl-header">
             <span class="tl-status-label" style="color:${cfg.color}">${cfg.icon} ${cfg.label}${entry.subStatus?' › '+esc(entry.subStatus):''}</span>
