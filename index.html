@@ -652,13 +652,13 @@
     outline: 2px solid var(--accent) !important;
   }
   
-  /* Workflow state grid (expanded card body) */
-  .wf-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
-  .wf-grid-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 12px 8px 10px; border-radius: 12px; border: 2px solid var(--border); background: var(--bg3); cursor: pointer; transition: all 0.18s; user-select: none; text-align: center; }
+  /* Workflow state row (expanded card body) */
+  .wf-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 12px; }
+  .wf-grid-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 7px 4px 6px; border-radius: 10px; border: 2px solid var(--border); background: var(--bg3); cursor: pointer; transition: all 0.18s; user-select: none; text-align: center; }
   .wf-grid-btn:hover { filter: brightness(1.15); transform: scale(1.02); }
-  .wf-grid-btn .wf-icon { font-size: 22px; line-height: 1; }
-  .wf-grid-btn .wf-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text3); margin-top: 1px; }
-  .wf-grid-btn .wf-actor { font-size: 10px; color: var(--text3); font-family: 'Nunito', sans-serif; font-weight: 600; opacity: 0.85; }
+  .wf-grid-btn .wf-icon { font-size: 16px; line-height: 1; }
+  .wf-grid-btn .wf-label { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text3); margin-top: 1px; }
+  .wf-grid-btn .wf-actor { font-size: 8px; color: var(--text3); font-family: 'Nunito', sans-serif; font-weight: 600; opacity: 0.85; }
   .wf-grid-btn.pending { opacity: 0.3; }
   .wf-grid-btn.completed { background: rgba(34,197,94,0.1); border-color: rgba(34,197,94,0.4); }
   .wf-grid-btn.completed .wf-label { color: #22c55e; }
