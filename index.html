@@ -4436,27 +4436,34 @@ function renderIssues() {
       <div class="wf-state-label ${workflowConfig[workflowState].cssState}">${workflowConfig[workflowState].label}</div>
     </div>`;
 
-    // Per-status workflow rows for expanded card body
+    // Per-status workflow rows for expanded card body — derived from status history
+    // Shows each department called (unique status keys from history), excluding the
+    // primary status (already in header) and any already marked 'finished'
     const wfByStatus = issue.workflowStateByStatus || {};
-    const activeStatKeys = [currentKey, ...secKeys.filter(k => k !== currentKey)];
-    const wfStatusRowsHtml = `<div class="wf-status-rows">${activeStatKeys.map(sKey => {
-      const sCfg = STATUS_CONFIG_SAFE[sKey];
-      const sColor = getStatusColor(sKey);
-      const sState = wfByStatus[sKey] || (sKey === currentKey ? workflowState : 'called');
-      const sCurrentIdx = wfOrder.indexOf(sState);
-      const btnHtml = wfOrder.map(st => {
-        const cfg = workflowConfig[st];
-        const cls = st === sState ? `active ${cfg.cssState}` : wfOrder.indexOf(st) < sCurrentIdx ? 'completed' : 'pending';
-        return `<button class="wf-step-btn ${cls}" onclick="event.stopPropagation(); setWorkflowStateForStatus('${issue.id}','${sKey}','${st}')" title="${cfg.label}">${cfg.icon}</button>`;
-      }).join('');
-      return `<div class="wf-status-row">
-        <div class="wf-status-row-info" style="color:${sColor}">
-          <span class="wf-status-row-icon">${sCfg.icon}</span>
-          <span class="wf-status-row-name">${esc(sCfg.label)}</span>
-        </div>
-        <div class="wf-steps" onclick="event.stopPropagation()">${btnHtml}</div>
-      </div>`;
-    }).join('')}</div>`;
+    const histStatKeys = [...new Set(
+      displayHistory.map(e => e.status).filter(k => k && k !== 'open' && k !== 'resolved' && k !== currentKey)
+    )].filter(k => wfByStatus[k] !== 'finished');
+
+    const wfStatusRowsHtml = histStatKeys.length > 0
+      ? `<div class="wf-status-rows">${histStatKeys.map(sKey => {
+          const sCfg = STATUS_CONFIG_SAFE[sKey];
+          const sColor = getStatusColor(sKey);
+          const sState = wfByStatus[sKey] || 'called';
+          const sCurrentIdx = wfOrder.indexOf(sState);
+          const btnHtml = wfOrder.map(st => {
+            const cfg = workflowConfig[st];
+            const cls = st === sState ? `active ${cfg.cssState}` : wfOrder.indexOf(st) < sCurrentIdx ? 'completed' : 'pending';
+            return `<button class="wf-step-btn ${cls}" onclick="event.stopPropagation(); setWorkflowStateForStatus('${issue.id}','${sKey}','${st}')" title="${cfg.label}">${cfg.icon}</button>`;
+          }).join('');
+          return `<div class="wf-status-row">
+            <div class="wf-status-row-info" style="color:${sColor}">
+              <span class="wf-status-row-icon">${sCfg.icon}</span>
+              <span class="wf-status-row-name">${esc(sCfg.label)}</span>
+            </div>
+            <div class="wf-steps" onclick="event.stopPropagation()">${btnHtml}</div>
+          </div>`;
+        }).join('')}</div>`
+      : '';
 
     // Split status label from sub-status for two-line display
     const baseLabel = scfg.label;
@@ -4469,21 +4476,6 @@ function renderIssues() {
           const col = getStatusColor(k);
           return `<span class="secondary-dot" style="color:${col};border-color:${col};background:${alphaColor(col,0.12)}">${cfg.icon} ${cfg.label}</span>`;
         }).join('')}</div>`
-      : '';
-
-    // "Also Waiting On" toggle chips for expanded card body
-    const alsoNeedsOrder = (window._STATUS_ORDER || Object.keys(STATUSES))
-      .filter(k => k !== 'open' && k !== 'resolved' && k !== currentKey);
-    const alsoNeedsHtml = currentUserPermissions.canEditIssue || secKeys.length > 0
-      ? `<div class="also-needs-section">
-          <div class="also-needs-label">Also Waiting On</div>
-          <div class="also-needs-chips">${alsoNeedsOrder.map(k => {
-            const cfg = STATUS_CONFIG_SAFE[k];
-            const col = getStatusColor(k);
-            const isActive = secKeys.includes(k);
-            return `<div class="also-chip ${isActive ? 'active' : 'inactive'}" style="color:${col};border-color:${col};background:${alphaColor(col, isActive ? 0.15 : 0.05)}" onclick="event.stopPropagation(); toggleSecondaryStatus('${issue.id}','${k}')">${cfg.icon} ${cfg.label}</div>`;
-          }).join('')}</div>
-        </div>`
       : '';
 
     card.innerHTML=`
@@ -4514,7 +4506,6 @@ function renderIssues() {
         <div class="issue-full-note">${esc(issue.note)}</div>
         ${editedNote}
         ${photosHtml}
-        ${alsoNeedsHtml}
         <div class="divider"></div>
         ${resolveHtml}
       </div>`;
