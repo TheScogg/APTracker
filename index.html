@@ -4598,6 +4598,10 @@ function renderIssues() {
         <div class="divider"></div>
         ${resolveHtml}
       </div>`;
+    // Safety cleanup: remove any legacy "Workflow: ..." pill buttons from status history rows.
+    card.querySelectorAll('.status-timeline button').forEach(btn => {
+      if (/^workflow\s*:/i.test((btn.textContent || '').trim())) btn.remove();
+    });
     row.appendChild(card);
 
     // Add teaser strip (gradient bar that peeks out during left swipe)
