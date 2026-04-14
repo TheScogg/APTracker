@@ -737,16 +737,15 @@
 
   /* STATUS TIMELINE */
   .status-timeline { margin-top: 8px; }
-  .tl-list { display: flex; flex-direction: column; gap: 0; position: relative; padding-left: 46px; }
-  .tl-entry { position: relative; padding: 2px 0 6px; }
-  .tl-entry:last-child { padding-bottom: 0; }
-  .tl-dot { position: absolute; left: -42px; top: 22px; transform: translateY(-50%); width: 34px; height: 34px; border-radius: 999px; border: 2px solid; background: var(--bg2); display:flex; align-items:center; justify-content:center; font-size:17px; line-height:1; padding:0; color: var(--text); }
-  .tl-dot.current { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent); }
-  .tl-dot.is-button { cursor: pointer; appearance: none; -webkit-appearance: none; }
+  .tl-list { display: flex; flex-direction: column; gap: 8px; position: relative; }
+  .tl-entry { position: relative; padding: 10px 12px 8px 14px; border-radius: 10px; background: var(--bg2); border: 1px solid var(--border); border-left: 3px solid transparent; }
+  .tl-wf-badge { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; display: inline-flex; align-items: center; gap: 4px; margin-bottom: 5px; background: none; border: none; padding: 0; cursor: pointer; font-family: 'Rajdhani', sans-serif; }
+  .tl-wf-badge:hover { opacity: 0.75; }
+  .tl-wf-badge.no-action { cursor: default; }
+  .tl-wf-badge.no-action:hover { opacity: 1; }
   .tl-header { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-  .tl-status-label { font-size: 15px; font-weight: 700; }
-  .tl-current-tag { font-size: 9px; background: var(--accent-glow); color: var(--accent); border: 1px solid rgba(249,115,22,0.4); border-radius: 8px; padding: 1px 6px; font-family: 'Share Tech Mono', monospace; }
-  .tl-time { font-size: 12px; font-weight: 600; color: var(--text2); font-family: 'Nunito', sans-serif; }
+  .tl-status-label { font-size: 15px; font-weight: 700; line-height: 1.3; }
+  .tl-time { font-size: 12px; font-weight: 600; color: var(--text2); font-family: 'Nunito', sans-serif; margin-top: 3px; }
   .tl-note-text { font-size: 13px; color: var(--text2); margin-top: 4px; font-style: italic; }
   .tl-edit-row { display: flex; gap: 5px; margin-top: 5px; flex-wrap: wrap; align-items: center; }
   .tl-mini-select { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 4px 7px; color: var(--text); font-size: 11px; font-family: 'Nunito', sans-serif; outline: none; max-width: 100%; min-width: 0; user-select: auto; pointer-events: auto; }
@@ -4415,10 +4414,10 @@ function renderIssues() {
     // Workflow state configuration
     const workflowState = issue.workflowState || 'called';
     const workflowConfig = {
-      called:      { icon: '📣', label: 'Called',      cssState: 'called' },
+      called:      { icon: '🔔', label: 'Called',      cssState: 'called' },
       accepted:    { icon: '👋', label: 'Accepted',    cssState: 'accepted' },
       'in-progress': { icon: '🔧', label: 'In Progress', cssState: 'in-progress' },
-      finished:    { icon: '✅', label: 'Finished',    cssState: 'finished' }
+      finished:    { icon: '✓',  label: 'Finished',    cssState: 'finished' }
     };
     const wfOrder = ['called', 'accepted', 'in-progress', 'finished'];
     const wfCurrentIdx = wfOrder.indexOf(workflowState);
@@ -4437,25 +4436,31 @@ function renderIssues() {
         ? 'finished'
         : (entry.status === currentKey ? workflowState : (wfByStatus[entry.status] || 'called'));
       const wfCfg = workflowConfig[entryWorkflowState] || workflowConfig.called;
-      const wfColor = entryWorkflowState === 'called' ? '#16a34a'
-        : entryWorkflowState === 'accepted' ? '#16a34a'
+      const wfColor = entryWorkflowState === 'called' ? '#eab308'
+        : entryWorkflowState === 'accepted' ? '#22c55e'
         : entryWorkflowState === 'in-progress' ? '#3b82f6'
         : '#a855f7';
-      const dotEl = !isResolvedEntry
-        ? `<button class="tl-dot is-button${isCurrent?' current':''}" style="border-color:${wfColor};background:${alphaColor(wfColor,0.18)};color:${wfColor};" onclick="event.stopPropagation(); cycleWorkflowStateForStatus('${issue.id}','${entry.status}')" title="Workflow: ${wfCfg.label}. Tap to change.">${wfCfg.icon}</button>`
-        : `<div class="tl-dot${isCurrent?' current':''}" style="border-color:${cfg.color};background:${cfg.color};color:#111;">${cfg.icon}</div>`;
 
-      return `<div class="tl-entry">
-        ${dotEl}
+      // Left bar color: workflow state color for regular entries, status color for resolved
+      const barColor = isResolvedEntry ? cfg.color : wfColor;
+      // Subtle tinted background using bar color
+      const entryBg = `background:${alphaColor(barColor, 0.05)};`;
+
+      // Workflow badge (clickable for non-resolved entries to cycle state)
+      const wfBadgeLabel = `${wfCfg.icon} ${wfCfg.label.toUpperCase()}${isCurrent ? ' · CURRENT' : ''}`;
+      const wfBadge = isResolvedEntry
+        ? `<div class="tl-wf-badge no-action" style="color:${cfg.color}">${cfg.icon} RESOLVED${isCurrent ? ' · CURRENT' : ''}</div>`
+        : `<button class="tl-wf-badge" style="color:${wfColor}" onclick="event.stopPropagation(); cycleWorkflowStateForStatus('${issue.id}','${entry.status}')" title="Tap to cycle workflow state">${wfBadgeLabel}</button>`;
+
+      return `<div class="tl-entry" style="border-left-color:${barColor};${entryBg}">
+        ${wfBadge}
         <div>
           <div class="tl-header">
-            <span class="tl-status-label" style="color:${cfg.color}">${cfg.icon} ${cfg.label}${entry.subStatus?' › '+esc(entry.subStatus):''}</span>
-            ${isCurrent?'<span class="tl-current-tag">current</span>':''}
+            <span class="tl-status-label" style="color:${cfg.color}">${cfg.label}${entry.subStatus?' › '+esc(entry.subStatus):''}</span>
           </div>
           <div class="tl-time">${entry.dateTime||''}${entry.by?' — '+esc(entry.by):''}</div>
-          ${!isResolvedEntry ? `<div style="margin-top:4px;"><button class="tl-mini-btn" onclick="event.stopPropagation(); cycleWorkflowStateForStatus('${issue.id}','${entry.status}')" title="Tap to cycle workflow state">Workflow: ${workflowConfig[entryWorkflowState]?.label || 'Called'}</button></div>` : ''}
           ${entry.note?`<div class="tl-note-text">"${esc(entry.note)}"</div>`:''}
-          ${currentUserPermissions.canEditIssue ? `<div style="display:flex;gap:5px;margin-top:4px;">
+          ${currentUserPermissions.canEditIssue ? `<div style="display:flex;gap:5px;margin-top:6px;">
             ${!isResolvedEntry && !isCurrent ? `<button class="tl-edit-btn" onclick="setStatusCurrentFromHistory('${issue.id}',${trueIdx})">Set current</button>` : ''}
             ${!isResolvedEntry && entryWorkflowState === 'finished' ? `<button class="tl-edit-btn" onclick="setWorkflowStateForStatus('${issue.id}','${entry.status}','called')">Un-finish</button>` : ''}
             <button class="tl-edit-btn" onclick="startEditEntry('${issue.id}',${trueIdx})">✏ Edit</button>
