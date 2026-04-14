@@ -4453,6 +4453,7 @@ function renderIssues() {
             ${isCurrent?'<span class="tl-current-tag">current</span>':''}
           </div>
           <div class="tl-time">${entry.dateTime||''}${entry.by?' — '+esc(entry.by):''}</div>
+          ${!isResolvedEntry ? `<div style="margin-top:4px;"><button class="tl-mini-btn" onclick="event.stopPropagation(); cycleWorkflowStateForStatus('${issue.id}','${entry.status}')" title="Tap to cycle workflow state">Workflow: ${workflowConfig[entryWorkflowState]?.label || 'Called'}</button></div>` : ''}
           ${entry.note?`<div class="tl-note-text">"${esc(entry.note)}"</div>`:''}
           ${currentUserPermissions.canEditIssue ? `<div style="display:flex;gap:5px;margin-top:4px;">
             ${!isResolvedEntry && !isCurrent ? `<button class="tl-edit-btn" onclick="setStatusCurrentFromHistory('${issue.id}',${trueIdx})">Set current</button>` : ''}
