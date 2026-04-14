@@ -4,7 +4,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AP Tracker</title>
+<title>AP-Tracker</title>
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&family=Nunito:wght@300;400;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <style>
@@ -213,7 +213,7 @@
   .plant-dropdown-divider { height: 1px; background: var(--border); }
   .plant-add-btn { display: flex; align-items: center; gap: 8px; padding: 10px 14px; font-size: 12px; color: var(--accent); cursor: pointer; transition: background 0.1s; border: none; background: none; width: 100%; text-align: left; font-family: 'Nunito', sans-serif; font-weight: 700; }
   .plant-add-btn:hover { background: var(--bg3); }
-  .game-pill { display: flex; align-items: center; gap: 6px; background: linear-gradient(135deg, var(--bg3), rgba(168,85,247,0.13)); border: 1px solid rgba(168,85,247,0.25); border-radius: 999px; padding: 5px 10px; cursor: pointer; color: var(--text2); font-size: 12px; font-weight: 700; font-family: 'Share Tech Mono', monospace; transition: all 0.15s; white-space: nowrap; box-shadow: 0 0 0 1px rgba(168,85,247,0.08); }
+  .game-pill { display: flex; align-items: center; gap: 6px; background: linear-gradient(135deg, var(--bg3), rgba(168,85,247,0.13)); border: 1px solid rgba(168,85,247,0.25); border-radius: 999px; padding: 5px 10px; cursor: pointer; color: var(--text2); font-size: 12px; font-weight: 700; font-family: 'Share Tech Mono', monospace; transition: all 0.15s; white-space: nowrap; box-shadow: 0 0 0 1px rgba(168,85,247,0.08); position: relative; }
   .game-pill:hover { border-color: var(--purple); color: var(--text); box-shadow: 0 0 0 1px rgba(168,85,247,0.2); }
   .game-pill .game-pill-xp { color: var(--purple); font-weight: 800; }
   .game-pill .game-pill-mission { color: var(--babyblue); }
@@ -257,6 +257,29 @@
   .game-levelup-title { font-family: 'Rajdhani', sans-serif; font-size: 22px; letter-spacing: 1px; margin-top: 4px; color: var(--text); }
   @keyframes levelUpPop { 0%{opacity:0;transform:scale(0.5) translateY(40px)} 70%{opacity:1;transform:scale(1.06) translateY(-4px)} 100%{opacity:1;transform:scale(1) translateY(0)} }
   @media (max-width: 700px) { .game-drawer { width: 100vw; max-width: 100vw; } }
+  /* Notification badge on game pill */
+  .game-pill-badge { position: absolute; top: -3px; right: -3px; width: 11px; height: 11px; border-radius: 50%; background: var(--green); border: 2px solid var(--bg2); animation: badgePulse 2s ease-in-out infinite; }
+  @keyframes badgePulse { 0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,0.5)} 50%{box-shadow:0 0 0 5px rgba(34,197,94,0)} }
+  /* Confetti */
+  .confetti-container { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+  .confetti-piece { position: absolute; top: -10px; border-radius: 2px; animation: confettiFall linear forwards; }
+  @keyframes confettiFall { 0%{transform:translateY(0) rotate(0deg);opacity:1} 100%{transform:translateY(110vh) rotate(720deg);opacity:0} }
+  /* Mission complete overlay */
+  .game-mission-complete-overlay { position: fixed; inset: 0; z-index: 502; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+  .game-mission-complete-card { background: var(--bg2); border: 1px solid rgba(34,197,94,0.5); border-radius: 20px; padding: 28px 40px; text-align: center; box-shadow: 0 0 60px rgba(34,197,94,0.25), 0 24px 80px rgba(0,0,0,0.6); animation: levelUpPop 0.4s cubic-bezier(0.34,1.56,0.64,1) both; position: relative; z-index: 1; max-width: 320px; width: 90vw; }
+  .game-mission-complete-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--green); margin-bottom: 6px; }
+  .game-mission-complete-name { font-family: 'Rajdhani', sans-serif; font-size: 20px; font-weight: 700; color: var(--text); margin: 8px 0 4px; }
+  .game-mission-complete-xp { font-family: 'Rajdhani', sans-serif; font-size: 28px; font-weight: 700; color: var(--yellow); }
+  /* Badge earned overlay (reuses mission-complete styles) */
+  .game-badge-complete-card { background: var(--bg2); border: 1px solid rgba(168,85,247,0.5); border-radius: 20px; padding: 28px 40px; text-align: center; box-shadow: 0 0 60px rgba(168,85,247,0.25), 0 24px 80px rgba(0,0,0,0.6); animation: levelUpPop 0.4s cubic-bezier(0.34,1.56,0.64,1) both; position: relative; z-index: 1; max-width: 320px; width: 90vw; }
+  .game-badge-icon { font-size: 48px; line-height: 1; display: block; margin-bottom: 8px; }
+  /* Badge grid in drawer */
+  .game-badge-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); gap: 8px; }
+  .game-badge-tile { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 6px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .game-badge-tile.earned { border-color: rgba(168,85,247,0.4); background: rgba(168,85,247,0.06); }
+  .game-badge-tile .badge-icon { font-size: 22px; line-height: 1; }
+  .game-badge-tile .badge-name { font-size: 9px; color: var(--text2); font-weight: 700; text-align: center; line-height: 1.3; }
+  .game-badge-tile.locked { opacity: 0.4; filter: grayscale(1); }
   .user-pill { display: flex; align-items: center; gap: 7px; background: var(--bg3); border: 1px solid var(--border); border-radius: 20px; padding: 3px 9px 3px 3px; cursor: pointer; transition: border-color 0.15s; user-select: none; }
   .user-pill:hover { border-color: var(--text2); }
   .user-pill.open { border-color: var(--accent); }
@@ -937,6 +960,7 @@
         </div>
         <button class="game-pill" id="game-pill" onclick="toggleGameDrawer()" title="Open gamification">
           🏆 <span class="game-pill-xp" id="game-pill-xp">0 XP</span> <span>•</span> <span class="game-pill-mission" id="game-pill-mission">0 missions</span>
+          <span class="game-pill-badge" style="display:none"></span>
         </button>
         <button class="user-dropdown-item" id="admin-page-btn" style="display:none">🛠 Admin Portal</button>
         <div class="theme-select-row">
@@ -949,6 +973,7 @@
         </div>
         <button class="game-pill" onclick="toggleGameDrawer()" title="Open gamification">
           🏆 <span class="game-pill-xp">0 XP</span> <span>•</span> <span class="game-pill-mission">0 missions</span>
+          <span class="game-pill-badge" style="display:none"></span>
         </button>
         <button class="user-dropdown-item danger" id="signout-btn">⏻ Sign Out</button>
       </div>
@@ -1342,8 +1367,13 @@
     <!-- Leaderboard card -->
     <div class="game-card">
       <div class="game-card-title">Leaderboard</div>
-      <div style="font-size:10px;color:var(--text3);margin-bottom:8px;">This week</div>
+      <div style="font-size:10px;color:var(--text3);margin-bottom:8px;" id="game-lb-period-label">This week</div>
       <div id="game-leaderboard-list"></div>
+    </div>
+    <!-- Badges card -->
+    <div class="game-card">
+      <div class="game-card-title">Badges</div>
+      <div id="game-badges-list"></div>
     </div>
   </div>
 </aside>
@@ -1415,7 +1445,8 @@ function plantMemberDocRef(plantId, userId) { return doc(db, 'plants', plantId, 
 function gameConfigDoc() { return doc(db, 'plants', currentPlantId, 'gamificationConfig', 'main'); }
 function gameUserStatsDoc(userId) { return doc(db, 'plants', currentPlantId, 'userGameStats', userId); }
 function gameMissionsCol() { return collection(db, 'plants', currentPlantId, 'missions'); }
-function gameLeaderboardDoc(boardId = 'weekly') { return doc(db, 'plants', currentPlantId, 'leaderboards', boardId); }
+function gameLeaderboardDoc(boardId) { return doc(db, 'plants', currentPlantId, 'leaderboards', boardId || gameConfig?.leaderboardPeriod || 'weekly'); }
+function userBadgesDoc(userId) { return doc(db, 'plants', currentPlantId, 'userBadges', userId); }
 function gameEventsCol() { return collection(db, 'plants', currentPlantId, 'gameEvents'); }
 function missionProgressDoc(missionId, subjectId) { return doc(db, 'plants', currentPlantId, 'missions', missionId, 'progress', subjectId); }
 
@@ -2320,11 +2351,20 @@ function renderGamePanel() {
     if (!gameMissions.length) {
       missionsList.innerHTML = `<div class="game-mission-meta" style="padding:8px 0;text-align:center;">No active missions for this plant.</div>`;
     } else {
+      let anyBadged = false;
       missionsList.innerHTML = gameMissions.map(m => {
         const current = Number(m.progress?.current || 0);
         const target = Number(m.objective?.threshold || 1);
         const pct = Math.max(0, Math.min(100, Math.round((current / Math.max(1, target)) * 100)));
         const completed = pct >= 100;
+        const near = pct >= 90 && !completed;
+        if (completed || near) anyBadged = true;
+        // Detect completion transition
+        const prevPct = gameMissionPrevPct.get(m.id);
+        if (completed && prevPct !== undefined && prevPct < 100) {
+          showMissionCompleteCelebration(m);
+        }
+        gameMissionPrevPct.set(m.id, pct);
         const progressColor = completed
           ? 'linear-gradient(90deg,#22c55e,#4ade80)'
           : pct > 50
@@ -2333,13 +2373,32 @@ function renderGamePanel() {
         const glowColor = completed ? '0 0 8px rgba(34,197,94,0.5)' : 'none';
         return `<div class="game-mission-item${completed ? ' game-mission-complete' : ''}">
           <div class="game-mission-head">
-            <span>${completed ? '✓ ' : ''}${esc(m.name || 'Mission')}</span>
-            <strong style="color:${completed ? 'var(--green)' : 'var(--text)'}">${pct}%</strong>
+            <span>${completed ? '✓ ' : near ? '🔔 ' : ''}${esc(m.name || 'Mission')}</span>
+            <strong style="color:${completed ? 'var(--green)' : near ? 'var(--yellow)' : 'var(--text)'}">${pct}%</strong>
           </div>
           <div class="game-progress"><span style="width:${pct}%;background:${progressColor};box-shadow:${glowColor}"></span></div>
           <div class="game-mission-meta">${current} / ${target} &nbsp;·&nbsp; <span style="color:var(--yellow)">${Number(m.rewards?.xp || 0)} XP</span> reward</div>
         </div>`;
       }).join('');
+      updateGamePillBadge(anyBadged);
+    }
+  }
+
+  // Badges card
+  const badgesList = document.getElementById('game-badges-list');
+  if (badgesList) {
+    const defs = gameBadgeDefs.length ? gameBadgeDefs : DEFAULT_BADGE_DEFS;
+    if (!defs.length) {
+      badgesList.innerHTML = `<div class="game-mission-meta" style="text-align:center;">No badges configured.</div>`;
+    } else {
+      badgesList.innerHTML = `<div class="game-badge-grid">${defs.map(b => {
+        const earned = !!gameUserBadges[b.id];
+        return `<div class="game-badge-tile ${earned ? 'earned' : 'locked'}" title="${esc(b.description || b.name)}">
+          <span class="badge-icon">${b.icon || '🏅'}</span>
+          <span class="badge-name">${esc(b.name)}</span>
+          ${earned ? '<span style="font-size:9px;color:var(--green);">✓</span>' : ''}
+        </div>`;
+      }).join('')}</div>`;
     }
   }
 
@@ -2370,6 +2429,7 @@ window.toggleGameDrawer = (forceOpen) => {
   if (!drawer) return;
   gameDrawerOpen = typeof forceOpen === 'boolean' ? forceOpen : !gameDrawerOpen;
   drawer.classList.toggle('open', gameDrawerOpen);
+  if (gameDrawerOpen) updateGamePillBadge(false); // clear badge when drawer opens
 };
 
 function showGameToast(message) {
@@ -2388,14 +2448,115 @@ function showLevelUpCelebration(level) {
   const overlay = document.createElement('div');
   overlay.className = 'game-levelup-overlay';
   overlay.innerHTML = `
-    <div class="game-levelup-card">
+    <div class="confetti-container" id="levelup-confetti"></div>
+    <div class="game-levelup-card" style="position:relative;z-index:1;">
       <div class="game-levelup-label">Level Up!</div>
       <div class="game-levelup-num">${level}</div>
       <div class="game-levelup-title">Keep it up!</div>
     </div>`;
   document.body.appendChild(overlay);
+  launchConfetti(overlay.querySelector('.confetti-container'));
   showGameToast(`Level ${level} reached!`);
-  setTimeout(() => overlay.remove(), 2800);
+  setTimeout(() => overlay.remove(), 3000);
+}
+
+function launchConfetti(container, count = 55) {
+  if (!container) return;
+  const colors = ['#a855f7','#3b82f6','#22c55e','#eab308','#f97316','#ef4444','#38bdf8','#ec4899'];
+  for (let i = 0; i < count; i++) {
+    const piece = document.createElement('div');
+    piece.className = 'confetti-piece';
+    const color = colors[i % colors.length];
+    const left   = Math.random() * 100;
+    const dur    = 1.4 + Math.random() * 1.4;
+    const delay  = Math.random() * 0.9;
+    const size   = 6 + Math.floor(Math.random() * 8);
+    piece.style.cssText = `left:${left}%;width:${size}px;height:${size}px;background:${color};` +
+      `animation-duration:${dur}s;animation-delay:${delay}s;` +
+      `border-radius:${Math.random() > 0.5 ? '50%' : '2px'};`;
+    container.appendChild(piece);
+  }
+}
+
+function showMissionCompleteCelebration(mission) {
+  const xp = Number(mission.rewards?.xp || 0);
+  const overlay = document.createElement('div');
+  overlay.className = 'game-mission-complete-overlay';
+  overlay.innerHTML = `
+    <div class="confetti-container" id="mission-confetti"></div>
+    <div class="game-mission-complete-card">
+      <div class="game-mission-complete-label">Mission Complete!</div>
+      <div style="font-size:40px;line-height:1;margin:6px 0;">🎯</div>
+      <div class="game-mission-complete-name">${esc(mission.name || 'Mission')}</div>
+      ${xp ? `<div class="game-mission-complete-xp">+${xp} XP</div>` : ''}
+    </div>`;
+  document.body.appendChild(overlay);
+  launchConfetti(overlay.querySelector('.confetti-container'), 65);
+  showGameToast(`+${xp} XP • Mission complete!`);
+  setTimeout(() => overlay.remove(), 3500);
+}
+
+function showBadgeEarnedCelebration(badge) {
+  const overlay = document.createElement('div');
+  overlay.className = 'game-mission-complete-overlay';
+  overlay.innerHTML = `
+    <div class="confetti-container"></div>
+    <div class="game-badge-complete-card">
+      <div class="game-mission-complete-label">Badge Unlocked!</div>
+      <span class="game-badge-icon">${badge.icon || '🏅'}</span>
+      <div class="game-mission-complete-name">${esc(badge.name)}</div>
+      <div style="font-size:12px;color:var(--text2);margin-top:4px;">${esc(badge.description || '')}</div>
+      ${Number(badge.xpReward||0) ? `<div class="game-mission-complete-xp" style="margin-top:8px;">+${badge.xpReward} XP</div>` : ''}
+    </div>`;
+  document.body.appendChild(overlay);
+  launchConfetti(overlay.querySelector('.confetti-container'), 45);
+  showGameToast(`Badge unlocked: ${badge.name}`);
+  setTimeout(() => overlay.remove(), 3500);
+}
+
+function updateGamePillBadge(show) {
+  document.querySelectorAll('.game-pill-badge').forEach(el => {
+    el.style.display = show ? '' : 'none';
+  });
+}
+
+function checkBadgeTrigger(badge, stats) {
+  const threshold = Number(badge.threshold || 1);
+  switch (badge.triggerType) {
+    case 'xp_milestone':        return Number(stats.totals?.xp || 0) >= threshold;
+    case 'level_reached':       return Number(stats.totals?.level || 1) >= threshold;
+    case 'streak_days':         return Number(stats.streaks?.current || 0) >= threshold;
+    case 'issues_resolved':     return Number(stats.totals?.issuesResolved || 0) >= threshold;
+    case 'photos_attached':     return Number(stats.totals?.photosAttached || 0) >= threshold;
+    case 'issues_created':      return Number(stats.totals?.issuesCreated || 0) >= threshold;
+    case 'missions_completed':  return Number(stats.totals?.missionsCompleted || 0) >= threshold;
+    default: return false;
+  }
+}
+
+async function checkAndAwardBadges() {
+  if (!currentPlantId || !currentUser?.uid) return;
+  const defs = (gameBadgeDefs.length ? gameBadgeDefs : DEFAULT_BADGE_DEFS).filter(b => b.isEnabled !== false);
+  for (const badge of defs) {
+    if (gameUserBadges[badge.id]) continue; // already earned
+    if (!checkBadgeTrigger(badge, gameUserStats)) continue;
+    // Award optimistically to prevent re-triggering
+    gameUserBadges[badge.id] = { earnedAt: new Date(), badgeName: badge.name, icon: badge.icon };
+    try {
+      const badgesRef = userBadgesDoc(currentUser.uid);
+      await setDoc(badgesRef, {
+        [`earnedBadges.${badge.id}`]: { earnedAt: serverTimestamp(), badgeName: badge.name, icon: badge.icon || '🏅' },
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+      showBadgeEarnedCelebration(badge);
+      // Award badge XP as a direct stat increment (no dedup loop risk — badge already marked earned)
+      if (Number(badge.xpReward || 0) > 0) {
+        await setDoc(gameUserStatsDoc(currentUser.uid), { 'totals.xp': increment(Number(badge.xpReward)) }, { merge: true });
+      }
+    } catch (e) {
+      console.warn('Badge award failed:', e?.message);
+    }
+  }
 }
 
 async function ensureGamificationConfig() {
@@ -2409,14 +2570,30 @@ function stopGamificationListeners() {
   if (gameStatsUnsubscribe) { gameStatsUnsubscribe(); gameStatsUnsubscribe = null; }
   if (gameMissionsUnsubscribe) { gameMissionsUnsubscribe(); gameMissionsUnsubscribe = null; }
   if (gameLeaderboardUnsubscribe) { gameLeaderboardUnsubscribe(); gameLeaderboardUnsubscribe = null; }
+  if (gameConfigUnsubscribe) { gameConfigUnsubscribe(); gameConfigUnsubscribe = null; }
+  if (gameBadgesUnsubscribe) { gameBadgesUnsubscribe(); gameBadgesUnsubscribe = null; }
 }
 
 function startGamificationListeners() {
   stopGamificationListeners();
   if (!currentPlantId || !currentUser?.uid) return;
+
+  // Config listener — keeps gameBadgeDefs + leaderboardPeriod live
+  gameConfigUnsubscribe = onSnapshot(gameConfigDoc(), snap => {
+    gameConfig = snap.exists() ? snap.data() : GAME_DEFAULT_CONFIG;
+    gameBadgeDefs = Array.isArray(gameConfig.badges) ? gameConfig.badges : DEFAULT_BADGE_DEFS;
+  });
+
+  // User badges listener
+  gameBadgesUnsubscribe = onSnapshot(userBadgesDoc(currentUser.uid), snap => {
+    gameUserBadges = snap.exists() ? (snap.data()?.earnedBadges || {}) : {};
+    renderGamePanel();
+  });
+
   gameStatsUnsubscribe = onSnapshot(gameUserStatsDoc(currentUser.uid), snap => {
     gameUserStats = snap.exists() ? snap.data() : { totals: { xp: 0, level: 1 }, streaks: { current: 0 } };
     renderGamePanel();
+    checkAndAwardBadges();
   });
   gameMissionsUnsubscribe = onSnapshot(query(gameMissionsCol(), where('isActive', '==', true), orderBy('startsAt', 'desc'), limit(6)), async snap => {
     const missionRows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -2536,11 +2713,17 @@ async function awardGamification(reason, context = {}) {
       dedupeKey,
       schemaVersion: 1
     });
+    const reasonCounters = {};
+    if (reason === 'issue_resolved')           reasonCounters['totals.issuesResolved']  = increment(1);
+    if (reason === 'issue_created_complete')   reasonCounters['totals.issuesCreated']   = increment(1);
+    if (reason === 'photo_attached')           reasonCounters['totals.photosAttached']  = increment(1);
+    if (reason === 'serial_captured_when_required') reasonCounters['totals.serialsCaptured'] = increment(1);
     batch.set(statsRef, {
       userId: currentUser.uid,
       displayName: currentUser.displayName || currentUser.email || 'User',
-      totals: { xp: increment(totalDelta) },
-      streaks: { current: increment(totalDelta > 0 ? 1 : 0) },
+      'totals.xp': increment(totalDelta),
+      ...reasonCounters,
+      'streaks.current': increment(totalDelta > 0 ? 1 : 0),
       lastEventAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       schemaVersion: 1
@@ -2550,7 +2733,7 @@ async function awardGamification(reason, context = {}) {
     const currentXp = Number(gameUserStats?.totals?.xp || 0) + totalDelta;
     const nextLevel = gameLevelFromXp(currentXp);
     await setDoc(statsRef, { totals: { level: nextLevel } }, { merge: true });
-    await setDoc(gameLeaderboardDoc('weekly'), {
+    await setDoc(gameLeaderboardDoc(), {
       [`entriesByUid.${currentUser.uid}`]: {
         uid: currentUser.uid,
         displayName: currentUser.displayName || currentUser.email || 'User',
@@ -2601,8 +2784,23 @@ let gameLeaderboard = [];
 let gameStatsUnsubscribe = null;
 let gameMissionsUnsubscribe = null;
 let gameLeaderboardUnsubscribe = null;
+let gameConfigUnsubscribe = null;
+let gameBadgesUnsubscribe = null;
 let gamePrevLevel = 0;
 const gameCapTracker = new Map();
+const gameMissionPrevPct = new Map();
+let gameBadgeDefs = [];
+let gameUserBadges = {};
+
+const DEFAULT_BADGE_DEFS = [
+  { id: 'badge_first_resolve',  name: 'First Responder', icon: '✅', description: 'Resolve your first issue',   triggerType: 'issues_resolved',  threshold: 1,   xpReward: 25,  isEnabled: true },
+  { id: 'badge_streak_3',       name: 'On a Roll',       icon: '🔥', description: 'Maintain a 3-day streak',  triggerType: 'streak_days',      threshold: 3,   xpReward: 30,  isEnabled: true },
+  { id: 'badge_streak_10',      name: 'Committed',       icon: '💪', description: '10-day streak',             triggerType: 'streak_days',      threshold: 10,  xpReward: 100, isEnabled: true },
+  { id: 'badge_photo_pro',      name: 'Photo Pro',       icon: '📸', description: 'Attach 50 photos',          triggerType: 'photos_attached',  threshold: 50,  xpReward: 75,  isEnabled: true },
+  { id: 'badge_level_5',        name: 'Veteran',         icon: '⭐', description: 'Reach Level 5',             triggerType: 'level_reached',    threshold: 5,   xpReward: 150, isEnabled: true },
+  { id: 'badge_xp_500',         name: 'XP Hunter',       icon: '⚡', description: 'Earn 500 total XP',         triggerType: 'xp_milestone',     threshold: 500, xpReward: 50,  isEnabled: true },
+  { id: 'badge_resolver_10',    name: 'Problem Solver',  icon: '🏆', description: 'Resolve 10 issues',         triggerType: 'issues_resolved',  threshold: 10,  xpReward: 100, isEnabled: true },
+];
 const GAME_DEFAULT_CONFIG = {
   enabled: true,
   weights: { issue_created_complete: 5, status_changed_valid: 2, workflow_step_advance: 3, issue_resolved: 8, photo_attached: 2, serial_captured_when_required: 4 },
@@ -5893,7 +6091,7 @@ window.openExportModal = () => {
 
   const previewHtml = `<div id="pdf-content" style="background:white;padding:20px;color:#1a1a1a;font-family:'Segoe UI',sans-serif;font-size:11px;">
     <div style="display:flex;align-items:flex-end;justify-content:space-between;border-bottom:2px solid #ea580c;padding-bottom:8px;margin-bottom:16px;">
-      <div style="font-size:18px;font-weight:700;color:#ea580c;letter-spacing:0.5px;">AP TRACKER</div>
+      <div style="font-size:18px;font-weight:700;color:#ea580c;letter-spacing:0.5px;">AP-TRACKER</div>
       <div style="text-align:right;font-size:9px;color:#666;line-height:1.5;">Issue log report<br>${dateStr}<br>Generated by ${esc(userName)}</div>
     </div>
     ${cardsHtml}
