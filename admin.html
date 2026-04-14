@@ -71,6 +71,71 @@
       .status-row-top { align-items:flex-start; flex-direction:column; }
       .status-row-actions { width:100%; justify-content:flex-end; }
     }
+
+    /* ── Gamification editor ─────────────────────────────── */
+    .game-tabs { display:flex; gap:2px; margin-bottom:14px; border-bottom:1px solid var(--border); padding-bottom:0; }
+    .game-tab-btn { background:none; border:none; border-bottom:2px solid transparent; color:var(--text2); font-family:'Nunito',sans-serif; font-weight:700; font-size:12px; padding:8px 14px; cursor:pointer; margin-bottom:-1px; transition:color 0.15s,border-color 0.15s; white-space:nowrap; }
+    .game-tab-btn.active { color:var(--accent); border-bottom-color:var(--accent); }
+    .game-tab-btn:hover:not(.active) { color:var(--text); }
+    .game-tab-pane { display:none; }
+    .game-tab-pane.active { display:block; }
+
+    /* XP weight / penalty cards */
+    .game-weight-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:8px; margin-bottom:4px; }
+    .game-weight-card { background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:10px 12px; display:flex; flex-direction:column; gap:5px; }
+    .game-weight-card.penalty { border-color:rgba(239,68,68,0.2); }
+    .game-weight-icon { font-size:18px; line-height:1; }
+    .game-weight-label { font-size:12px; color:var(--text); font-weight:700; }
+    .game-weight-sub { font-size:10px; color:var(--text2); }
+    .game-weight-card input[type=number] { width:100%; font-size:15px; font-weight:700; text-align:center; font-family:'Share Tech Mono',monospace; padding:6px; background:var(--bg2); border:1px solid var(--border); border-radius:6px; color:var(--accent); }
+    .game-weight-card.penalty input[type=number] { color:var(--red); }
+    .game-section-label { font-family:'Share Tech Mono',monospace; font-size:11px; color:var(--text2); margin:12px 0 8px; }
+
+    /* Toggle switch */
+    .game-enable-row { display:flex; align-items:center; justify-content:space-between; padding:12px 14px; background:var(--bg3); border:1px solid var(--border); border-radius:10px; margin-bottom:14px; gap:12px; }
+    .game-enable-info strong { display:block; font-size:13px; font-weight:700; }
+    .game-enable-info span { font-size:11px; color:var(--text2); }
+    .toggle-switch { position:relative; width:44px; height:24px; flex-shrink:0; }
+    .toggle-switch input { opacity:0; width:0; height:0; position:absolute; }
+    .toggle-slider { position:absolute; inset:0; background:var(--bg2); border:1px solid var(--border); border-radius:999px; cursor:pointer; transition:background 0.2s,border-color 0.2s; }
+    .toggle-slider::before { content:''; position:absolute; width:18px; height:18px; left:2px; top:2px; background:var(--text2); border-radius:50%; transition:transform 0.2s,background 0.2s; }
+    .toggle-switch input:checked + .toggle-slider { background:rgba(34,197,94,0.12); border-color:var(--green); }
+    .toggle-switch input:checked + .toggle-slider::before { transform:translateX(20px); background:var(--green); }
+
+    /* Mission cards */
+    .game-mission-card { background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:12px 14px; display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; transition:border-color 0.15s; }
+    .game-mission-card:hover { border-color:var(--text2); }
+    .game-mission-card-info { min-width:0; }
+    .game-mission-card-name { font-size:13px; font-weight:700; color:var(--text); }
+    .game-mission-card-meta { font-size:11px; color:var(--text2); margin-top:3px; }
+    .game-mission-card-actions { display:flex; gap:6px; align-items:center; flex-shrink:0; }
+    .game-status-badge { font-size:11px; font-weight:700; padding:2px 8px; border-radius:999px; }
+    .game-status-badge.active { color:var(--green); background:rgba(34,197,94,0.1); }
+    .game-status-badge.inactive { color:var(--text2); background:var(--bg2); }
+    .game-empty-state { text-align:center; padding:20px; color:var(--text2); font-size:12px; }
+    .game-empty-state .es-icon { font-size:28px; display:block; margin-bottom:6px; }
+
+    /* Mission modal */
+    .mission-modal-backdrop { position:fixed; inset:0; background:rgba(0,0,0,0.65); z-index:800; display:flex; align-items:center; justify-content:center; padding:20px; opacity:0; pointer-events:none; transition:opacity 0.2s; }
+    .mission-modal-backdrop.open { opacity:1; pointer-events:all; }
+    .mission-modal { background:var(--bg2); border:1px solid var(--border); border-radius:16px; width:540px; max-width:100%; max-height:90vh; overflow-y:auto; padding:24px; box-shadow:0 24px 80px rgba(0,0,0,0.6); transform:translateY(20px) scale(0.97); transition:transform 0.2s; }
+    .mission-modal-backdrop.open .mission-modal { transform:translateY(0) scale(1); }
+    .mission-modal-title { font-family:'Rajdhani',sans-serif; font-size:22px; letter-spacing:0.8px; font-weight:700; margin-bottom:2px; }
+    .mission-modal-sub { font-size:12px; color:var(--text2); margin-bottom:18px; }
+    .mission-type-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:18px; }
+    .mission-type-tile { border:1px solid var(--border); background:var(--bg3); border-radius:10px; padding:12px 8px; text-align:center; cursor:pointer; transition:border-color 0.15s,background 0.15s,transform 0.12s; user-select:none; }
+    .mission-type-tile:hover { border-color:var(--text2); transform:translateY(-1px); }
+    .mission-type-tile.selected { border-color:var(--accent); background:rgba(249,115,22,0.08); }
+    .mission-type-tile .tile-icon { font-size:22px; display:block; margin-bottom:4px; }
+    .mission-type-tile .tile-label { font-size:11px; font-weight:700; color:var(--text); line-height:1.3; }
+    .mission-type-tile .tile-sub { font-size:10px; color:var(--text2); margin-top:2px; }
+    .mission-field-row { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px; }
+    .mission-field-label { font-size:11px; color:var(--text2); display:block; margin-bottom:4px; font-weight:700; }
+    .mission-preview-card { background:var(--bg3); border:1px solid rgba(59,130,246,0.25); border-radius:10px; padding:12px; margin-top:16px; }
+    .mission-preview-label { font-size:10px; color:var(--text2); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:8px; }
+    .mm-progress { height:7px; border-radius:999px; background:rgba(255,255,255,0.08); overflow:hidden; margin:5px 0; }
+    .mm-progress > span { display:block; height:100%; background:linear-gradient(90deg,#a855f7,#3b82f6); width:0%; }
+    @media (max-width:540px) { .mission-type-grid { grid-template-columns:repeat(2,1fr); } .mission-field-row { grid-template-columns:1fr; } }
   </style>
 </head>
 <body>
@@ -143,6 +208,56 @@
     </div>
   </div>
 
+<!-- Mission Editor Modal -->
+<div class="mission-modal-backdrop" id="mission-modal-backdrop">
+  <div class="mission-modal" id="mission-modal" onclick="event.stopPropagation()">
+    <div class="mission-modal-title" id="mm-title">New Mission</div>
+    <div class="mission-modal-sub">Choose a type, set a target, and assign an XP reward.</div>
+
+    <label class="mission-field-label" style="margin-bottom:8px;">Objective Type</label>
+    <div class="mission-type-grid" id="mm-type-grid"></div>
+
+    <div class="mission-field-row">
+      <div>
+        <label class="mission-field-label" for="mm-name">Mission Name</label>
+        <input id="mm-name" placeholder="e.g. Resolution Rush" oninput="window.renderMissionPreview()" />
+      </div>
+      <div>
+        <label class="mission-field-label" for="mm-threshold">Target Count</label>
+        <input id="mm-threshold" type="number" value="5" min="1" oninput="window.renderMissionPreview()" />
+      </div>
+    </div>
+
+    <div class="mission-field-row">
+      <div>
+        <label class="mission-field-label" for="mm-xp">XP Reward</label>
+        <input id="mm-xp" type="number" value="100" min="0" oninput="window.renderMissionPreview()" />
+      </div>
+      <div>
+        <label class="mission-field-label" for="mm-active">Status</label>
+        <select id="mm-active">
+          <option value="true">Active</option>
+          <option value="false">Inactive (draft)</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Live preview -->
+    <div class="mission-preview-card">
+      <div class="mission-preview-label">Preview — how users see this</div>
+      <div id="mm-preview-inner"></div>
+    </div>
+
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px;">
+      <button class="btn" onclick="window.closeMissionModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="window.saveMissionModal()">Save Mission</button>
+    </div>
+
+    <input type="hidden" id="mm-plant-id" />
+    <input type="hidden" id="mm-mission-idx" value="-1" />
+  </div>
+</div>
+
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut as fbSignOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
@@ -191,6 +306,27 @@ const DEFAULT_GAME_CONFIG = {
   penalties: { issue_reopened: -6, missing_required_serial: -5, invalid_status_bounce: -2 },
   caps: { photo_attached_per_issue: 1, status_changed_valid_per_issue_per_hour: 3 },
   customRules: []
+};
+
+const GAME_WEIGHT_META = {
+  issue_created_complete:        { icon: '📋', label: 'Issue Created',     sub: 'Fully filled out' },
+  status_changed_valid:          { icon: '🔄', label: 'Status Change',      sub: 'Valid transition' },
+  workflow_step_advance:         { icon: '⚙️',  label: 'Workflow Step',      sub: 'Advance a step' },
+  issue_resolved:                { icon: '✅', label: 'Issue Resolved',     sub: 'Mark as resolved' },
+  photo_attached:                { icon: '📸', label: 'Photo Attached',     sub: 'Per issue (capped)' },
+  serial_captured_when_required: { icon: '🔢', label: 'Serial Captured',    sub: 'When required' },
+  issue_reopened:                { icon: '↩️',  label: 'Issue Reopened',     sub: 'Penalty', penalty: true },
+  missing_required_serial:       { icon: '⚠️', label: 'Missing Serial',     sub: 'Penalty', penalty: true },
+  invalid_status_bounce:         { icon: '🚫', label: 'Invalid Bounce',     sub: 'Penalty', penalty: true },
+};
+
+const MISSION_TYPE_META = {
+  issues_created:    { icon: '📋', label: 'Create Issues',   sub: 'Log new issues' },
+  issue_resolved:    { icon: '✅', label: 'Resolve Issues',   sub: 'Mark issues done' },
+  photo_attachments: { icon: '📸', label: 'Attach Photos',    sub: 'Add photos to issues' },
+  status_changes:    { icon: '🔄', label: 'Status Changes',   sub: 'Change issue status' },
+  workflow_advances: { icon: '⚙️',  label: 'Workflow Steps',   sub: 'Advance workflow' },
+  serial_captures:   { icon: '🔢', label: 'Serial Captures',  sub: 'Capture serials' },
 };
 
 const app = initializeApp(firebaseConfig);
@@ -562,92 +698,146 @@ function renderGamificationEditor(plantId, plantName) {
   const cfg = gameDraftByPlant.get(plantId) || deepCopy(DEFAULT_GAME_CONFIG);
   const missions = missionDraftByPlant.get(plantId) || [];
   const customRules = Array.isArray(cfg.customRules) ? cfg.customRules : [];
-  const weightRows = Object.keys(cfg.weights || {}).map(k => `
-    <div class="row" style="margin-bottom:6px;">
-      <div class="mono">${esc(k)}</div>
-      <input type="number" value="${Number(cfg.weights[k] || 0)}" onchange="window.patchGameField('${plantId}','weights','${k}', this.value)" />
-    </div>
-  `).join('');
-  const penaltyRows = Object.keys(cfg.penalties || {}).map(k => `
-    <div class="row" style="margin-bottom:6px;">
-      <div class="mono">${esc(k)}</div>
-      <input type="number" value="${Number(cfg.penalties[k] || 0)}" onchange="window.patchGameField('${plantId}','penalties','${k}', this.value)" />
-    </div>
-  `).join('');
-  const capRows = Object.keys(cfg.caps || {}).map(k => `
-    <div class="row" style="margin-bottom:6px;">
-      <div class="mono">${esc(k)}</div>
-      <input type="number" value="${Number(cfg.caps[k] || 0)}" onchange="window.patchGameField('${plantId}','caps','${k}', this.value)" />
-    </div>
-  `).join('');
+  const panelOpen = gamePanelOpen[plantId] ?? false;
+  const activeTab = gamePanelOpen[`tab_${plantId}`] || 'points';
 
+  // ── Weight cards ──────────────────────────────────────────
+  const weightCards = Object.keys(cfg.weights || {}).map(k => {
+    const meta = GAME_WEIGHT_META[k] || { icon: '🎯', label: k, sub: '' };
+    return `<div class="game-weight-card">
+      <div class="game-weight-icon">${meta.icon}</div>
+      <div class="game-weight-label">${esc(meta.label)}</div>
+      <div class="game-weight-sub">${esc(meta.sub)}</div>
+      <input type="number" value="${Number(cfg.weights[k] || 0)}"
+             oninput="window.patchGameField('${plantId}','weights','${k}',this.value)" />
+    </div>`;
+  }).join('');
+
+  // ── Penalty cards ─────────────────────────────────────────
+  const penaltyCards = Object.keys(cfg.penalties || {}).map(k => {
+    const meta = GAME_WEIGHT_META[k] || { icon: '⚠️', label: k, sub: 'Penalty' };
+    return `<div class="game-weight-card penalty">
+      <div class="game-weight-icon">${meta.icon}</div>
+      <div class="game-weight-label">${esc(meta.label)}</div>
+      <div class="game-weight-sub">${esc(meta.sub)}</div>
+      <input type="number" value="${Number(cfg.penalties[k] || 0)}"
+             oninput="window.patchGameField('${plantId}','penalties','${k}',this.value)" />
+    </div>`;
+  }).join('');
+
+  // ── Cap rows ──────────────────────────────────────────────
+  const capRows = Object.keys(cfg.caps || {}).map(k => {
+    const label = k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    return `<div class="row" style="margin-bottom:6px;align-items:center;">
+      <div class="mono" style="flex:1;">${esc(label)}</div>
+      <input type="number" style="max-width:90px;" value="${Number(cfg.caps[k] || 0)}"
+             oninput="window.patchGameField('${plantId}','caps','${k}',this.value)" />
+    </div>`;
+  }).join('');
+
+  // ── Custom rule rows ──────────────────────────────────────
   const customRows = customRules.map((r, idx) => `
     <tr>
       <td><input value="${esc(r.label || '')}" onchange="window.patchCustomRule('${plantId}',${idx},'label',this.value)" /></td>
       <td><input value="${esc(r.triggerKey || '')}" onchange="window.patchCustomRule('${plantId}',${idx},'triggerKey',this.value)" /></td>
       <td><input type="number" value="${Number(r.points || 0)}" onchange="window.patchCustomRule('${plantId}',${idx},'points',this.value)" /></td>
-      <td><select onchange="window.patchCustomRule('${plantId}',${idx},'isEnabled',this.value)"><option value="true" ${r.isEnabled !== false ? 'selected':''}>enabled</option><option value="false" ${r.isEnabled===false?'selected':''}>disabled</option></select></td>
+      <td>
+        <label class="toggle-switch" title="${r.isEnabled !== false ? 'Enabled' : 'Disabled'}">
+          <input type="checkbox" ${r.isEnabled !== false ? 'checked' : ''} onchange="window.patchCustomRule('${plantId}',${idx},'isEnabled',this.checked)">
+          <span class="toggle-slider"></span>
+        </label>
+      </td>
       <td><button class="small-btn danger" onclick="window.removeCustomRule('${plantId}',${idx})">Remove</button></td>
     </tr>
   `).join('');
 
-  const missionRows = missions.map((m, idx) => `
-    <tr>
-      <td><input value="${esc(m.name || '')}" onchange="window.patchMission('${plantId}',${idx},'name',this.value)" /></td>
-      <td><input value="${esc(m.objective?.type || '')}" onchange="window.patchMission('${plantId}',${idx},'objectiveType',this.value)" /></td>
-      <td><input type="number" value="${Number(m.objective?.threshold || 1)}" onchange="window.patchMission('${plantId}',${idx},'threshold',this.value)" /></td>
-      <td><input type="number" value="${Number(m.rewards?.xp || 0)}" onchange="window.patchMission('${plantId}',${idx},'rewardXp',this.value)" /></td>
-      <td><select onchange="window.patchMission('${plantId}',${idx},'isActive',this.value)"><option value="true" ${m.isActive!==false?'selected':''}>active</option><option value="false" ${m.isActive===false?'selected':''}>inactive</option></select></td>
-      <td><button class="small-btn danger" onclick="window.removeMission('${plantId}',${idx})">Remove</button></td>
-    </tr>
-  `).join('');
-
-  const panelOpen = gamePanelOpen[plantId] ?? false;
+  // ── Mission cards ─────────────────────────────────────────
+  const missionCards = missions.length
+    ? missions.map((m, idx) => {
+        const typeMeta = MISSION_TYPE_META[m.objective?.type] || { icon: '🎯', label: m.objective?.type || '—' };
+        const isActive = m.isActive !== false;
+        return `<div class="game-mission-card">
+          <div class="game-mission-card-info">
+            <div class="game-mission-card-name">${esc(m.name || 'Untitled Mission')}</div>
+            <div class="game-mission-card-meta">${typeMeta.icon} ${esc(typeMeta.label)} &nbsp;·&nbsp; ${Number(m.objective?.threshold || 1)} target &nbsp;·&nbsp; <span style="color:#eab308">${Number(m.rewards?.xp || 0)} XP</span></div>
+          </div>
+          <div class="game-mission-card-actions">
+            <span class="game-status-badge ${isActive ? 'active' : 'inactive'}">${isActive ? 'Active' : 'Inactive'}</span>
+            <button class="small-btn" onclick="window.openMissionModal('${plantId}',${idx})">Edit</button>
+            <button class="small-btn danger" onclick="window.removeMission('${plantId}',${idx})">Remove</button>
+          </div>
+        </div>`;
+      }).join('')
+    : `<div class="game-empty-state"><span class="es-icon">🎯</span>No missions yet. Create one to get started.</div>`;
 
   return `
     <div class="divider"></div>
     <div class="status-header-row">
-      <h3 style="font-family:'Rajdhani',sans-serif;letter-spacing:0.6px;">Gamification — ${esc(plantName)}</h3>
+      <h3 style="font-family:'Rajdhani',sans-serif;letter-spacing:0.6px;">🎮 Gamification — ${esc(plantName)}</h3>
       <div class="status-header-actions">
         <button class="compact-btn" onclick="window.toggleGamePanel('${plantId}')">${panelOpen ? 'Minimize' : 'Expand'}</button>
       </div>
     </div>
-    <p class="muted" style="margin:8px 0;">Modify points, build missions, and create additional gain/loss rules using trigger keys.</p>
     <div class="status-panel ${panelOpen ? 'visible' : ''}">
-      <div class="status-row">
-        <div class="row" style="margin-bottom:8px;">
-          <div class="mono">Enabled</div>
-          <select onchange="window.patchGameEnabled('${plantId}', this.value)"><option value="true" ${cfg.enabled!==false?'selected':''}>true</option><option value="false" ${cfg.enabled===false?'selected':''}>false</option></select>
+
+      <!-- Enable toggle -->
+      <div class="game-enable-row">
+        <div class="game-enable-info">
+          <strong>Enable Gamification</strong>
+          <span>Award XP and track missions for all users in this plant</span>
         </div>
-        <div class="grid-2">
-          <div><div class="mono" style="margin-bottom:6px;">Weights</div>${weightRows}</div>
-          <div><div class="mono" style="margin-bottom:6px;">Penalties</div>${penaltyRows}</div>
-        </div>
-        <div style="margin-top:8px;"><div class="mono" style="margin-bottom:6px;">Caps</div>${capRows}</div>
+        <label class="toggle-switch">
+          <input type="checkbox" ${cfg.enabled !== false ? 'checked' : ''}
+                 onchange="window.patchGameEnabled('${plantId}', this.checked)">
+          <span class="toggle-slider"></span>
+        </label>
       </div>
-      <div class="status-row">
-        <div class="mono" style="margin-bottom:6px;">Custom Trigger Rules (trigger examples: <code>status:maintenance</code>, <code>workflow:finished</code>, <code>issue_created_complete</code>)</div>
-        <table><thead><tr><th>Label</th><th>Trigger Key</th><th>Points</th><th>State</th><th></th></tr></thead><tbody>${customRows || '<tr><td colspan="5" class="muted">No custom rules.</td></tr>'}</tbody></table>
-        <div class="row" style="margin-top:8px;">
-          <input id="new-rule-label-${plantId}" placeholder="Rule label" />
-          <input id="new-rule-trigger-${plantId}" placeholder="trigger key" />
-          <input id="new-rule-points-${plantId}" type="number" placeholder="points" />
-          <button class="small-btn" onclick="window.addCustomRule('${plantId}')">Add Rule</button>
+
+      <!-- Tab bar -->
+      <div class="game-tabs">
+        <button class="game-tab-btn ${activeTab === 'points' ? 'active' : ''}"
+                onclick="window.switchGameTab('${plantId}','points',this)">⚡ Points</button>
+        <button class="game-tab-btn ${activeTab === 'rules' ? 'active' : ''}"
+                onclick="window.switchGameTab('${plantId}','rules',this)">🛠 Rules</button>
+        <button class="game-tab-btn ${activeTab === 'missions' ? 'active' : ''}"
+                onclick="window.switchGameTab('${plantId}','missions',this)">🎯 Missions</button>
+      </div>
+
+      <!-- Tab: Points -->
+      <div class="game-tab-pane ${activeTab === 'points' ? 'active' : ''}" id="game-tab-points-${plantId}">
+        <div class="game-section-label">XP Weights</div>
+        <div class="game-weight-grid">${weightCards}</div>
+        <div class="game-section-label" style="margin-top:16px;">Penalties</div>
+        <div class="game-weight-grid">${penaltyCards}</div>
+        <div class="game-section-label" style="margin-top:16px;">Rate Limits</div>
+        <div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:10px 14px;">${capRows}</div>
+      </div>
+
+      <!-- Tab: Rules -->
+      <div class="game-tab-pane ${activeTab === 'rules' ? 'active' : ''}" id="game-tab-rules-${plantId}">
+        <p class="muted" style="margin-bottom:10px;font-size:11px;">Custom rules fire on top of built-in weights. Trigger key examples: <code>status:maintenance</code>, <code>workflow:finished</code></p>
+        <table>
+          <thead><tr><th>Label</th><th>Trigger Key</th><th>Points</th><th>On</th><th></th></tr></thead>
+          <tbody>${customRows || '<tr><td colspan="5" class="muted" style="text-align:center;padding:12px;">No custom rules yet.</td></tr>'}</tbody>
+        </table>
+        <div class="row" style="margin-top:10px;flex-wrap:wrap;gap:6px;">
+          <input id="new-rule-label-${plantId}" placeholder="Rule label" style="flex:1;min-width:100px;" />
+          <input id="new-rule-trigger-${plantId}" placeholder="trigger key" style="flex:1;min-width:100px;" />
+          <input id="new-rule-points-${plantId}" type="number" placeholder="pts" style="width:70px;flex:0 0 70px;" />
+          <button class="small-btn" onclick="window.addCustomRule('${plantId}')">+ Add Rule</button>
         </div>
       </div>
-      <div class="status-row">
-        <div class="mono" style="margin-bottom:6px;">Missions</div>
-        <table><thead><tr><th>Name</th><th>Objective Type</th><th>Target</th><th>XP</th><th>State</th><th></th></tr></thead><tbody>${missionRows || '<tr><td colspan="6" class="muted">No missions.</td></tr>'}</tbody></table>
-        <div class="row" style="margin-top:8px;">
-          <input id="new-mission-name-${plantId}" placeholder="Mission name" />
-          <input id="new-mission-type-${plantId}" placeholder="objective type" />
-          <input id="new-mission-threshold-${plantId}" type="number" placeholder="target" value="5" />
-          <input id="new-mission-xp-${plantId}" type="number" placeholder="reward xp" value="100" />
-          <button class="small-btn" onclick="window.addMission('${plantId}')">Add Mission</button>
-        </div>
+
+      <!-- Tab: Missions -->
+      <div class="game-tab-pane ${activeTab === 'missions' ? 'active' : ''}" id="game-tab-missions-${plantId}">
+        <div id="game-missions-cards-${plantId}">${missionCards}</div>
+        <button class="small-btn" style="border-color:var(--accent);color:var(--accent);margin-top:4px;"
+                onclick="window.openMissionModal('${plantId}')">+ New Mission</button>
       </div>
-      <div class="status-toolbar">
-        <button class="small-btn" style="border-color:var(--accent);color:var(--accent);" onclick="window.saveGamification('${plantId}')">Save Gamification</button>
+
+      <div class="status-toolbar" style="margin-top:14px;">
+        <button class="small-btn" style="border-color:var(--accent);color:var(--accent);"
+                onclick="window.saveGamification('${plantId}')">💾 Save Gamification</button>
       </div>
     </div>
     <div id="game-fb-${plantId}" class="feedback"></div>
@@ -1110,7 +1300,7 @@ window.saveStatuses = async function(plantId) {
 
 window.patchGameEnabled = function(plantId, value) {
   const cfg = deepCopy(gameDraftByPlant.get(plantId) || DEFAULT_GAME_CONFIG);
-  cfg.enabled = value === 'true';
+  cfg.enabled = value === true || value === 'true';
   gameDraftByPlant.set(plantId, cfg);
 };
 
@@ -1252,6 +1442,19 @@ window.toggleGamePanel = function(plantId) {
   renderPlantsUsers();
 };
 
+window.switchGameTab = function(plantId, tabName, btnEl) {
+  gamePanelOpen[`tab_${plantId}`] = tabName;
+  // Update button states
+  const panel = btnEl.closest('.status-panel');
+  if (panel) {
+    panel.querySelectorAll('.game-tab-btn').forEach(b => b.classList.remove('active'));
+    btnEl.classList.add('active');
+    panel.querySelectorAll('.game-tab-pane').forEach(p => p.classList.remove('active'));
+    const target = panel.querySelector(`#game-tab-${tabName}-${plantId}`);
+    if (target) target.classList.add('active');
+  }
+};
+
 window.toggleStatusRow = function(plantId, statusKey) {
   const rowKey = `${plantId}:${statusKey}`;
   statusRowOpen[rowKey] = !(statusRowOpen[rowKey] ?? false);
@@ -1299,6 +1502,126 @@ onAuthStateChanged(auth, async user => {
 
   await refreshAdminData();
 });
+
+// ── Mission Modal ─────────────────────────────────────────────────────────────
+
+let _mmSelectedType = '';
+
+function buildMissionTypeGrid(selectedType) {
+  const grid = document.getElementById('mm-type-grid');
+  if (!grid) return;
+  grid.innerHTML = Object.entries(MISSION_TYPE_META).map(([key, meta]) => `
+    <div class="mission-type-tile ${selectedType === key ? 'selected' : ''}"
+         data-type="${esc(key)}"
+         onclick="window._mmSelectType('${esc(key)}')">
+      <span class="tile-icon">${meta.icon}</span>
+      <div class="tile-label">${esc(meta.label)}</div>
+      <div class="tile-sub">${esc(meta.sub)}</div>
+    </div>
+  `).join('');
+}
+
+window._mmSelectType = function(key) {
+  _mmSelectedType = key;
+  document.querySelectorAll('.mission-type-tile').forEach(el => {
+    el.classList.toggle('selected', el.dataset.type === key);
+  });
+  window.renderMissionPreview();
+};
+
+window.renderMissionPreview = function() {
+  const name = document.getElementById('mm-name')?.value || 'My Mission';
+  const threshold = Number(document.getElementById('mm-threshold')?.value || 5);
+  const xp = Number(document.getElementById('mm-xp')?.value || 100);
+  const meta = MISSION_TYPE_META[_mmSelectedType] || { icon: '🎯', label: _mmSelectedType || 'Select a type' };
+  const el = document.getElementById('mm-preview-inner');
+  if (!el) return;
+  const pEsc = (v) => String(v || '').replace(/[&<>'"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' }[c]));
+  el.innerHTML = `
+    <div style="font-size:11px;color:#8b949e;margin-bottom:6px;">${meta.icon} ${pEsc(meta.label)}</div>
+    <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;color:#e6edf3;margin-bottom:6px;">
+      <span>${pEsc(name)}</span><span>0%</span>
+    </div>
+    <div class="mm-progress"><span></span></div>
+    <div style="font-size:10px;color:#484f58;margin-top:5px;">0 / ${threshold} &nbsp;·&nbsp; <span style="color:#eab308">${xp} XP</span> reward</div>
+  `;
+};
+
+window.openMissionModal = function(plantId, missionIdx = -1) {
+  document.getElementById('mm-plant-id').value = plantId;
+  document.getElementById('mm-mission-idx').value = String(missionIdx);
+
+  if (missionIdx >= 0) {
+    const missions = missionDraftByPlant.get(plantId) || [];
+    const m = missions[missionIdx];
+    document.getElementById('mm-title').textContent = 'Edit Mission';
+    document.getElementById('mm-name').value = m?.name || '';
+    document.getElementById('mm-threshold').value = String(m?.objective?.threshold || 5);
+    document.getElementById('mm-xp').value = String(m?.rewards?.xp || 100);
+    document.getElementById('mm-active').value = m?.isActive !== false ? 'true' : 'false';
+    _mmSelectedType = m?.objective?.type || '';
+  } else {
+    document.getElementById('mm-title').textContent = 'New Mission';
+    document.getElementById('mm-name').value = '';
+    document.getElementById('mm-threshold').value = '5';
+    document.getElementById('mm-xp').value = '100';
+    document.getElementById('mm-active').value = 'true';
+    _mmSelectedType = '';
+  }
+
+  buildMissionTypeGrid(_mmSelectedType);
+  window.renderMissionPreview();
+  document.getElementById('mission-modal-backdrop').classList.add('open');
+};
+
+window.closeMissionModal = function() {
+  document.getElementById('mission-modal-backdrop').classList.remove('open');
+};
+
+// Close on backdrop click
+document.getElementById('mission-modal-backdrop').addEventListener('click', function(e) {
+  if (e.target === this) window.closeMissionModal();
+});
+
+window.saveMissionModal = function() {
+  const plantId = document.getElementById('mm-plant-id').value;
+  const missionIdx = Number(document.getElementById('mm-mission-idx').value);
+  const name = (document.getElementById('mm-name')?.value || '').trim();
+  const threshold = Math.max(1, Number(document.getElementById('mm-threshold')?.value || 1));
+  const rewardXp = Number(document.getElementById('mm-xp')?.value || 0);
+  const isActive = document.getElementById('mm-active')?.value === 'true';
+
+  if (!name) { alert('Mission name is required.'); return; }
+  if (!_mmSelectedType) { alert('Please select an objective type.'); return; }
+
+  const missions = deepCopy(missionDraftByPlant.get(plantId) || []);
+  const missionData = {
+    id: missionIdx >= 0 && missions[missionIdx]?.id
+      ? missions[missionIdx].id
+      : `mission_${Date.now().toString(36)}`,
+    name,
+    objective: { type: _mmSelectedType, threshold },
+    rewards: { xp: rewardXp },
+    isActive,
+    startsAt: (missionIdx >= 0 && missions[missionIdx]?.startsAt) || new Date().toISOString(),
+    createdAt: (missionIdx >= 0 && missions[missionIdx]?.createdAt) || null,
+    updatedAt: null,
+  };
+
+  if (missionIdx >= 0) {
+    missions[missionIdx] = missionData;
+  } else {
+    missions.push(missionData);
+  }
+
+  missionDraftByPlant.set(plantId, missions);
+  window.closeMissionModal();
+  // Switch to missions tab and re-render
+  gamePanelOpen[`tab_${plantId}`] = 'missions';
+  renderPlantsUsers();
+};
+
+// ── End Mission Modal ─────────────────────────────────────────────────────────
 
 document.getElementById('google-signin-btn').addEventListener('click', signInWithGoogle);
 document.getElementById('signout-btn').addEventListener('click', doSignOut);
