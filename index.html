@@ -737,12 +737,13 @@
 
   /* STATUS TIMELINE */
   .status-timeline { margin-top: 8px; }
-  .tl-list { display: flex; flex-direction: column; gap: 0; position: relative; padding-left: 20px; }
-  .tl-line { position: absolute; left: 5px; top: 6px; bottom: 6px; width: 1px; background: var(--border); }
+  .tl-list { display: flex; flex-direction: column; gap: 0; position: relative; padding-left: 40px; }
+  .tl-line { position: absolute; left: 18px; top: 8px; bottom: 8px; width: 1px; background: var(--border); }
   .tl-entry { position: relative; padding-bottom: 10px; }
   .tl-entry:last-child { padding-bottom: 0; }
-  .tl-dot { position: absolute; left: -16px; top: 3px; width: 10px; height: 10px; border-radius: 50%; border: 2px solid; background: var(--bg2); }
-  .tl-dot.current { width: 12px; height: 12px; left: -17px; top: 2px; }
+  .tl-dot { position: absolute; left: -38px; top: 50%; transform: translateY(-50%); width: 44px; height: 44px; border-radius: 999px; border: 2px solid; background: var(--bg2); display:flex; align-items:center; justify-content:center; font-size:21px; line-height:1; padding:0; color: var(--text); }
+  .tl-dot.current { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent); }
+  .tl-dot.is-button { cursor: pointer; appearance: none; -webkit-appearance: none; }
   .tl-header { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
   .tl-status-label { font-size: 15px; font-weight: 700; }
   .tl-current-tag { font-size: 9px; background: var(--accent-glow); color: var(--accent); border: 1px solid rgba(249,115,22,0.4); border-radius: 8px; padding: 1px 6px; font-family: 'Share Tech Mono', monospace; }
@@ -3875,6 +3876,61 @@ window.removeStatusEntry = async (id, idx) => {
   } catch(e) { setSyncStatus('err','Error: '+e.message); }
 };
 
+// Promote a historical status entry to be the current status.
+window.setStatusCurrentFromHistory = async (id, idx) => {
+  if (!currentUserPermissions.canEditIssue) return;
+  const issue = issues.find(i => i.id === id);
+  if (!issue) return;
+  const history = getMutableStatusHistory(issue);
+  const source = history[idx];
+  if (!source || !source.status) return;
+  const prev = currentStatus(issue);
+  const nextEntry = {
+    status: source.status,
+    subStatus: source.subStatus || '',
+    note: source.note || '',
+    dateTime: fmtDate(new Date()),
+    by: currentUser.displayName || currentUser.email
+  };
+  history.push(nextEntry);
+  try {
+    const patch = {
+      statusHistory: history,
+      [`workflowStateByStatus.${nextEntry.status}`]: 'called',
+      ...buildIssueV2Compat({
+        machineCode: issue.machine || issue.machineCode || '',
+        statusKey: nextEntry.status,
+        subStatus: nextEntry.subStatus,
+        statusDateTime: nextEntry.dateTime,
+        note: nextEntry.note,
+        baseIssue: issue,
+        forceReopenIncrement: nextEntry.status !== 'resolved'
+      })
+    };
+    if (nextEntry.status !== 'resolved') {
+      patch.workflowState = 'called';
+      patch['workflowStateHistory.called'] = { by: currentActor(), at: serverTimestamp() };
+    } else {
+      patch.workflowState = 'finished';
+      patch['workflowStateHistory.finished'] = { by: currentActor(), at: serverTimestamp() };
+    }
+    const batch = writeBatch(db);
+    batch.update(plantDoc('issues', id), patch);
+    queueIssueEvent(batch, id, 'status_changed', {
+      fromStatusKey: prev?.status || currentStatusKey(issue),
+      fromSubStatusKey: prev?.subStatus || '',
+      toStatusKey: nextEntry.status,
+      toSubStatusKey: nextEntry.subStatus || '',
+      note: 'Set current from history'
+    });
+    await batch.commit();
+    issueEventHistoryCache.delete(id);
+    await awardGamification('status_changed_valid', { issueId: id, dedupeSuffix: `set-current-${Date.now()}`, tags: ['status:changed', `status:${nextEntry.status}`] });
+  } catch (e) {
+    setSyncStatus('err','Error: '+e.message);
+  }
+};
+
 // State for pending new entry per issue
 const pendingEntry = {};
 window.setPendingStatus = (id, key, val) => {
@@ -4102,6 +4158,18 @@ window.setWorkflowStateForStatus = async (issueId, statusKey, state) => {
   } catch(e) {
     setSyncStatus('err', 'Error updating workflow: ' + e.message);
   }
+};
+
+window.cycleWorkflowStateForStatus = async (issueId, statusKey) => {
+  const states = ['called', 'accepted', 'in-progress', 'finished'];
+  const issue = issues.find(i => i.id === issueId);
+  if (!issue) return;
+  const primaryKey = currentStatusKey(issue);
+  const current = statusKey === primaryKey
+    ? (issue.workflowState || 'called')
+    : (issue.workflowStateByStatus?.[statusKey] || 'called');
+  const next = states[(Math.max(0, states.indexOf(current)) + 1) % states.length];
+  await setWorkflowStateForStatus(issueId, statusKey, next);
 };
 
 window.cycleWorkflowState = async (id) => {
@@ -4345,15 +4413,41 @@ function renderIssues() {
       catch(e) { const n=new Date(); return toLocalDTInputs(n); }
     }
 
+    // Workflow state configuration
+    const workflowState = issue.workflowState || 'called';
+    const workflowConfig = {
+      called:      { icon: '📣', label: 'Called',      cssState: 'called' },
+      accepted:    { icon: '👋', label: 'Accepted',    cssState: 'accepted' },
+      'in-progress': { icon: '🔧', label: 'In Progress', cssState: 'in-progress' },
+      finished:    { icon: '✅', label: 'Finished',    cssState: 'finished' }
+    };
+    const wfOrder = ['called', 'accepted', 'in-progress', 'finished'];
+    const wfCurrentIdx = wfOrder.indexOf(workflowState);
+    const isCompleted = (state) => wfOrder.indexOf(state) < wfCurrentIdx;
+    const wfStateHistory = issue.workflowStateHistory || {};
+    const wfByStatus = issue.workflowStateByStatus || {};
+
     // Build timeline entries HTML — reversed so newest is on top
     const timelineEntries = [...displayHistory].reverse().map((entry, displayIdx) => {
       const trueIdx = displayHistory.length - 1 - displayIdx; // real index in array for Firestore ops
       const isCurrent = trueIdx === displayHistory.length - 1;
       const isSynthetic = !!entry._synthetic; // display-only entry; not stored in statusHistory
       const cfg = STATUS_CONFIG_SAFE[entry.status];
+      const isResolvedEntry = entry.status === 'resolved';
+      const entryWorkflowState = isResolvedEntry
+        ? 'finished'
+        : (entry.status === currentKey ? workflowState : (wfByStatus[entry.status] || 'called'));
+      const wfCfg = workflowConfig[entryWorkflowState] || workflowConfig.called;
+      const wfColor = entryWorkflowState === 'called' ? '#16a34a'
+        : entryWorkflowState === 'accepted' ? '#16a34a'
+        : entryWorkflowState === 'in-progress' ? '#3b82f6'
+        : '#a855f7';
+      const dotEl = !isResolvedEntry
+        ? `<button class="tl-dot is-button${isCurrent?' current':''}" style="border-color:${wfColor};background:${alphaColor(wfColor,0.18)};color:${wfColor};" onclick="event.stopPropagation(); cycleWorkflowStateForStatus('${issue.id}','${entry.status}')" title="Workflow: ${wfCfg.label}. Tap to change.">${wfCfg.icon}</button>`
+        : `<div class="tl-dot${isCurrent?' current':''}" style="border-color:${cfg.color};background:${cfg.color};color:#111;">${cfg.icon}</div>`;
 
       return `<div class="tl-entry">
-        <div class="tl-dot${isCurrent?' current':''}" style="border-color:${cfg.color};${isCurrent?'background:'+cfg.color:'background:var(--bg2)'}"></div>
+        ${dotEl}
         <div>
           <div class="tl-header">
             <span class="tl-status-label" style="color:${cfg.color}">${cfg.icon} ${cfg.label}${entry.subStatus?' › '+esc(entry.subStatus):''}</span>
@@ -4362,6 +4456,8 @@ function renderIssues() {
           <div class="tl-time">${entry.dateTime||''}${entry.by?' — '+esc(entry.by):''}</div>
           ${entry.note?`<div class="tl-note-text">"${esc(entry.note)}"</div>`:''}
           ${currentUserPermissions.canEditIssue ? `<div style="display:flex;gap:5px;margin-top:4px;">
+            ${!isResolvedEntry && !isCurrent ? `<button class="tl-edit-btn" onclick="setStatusCurrentFromHistory('${issue.id}',${trueIdx})">Set current</button>` : ''}
+            ${!isResolvedEntry && entryWorkflowState === 'finished' ? `<button class="tl-edit-btn" onclick="setWorkflowStateForStatus('${issue.id}','${entry.status}','called')">Un-finish</button>` : ''}
             <button class="tl-edit-btn" onclick="startEditEntry('${issue.id}',${trueIdx})">✏ Edit</button>
             <button class="tl-remove-btn" onclick="removeStatusEntry('${issue.id}',${trueIdx})" ${isSynthetic||history.length<=1?'disabled':''}>🗑 Delete</button>
           </div>` : ''}
@@ -4412,19 +4508,6 @@ function renderIssues() {
     // Secondary status keys (needed by workflow rows below)
     const secKeys = getSecondaryStatuses(issue).filter(k => k !== 'resolved');
 
-    // Workflow state configuration
-    const workflowState = issue.workflowState || 'called';
-    const workflowConfig = {
-      called:      { icon: '📣', label: 'Called',      cssState: 'called' },
-      accepted:    { icon: '👋', label: 'Accepted',    cssState: 'accepted' },
-      'in-progress': { icon: '🔧', label: 'In Progress', cssState: 'in-progress' },
-      finished:    { icon: '✅', label: 'Finished',    cssState: 'finished' }
-    };
-    const wfOrder = ['called', 'accepted', 'in-progress', 'finished'];
-    const wfCurrentIdx = wfOrder.indexOf(workflowState);
-    const isCompleted = (state) => wfOrder.indexOf(state) < wfCurrentIdx;
-    const wfStateHistory = issue.workflowStateHistory || {};
-
     // Build compact 4-step header buttons with state label below
     const wfHeaderHtml = `<div class="wf-steps-wrap" onclick="event.stopPropagation()">
       <div class="wf-steps">${wfOrder.map(state => {
@@ -4438,7 +4521,6 @@ function renderIssues() {
     // Per-status workflow rows for expanded card body — derived from status history
     // Shows each department called (unique status keys from history), excluding the
     // primary status (already in header) and any already marked 'finished'
-    const wfByStatus = issue.workflowStateByStatus || {};
     const histStatKeys = [...new Set(
       displayHistory.map(e => e.status).filter(k => k && k !== 'open' && k !== 'resolved' && k !== currentKey)
     )].filter(k => wfByStatus[k] !== 'finished');
