@@ -136,6 +136,25 @@
     .mm-progress { height:7px; border-radius:999px; background:rgba(255,255,255,0.08); overflow:hidden; margin:5px 0; }
     .mm-progress > span { display:block; height:100%; background:linear-gradient(90deg,#a855f7,#3b82f6); width:0%; }
     @media (max-width:540px) { .mission-type-grid { grid-template-columns:repeat(2,1fr); } .mission-field-row { grid-template-columns:1fr; } }
+
+    /* Badge cards in admin */
+    .badge-card { background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:12px 14px; display:flex; align-items:center; gap:12px; margin-bottom:8px; transition:border-color 0.15s; }
+    .badge-card:hover { border-color:var(--text2); }
+    .badge-card-icon { font-size:28px; flex-shrink:0; width:36px; text-align:center; }
+    .badge-card-info { flex:1; min-width:0; }
+    .badge-card-name { font-size:13px; font-weight:700; color:var(--text); }
+    .badge-card-meta { font-size:11px; color:var(--text2); margin-top:2px; }
+    .badge-card-actions { display:flex; gap:6px; align-items:center; flex-shrink:0; }
+
+    /* Leaderboard settings */
+    .lb-settings-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:8px; }
+    .lb-period-btn { border:1px solid var(--border); background:var(--bg3); color:var(--text2); border-radius:6px; padding:6px 12px; cursor:pointer; font-size:12px; font-family:'Nunito',sans-serif; font-weight:700; transition:all 0.15s; }
+    .lb-period-btn.active { border-color:var(--accent); color:var(--accent); background:rgba(249,115,22,0.08); }
+    .lb-period-btn:hover:not(.active) { border-color:var(--text2); color:var(--text); }
+
+    /* Badge modal (reuse mission modal styles + small tweaks) */
+    .badge-type-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:16px; }
+    @media (max-width:480px) { .badge-type-grid { grid-template-columns:repeat(2,1fr); } }
   </style>
 </head>
 <body>
@@ -207,6 +226,51 @@
       </div>
     </div>
   </div>
+
+<!-- Badge Editor Modal -->
+<div class="mission-modal-backdrop" id="badge-modal-backdrop">
+  <div class="mission-modal" id="badge-modal" onclick="event.stopPropagation()">
+    <div class="mission-modal-title" id="bm-title">New Badge</div>
+    <div class="mission-modal-sub">Define a one-time achievement users can earn.</div>
+
+    <label class="mission-field-label" style="margin-bottom:8px;">Trigger Type</label>
+    <div class="badge-type-grid" id="bm-type-grid"></div>
+
+    <div class="mission-field-row">
+      <div>
+        <label class="mission-field-label" for="bm-name">Badge Name</label>
+        <input id="bm-name" placeholder="e.g. Problem Solver" />
+      </div>
+      <div>
+        <label class="mission-field-label" for="bm-icon">Icon (emoji)</label>
+        <input id="bm-icon" placeholder="🏅" maxlength="4" style="font-size:20px;text-align:center;" />
+      </div>
+    </div>
+
+    <div class="mission-field-row">
+      <div>
+        <label class="mission-field-label" for="bm-threshold">Threshold</label>
+        <input id="bm-threshold" type="number" value="1" min="1" />
+      </div>
+      <div>
+        <label class="mission-field-label" for="bm-xp">XP Reward</label>
+        <input id="bm-xp" type="number" value="50" min="0" />
+      </div>
+    </div>
+
+    <div>
+      <label class="mission-field-label" for="bm-description">Description (shown to users)</label>
+      <input id="bm-description" placeholder="e.g. Resolve 10 issues" />
+    </div>
+
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px;">
+      <button class="btn" onclick="window.closeBadgeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="window.saveBadgeModal()">Save Badge</button>
+    </div>
+    <input type="hidden" id="bm-plant-id" />
+    <input type="hidden" id="bm-badge-idx" value="-1" />
+  </div>
+</div>
 
 <!-- Mission Editor Modal -->
 <div class="mission-modal-backdrop" id="mission-modal-backdrop">
@@ -329,6 +393,26 @@ const MISSION_TYPE_META = {
   serial_captures:   { icon: '🔢', label: 'Serial Captures',  sub: 'Capture serials' },
 };
 
+const BADGE_TRIGGER_META = {
+  xp_milestone:       { icon: '⚡', label: 'XP Milestone',     sub: 'Total XP earned' },
+  level_reached:      { icon: '⭐', label: 'Level Reached',     sub: 'User level' },
+  streak_days:        { icon: '🔥', label: 'Streak Days',       sub: 'Consecutive days' },
+  issues_resolved:    { icon: '✅', label: 'Issues Resolved',   sub: 'Total resolved' },
+  photos_attached:    { icon: '📸', label: 'Photos Attached',   sub: 'Total photos' },
+  issues_created:     { icon: '📋', label: 'Issues Created',    sub: 'Total created' },
+  missions_completed: { icon: '🎯', label: 'Missions Done',     sub: 'Total completed' },
+};
+
+const DEFAULT_BADGE_DEFS = [
+  { id: 'badge_first_resolve',  name: 'First Responder', icon: '✅', description: 'Resolve your first issue',   triggerType: 'issues_resolved',  threshold: 1,   xpReward: 25,  isEnabled: true },
+  { id: 'badge_streak_3',       name: 'On a Roll',       icon: '🔥', description: 'Maintain a 3-day streak',  triggerType: 'streak_days',      threshold: 3,   xpReward: 30,  isEnabled: true },
+  { id: 'badge_streak_10',      name: 'Committed',       icon: '💪', description: '10-day streak',             triggerType: 'streak_days',      threshold: 10,  xpReward: 100, isEnabled: true },
+  { id: 'badge_photo_pro',      name: 'Photo Pro',       icon: '📸', description: 'Attach 50 photos',          triggerType: 'photos_attached',  threshold: 50,  xpReward: 75,  isEnabled: true },
+  { id: 'badge_level_5',        name: 'Veteran',         icon: '⭐', description: 'Reach Level 5',             triggerType: 'level_reached',    threshold: 5,   xpReward: 150, isEnabled: true },
+  { id: 'badge_xp_500',         name: 'XP Hunter',       icon: '⚡', description: 'Earn 500 total XP',         triggerType: 'xp_milestone',     threshold: 500, xpReward: 50,  isEnabled: true },
+  { id: 'badge_resolver_10',    name: 'Problem Solver',  icon: '🏆', description: 'Resolve 10 issues',         triggerType: 'issues_resolved',  threshold: 10,  xpReward: 100, isEnabled: true },
+];
+
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
@@ -342,6 +426,7 @@ let membersByPlant = new Map();
 let userDirectory = [];
 let statusDraftByPlant = new Map();
 let gameDraftByPlant = new Map();
+let badgeDraftByPlant = new Map();
 let missionDraftByPlant = new Map();
 const statusPanelOpen = {};
 const statusRowOpen = {};
@@ -597,9 +682,13 @@ async function loadMembersAndStatusesForAdminPlants() {
       weights: { ...deepCopy(DEFAULT_GAME_CONFIG.weights), ...(gameConfig.weights || {}) },
       penalties: { ...deepCopy(DEFAULT_GAME_CONFIG.penalties), ...(gameConfig.penalties || {}) },
       caps: { ...deepCopy(DEFAULT_GAME_CONFIG.caps), ...(gameConfig.caps || {}) },
-      customRules: Array.isArray(gameConfig.customRules) ? gameConfig.customRules.map(r => ({ ...r })) : []
+      customRules: Array.isArray(gameConfig.customRules) ? gameConfig.customRules.map(r => ({ ...r })) : [],
+      leaderboardPeriod: gameConfig.leaderboardPeriod || 'weekly',
     });
     missionDraftByPlant.set(plantId, missionsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+    // Load badge definitions (stored in gamificationConfig/main.badges)
+    const storedBadges = Array.isArray(gameConfig.badges) ? gameConfig.badges : null;
+    badgeDraftByPlant.set(plantId, storedBadges ? storedBadges.map(b => ({ ...b })) : deepCopy(DEFAULT_BADGE_DEFS));
   }
 }
 
@@ -697,6 +786,7 @@ function renderStatusEditor(plantId, plantName) {
 function renderGamificationEditor(plantId, plantName) {
   const cfg = gameDraftByPlant.get(plantId) || deepCopy(DEFAULT_GAME_CONFIG);
   const missions = missionDraftByPlant.get(plantId) || [];
+  const badgeDefs = badgeDraftByPlant.get(plantId) || deepCopy(DEFAULT_BADGE_DEFS);
   const customRules = Array.isArray(cfg.customRules) ? cfg.customRules : [];
   const panelOpen = gamePanelOpen[plantId] ?? false;
   const activeTab = gamePanelOpen[`tab_${plantId}`] || 'points';
@@ -751,6 +841,28 @@ function renderGamificationEditor(plantId, plantName) {
     </tr>
   `).join('');
 
+  // ── Badge cards ───────────────────────────────────────────
+  const badgeCards = badgeDefs.length
+    ? badgeDefs.map((b, idx) => {
+        const trigMeta = BADGE_TRIGGER_META[b.triggerType] || { icon: '🎯', label: b.triggerType || '—' };
+        return `<div class="badge-card">
+          <div class="badge-card-icon">${b.icon || '🏅'}</div>
+          <div class="badge-card-info">
+            <div class="badge-card-name">${esc(b.name || 'Badge')}</div>
+            <div class="badge-card-meta">${trigMeta.icon} ${esc(trigMeta.label)} ≥ ${Number(b.threshold||1)} &nbsp;·&nbsp; <span style="color:#eab308">${Number(b.xpReward||0)} XP</span> &nbsp;·&nbsp; ${esc(b.description||'')}</div>
+          </div>
+          <div class="badge-card-actions">
+            <label class="toggle-switch" title="${b.isEnabled!==false?'Enabled':'Disabled'}">
+              <input type="checkbox" ${b.isEnabled!==false?'checked':''} onchange="window.patchBadge('${plantId}',${idx},'isEnabled',this.checked)">
+              <span class="toggle-slider"></span>
+            </label>
+            <button class="small-btn" onclick="window.openBadgeModal('${plantId}',${idx})">Edit</button>
+            <button class="small-btn danger" onclick="window.removeBadge('${plantId}',${idx})">Remove</button>
+          </div>
+        </div>`;
+      }).join('')
+    : `<div class="game-empty-state"><span class="es-icon">🏅</span>No badges yet. Add one to reward your team.</div>`;
+
   // ── Mission cards ─────────────────────────────────────────
   const missionCards = missions.length
     ? missions.map((m, idx) => {
@@ -795,12 +907,14 @@ function renderGamificationEditor(plantId, plantName) {
 
       <!-- Tab bar -->
       <div class="game-tabs">
-        <button class="game-tab-btn ${activeTab === 'points' ? 'active' : ''}"
+        <button class="game-tab-btn ${activeTab === 'points'   ? 'active' : ''}"
                 onclick="window.switchGameTab('${plantId}','points',this)">⚡ Points</button>
-        <button class="game-tab-btn ${activeTab === 'rules' ? 'active' : ''}"
+        <button class="game-tab-btn ${activeTab === 'rules'    ? 'active' : ''}"
                 onclick="window.switchGameTab('${plantId}','rules',this)">🛠 Rules</button>
         <button class="game-tab-btn ${activeTab === 'missions' ? 'active' : ''}"
                 onclick="window.switchGameTab('${plantId}','missions',this)">🎯 Missions</button>
+        <button class="game-tab-btn ${activeTab === 'badges'   ? 'active' : ''}"
+                onclick="window.switchGameTab('${plantId}','badges',this)">🏅 Badges</button>
       </div>
 
       <!-- Tab: Points -->
@@ -811,6 +925,25 @@ function renderGamificationEditor(plantId, plantName) {
         <div class="game-weight-grid">${penaltyCards}</div>
         <div class="game-section-label" style="margin-top:16px;">Rate Limits</div>
         <div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:10px 14px;">${capRows}</div>
+        <div class="game-section-label" style="margin-top:20px;">Leaderboard</div>
+        <div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px 14px;">
+          <div style="font-size:12px;color:var(--text2);margin-bottom:10px;">Period shown to all users in this plant</div>
+          <div class="lb-settings-row">
+            ${['weekly','monthly','alltime'].map(p => {
+              const active = (cfg.leaderboardPeriod || 'weekly') === p;
+              const lbl = p === 'alltime' ? 'All Time' : p.charAt(0).toUpperCase() + p.slice(1);
+              return `<button class="lb-period-btn ${active ? 'active' : ''}"
+                onclick="window.patchLeaderboardPeriod('${plantId}','${p}',this)">${lbl}</button>`;
+            }).join('')}
+          </div>
+          <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+            <div>
+              <div style="font-size:12px;font-weight:700;color:var(--text);">Reset Leaderboard</div>
+              <div style="font-size:11px;color:var(--text2);">Clears all current-period scores — cannot be undone.</div>
+            </div>
+            <button class="small-btn danger" onclick="window.resetLeaderboard('${plantId}')">Reset</button>
+          </div>
+        </div>
       </div>
 
       <!-- Tab: Rules -->
@@ -833,6 +966,13 @@ function renderGamificationEditor(plantId, plantName) {
         <div id="game-missions-cards-${plantId}">${missionCards}</div>
         <button class="small-btn" style="border-color:var(--accent);color:var(--accent);margin-top:4px;"
                 onclick="window.openMissionModal('${plantId}')">+ New Mission</button>
+      </div>
+
+      <!-- Tab: Badges -->
+      <div class="game-tab-pane ${activeTab === 'badges' ? 'active' : ''}" id="game-tab-badges-${plantId}">
+        ${badgeCards}
+        <button class="small-btn" style="border-color:var(--accent);color:var(--accent);margin-top:4px;"
+                onclick="window.openBadgeModal('${plantId}')">+ New Badge</button>
       </div>
 
       <div class="status-toolbar" style="margin-top:14px;">
@@ -1394,12 +1534,24 @@ window.saveGamification = async function(plantId) {
   const cfg = deepCopy(gameDraftByPlant.get(plantId) || DEFAULT_GAME_CONFIG);
   const missions = deepCopy(missionDraftByPlant.get(plantId) || []);
   try {
+    const badges = deepCopy(badgeDraftByPlant.get(plantId) || DEFAULT_BADGE_DEFS);
     await setDoc(doc(db, 'plants', plantId, 'gamificationConfig', 'main'), {
       enabled: cfg.enabled !== false,
       weights: cfg.weights || {},
       penalties: cfg.penalties || {},
       caps: cfg.caps || {},
       customRules: Array.isArray(cfg.customRules) ? cfg.customRules : [],
+      badges: badges.map(b => ({
+        id: b.id || `badge_${Date.now().toString(36)}`,
+        name: b.name || 'Badge',
+        icon: b.icon || '🏅',
+        description: b.description || '',
+        triggerType: b.triggerType || 'xp_milestone',
+        threshold: Math.max(1, Number(b.threshold || 1)),
+        xpReward: Number(b.xpReward || 0),
+        isEnabled: b.isEnabled !== false,
+      })),
+      leaderboardPeriod: cfg.leaderboardPeriod || 'weekly',
       updatedAt: serverTimestamp(),
       updatedBy: { uid: currentUser.uid, name: currentUser.displayName || currentUser.email || '' }
     }, { merge: true });
@@ -1502,6 +1654,141 @@ onAuthStateChanged(auth, async user => {
 
   await refreshAdminData();
 });
+
+// ── Badge & Leaderboard helpers ───────────────────────────────────────────────
+
+window.patchBadge = function(plantId, idx, field, value) {
+  const badges = deepCopy(badgeDraftByPlant.get(plantId) || DEFAULT_BADGE_DEFS);
+  if (!badges[idx]) return;
+  if (field === 'isEnabled') badges[idx].isEnabled = value === true || value === 'true';
+  else if (field === 'threshold' || field === 'xpReward') badges[idx][field] = Number(value || 0);
+  else badges[idx][field] = String(value || '').trim();
+  badgeDraftByPlant.set(plantId, badges);
+};
+
+window.removeBadge = function(plantId, idx) {
+  const badges = deepCopy(badgeDraftByPlant.get(plantId) || DEFAULT_BADGE_DEFS);
+  badges.splice(idx, 1);
+  badgeDraftByPlant.set(plantId, badges);
+  gamePanelOpen[`tab_${plantId}`] = 'badges';
+  renderPlantsUsers();
+};
+
+window.patchLeaderboardPeriod = function(plantId, period, btnEl) {
+  const cfg = deepCopy(gameDraftByPlant.get(plantId) || DEFAULT_GAME_CONFIG);
+  cfg.leaderboardPeriod = period;
+  gameDraftByPlant.set(plantId, cfg);
+  // Update button states without full re-render
+  btnEl.closest('.lb-settings-row')?.querySelectorAll('.lb-period-btn').forEach(b => {
+    b.classList.toggle('active', b.textContent.toLowerCase().replace(/\s/g,'') === period.replace('alltime','alltime'));
+  });
+  btnEl.closest('.lb-settings-row')?.querySelectorAll('.lb-period-btn').forEach(b => b.classList.remove('active'));
+  btnEl.classList.add('active');
+};
+
+window.resetLeaderboard = async function(plantId) {
+  if (!confirm('Reset the leaderboard for this plant? All current-period scores will be cleared. This cannot be undone.')) return;
+  const cfg = gameDraftByPlant.get(plantId) || DEFAULT_GAME_CONFIG;
+  const period = cfg.leaderboardPeriod || 'weekly';
+  try {
+    await setDoc(doc(db, 'plants', plantId, 'leaderboards', period), {
+      entriesByUid: {},
+      updatedAt: serverTimestamp(),
+      resetBy: { uid: currentUser.uid, name: currentUser.displayName || currentUser.email || '' }
+    });
+    feedback(`game-fb-${plantId}`, 'ok', `Leaderboard (${period}) reset successfully.`);
+  } catch (e) {
+    feedback(`game-fb-${plantId}`, 'error', e.message || 'Failed to reset leaderboard.');
+  }
+};
+
+// ── Badge Modal ───────────────────────────────────────────────────────────────
+
+let _bmSelectedType = '';
+
+function buildBadgeTypeGrid(selectedType) {
+  const grid = document.getElementById('bm-type-grid');
+  if (!grid) return;
+  grid.innerHTML = Object.entries(BADGE_TRIGGER_META).map(([key, meta]) => `
+    <div class="mission-type-tile ${selectedType === key ? 'selected' : ''}"
+         data-type="${esc(key)}"
+         onclick="window._bmSelectType('${esc(key)}')">
+      <span class="tile-icon">${meta.icon}</span>
+      <div class="tile-label">${esc(meta.label)}</div>
+      <div class="tile-sub">${esc(meta.sub)}</div>
+    </div>
+  `).join('');
+}
+
+window._bmSelectType = function(key) {
+  _bmSelectedType = key;
+  document.querySelectorAll('#bm-type-grid .mission-type-tile').forEach(el => {
+    el.classList.toggle('selected', el.dataset.type === key);
+  });
+};
+
+window.openBadgeModal = function(plantId, badgeIdx = -1) {
+  document.getElementById('bm-plant-id').value = plantId;
+  document.getElementById('bm-badge-idx').value = String(badgeIdx);
+
+  if (badgeIdx >= 0) {
+    const badges = badgeDraftByPlant.get(plantId) || DEFAULT_BADGE_DEFS;
+    const b = badges[badgeIdx];
+    document.getElementById('bm-title').textContent = 'Edit Badge';
+    document.getElementById('bm-name').value = b?.name || '';
+    document.getElementById('bm-icon').value = b?.icon || '🏅';
+    document.getElementById('bm-threshold').value = String(b?.threshold || 1);
+    document.getElementById('bm-xp').value = String(b?.xpReward || 50);
+    document.getElementById('bm-description').value = b?.description || '';
+    _bmSelectedType = b?.triggerType || '';
+  } else {
+    document.getElementById('bm-title').textContent = 'New Badge';
+    document.getElementById('bm-name').value = '';
+    document.getElementById('bm-icon').value = '🏅';
+    document.getElementById('bm-threshold').value = '1';
+    document.getElementById('bm-xp').value = '50';
+    document.getElementById('bm-description').value = '';
+    _bmSelectedType = '';
+  }
+  buildBadgeTypeGrid(_bmSelectedType);
+  document.getElementById('badge-modal-backdrop').classList.add('open');
+};
+
+window.closeBadgeModal = function() {
+  document.getElementById('badge-modal-backdrop').classList.remove('open');
+};
+
+document.getElementById('badge-modal-backdrop').addEventListener('click', function(e) {
+  if (e.target === this) window.closeBadgeModal();
+});
+
+window.saveBadgeModal = function() {
+  const plantId = document.getElementById('bm-plant-id').value;
+  const badgeIdx = Number(document.getElementById('bm-badge-idx').value);
+  const name = (document.getElementById('bm-name')?.value || '').trim();
+  const icon = (document.getElementById('bm-icon')?.value || '🏅').trim();
+  const threshold = Math.max(1, Number(document.getElementById('bm-threshold')?.value || 1));
+  const xpReward = Number(document.getElementById('bm-xp')?.value || 0);
+  const description = (document.getElementById('bm-description')?.value || '').trim();
+
+  if (!name) { alert('Badge name is required.'); return; }
+  if (!_bmSelectedType) { alert('Please select a trigger type.'); return; }
+
+  const badges = deepCopy(badgeDraftByPlant.get(plantId) || DEFAULT_BADGE_DEFS);
+  const badgeData = {
+    id: (badgeIdx >= 0 && badges[badgeIdx]?.id) ? badges[badgeIdx].id : `badge_${Date.now().toString(36)}`,
+    name, icon, description, triggerType: _bmSelectedType, threshold, xpReward,
+    isEnabled: badgeIdx >= 0 ? (badges[badgeIdx]?.isEnabled ?? true) : true,
+  };
+
+  if (badgeIdx >= 0) badges[badgeIdx] = badgeData;
+  else badges.push(badgeData);
+
+  badgeDraftByPlant.set(plantId, badges);
+  window.closeBadgeModal();
+  gamePanelOpen[`tab_${plantId}`] = 'badges';
+  renderPlantsUsers();
+};
 
 // ── Mission Modal ─────────────────────────────────────────────────────────────
 
