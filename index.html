@@ -737,11 +737,10 @@
 
   /* STATUS TIMELINE */
   .status-timeline { margin-top: 8px; }
-  .tl-list { display: flex; flex-direction: column; gap: 0; position: relative; padding-left: 54px; }
-  .tl-line { position: absolute; left: 22px; top: 8px; bottom: 8px; width: 1px; background: var(--border); }
+  .tl-list { display: flex; flex-direction: column; gap: 0; position: relative; padding-left: 46px; }
   .tl-entry { position: relative; padding: 2px 0 6px; }
   .tl-entry:last-child { padding-bottom: 0; }
-  .tl-dot { position: absolute; left: -52px; top: 24px; transform: translateY(-50%); width: 44px; height: 44px; border-radius: 999px; border: 2px solid; background: var(--bg2); display:flex; align-items:center; justify-content:center; font-size:21px; line-height:1; padding:0; color: var(--text); }
+  .tl-dot { position: absolute; left: -42px; top: 22px; transform: translateY(-50%); width: 34px; height: 34px; border-radius: 999px; border: 2px solid; background: var(--bg2); display:flex; align-items:center; justify-content:center; font-size:17px; line-height:1; padding:0; color: var(--text); }
   .tl-dot.current { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent); }
   .tl-dot.is-button { cursor: pointer; appearance: none; -webkit-appearance: none; }
   .tl-header { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
@@ -4493,7 +4492,6 @@ function renderIssues() {
     const resolveHtml = `<div class="status-timeline">
       <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text2);margin-bottom:8px;">Status History</div>
       <div class="tl-list">
-        <div class="tl-line"></div>
         ${timelineEntries}
       </div>
       ${addRowHtml}
@@ -4526,8 +4524,7 @@ function renderIssues() {
       displayHistory.map(e => e.status).filter(k => k && k !== 'open' && k !== 'resolved' && k !== currentKey)
     )].filter(k => wfByStatus[k] !== 'finished');
 
-    const wfStatusRowsHtml = histStatKeys.length > 0
-      ? `<div class="wf-status-rows" onclick="event.stopPropagation()">${histStatKeys.map(sKey => {
+    const wfHistoryRowsHtml = histStatKeys.map(sKey => {
           const sCfg = STATUS_CONFIG_SAFE[sKey];
           const sColor = getStatusColor(sKey);
           const sState = wfByStatus[sKey] || 'called';
@@ -4551,14 +4548,13 @@ function renderIssues() {
               <div class="wf-state-label ${workflowConfig[sState].cssState}">${workflowConfig[sState].label}</div>
             </div>
           </div>`;
-        }).join('')}</div>`
-      : '';
+        }).join('');
 
     // Split status label from sub-status for two-line display
     const baseLabel = scfg.label;
     const subLabel = currentSubKey;
 
-    // Secondary status dots (card header indicator strip)
+    // Secondary status dots (shown on the current row)
     const secDotsHtml = secKeys.length > 0
       ? `<div class="secondary-status-dots">${secKeys.map(k => {
           const cfg = STATUS_CONFIG_SAFE[k];
@@ -4566,6 +4562,22 @@ function renderIssues() {
           return `<span class="secondary-dot" style="color:${col};border-color:${col};background:${alphaColor(col,0.12)}">${cfg.icon} ${cfg.label}</span>`;
         }).join('')}</div>`
       : '';
+
+    const currentWfRowHtml = `<div class="wf-status-row">
+      <div class="wf-status-row-info">
+        <div class="issue-status" style="color:${sc.color};border-color:${sc.color};background:${alphaColor(sc.color,0.12)}">
+          <span class="issue-status-main">${sc.icon} ${baseLabel}</span>
+        </div>
+        ${subLabel ? `<span class="issue-status-sub" style="color:${sc.color};">${esc(subLabel)}</span>` : ''}
+        ${secDotsHtml}
+      </div>
+      ${wfHeaderHtml}
+    </div>`;
+
+    const wfStatusRowsHtml = `<div class="wf-status-rows" onclick="event.stopPropagation()">
+      ${currentWfRowHtml}
+      ${wfHistoryRowsHtml}
+    </div>`;
 
     card.innerHTML=`
       <div class="issue-card-header" onclick="toggleCard('${issue.id}')">
@@ -4577,16 +4589,6 @@ function renderIssues() {
           </div>
           <button class="priority-btn${issue.highPriority?' active':''}" onclick="event.stopPropagation(); togglePriority('${issue.id}')" title="${issue.highPriority?'Remove high priority':'Mark as high priority'}">!</button>
           <div class="issue-expand-icon ${wasOpen?'open':''}" id="chevron-${issue.id}">▼</div>
-        </div>
-        <div class="issue-card-bottom">
-          <div class="issue-status-wrap">
-            <div class="issue-status" style="color:${sc.color};border-color:${sc.color};background:${alphaColor(sc.color,0.12)}">
-              <span class="issue-status-main">${sc.icon} ${baseLabel}</span>
-            </div>
-            ${subLabel ? `<span class="issue-status-sub" style="color:${sc.color};">${esc(subLabel)}</span>` : ''}
-            ${secDotsHtml}
-          </div>
-          ${wfHeaderHtml}
         </div>
         ${wfStatusRowsHtml}
       </div>
