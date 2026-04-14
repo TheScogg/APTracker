@@ -209,6 +209,7 @@ let gameDraftByPlant = new Map();
 let missionDraftByPlant = new Map();
 const statusPanelOpen = {};
 const statusRowOpen = {};
+const gamePanelOpen = {};
 const SCHEDULE_SECTIONS = [
   { inputKey: 'page_1', section: 'page1', isChange: false },
   { inputKey: 'page_2', section: 'page2', isChange: false },
@@ -601,44 +602,53 @@ function renderGamificationEditor(plantId, plantName) {
     </tr>
   `).join('');
 
+  const panelOpen = gamePanelOpen[plantId] ?? false;
+
   return `
     <div class="divider"></div>
-    <h3 style="font-family:'Rajdhani',sans-serif;letter-spacing:0.6px;">Gamification — ${esc(plantName)}</h3>
+    <div class="status-header-row">
+      <h3 style="font-family:'Rajdhani',sans-serif;letter-spacing:0.6px;">Gamification — ${esc(plantName)}</h3>
+      <div class="status-header-actions">
+        <button class="compact-btn" onclick="window.toggleGamePanel('${plantId}')">${panelOpen ? 'Minimize' : 'Expand'}</button>
+      </div>
+    </div>
     <p class="muted" style="margin:8px 0;">Modify points, build missions, and create additional gain/loss rules using trigger keys.</p>
-    <div class="status-row">
-      <div class="row" style="margin-bottom:8px;">
-        <div class="mono">Enabled</div>
-        <select onchange="window.patchGameEnabled('${plantId}', this.value)"><option value="true" ${cfg.enabled!==false?'selected':''}>true</option><option value="false" ${cfg.enabled===false?'selected':''}>false</option></select>
+    <div class="status-panel ${panelOpen ? 'visible' : ''}">
+      <div class="status-row">
+        <div class="row" style="margin-bottom:8px;">
+          <div class="mono">Enabled</div>
+          <select onchange="window.patchGameEnabled('${plantId}', this.value)"><option value="true" ${cfg.enabled!==false?'selected':''}>true</option><option value="false" ${cfg.enabled===false?'selected':''}>false</option></select>
+        </div>
+        <div class="grid-2">
+          <div><div class="mono" style="margin-bottom:6px;">Weights</div>${weightRows}</div>
+          <div><div class="mono" style="margin-bottom:6px;">Penalties</div>${penaltyRows}</div>
+        </div>
+        <div style="margin-top:8px;"><div class="mono" style="margin-bottom:6px;">Caps</div>${capRows}</div>
       </div>
-      <div class="grid-2">
-        <div><div class="mono" style="margin-bottom:6px;">Weights</div>${weightRows}</div>
-        <div><div class="mono" style="margin-bottom:6px;">Penalties</div>${penaltyRows}</div>
+      <div class="status-row">
+        <div class="mono" style="margin-bottom:6px;">Custom Trigger Rules (trigger examples: <code>status:maintenance</code>, <code>workflow:finished</code>, <code>issue_created_complete</code>)</div>
+        <table><thead><tr><th>Label</th><th>Trigger Key</th><th>Points</th><th>State</th><th></th></tr></thead><tbody>${customRows || '<tr><td colspan="5" class="muted">No custom rules.</td></tr>'}</tbody></table>
+        <div class="row" style="margin-top:8px;">
+          <input id="new-rule-label-${plantId}" placeholder="Rule label" />
+          <input id="new-rule-trigger-${plantId}" placeholder="trigger key" />
+          <input id="new-rule-points-${plantId}" type="number" placeholder="points" />
+          <button class="small-btn" onclick="window.addCustomRule('${plantId}')">Add Rule</button>
+        </div>
       </div>
-      <div style="margin-top:8px;"><div class="mono" style="margin-bottom:6px;">Caps</div>${capRows}</div>
-    </div>
-    <div class="status-row">
-      <div class="mono" style="margin-bottom:6px;">Custom Trigger Rules (trigger examples: <code>status:maintenance</code>, <code>workflow:finished</code>, <code>issue_created_complete</code>)</div>
-      <table><thead><tr><th>Label</th><th>Trigger Key</th><th>Points</th><th>State</th><th></th></tr></thead><tbody>${customRows || '<tr><td colspan="5" class="muted">No custom rules.</td></tr>'}</tbody></table>
-      <div class="row" style="margin-top:8px;">
-        <input id="new-rule-label-${plantId}" placeholder="Rule label" />
-        <input id="new-rule-trigger-${plantId}" placeholder="trigger key" />
-        <input id="new-rule-points-${plantId}" type="number" placeholder="points" />
-        <button class="small-btn" onclick="window.addCustomRule('${plantId}')">Add Rule</button>
+      <div class="status-row">
+        <div class="mono" style="margin-bottom:6px;">Missions</div>
+        <table><thead><tr><th>Name</th><th>Objective Type</th><th>Target</th><th>XP</th><th>State</th><th></th></tr></thead><tbody>${missionRows || '<tr><td colspan="6" class="muted">No missions.</td></tr>'}</tbody></table>
+        <div class="row" style="margin-top:8px;">
+          <input id="new-mission-name-${plantId}" placeholder="Mission name" />
+          <input id="new-mission-type-${plantId}" placeholder="objective type" />
+          <input id="new-mission-threshold-${plantId}" type="number" placeholder="target" value="5" />
+          <input id="new-mission-xp-${plantId}" type="number" placeholder="reward xp" value="100" />
+          <button class="small-btn" onclick="window.addMission('${plantId}')">Add Mission</button>
+        </div>
       </div>
-    </div>
-    <div class="status-row">
-      <div class="mono" style="margin-bottom:6px;">Missions</div>
-      <table><thead><tr><th>Name</th><th>Objective Type</th><th>Target</th><th>XP</th><th>State</th><th></th></tr></thead><tbody>${missionRows || '<tr><td colspan="6" class="muted">No missions.</td></tr>'}</tbody></table>
-      <div class="row" style="margin-top:8px;">
-        <input id="new-mission-name-${plantId}" placeholder="Mission name" />
-        <input id="new-mission-type-${plantId}" placeholder="objective type" />
-        <input id="new-mission-threshold-${plantId}" type="number" placeholder="target" value="5" />
-        <input id="new-mission-xp-${plantId}" type="number" placeholder="reward xp" value="100" />
-        <button class="small-btn" onclick="window.addMission('${plantId}')">Add Mission</button>
+      <div class="status-toolbar">
+        <button class="small-btn" style="border-color:var(--accent);color:var(--accent);" onclick="window.saveGamification('${plantId}')">Save Gamification</button>
       </div>
-    </div>
-    <div class="status-toolbar">
-      <button class="small-btn" style="border-color:var(--accent);color:var(--accent);" onclick="window.saveGamification('${plantId}')">Save Gamification</button>
     </div>
     <div id="game-fb-${plantId}" class="feedback"></div>
   `;
@@ -1089,7 +1099,7 @@ window.importStatuses = async function(plantId) {
 window.saveStatuses = async function(plantId) {
   const statuses = normalizeStatusesForSave(statusDraftByPlant.get(plantId) || {});
   try {
-    await setDoc(doc(db, 'plants', plantId, 'config', 'statuses'), { statuses }, { merge: true });
+    await setDoc(doc(db, 'plants', plantId, 'config', 'statuses'), { statuses });
     statusDraftByPlant.set(plantId, statuses);
     feedback(`status-fb-${plantId}`, 'ok', 'Saved statuses to Firestore.');
   } catch (e) {
@@ -1234,6 +1244,11 @@ window.saveGamification = async function(plantId) {
 
 window.toggleStatusPanel = function(plantId) {
   statusPanelOpen[plantId] = !(statusPanelOpen[plantId] ?? false);
+  renderPlantsUsers();
+};
+
+window.toggleGamePanel = function(plantId) {
+  gamePanelOpen[plantId] = !(gamePanelOpen[plantId] ?? false);
   renderPlantsUsers();
 };
 
