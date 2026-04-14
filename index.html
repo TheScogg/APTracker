@@ -4242,6 +4242,53 @@ function addTapListener(el, fn) {
   el.addEventListener('click', fn);
 }
 
+// ── SORT ──
+// Applies primary sort order to `arr` in-place. Used by both renderIssues and openExportModal
+// so the PDF export always matches what the user sees on screen.
+function applySortOrder(arr, sort) {
+  if (sort === 'newest') {
+    arr.sort((a, b) => b.timestamp - a.timestamp);
+  } else if (sort === 'oldest') {
+    arr.sort((a, b) => a.timestamp - b.timestamp);
+  } else if (sort === 'machine') {
+    arr.sort((a, b) => a.machine.localeCompare(b.machine));
+  } else if (sort === 'status') {
+    const order = window._STATUS_ORDER || Object.keys(STATUSES);
+    arr.sort((a, b) => order.indexOf(currentStatusKey(a)) - order.indexOf(currentStatusKey(b)));
+  } else if (sort === 'longest-open') {
+    arr.sort((a, b) => {
+      const aOpen = currentStatusKey(a) !== 'resolved';
+      const bOpen = currentStatusKey(b) !== 'resolved';
+      if (aOpen && !bOpen) return -1;
+      if (!aOpen && bOpen) return 1;
+      return (a.timestamp || 0) - (b.timestamp || 0); // oldest unresolved first
+    });
+  } else if (sort === 'submitter') {
+    arr.sort((a, b) => (a.userName || '').localeCompare(b.userName || ''));
+  } else if (sort === 'most-updates') {
+    // For v2 issues the canonical history is in eventHistory (from events subcollection);
+    // fall back to statusHistory for legacy v1 issues.
+    const countUpdates = i => (i.eventHistory?.length || i.statusHistory?.length || 0);
+    arr.sort((a, b) => countUpdates(b) - countUpdates(a));
+  } else if (sort === 'recently-updated') {
+    // Prefer the Firestore updatedAt timestamp — it is written on every status change and
+    // is far more reliable than parsing free-form dateTime strings from history entries.
+    const lastUpdateTime = i => {
+      if (i.updatedAt?.toMillis) return i.updatedAt.toMillis();
+      // Fallback: scan eventHistory then statusHistory for the most recent dateTime string.
+      const h = i.eventHistory?.length ? i.eventHistory : i.statusHistory;
+      if (!h?.length) return i.timestamp || 0;
+      const last = h[h.length - 1];
+      if (!last.dateTime) return i.timestamp || 0;
+      try {
+        const d = new Date(last.dateTime);
+        return isNaN(d.getTime()) ? (i.timestamp || 0) : d.getTime();
+      } catch (e) { return i.timestamp || 0; }
+    };
+    arr.sort((a, b) => lastUpdateTime(b) - lastUpdateTime(a));
+  }
+}
+
 // ── RENDER ──
 function renderIssues() {
   const search=document.getElementById('search-input').value.toLowerCase();
@@ -4273,37 +4320,7 @@ function renderIssues() {
     return true;
   });
 
-  if (sort==='newest') filtered.sort((a,b)=>b.timestamp-a.timestamp);
-  else if (sort==='oldest') filtered.sort((a,b)=>a.timestamp-b.timestamp);
-  else if (sort==='machine') filtered.sort((a,b)=>a.machine.localeCompare(b.machine));
-  else if (sort==='status') {
-    const order = window._STATUS_ORDER || Object.keys(STATUSES);
-    filtered.sort((a,b)=> order.indexOf(currentStatusKey(a)) - order.indexOf(currentStatusKey(b)));
-  }
-  else if (sort==='longest-open') {
-    filtered.sort((a,b)=> {
-      const aOpen = currentStatusKey(a)!=='resolved';
-      const bOpen = currentStatusKey(b)!=='resolved';
-      if (aOpen && !bOpen) return -1;
-      if (!aOpen && bOpen) return 1;
-      return (a.timestamp||0) - (b.timestamp||0); // oldest unresolved first
-    });
-  }
-  else if (sort==='submitter') filtered.sort((a,b)=>(a.userName||'').localeCompare(b.userName||''));
-  else if (sort==='most-updates') {
-    filtered.sort((a,b)=> (b.statusHistory||[]).length - (a.statusHistory||[]).length);
-  }
-  else if (sort==='recently-updated') {
-    const lastUpdateTime = i => {
-      const h = i.eventHistory;
-      if (!h || !h.length) return i.timestamp||0;
-      const last = h[h.length-1];
-      if (!last.dateTime) return i.timestamp||0;
-      try { const d = new Date(last.dateTime); return isNaN(d.getTime()) ? (i.timestamp||0) : d.getTime(); }
-      catch(e) { return i.timestamp||0; }
-    };
-    filtered.sort((a,b)=> lastUpdateTime(b) - lastUpdateTime(a));
-  }
+  applySortOrder(filtered, sort);
   // Always float resolved issues to the bottom (unless sorting by status)
   if (sort !== 'status' && sort !== 'longest-open') {
     const isResolved = i => currentStatusKey(i) === 'resolved';
@@ -5702,11 +5719,8 @@ window.openExportModal = () => {
     return true;
   });
 
-  // Apply same sort
-  if (sort==='newest') filtered.sort((a,b)=>b.timestamp-a.timestamp);
-  else if (sort==='oldest') filtered.sort((a,b)=>a.timestamp-b.timestamp);
-  else if (sort==='machine') filtered.sort((a,b)=>a.machine.localeCompare(b.machine));
-  else if (sort==='status') { const order=window._STATUS_ORDER||Object.keys(STATUSES); filtered.sort((a,b)=>order.indexOf(currentStatusKey(a))-order.indexOf(currentStatusKey(b))); }
+  // Apply same sort as the issue log so the PDF always matches what the user sees.
+  applySortOrder(filtered, sort);
 
   document.getElementById('export-subtitle').textContent = filtered.length + ' issue' + (filtered.length!==1?'s':'') + ' in current view';
 
