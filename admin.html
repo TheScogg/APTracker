@@ -35,6 +35,9 @@
     .feedback.ok { color:var(--green); }
     .plant-head { display:flex; gap:8px; align-items:center; justify-content:space-between; margin-bottom:8px; }
     .plant-name { font-size:16px; font-weight:700; }
+    .plant-head-actions { display:flex; align-items:center; gap:6px; }
+    .plant-body { display:none; }
+    .plant-body.visible { display:block; }
     .pill { font-size:11px; border:1px solid rgba(59,130,246,0.35); color:var(--blue); border-radius:16px; padding:2px 9px; }
     table { width:100%; border-collapse:collapse; }
     th, td { text-align:left; padding:8px 6px; border-top:1px solid var(--border); font-size:12px; vertical-align:top; }
@@ -431,6 +434,7 @@ let missionDraftByPlant = new Map();
 const statusPanelOpen = {};
 const statusRowOpen = {};
 const gamePanelOpen = {};
+const plantPanelOpen = {};
 const SCHEDULE_SECTIONS = [
   { inputKey: 'page_1', section: 'page1', isChange: false },
   { inputKey: 'page_2', section: 'page2', isChange: false },
@@ -1003,6 +1007,7 @@ function renderPlantsUsers() {
     const card = document.createElement('div');
     card.className = 'card';
 
+    const plantOpen = plantPanelOpen[plant.id] ?? false;
     const rows = members.map(member => {
       const canEdit = member.userId !== currentUser.uid;
       const label = member.displayName || member.email || member.userId || 'Unknown';
@@ -1031,34 +1036,39 @@ function renderPlantsUsers() {
           <div class="plant-name">${esc(plant.name)}</div>
           <div class="muted">${esc(plant.location || 'No location')} · ${esc(plant.id)}</div>
         </div>
-        <span class="pill">admin</span>
-      </div>
-
-      <table>
-        <thead>
-          <tr><th>User</th><th>Role</th><th>Action</th></tr>
-        </thead>
-        <tbody>${rows || '<tr><td colspan="3" class="muted">No members found.</td></tr>'}</tbody>
-      </table>
-
-      <div style="margin-top:10px; border-top:1px solid var(--border); padding-top:10px;">
-        <div class="muted" style="margin-bottom:6px;">Add user to ${esc(plant.name)}</div>
-        <div class="row">
-          <select id="add-user-${plant.id}">
-            ${userOptions || '<option value="">No available users</option>'}
-          </select>
-          <select id="add-role-${plant.id}" style="max-width:120px;">
-            <option value="editor">editor</option>
-            <option value="viewer">viewer</option>
-            <option value="admin">admin</option>
-          </select>
-          <button class="small-btn" style="max-width:95px;" onclick="window.addMember('${plant.id}')">Add</button>
+        <div class="plant-head-actions">
+          <button class="compact-btn" onclick="window.togglePlantPanel('${plant.id}')">${plantOpen ? 'Minimize' : 'Expand'}</button>
+          <span class="pill">admin</span>
         </div>
-        <div id="fb-${plant.id}" class="feedback"></div>
       </div>
 
-      ${renderStatusEditor(plant.id, plant.name)}
-      ${renderGamificationEditor(plant.id, plant.name)}
+      <div class="plant-body ${plantOpen ? 'visible' : ''}">
+        <table>
+          <thead>
+            <tr><th>User</th><th>Role</th><th>Action</th></tr>
+          </thead>
+          <tbody>${rows || '<tr><td colspan="3" class="muted">No members found.</td></tr>'}</tbody>
+        </table>
+
+        <div style="margin-top:10px; border-top:1px solid var(--border); padding-top:10px;">
+          <div class="muted" style="margin-bottom:6px;">Add user to ${esc(plant.name)}</div>
+          <div class="row">
+            <select id="add-user-${plant.id}">
+              ${userOptions || '<option value="">No available users</option>'}
+            </select>
+            <select id="add-role-${plant.id}" style="max-width:120px;">
+              <option value="editor">editor</option>
+              <option value="viewer">viewer</option>
+              <option value="admin">admin</option>
+            </select>
+            <button class="small-btn" style="max-width:95px;" onclick="window.addMember('${plant.id}')">Add</button>
+          </div>
+          <div id="fb-${plant.id}" class="feedback"></div>
+        </div>
+
+        ${renderStatusEditor(plant.id, plant.name)}
+        ${renderGamificationEditor(plant.id, plant.name)}
+      </div>
     `;
     container.appendChild(card);
   }
@@ -1591,6 +1601,11 @@ window.toggleStatusPanel = function(plantId) {
 
 window.toggleGamePanel = function(plantId) {
   gamePanelOpen[plantId] = !(gamePanelOpen[plantId] ?? false);
+  renderPlantsUsers();
+};
+
+window.togglePlantPanel = function(plantId) {
+  plantPanelOpen[plantId] = !(plantPanelOpen[plantId] ?? false);
   renderPlantsUsers();
 };
 
