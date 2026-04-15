@@ -2894,7 +2894,7 @@ async function awardGamification(reason, context = {}) {
 
     const currentXp = Number(gameUserStats?.totals?.xp || 0) + totalDelta;
     const nextLevel = gameLevelFromXp(currentXp);
-    await setDoc(statsRef, { totals: { level: nextLevel } }, { merge: true });
+    await updateDoc(statsRef, { 'totals.level': nextLevel });
     await setDoc(gameLeaderboardDoc(), {
       [`entriesByUid.${currentUser.uid}`]: {
         uid: currentUser.uid,
