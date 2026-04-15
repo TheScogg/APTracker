@@ -665,19 +665,22 @@
 
   /* Sub-status panel underneath categories - React design */
   .swipe-sub-panel { overflow: hidden; max-height: 0; background: var(--bg); border: 1px solid var(--border); border-top: none; border-radius: 0 0 18px 18px; transition: max-height 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94); }
-  .swipe-sub-panel.visible { max-height: 500px; }
-  .swipe-sub-inner { padding: 12px 16px; display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; }
-  .swipe-sub-chip { font-size: 10px; font-weight: 500; padding: 4px 10px; border-radius: 9999px; border: 2px solid; cursor: pointer; transition: all 0.15s; white-space: nowrap; font-family: 'Nunito', sans-serif; opacity: 0; animation: swipeSubIn 0.25s ease forwards; line-height: 1.3; }
+  .swipe-sub-panel.visible { max-height: 600px; }
+  .swipe-sub-inner { padding: 8px 0; display: flex; flex-direction: column; gap: 0; }
+  .swipe-sub-chip { font-size: 13px; font-weight: 600; padding: 13px 18px; border: none; border-bottom: 1px solid var(--border); cursor: pointer; transition: background 0.12s, transform 0.08s; font-family: 'Nunito', sans-serif; opacity: 0; animation: swipeSubIn 0.22s ease forwards; line-height: 1.35; display: flex; align-items: center; gap: 10px; border-radius: 0; }
+  .swipe-sub-chip:last-child { border-bottom: none; }
   .swipe-sub-chip:nth-child(1) { animation-delay: 0.02s; }
-  .swipe-sub-chip:nth-child(2) { animation-delay: 0.06s; }
-  .swipe-sub-chip:nth-child(3) { animation-delay: 0.10s; }
-  .swipe-sub-chip:nth-child(4) { animation-delay: 0.14s; }
-  .swipe-sub-chip:nth-child(5) { animation-delay: 0.18s; }
-  .swipe-sub-chip:nth-child(6) { animation-delay: 0.22s; }
-  .swipe-sub-chip:nth-child(7) { animation-delay: 0.26s; }
-  .swipe-sub-chip:hover { background: rgba(255,255,255,0.05); }
-  .swipe-sub-chip:active { transform: scale(0.95); }
-  .swipe-sub-chip.skip { background: transparent; border: 1px dashed var(--border); color: var(--text3); font-weight: 500; }
+  .swipe-sub-chip:nth-child(2) { animation-delay: 0.05s; }
+  .swipe-sub-chip:nth-child(3) { animation-delay: 0.08s; }
+  .swipe-sub-chip:nth-child(4) { animation-delay: 0.11s; }
+  .swipe-sub-chip:nth-child(5) { animation-delay: 0.14s; }
+  .swipe-sub-chip:nth-child(6) { animation-delay: 0.17s; }
+  .swipe-sub-chip:nth-child(7) { animation-delay: 0.20s; }
+  .swipe-sub-chip:nth-child(8) { animation-delay: 0.23s; }
+  .swipe-sub-chip:hover { background: var(--bg3); }
+  .swipe-sub-chip:active { transform: scaleX(0.98); background: var(--bg3); }
+  .swipe-sub-chip-arrow { margin-left: auto; opacity: 0.35; font-size: 14px; flex-shrink: 0; }
+  .swipe-sub-chip.skip { color: var(--text3); font-weight: 500; font-style: italic; border-bottom: none; border-top: 1px solid var(--border); margin-top: 4px; }
   .swipe-sub-chip.skip:hover { color: var(--text); background: var(--bg3); }
 
   @keyframes slideIn { from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)} }
@@ -5235,23 +5238,29 @@ function renderIssues() {
             subPanel.insertBefore(mh, subInner);
           }
 
-          // Skip chip
-          const skipChip = document.createElement('div');
-          skipChip.className = 'swipe-sub-chip skip';
-          skipChip.textContent = 'Skip ›';
-          skipChip.dataset.sub = '';
-          subInner.appendChild(skipChip);
-
-          // Sub chips
+          // Sub rows (sub-status options first, skip at bottom)
+          const col = getStatusColor(statusKey);
           getStatusSubs(statusKey).forEach(sub => {
             const chip = document.createElement('div');
             chip.className = 'swipe-sub-chip';
-            const col = getStatusColor(statusKey);
-            chip.style.cssText = `background:${col}18;color:${col};border-color:${col}`;
-            chip.textContent = sub;
+            chip.style.cssText = `color:${col};border-left:3px solid ${col};background:${col}0d;padding-left:15px;`;
             chip.dataset.sub = sub;
+            const label = document.createElement('span');
+            label.textContent = sub;
+            const arrow = document.createElement('span');
+            arrow.className = 'swipe-sub-chip-arrow';
+            arrow.textContent = '›';
+            chip.appendChild(label);
+            chip.appendChild(arrow);
             subInner.appendChild(chip);
           });
+
+          // Skip chip (at the bottom)
+          const skipChip = document.createElement('div');
+          skipChip.className = 'swipe-sub-chip skip';
+          skipChip.textContent = 'Skip — no sub-status';
+          skipChip.dataset.sub = '';
+          subInner.appendChild(skipChip);
 
           // Add click handlers to sub chips
           subInner.querySelectorAll('.swipe-sub-chip').forEach(chip => {
