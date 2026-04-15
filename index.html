@@ -4,7 +4,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AP Tracker</title>
+<title>AP-Tracker</title>
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&family=Nunito:wght@300;400;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <style>
@@ -213,30 +213,73 @@
   .plant-dropdown-divider { height: 1px; background: var(--border); }
   .plant-add-btn { display: flex; align-items: center; gap: 8px; padding: 10px 14px; font-size: 12px; color: var(--accent); cursor: pointer; transition: background 0.1s; border: none; background: none; width: 100%; text-align: left; font-family: 'Nunito', sans-serif; font-weight: 700; }
   .plant-add-btn:hover { background: var(--bg3); }
-  .game-pill { display: flex; align-items: center; gap: 6px; background: linear-gradient(135deg, var(--bg3), rgba(168,85,247,0.13)); border: 1px solid var(--border); border-radius: 999px; padding: 5px 10px; cursor: pointer; color: var(--text2); font-size: 11px; font-weight: 700; font-family: 'Share Tech Mono', monospace; transition: all 0.15s; white-space: nowrap; }
-  .game-pill:hover { border-color: var(--purple); color: var(--text); }
+  .game-pill { display: flex; align-items: center; gap: 6px; background: linear-gradient(135deg, var(--bg3), rgba(168,85,247,0.13)); border: 1px solid rgba(168,85,247,0.25); border-radius: 999px; padding: 5px 10px; cursor: pointer; color: var(--text2); font-size: 12px; font-weight: 700; font-family: 'Share Tech Mono', monospace; transition: all 0.15s; white-space: nowrap; box-shadow: 0 0 0 1px rgba(168,85,247,0.08); position: relative; }
+  .game-pill:hover { border-color: var(--purple); color: var(--text); box-shadow: 0 0 0 1px rgba(168,85,247,0.2); }
   .game-pill .game-pill-xp { color: var(--purple); font-weight: 800; }
   .game-pill .game-pill-mission { color: var(--babyblue); }
   .user-dropdown .game-pill { width: calc(100% - 20px); margin: 10px; justify-content: center; }
-  .game-drawer { position: fixed; top: 0; right: -380px; width: 360px; max-width: 96vw; height: 100vh; background: var(--bg2); border-left: 1px solid var(--border); z-index: 450; box-shadow: -20px 0 50px rgba(0,0,0,0.45); transition: right 0.24s ease; display: flex; flex-direction: column; }
+  .game-drawer { position: fixed; top: 0; right: -400px; width: 380px; max-width: 96vw; height: 100vh; background: var(--bg2); border-left: 1px solid var(--border); z-index: 450; box-shadow: -20px 0 60px rgba(0,0,0,0.5); transition: right 0.26s cubic-bezier(0.4,0,0.2,1); display: flex; flex-direction: column; }
   .game-drawer.open { right: 0; }
-  .game-drawer-header { padding: 14px 14px 10px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
-  .game-drawer-title { font-family: 'Rajdhani', sans-serif; font-size: 18px; letter-spacing: 0.8px; font-weight: 700; }
-  .game-drawer-close { border: 1px solid var(--border); background: var(--bg3); color: var(--text2); border-radius: 8px; padding: 4px 8px; cursor: pointer; }
+  .game-drawer-header { padding: 16px 16px 12px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: linear-gradient(135deg, rgba(168,85,247,0.1), rgba(56,189,248,0.06)); flex-shrink: 0; }
+  .game-drawer-title { font-family: 'Rajdhani', sans-serif; font-size: 20px; letter-spacing: 0.8px; font-weight: 700; }
+  .game-drawer-close { border: 1px solid var(--border); background: var(--bg3); color: var(--text2); border-radius: 8px; padding: 4px 10px; cursor: pointer; font-size: 13px; transition: border-color 0.15s, color 0.15s; }
+  .game-drawer-close:hover { border-color: var(--text2); color: var(--text); }
   .game-drawer-body { padding: 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
-  .game-card { background: var(--bg3); border: 1px solid var(--border); border-radius: 12px; padding: 10px; }
-  .game-card-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text3); margin-bottom: 8px; font-weight: 800; }
-  .game-metric-row { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--text2); margin-bottom: 6px; }
-  .game-metric-row strong { color: var(--text); font-size: 14px; }
-  .game-progress { height: 7px; border-radius: 999px; background: rgba(255,255,255,0.08); overflow: hidden; margin-top: 4px; }
-  .game-progress > span { display: block; height: 100%; background: linear-gradient(90deg, var(--purple), var(--blue)); }
-  .game-mission-item { padding: 8px; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px; background: rgba(255,255,255,0.01); }
-  .game-mission-head { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--text); margin-bottom: 5px; }
-  .game-mission-meta { font-size: 10px; color: var(--text3); }
-  .game-leader-row { display: flex; justify-content: space-between; font-size: 12px; color: var(--text2); padding: 5px 0; border-bottom: 1px dashed rgba(255,255,255,0.08); }
+  .game-card { background: linear-gradient(135deg, var(--bg3), rgba(168,85,247,0.03)); border: 1px solid var(--border); border-radius: 14px; padding: 14px; box-shadow: 0 2px 12px rgba(0,0,0,0.2); }
+  .game-card-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text2); margin-bottom: 10px; font-weight: 800; border-left: 2px solid var(--purple); padding-left: 7px; }
+  .game-stats-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+  .game-stat-tile { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 8px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  .game-stat-tile .st-value { font-family: 'Rajdhani', sans-serif; font-size: 22px; font-weight: 700; color: var(--text); line-height: 1; }
+  .game-stat-tile .st-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text3); }
+  .game-stat-tile.xp .st-value { color: var(--purple); }
+  .game-stat-tile.streak .st-value { color: var(--yellow); }
+  .game-level-badge { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, var(--purple), var(--blue)); display: flex; align-items: center; justify-content: center; font-family: 'Rajdhani', sans-serif; font-size: 18px; font-weight: 700; color: white; box-shadow: 0 0 14px rgba(168,85,247,0.45); margin-bottom: 2px; }
+  .game-xp-bar-row { display: flex; justify-content: space-between; margin-top: 5px; font-size: 10px; color: var(--text3); }
+  .game-progress { height: 8px; border-radius: 999px; background: rgba(255,255,255,0.08); overflow: hidden; margin-top: 4px; box-shadow: inset 0 1px 3px rgba(0,0,0,0.3); }
+  .game-progress > span { display: block; height: 100%; background: linear-gradient(90deg, var(--purple), var(--blue)); transition: width 0.5s cubic-bezier(0.4,0,0.2,1); box-shadow: 0 0 8px rgba(168,85,247,0.4); }
+  .game-mission-item { padding: 10px; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px; background: rgba(255,255,255,0.01); transition: border-color 0.15s, background 0.15s; cursor: default; }
+  .game-mission-item:hover { border-color: rgba(168,85,247,0.3); background: rgba(168,85,247,0.04); }
+  .game-mission-complete { border-color: rgba(34,197,94,0.35) !important; background: rgba(34,197,94,0.04) !important; }
+  .game-mission-head { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--text); margin-bottom: 6px; }
+  .game-mission-meta { font-size: 10px; color: var(--text3); margin-top: 5px; }
+  .game-leader-row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--text2); padding: 7px 4px; border-bottom: 1px dashed rgba(255,255,255,0.08); gap: 6px; }
   .game-leader-row:last-child { border-bottom: none; }
-  .game-toast { position: fixed; bottom: 16px; right: 16px; z-index: 470; background: var(--bg2); border: 1px solid rgba(168,85,247,0.45); color: var(--text); border-radius: 10px; padding: 8px 10px; font-size: 12px; box-shadow: 0 10px 32px rgba(0,0,0,0.35); opacity: 0; transform: translateY(8px); pointer-events: none; transition: all 0.2s; }
+  .game-leader-left { display: flex; align-items: center; gap: 7px; min-width: 0; }
+  .game-leader-medal { font-size: 15px; flex-shrink: 0; }
+  .game-leader-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .game-leader-you { font-size: 10px; color: var(--purple); flex-shrink: 0; }
+  .game-toast { position: fixed; bottom: 16px; right: 16px; z-index: 470; background: var(--bg2); border: 1px solid rgba(168,85,247,0.45); color: var(--text); border-radius: 12px; padding: 10px 14px; font-size: 12px; font-weight: 700; box-shadow: 0 10px 32px rgba(0,0,0,0.35); opacity: 0; transform: translateY(8px); pointer-events: none; transition: all 0.22s; display: flex; align-items: center; gap: 7px; }
   .game-toast.show { opacity: 1; transform: translateY(0); }
+  .game-levelup-overlay { position: fixed; inset: 0; z-index: 500; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+  .game-levelup-card { background: var(--bg2); border: 1px solid rgba(168,85,247,0.5); border-radius: 20px; padding: 32px 44px; text-align: center; box-shadow: 0 0 60px rgba(168,85,247,0.3), 0 24px 80px rgba(0,0,0,0.6); animation: levelUpPop 0.4s cubic-bezier(0.34,1.56,0.64,1) both; }
+  .game-levelup-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--purple); margin-bottom: 6px; }
+  .game-levelup-num { font-family: 'Rajdhani', sans-serif; font-size: 80px; font-weight: 700; line-height: 1; background: linear-gradient(135deg, var(--purple), var(--blue)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .game-levelup-title { font-family: 'Rajdhani', sans-serif; font-size: 22px; letter-spacing: 1px; margin-top: 4px; color: var(--text); }
+  @keyframes levelUpPop { 0%{opacity:0;transform:scale(0.5) translateY(40px)} 70%{opacity:1;transform:scale(1.06) translateY(-4px)} 100%{opacity:1;transform:scale(1) translateY(0)} }
+  @media (max-width: 700px) { .game-drawer { width: 100vw; max-width: 100vw; } }
+  /* Notification badge on game pill */
+  .game-pill-badge { position: absolute; top: -3px; right: -3px; width: 11px; height: 11px; border-radius: 50%; background: var(--green); border: 2px solid var(--bg2); animation: badgePulse 2s ease-in-out infinite; }
+  @keyframes badgePulse { 0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,0.5)} 50%{box-shadow:0 0 0 5px rgba(34,197,94,0)} }
+  /* Confetti */
+  .confetti-container { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+  .confetti-piece { position: absolute; top: -10px; border-radius: 2px; animation: confettiFall linear forwards; }
+  @keyframes confettiFall { 0%{transform:translateY(0) rotate(0deg);opacity:1} 100%{transform:translateY(110vh) rotate(720deg);opacity:0} }
+  /* Mission complete overlay */
+  .game-mission-complete-overlay { position: fixed; inset: 0; z-index: 502; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+  .game-mission-complete-card { background: var(--bg2); border: 1px solid rgba(34,197,94,0.5); border-radius: 20px; padding: 28px 40px; text-align: center; box-shadow: 0 0 60px rgba(34,197,94,0.25), 0 24px 80px rgba(0,0,0,0.6); animation: levelUpPop 0.4s cubic-bezier(0.34,1.56,0.64,1) both; position: relative; z-index: 1; max-width: 320px; width: 90vw; }
+  .game-mission-complete-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--green); margin-bottom: 6px; }
+  .game-mission-complete-name { font-family: 'Rajdhani', sans-serif; font-size: 20px; font-weight: 700; color: var(--text); margin: 8px 0 4px; }
+  .game-mission-complete-xp { font-family: 'Rajdhani', sans-serif; font-size: 28px; font-weight: 700; color: var(--yellow); }
+  /* Badge earned overlay (reuses mission-complete styles) */
+  .game-badge-complete-card { background: var(--bg2); border: 1px solid rgba(168,85,247,0.5); border-radius: 20px; padding: 28px 40px; text-align: center; box-shadow: 0 0 60px rgba(168,85,247,0.25), 0 24px 80px rgba(0,0,0,0.6); animation: levelUpPop 0.4s cubic-bezier(0.34,1.56,0.64,1) both; position: relative; z-index: 1; max-width: 320px; width: 90vw; }
+  .game-badge-icon { font-size: 48px; line-height: 1; display: block; margin-bottom: 8px; }
+  /* Badge grid in drawer */
+  .game-badge-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); gap: 8px; }
+  .game-badge-tile { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 6px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .game-badge-tile.earned { border-color: rgba(168,85,247,0.4); background: rgba(168,85,247,0.06); }
+  .game-badge-tile .badge-icon { font-size: 22px; line-height: 1; }
+  .game-badge-tile .badge-name { font-size: 9px; color: var(--text2); font-weight: 700; text-align: center; line-height: 1.3; }
+  .game-badge-tile.locked { opacity: 0.4; filter: grayscale(1); }
   .user-pill { display: flex; align-items: center; gap: 7px; background: var(--bg3); border: 1px solid var(--border); border-radius: 20px; padding: 3px 9px 3px 3px; cursor: pointer; transition: border-color 0.15s; user-select: none; }
   .user-pill:hover { border-color: var(--text2); }
   .user-pill.open { border-color: var(--accent); }
@@ -608,6 +651,11 @@
   .swipe-status-tile:active { transform: scale(0.96); }
   .swipe-status-tile.current { background: #232120; border-color: currentColor; box-shadow: 0 0 10px currentColor; }
   .swipe-status-tile.selected { background: #232120; border-color: currentColor; box-shadow: 0 0 10px currentColor; }
+  .swipe-category-inner.has-selection .swipe-status-tile.current:not(.selected) {
+    background: var(--bg3);
+    border-color: transparent;
+    box-shadow: none;
+  }
   .swipe-tile-icon { font-size: 24px; line-height: 1; display: flex; align-items: center; justify-content: center; height: 32px; width: 32px; }
   .swipe-tile-label { font-size: 10px; font-weight: 500; text-align: center; font-family: 'Nunito', sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; width: 100%; }
 
@@ -737,17 +785,15 @@
 
   /* STATUS TIMELINE */
   .status-timeline { margin-top: 8px; }
-  .tl-list { display: flex; flex-direction: column; gap: 0; position: relative; padding-left: 20px; }
-  .tl-line { position: absolute; left: 7px; top: 8px; bottom: 8px; width: 1px; background: var(--border); }
-  .tl-entry { position: relative; padding-bottom: 10px; }
-  .tl-entry:last-child { padding-bottom: 0; }
-  .tl-dot { position: absolute; left: -24px; top: 50%; transform: translateY(-50%); width: 22px; height: 22px; border-radius: 999px; border: 2px solid; background: var(--bg2); display:flex; align-items:center; justify-content:center; font-size:12px; line-height:1; padding:0; color: var(--text); }
-  .tl-dot.current { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent); }
-  .tl-dot.is-button { cursor: pointer; }
+  .tl-list { display: flex; flex-direction: column; gap: 8px; position: relative; }
+  .tl-entry { position: relative; padding: 10px 12px 8px 14px; border-radius: 10px; background: var(--bg2); border: 1px solid var(--border); border-left: 3px solid transparent; }
+  .tl-wf-badge { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; display: inline-flex; align-items: center; gap: 4px; margin-bottom: 5px; background: none; border: none; padding: 0; cursor: pointer; font-family: 'Rajdhani', sans-serif; }
+  .tl-wf-badge:hover { opacity: 0.75; }
+  .tl-wf-badge.no-action { cursor: default; }
+  .tl-wf-badge.no-action:hover { opacity: 1; }
   .tl-header { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-  .tl-status-label { font-size: 15px; font-weight: 700; }
-  .tl-current-tag { font-size: 9px; background: var(--accent-glow); color: var(--accent); border: 1px solid rgba(249,115,22,0.4); border-radius: 8px; padding: 1px 6px; font-family: 'Share Tech Mono', monospace; }
-  .tl-time { font-size: 12px; font-weight: 600; color: var(--text2); font-family: 'Nunito', sans-serif; }
+  .tl-status-label { font-size: 15px; font-weight: 700; line-height: 1.3; }
+  .tl-time { font-size: 12px; font-weight: 600; color: var(--text2); font-family: 'Nunito', sans-serif; margin-top: 3px; }
   .tl-note-text { font-size: 13px; color: var(--text2); margin-top: 4px; font-style: italic; }
   .tl-edit-row { display: flex; gap: 5px; margin-top: 5px; flex-wrap: wrap; align-items: center; }
   .tl-mini-select { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 4px 7px; color: var(--text); font-size: 11px; font-family: 'Nunito', sans-serif; outline: none; max-width: 100%; min-width: 0; user-select: auto; pointer-events: auto; }
@@ -919,6 +965,7 @@
         </div>
         <button class="game-pill" id="game-pill" onclick="toggleGameDrawer()" title="Open gamification">
           🏆 <span class="game-pill-xp" id="game-pill-xp">0 XP</span> <span>•</span> <span class="game-pill-mission" id="game-pill-mission">0 missions</span>
+          <span class="game-pill-badge" style="display:none"></span>
         </button>
         <button class="user-dropdown-item" id="admin-page-btn" style="display:none">🛠 Admin Portal</button>
         <div class="theme-select-row">
@@ -931,6 +978,7 @@
         </div>
         <button class="game-pill" onclick="toggleGameDrawer()" title="Open gamification">
           🏆 <span class="game-pill-xp">0 XP</span> <span>•</span> <span class="game-pill-mission">0 missions</span>
+          <span class="game-pill-badge" style="display:none"></span>
         </button>
         <button class="user-dropdown-item danger" id="signout-btn">⏻ Sign Out</button>
       </div>
@@ -1289,24 +1337,48 @@
 
 <aside class="game-drawer" id="game-drawer" aria-label="Gamification drawer">
   <div class="game-drawer-header">
-    <div class="game-drawer-title">🏆 Progress</div>
+    <div class="game-drawer-title">🏆 Your Progress</div>
     <button class="game-drawer-close" onclick="toggleGameDrawer(false)">✕</button>
   </div>
   <div class="game-drawer-body">
+    <!-- Stats card -->
     <div class="game-card">
-      <div class="game-card-title">Your Stats</div>
-      <div class="game-metric-row"><span>Total XP</span><strong id="game-total-xp">0</strong></div>
-      <div class="game-metric-row"><span>Level</span><strong id="game-level">1</strong></div>
-      <div class="game-metric-row"><span>Current Streak</span><strong id="game-streak">0</strong></div>
+      <div class="game-card-title">Stats</div>
+      <div class="game-stats-grid">
+        <div class="game-stat-tile xp">
+          <div class="st-value" id="game-total-xp">0</div>
+          <div class="st-label">Total XP</div>
+        </div>
+        <div class="game-stat-tile level">
+          <div class="game-level-badge" id="game-level-badge">1</div>
+          <div class="st-label">Level</div>
+        </div>
+        <div class="game-stat-tile streak">
+          <div class="st-value" id="game-streak">0</div>
+          <div class="st-label">🔥 Streak</div>
+        </div>
+      </div>
       <div class="game-progress"><span id="game-level-progress" style="width:0%"></span></div>
+      <div class="game-xp-bar-row">
+        <span id="game-xp-current">0 XP</span>
+        <span id="game-xp-to-next">to Level 2</span>
+      </div>
     </div>
+    <!-- Missions card -->
     <div class="game-card">
       <div class="game-card-title">Missions</div>
       <div id="game-missions-list"></div>
     </div>
+    <!-- Leaderboard card -->
     <div class="game-card">
       <div class="game-card-title">Leaderboard</div>
+      <div style="font-size:10px;color:var(--text3);margin-bottom:8px;" id="game-lb-period-label">This week</div>
       <div id="game-leaderboard-list"></div>
+    </div>
+    <!-- Badges card -->
+    <div class="game-card">
+      <div class="game-card-title">Badges</div>
+      <div id="game-badges-list"></div>
     </div>
   </div>
 </aside>
@@ -1378,7 +1450,8 @@ function plantMemberDocRef(plantId, userId) { return doc(db, 'plants', plantId, 
 function gameConfigDoc() { return doc(db, 'plants', currentPlantId, 'gamificationConfig', 'main'); }
 function gameUserStatsDoc(userId) { return doc(db, 'plants', currentPlantId, 'userGameStats', userId); }
 function gameMissionsCol() { return collection(db, 'plants', currentPlantId, 'missions'); }
-function gameLeaderboardDoc(boardId = 'weekly') { return doc(db, 'plants', currentPlantId, 'leaderboards', boardId); }
+function gameLeaderboardDoc(boardId) { return doc(db, 'plants', currentPlantId, 'leaderboards', boardId || gameConfig?.leaderboardPeriod || 'weekly'); }
+function userBadgesDoc(userId) { return doc(db, 'plants', currentPlantId, 'userBadges', userId); }
 function gameEventsCol() { return collection(db, 'plants', currentPlantId, 'gameEvents'); }
 function missionProgressDoc(missionId, subjectId) { return doc(db, 'plants', currentPlantId, 'missions', missionId, 'progress', subjectId); }
 
@@ -2248,41 +2321,110 @@ function renderGamePanel() {
   const streak = Number(gameUserStats?.streaks?.current || 0);
   const missionCount = gameMissions.length;
   const progressPct = gameLevelProgress(xp);
+
+  // XP bar labels
+  const prevFloor = Math.pow(level - 1, 2) * 100;
+  const nextFloor = Math.pow(level, 2) * 100;
+  const xpInLevel = xp - prevFloor;
+  const xpNeeded = nextFloor - prevFloor;
+
+  // Detect level-up
+  if (typeof gamePrevLevel !== 'undefined' && level > gamePrevLevel && gamePrevLevel > 0) {
+    showLevelUpCelebration(level);
+  }
+  gamePrevLevel = level;
+
   document.querySelectorAll('.game-pill .game-pill-xp').forEach(el => { el.textContent = `${xp} XP`; });
   document.querySelectorAll('.game-pill .game-pill-mission').forEach(el => { el.textContent = `${missionCount} missions`; });
+
   const totalXpEl = document.getElementById('game-total-xp');
-  const levelEl = document.getElementById('game-level');
+  const levelBadgeEl = document.getElementById('game-level-badge');
   const streakEl = document.getElementById('game-streak');
   const progressEl = document.getElementById('game-level-progress');
+  const xpCurrentEl = document.getElementById('game-xp-current');
+  const xpToNextEl = document.getElementById('game-xp-to-next');
+
   if (totalXpEl) totalXpEl.textContent = String(xp);
-  if (levelEl) levelEl.textContent = String(level);
+  if (levelBadgeEl) levelBadgeEl.textContent = String(level);
   if (streakEl) streakEl.textContent = String(streak);
   if (progressEl) progressEl.style.width = `${progressPct}%`;
+  if (xpCurrentEl) xpCurrentEl.textContent = `${xpInLevel} / ${xpNeeded} XP`;
+  if (xpToNextEl) xpToNextEl.textContent = `to Level ${level + 1}`;
 
   const missionsList = document.getElementById('game-missions-list');
   if (missionsList) {
-    if (!gameMissions.length) missionsList.innerHTML = `<div class="game-mission-meta">No active missions for this plant.</div>`;
-    else {
+    if (!gameMissions.length) {
+      missionsList.innerHTML = `<div class="game-mission-meta" style="padding:8px 0;text-align:center;">No active missions for this plant.</div>`;
+    } else {
+      let anyBadged = false;
       missionsList.innerHTML = gameMissions.map(m => {
         const current = Number(m.progress?.current || 0);
         const target = Number(m.objective?.threshold || 1);
         const pct = Math.max(0, Math.min(100, Math.round((current / Math.max(1, target)) * 100)));
-        return `<div class="game-mission-item">
-          <div class="game-mission-head"><span>${esc(m.name || 'Mission')}</span><strong>${pct}%</strong></div>
-          <div class="game-progress"><span style="width:${pct}%"></span></div>
-          <div class="game-mission-meta">${current}/${target} • Reward ${Number(m.rewards?.xp || 0)} XP</div>
+        const completed = pct >= 100;
+        const near = pct >= 90 && !completed;
+        if (completed || near) anyBadged = true;
+        // Detect completion transition
+        const prevPct = gameMissionPrevPct.get(m.id);
+        if (completed && prevPct !== undefined && prevPct < 100) {
+          showMissionCompleteCelebration(m);
+        }
+        gameMissionPrevPct.set(m.id, pct);
+        const progressColor = completed
+          ? 'linear-gradient(90deg,#22c55e,#4ade80)'
+          : pct > 50
+            ? 'linear-gradient(90deg,var(--yellow),var(--green))'
+            : 'linear-gradient(90deg,var(--purple),var(--blue))';
+        const glowColor = completed ? '0 0 8px rgba(34,197,94,0.5)' : 'none';
+        return `<div class="game-mission-item${completed ? ' game-mission-complete' : ''}">
+          <div class="game-mission-head">
+            <span>${completed ? '✓ ' : near ? '🔔 ' : ''}${esc(m.name || 'Mission')}</span>
+            <strong style="color:${completed ? 'var(--green)' : near ? 'var(--yellow)' : 'var(--text)'}">${pct}%</strong>
+          </div>
+          <div class="game-progress"><span style="width:${pct}%;background:${progressColor};box-shadow:${glowColor}"></span></div>
+          <div class="game-mission-meta">${current} / ${target} &nbsp;·&nbsp; <span style="color:var(--yellow)">${Number(m.rewards?.xp || 0)} XP</span> reward</div>
         </div>`;
       }).join('');
+      updateGamePillBadge(anyBadged);
     }
   }
 
+  // Badges card
+  const badgesList = document.getElementById('game-badges-list');
+  if (badgesList) {
+    const defs = gameBadgeDefs.length ? gameBadgeDefs : DEFAULT_BADGE_DEFS;
+    if (!defs.length) {
+      badgesList.innerHTML = `<div class="game-mission-meta" style="text-align:center;">No badges configured.</div>`;
+    } else {
+      badgesList.innerHTML = `<div class="game-badge-grid">${defs.map(b => {
+        const earned = !!gameUserBadges[b.id];
+        return `<div class="game-badge-tile ${earned ? 'earned' : 'locked'}" title="${esc(b.description || b.name)}">
+          <span class="badge-icon">${b.icon || '🏅'}</span>
+          <span class="badge-name">${esc(b.name)}</span>
+          ${earned ? '<span style="font-size:9px;color:var(--green);">✓</span>' : ''}
+        </div>`;
+      }).join('')}</div>`;
+    }
+  }
+
+  const medals = ['🥇', '🥈', '🥉'];
   const lbList = document.getElementById('game-leaderboard-list');
   if (lbList) {
-    if (!gameLeaderboard.length) lbList.innerHTML = `<div class="game-mission-meta">Leaderboard is warming up…</div>`;
-    else {
-      lbList.innerHTML = gameLeaderboard.slice(0, 8).map((entry, idx) =>
-        `<div class="game-leader-row"><span>${idx + 1}. ${esc(entry.displayName || entry.name || 'User')}</span><strong>${Number(entry.xp || 0)} XP</strong></div>`
-      ).join('');
+    if (!gameLeaderboard.length) {
+      lbList.innerHTML = `<div class="game-mission-meta" style="padding:8px 0;text-align:center;">Leaderboard is warming up…</div>`;
+    } else {
+      lbList.innerHTML = gameLeaderboard.slice(0, 8).map((entry, idx) => {
+        const isMe = entry.uid === currentUser?.uid;
+        const medal = medals[idx] || `${idx + 1}.`;
+        return `<div class="game-leader-row"${isMe ? ' style="background:rgba(168,85,247,0.07);border-radius:8px;padding:7px 8px;margin:-2px -4px;"' : ''}>
+          <div class="game-leader-left">
+            <span class="game-leader-medal">${medal}</span>
+            <span class="game-leader-name">${esc(entry.displayName || entry.name || 'User')}</span>
+            ${isMe ? '<span class="game-leader-you">you</span>' : ''}
+          </div>
+          <strong style="color:var(--yellow);flex-shrink:0">${Number(entry.xp || 0)} XP</strong>
+        </div>`;
+      }).join('');
     }
   }
 }
@@ -2292,14 +2434,134 @@ window.toggleGameDrawer = (forceOpen) => {
   if (!drawer) return;
   gameDrawerOpen = typeof forceOpen === 'boolean' ? forceOpen : !gameDrawerOpen;
   drawer.classList.toggle('open', gameDrawerOpen);
+  if (gameDrawerOpen) updateGamePillBadge(false); // clear badge when drawer opens
 };
 
 function showGameToast(message) {
   const el = document.getElementById('game-toast');
   if (!el) return;
-  el.textContent = message;
+  const isPositive = String(message).startsWith('+');
+  const isNegative = String(message).startsWith('-') || String(message).startsWith('−');
+  const icon = isNegative ? '💀' : isPositive ? '⚡' : '🎯';
+  const color = isNegative ? 'var(--red)' : 'var(--yellow)';
+  el.innerHTML = `<span style="color:${color};font-size:14px;">${icon}</span><span>${esc(message)}</span>`;
   el.classList.add('show');
-  setTimeout(() => el.classList.remove('show'), 1700);
+  setTimeout(() => el.classList.remove('show'), 2000);
+}
+
+function showLevelUpCelebration(level) {
+  const overlay = document.createElement('div');
+  overlay.className = 'game-levelup-overlay';
+  overlay.innerHTML = `
+    <div class="confetti-container" id="levelup-confetti"></div>
+    <div class="game-levelup-card" style="position:relative;z-index:1;">
+      <div class="game-levelup-label">Level Up!</div>
+      <div class="game-levelup-num">${level}</div>
+      <div class="game-levelup-title">Keep it up!</div>
+    </div>`;
+  document.body.appendChild(overlay);
+  launchConfetti(overlay.querySelector('.confetti-container'));
+  showGameToast(`Level ${level} reached!`);
+  setTimeout(() => overlay.remove(), 3000);
+}
+
+function launchConfetti(container, count = 55) {
+  if (!container) return;
+  const colors = ['#a855f7','#3b82f6','#22c55e','#eab308','#f97316','#ef4444','#38bdf8','#ec4899'];
+  for (let i = 0; i < count; i++) {
+    const piece = document.createElement('div');
+    piece.className = 'confetti-piece';
+    const color = colors[i % colors.length];
+    const left   = Math.random() * 100;
+    const dur    = 1.4 + Math.random() * 1.4;
+    const delay  = Math.random() * 0.9;
+    const size   = 6 + Math.floor(Math.random() * 8);
+    piece.style.cssText = `left:${left}%;width:${size}px;height:${size}px;background:${color};` +
+      `animation-duration:${dur}s;animation-delay:${delay}s;` +
+      `border-radius:${Math.random() > 0.5 ? '50%' : '2px'};`;
+    container.appendChild(piece);
+  }
+}
+
+function showMissionCompleteCelebration(mission) {
+  const xp = Number(mission.rewards?.xp || 0);
+  const overlay = document.createElement('div');
+  overlay.className = 'game-mission-complete-overlay';
+  overlay.innerHTML = `
+    <div class="confetti-container" id="mission-confetti"></div>
+    <div class="game-mission-complete-card">
+      <div class="game-mission-complete-label">Mission Complete!</div>
+      <div style="font-size:40px;line-height:1;margin:6px 0;">🎯</div>
+      <div class="game-mission-complete-name">${esc(mission.name || 'Mission')}</div>
+      ${xp ? `<div class="game-mission-complete-xp">+${xp} XP</div>` : ''}
+    </div>`;
+  document.body.appendChild(overlay);
+  launchConfetti(overlay.querySelector('.confetti-container'), 65);
+  showGameToast(`+${xp} XP • Mission complete!`);
+  setTimeout(() => overlay.remove(), 3500);
+}
+
+function showBadgeEarnedCelebration(badge) {
+  const overlay = document.createElement('div');
+  overlay.className = 'game-mission-complete-overlay';
+  overlay.innerHTML = `
+    <div class="confetti-container"></div>
+    <div class="game-badge-complete-card">
+      <div class="game-mission-complete-label">Badge Unlocked!</div>
+      <span class="game-badge-icon">${badge.icon || '🏅'}</span>
+      <div class="game-mission-complete-name">${esc(badge.name)}</div>
+      <div style="font-size:12px;color:var(--text2);margin-top:4px;">${esc(badge.description || '')}</div>
+      ${Number(badge.xpReward||0) ? `<div class="game-mission-complete-xp" style="margin-top:8px;">+${badge.xpReward} XP</div>` : ''}
+    </div>`;
+  document.body.appendChild(overlay);
+  launchConfetti(overlay.querySelector('.confetti-container'), 45);
+  showGameToast(`Badge unlocked: ${badge.name}`);
+  setTimeout(() => overlay.remove(), 3500);
+}
+
+function updateGamePillBadge(show) {
+  document.querySelectorAll('.game-pill-badge').forEach(el => {
+    el.style.display = show ? '' : 'none';
+  });
+}
+
+function checkBadgeTrigger(badge, stats) {
+  const threshold = Number(badge.threshold || 1);
+  switch (badge.triggerType) {
+    case 'xp_milestone':        return Number(stats.totals?.xp || 0) >= threshold;
+    case 'level_reached':       return Number(stats.totals?.level || 1) >= threshold;
+    case 'streak_days':         return Number(stats.streaks?.current || 0) >= threshold;
+    case 'issues_resolved':     return Number(stats.totals?.issuesResolved || 0) >= threshold;
+    case 'photos_attached':     return Number(stats.totals?.photosAttached || 0) >= threshold;
+    case 'issues_created':      return Number(stats.totals?.issuesCreated || 0) >= threshold;
+    case 'missions_completed':  return Number(stats.totals?.missionsCompleted || 0) >= threshold;
+    default: return false;
+  }
+}
+
+async function checkAndAwardBadges() {
+  if (!currentPlantId || !currentUser?.uid) return;
+  const defs = (gameBadgeDefs.length ? gameBadgeDefs : DEFAULT_BADGE_DEFS).filter(b => b.isEnabled !== false);
+  for (const badge of defs) {
+    if (gameUserBadges[badge.id]) continue; // already earned
+    if (!checkBadgeTrigger(badge, gameUserStats)) continue;
+    // Award optimistically to prevent re-triggering
+    gameUserBadges[badge.id] = { earnedAt: new Date(), badgeName: badge.name, icon: badge.icon };
+    try {
+      const badgesRef = userBadgesDoc(currentUser.uid);
+      await setDoc(badgesRef, {
+        [`earnedBadges.${badge.id}`]: { earnedAt: serverTimestamp(), badgeName: badge.name, icon: badge.icon || '🏅' },
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+      showBadgeEarnedCelebration(badge);
+      // Award badge XP as a direct stat increment (no dedup loop risk — badge already marked earned)
+      if (Number(badge.xpReward || 0) > 0) {
+        await setDoc(gameUserStatsDoc(currentUser.uid), { 'totals.xp': increment(Number(badge.xpReward)) }, { merge: true });
+      }
+    } catch (e) {
+      console.warn('Badge award failed:', e?.message);
+    }
+  }
 }
 
 async function ensureGamificationConfig() {
@@ -2313,14 +2575,30 @@ function stopGamificationListeners() {
   if (gameStatsUnsubscribe) { gameStatsUnsubscribe(); gameStatsUnsubscribe = null; }
   if (gameMissionsUnsubscribe) { gameMissionsUnsubscribe(); gameMissionsUnsubscribe = null; }
   if (gameLeaderboardUnsubscribe) { gameLeaderboardUnsubscribe(); gameLeaderboardUnsubscribe = null; }
+  if (gameConfigUnsubscribe) { gameConfigUnsubscribe(); gameConfigUnsubscribe = null; }
+  if (gameBadgesUnsubscribe) { gameBadgesUnsubscribe(); gameBadgesUnsubscribe = null; }
 }
 
 function startGamificationListeners() {
   stopGamificationListeners();
   if (!currentPlantId || !currentUser?.uid) return;
+
+  // Config listener — keeps gameBadgeDefs + leaderboardPeriod live
+  gameConfigUnsubscribe = onSnapshot(gameConfigDoc(), snap => {
+    gameConfig = snap.exists() ? snap.data() : GAME_DEFAULT_CONFIG;
+    gameBadgeDefs = Array.isArray(gameConfig.badges) ? gameConfig.badges : DEFAULT_BADGE_DEFS;
+  });
+
+  // User badges listener
+  gameBadgesUnsubscribe = onSnapshot(userBadgesDoc(currentUser.uid), snap => {
+    gameUserBadges = snap.exists() ? (snap.data()?.earnedBadges || {}) : {};
+    renderGamePanel();
+  });
+
   gameStatsUnsubscribe = onSnapshot(gameUserStatsDoc(currentUser.uid), snap => {
     gameUserStats = snap.exists() ? snap.data() : { totals: { xp: 0, level: 1 }, streaks: { current: 0 } };
     renderGamePanel();
+    checkAndAwardBadges();
   });
   gameMissionsUnsubscribe = onSnapshot(query(gameMissionsCol(), where('isActive', '==', true), orderBy('startsAt', 'desc'), limit(6)), async snap => {
     const missionRows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -2440,11 +2718,17 @@ async function awardGamification(reason, context = {}) {
       dedupeKey,
       schemaVersion: 1
     });
+    const reasonCounters = {};
+    if (reason === 'issue_resolved')           reasonCounters['totals.issuesResolved']  = increment(1);
+    if (reason === 'issue_created_complete')   reasonCounters['totals.issuesCreated']   = increment(1);
+    if (reason === 'photo_attached')           reasonCounters['totals.photosAttached']  = increment(1);
+    if (reason === 'serial_captured_when_required') reasonCounters['totals.serialsCaptured'] = increment(1);
     batch.set(statsRef, {
       userId: currentUser.uid,
       displayName: currentUser.displayName || currentUser.email || 'User',
-      totals: { xp: increment(totalDelta) },
-      streaks: { current: increment(totalDelta > 0 ? 1 : 0) },
+      'totals.xp': increment(totalDelta),
+      ...reasonCounters,
+      'streaks.current': increment(totalDelta > 0 ? 1 : 0),
       lastEventAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       schemaVersion: 1
@@ -2454,7 +2738,7 @@ async function awardGamification(reason, context = {}) {
     const currentXp = Number(gameUserStats?.totals?.xp || 0) + totalDelta;
     const nextLevel = gameLevelFromXp(currentXp);
     await setDoc(statsRef, { totals: { level: nextLevel } }, { merge: true });
-    await setDoc(gameLeaderboardDoc('weekly'), {
+    await setDoc(gameLeaderboardDoc(), {
       [`entriesByUid.${currentUser.uid}`]: {
         uid: currentUser.uid,
         displayName: currentUser.displayName || currentUser.email || 'User',
@@ -2505,7 +2789,23 @@ let gameLeaderboard = [];
 let gameStatsUnsubscribe = null;
 let gameMissionsUnsubscribe = null;
 let gameLeaderboardUnsubscribe = null;
+let gameConfigUnsubscribe = null;
+let gameBadgesUnsubscribe = null;
+let gamePrevLevel = 0;
 const gameCapTracker = new Map();
+const gameMissionPrevPct = new Map();
+let gameBadgeDefs = [];
+let gameUserBadges = {};
+
+const DEFAULT_BADGE_DEFS = [
+  { id: 'badge_first_resolve',  name: 'First Responder', icon: '✅', description: 'Resolve your first issue',   triggerType: 'issues_resolved',  threshold: 1,   xpReward: 25,  isEnabled: true },
+  { id: 'badge_streak_3',       name: 'On a Roll',       icon: '🔥', description: 'Maintain a 3-day streak',  triggerType: 'streak_days',      threshold: 3,   xpReward: 30,  isEnabled: true },
+  { id: 'badge_streak_10',      name: 'Committed',       icon: '💪', description: '10-day streak',             triggerType: 'streak_days',      threshold: 10,  xpReward: 100, isEnabled: true },
+  { id: 'badge_photo_pro',      name: 'Photo Pro',       icon: '📸', description: 'Attach 50 photos',          triggerType: 'photos_attached',  threshold: 50,  xpReward: 75,  isEnabled: true },
+  { id: 'badge_level_5',        name: 'Veteran',         icon: '⭐', description: 'Reach Level 5',             triggerType: 'level_reached',    threshold: 5,   xpReward: 150, isEnabled: true },
+  { id: 'badge_xp_500',         name: 'XP Hunter',       icon: '⚡', description: 'Earn 500 total XP',         triggerType: 'xp_milestone',     threshold: 500, xpReward: 50,  isEnabled: true },
+  { id: 'badge_resolver_10',    name: 'Problem Solver',  icon: '🏆', description: 'Resolve 10 issues',         triggerType: 'issues_resolved',  threshold: 10,  xpReward: 100, isEnabled: true },
+];
 const GAME_DEFAULT_CONFIG = {
   enabled: true,
   weights: { issue_created_complete: 5, status_changed_valid: 2, workflow_step_advance: 3, issue_resolved: 8, photo_attached: 2, serial_captured_when_required: 4 },
@@ -4244,6 +4544,53 @@ function addTapListener(el, fn) {
   el.addEventListener('click', fn);
 }
 
+// ── SORT ──
+// Applies primary sort order to `arr` in-place. Used by both renderIssues and openExportModal
+// so the PDF export always matches what the user sees on screen.
+function applySortOrder(arr, sort) {
+  if (sort === 'newest') {
+    arr.sort((a, b) => b.timestamp - a.timestamp);
+  } else if (sort === 'oldest') {
+    arr.sort((a, b) => a.timestamp - b.timestamp);
+  } else if (sort === 'machine') {
+    arr.sort((a, b) => a.machine.localeCompare(b.machine));
+  } else if (sort === 'status') {
+    const order = window._STATUS_ORDER || Object.keys(STATUSES);
+    arr.sort((a, b) => order.indexOf(currentStatusKey(a)) - order.indexOf(currentStatusKey(b)));
+  } else if (sort === 'longest-open') {
+    arr.sort((a, b) => {
+      const aOpen = currentStatusKey(a) !== 'resolved';
+      const bOpen = currentStatusKey(b) !== 'resolved';
+      if (aOpen && !bOpen) return -1;
+      if (!aOpen && bOpen) return 1;
+      return (a.timestamp || 0) - (b.timestamp || 0); // oldest unresolved first
+    });
+  } else if (sort === 'submitter') {
+    arr.sort((a, b) => (a.userName || '').localeCompare(b.userName || ''));
+  } else if (sort === 'most-updates') {
+    // For v2 issues the canonical history is in eventHistory (from events subcollection);
+    // fall back to statusHistory for legacy v1 issues.
+    const countUpdates = i => (i.eventHistory?.length || i.statusHistory?.length || 0);
+    arr.sort((a, b) => countUpdates(b) - countUpdates(a));
+  } else if (sort === 'recently-updated') {
+    // Prefer the Firestore updatedAt timestamp — it is written on every status change and
+    // is far more reliable than parsing free-form dateTime strings from history entries.
+    const lastUpdateTime = i => {
+      if (i.updatedAt?.toMillis) return i.updatedAt.toMillis();
+      // Fallback: scan eventHistory then statusHistory for the most recent dateTime string.
+      const h = i.eventHistory?.length ? i.eventHistory : i.statusHistory;
+      if (!h?.length) return i.timestamp || 0;
+      const last = h[h.length - 1];
+      if (!last.dateTime) return i.timestamp || 0;
+      try {
+        const d = new Date(last.dateTime);
+        return isNaN(d.getTime()) ? (i.timestamp || 0) : d.getTime();
+      } catch (e) { return i.timestamp || 0; }
+    };
+    arr.sort((a, b) => lastUpdateTime(b) - lastUpdateTime(a));
+  }
+}
+
 // ── RENDER ──
 function renderIssues() {
   const search=document.getElementById('search-input').value.toLowerCase();
@@ -4275,37 +4622,7 @@ function renderIssues() {
     return true;
   });
 
-  if (sort==='newest') filtered.sort((a,b)=>b.timestamp-a.timestamp);
-  else if (sort==='oldest') filtered.sort((a,b)=>a.timestamp-b.timestamp);
-  else if (sort==='machine') filtered.sort((a,b)=>a.machine.localeCompare(b.machine));
-  else if (sort==='status') {
-    const order = window._STATUS_ORDER || Object.keys(STATUSES);
-    filtered.sort((a,b)=> order.indexOf(currentStatusKey(a)) - order.indexOf(currentStatusKey(b)));
-  }
-  else if (sort==='longest-open') {
-    filtered.sort((a,b)=> {
-      const aOpen = currentStatusKey(a)!=='resolved';
-      const bOpen = currentStatusKey(b)!=='resolved';
-      if (aOpen && !bOpen) return -1;
-      if (!aOpen && bOpen) return 1;
-      return (a.timestamp||0) - (b.timestamp||0); // oldest unresolved first
-    });
-  }
-  else if (sort==='submitter') filtered.sort((a,b)=>(a.userName||'').localeCompare(b.userName||''));
-  else if (sort==='most-updates') {
-    filtered.sort((a,b)=> (b.statusHistory||[]).length - (a.statusHistory||[]).length);
-  }
-  else if (sort==='recently-updated') {
-    const lastUpdateTime = i => {
-      const h = i.eventHistory;
-      if (!h || !h.length) return i.timestamp||0;
-      const last = h[h.length-1];
-      if (!last.dateTime) return i.timestamp||0;
-      try { const d = new Date(last.dateTime); return isNaN(d.getTime()) ? (i.timestamp||0) : d.getTime(); }
-      catch(e) { return i.timestamp||0; }
-    };
-    filtered.sort((a,b)=> lastUpdateTime(b) - lastUpdateTime(a));
-  }
+  applySortOrder(filtered, sort);
   // Always float resolved issues to the bottom (unless sorting by status)
   if (sort !== 'status' && sort !== 'longest-open') {
     const isResolved = i => currentStatusKey(i) === 'resolved';
@@ -4416,10 +4733,10 @@ function renderIssues() {
     // Workflow state configuration
     const workflowState = issue.workflowState || 'called';
     const workflowConfig = {
-      called:      { icon: '📣', label: 'Called',      cssState: 'called' },
+      called:      { icon: '🔔', label: 'Called',      cssState: 'called' },
       accepted:    { icon: '👋', label: 'Accepted',    cssState: 'accepted' },
       'in-progress': { icon: '🔧', label: 'In Progress', cssState: 'in-progress' },
-      finished:    { icon: '✅', label: 'Finished',    cssState: 'finished' }
+      finished:    { icon: '✓',  label: 'Finished',    cssState: 'finished' }
     };
     const wfOrder = ['called', 'accepted', 'in-progress', 'finished'];
     const wfCurrentIdx = wfOrder.indexOf(workflowState);
@@ -4438,25 +4755,31 @@ function renderIssues() {
         ? 'finished'
         : (entry.status === currentKey ? workflowState : (wfByStatus[entry.status] || 'called'));
       const wfCfg = workflowConfig[entryWorkflowState] || workflowConfig.called;
-      const wfColor = entryWorkflowState === 'called' ? '#16a34a'
-        : entryWorkflowState === 'accepted' ? '#16a34a'
+      const wfColor = entryWorkflowState === 'called' ? '#eab308'
+        : entryWorkflowState === 'accepted' ? '#22c55e'
         : entryWorkflowState === 'in-progress' ? '#3b82f6'
         : '#a855f7';
-      const dotEl = !isResolvedEntry
-        ? `<button class="tl-dot is-button${isCurrent?' current':''}" style="border-color:${wfColor};background:${alphaColor(wfColor,0.18)};color:${wfColor};" onclick="event.stopPropagation(); cycleWorkflowStateForStatus('${issue.id}','${entry.status}')" title="Workflow: ${wfCfg.label}. Tap to change.">${wfCfg.icon}</button>`
-        : `<div class="tl-dot${isCurrent?' current':''}" style="border-color:${cfg.color};background:${cfg.color};color:#111;">${cfg.icon}</div>`;
 
-      return `<div class="tl-entry">
-        ${dotEl}
+      // Left bar color: workflow state color for regular entries, status color for resolved
+      const barColor = isResolvedEntry ? cfg.color : wfColor;
+      // Subtle tinted background using bar color
+      const entryBg = `background:${alphaColor(barColor, 0.05)};`;
+
+      // Workflow badge (clickable for non-resolved entries to cycle state)
+      const wfBadgeLabel = `${wfCfg.icon} ${wfCfg.label.toUpperCase()}${isCurrent ? ' · CURRENT' : ''}`;
+      const wfBadge = isResolvedEntry
+        ? `<div class="tl-wf-badge no-action" style="color:${cfg.color}">${cfg.icon} RESOLVED${isCurrent ? ' · CURRENT' : ''}</div>`
+        : `<button class="tl-wf-badge" style="color:${wfColor}" onclick="event.stopPropagation(); cycleWorkflowStateForStatus('${issue.id}','${entry.status}')" title="Tap to cycle workflow state">${wfBadgeLabel}</button>`;
+
+      return `<div class="tl-entry" style="border-left-color:${barColor};${entryBg}">
+        ${wfBadge}
         <div>
           <div class="tl-header">
-            <span class="tl-status-label" style="color:${cfg.color}">${cfg.icon} ${cfg.label}${entry.subStatus?' › '+esc(entry.subStatus):''}</span>
-            ${isCurrent?'<span class="tl-current-tag">current</span>':''}
+            <span class="tl-status-label" style="color:${cfg.color}">${cfg.label}${entry.subStatus?' › '+esc(entry.subStatus):''}</span>
           </div>
           <div class="tl-time">${entry.dateTime||''}${entry.by?' — '+esc(entry.by):''}</div>
-          ${!isResolvedEntry ? `<div style="margin-top:4px;"><button class="tl-mini-btn" onclick="event.stopPropagation(); cycleWorkflowStateForStatus('${issue.id}','${entry.status}')" title="Tap to cycle workflow state">Workflow: ${workflowConfig[entryWorkflowState]?.label || 'Called'}</button></div>` : ''}
           ${entry.note?`<div class="tl-note-text">"${esc(entry.note)}"</div>`:''}
-          ${currentUserPermissions.canEditIssue ? `<div style="display:flex;gap:5px;margin-top:4px;">
+          ${currentUserPermissions.canEditIssue ? `<div style="display:flex;gap:5px;margin-top:6px;">
             ${!isResolvedEntry && !isCurrent ? `<button class="tl-edit-btn" onclick="setStatusCurrentFromHistory('${issue.id}',${trueIdx})">Set current</button>` : ''}
             ${!isResolvedEntry && entryWorkflowState === 'finished' ? `<button class="tl-edit-btn" onclick="setWorkflowStateForStatus('${issue.id}','${entry.status}','called')">Un-finish</button>` : ''}
             <button class="tl-edit-btn" onclick="startEditEntry('${issue.id}',${trueIdx})">✏ Edit</button>
@@ -4493,7 +4816,6 @@ function renderIssues() {
     const resolveHtml = `<div class="status-timeline">
       <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text2);margin-bottom:8px;">Status History</div>
       <div class="tl-list">
-        <div class="tl-line"></div>
         ${timelineEntries}
       </div>
       ${addRowHtml}
@@ -4526,8 +4848,7 @@ function renderIssues() {
       displayHistory.map(e => e.status).filter(k => k && k !== 'open' && k !== 'resolved' && k !== currentKey)
     )].filter(k => wfByStatus[k] !== 'finished');
 
-    const wfStatusRowsHtml = histStatKeys.length > 0
-      ? `<div class="wf-status-rows" onclick="event.stopPropagation()">${histStatKeys.map(sKey => {
+    const wfHistoryRowsHtml = histStatKeys.map(sKey => {
           const sCfg = STATUS_CONFIG_SAFE[sKey];
           const sColor = getStatusColor(sKey);
           const sState = wfByStatus[sKey] || 'called';
@@ -4551,14 +4872,13 @@ function renderIssues() {
               <div class="wf-state-label ${workflowConfig[sState].cssState}">${workflowConfig[sState].label}</div>
             </div>
           </div>`;
-        }).join('')}</div>`
-      : '';
+        }).join('');
 
     // Split status label from sub-status for two-line display
     const baseLabel = scfg.label;
     const subLabel = currentSubKey;
 
-    // Secondary status dots (card header indicator strip)
+    // Secondary status dots (shown on the current row)
     const secDotsHtml = secKeys.length > 0
       ? `<div class="secondary-status-dots">${secKeys.map(k => {
           const cfg = STATUS_CONFIG_SAFE[k];
@@ -4566,6 +4886,22 @@ function renderIssues() {
           return `<span class="secondary-dot" style="color:${col};border-color:${col};background:${alphaColor(col,0.12)}">${cfg.icon} ${cfg.label}</span>`;
         }).join('')}</div>`
       : '';
+
+    const currentWfRowHtml = `<div class="wf-status-row">
+      <div class="wf-status-row-info">
+        <div class="issue-status" style="color:${sc.color};border-color:${sc.color};background:${alphaColor(sc.color,0.12)}">
+          <span class="issue-status-main">${sc.icon} ${baseLabel}</span>
+        </div>
+        ${subLabel ? `<span class="issue-status-sub" style="color:${sc.color};">${esc(subLabel)}</span>` : ''}
+        ${secDotsHtml}
+      </div>
+      ${wfHeaderHtml}
+    </div>`;
+
+    const wfStatusRowsHtml = `<div class="wf-status-rows" onclick="event.stopPropagation()">
+      ${currentWfRowHtml}
+      ${wfHistoryRowsHtml}
+    </div>`;
 
     card.innerHTML=`
       <div class="issue-card-header" onclick="toggleCard('${issue.id}')">
@@ -4578,16 +4914,6 @@ function renderIssues() {
           <button class="priority-btn${issue.highPriority?' active':''}" onclick="event.stopPropagation(); togglePriority('${issue.id}')" title="${issue.highPriority?'Remove high priority':'Mark as high priority'}">!</button>
           <div class="issue-expand-icon ${wasOpen?'open':''}" id="chevron-${issue.id}">▼</div>
         </div>
-        <div class="issue-card-bottom">
-          <div class="issue-status-wrap">
-            <div class="issue-status" style="color:${sc.color};border-color:${sc.color};background:${alphaColor(sc.color,0.12)}">
-              <span class="issue-status-main">${sc.icon} ${baseLabel}</span>
-            </div>
-            ${subLabel ? `<span class="issue-status-sub" style="color:${sc.color};">${esc(subLabel)}</span>` : ''}
-            ${secDotsHtml}
-          </div>
-          ${wfHeaderHtml}
-        </div>
         ${wfStatusRowsHtml}
       </div>
       <div class="issue-body ${wasOpen?'visible':''}" id="body-${issue.id}">
@@ -4598,6 +4924,10 @@ function renderIssues() {
         <div class="divider"></div>
         ${resolveHtml}
       </div>`;
+    // Safety cleanup: remove any legacy "Workflow: ..." pill buttons from status history rows.
+    card.querySelectorAll('.status-timeline button').forEach(btn => {
+      if (/^workflow\s*:/i.test((btn.textContent || '').trim())) btn.remove();
+    });
     row.appendChild(card);
 
     // Add teaser strip (gradient bar that peeks out during left swipe)
@@ -4680,6 +5010,7 @@ function renderIssues() {
       const sp = r.querySelector('.swipe-sub-panel');
       cp.classList.remove('visible', 'has-subs');
       sp.classList.remove('visible');
+      cp.querySelector('.swipe-category-inner')?.classList.remove('has-selection');
       cp.querySelectorAll('.swipe-status-tile').forEach(t => t.classList.remove('selected'));
       if (openSwipeRow?.card === c) openSwipeRow = null;
       scheduleIssueLogRelayout();
@@ -4711,6 +5042,7 @@ function renderIssues() {
         if (isDoubleTap && getStatusSubs(statusKey).length > 0) {
           // Double-click/tap on a category = apply immediately with no sub-status (Skip)
           catInner.querySelectorAll('.swipe-status-tile').forEach(t => t.classList.remove('selected'));
+          catInner.classList.remove('has-selection');
           subPanel.classList.remove('visible');
           catPanel.classList.remove('has-subs');
           closeSwipeCard(card);
@@ -4720,10 +5052,12 @@ function renderIssues() {
 
         // Clear previous selection
         catInner.querySelectorAll('.swipe-status-tile').forEach(t => t.classList.remove('selected'));
+        catInner.classList.remove('has-selection');
 
         if (getStatusSubs(statusKey).length > 0) {
           // Show sub panel
           tile.classList.add('selected');
+          catInner.classList.add('has-selection');
           catPanel.classList.add('has-subs');
 
           const subInner = subPanel.querySelector('.swipe-sub-inner');
@@ -5691,11 +6025,8 @@ window.openExportModal = () => {
     return true;
   });
 
-  // Apply same sort
-  if (sort==='newest') filtered.sort((a,b)=>b.timestamp-a.timestamp);
-  else if (sort==='oldest') filtered.sort((a,b)=>a.timestamp-b.timestamp);
-  else if (sort==='machine') filtered.sort((a,b)=>a.machine.localeCompare(b.machine));
-  else if (sort==='status') { const order=window._STATUS_ORDER||Object.keys(STATUSES); filtered.sort((a,b)=>order.indexOf(currentStatusKey(a))-order.indexOf(currentStatusKey(b))); }
+  // Apply same sort as the issue log so the PDF always matches what the user sees.
+  applySortOrder(filtered, sort);
 
   document.getElementById('export-subtitle').textContent = filtered.length + ' issue' + (filtered.length!==1?'s':'') + ' in current view';
 
@@ -5769,7 +6100,7 @@ window.openExportModal = () => {
 
   const previewHtml = `<div id="pdf-content" style="background:white;padding:20px;color:#1a1a1a;font-family:'Segoe UI',sans-serif;font-size:11px;">
     <div style="display:flex;align-items:flex-end;justify-content:space-between;border-bottom:2px solid #ea580c;padding-bottom:8px;margin-bottom:16px;">
-      <div style="font-size:18px;font-weight:700;color:#ea580c;letter-spacing:0.5px;">AP TRACKER</div>
+      <div style="font-size:18px;font-weight:700;color:#ea580c;letter-spacing:0.5px;">AP-TRACKER</div>
       <div style="text-align:right;font-size:9px;color:#666;line-height:1.5;">Issue log report<br>${dateStr}<br>Generated by ${esc(userName)}</div>
     </div>
     ${cardsHtml}
