@@ -2707,13 +2707,15 @@ async function checkAndAwardBadges() {
     try {
       const badgesRef = userBadgesDoc(currentUser.uid);
       await setDoc(badgesRef, {
-        [`earnedBadges.${badge.id}`]: { earnedAt: serverTimestamp(), badgeName: badge.name, icon: badge.icon || '🏅' },
+        earnedBadges: {
+          [badge.id]: { earnedAt: serverTimestamp(), badgeName: badge.name, icon: badge.icon || '🏅' }
+        },
         updatedAt: serverTimestamp()
       }, { merge: true });
       showBadgeEarnedCelebration(badge);
       // Award badge XP as a direct stat increment (no dedup loop risk — badge already marked earned)
       if (Number(badge.xpReward || 0) > 0) {
-        await setDoc(gameUserStatsDoc(currentUser.uid), { 'totals.xp': increment(Number(badge.xpReward)) }, { merge: true });
+        await setDoc(gameUserStatsDoc(currentUser.uid), { totals: { xp: increment(Number(badge.xpReward)) } }, { merge: true });
       }
     } catch (e) {
       console.warn('Badge award failed:', e?.message);
@@ -2875,17 +2877,16 @@ async function awardGamification(reason, context = {}) {
       dedupeKey,
       schemaVersion: 1
     });
-    const reasonCounters = {};
-    if (reason === 'issue_resolved')           reasonCounters['totals.issuesResolved']  = increment(1);
-    if (reason === 'issue_created_complete')   reasonCounters['totals.issuesCreated']   = increment(1);
-    if (reason === 'photo_attached')           reasonCounters['totals.photosAttached']  = increment(1);
-    if (reason === 'serial_captured_when_required') reasonCounters['totals.serialsCaptured'] = increment(1);
+    const totalsCounters = { xp: increment(totalDelta) };
+    if (reason === 'issue_resolved')                totalsCounters.issuesResolved = increment(1);
+    if (reason === 'issue_created_complete')        totalsCounters.issuesCreated = increment(1);
+    if (reason === 'photo_attached')                totalsCounters.photosAttached = increment(1);
+    if (reason === 'serial_captured_when_required') totalsCounters.serialsCaptured = increment(1);
     batch.set(statsRef, {
       userId: currentUser.uid,
       displayName: currentUser.displayName || currentUser.email || 'User',
-      'totals.xp': increment(totalDelta),
-      ...reasonCounters,
-      'streaks.current': increment(totalDelta > 0 ? 1 : 0),
+      totals: totalsCounters,
+      streaks: { current: increment(totalDelta > 0 ? 1 : 0) },
       lastEventAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       schemaVersion: 1
