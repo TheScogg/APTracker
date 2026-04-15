@@ -937,6 +937,39 @@
   .mascot-lift-chassis { animation: mascot-lift-bounce 2.2s ease-in-out infinite; }
   .mascot-lift-forks { animation: mascot-fork-raise 2.2s ease-in-out infinite; }
   .mascot-lift-wheel { animation: mascot-wheel-spin 1.1s linear infinite; transform-origin: center; }
+  /* CINDER (startup) — heat ring animations */
+  @keyframes mascot-heat-pulse { 0%,100%{transform:scale(1);opacity:0.5} 50%{transform:scale(1.14);opacity:1} }
+  @keyframes mascot-heat-bob   { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
+  @keyframes mascot-heat-wave  { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
+  .mascot-heat-ring-1 { animation: mascot-heat-pulse 2s ease-in-out infinite;       transform-origin: 90px 90px; }
+  .mascot-heat-ring-2 { animation: mascot-heat-pulse 2s ease-in-out 0.45s infinite; transform-origin: 90px 90px; }
+  .mascot-heat-ring-3 { animation: mascot-heat-pulse 2s ease-in-out 0.9s  infinite; transform-origin: 90px 90px; }
+  .mascot-heat-waves  { animation: mascot-heat-wave 1.5s ease-in-out infinite; }
+  .mascot-ramp-body   { animation: mascot-heat-bob  2.5s ease-in-out infinite; }
+  /* Mascot character-card popover */
+  .mascot-popover-backdrop { position:fixed; inset:0; z-index:9100; background:rgba(0,0,0,0.58); backdrop-filter:blur(3px); display:flex; align-items:center; justify-content:center; opacity:0; pointer-events:none; transition:opacity 0.2s; }
+  .mascot-popover-backdrop.visible { opacity:1; pointer-events:all; }
+  .mascot-popover { background:var(--card,#1e2330); border:1px solid var(--border,#2a3045); border-radius:22px; padding:24px 20px 22px; max-width:300px; width:90vw; display:flex; flex-direction:column; align-items:center; gap:6px; position:relative; transform:scale(0.88) translateY(16px); transition:transform 0.28s cubic-bezier(0.34,1.56,0.64,1); }
+  .mascot-popover-backdrop.visible .mascot-popover { transform:scale(1) translateY(0); }
+  .mascot-popover::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; border-radius:22px 22px 0 0; background:var(--mascot-accent,#f5a623); }
+  .mascot-popover-close { position:absolute; top:12px; right:14px; background:none; border:none; color:var(--text3,#6b7280); font-size:16px; cursor:pointer; padding:4px 6px; border-radius:6px; line-height:1; }
+  .mascot-popover-close:hover { color:var(--text); background:var(--bg3); }
+  .mascot-popover-name { font-family:'Rajdhani',sans-serif; font-size:26px; font-weight:700; letter-spacing:2px; text-transform:uppercase; margin-top:4px; line-height:1; }
+  .mascot-popover-role { font-family:'Share Tech Mono',monospace; font-size:10px; letter-spacing:2px; text-transform:uppercase; opacity:0.5; margin-top:-2px; }
+  .mascot-popover-tagline { font-size:12px; color:var(--text2,#9ca3af); text-align:center; font-style:italic; line-height:1.5; margin-top:2px; max-width:220px; }
+  .mascot-popover-divider { width:100%; height:1px; background:var(--border,#2a3045); margin:10px 0 4px; }
+  .mascot-popover-badge-label { font-family:'Share Tech Mono',monospace; font-size:9px; letter-spacing:3px; text-transform:uppercase; opacity:0.4; align-self:flex-start; }
+  .mascot-popover-facts { width:100%; display:flex; flex-direction:column; gap:6px; margin-top:2px; }
+  .mascot-popover-fact { display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+  .mascot-popover-fact-label { font-family:'Share Tech Mono',monospace; font-size:10px; opacity:0.45; flex-shrink:0; }
+  .mascot-popover-fact-value { font-size:12px; font-weight:600; color:var(--text); text-align:right; max-width:62%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  /* Issue card mascot badge */
+  .issue-mascot-badge { width:36px; height:36px; cursor:pointer; flex-shrink:0; border-radius:10px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:center; transition:background 0.15s, border-color 0.15s, transform 0.1s; overflow:hidden; padding:1px; }
+  .issue-mascot-badge:hover { background:rgba(255,255,255,0.09); border-color:rgba(255,255,255,0.2); }
+  .issue-mascot-badge:active { transform:scale(0.91); }
+  /* Stat pill mascot avatar */
+  .stat-pill-mascot { display:inline-flex; align-items:center; flex-shrink:0; cursor:pointer; border-radius:4px; overflow:hidden; opacity:0.75; margin-right:2px; transition:opacity 0.12s, transform 0.1s; }
+  .stat-pill-mascot:hover { opacity:1; transform:scale(1.15); }
   /* Swipe sub-panel mascot header */
   .swipe-mascot-header { display:flex; align-items:center; gap:12px; padding:10px 16px 8px; border-bottom:1px solid var(--border); }
   .swipe-mascot-svg { flex-shrink:0; }
@@ -2172,10 +2205,15 @@ const MASCOTS = {
     tagline: '"Everything spins around precision."',
     svg(w=180,h=180){return `<svg width="${w}" height="${h}" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="90" cy="170" rx="32" ry="5" fill="rgba(0,0,0,0.4)"/><g class="mascot-gear-outer"><circle cx="90" cy="86" r="74" fill="none" stroke="#475569" stroke-width="3"/><rect x="86" y="7" width="8" height="14" rx="2" fill="#475569"/><rect x="86" y="151" width="8" height="14" rx="2" fill="#475569"/><rect x="7" y="82" width="14" height="8" rx="2" fill="#475569"/><rect x="151" y="82" width="14" height="8" rx="2" fill="#475569"/><rect x="30" y="26" width="8" height="14" rx="2" fill="#475569" transform="rotate(45 34 33)"/><rect x="130" y="130" width="8" height="14" rx="2" fill="#475569" transform="rotate(45 134 137)"/><rect x="130" y="26" width="8" height="14" rx="2" fill="#475569" transform="rotate(-45 134 33)"/><rect x="30" y="130" width="8" height="14" rx="2" fill="#475569" transform="rotate(-45 34 137)"/><rect x="14" y="55" width="14" height="8" rx="2" fill="#475569" transform="rotate(30 21 59)"/><rect x="150" y="115" width="14" height="8" rx="2" fill="#475569" transform="rotate(30 157 119)"/><rect x="150" y="55" width="14" height="8" rx="2" fill="#475569" transform="rotate(-30 157 59)"/><rect x="14" y="115" width="14" height="8" rx="2" fill="#475569" transform="rotate(-30 21 119)"/></g><g class="mascot-gear-inner"><circle cx="90" cy="86" r="50" fill="none" stroke="#64748b" stroke-width="2"/><rect x="87" y="31" width="6" height="10" rx="2" fill="#64748b"/><rect x="87" y="131" width="6" height="10" rx="2" fill="#64748b"/><rect x="35" y="83" width="10" height="6" rx="2" fill="#64748b"/><rect x="135" y="83" width="10" height="6" rx="2" fill="#64748b"/><rect x="51" y="47" width="6" height="10" rx="2" fill="#64748b" transform="rotate(45 54 52)"/><rect x="123" y="119" width="6" height="10" rx="2" fill="#64748b" transform="rotate(45 126 124)"/><rect x="123" y="47" width="6" height="10" rx="2" fill="#64748b" transform="rotate(-45 126 52)"/><rect x="51" y="119" width="6" height="10" rx="2" fill="#64748b" transform="rotate(-45 54 124)"/></g><g class="mascot-gauge-body"><circle cx="90" cy="86" r="36" fill="#111827" stroke="#94a3b8" stroke-width="2.5"/><circle cx="78" cy="82" r="13" fill="rgba(56,189,248,0.08)" stroke="#38bdf8" stroke-width="2.5"/><circle cx="102" cy="82" r="13" fill="rgba(56,189,248,0.08)" stroke="#38bdf8" stroke-width="2.5"/><line x1="91" y1="82" x2="89" y2="82" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round"/><line x1="65" y1="82" x2="56" y2="84" stroke="#38bdf8" stroke-width="2" stroke-linecap="round"/><line x1="115" y1="82" x2="124" y2="84" stroke="#38bdf8" stroke-width="2" stroke-linecap="round"/><circle cx="78" cy="82" r="6" fill="#94a3b8"/><circle cx="102" cy="82" r="6" fill="#94a3b8"/><circle cx="78" cy="82" r="3.5" fill="#0f1117"/><circle cx="102" cy="82" r="3.5" fill="#0f1117"/><circle cx="79.5" cy="80" r="1.5" fill="white" opacity="0.7"/><circle cx="103.5" cy="80" r="1.5" fill="white" opacity="0.7"/><line x1="80" y1="98" x2="100" y2="98" stroke="#94a3b8" stroke-width="3" stroke-linecap="round"/><rect x="40" y="98" width="18" height="8" rx="4" fill="#111827" stroke="#94a3b8" stroke-width="1.5"/><rect x="122" y="98" width="18" height="8" rx="4" fill="#111827" stroke="#94a3b8" stroke-width="1.5"/><rect x="75" y="120" width="13" height="18" rx="6" fill="#111827" stroke="#94a3b8" stroke-width="1.5"/><rect x="92" y="120" width="13" height="18" rx="6" fill="#111827" stroke="#94a3b8" stroke-width="1.5"/><rect x="72" y="132" width="19" height="10" rx="4" fill="#334155"/><rect x="89" y="132" width="19" height="10" rx="4" fill="#334155"/><rect x="72" y="132" width="7" height="10" rx="3" fill="#64748b"/><rect x="89" y="132" width="7" height="10" rx="3" fill="#64748b"/></g></svg>`;}
   },
-  startup: {
+  controlman: {
     name: 'SETTER', color: '#06b6d4',
     tagline: '"Two halves. One perfect part."',
     svg(w=180,h=180){return `<svg width="${w}" height="${h}" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="90" cy="172" rx="34" ry="5" fill="rgba(0,0,0,0.35)"/><ellipse cx="90" cy="96" rx="18" ry="22" fill="rgba(6,182,212,0.2)" stroke="#06b6d4" stroke-width="1" opacity="0.6"/><ellipse class="mascot-mold-seam" cx="90" cy="96" rx="10" ry="14" fill="rgba(6,182,212,0.35)"/><g class="mascot-mold-left"><path d="M90 30 L52 46 L44 80 L44 115 L52 148 L90 162 Z" fill="#071820" stroke="#06b6d4" stroke-width="2.5"/><line x1="56" y1="60" x2="78" y2="60" stroke="#06b6d4" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.5"/><line x1="52" y1="80" x2="78" y2="80" stroke="#06b6d4" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.5"/><line x1="52" y1="100" x2="78" y2="100" stroke="#06b6d4" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.5"/><line x1="52" y1="120" x2="78" y2="120" stroke="#06b6d4" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.5"/><circle cx="62" cy="72" r="3" fill="#06b6d4" opacity="0.6"/><circle cx="62" cy="110" r="3" fill="#06b6d4" opacity="0.6"/><ellipse cx="68" cy="86" rx="9" ry="10" fill="#06b6d4"/><circle cx="68" cy="87" r="5" fill="#0f1117"/><circle cx="70" cy="84" r="2" fill="white" opacity="0.7"/><rect x="26" y="88" width="22" height="9" rx="4.5" fill="#071820" stroke="#06b6d4" stroke-width="1.8"/><rect x="56" y="148" width="14" height="20" rx="6" fill="#071820" stroke="#06b6d4" stroke-width="1.8"/><rect x="52" y="161" width="21" height="10" rx="4" fill="#164e63"/><rect x="52" y="161" width="8" height="10" rx="3" fill="#06b6d4" opacity="0.7"/></g><g class="mascot-mold-right"><path d="M90 30 L128 46 L136 80 L136 115 L128 148 L90 162 Z" fill="#071820" stroke="#06b6d4" stroke-width="2.5"/><line x1="102" y1="60" x2="124" y2="60" stroke="#06b6d4" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.5"/><line x1="102" y1="80" x2="128" y2="80" stroke="#06b6d4" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.5"/><line x1="102" y1="100" x2="128" y2="100" stroke="#06b6d4" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.5"/><line x1="102" y1="120" x2="128" y2="120" stroke="#06b6d4" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.5"/><circle cx="118" cy="72" r="3" fill="#06b6d4" opacity="0.6"/><circle cx="118" cy="110" r="3" fill="#06b6d4" opacity="0.6"/><ellipse cx="112" cy="86" rx="9" ry="10" fill="#06b6d4"/><circle cx="112" cy="87" r="5" fill="#0f1117"/><circle cx="114" cy="84" r="2" fill="white" opacity="0.7"/><rect x="132" y="88" width="22" height="9" rx="4.5" fill="#071820" stroke="#06b6d4" stroke-width="1.8"/><rect x="110" y="148" width="14" height="20" rx="6" fill="#071820" stroke="#06b6d4" stroke-width="1.8"/><rect x="107" y="161" width="21" height="10" rx="4" fill="#164e63"/><rect x="107" y="161" width="8" height="10" rx="3" fill="#06b6d4" opacity="0.7"/></g><path d="M78 112 Q90 120 102 112" stroke="#06b6d4" stroke-width="2.5" stroke-linecap="round" fill="none"/><line x1="90" y1="30" x2="90" y2="162" stroke="#06b6d4" stroke-width="1" stroke-dasharray="5 4" opacity="0.3"/></svg>`;}
+  },
+  startup: {
+    name: 'CINDER', color: '#ef4444',
+    tagline: '"Cold metal? Not on my watch."',
+    svg(w=180,h=180){return `<svg width="${w}" height="${h}" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="90" cy="170" rx="32" ry="5" fill="rgba(0,0,0,0.35)"/><circle class="mascot-heat-ring-3" cx="90" cy="90" r="70" fill="none" stroke="#ef4444" stroke-width="2" stroke-dasharray="9 6" opacity="0.25"/><circle class="mascot-heat-ring-2" cx="90" cy="90" r="55" fill="none" stroke="#ef4444" stroke-width="3" stroke-dasharray="11 5" opacity="0.4"/><circle class="mascot-heat-ring-1" cx="90" cy="90" r="40" fill="none" stroke="#ef4444" stroke-width="4" stroke-dasharray="12 4" opacity="0.65"/><g class="mascot-ramp-body"><circle cx="90" cy="90" r="30" fill="rgba(239,68,68,0.12)" stroke="#ef4444" stroke-width="0.5"/><circle cx="90" cy="90" r="27" fill="#1f0808" stroke="#ef4444" stroke-width="2.5"/><path d="M73 76 Q79 70 85 74" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" fill="none"/><path d="M95 74 Q101 70 107 76" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" fill="none"/><ellipse cx="80" cy="86" rx="8" ry="8.5" fill="#ef4444"/><ellipse cx="100" cy="86" rx="8" ry="8.5" fill="#ef4444"/><circle cx="80" cy="87" r="4.5" fill="#0f1117"/><circle cx="100" cy="87" r="4.5" fill="#0f1117"/><circle cx="82" cy="84" r="2" fill="white" opacity="0.8"/><circle cx="102" cy="84" r="2" fill="white" opacity="0.8"/><path d="M74 101 Q90 114 106 101" stroke="#ef4444" stroke-width="3" stroke-linecap="round" fill="none"/><rect x="80" y="104" width="8" height="5" rx="2" fill="#ef4444"/><rect x="90" y="104" width="8" height="5" rx="2" fill="#ef4444"/><g class="mascot-heat-waves"><path d="M70 52 Q74 44 78 52 Q82 44 86 52" stroke="#ef4444" stroke-width="2" stroke-linecap="round" fill="none" opacity="0.8"/><path d="M84 48 Q88 40 92 48 Q96 40 100 48" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" fill="none"/><path d="M98 52 Q102 44 106 52 Q110 44 114 52" stroke="#ef4444" stroke-width="2" stroke-linecap="round" fill="none" opacity="0.8"/></g><rect x="44" y="84" width="21" height="9" rx="4.5" fill="#1f0808" stroke="#ef4444" stroke-width="1.8"/><rect x="115" y="84" width="21" height="9" rx="4.5" fill="#1f0808" stroke="#ef4444" stroke-width="1.8"/><rect x="77" y="116" width="12" height="18" rx="5" fill="#1f0808" stroke="#ef4444" stroke-width="1.8"/><rect x="91" y="116" width="12" height="18" rx="5" fill="#1f0808" stroke="#ef4444" stroke-width="1.8"/><rect x="73" y="128" width="20" height="9" rx="4" fill="#5f0a0a"/><rect x="87" y="128" width="20" height="9" rx="4" fill="#5f0a0a"/><rect x="73" y="128" width="8" height="9" rx="3" fill="#ef4444" opacity="0.7"/><rect x="87" y="128" width="8" height="9" rx="3" fill="#ef4444" opacity="0.7"/></g></svg>`;}
   },
   quality: {
     name: 'SPEC', color: '#ec4899',
@@ -2298,13 +2336,20 @@ function buildStatusFilterPills() {
   const container = document.getElementById('stat-pills-row');
   if (!container) return;
 
+  const _mascotAvatarHtml = (key) => {
+    const m = MASCOTS[key];
+    return m ? `<span class="stat-pill-mascot" onclick="event.stopPropagation();openMascotPopover(event,'${key}','stat')" title="${m.name}">${m.svg(22,22)}</span>` : '';
+  };
+
   // Start with the standard Open/Resolved
   let html = `
     <div class="stat-pill" id="pill-open" onclick="toggleStatFilter('open')">
+      ${_mascotAvatarHtml('open')}
       <div class="dot" style="background:var(--red)"></div>
       <span id="stat-open">0 Open</span>
     </div>
     <div class="stat-pill" id="pill-resolved" onclick="toggleStatFilter('resolved')">
+      ${_mascotAvatarHtml('resolved')}
       <div class="dot" style="background:var(--green)"></div>
       <span id="stat-resolved">0 Resolved</span>
     </div>
@@ -2318,6 +2363,7 @@ function buildStatusFilterPills() {
     const col = getStatusColor(key);
     html += `
       <div class="stat-pill" id="pill-${key}" onclick="toggleStatFilter('${key}')">
+        ${_mascotAvatarHtml(key)}
         <div class="dot" style="background:${col}"></div>
         <span id="stat-${key}">0 ${getStatusLabel(key, 'stat')}</span>
       </div>
@@ -2349,7 +2395,9 @@ function rebuildDerivedStatus() {
       pill.className = 'stat-pill dynamic-pill';
       pill.id = 'pill-' + k;
       pill.onclick = () => toggleStatFilter(k);
-      pill.innerHTML = `<div class="dot" style="background:${col}"></div><span id="stat-${k}">0 ${getStatusLabel(k, 'stat')}</span>`;
+      const _m = MASCOTS[k];
+      const _ma = _m ? `<span class="stat-pill-mascot" onclick="event.stopPropagation();openMascotPopover(event,'${k}','stat')" title="${_m.name}">${_m.svg(22,22)}</span>` : '';
+      pill.innerHTML = `${_ma}<div class="dot" style="background:${col}"></div><span id="stat-${k}">0 ${getStatusLabel(k, 'stat')}</span>`;
       // Insert before resolved pill
       if (resolvedPill) pillsRow.insertBefore(pill, resolvedPill);
       else pillsRow.appendChild(pill);
@@ -4761,6 +4809,10 @@ function renderIssues() {
     // Authoritative current status from issue.currentStatus (v2) or lifecycle fallback
     const currentKey = currentStatusKey(issue);
     const currentSubKey = issue.currentStatus?.subStatusKey || '';
+    const _mb = MASCOTS[currentKey];
+    const mascotBadgeHtml = _mb
+      ? `<button class="issue-mascot-badge" onclick="event.stopPropagation();openMascotPopover(event,'${currentKey}','issue','${issue.id}')" title="${_mb.name}" style="border-color:${_mb.color}44">${_mb.svg(34,34)}</button>`
+      : '';
 
     // History for timeline display
     const history = issue.statusHistory && issue.statusHistory.length > 0
@@ -4968,6 +5020,7 @@ function renderIssues() {
         ${subLabel ? `<span class="issue-status-sub" style="color:${sc.color};">${esc(subLabel)}</span>` : ''}
         ${secDotsHtml}
       </div>
+      ${mascotBadgeHtml}
       ${wfHeaderHtml}
     </div>`;
 
@@ -5520,6 +5573,78 @@ function updateStats() {
       }
     });
 }
+
+// ── MASCOT POPOVER ──
+function openMascotPopover(e, statusKey, contextType, issueId) {
+  e.stopPropagation();
+  const m = MASCOTS[statusKey];
+  if (!m) return;
+  const popover  = document.getElementById('mascot-popover');
+  const backdrop = document.getElementById('mascot-popover-backdrop');
+  if (!popover || !backdrop) return;
+  popover.style.setProperty('--mascot-accent', m.color);
+  const statusDef = getStatusDef(statusKey);
+  let badgeLabel = '', contextHtml = '';
+  if (contextType === 'stat') {
+    let scoped = issueScope === 'mine' ? issues.filter(i => i.userId === currentUser?.uid) : issues;
+    scoped = scoped.filter(periodFilter);
+    const matching = scoped.filter(i => issueHasActiveStatus(i, statusKey));
+    const count = matching.length;
+    const presses = [...new Set(matching.map(i => i.machine || i.machineCode).filter(Boolean))].slice(0, 6).join(', ');
+    badgeLabel = 'ACTIVE ON FLOOR';
+    contextHtml = `
+      <div class="mascot-popover-fact">
+        <span class="mascot-popover-fact-label">Issues</span>
+        <span class="mascot-popover-fact-value" style="color:${m.color}">${count}</span>
+      </div>
+      ${presses ? `<div class="mascot-popover-fact">
+        <span class="mascot-popover-fact-label">Presses</span>
+        <span class="mascot-popover-fact-value">${presses}</span>
+      </div>` : ''}
+    `;
+  } else if (contextType === 'issue') {
+    const issue = issues.find(i => i.id === issueId);
+    const cs = issue?.currentStatus || {};
+    const setBy  = cs.enteredBy?.name || issue?.userName || '—';
+    const setAt  = cs.enteredDateTime || issue?.dateTime || '—';
+    const sub    = cs.subLabel || cs.subStatusKey || '';
+    const note   = cs.notePreview || '';
+    badgeLabel = 'STATUS DETAILS';
+    contextHtml = `
+      <div class="mascot-popover-fact">
+        <span class="mascot-popover-fact-label">Set by</span>
+        <span class="mascot-popover-fact-value">${setBy}</span>
+      </div>
+      <div class="mascot-popover-fact">
+        <span class="mascot-popover-fact-label">At</span>
+        <span class="mascot-popover-fact-value">${setAt}</span>
+      </div>
+      ${sub ? `<div class="mascot-popover-fact">
+        <span class="mascot-popover-fact-label">Sub-status</span>
+        <span class="mascot-popover-fact-value" style="color:${m.color}">${sub}</span>
+      </div>` : ''}
+      ${note ? `<div class="mascot-popover-fact">
+        <span class="mascot-popover-fact-label">Note</span>
+        <span class="mascot-popover-fact-value">${note}</span>
+      </div>` : ''}
+    `;
+  }
+  popover.innerHTML = `
+    <button class="mascot-popover-close" onclick="closeMascotPopover()">✕</button>
+    <div style="margin-bottom:2px">${m.svg(120, 120)}</div>
+    <div class="mascot-popover-name" style="color:${m.color}">${m.name}</div>
+    <div class="mascot-popover-role">${statusDef.label}</div>
+    <div class="mascot-popover-tagline">${m.tagline}</div>
+    <div class="mascot-popover-divider"></div>
+    <div class="mascot-popover-badge-label">${badgeLabel}</div>
+    <div class="mascot-popover-facts">${contextHtml}</div>
+  `;
+  backdrop.classList.add('visible');
+}
+function closeMascotPopover() {
+  document.getElementById('mascot-popover-backdrop')?.classList.remove('visible');
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMascotPopover(); });
 
 // ── LIGHTBOX ──
 let _lbPhotos = [], _lbIndex = 0;
@@ -6664,6 +6789,11 @@ document.getElementById('admin-page-btn')?.addEventListener('click', e => {
   window.location.href = 'admin.html';
 });
 </script>
+
+<!-- MASCOT CHARACTER CARD POPOVER -->
+<div class="mascot-popover-backdrop" id="mascot-popover-backdrop" onclick="if(event.target===this)closeMascotPopover()">
+  <div class="mascot-popover" id="mascot-popover"></div>
+</div>
 
 </body>
 </html>
