@@ -651,6 +651,11 @@
   .swipe-status-tile:active { transform: scale(0.96); }
   .swipe-status-tile.current { background: #232120; border-color: currentColor; box-shadow: 0 0 10px currentColor; }
   .swipe-status-tile.selected { background: #232120; border-color: currentColor; box-shadow: 0 0 10px currentColor; }
+  .swipe-category-inner.has-selection .swipe-status-tile.current:not(.selected) {
+    background: var(--bg3);
+    border-color: transparent;
+    box-shadow: none;
+  }
   .swipe-tile-icon { font-size: 24px; line-height: 1; display: flex; align-items: center; justify-content: center; height: 32px; width: 32px; }
   .swipe-tile-label { font-size: 10px; font-weight: 500; text-align: center; font-family: 'Nunito', sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; width: 100%; }
 
@@ -5005,6 +5010,7 @@ function renderIssues() {
       const sp = r.querySelector('.swipe-sub-panel');
       cp.classList.remove('visible', 'has-subs');
       sp.classList.remove('visible');
+      cp.querySelector('.swipe-category-inner')?.classList.remove('has-selection');
       cp.querySelectorAll('.swipe-status-tile').forEach(t => t.classList.remove('selected'));
       if (openSwipeRow?.card === c) openSwipeRow = null;
       scheduleIssueLogRelayout();
@@ -5036,6 +5042,7 @@ function renderIssues() {
         if (isDoubleTap && getStatusSubs(statusKey).length > 0) {
           // Double-click/tap on a category = apply immediately with no sub-status (Skip)
           catInner.querySelectorAll('.swipe-status-tile').forEach(t => t.classList.remove('selected'));
+          catInner.classList.remove('has-selection');
           subPanel.classList.remove('visible');
           catPanel.classList.remove('has-subs');
           closeSwipeCard(card);
@@ -5045,10 +5052,12 @@ function renderIssues() {
 
         // Clear previous selection
         catInner.querySelectorAll('.swipe-status-tile').forEach(t => t.classList.remove('selected'));
+        catInner.classList.remove('has-selection');
 
         if (getStatusSubs(statusKey).length > 0) {
           // Show sub panel
           tile.classList.add('selected');
+          catInner.classList.add('has-selection');
           catPanel.classList.add('has-subs');
 
           const subInner = subPanel.querySelector('.swipe-sub-inner');
