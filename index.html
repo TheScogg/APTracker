@@ -666,8 +666,9 @@
   /* Sub-status panel underneath categories - React design */
   .swipe-sub-panel { overflow: hidden; max-height: 0; background: var(--bg); border: 1px solid var(--border); border-top: none; border-radius: 0 0 18px 18px; transition: max-height 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94); }
   .swipe-sub-panel.visible { max-height: 500px; }
-  .swipe-sub-inner { padding: 12px 16px; display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; }
-  .swipe-sub-chip { font-size: 10px; font-weight: 500; padding: 4px 10px; border-radius: 9999px; border: 2px solid; cursor: pointer; transition: all 0.15s; white-space: nowrap; font-family: 'Nunito', sans-serif; opacity: 0; animation: swipeSubIn 0.25s ease forwards; line-height: 1.3; }
+  .swipe-sub-inner { padding: 12px 16px; display: block; }
+  .swipe-sub-inner::after { content: ''; display: table; clear: both; }
+  .swipe-sub-chip { display: inline-flex; align-items: center; font-size: 10px; font-weight: 500; padding: 4px 10px; border-radius: 9999px; border: 2px solid; cursor: pointer; transition: all 0.15s; white-space: nowrap; font-family: 'Nunito', sans-serif; opacity: 0; animation: swipeSubIn 0.25s ease forwards; line-height: 1.3; margin: 0 8px 8px 0; vertical-align: top; }
   .swipe-sub-chip:nth-child(1) { animation-delay: 0.02s; }
   .swipe-sub-chip:nth-child(2) { animation-delay: 0.06s; }
   .swipe-sub-chip:nth-child(3) { animation-delay: 0.10s; }
@@ -990,10 +991,14 @@
   .issue-mascot-badge:hover { background:rgba(255,255,255,0.09); border-color:rgba(255,255,255,0.2); }
   .issue-mascot-badge:active { transform:scale(0.91); }
   /* Swipe sub-panel mascot header */
-  .swipe-mascot-header { display:flex; align-items:center; gap:12px; padding:10px 16px 8px; border-bottom:1px solid var(--border); }
-  .swipe-mascot-svg { flex-shrink:0; }
+  .swipe-mascot-header { float: left; display:flex; align-items:center; gap:8px; margin: 0 12px 8px 0; padding:8px 10px; border:1px solid var(--border); border-radius:12px; background:var(--bg2); max-width:min(100%, 280px); }
+  .swipe-mascot-svg { flex-shrink:0; line-height:0; }
+  .swipe-mascot-svg svg { width:56px; height:56px; }
   .swipe-mascot-name { font-family:'Rajdhani',sans-serif; font-size:16px; font-weight:700; letter-spacing:2px; text-transform:uppercase; line-height:1.1; }
   .swipe-mascot-tagline { font-family:'Share Tech Mono',monospace; font-size:10px; opacity:0.55; font-style:italic; line-height:1.4; margin-top:2px; }
+  @media (max-width: 560px) {
+    .swipe-mascot-header { float:none; margin:0 0 10px; max-width:none; }
+  }
 
   ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { background: var(--bg); }
@@ -5211,15 +5216,13 @@ function renderIssues() {
           const subInner = subPanel.querySelector('.swipe-sub-inner');
           subInner.innerHTML = '';
 
-          // Mascot header — swap in/out based on selected status
-          const existingMascotHeader = subPanel.querySelector('.swipe-mascot-header');
-          if (existingMascotHeader) existingMascotHeader.remove();
+          // Mascot header — rendered inside the chip flow so sub-status chips wrap around it
           const mascotDef = MASCOTS[statusKey];
           if (mascotDef) {
             const mh = document.createElement('div');
             mh.className = 'swipe-mascot-header';
             mh.innerHTML = `<div class="swipe-mascot-svg">${mascotDef.svg(68, 68)}</div><div class="swipe-mascot-info"><div class="swipe-mascot-name" style="color:${mascotDef.color}">${mascotDef.name}</div><div class="swipe-mascot-tagline">${mascotDef.tagline}</div></div>`;
-            subPanel.insertBefore(mh, subInner);
+            subInner.appendChild(mh);
           }
 
           // Skip chip
