@@ -4809,11 +4809,6 @@ function renderIssues() {
     // Authoritative current status from issue.currentStatus (v2) or lifecycle fallback
     const currentKey = currentStatusKey(issue);
     const currentSubKey = issue.currentStatus?.subStatusKey || '';
-    const _mb = MASCOTS[currentKey];
-    const mascotBadgeHtml = _mb
-      ? `<button class="issue-mascot-badge" onclick="event.stopPropagation();openMascotPopover(event,'${currentKey}','issue','${issue.id}')" title="${_mb.name}" style="border-color:${_mb.color}44">${_mb.svg(34,34)}</button>`
-      : '';
-
     // History for timeline display
     const history = issue.statusHistory && issue.statusHistory.length > 0
       ? issue.statusHistory
@@ -4970,7 +4965,7 @@ function renderIssues() {
     // Shows each department called (unique status keys from history), excluding the
     // primary status (already in header) and any already marked 'finished'
     const histStatKeys = [...new Set(
-      displayHistory.map(e => e.status).filter(k => k && k !== 'open' && k !== 'resolved' && k !== currentKey)
+      [...displayHistory].reverse().map(e => e.status).filter(k => k && k !== 'open' && k !== 'resolved' && k !== currentKey)
     )].filter(k => wfByStatus[k] !== 'finished');
 
     const wfHistoryRowsHtml = histStatKeys.map(sKey => {
@@ -5020,7 +5015,6 @@ function renderIssues() {
         ${subLabel ? `<span class="issue-status-sub" style="color:${sc.color};">${esc(subLabel)}</span>` : ''}
         ${secDotsHtml}
       </div>
-      ${mascotBadgeHtml}
       ${wfHeaderHtml}
     </div>`;
 
