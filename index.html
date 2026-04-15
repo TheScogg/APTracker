@@ -1668,7 +1668,7 @@ function renderScheduleSection(container, lookupDoc, scheduleDate) {
   meta.className = 'mc-schedule-meta';
   const section = document.createElement('span');
   section.className = 'mc-schedule-pill';
-  section.textContent = `Section: ${lookupDoc.mainRow?.section || '—'}`;
+  section.textContent = `Part Storage Location: ${lookupDoc.mainRow?.section || '—'}`;
   meta.appendChild(section);
   const cavity = document.createElement('span');
   cavity.className = 'mc-schedule-pill';
