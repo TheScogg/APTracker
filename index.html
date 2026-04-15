@@ -989,9 +989,6 @@
   .issue-mascot-badge { width:36px; height:36px; cursor:pointer; flex-shrink:0; border-radius:10px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:center; transition:background 0.15s, border-color 0.15s, transform 0.1s; overflow:hidden; padding:1px; }
   .issue-mascot-badge:hover { background:rgba(255,255,255,0.09); border-color:rgba(255,255,255,0.2); }
   .issue-mascot-badge:active { transform:scale(0.91); }
-  /* Stat pill mascot avatar */
-  .stat-pill-mascot { display:inline-flex; align-items:center; flex-shrink:0; cursor:pointer; border-radius:4px; overflow:hidden; opacity:0.75; margin-right:2px; transition:opacity 0.12s, transform 0.1s; }
-  .stat-pill-mascot:hover { opacity:1; transform:scale(1.15); }
   /* Swipe sub-panel mascot header */
   .swipe-mascot-header { display:flex; align-items:center; gap:12px; padding:10px 16px 8px; border-bottom:1px solid var(--border); }
   .swipe-mascot-svg { flex-shrink:0; }
@@ -2376,20 +2373,13 @@ function buildStatusFilterPills() {
   const container = document.getElementById('stat-pills-row');
   if (!container) return;
 
-  const _mascotAvatarHtml = (key) => {
-    const m = MASCOTS[key];
-    return m ? `<span class="stat-pill-mascot" onclick="event.stopPropagation();openMascotPopover(event,'${key}','stat')" title="${m.name}">${m.svg(22,22)}</span>` : '';
-  };
-
   // Start with the standard Open/Resolved
   let html = `
     <div class="stat-pill" id="pill-open" onclick="toggleStatFilter('open')">
-      ${_mascotAvatarHtml('open')}
       <div class="dot" style="background:var(--red)"></div>
       <span id="stat-open">0 Open</span>
     </div>
     <div class="stat-pill" id="pill-resolved" onclick="toggleStatFilter('resolved')">
-      ${_mascotAvatarHtml('resolved')}
       <div class="dot" style="background:var(--green)"></div>
       <span id="stat-resolved">0 Resolved</span>
     </div>
@@ -2403,7 +2393,6 @@ function buildStatusFilterPills() {
     const col = getStatusColor(key);
     html += `
       <div class="stat-pill" id="pill-${key}" onclick="toggleStatFilter('${key}')">
-        ${_mascotAvatarHtml(key)}
         <div class="dot" style="background:${col}"></div>
         <span id="stat-${key}">0 ${getStatusLabel(key, 'stat')}</span>
       </div>
@@ -2435,9 +2424,7 @@ function rebuildDerivedStatus() {
       pill.className = 'stat-pill dynamic-pill';
       pill.id = 'pill-' + k;
       pill.onclick = () => toggleStatFilter(k);
-      const _m = MASCOTS[k];
-      const _ma = _m ? `<span class="stat-pill-mascot" onclick="event.stopPropagation();openMascotPopover(event,'${k}','stat')" title="${_m.name}">${_m.svg(22,22)}</span>` : '';
-      pill.innerHTML = `${_ma}<div class="dot" style="background:${col}"></div><span id="stat-${k}">0 ${getStatusLabel(k, 'stat')}</span>`;
+      pill.innerHTML = `<div class="dot" style="background:${col}"></div><span id="stat-${k}">0 ${getStatusLabel(k, 'stat')}</span>`;
       // Insert before resolved pill
       if (resolvedPill) pillsRow.insertBefore(pill, resolvedPill);
       else pillsRow.appendChild(pill);
