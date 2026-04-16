@@ -3072,7 +3072,7 @@ async function bootstrapSignedInSession(user) {
   startGamificationListeners();
   startListener();
   setTodayDate();
-  if (!localStorage.getItem(TUTORIAL_KEY)) setTimeout(() => openTutorial(), 900);
+  if (!localStorage.getItem(TUTORIAL_KEY)) setTimeout(() => window.openTutorial(), 900);
 }
 
 onAuthStateChanged(auth, async user => {
@@ -5710,7 +5710,7 @@ function closeMascotPopover() {
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     closeMascotPopover();
-    if (document.getElementById('tutorial-overlay')?.classList.contains('visible')) closeTutorial();
+    if (document.getElementById('tutorial-overlay')?.classList.contains('visible')) window.closeTutorial();
   }
 });
 
@@ -5759,28 +5759,28 @@ const TUTORIAL_SLIDES = [
 
 let _tutStep = 0;
 
-function openTutorial(step = 0) {
+window.openTutorial = function(step = 0) {
   _tutStep = step;
   _renderTutSlide();
   document.getElementById('tutorial-overlay')?.classList.add('visible');
-}
+};
 
-function closeTutorial() {
+window.closeTutorial = function() {
   localStorage.setItem(TUTORIAL_KEY, '1');
   document.getElementById('tutorial-overlay')?.classList.remove('visible');
-}
+};
 
-function tutorialNext() {
-  if (_tutStep >= TUTORIAL_SLIDES.length - 1) { closeTutorial(); return; }
+window.tutorialNext = function() {
+  if (_tutStep >= TUTORIAL_SLIDES.length - 1) { window.closeTutorial(); return; }
   _tutStep++;
   _renderTutSlide();
-}
+};
 
-function tutorialBack() {
+window.tutorialBack = function() {
   if (_tutStep <= 0) return;
   _tutStep--;
   _renderTutSlide();
-}
+};
 
 function _renderTutSlide() {
   const slide = TUTORIAL_SLIDES[_tutStep];
