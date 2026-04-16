@@ -760,11 +760,23 @@
   
   /* Header workflow wrap — small buttons + state label below */
   .wf-steps-wrap { display: flex; flex-direction: column; align-items: center; gap: 3px; flex-shrink: 0; }
+  .wf-steps-row { display: flex; align-items: center; gap: 5px; }
   .wf-state-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
   .wf-state-label.called      { color: #eab308; }
   .wf-state-label.accepted    { color: #22c55e; }
   .wf-state-label.in-progress { color: #3b82f6; }
   .wf-state-label.finished    { color: #a855f7; }
+  /* Pulsing prompt arrow shown before first workflow action */
+  .wf-prompt-arrow { color: #22c55e; font-size: 13px; line-height: 1; flex-shrink: 0; margin-left: -6px; margin-right: 2px; animation: wfArrowPulse 1.05s ease-in-out infinite; pointer-events: none; }
+  .wf-prompt-arrow.wf-arrow-dismissed { animation: wfArrowDismiss 0.35s ease-out forwards; }
+  @keyframes wfArrowPulse {
+    0%, 100% { transform: translateX(0) scale(1);     opacity: 1;   }
+    45%       { transform: translateX(5px) scale(1.2); opacity: 0.45; }
+    65%       { transform: translateX(3px) scale(1.1); opacity: 0.75; }
+  }
+  @keyframes wfArrowDismiss {
+    to { opacity: 0; transform: translateX(14px) scale(0.2); width: 0; margin: 0; padding: 0; overflow: hidden; }
+  }
 
   /* Per-status workflow rows (always-visible, inside card header) */
   .wf-status-rows { display: flex; flex-direction: column; gap: 0; margin-top: 8px; border-top: 1px solid var(--border); }
@@ -3965,8 +3977,6 @@ window.submitIssue = async () => {
       machine: currentMachine, note,
       dateTime: fmtDate(d), dateKey: localDateStr(d), timestamp: d.getTime(),
       userId: currentUser.uid, userName: currentUser.displayName||currentUser.email,
-      workflowState: 'called',
-      workflowStateHistory: { called: { by: currentActor(), at: serverTimestamp() } },
       photoCount: uploadedPhotos.length,
       createdAt: serverTimestamp(),
       createdBy: currentActor(),
@@ -4642,6 +4652,17 @@ window.cycleWorkflowState = async (id) => {
   }
 };
 
+// Dismiss the prompt arrow then set the workflow state
+window.handleWfStepClick = (evt, issueId, statusKey, state) => {
+  evt.stopPropagation();
+  const arrow = document.getElementById(`wf-arrow-${issueId}`);
+  if (arrow) {
+    arrow.classList.add('wf-arrow-dismissed');
+    setTimeout(() => arrow.remove(), 380);
+  }
+  setWorkflowStateForStatus(issueId, statusKey, state);
+};
+
 // ── PRIORITY TOGGLE ──
 window.togglePriority = async (id) => {
   const issue = issues.find(i => i.id === id);
@@ -4884,7 +4905,8 @@ function renderIssues() {
     }
 
     // Workflow state configuration
-    const workflowState = issue.workflowState || 'called';
+    const workflowState = issue.workflowState || null;
+    const hasNoWorkflowState = !workflowState;
     const workflowConfig = {
       called:      { icon: '🔔', label: 'Called',      cssState: 'called' },
       accepted:    { icon: '👋', label: 'Accepted',    cssState: 'accepted' },
@@ -4892,8 +4914,8 @@ function renderIssues() {
       finished:    { icon: '✓',  label: 'Finished',    cssState: 'finished' }
     };
     const wfOrder = ['called', 'accepted', 'in-progress', 'finished'];
-    const wfCurrentIdx = wfOrder.indexOf(workflowState);
-    const isCompleted = (state) => wfOrder.indexOf(state) < wfCurrentIdx;
+    const wfCurrentIdx = workflowState ? wfOrder.indexOf(workflowState) : -1;
+    const isCompleted = (state) => workflowState && wfOrder.indexOf(state) < wfCurrentIdx;
     const wfStateHistory = issue.workflowStateHistory || {};
     const wfByStatus = issue.workflowStateByStatus || {};
 
@@ -4906,9 +4928,10 @@ function renderIssues() {
       const isResolvedEntry = entry.status === 'resolved';
       const entryWorkflowState = isResolvedEntry
         ? 'finished'
-        : (entry.status === currentKey ? workflowState : (wfByStatus[entry.status] || 'called'));
+        : (entry.status === currentKey ? workflowState : (wfByStatus[entry.status] || null));
       const wfCfg = workflowConfig[entryWorkflowState] || workflowConfig.called;
-      const wfColor = entryWorkflowState === 'called' ? '#eab308'
+      const wfColor = !entryWorkflowState ? '#6b7280'
+        : entryWorkflowState === 'called' ? '#eab308'
         : entryWorkflowState === 'accepted' ? '#22c55e'
         : entryWorkflowState === 'in-progress' ? '#3b82f6'
         : '#a855f7';
@@ -4919,7 +4942,9 @@ function renderIssues() {
       const entryBg = `background:${alphaColor(barColor, 0.05)};`;
 
       // Workflow badge (clickable for non-resolved entries to cycle state)
-      const wfBadgeLabel = `${wfCfg.icon} ${wfCfg.label.toUpperCase()}${isCurrent ? ' · CURRENT' : ''}`;
+      const wfBadgeLabel = entryWorkflowState
+        ? `${wfCfg.icon} ${wfCfg.label.toUpperCase()}${isCurrent ? ' · CURRENT' : ''}`
+        : `— NOT STARTED${isCurrent ? ' · CURRENT' : ''}`;
       const wfBadge = isResolvedEntry
         ? `<div class="tl-wf-badge no-action" style="color:${cfg.color}">${cfg.icon} RESOLVED${isCurrent ? ' · CURRENT' : ''}</div>`
         : `<button class="tl-wf-badge" style="color:${wfColor}" onclick="event.stopPropagation(); cycleWorkflowStateForStatus('${issue.id}','${entry.status}')" title="Tap to cycle workflow state">${wfBadgeLabel}</button>`;
@@ -4986,12 +5011,15 @@ function renderIssues() {
 
     // Build compact 4-step header buttons with state label below
     const wfHeaderHtml = `<div class="wf-steps-wrap" onclick="event.stopPropagation()">
-      <div class="wf-steps">${wfOrder.map(state => {
-        const cfg = workflowConfig[state];
-        const cls = state === workflowState ? `active ${cfg.cssState}` : isCompleted(state) ? 'completed' : 'pending';
-        return `<button class="wf-step-btn ${cls}" onclick="setWorkflowStateForStatus('${issue.id}','${currentKey}','${state}')" title="${cfg.label}">${cfg.icon}</button>`;
-      }).join('')}</div>
-      <div class="wf-state-label ${workflowConfig[workflowState].cssState}">${workflowConfig[workflowState].label}</div>
+      <div class="wf-steps-row">
+        ${hasNoWorkflowState ? `<div class="wf-prompt-arrow" id="wf-arrow-${issue.id}">▶</div>` : ''}
+        <div class="wf-steps">${wfOrder.map(state => {
+          const cfg = workflowConfig[state];
+          const cls = state === workflowState ? `active ${cfg.cssState}` : isCompleted(state) ? 'completed' : 'pending';
+          return `<button class="wf-step-btn ${cls}" onclick="handleWfStepClick(event,'${issue.id}','${currentKey}','${state}')" title="${cfg.label}">${cfg.icon}</button>`;
+        }).join('')}</div>
+      </div>
+      <div class="wf-state-label ${workflowState ? workflowConfig[workflowState].cssState : ''}">${workflowState ? workflowConfig[workflowState].label : ''}</div>
     </div>`;
 
     // Per-status workflow rows for expanded card body — derived from status history
