@@ -924,6 +924,10 @@
   .load-more-btn { background: transparent; border: 1px solid var(--border); border-radius: 20px; color: var(--text2); font-family: 'Nunito', sans-serif; font-size: 13px; padding: 8px 20px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: border-color 0.15s, color 0.15s; }
   .load-more-btn:hover { border-color: var(--accent); color: var(--accent); }
   .load-more-count { font-family: 'Share Tech Mono', monospace; font-size: 11px; color: var(--text3); background: var(--bg3); border-radius: 10px; padding: 1px 7px; }
+  .shift-badge { font-family: 'Share Tech Mono', monospace; font-size: 10px; font-weight: 600; border: 1px solid; border-radius: 4px; padding: 1px 5px; white-space: nowrap; vertical-align: middle; margin-left: 4px; }
+  .shift-filter-row { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+  .shift-filter-pill { background:var(--bg3); border:1px solid var(--border); border-radius:14px; color:var(--text2); font-family:'Nunito',sans-serif; font-size:12px; padding:4px 12px; cursor:pointer; transition:border-color 0.15s,color 0.15s,background 0.15s; }
+  .shift-filter-pill.active { border-color:var(--accent); color:var(--accent); background:color-mix(in srgb,var(--accent) 10%,transparent); }
 
   /* ── MASCOT ANIMATIONS ── */
   @keyframes mascot-flame-flicker { 0%,100%{transform:scaleX(1) scaleY(1) rotate(0deg)} 20%{transform:scaleX(1.04) scaleY(0.97) rotate(1deg)} 40%{transform:scaleX(0.97) scaleY(1.03) rotate(-1deg)} 60%{transform:scaleX(1.03) scaleY(0.98) rotate(0.5deg)} 80%{transform:scaleX(0.98) scaleY(1.02) rotate(-0.5deg)} }
@@ -1189,6 +1193,12 @@
         <span class="search-icon">🔍</span>
         <input class="search-box" type="text" id="search-input" placeholder="Search issues…">
       </div>
+      <div class="shift-filter-row">
+        <button class="shift-filter-pill active" id="shift-pill-all"    onclick="setShiftFilter('all')">All Shifts</button>
+        <button class="shift-filter-pill"        id="shift-pill-first"  onclick="setShiftFilter('first')">1st Shift</button>
+        <button class="shift-filter-pill"        id="shift-pill-second" onclick="setShiftFilter('second')">2nd Shift</button>
+        <button class="shift-filter-pill"        id="shift-pill-third"  onclick="setShiftFilter('third')">3rd Shift</button>
+      </div>
     </div>
   </div>
 
@@ -1257,6 +1267,15 @@
         <button onclick="resetIssueDateTime()" style="font-size:11px;color:var(--accent);background:none;border:none;cursor:pointer;font-family:'Nunito',sans-serif;white-space:nowrap;padding:0;" title="Reset to now">↺ Now</button>
       </div>
     </div>
+    <div style="margin-bottom:14px">
+      <label style="margin-bottom:5px">Shift</label>
+      <select id="issue-shift" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:100%;">
+        <option value="auto">Auto-detect from time</option>
+        <option value="first">1st Shift (5:54 AM – 1:54 PM)</option>
+        <option value="second">2nd Shift (1:54 PM – 9:54 PM)</option>
+        <option value="third">3rd Shift (9:54 PM – 5:54 AM)</option>
+      </select>
+    </div>
     <label>Issue Description</label>
     <textarea id="issue-note" placeholder="Describe the issue in detail…"></textarea>
     <div style="margin-bottom:4px">
@@ -1293,6 +1312,15 @@
         <input type="date" id="edit-date" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;outline:none;flex:1;">
         <input type="time" id="edit-time-input" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:120px;">
       </div>
+    </div>
+    <div style="margin-bottom:14px">
+      <label style="margin-bottom:5px">Shift</label>
+      <select id="edit-shift" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:100%;">
+        <option value="auto">Auto-detect from time</option>
+        <option value="first">1st Shift (5:54 AM – 1:54 PM)</option>
+        <option value="second">2nd Shift (1:54 PM – 9:54 PM)</option>
+        <option value="third">3rd Shift (9:54 PM – 5:54 AM)</option>
+      </select>
     </div>
     <label>Issue Description</label>
     <textarea id="edit-note" placeholder="Describe the issue…"></textarea>
@@ -2205,6 +2233,8 @@ async function switchPlant(plantId) {
   attachmentsHydrationToken++;
   eventsHydrationToken++;
   scheduledPressesState = null; // clear so new plant reloads schedule
+  issueShiftFilter = 'all';
+  ['all','first','second','third'].forEach(x => document.getElementById('shift-pill-'+x)?.classList.toggle('active', x==='all'));
   setSyncStatus('', 'Switching plant…');
   await hydrateCurrentPlantView();
   gameConfig = null;
@@ -2965,6 +2995,37 @@ async function awardGamification(reason, context = {}) {
   }
 }
 
+// ── SHIFT SCHEDULE ──
+// startMinutes = minutes from midnight for shift start.
+// Shifts cover from their startMinutes up to (but not including) the next shift's startMinutes.
+// The last shift wraps overnight back to the first shift's start.
+// To add per-plant schedules later: populate PLANT_SHIFT_SCHEDULES[plantId] in switchPlant()
+// after reading from Firestore (e.g. plants/{plantId}/config/shifts).
+const DEFAULT_SHIFT_SCHEDULE = [
+  { key: 'first',  label: '1st Shift', shortLabel: '1st', startMinutes: 5*60+54, color: '#3b82f6' },
+  { key: 'second', label: '2nd Shift', shortLabel: '2nd', startMinutes: 13*60+54, color: '#f59e0b' },
+  { key: 'third',  label: '3rd Shift', shortLabel: '3rd', startMinutes: 21*60+54, color: '#8b5cf6' },
+];
+const PLANT_SHIFT_SCHEDULES = {}; // keyed by plantId; empty = use DEFAULT_SHIFT_SCHEDULE
+
+function getShiftSchedule(plantId) {
+  return PLANT_SHIFT_SCHEDULES[plantId] || DEFAULT_SHIFT_SCHEDULE;
+}
+
+function getShiftForTime(date, schedule) {
+  const minutes = date.getHours() * 60 + date.getMinutes();
+  for (let i = 0; i < schedule.length; i++) {
+    const start = schedule[i].startMinutes;
+    const end = schedule[(i + 1) % schedule.length].startMinutes;
+    if (start < end) {
+      if (minutes >= start && minutes < end) return schedule[i].key;
+    } else {
+      if (minutes >= start || minutes < end) return schedule[i].key;
+    }
+  }
+  return schedule[0].key;
+}
+
 let issues = [];
 let issueDisplayLimit = 50;
 const PAGE_SIZE = 50;
@@ -2978,6 +3039,7 @@ let resolveTargetId = null;
 let reopenTargetId = null;
 let currentUser = null;
 let issueScope = 'all';
+let issueShiftFilter = 'all';
 let mapMode = 'log'; // 'log' | 'hist'
 let issuePeriod = 'today';
 let unsubscribe = null;
@@ -3164,6 +3226,13 @@ window.setScope = s => {
   issueScope = s;
   ['all','mine'].forEach(x => document.getElementById('scope-'+x).classList.toggle('active', x===s));
   renderIssues(); updatePressStates(); updateStats();
+};
+
+// ── SHIFT FILTER ──
+window.setShiftFilter = s => {
+  issueShiftFilter = s;
+  ['all','first','second','third'].forEach(x => document.getElementById('shift-pill-'+x)?.classList.toggle('active', x===s));
+  renderIssues(); updateFilterBadge();
 };
 
 // ── PERIOD TOGGLE ──
@@ -3866,6 +3935,7 @@ window.openAddModal = m => {
   document.getElementById('issue-note').value='';
   document.getElementById('photo-previews').innerHTML='';
   document.getElementById('modal-machine-name').textContent=m;
+  document.getElementById('issue-shift').value='auto';
   resetIssueDateTime(); setSubmitting(false);
   renderLogCatButtons();
   document.getElementById('log-cat-selected').classList.remove('visible');
@@ -4011,11 +4081,14 @@ window.submitIssue = async () => {
     const d = getIssueDateFromInputs('issue-date','issue-time-input');
     const initialStatus = logCatKey || 'open';
     const initialSubStatus = logCatSub || '';
+    const shiftSel = document.getElementById('issue-shift').value;
+    const shift = shiftSel === 'auto' ? getShiftForTime(d, getShiftSchedule(currentPlantId)) : shiftSel;
     const issueRef = doc(plantCol('issues'));
     const uploadedPhotos = await uploadIssuePhotosToStorage(issueRef.id, pendingPhotos);
     const issuePayload = {
       machine: currentMachine, note,
       dateTime: fmtDate(d), dateKey: localDateStr(d), timestamp: d.getTime(),
+      shift,
       userId: currentUser.uid, userName: currentUser.displayName||currentUser.email,
       photoCount: uploadedPhotos.length,
       createdAt: serverTimestamp(),
@@ -4075,6 +4148,7 @@ window.openEditModal = async id => {
   } catch(e) {}
   renderPreviews(editPhotos,'edit-photo-previews');
   document.getElementById('edit-photo-input').value='';
+  document.getElementById('edit-shift').value = issue.shift || 'auto';
   const btn = document.getElementById('edit-submit-btn');
   btn.disabled=false; btn.innerHTML='💾 Save Changes';
   document.getElementById('edit-modal').classList.add('visible');
@@ -4090,10 +4164,13 @@ window.saveEdit = async () => {
     const d = getIssueDateFromInputs('edit-date','edit-time-input');
     const issue = issues.find(i=>i.id===editTargetId);
     const last = currentStatus(issue || {});
+    const shiftSel = document.getElementById('edit-shift').value;
+    const shift = shiftSel === 'auto' ? getShiftForTime(d, getShiftSchedule(currentPlantId)) : shiftSel;
     const uploadedPhotos = await uploadIssuePhotosToStorage(editTargetId, editPhotos);
     const issuePatch = {
       note,
       dateTime: fmtDate(d), dateKey: localDateStr(d), timestamp: d.getTime(),
+      shift,
       photoCount: uploadedPhotos.length,
       editedAt: fmtDate(new Date()), editedBy: currentUser.displayName||currentUser.email,
       ...buildIssueV2Compat({
@@ -4822,6 +4899,7 @@ function renderIssues() {
 
   let filtered=issues.filter(i=>{
     if (issueScope==='mine' && i.userId!==currentUser?.uid) return false;
+    if (issueShiftFilter !== 'all' && i.shift !== issueShiftFilter) return false;
     if (!periodFilter(i)) return false;
     if (issueRowScope === 'active' && activeRows.size > 0 && !activeRowMachines.has(i.machine)) return false;
     if (mf && i.machine!==mf) return false;
@@ -4853,7 +4931,7 @@ function renderIssues() {
   }
 
   // Reset display limit when filter/sort parameters change
-  const filterKey = `${issueScope}|${issuePeriod}|${document.getElementById('date-filter')?.value}|${mf}|${sf}|${search}|${sort}|${issueRowScope}`;
+  const filterKey = `${issueScope}|${issuePeriod}|${document.getElementById('date-filter')?.value}|${mf}|${sf}|${search}|${sort}|${issueRowScope}|${issueShiftFilter}`;
   if (filterKey !== renderIssues._lastFilterKey) {
     issueDisplayLimit = PAGE_SIZE;
     renderIssues._lastFilterKey = filterKey;
@@ -5136,10 +5214,15 @@ function renderIssues() {
       ${wfHistoryRowsHtml}
     </div>`;
 
+    const _shiftDef = issue.shift ? getShiftSchedule(currentPlantId).find(s => s.key === issue.shift) : null;
+    const shiftBadgeHtml = _shiftDef
+      ? `<span class="shift-badge" style="background:${_shiftDef.color}20;color:${_shiftDef.color};border-color:${_shiftDef.color}50">${_shiftDef.shortLabel}</span>`
+      : '';
+
     card.innerHTML=`
       <div class="issue-card-header" onclick="toggleCard('${issue.id}')">
         <div class="issue-card-top">
-          <div class="issue-machine-tag">${esc(issue.machine)}</div>
+          <div class="issue-machine-tag">${esc(issue.machine)}${shiftBadgeHtml}</div>
           <div class="issue-meta">
             <div class="issue-note-preview">${esc(issue.note)}</div>
             <div class="issue-time">${datePart} ${submitterHtml}${(issue.photos||[]).length?`<span class="photo-count-badge">📷 ${issue.photos.length}</span>`:''}${issue.editedAt?'<span style="color:var(--text3)">(edited)</span>':''}</div>
@@ -6123,6 +6206,7 @@ function updateFilterBadge() {
   if (mf) count++;
   if (sf) count++;
   if (search) count++;
+  if (issueShiftFilter !== 'all') count++;
   const badge = document.getElementById('filter-active-badge');
   badge.style.display = count > 0 ? 'inline-flex' : 'none';
   badge.textContent = count;
