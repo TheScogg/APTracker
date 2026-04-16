@@ -767,7 +767,7 @@
   .wf-state-label.in-progress { color: #3b82f6; }
   .wf-state-label.finished    { color: #a855f7; }
   /* Pulsing prompt arrow shown before first workflow action */
-  .wf-prompt-arrow { color: #22c55e; font-size: 13px; line-height: 1; flex-shrink: 0; margin-left: -6px; margin-right: 2px; animation: wfArrowPulse 1.05s ease-in-out infinite; pointer-events: none; }
+  .wf-prompt-arrow { width: 0; height: 0; border-top: 6px solid transparent; border-bottom: 6px solid transparent; border-left: 10px solid #22c55e; flex-shrink: 0; margin-left: -6px; margin-right: 2px; animation: wfArrowPulse 1.05s ease-in-out infinite; pointer-events: none; }
   .wf-prompt-arrow.wf-arrow-dismissed { animation: wfArrowDismiss 0.35s ease-out forwards; }
   @keyframes wfArrowPulse {
     0%, 100% { transform: translateX(0) scale(1);     opacity: 1;   }
@@ -5012,7 +5012,7 @@ function renderIssues() {
     // Build compact 4-step header buttons with state label below
     const wfHeaderHtml = `<div class="wf-steps-wrap" onclick="event.stopPropagation()">
       <div class="wf-steps-row">
-        ${hasNoWorkflowState ? `<div class="wf-prompt-arrow" id="wf-arrow-${issue.id}">▶</div>` : ''}
+        ${hasNoWorkflowState ? `<div class="wf-prompt-arrow" id="wf-arrow-${issue.id}"></div>` : ''}
         <div class="wf-steps">${wfOrder.map(state => {
           const cfg = workflowConfig[state];
           const cls = state === workflowState ? `active ${cfg.cssState}` : isCompleted(state) ? 'completed' : 'pending';
