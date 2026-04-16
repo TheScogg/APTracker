@@ -920,6 +920,10 @@
   .empty-state-icon { font-size: 36px; margin-bottom: 10px; }
   .empty-state-text { font-size: 14px; }
   .mascot-empty-wrap { display:flex; justify-content:center; margin-bottom:16px; opacity:0.85; }
+  .load-more-row { width: 100%; display: flex; justify-content: center; padding: 16px 0 8px; }
+  .load-more-btn { background: transparent; border: 1px solid var(--border); border-radius: 20px; color: var(--text2); font-family: 'Nunito', sans-serif; font-size: 13px; padding: 8px 20px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: border-color 0.15s, color 0.15s; }
+  .load-more-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .load-more-count { font-family: 'Share Tech Mono', monospace; font-size: 11px; color: var(--text3); background: var(--bg3); border-radius: 10px; padding: 1px 7px; }
 
   /* ── MASCOT ANIMATIONS ── */
   @keyframes mascot-flame-flicker { 0%,100%{transform:scaleX(1) scaleY(1) rotate(0deg)} 20%{transform:scaleX(1.04) scaleY(0.97) rotate(1deg)} 40%{transform:scaleX(0.97) scaleY(1.03) rotate(-1deg)} 60%{transform:scaleX(1.03) scaleY(0.98) rotate(0.5deg)} 80%{transform:scaleX(0.98) scaleY(1.02) rotate(-0.5deg)} }
@@ -2962,6 +2966,8 @@ async function awardGamification(reason, context = {}) {
 }
 
 let issues = [];
+let issueDisplayLimit = 50;
+const PAGE_SIZE = 50;
 let pendingPhotos = [];   // for add modal
 let logCatKey = null;
 let logCatSub = null;
@@ -3112,7 +3118,7 @@ function startListener() {
   if (retryTimeout) { clearTimeout(retryTimeout); retryTimeout = null; }
   if (!currentPlantId) return;
 
-  const q = query(plantCol('issues'), orderBy('createdAt', 'desc'));
+  const q = query(plantCol('issues'), orderBy('createdAt', 'desc'), limit(500));
   unsubscribe = onSnapshot(q, snap => {
     retryCount = 0; // reset on success
     issues = snap.docs.map(d => {
@@ -4846,8 +4852,20 @@ function renderIssues() {
     });
   }
 
+  // Reset display limit when filter/sort parameters change
+  const filterKey = `${issueScope}|${issuePeriod}|${document.getElementById('date-filter')?.value}|${mf}|${sf}|${search}|${sort}|${issueRowScope}`;
+  if (filterKey !== renderIssues._lastFilterKey) {
+    issueDisplayLimit = PAGE_SIZE;
+    renderIssues._lastFilterKey = filterKey;
+  }
+
+  const totalFiltered = filtered.length;
+  const visible = filtered.slice(0, issueDisplayLimit);
+
   const list=document.getElementById('issues-list');
-  document.getElementById('issue-count').textContent=filtered.length+' issue'+(filtered.length!==1?'s':'');
+  document.getElementById('issue-count').textContent = issueDisplayLimit < totalFiltered
+    ? `${issueDisplayLimit} of ${totalFiltered} issues`
+    : `${totalFiltered} issue${totalFiltered!==1?'s':''}`;
 
   list.classList.remove('masonic-enabled');
   list.style.height = '';
@@ -4881,7 +4899,7 @@ function renderIssues() {
       +'</select>';
   }
 
-  filtered.forEach(issue => {
+  visible.forEach(issue => {
     const wasOpen=expanded.has(issue.id);
     const isMyIssue=issue.userId===currentUser?.uid;
     const row=document.createElement('div'); row.className='issue-row'; row.dataset.id = issue.id;
@@ -5484,9 +5502,22 @@ function renderIssues() {
     });
   });
 
+  if (issueDisplayLimit < totalFiltered) {
+    const remaining = totalFiltered - issueDisplayLimit;
+    const loadMoreRow = document.createElement('div');
+    loadMoreRow.className = 'load-more-row';
+    loadMoreRow.innerHTML = `<button class="load-more-btn" onclick="loadMoreIssues()">Show ${Math.min(remaining, PAGE_SIZE)} more <span class="load-more-count">${remaining} remaining</span></button>`;
+    list.appendChild(loadMoreRow);
+  }
+
   scheduleIssueLogRelayout();
   scheduleIssueLogRelayout(40);
 }
+
+window.loadMoreIssues = function() {
+  issueDisplayLimit += PAGE_SIZE;
+  renderIssues();
+};
 
 // ── STATUS BOTTOM SHEET ──
 
@@ -5533,6 +5564,13 @@ function resetIssueLogLayoutStyles(list) {
     row.style.width = '';
     row.style.transform = '';
   });
+  const loadMoreEl = list.querySelector(':scope > .load-more-row');
+  if (loadMoreEl) {
+    loadMoreEl.style.position = '';
+    loadMoreEl.style.top = '';
+    loadMoreEl.style.left = '';
+    loadMoreEl.style.width = '';
+  }
   issueLogMasonicState.positions.clear();
 }
 
@@ -5612,7 +5650,16 @@ function applyIssueLogLayout() {
   });
 
   const maxHeight = placeIssueLogRows(rows, columnCount, columnWidth, gutter);
-  list.style.height = `${maxHeight}px`;
+  const loadMoreEl = list.querySelector(':scope > .load-more-row');
+  if (loadMoreEl) {
+    loadMoreEl.style.position = 'absolute';
+    loadMoreEl.style.top = `${maxHeight}px`;
+    loadMoreEl.style.left = '0';
+    loadMoreEl.style.width = '100%';
+    list.style.height = `${maxHeight + loadMoreEl.offsetHeight + gutter}px`;
+  } else {
+    list.style.height = `${maxHeight}px`;
+  }
   observeIssueLogRows(rows);
 }
 
