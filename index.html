@@ -1009,6 +1009,38 @@
   #app { display: none; }
   #app.visible { display: block; }
 
+  /* ── TUTORIAL MODAL ── */
+  .tutorial-overlay { position: fixed; inset: 0; z-index: 9200; background: rgba(0,0,0,0.75); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 20px; opacity: 0; pointer-events: none; transition: opacity 0.25s; }
+  .tutorial-overlay.visible { opacity: 1; pointer-events: all; }
+  .tutorial-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 24px; padding: 0 0 24px; max-width: 400px; width: 100%; display: flex; flex-direction: column; align-items: center; position: relative; overflow: hidden; transform: scale(0.92) translateY(16px); transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1); }
+  .tutorial-overlay.visible .tutorial-card { transform: scale(1) translateY(0); }
+  @keyframes tutSlideIn { from { opacity:0.5; transform:translateX(18px); } to { opacity:1; transform:translateX(0); } }
+  .tutorial-card.slide-in { animation: tutSlideIn 0.2s ease; }
+  .tutorial-accent-bar { width: 100%; height: 3px; flex-shrink: 0; transition: background 0.3s; }
+  .tutorial-skip { position: absolute; top: 12px; right: 14px; background: none; border: none; color: var(--text3); font-size: 11px; font-family: 'Share Tech Mono', monospace; letter-spacing: 1px; text-transform: uppercase; cursor: pointer; padding: 4px 8px; border-radius: 6px; transition: color 0.15s, background 0.15s; line-height: 1; }
+  .tutorial-skip:hover { color: var(--text); background: var(--bg3); }
+  .tutorial-mascot-area { padding: 28px 20px 6px; display: flex; flex-direction: column; align-items: center; gap: 4px; min-height: 168px; justify-content: flex-end; }
+  .tutorial-mascot-name { font-family: 'Rajdhani', sans-serif; font-size: 16px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; line-height: 1; }
+  .tutorial-content { text-align: center; padding: 14px 28px 0; }
+  .tutorial-headline { font-family: 'Rajdhani', sans-serif; font-size: 22px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--text); line-height: 1.2; margin-bottom: 10px; }
+  .tutorial-body { font-size: 14px; color: var(--text2); line-height: 1.65; font-family: 'Nunito', sans-serif; }
+  .tutorial-progress { display: flex; gap: 7px; align-items: center; margin: 18px 0 16px; }
+  .tutorial-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--border); transition: background 0.25s, transform 0.25s; }
+  .tutorial-dot.active { background: var(--tut-accent, var(--accent)); transform: scale(1.4); }
+  .tutorial-nav { display: flex; gap: 10px; align-items: center; padding: 0 24px; width: 100%; }
+  .tutorial-back-btn { flex: 0 0 auto; }
+  .tutorial-next-btn { flex: 1; }
+  .tutorial-wf-vis { display: flex; align-items: center; padding: 8px 0 4px; }
+  .tutorial-wf-step { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .tutorial-wf-dot { width: 20px; height: 20px; border-radius: 50%; background: var(--border); border: 2px solid var(--border); transition: all 0.2s; }
+  .tutorial-wf-step.wf-done .tutorial-wf-dot { background: var(--green); border-color: var(--green); }
+  .tutorial-wf-step.wf-active .tutorial-wf-dot { background: var(--blue); border-color: var(--blue); box-shadow: 0 0 10px rgba(59,130,246,0.55); }
+  .tutorial-wf-label { font-family: 'Share Tech Mono', monospace; font-size: 9px; letter-spacing: 1px; text-transform: uppercase; color: var(--text3); white-space: nowrap; }
+  .tutorial-wf-step.wf-done .tutorial-wf-label { color: var(--green); }
+  .tutorial-wf-step.wf-active .tutorial-wf-label { color: var(--blue); }
+  .tutorial-wf-line { width: 28px; height: 2px; background: var(--green); margin-bottom: 22px; flex-shrink: 0; }
+  .tutorial-wf-line.pending { background: var(--border); }
+
 </style>
 </head>
 <body>
@@ -1061,6 +1093,7 @@
           <span class="game-pill-badge" style="display:none"></span>
         </button>
         <button class="user-dropdown-item" id="admin-page-btn" style="display:none">🛠 Admin Portal</button>
+        <button class="user-dropdown-item" id="tutorial-btn" onclick="document.getElementById('user-dropdown').classList.remove('visible');document.getElementById('user-pill').classList.remove('open');openTutorial();">❓ Tutorial</button>
         <div class="theme-select-row">
           <button class="theme-select-toggle" id="theme-select-toggle" type="button">
             <span>🎨 Theme</span>
@@ -3039,6 +3072,7 @@ async function bootstrapSignedInSession(user) {
   startGamificationListeners();
   startListener();
   setTodayDate();
+  if (!localStorage.getItem(TUTORIAL_KEY)) setTimeout(() => openTutorial(), 900);
 }
 
 onAuthStateChanged(auth, async user => {
@@ -5673,7 +5707,131 @@ function openMascotPopover(e, statusKey, contextType, issueId) {
 function closeMascotPopover() {
   document.getElementById('mascot-popover-backdrop')?.classList.remove('visible');
 }
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMascotPopover(); });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    closeMascotPopover();
+    if (document.getElementById('tutorial-overlay')?.classList.contains('visible')) closeTutorial();
+  }
+});
+
+// ── TUTORIAL ──
+const TUTORIAL_KEY = 'aptracker_tutorial_v1';
+
+const TUTORIAL_SLIDES = [
+  {
+    mascotKey: 'open',
+    headline: 'WELCOME TO AP TRACKER',
+    body: "I'm KLAX. When a press goes down, I'm the first to sound off. Let me show you how we keep this floor moving.",
+  },
+  {
+    mascotKey: 'controlman',
+    headline: 'THE FLOOR MAP',
+    body: "Every press on your floor, live. Colored buttons show what's happening right now. Tap a row tab to expand it and see its machines.",
+  },
+  {
+    mascotKey: 'maintenance',
+    headline: 'REPORT AN ISSUE',
+    body: "See something wrong? Tap the press button, then hit + Add. Fill in the note and attach a photo if you've got one. Takes 20 seconds.",
+  },
+  {
+    mascotKey: 'alert',
+    headline: 'ROUTE TO THE RIGHT TEAM',
+    body: "Swipe right on any issue card to route it — Maintenance, Tool & Die, Quality, whoever needs to respond. Pick a sub-status for more detail.",
+  },
+  {
+    mascotKey: null,
+    wf: true,
+    headline: 'TRACK THE WORKFLOW',
+    body: "Every issue moves through four stages. Tap the workflow badge on a card to advance it toward resolution.",
+  },
+  {
+    mascotKey: 'resolved',
+    headline: 'CLOSE IT OUT',
+    body: "Fix is done? Open the card, hit Resolve, and leave a note. CLEAR will put the stamp on it.",
+  },
+  {
+    mascotKey: 'processengineer',
+    headline: "YOU'RE ALL SET",
+    body: "Use the filter bar to focus by team, machine, or time period. Export a PDF for your end-of-shift report. Now go keep the floor moving.",
+    isLast: true,
+  },
+];
+
+let _tutStep = 0;
+
+function openTutorial(step = 0) {
+  _tutStep = step;
+  _renderTutSlide();
+  document.getElementById('tutorial-overlay')?.classList.add('visible');
+}
+
+function closeTutorial() {
+  localStorage.setItem(TUTORIAL_KEY, '1');
+  document.getElementById('tutorial-overlay')?.classList.remove('visible');
+}
+
+function tutorialNext() {
+  if (_tutStep >= TUTORIAL_SLIDES.length - 1) { closeTutorial(); return; }
+  _tutStep++;
+  _renderTutSlide();
+}
+
+function tutorialBack() {
+  if (_tutStep <= 0) return;
+  _tutStep--;
+  _renderTutSlide();
+}
+
+function _renderTutSlide() {
+  const slide = TUTORIAL_SLIDES[_tutStep];
+  if (!slide) return;
+  const m = slide.mascotKey ? MASCOTS[slide.mascotKey] : null;
+  const accent = m ? m.color : '#3b82f6';
+
+  const accentBar  = document.getElementById('tutorial-accent-bar');
+  const mascotArea = document.getElementById('tutorial-mascot-area');
+  const headline   = document.getElementById('tutorial-headline');
+  const body       = document.getElementById('tutorial-body');
+  const progress   = document.getElementById('tutorial-progress');
+  const nextBtn    = document.getElementById('tutorial-next-btn');
+  const backBtn    = document.getElementById('tutorial-back-btn');
+  const card       = document.getElementById('tutorial-card');
+
+  if (accentBar) accentBar.style.background = accent;
+  card?.style.setProperty('--tut-accent', accent);
+
+  if (mascotArea) {
+    if (slide.wf) {
+      mascotArea.innerHTML = `<div class="tutorial-wf-vis">
+        <div class="tutorial-wf-step wf-done"><div class="tutorial-wf-dot"></div><div class="tutorial-wf-label">Called</div></div>
+        <div class="tutorial-wf-line"></div>
+        <div class="tutorial-wf-step wf-done"><div class="tutorial-wf-dot"></div><div class="tutorial-wf-label">Accepted</div></div>
+        <div class="tutorial-wf-line"></div>
+        <div class="tutorial-wf-step wf-active"><div class="tutorial-wf-dot"></div><div class="tutorial-wf-label">In Progress</div></div>
+        <div class="tutorial-wf-line pending"></div>
+        <div class="tutorial-wf-step"><div class="tutorial-wf-dot"></div><div class="tutorial-wf-label">Finished</div></div>
+      </div>`;
+    } else if (m) {
+      mascotArea.innerHTML = `<div>${m.svg(130, 130)}</div><div class="tutorial-mascot-name" style="color:${m.color}">${m.name}</div>`;
+    } else {
+      mascotArea.innerHTML = '';
+    }
+  }
+
+  if (headline) headline.textContent = slide.headline;
+  if (body)     body.textContent     = slide.body;
+
+  if (progress) {
+    progress.innerHTML = TUTORIAL_SLIDES.map((_, i) =>
+      `<span class="tutorial-dot${i === _tutStep ? ' active' : ''}"></span>`
+    ).join('');
+  }
+
+  if (nextBtn) nextBtn.textContent = slide.isLast ? "Let's Go!" : 'Next →';
+  if (backBtn) backBtn.style.visibility = _tutStep === 0 ? 'hidden' : 'visible';
+
+  if (card) { card.classList.remove('slide-in'); void card.offsetWidth; card.classList.add('slide-in'); }
+}
 
 // ── LIGHTBOX ──
 let _lbPhotos = [], _lbIndex = 0;
@@ -6822,6 +6980,24 @@ document.getElementById('admin-page-btn')?.addEventListener('click', e => {
 <!-- MASCOT CHARACTER CARD POPOVER -->
 <div class="mascot-popover-backdrop" id="mascot-popover-backdrop" onclick="if(event.target===this)closeMascotPopover()">
   <div class="mascot-popover" id="mascot-popover"></div>
+</div>
+
+<!-- TUTORIAL MODAL -->
+<div class="tutorial-overlay" id="tutorial-overlay" onclick="if(event.target===this)closeTutorial()">
+  <div class="tutorial-card" id="tutorial-card">
+    <div class="tutorial-accent-bar" id="tutorial-accent-bar"></div>
+    <button class="tutorial-skip" onclick="closeTutorial()">Skip</button>
+    <div class="tutorial-mascot-area" id="tutorial-mascot-area"></div>
+    <div class="tutorial-content">
+      <div class="tutorial-headline" id="tutorial-headline"></div>
+      <div class="tutorial-body" id="tutorial-body"></div>
+    </div>
+    <div class="tutorial-progress" id="tutorial-progress"></div>
+    <div class="tutorial-nav">
+      <button class="btn btn-ghost tutorial-back-btn" id="tutorial-back-btn" onclick="tutorialBack()">← Back</button>
+      <button class="btn btn-primary tutorial-next-btn" id="tutorial-next-btn" onclick="tutorialNext()">Next →</button>
+    </div>
+  </div>
 </div>
 
 </body>
