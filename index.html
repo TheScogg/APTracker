@@ -666,8 +666,9 @@
   /* Sub-status panel underneath categories - React design */
   .swipe-sub-panel { overflow: hidden; max-height: 0; background: var(--bg); border: 1px solid var(--border); border-top: none; border-radius: 0 0 18px 18px; transition: max-height 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94); }
   .swipe-sub-panel.visible { max-height: 500px; }
-  .swipe-sub-inner { padding: 12px 16px; display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; }
-  .swipe-sub-chip { font-size: 10px; font-weight: 500; padding: 4px 10px; border-radius: 9999px; border: 2px solid; cursor: pointer; transition: all 0.15s; white-space: nowrap; font-family: 'Nunito', sans-serif; opacity: 0; animation: swipeSubIn 0.25s ease forwards; line-height: 1.3; }
+  .swipe-sub-inner { padding: 12px 16px; display: block; }
+  .swipe-sub-inner::after { content: ''; display: table; clear: both; }
+  .swipe-sub-chip { display: inline-flex; align-items: center; font-size: 10px; font-weight: 500; padding: 4px 10px; border-radius: 9999px; border: 2px solid; cursor: pointer; transition: all 0.15s; white-space: nowrap; font-family: 'Nunito', sans-serif; opacity: 0; animation: swipeSubIn 0.25s ease forwards; line-height: 1.3; margin: 0 8px 8px 0; vertical-align: top; }
   .swipe-sub-chip:nth-child(1) { animation-delay: 0.02s; }
   .swipe-sub-chip:nth-child(2) { animation-delay: 0.06s; }
   .swipe-sub-chip:nth-child(3) { animation-delay: 0.10s; }
@@ -759,11 +760,23 @@
   
   /* Header workflow wrap — small buttons + state label below */
   .wf-steps-wrap { display: flex; flex-direction: column; align-items: center; gap: 3px; flex-shrink: 0; }
+  .wf-steps-row { display: flex; align-items: center; gap: 5px; }
   .wf-state-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
   .wf-state-label.called      { color: #eab308; }
   .wf-state-label.accepted    { color: #22c55e; }
   .wf-state-label.in-progress { color: #3b82f6; }
   .wf-state-label.finished    { color: #a855f7; }
+  /* Pulsing prompt arrow shown before first workflow action */
+  .wf-prompt-arrow { width: 0; height: 0; border-top: 6px solid transparent; border-bottom: 6px solid transparent; border-left: 10px solid #22c55e; flex-shrink: 0; margin-left: -6px; margin-right: 2px; animation: wfArrowPulse 1.05s ease-in-out infinite; pointer-events: none; }
+  .wf-prompt-arrow.wf-arrow-dismissed { animation: wfArrowDismiss 0.35s ease-out forwards; }
+  @keyframes wfArrowPulse {
+    0%, 100% { transform: translateX(0) scale(1);     opacity: 1;   }
+    45%       { transform: translateX(5px) scale(1.2); opacity: 0.45; }
+    65%       { transform: translateX(3px) scale(1.1); opacity: 0.75; }
+  }
+  @keyframes wfArrowDismiss {
+    to { opacity: 0; transform: translateX(14px) scale(0.2); width: 0; margin: 0; padding: 0; overflow: hidden; }
+  }
 
   /* Per-status workflow rows (always-visible, inside card header) */
   .wf-status-rows { display: flex; flex-direction: column; gap: 0; margin-top: 8px; border-top: 1px solid var(--border); }
@@ -906,6 +919,98 @@
   .empty-state { text-align: center; padding: 50px 20px; color: var(--text3); width: 100%; }
   .empty-state-icon { font-size: 36px; margin-bottom: 10px; }
   .empty-state-text { font-size: 14px; }
+  .mascot-empty-wrap { display:flex; justify-content:center; margin-bottom:16px; opacity:0.85; }
+
+  /* ── MASCOT ANIMATIONS ── */
+  @keyframes mascot-flame-flicker { 0%,100%{transform:scaleX(1) scaleY(1) rotate(0deg)} 20%{transform:scaleX(1.04) scaleY(0.97) rotate(1deg)} 40%{transform:scaleX(0.97) scaleY(1.03) rotate(-1deg)} 60%{transform:scaleX(1.03) scaleY(0.98) rotate(0.5deg)} 80%{transform:scaleX(0.98) scaleY(1.02) rotate(-0.5deg)} }
+  @keyframes mascot-flame-glow { 0%,100%{filter:drop-shadow(0 0 6px rgba(245,166,35,0.5))} 50%{filter:drop-shadow(0 0 18px rgba(245,166,35,0.95))} }
+  @keyframes mascot-wrench-spin { 0%{transform:rotate(-20deg)} 50%{transform:rotate(20deg)} 100%{transform:rotate(-20deg)} }
+  @keyframes mascot-gear-rotate { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+  @keyframes mascot-gear-counter { from{transform:rotate(0deg)} to{transform:rotate(-360deg)} }
+  @keyframes mascot-gauge-bob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
+  @keyframes mascot-mold-left { 0%,100%{transform:translateX(0)} 40%,60%{transform:translateX(-10px)} }
+  @keyframes mascot-mold-right { 0%,100%{transform:translateX(0)} 40%,60%{transform:translateX(10px)} }
+  @keyframes mascot-mold-glow { 0%,100%{opacity:0.2} 50%{opacity:0.8} }
+  @keyframes mascot-mag-scan { 0%{transform:translate(0,0) rotate(-15deg)} 25%{transform:translate(18px,-8px) rotate(5deg)} 50%{transform:translate(30px,5px) rotate(-5deg)} 75%{transform:translate(10px,15px) rotate(10deg)} 100%{transform:translate(0,0) rotate(-15deg)} }
+  @keyframes mascot-scan-pulse { 0%,100%{opacity:0.15} 50%{opacity:0.7} }
+  @keyframes mascot-wave-bob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-7px)} }
+  @keyframes mascot-line-draw { 0%{stroke-dashoffset:200} 100%{stroke-dashoffset:0} }
+  @keyframes mascot-node-pop { 0%,80%,100%{opacity:0.4} 40%{opacity:1} }
+  @keyframes mascot-lift-bounce { 0%,100%{transform:translateY(0) rotate(0deg)} 30%{transform:translateY(-8px) rotate(1deg)} 60%{transform:translateY(-4px) rotate(-0.5deg)} }
+  @keyframes mascot-fork-raise { 0%,100%{transform:translateY(0)} 40%,60%{transform:translateY(-14px)} }
+  @keyframes mascot-wheel-spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+  .mascot-flame-body { animation: mascot-flame-flicker 1.8s ease-in-out infinite, mascot-flame-glow 1.8s ease-in-out infinite; transform-origin: center 140px; }
+  .mascot-wrench-anim { animation: mascot-wrench-spin 2.5s ease-in-out infinite; transform-origin: 80px 100px; }
+  .mascot-gear-outer { animation: mascot-gear-rotate 6s linear infinite; transform-origin: 90px 86px; }
+  .mascot-gear-inner { animation: mascot-gear-counter 4s linear infinite; transform-origin: 90px 86px; }
+  .mascot-gauge-body { animation: mascot-gauge-bob 3s ease-in-out infinite; }
+  .mascot-mold-left { animation: mascot-mold-left 3.5s ease-in-out infinite; }
+  .mascot-mold-right { animation: mascot-mold-right 3.5s ease-in-out infinite; }
+  .mascot-mold-seam { animation: mascot-mold-glow 3.5s ease-in-out infinite; }
+  .mascot-mag-body { animation: mascot-mag-scan 4s ease-in-out infinite; transform-origin: 80px 80px; }
+  .mascot-scan-beam { animation: mascot-scan-pulse 1.6s ease-in-out infinite; }
+  .mascot-sigma-body { animation: mascot-wave-bob 3s ease-in-out infinite; }
+  .mascot-wave-line { stroke-dasharray: 200; animation: mascot-line-draw 2s linear infinite; }
+  .mascot-data-node { animation: mascot-node-pop 2s ease-in-out infinite; }
+  .mascot-lift-chassis { animation: mascot-lift-bounce 2.2s ease-in-out infinite; }
+  .mascot-lift-forks { animation: mascot-fork-raise 2.2s ease-in-out infinite; }
+  .mascot-lift-wheel { animation: mascot-wheel-spin 1.1s linear infinite; transform-origin: center; }
+  /* CINDER (startup) — heat ring animations */
+  @keyframes mascot-heat-pulse { 0%,100%{transform:scale(1);opacity:0.5} 50%{transform:scale(1.14);opacity:1} }
+  @keyframes mascot-heat-bob   { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
+  @keyframes mascot-heat-wave  { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
+  .mascot-heat-ring-1 { animation: mascot-heat-pulse 2s ease-in-out infinite;       transform-origin: 90px 90px; }
+  .mascot-heat-ring-2 { animation: mascot-heat-pulse 2s ease-in-out 0.45s infinite; transform-origin: 90px 90px; }
+  .mascot-heat-ring-3 { animation: mascot-heat-pulse 2s ease-in-out 0.9s  infinite; transform-origin: 90px 90px; }
+  .mascot-heat-waves  { animation: mascot-heat-wave 1.5s ease-in-out infinite; }
+  .mascot-ramp-body   { animation: mascot-heat-bob  2.5s ease-in-out infinite; }
+  /* HAZARD (alert) — E-STOP pulse */
+  @keyframes mascot-estop-pulse { 0%,100%{transform:scale(1)} 45%,55%{transform:scale(1.06)} }
+  @keyframes mascot-estop-flash { 0%,100%{opacity:0.35} 45%,55%{opacity:0.9} }
+  .mascot-estop-body { animation: mascot-estop-pulse 0.85s ease-in-out infinite; transform-origin: 90px 82px; }
+  .mascot-estop-ring { animation: mascot-estop-flash 0.85s ease-in-out infinite; }
+  /* KLAX (open) — bell swing + waves */
+  @keyframes mascot-bell-swing { 0%,100%{transform:rotate(-7deg)} 50%{transform:rotate(7deg)} }
+  @keyframes mascot-bell-wave  { 0%{opacity:0;transform:scale(1)} 40%{opacity:0.6} 100%{opacity:0;transform:scale(1.28)} }
+  .mascot-bell-body  { animation: mascot-bell-swing 0.65s ease-in-out infinite; transform-origin: 90px 65px; }
+  .mascot-bell-wave1 { animation: mascot-bell-wave 1.3s ease-out infinite; transform-origin: 90px 90px; }
+  .mascot-bell-wave2 { animation: mascot-bell-wave 1.3s ease-out 0.65s infinite; transform-origin: 90px 90px; }
+  /* CLEAR (resolved) — calm glow pulse */
+  @keyframes mascot-clear-pulse { 0%,100%{opacity:0.45;transform:scale(1)} 50%{opacity:0.85;transform:scale(1.07)} }
+  @keyframes mascot-clear-ray   { 0%,100%{opacity:0.25} 50%{opacity:0.85} }
+  .mascot-clear-dome  { animation: mascot-clear-pulse 2.4s ease-in-out infinite; transform-origin: 90px 80px; }
+  .mascot-clear-glow  { animation: mascot-clear-pulse 2.4s ease-in-out infinite; transform-origin: 90px 80px; }
+  .mascot-clear-ray   { animation: mascot-clear-ray   2.4s ease-in-out infinite; }
+  /* Mascot character-card popover */
+  .mascot-popover-backdrop { position:fixed; inset:0; z-index:9100; background:rgba(0,0,0,0.58); backdrop-filter:blur(3px); display:flex; align-items:center; justify-content:center; opacity:0; pointer-events:none; transition:opacity 0.2s; }
+  .mascot-popover-backdrop.visible { opacity:1; pointer-events:all; }
+  .mascot-popover { background:var(--card,#1e2330); border:1px solid var(--border,#2a3045); border-radius:22px; padding:24px 20px 22px; max-width:300px; width:90vw; display:flex; flex-direction:column; align-items:center; gap:6px; position:relative; transform:scale(0.88) translateY(16px); transition:transform 0.28s cubic-bezier(0.34,1.56,0.64,1); }
+  .mascot-popover-backdrop.visible .mascot-popover { transform:scale(1) translateY(0); }
+  .mascot-popover::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; border-radius:22px 22px 0 0; background:var(--mascot-accent,#f5a623); }
+  .mascot-popover-close { position:absolute; top:12px; right:14px; background:none; border:none; color:var(--text3,#6b7280); font-size:16px; cursor:pointer; padding:4px 6px; border-radius:6px; line-height:1; }
+  .mascot-popover-close:hover { color:var(--text); background:var(--bg3); }
+  .mascot-popover-name { font-family:'Rajdhani',sans-serif; font-size:26px; font-weight:700; letter-spacing:2px; text-transform:uppercase; margin-top:4px; line-height:1; }
+  .mascot-popover-role { font-family:'Share Tech Mono',monospace; font-size:10px; letter-spacing:2px; text-transform:uppercase; opacity:0.5; margin-top:-2px; }
+  .mascot-popover-tagline { font-size:12px; color:var(--text2,#9ca3af); text-align:center; font-style:italic; line-height:1.5; margin-top:2px; max-width:220px; }
+  .mascot-popover-divider { width:100%; height:1px; background:var(--border,#2a3045); margin:10px 0 4px; }
+  .mascot-popover-badge-label { font-family:'Share Tech Mono',monospace; font-size:9px; letter-spacing:3px; text-transform:uppercase; opacity:0.4; align-self:flex-start; }
+  .mascot-popover-facts { width:100%; display:flex; flex-direction:column; gap:6px; margin-top:2px; }
+  .mascot-popover-fact { display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+  .mascot-popover-fact-label { font-family:'Share Tech Mono',monospace; font-size:10px; opacity:0.45; flex-shrink:0; }
+  .mascot-popover-fact-value { font-size:12px; font-weight:600; color:var(--text); text-align:right; max-width:62%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  /* Issue card mascot badge */
+  .issue-mascot-badge { width:36px; height:36px; cursor:pointer; flex-shrink:0; border-radius:10px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:center; transition:background 0.15s, border-color 0.15s, transform 0.1s; overflow:hidden; padding:1px; }
+  .issue-mascot-badge:hover { background:rgba(255,255,255,0.09); border-color:rgba(255,255,255,0.2); }
+  .issue-mascot-badge:active { transform:scale(0.91); }
+  /* Swipe sub-panel mascot header */
+  .swipe-mascot-header { float: left; display:flex; align-items:center; gap:8px; margin: 0 12px 8px 0; padding:8px 10px; border:1px solid var(--border); border-radius:12px; background:var(--bg2); max-width:min(100%, 280px); }
+  .swipe-mascot-svg { flex-shrink:0; line-height:0; }
+  .swipe-mascot-svg svg { width:56px; height:56px; }
+  .swipe-mascot-name { font-family:'Rajdhani',sans-serif; font-size:16px; font-weight:700; letter-spacing:2px; text-transform:uppercase; line-height:1.1; }
+  .swipe-mascot-tagline { font-family:'Share Tech Mono',monospace; font-size:10px; opacity:0.55; font-style:italic; line-height:1.4; margin-top:2px; }
+  @media (max-width: 560px) {
+    .swipe-mascot-header { float:none; margin:0 0 10px; max-width:none; }
+  }
 
   ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { background: var(--bg); }
@@ -915,6 +1020,38 @@
 
   #app { display: none; }
   #app.visible { display: block; }
+
+  /* ── TUTORIAL MODAL ── */
+  .tutorial-overlay { position: fixed; inset: 0; z-index: 9200; background: rgba(0,0,0,0.75); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 20px; opacity: 0; pointer-events: none; transition: opacity 0.25s; }
+  .tutorial-overlay.visible { opacity: 1; pointer-events: all; }
+  .tutorial-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 24px; padding: 0 0 24px; max-width: 400px; width: 100%; display: flex; flex-direction: column; align-items: center; position: relative; overflow: hidden; transform: scale(0.92) translateY(16px); transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1); }
+  .tutorial-overlay.visible .tutorial-card { transform: scale(1) translateY(0); }
+  @keyframes tutSlideIn { from { opacity:0.5; transform:translateX(18px); } to { opacity:1; transform:translateX(0); } }
+  .tutorial-card.slide-in { animation: tutSlideIn 0.2s ease; }
+  .tutorial-accent-bar { width: 100%; height: 3px; flex-shrink: 0; transition: background 0.3s; }
+  .tutorial-skip { position: absolute; top: 12px; right: 14px; background: none; border: none; color: var(--text3); font-size: 11px; font-family: 'Share Tech Mono', monospace; letter-spacing: 1px; text-transform: uppercase; cursor: pointer; padding: 4px 8px; border-radius: 6px; transition: color 0.15s, background 0.15s; line-height: 1; }
+  .tutorial-skip:hover { color: var(--text); background: var(--bg3); }
+  .tutorial-mascot-area { padding: 28px 20px 6px; display: flex; flex-direction: column; align-items: center; gap: 4px; min-height: 168px; justify-content: flex-end; }
+  .tutorial-mascot-name { font-family: 'Rajdhani', sans-serif; font-size: 16px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; line-height: 1; }
+  .tutorial-content { text-align: center; padding: 14px 28px 0; }
+  .tutorial-headline { font-family: 'Rajdhani', sans-serif; font-size: 22px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--text); line-height: 1.2; margin-bottom: 10px; }
+  .tutorial-body { font-size: 14px; color: var(--text2); line-height: 1.65; font-family: 'Nunito', sans-serif; }
+  .tutorial-progress { display: flex; gap: 7px; align-items: center; margin: 18px 0 16px; }
+  .tutorial-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--border); transition: background 0.25s, transform 0.25s; }
+  .tutorial-dot.active { background: var(--tut-accent, var(--accent)); transform: scale(1.4); }
+  .tutorial-nav { display: flex; gap: 10px; align-items: center; padding: 0 24px; width: 100%; }
+  .tutorial-back-btn { flex: 0 0 auto; }
+  .tutorial-next-btn { flex: 1; }
+  .tutorial-wf-vis { display: flex; align-items: center; padding: 8px 0 4px; }
+  .tutorial-wf-step { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .tutorial-wf-dot { width: 20px; height: 20px; border-radius: 50%; background: var(--border); border: 2px solid var(--border); transition: all 0.2s; }
+  .tutorial-wf-step.wf-done .tutorial-wf-dot { background: var(--green); border-color: var(--green); }
+  .tutorial-wf-step.wf-active .tutorial-wf-dot { background: var(--blue); border-color: var(--blue); box-shadow: 0 0 10px rgba(59,130,246,0.55); }
+  .tutorial-wf-label { font-family: 'Share Tech Mono', monospace; font-size: 9px; letter-spacing: 1px; text-transform: uppercase; color: var(--text3); white-space: nowrap; }
+  .tutorial-wf-step.wf-done .tutorial-wf-label { color: var(--green); }
+  .tutorial-wf-step.wf-active .tutorial-wf-label { color: var(--blue); }
+  .tutorial-wf-line { width: 28px; height: 2px; background: var(--green); margin-bottom: 22px; flex-shrink: 0; }
+  .tutorial-wf-line.pending { background: var(--border); }
 
 </style>
 </head>
@@ -968,6 +1105,7 @@
           <span class="game-pill-badge" style="display:none"></span>
         </button>
         <button class="user-dropdown-item" id="admin-page-btn" style="display:none">🛠 Admin Portal</button>
+        <button class="user-dropdown-item" id="tutorial-btn" onclick="document.getElementById('user-dropdown').classList.remove('visible');document.getElementById('user-pill').classList.remove('open');openTutorial();">❓ Tutorial</button>
         <div class="theme-select-row">
           <button class="theme-select-toggle" id="theme-select-toggle" type="button">
             <span>🎨 Theme</span>
@@ -1577,7 +1715,10 @@ function renderScheduleSection(container, lookupDoc, scheduleDate) {
   meta.className = 'mc-schedule-meta';
   const section = document.createElement('span');
   section.className = 'mc-schedule-pill';
-  section.textContent = `Section: ${lookupDoc.mainRow?.section || '—'}`;
+  const partStorageLocation = Array.isArray(lookupDoc.mainRow?.partStorageLocation)
+    ? lookupDoc.mainRow.partStorageLocation.filter(Boolean).join(', ')
+    : String(lookupDoc.mainRow?.partStorageLocation || '').trim();
+  section.textContent = `Part Storage Location: ${partStorageLocation || '—'}`;
   meta.appendChild(section);
   const cavity = document.createElement('span');
   cavity.className = 'mc-schedule-pill';
@@ -2122,6 +2263,62 @@ let STATUSES = {
   tooldie:         { label:'Tool & Die',       shortLabel:'Tool & Die',   icon:'🔩', cssColor:'var(--orange)',   swipeColor:'#f97316', floorCls:'has-tooldie',         cls:'status-tooldie',         subs:['Broken / Bent Ejector Pin','Hot Runner / Gate Issue','Water Leak in Mold','Stuck Part / Sprue','Mold Greasing / PM'], statLabel:'Tool & Die',    order:8 },
   resolved:        { label:'Resolved',         shortLabel:'Resolved',     icon:'✓',  cssColor:'var(--green)',    swipeColor:'#22c55e', floorCls:'all-resolved',        cls:'status-resolved',        subs:['Process Parameter Adjusted','Mold Cleaned / Repaired','Hardware Replaced','Temporary Workaround'],                      statLabel:'Resolved',      order:9 },
 };
+
+// ── MASCOT CHARACTERS ──
+// Animated SVG characters, one per job role. Appear in status swipe panels and empty states.
+const MASCOTS = {
+  maintenance: {
+    name: 'TORCH', color: '#eab308',
+    tagline: '"The floor runs hot. So do I."',
+    svg(w=180,h=180){return `<svg width="${w}" height="${h}" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="90" cy="165" rx="38" ry="6" fill="rgba(0,0,0,0.4)"/><g class="mascot-flame-body"><path d="M90 155 C50 155 28 128 30 100 C32 78 44 65 50 50 C56 35 52 18 58 10 C62 4 68 8 66 18 C64 28 70 24 74 16 C78 8 84 12 82 22 C80 32 88 28 88 18 C88 10 96 8 96 18 C96 28 102 22 100 12 C98 4 106 2 108 12 C112 28 120 38 128 55 C136 72 150 88 150 108 C150 135 126 155 90 155Z" fill="#1a1600" stroke="#eab308" stroke-width="2.5"/><path d="M90 145 C62 145 46 126 48 104 C50 86 60 74 66 62 C70 52 68 38 72 30 C76 22 80 28 78 36 C76 44 82 40 84 32 C86 24 92 28 90 36 C88 44 96 40 94 30 C92 22 100 20 100 32 C100 42 108 36 106 26 C108 38 118 52 122 70 C128 90 134 104 132 116 C130 135 114 145 90 145Z" fill="rgba(245,166,35,0.18)"/><ellipse cx="90" cy="100" rx="32" ry="34" fill="#111000"/><ellipse cx="78" cy="96" rx="8" ry="9" fill="#eab308"/><ellipse cx="102" cy="96" rx="8" ry="9" fill="#eab308"/><circle cx="78" cy="97" r="4.5" fill="#0f1117"/><circle cx="102" cy="97" r="4.5" fill="#0f1117"/><circle cx="80" cy="94" r="2" fill="white" opacity="0.8"/><circle cx="104" cy="94" r="2" fill="white" opacity="0.8"/><path d="M76 112 Q90 121 104 112" stroke="#eab308" stroke-width="3" stroke-linecap="round" fill="none"/><rect x="82" y="114" width="7" height="5" rx="2" fill="#eab308"/><rect x="91" y="114" width="7" height="5" rx="2" fill="#eab308"/><ellipse cx="90" cy="48" rx="30" ry="11" fill="#eab308"/><rect x="62" y="44" width="56" height="10" rx="5" fill="#ca8a04"/><rect x="58" y="51" width="64" height="5" rx="2.5" fill="#eab308" opacity="0.55"/></g><g class="mascot-wrench-anim"><rect x="70" y="140" width="40" height="12" rx="6" fill="#1a1600" stroke="#eab308" stroke-width="2"/><circle cx="70" cy="146" r="8" fill="#1a1600" stroke="#eab308" stroke-width="2"/><circle cx="70" cy="146" r="4" fill="transparent" stroke="#eab308" stroke-width="2"/><circle cx="110" cy="146" r="8" fill="#1a1600" stroke="#eab308" stroke-width="2"/><circle cx="110" cy="146" r="4" fill="transparent" stroke="#eab308" stroke-width="2"/></g></svg>`;}
+  },
+  tooldie: {
+    name: 'GAUGE', color: '#f97316',
+    tagline: '"Everything spins around precision."',
+    svg(w=180,h=180){return `<svg width="${w}" height="${h}" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="90" cy="170" rx="32" ry="5" fill="rgba(0,0,0,0.4)"/><g class="mascot-gear-outer"><circle cx="90" cy="86" r="74" fill="none" stroke="#c2410c" stroke-width="3"/><rect x="86" y="7" width="8" height="14" rx="2" fill="#c2410c"/><rect x="86" y="151" width="8" height="14" rx="2" fill="#c2410c"/><rect x="7" y="82" width="14" height="8" rx="2" fill="#c2410c"/><rect x="151" y="82" width="14" height="8" rx="2" fill="#c2410c"/><rect x="30" y="26" width="8" height="14" rx="2" fill="#c2410c" transform="rotate(45 34 33)"/><rect x="130" y="130" width="8" height="14" rx="2" fill="#c2410c" transform="rotate(45 134 137)"/><rect x="130" y="26" width="8" height="14" rx="2" fill="#c2410c" transform="rotate(-45 134 33)"/><rect x="30" y="130" width="8" height="14" rx="2" fill="#c2410c" transform="rotate(-45 34 137)"/><rect x="14" y="55" width="14" height="8" rx="2" fill="#c2410c" transform="rotate(30 21 59)"/><rect x="150" y="115" width="14" height="8" rx="2" fill="#c2410c" transform="rotate(30 157 119)"/><rect x="150" y="55" width="14" height="8" rx="2" fill="#c2410c" transform="rotate(-30 157 59)"/><rect x="14" y="115" width="14" height="8" rx="2" fill="#c2410c" transform="rotate(-30 21 119)"/></g><g class="mascot-gear-inner"><circle cx="90" cy="86" r="50" fill="none" stroke="#ea580c" stroke-width="2"/><rect x="87" y="31" width="6" height="10" rx="2" fill="#ea580c"/><rect x="87" y="131" width="6" height="10" rx="2" fill="#ea580c"/><rect x="35" y="83" width="10" height="6" rx="2" fill="#ea580c"/><rect x="135" y="83" width="10" height="6" rx="2" fill="#ea580c"/><rect x="51" y="47" width="6" height="10" rx="2" fill="#ea580c" transform="rotate(45 54 52)"/><rect x="123" y="119" width="6" height="10" rx="2" fill="#ea580c" transform="rotate(45 126 124)"/><rect x="123" y="47" width="6" height="10" rx="2" fill="#ea580c" transform="rotate(-45 126 52)"/><rect x="51" y="119" width="6" height="10" rx="2" fill="#ea580c" transform="rotate(-45 54 124)"/></g><g class="mascot-gauge-body"><circle cx="90" cy="86" r="36" fill="#1c0d00" stroke="#f97316" stroke-width="2.5"/><circle cx="78" cy="82" r="13" fill="rgba(251,191,36,0.08)" stroke="#fdba74" stroke-width="2.5"/><circle cx="102" cy="82" r="13" fill="rgba(251,191,36,0.08)" stroke="#fdba74" stroke-width="2.5"/><line x1="91" y1="82" x2="89" y2="82" stroke="#fdba74" stroke-width="2.5" stroke-linecap="round"/><line x1="65" y1="82" x2="56" y2="84" stroke="#fdba74" stroke-width="2" stroke-linecap="round"/><line x1="115" y1="82" x2="124" y2="84" stroke="#fdba74" stroke-width="2" stroke-linecap="round"/><circle cx="78" cy="82" r="6" fill="#f97316"/><circle cx="102" cy="82" r="6" fill="#f97316"/><circle cx="78" cy="82" r="3.5" fill="#0f1117"/><circle cx="102" cy="82" r="3.5" fill="#0f1117"/><circle cx="79.5" cy="80" r="1.5" fill="white" opacity="0.7"/><circle cx="103.5" cy="80" r="1.5" fill="white" opacity="0.7"/><line x1="80" y1="98" x2="100" y2="98" stroke="#f97316" stroke-width="3" stroke-linecap="round"/><rect x="40" y="98" width="18" height="8" rx="4" fill="#1c0d00" stroke="#f97316" stroke-width="1.5"/><rect x="122" y="98" width="18" height="8" rx="4" fill="#1c0d00" stroke="#f97316" stroke-width="1.5"/><rect x="75" y="120" width="13" height="18" rx="6" fill="#1c0d00" stroke="#f97316" stroke-width="1.5"/><rect x="92" y="120" width="13" height="18" rx="6" fill="#1c0d00" stroke="#f97316" stroke-width="1.5"/><rect x="72" y="132" width="19" height="10" rx="4" fill="#431407"/><rect x="89" y="132" width="19" height="10" rx="4" fill="#431407"/><rect x="72" y="132" width="7" height="10" rx="3" fill="#ea580c"/><rect x="89" y="132" width="7" height="10" rx="3" fill="#ea580c"/></g></svg>`;}
+  },
+  controlman: {
+    name: 'SETTER', color: '#38bdf8',
+    tagline: '"Two halves. One perfect part."',
+    svg(w=180,h=180){return `<svg width="${w}" height="${h}" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="90" cy="172" rx="34" ry="5" fill="rgba(0,0,0,0.35)"/><ellipse cx="90" cy="96" rx="18" ry="22" fill="rgba(56,189,248,0.2)" stroke="#38bdf8" stroke-width="1" opacity="0.6"/><ellipse class="mascot-mold-seam" cx="90" cy="96" rx="10" ry="14" fill="rgba(56,189,248,0.35)"/><g class="mascot-mold-left"><path d="M90 30 L52 46 L44 80 L44 115 L52 148 L90 162 Z" fill="#071e2a" stroke="#38bdf8" stroke-width="2.5"/><line x1="56" y1="60" x2="78" y2="60" stroke="#38bdf8" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.5"/><line x1="52" y1="80" x2="78" y2="80" stroke="#38bdf8" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.5"/><line x1="52" y1="100" x2="78" y2="100" stroke="#38bdf8" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.5"/><line x1="52" y1="120" x2="78" y2="120" stroke="#38bdf8" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.5"/><circle cx="62" cy="72" r="3" fill="#38bdf8" opacity="0.6"/><circle cx="62" cy="110" r="3" fill="#38bdf8" opacity="0.6"/><ellipse cx="68" cy="86" rx="9" ry="10" fill="#38bdf8"/><circle cx="68" cy="87" r="5" fill="#0f1117"/><circle cx="70" cy="84" r="2" fill="white" opacity="0.7"/><rect x="26" y="88" width="22" height="9" rx="4.5" fill="#071e2a" stroke="#38bdf8" stroke-width="1.8"/><rect x="56" y="148" width="14" height="20" rx="6" fill="#071e2a" stroke="#38bdf8" stroke-width="1.8"/><rect x="52" y="161" width="21" height="10" rx="4" fill="#0c3d6e"/><rect x="52" y="161" width="8" height="10" rx="3" fill="#38bdf8" opacity="0.7"/></g><g class="mascot-mold-right"><path d="M90 30 L128 46 L136 80 L136 115 L128 148 L90 162 Z" fill="#071e2a" stroke="#38bdf8" stroke-width="2.5"/><line x1="102" y1="60" x2="124" y2="60" stroke="#38bdf8" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.5"/><line x1="102" y1="80" x2="128" y2="80" stroke="#38bdf8" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.5"/><line x1="102" y1="100" x2="128" y2="100" stroke="#38bdf8" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.5"/><line x1="102" y1="120" x2="128" y2="120" stroke="#38bdf8" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.5"/><circle cx="118" cy="72" r="3" fill="#38bdf8" opacity="0.6"/><circle cx="118" cy="110" r="3" fill="#38bdf8" opacity="0.6"/><ellipse cx="112" cy="86" rx="9" ry="10" fill="#38bdf8"/><circle cx="112" cy="87" r="5" fill="#0f1117"/><circle cx="114" cy="84" r="2" fill="white" opacity="0.7"/><rect x="132" y="88" width="22" height="9" rx="4.5" fill="#071e2a" stroke="#38bdf8" stroke-width="1.8"/><rect x="110" y="148" width="14" height="20" rx="6" fill="#071e2a" stroke="#38bdf8" stroke-width="1.8"/><rect x="107" y="161" width="21" height="10" rx="4" fill="#0c3d6e"/><rect x="107" y="161" width="8" height="10" rx="3" fill="#38bdf8" opacity="0.7"/></g><path d="M78 112 Q90 120 102 112" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round" fill="none"/><line x1="90" y1="30" x2="90" y2="162" stroke="#38bdf8" stroke-width="1" stroke-dasharray="5 4" opacity="0.3"/></svg>`;}
+  },
+  startup: {
+    name: 'CINDER', color: '#14b8a6',
+    tagline: '"Cold metal? Not on my watch."',
+    svg(w=180,h=180){return `<svg width="${w}" height="${h}" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="90" cy="170" rx="32" ry="5" fill="rgba(0,0,0,0.35)"/><circle class="mascot-heat-ring-3" cx="90" cy="90" r="70" fill="none" stroke="#14b8a6" stroke-width="2" stroke-dasharray="9 6" opacity="0.25"/><circle class="mascot-heat-ring-2" cx="90" cy="90" r="55" fill="none" stroke="#14b8a6" stroke-width="3" stroke-dasharray="11 5" opacity="0.4"/><circle class="mascot-heat-ring-1" cx="90" cy="90" r="40" fill="none" stroke="#14b8a6" stroke-width="4" stroke-dasharray="12 4" opacity="0.65"/><g class="mascot-ramp-body"><circle cx="90" cy="90" r="30" fill="rgba(20,184,166,0.12)" stroke="#14b8a6" stroke-width="0.5"/><circle cx="90" cy="90" r="27" fill="#071a18" stroke="#14b8a6" stroke-width="2.5"/><path d="M73 76 Q79 70 85 74" stroke="#14b8a6" stroke-width="2.5" stroke-linecap="round" fill="none"/><path d="M95 74 Q101 70 107 76" stroke="#14b8a6" stroke-width="2.5" stroke-linecap="round" fill="none"/><ellipse cx="80" cy="86" rx="8" ry="8.5" fill="#14b8a6"/><ellipse cx="100" cy="86" rx="8" ry="8.5" fill="#14b8a6"/><circle cx="80" cy="87" r="4.5" fill="#0f1117"/><circle cx="100" cy="87" r="4.5" fill="#0f1117"/><circle cx="82" cy="84" r="2" fill="white" opacity="0.8"/><circle cx="102" cy="84" r="2" fill="white" opacity="0.8"/><path d="M74 101 Q90 114 106 101" stroke="#14b8a6" stroke-width="3" stroke-linecap="round" fill="none"/><rect x="80" y="104" width="8" height="5" rx="2" fill="#14b8a6"/><rect x="90" y="104" width="8" height="5" rx="2" fill="#14b8a6"/><g class="mascot-heat-waves"><path d="M70 52 Q74 44 78 52 Q82 44 86 52" stroke="#14b8a6" stroke-width="2" stroke-linecap="round" fill="none" opacity="0.8"/><path d="M84 48 Q88 40 92 48 Q96 40 100 48" stroke="#14b8a6" stroke-width="2.5" stroke-linecap="round" fill="none"/><path d="M98 52 Q102 44 106 52 Q110 44 114 52" stroke="#14b8a6" stroke-width="2" stroke-linecap="round" fill="none" opacity="0.8"/></g><rect x="44" y="84" width="21" height="9" rx="4.5" fill="#071a18" stroke="#14b8a6" stroke-width="1.8"/><rect x="115" y="84" width="21" height="9" rx="4.5" fill="#071a18" stroke="#14b8a6" stroke-width="1.8"/><rect x="77" y="116" width="12" height="18" rx="5" fill="#071a18" stroke="#14b8a6" stroke-width="1.8"/><rect x="91" y="116" width="12" height="18" rx="5" fill="#071a18" stroke="#14b8a6" stroke-width="1.8"/><rect x="73" y="128" width="20" height="9" rx="4" fill="#0a3530"/><rect x="87" y="128" width="20" height="9" rx="4" fill="#0a3530"/><rect x="73" y="128" width="8" height="9" rx="3" fill="#14b8a6" opacity="0.7"/><rect x="87" y="128" width="8" height="9" rx="3" fill="#14b8a6" opacity="0.7"/></g></svg>`;}
+  },
+  quality: {
+    name: 'SPEC', color: '#06b6d4',
+    tagline: '"I see everything. Everything."',
+    svg(w=180,h=180){return `<svg width="${w}" height="${h}" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="90" cy="172" rx="28" ry="5" fill="rgba(0,0,0,0.3)"/><g class="mascot-mag-body"><ellipse class="mascot-scan-beam" cx="82" cy="76" rx="44" ry="44" fill="rgba(6,182,212,0.08)"/><circle cx="82" cy="76" r="52" fill="#071520" stroke="#06b6d4" stroke-width="4"/><path d="M50 50 Q66 44 78 52" stroke="white" stroke-width="2.5" stroke-linecap="round" fill="none" opacity="0.15"/><ellipse cx="82" cy="33" rx="14" ry="10" fill="#06b6d4" opacity="0.85"/><rect x="78" y="30" width="8" height="14" rx="4" fill="#06b6d4"/><ellipse cx="70" cy="72" rx="9" ry="10" fill="#06b6d4"/><ellipse cx="94" cy="72" rx="9" ry="10" fill="#06b6d4"/><circle cx="70" cy="73" r="5" fill="#0f1117"/><circle cx="94" cy="73" r="5" fill="#0f1117"/><circle cx="72" cy="70" r="2.2" fill="white" opacity="0.8"/><circle cx="96" cy="70" r="2.2" fill="white" opacity="0.8"/><path d="M60 60 Q70 56 79 60" stroke="#06b6d4" stroke-width="2.5" stroke-linecap="round" fill="none"/><path d="M85 60 Q94 56 104 60" stroke="#06b6d4" stroke-width="2.5" stroke-linecap="round" fill="none"/><path d="M68 90 Q82 97 96 90" stroke="#06b6d4" stroke-width="2.5" stroke-linecap="round" fill="none"/><rect x="12" y="92" width="26" height="34" rx="4" fill="#071520" stroke="#06b6d4" stroke-width="1.8"/><rect x="18" y="88" width="14" height="6" rx="3" fill="#06b6d4" opacity="0.8"/><line x1="18" y1="102" x2="32" y2="102" stroke="#06b6d4" stroke-width="1.5" opacity="0.7"/><line x1="18" y1="108" x2="32" y2="108" stroke="#06b6d4" stroke-width="1.5" opacity="0.7"/><rect x="78" y="126" width="16" height="38" rx="8" fill="#071520" stroke="#06b6d4" stroke-width="2.5"/><line x1="81" y1="136" x2="91" y2="136" stroke="#06b6d4" stroke-width="1.5" opacity="0.5"/><line x1="81" y1="142" x2="91" y2="142" stroke="#06b6d4" stroke-width="1.5" opacity="0.5"/><line x1="81" y1="148" x2="91" y2="148" stroke="#06b6d4" stroke-width="1.5" opacity="0.5"/><rect x="66" y="158" width="22" height="10" rx="5" fill="#0e4d6b"/><rect x="88" y="158" width="22" height="10" rx="5" fill="#0e4d6b"/><rect x="66" y="158" width="9" height="10" rx="4" fill="#06b6d4" opacity="0.6"/><rect x="88" y="158" width="9" height="10" rx="4" fill="#06b6d4" opacity="0.6"/></g></svg>`;}
+  },
+  processengineer: {
+    name: 'SIGMA', color: '#a855f7',
+    tagline: '"The trend line never lies. Usually."',
+    svg(w=180,h=180){return `<svg width="${w}" height="${h}" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="90" cy="172" rx="36" ry="5" fill="rgba(0,0,0,0.3)"/><g class="mascot-sigma-body"><rect x="20" y="90" width="140" height="74" rx="8" fill="#12083a" stroke="#a855f7" stroke-width="1.5" opacity="0.7"/><line x1="20" y1="110" x2="160" y2="110" stroke="#a855f7" stroke-width="0.5" opacity="0.3"/><line x1="20" y1="127" x2="160" y2="127" stroke="#a855f7" stroke-width="0.5" opacity="0.3"/><line x1="20" y1="144" x2="160" y2="144" stroke="#a855f7" stroke-width="0.5" opacity="0.3"/><line x1="55" y1="90" x2="55" y2="164" stroke="#a855f7" stroke-width="0.5" opacity="0.3"/><line x1="90" y1="90" x2="90" y2="164" stroke="#a855f7" stroke-width="0.5" opacity="0.3"/><line x1="125" y1="90" x2="125" y2="164" stroke="#a855f7" stroke-width="0.5" opacity="0.3"/><rect x="30" y="138" width="10" height="22" rx="2" fill="#a855f7" opacity="0.5"/><rect x="44" y="122" width="10" height="38" rx="2" fill="#a855f7" opacity="0.7"/><rect x="58" y="110" width="10" height="50" rx="2" fill="#a855f7" opacity="0.9"/><rect x="72" y="118" width="10" height="42" rx="2" fill="#a855f7" opacity="0.75"/><rect x="86" y="104" width="10" height="56" rx="2" fill="#a855f7"/><rect x="100" y="112" width="10" height="48" rx="2" fill="#a855f7" opacity="0.8"/><rect x="114" y="120" width="10" height="40" rx="2" fill="#a855f7" opacity="0.65"/><rect x="128" y="128" width="10" height="32" rx="2" fill="#a855f7" opacity="0.5"/><rect x="142" y="116" width="10" height="44" rx="2" fill="#a855f7" opacity="0.7"/><polyline class="mascot-wave-line" points="35,137 49,121 63,109 77,117 91,103 105,111 119,119 133,127 147,115" stroke="#d8b4fe" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle class="mascot-data-node" cx="35" cy="137" r="4" fill="#d8b4fe" style="animation-delay:0s"/><circle class="mascot-data-node" cx="63" cy="109" r="4" fill="#d8b4fe" style="animation-delay:0.4s"/><circle class="mascot-data-node" cx="91" cy="103" r="4" fill="#d8b4fe" style="animation-delay:0.8s"/><circle class="mascot-data-node" cx="119" cy="119" r="4" fill="#d8b4fe" style="animation-delay:1.2s"/><circle class="mascot-data-node" cx="147" cy="115" r="4" fill="#d8b4fe" style="animation-delay:1.6s"/><circle cx="90" cy="60" r="30" fill="#190c34" stroke="#a855f7" stroke-width="2.5"/><path d="M64 46 Q72 28 90 32 Q108 28 116 46" fill="#a855f7" opacity="0.5"/><circle cx="79" cy="59" r="10" fill="none" stroke="#a855f7" stroke-width="2.2"/><circle cx="101" cy="59" r="10" fill="none" stroke="#a855f7" stroke-width="2.2"/><line x1="89" y1="59" x2="91" y2="59" stroke="#a855f7" stroke-width="2" stroke-linecap="round"/><line x1="69" y1="59" x2="62" y2="61" stroke="#a855f7" stroke-width="1.8" stroke-linecap="round"/><line x1="111" y1="59" x2="118" y2="61" stroke="#a855f7" stroke-width="1.8" stroke-linecap="round"/><circle cx="79" cy="60" r="5.5" fill="#d8b4fe" opacity="0.9"/><circle cx="101" cy="60" r="5.5" fill="#d8b4fe" opacity="0.9"/><circle cx="79" cy="60" r="3" fill="#0f1117"/><circle cx="101" cy="60" r="3" fill="#0f1117"/><circle cx="80.5" cy="58" r="1.5" fill="white" opacity="0.7"/><circle cx="102.5" cy="58" r="1.5" fill="white" opacity="0.7"/><path d="M80 74 Q90 79 100 74" stroke="#a855f7" stroke-width="2" stroke-linecap="round" fill="none"/><rect x="0" y="106" width="24" height="9" rx="4.5" fill="#190c34" stroke="#a855f7" stroke-width="1.8"/><rect x="156" y="106" width="24" height="9" rx="4.5" fill="#190c34" stroke="#a855f7" stroke-width="1.8"/></g></svg>`;}
+  },
+  materials: {
+    name: 'LIFT', color: '#8b5cf6',
+    tagline: '"I don\'t drive the forklift. I am the forklift."',
+    svg(w=180,h=180){return `<svg width="${w}" height="${h}" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="90" cy="176" rx="50" ry="5" fill="rgba(0,0,0,0.45)"/><g class="mascot-lift-chassis"><rect x="24" y="112" width="124" height="44" rx="10" fill="#160c20" stroke="#8b5cf6" stroke-width="2.5"/><rect x="32" y="120" width="30" height="28" rx="4" fill="rgba(139,92,246,0.1)" stroke="#8b5cf6" stroke-width="1"/><rect x="68" y="120" width="30" height="28" rx="4" fill="rgba(139,92,246,0.1)" stroke="#8b5cf6" stroke-width="1"/><rect x="104" y="120" width="36" height="28" rx="4" fill="rgba(139,92,246,0.15)" stroke="#8b5cf6" stroke-width="1"/><line x1="108" y1="126" x2="136" y2="126" stroke="#8b5cf6" stroke-width="1.2" opacity="0.6"/><line x1="108" y1="130" x2="136" y2="130" stroke="#8b5cf6" stroke-width="1.2" opacity="0.6"/><line x1="108" y1="134" x2="136" y2="134" stroke="#8b5cf6" stroke-width="1.2" opacity="0.6"/><line x1="108" y1="138" x2="136" y2="138" stroke="#8b5cf6" stroke-width="1.2" opacity="0.6"/><line x1="108" y1="142" x2="136" y2="142" stroke="#8b5cf6" stroke-width="1.2" opacity="0.6"/><rect x="138" y="116" width="18" height="36" rx="6" fill="#160c20" stroke="#8b5cf6" stroke-width="2"/></g><g class="mascot-lift-wheel" style="transform-origin:52px 160px"><circle cx="52" cy="160" r="18" fill="#111" stroke="#8b5cf6" stroke-width="2.5"/><circle cx="52" cy="160" r="10" fill="#160c20" stroke="#8b5cf6" stroke-width="1.5"/><line x1="52" y1="142" x2="52" y2="178" stroke="#8b5cf6" stroke-width="1.5" opacity="0.5"/><line x1="34" y1="160" x2="70" y2="160" stroke="#8b5cf6" stroke-width="1.5" opacity="0.5"/></g><g class="mascot-lift-wheel" style="transform-origin:128px 160px;animation-delay:-0.3s"><circle cx="128" cy="160" r="18" fill="#111" stroke="#8b5cf6" stroke-width="2.5"/><circle cx="128" cy="160" r="10" fill="#160c20" stroke="#8b5cf6" stroke-width="1.5"/><line x1="128" y1="142" x2="128" y2="178" stroke="#8b5cf6" stroke-width="1.5" opacity="0.5"/><line x1="110" y1="160" x2="146" y2="160" stroke="#8b5cf6" stroke-width="1.5" opacity="0.5"/></g><g class="mascot-lift-chassis"><rect x="20" y="52" width="10" height="72" rx="3" fill="#160c20" stroke="#8b5cf6" stroke-width="1.8"/><rect x="34" y="52" width="10" height="72" rx="3" fill="#160c20" stroke="#8b5cf6" stroke-width="1.8"/><line x1="20" y1="70" x2="44" y2="70" stroke="#8b5cf6" stroke-width="1.5" opacity="0.5"/><line x1="20" y1="90" x2="44" y2="90" stroke="#8b5cf6" stroke-width="1.5" opacity="0.5"/><line x1="20" y1="110" x2="44" y2="110" stroke="#8b5cf6" stroke-width="1.5" opacity="0.5"/></g><g class="mascot-lift-forks"><rect x="6" y="96" width="46" height="6" rx="3" fill="#8b5cf6"/><rect x="6" y="106" width="46" height="6" rx="3" fill="#8b5cf6"/><rect x="2" y="80" width="52" height="16" rx="3" fill="#1e0f38" stroke="#8b5cf6" stroke-width="1.5" opacity="0.8"/><rect x="8" y="70" width="40" height="12" rx="2" fill="#1e0f38" stroke="#8b5cf6" stroke-width="1" opacity="0.6"/></g><g class="mascot-lift-chassis"><rect x="58" y="64" width="80" height="52" rx="14" fill="#160c20" stroke="#8b5cf6" stroke-width="2.5"/><rect x="58" y="76" width="80" height="7" fill="#8b5cf6" opacity="0.3"/><rect x="58" y="100" width="80" height="7" fill="#8b5cf6" opacity="0.3"/><circle cx="98" cy="44" r="28" fill="#160c20" stroke="#8b5cf6" stroke-width="2.5"/><ellipse cx="98" cy="22" rx="30" ry="10" fill="#8b5cf6"/><rect x="70" y="18" width="56" height="10" rx="5" fill="#7c3aed"/><rect x="66" y="25" width="64" height="5" rx="2.5" fill="#8b5cf6" opacity="0.55"/><ellipse cx="86" cy="44" rx="9" ry="10" fill="#8b5cf6"/><ellipse cx="110" cy="44" rx="9" ry="10" fill="#8b5cf6"/><circle cx="86" cy="45" r="5" fill="#0f1117"/><circle cx="110" cy="45" r="5" fill="#0f1117"/><circle cx="88" cy="42" r="2.2" fill="white" opacity="0.8"/><circle cx="112" cy="42" r="2.2" fill="white" opacity="0.8"/><path d="M80 58 Q98 70 116 58" stroke="#8b5cf6" stroke-width="3.5" stroke-linecap="round" fill="none"/><rect x="138" y="72" width="26" height="11" rx="5.5" fill="#160c20" stroke="#8b5cf6" stroke-width="2"/></g></svg>`;}
+  },
+  alert: {
+    name: 'HAZARD', color: '#dc2626',
+    tagline: '"Nobody pushes me and walks away happy."',
+    svg(w=180,h=180){return `<svg width="${w}" height="${h}" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="90" cy="174" rx="36" ry="5" fill="rgba(0,0,0,0.4)"/><circle class="mascot-estop-ring" cx="90" cy="84" r="72" fill="none" stroke="#dc2626" stroke-width="1.5" stroke-dasharray="6 5" opacity="0.35"/><rect x="60" y="118" width="60" height="52" rx="6" fill="#1a0000" stroke="#dc2626" stroke-width="2"/><line x1="62" y1="128" x2="118" y2="128" stroke="#fbbf24" stroke-width="7" opacity="0.4"/><line x1="62" y1="144" x2="118" y2="144" stroke="#fbbf24" stroke-width="7" opacity="0.4"/><line x1="62" y1="160" x2="118" y2="160" stroke="#fbbf24" stroke-width="7" opacity="0.4"/><ellipse cx="90" cy="117" rx="37" ry="7.5" fill="#1a0000" stroke="#fbbf24" stroke-width="3"/><rect x="76" y="100" width="28" height="22" rx="4" fill="#1a0000" stroke="#dc2626" stroke-width="2"/><g class="mascot-estop-body"><circle cx="90" cy="85" r="44" fill="#7f1d1d"/><circle cx="90" cy="82" r="44" fill="#dc2626"/><circle cx="90" cy="82" r="40" fill="#ef4444"/><ellipse cx="77" cy="67" rx="14" ry="8" fill="rgba(255,255,255,0.16)" transform="rotate(-20 77 67)"/><ellipse cx="76" cy="82" rx="8" ry="9.5" fill="#1a0000"/><ellipse cx="104" cy="82" rx="8" ry="9.5" fill="#1a0000"/><circle cx="76" cy="83" r="5.5" fill="white"/><circle cx="104" cy="83" r="5.5" fill="white"/><circle cx="78" cy="81" r="2.5" fill="#1a0000"/><circle cx="106" cy="81" r="2.5" fill="#1a0000"/><circle cx="79" cy="79.5" r="1" fill="white" opacity="0.8"/><circle cx="107" cy="79.5" r="1" fill="white" opacity="0.8"/><path d="M68 72 Q76 67 84 70" stroke="#1a0000" stroke-width="3" stroke-linecap="round" fill="none"/><path d="M96 70 Q104 67 112 72" stroke="#1a0000" stroke-width="3" stroke-linecap="round" fill="none"/><path d="M76 97 Q90 91 104 97" stroke="#1a0000" stroke-width="3" stroke-linecap="round" fill="none"/><rect x="82" y="93" width="6" height="4" rx="1.5" fill="#1a0000"/><rect x="92" y="93" width="6" height="4" rx="1.5" fill="#1a0000"/></g><circle class="mascot-estop-ring" cx="90" cy="82" r="47" fill="none" stroke="#fbbf24" stroke-width="2.5" stroke-dasharray="8 6" opacity="0.75"/></svg>`;}
+  },
+  open: {
+    name: 'KLAX', color: '#ef4444',
+    tagline: '"I don\'t make the trouble. I just announce it."',
+    svg(w=180,h=180){return `<svg width="${w}" height="${h}" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="90" cy="172" rx="30" ry="5" fill="rgba(0,0,0,0.35)"/><path class="mascot-bell-wave2" d="M22 112 Q22 26 90 12 Q158 26 158 112" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round"/><path class="mascot-bell-wave1" d="M38 118 Q38 44 90 32 Q142 44 142 118" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round"/><g class="mascot-bell-body"><path d="M52 148 Q46 82 90 66 Q134 82 128 148Z" fill="#1a0000" stroke="#ef4444" stroke-width="2.5"/><path d="M54 148 Q48 86 90 70 Q132 86 126 148Z" fill="#ef4444"/><ellipse cx="72" cy="96" rx="10" ry="16" fill="rgba(255,255,255,0.13)" transform="rotate(-15 72 96)"/><ellipse cx="90" cy="148" rx="40" ry="10" fill="#ef4444" stroke="#dc2626" stroke-width="2.5"/><ellipse cx="78" cy="118" rx="8" ry="8.5" fill="#dc2626"/><ellipse cx="102" cy="118" rx="8" ry="8.5" fill="#dc2626"/><circle cx="78" cy="119" r="4.5" fill="#0f1117"/><circle cx="102" cy="119" r="4.5" fill="#0f1117"/><circle cx="80" cy="117" r="2" fill="white" opacity="0.8"/><circle cx="104" cy="117" r="2" fill="white" opacity="0.8"/><path d="M70 108 Q78 104 86 107" stroke="#dc2626" stroke-width="2.5" stroke-linecap="round" fill="none"/><path d="M94 107 Q102 104 110 108" stroke="#dc2626" stroke-width="2.5" stroke-linecap="round" fill="none"/><path d="M76 130 Q90 140 104 130" stroke="#dc2626" stroke-width="3" stroke-linecap="round" fill="none"/><rect x="86" y="146" width="8" height="14" rx="4" fill="#dc2626"/><circle cx="90" cy="162" r="6" fill="#dc2626" stroke="#1a0000" stroke-width="2"/><rect x="82" y="60" width="16" height="12" rx="4" fill="#7f1d1d"/></g></svg>`;}
+  },
+  resolved: {
+    name: 'CLEAR', color: '#22c55e',
+    tagline: '"Case closed. Press on."',
+    svg(w=180,h=180){return `<svg width="${w}" height="${h}" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="90" cy="172" rx="32" ry="5" fill="rgba(0,0,0,0.3)"/><circle class="mascot-clear-glow" cx="90" cy="80" r="66" fill="rgba(34,197,94,0.06)"/><circle class="mascot-clear-glow" cx="90" cy="80" r="54" fill="rgba(34,197,94,0.09)" style="animation-delay:0.8s"/><rect x="74" y="140" width="32" height="30" rx="5" fill="#0a1f0f" stroke="#22c55e" stroke-width="2"/><rect x="70" y="136" width="40" height="10" rx="3" fill="#0a1f0f" stroke="#22c55e" stroke-width="2"/><line x1="82" y1="150" x2="98" y2="150" stroke="#22c55e" stroke-width="1.5" opacity="0.5"/><line x1="82" y1="158" x2="98" y2="158" stroke="#22c55e" stroke-width="1.5" opacity="0.5"/><rect x="82" y="130" width="16" height="14" rx="4" fill="#0a1f0f" stroke="#22c55e" stroke-width="2"/><g class="mascot-clear-dome"><circle cx="90" cy="80" r="52" fill="#0a1f0f" stroke="#22c55e" stroke-width="3"/><circle cx="90" cy="80" r="48" fill="#16a34a"/><circle cx="90" cy="80" r="44" fill="#22c55e"/><ellipse cx="75" cy="62" rx="14" ry="9" fill="rgba(255,255,255,0.18)" transform="rotate(-20 75 62)"/><ellipse cx="76" cy="80" rx="8" ry="8.5" fill="#0a1f0f"/><ellipse cx="104" cy="80" rx="8" ry="8.5" fill="#0a1f0f"/><circle cx="76" cy="81" r="5" fill="white"/><circle cx="104" cy="81" r="5" fill="white"/><circle cx="78" cy="79" r="2.5" fill="#0a1f0f"/><circle cx="106" cy="79" r="2.5" fill="#0a1f0f"/><circle cx="79" cy="78" r="1" fill="white" opacity="0.8"/><circle cx="107" cy="78" r="1" fill="white" opacity="0.8"/><path d="M70 70 Q76 66 82 69" stroke="#0a1f0f" stroke-width="2.5" stroke-linecap="round" fill="none"/><path d="M98 69 Q104 66 110 70" stroke="#0a1f0f" stroke-width="2.5" stroke-linecap="round" fill="none"/><path d="M74 94 Q90 106 106 94" stroke="#0a1f0f" stroke-width="3.5" stroke-linecap="round" fill="none"/><rect x="80" y="96" width="7" height="5" rx="2" fill="#0a1f0f"/><rect x="93" y="96" width="7" height="5" rx="2" fill="#0a1f0f"/></g><path class="mascot-clear-ray" d="M32 80 L16 80" stroke="#22c55e" stroke-width="3" stroke-linecap="round"/><path class="mascot-clear-ray" d="M148 80 L164 80" stroke="#22c55e" stroke-width="3" stroke-linecap="round" style="animation-delay:0.4s"/><path class="mascot-clear-ray" d="M48 37 L36 25" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" style="animation-delay:0.8s"/><path class="mascot-clear-ray" d="M132 37 L144 25" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" style="animation-delay:1.2s"/><path class="mascot-clear-ray" d="M90 24 L90 8" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" style="animation-delay:1.6s"/></svg>`;}
+  },
+};
+
 // Derived helpers — do not edit
 // ALL_STATUSES is now managed via rebuildDerivedStatus() — access as ALL_STATUSES
 // ── CONFIG LOAD / SAVE ──
@@ -2550,13 +2747,15 @@ async function checkAndAwardBadges() {
     try {
       const badgesRef = userBadgesDoc(currentUser.uid);
       await setDoc(badgesRef, {
-        [`earnedBadges.${badge.id}`]: { earnedAt: serverTimestamp(), badgeName: badge.name, icon: badge.icon || '🏅' },
+        earnedBadges: {
+          [badge.id]: { earnedAt: serverTimestamp(), badgeName: badge.name, icon: badge.icon || '🏅' }
+        },
         updatedAt: serverTimestamp()
       }, { merge: true });
       showBadgeEarnedCelebration(badge);
       // Award badge XP as a direct stat increment (no dedup loop risk — badge already marked earned)
       if (Number(badge.xpReward || 0) > 0) {
-        await setDoc(gameUserStatsDoc(currentUser.uid), { 'totals.xp': increment(Number(badge.xpReward)) }, { merge: true });
+        await setDoc(gameUserStatsDoc(currentUser.uid), { totals: { xp: increment(Number(badge.xpReward)) } }, { merge: true });
       }
     } catch (e) {
       console.warn('Badge award failed:', e?.message);
@@ -2718,17 +2917,16 @@ async function awardGamification(reason, context = {}) {
       dedupeKey,
       schemaVersion: 1
     });
-    const reasonCounters = {};
-    if (reason === 'issue_resolved')           reasonCounters['totals.issuesResolved']  = increment(1);
-    if (reason === 'issue_created_complete')   reasonCounters['totals.issuesCreated']   = increment(1);
-    if (reason === 'photo_attached')           reasonCounters['totals.photosAttached']  = increment(1);
-    if (reason === 'serial_captured_when_required') reasonCounters['totals.serialsCaptured'] = increment(1);
+    const totalsCounters = { xp: increment(totalDelta) };
+    if (reason === 'issue_resolved')                totalsCounters.issuesResolved = increment(1);
+    if (reason === 'issue_created_complete')        totalsCounters.issuesCreated = increment(1);
+    if (reason === 'photo_attached')                totalsCounters.photosAttached = increment(1);
+    if (reason === 'serial_captured_when_required') totalsCounters.serialsCaptured = increment(1);
     batch.set(statsRef, {
       userId: currentUser.uid,
       displayName: currentUser.displayName || currentUser.email || 'User',
-      'totals.xp': increment(totalDelta),
-      ...reasonCounters,
-      'streaks.current': increment(totalDelta > 0 ? 1 : 0),
+      totals: totalsCounters,
+      streaks: { current: increment(totalDelta > 0 ? 1 : 0) },
       lastEventAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       schemaVersion: 1
@@ -2737,7 +2935,7 @@ async function awardGamification(reason, context = {}) {
 
     const currentXp = Number(gameUserStats?.totals?.xp || 0) + totalDelta;
     const nextLevel = gameLevelFromXp(currentXp);
-    await setDoc(statsRef, { totals: { level: nextLevel } }, { merge: true });
+    await updateDoc(statsRef, { 'totals.level': nextLevel });
     await setDoc(gameLeaderboardDoc(), {
       [`entriesByUid.${currentUser.uid}`]: {
         uid: currentUser.uid,
@@ -2886,6 +3084,7 @@ async function bootstrapSignedInSession(user) {
   startGamificationListeners();
   startListener();
   setTodayDate();
+  if (!localStorage.getItem(TUTORIAL_KEY)) setTimeout(() => window.openTutorial(), 900);
 }
 
 onAuthStateChanged(auth, async user => {
@@ -3812,8 +4011,6 @@ window.submitIssue = async () => {
       machine: currentMachine, note,
       dateTime: fmtDate(d), dateKey: localDateStr(d), timestamp: d.getTime(),
       userId: currentUser.uid, userName: currentUser.displayName||currentUser.email,
-      workflowState: 'called',
-      workflowStateHistory: { called: { by: currentActor(), at: serverTimestamp() } },
       photoCount: uploadedPhotos.length,
       createdAt: serverTimestamp(),
       createdBy: currentActor(),
@@ -4489,6 +4686,17 @@ window.cycleWorkflowState = async (id) => {
   }
 };
 
+// Dismiss the prompt arrow then set the workflow state
+window.handleWfStepClick = (evt, issueId, statusKey, state) => {
+  evt.stopPropagation();
+  const arrow = document.getElementById(`wf-arrow-${issueId}`);
+  if (arrow) {
+    arrow.classList.add('wf-arrow-dismissed');
+    setTimeout(() => arrow.remove(), 380);
+  }
+  setWorkflowStateForStatus(issueId, statusKey, state);
+};
+
 // ── PRIORITY TOGGLE ──
 window.togglePriority = async (id) => {
   const issue = issues.find(i => i.id === id);
@@ -4645,7 +4853,8 @@ function renderIssues() {
   list.style.height = '';
 
   if (filtered.length===0) {
-    list.innerHTML='<div class="empty-state"><div class="empty-state-icon">📋</div><div class="empty-state-text">No issues match your filters.</div></div>';
+    const _sigmaHtml = MASCOTS.processengineer?.svg(110, 110) || '<div class="empty-state-icon">📋</div>';
+    list.innerHTML=`<div class="empty-state"><div class="mascot-empty-wrap">${_sigmaHtml}</div><div class="empty-state-text">No issues match your filters.</div></div>`;
     return;
   }
 
@@ -4688,7 +4897,6 @@ function renderIssues() {
     // Authoritative current status from issue.currentStatus (v2) or lifecycle fallback
     const currentKey = currentStatusKey(issue);
     const currentSubKey = issue.currentStatus?.subStatusKey || '';
-
     // History for timeline display
     const history = issue.statusHistory && issue.statusHistory.length > 0
       ? issue.statusHistory
@@ -4731,7 +4939,8 @@ function renderIssues() {
     }
 
     // Workflow state configuration
-    const workflowState = issue.workflowState || 'called';
+    const workflowState = issue.workflowState || null;
+    const hasNoWorkflowState = !workflowState;
     const workflowConfig = {
       called:      { icon: '🔔', label: 'Called',      cssState: 'called' },
       accepted:    { icon: '👋', label: 'Accepted',    cssState: 'accepted' },
@@ -4739,8 +4948,8 @@ function renderIssues() {
       finished:    { icon: '✓',  label: 'Finished',    cssState: 'finished' }
     };
     const wfOrder = ['called', 'accepted', 'in-progress', 'finished'];
-    const wfCurrentIdx = wfOrder.indexOf(workflowState);
-    const isCompleted = (state) => wfOrder.indexOf(state) < wfCurrentIdx;
+    const wfCurrentIdx = workflowState ? wfOrder.indexOf(workflowState) : -1;
+    const isCompleted = (state) => workflowState && wfOrder.indexOf(state) < wfCurrentIdx;
     const wfStateHistory = issue.workflowStateHistory || {};
     const wfByStatus = issue.workflowStateByStatus || {};
 
@@ -4753,9 +4962,10 @@ function renderIssues() {
       const isResolvedEntry = entry.status === 'resolved';
       const entryWorkflowState = isResolvedEntry
         ? 'finished'
-        : (entry.status === currentKey ? workflowState : (wfByStatus[entry.status] || 'called'));
+        : (entry.status === currentKey ? workflowState : (wfByStatus[entry.status] || null));
       const wfCfg = workflowConfig[entryWorkflowState] || workflowConfig.called;
-      const wfColor = entryWorkflowState === 'called' ? '#eab308'
+      const wfColor = !entryWorkflowState ? '#6b7280'
+        : entryWorkflowState === 'called' ? '#eab308'
         : entryWorkflowState === 'accepted' ? '#22c55e'
         : entryWorkflowState === 'in-progress' ? '#3b82f6'
         : '#a855f7';
@@ -4766,7 +4976,9 @@ function renderIssues() {
       const entryBg = `background:${alphaColor(barColor, 0.05)};`;
 
       // Workflow badge (clickable for non-resolved entries to cycle state)
-      const wfBadgeLabel = `${wfCfg.icon} ${wfCfg.label.toUpperCase()}${isCurrent ? ' · CURRENT' : ''}`;
+      const wfBadgeLabel = entryWorkflowState
+        ? `${wfCfg.icon} ${wfCfg.label.toUpperCase()}${isCurrent ? ' · CURRENT' : ''}`
+        : `— NOT STARTED${isCurrent ? ' · CURRENT' : ''}`;
       const wfBadge = isResolvedEntry
         ? `<div class="tl-wf-badge no-action" style="color:${cfg.color}">${cfg.icon} RESOLVED${isCurrent ? ' · CURRENT' : ''}</div>`
         : `<button class="tl-wf-badge" style="color:${wfColor}" onclick="event.stopPropagation(); cycleWorkflowStateForStatus('${issue.id}','${entry.status}')" title="Tap to cycle workflow state">${wfBadgeLabel}</button>`;
@@ -4833,19 +5045,22 @@ function renderIssues() {
 
     // Build compact 4-step header buttons with state label below
     const wfHeaderHtml = `<div class="wf-steps-wrap" onclick="event.stopPropagation()">
-      <div class="wf-steps">${wfOrder.map(state => {
-        const cfg = workflowConfig[state];
-        const cls = state === workflowState ? `active ${cfg.cssState}` : isCompleted(state) ? 'completed' : 'pending';
-        return `<button class="wf-step-btn ${cls}" onclick="setWorkflowStateForStatus('${issue.id}','${currentKey}','${state}')" title="${cfg.label}">${cfg.icon}</button>`;
-      }).join('')}</div>
-      <div class="wf-state-label ${workflowConfig[workflowState].cssState}">${workflowConfig[workflowState].label}</div>
+      <div class="wf-steps-row">
+        ${hasNoWorkflowState ? `<div class="wf-prompt-arrow" id="wf-arrow-${issue.id}"></div>` : ''}
+        <div class="wf-steps">${wfOrder.map(state => {
+          const cfg = workflowConfig[state];
+          const cls = state === workflowState ? `active ${cfg.cssState}` : isCompleted(state) ? 'completed' : 'pending';
+          return `<button class="wf-step-btn ${cls}" onclick="handleWfStepClick(event,'${issue.id}','${currentKey}','${state}')" title="${cfg.label}">${cfg.icon}</button>`;
+        }).join('')}</div>
+      </div>
+      <div class="wf-state-label ${workflowState ? workflowConfig[workflowState].cssState : ''}">${workflowState ? workflowConfig[workflowState].label : ''}</div>
     </div>`;
 
     // Per-status workflow rows for expanded card body — derived from status history
     // Shows each department called (unique status keys from history), excluding the
     // primary status (already in header) and any already marked 'finished'
     const histStatKeys = [...new Set(
-      displayHistory.map(e => e.status).filter(k => k && k !== 'open' && k !== 'resolved' && k !== currentKey)
+      [...displayHistory].reverse().map(e => e.status).filter(k => k && k !== 'open' && k !== 'resolved' && k !== currentKey)
     )].filter(k => wfByStatus[k] !== 'finished');
 
     const wfHistoryRowsHtml = histStatKeys.map(sKey => {
@@ -5062,6 +5277,15 @@ function renderIssues() {
 
           const subInner = subPanel.querySelector('.swipe-sub-inner');
           subInner.innerHTML = '';
+
+          // Mascot header — rendered inside the chip flow so sub-status chips wrap around it
+          const mascotDef = MASCOTS[statusKey];
+          if (mascotDef) {
+            const mh = document.createElement('div');
+            mh.className = 'swipe-mascot-header';
+            mh.innerHTML = `<div class="swipe-mascot-svg">${mascotDef.svg(68, 68)}</div><div class="swipe-mascot-info"><div class="swipe-mascot-name" style="color:${mascotDef.color}">${mascotDef.name}</div><div class="swipe-mascot-tagline">${mascotDef.tagline}</div></div>`;
+            subInner.appendChild(mh);
+          }
 
           // Skip chip
           const skipChip = document.createElement('div');
@@ -5439,6 +5663,202 @@ function updateStats() {
         el.textContent = `${count} ${getStatusLabel(key, 'stat')}`;
       }
     });
+}
+
+// ── MASCOT POPOVER ──
+function openMascotPopover(e, statusKey, contextType, issueId) {
+  e.stopPropagation();
+  const m = MASCOTS[statusKey];
+  if (!m) return;
+  const popover  = document.getElementById('mascot-popover');
+  const backdrop = document.getElementById('mascot-popover-backdrop');
+  if (!popover || !backdrop) return;
+  popover.style.setProperty('--mascot-accent', m.color);
+  const statusDef = getStatusDef(statusKey);
+  let badgeLabel = '', contextHtml = '';
+  if (contextType === 'stat') {
+    let scoped = issueScope === 'mine' ? issues.filter(i => i.userId === currentUser?.uid) : issues;
+    scoped = scoped.filter(periodFilter);
+    const matching = scoped.filter(i => issueHasActiveStatus(i, statusKey));
+    const count = matching.length;
+    const presses = [...new Set(matching.map(i => i.machine || i.machineCode).filter(Boolean))].slice(0, 6).join(', ');
+    badgeLabel = 'ACTIVE ON FLOOR';
+    contextHtml = `
+      <div class="mascot-popover-fact">
+        <span class="mascot-popover-fact-label">Issues</span>
+        <span class="mascot-popover-fact-value" style="color:${m.color}">${count}</span>
+      </div>
+      ${presses ? `<div class="mascot-popover-fact">
+        <span class="mascot-popover-fact-label">Presses</span>
+        <span class="mascot-popover-fact-value">${presses}</span>
+      </div>` : ''}
+    `;
+  } else if (contextType === 'issue') {
+    const issue = issues.find(i => i.id === issueId);
+    const cs = issue?.currentStatus || {};
+    const setBy  = cs.enteredBy?.name || issue?.userName || '—';
+    const setAt  = cs.enteredDateTime || issue?.dateTime || '—';
+    const sub    = cs.subLabel || cs.subStatusKey || '';
+    const note   = cs.notePreview || '';
+    badgeLabel = 'STATUS DETAILS';
+    contextHtml = `
+      <div class="mascot-popover-fact">
+        <span class="mascot-popover-fact-label">Set by</span>
+        <span class="mascot-popover-fact-value">${setBy}</span>
+      </div>
+      <div class="mascot-popover-fact">
+        <span class="mascot-popover-fact-label">At</span>
+        <span class="mascot-popover-fact-value">${setAt}</span>
+      </div>
+      ${sub ? `<div class="mascot-popover-fact">
+        <span class="mascot-popover-fact-label">Sub-status</span>
+        <span class="mascot-popover-fact-value" style="color:${m.color}">${sub}</span>
+      </div>` : ''}
+      ${note ? `<div class="mascot-popover-fact">
+        <span class="mascot-popover-fact-label">Note</span>
+        <span class="mascot-popover-fact-value">${note}</span>
+      </div>` : ''}
+    `;
+  }
+  popover.innerHTML = `
+    <button class="mascot-popover-close" onclick="closeMascotPopover()">✕</button>
+    <div style="margin-bottom:2px">${m.svg(120, 120)}</div>
+    <div class="mascot-popover-name" style="color:${m.color}">${m.name}</div>
+    <div class="mascot-popover-role">${statusDef.label}</div>
+    <div class="mascot-popover-tagline">${m.tagline}</div>
+    <div class="mascot-popover-divider"></div>
+    <div class="mascot-popover-badge-label">${badgeLabel}</div>
+    <div class="mascot-popover-facts">${contextHtml}</div>
+  `;
+  backdrop.classList.add('visible');
+}
+function closeMascotPopover() {
+  document.getElementById('mascot-popover-backdrop')?.classList.remove('visible');
+}
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    closeMascotPopover();
+    if (document.getElementById('tutorial-overlay')?.classList.contains('visible')) window.closeTutorial();
+  }
+});
+
+// ── TUTORIAL ──
+const TUTORIAL_KEY = 'aptracker_tutorial_v1';
+
+const TUTORIAL_SLIDES = [
+  {
+    mascotKey: 'open',
+    headline: 'WELCOME TO AP TRACKER',
+    body: "I'm KLAX. When a press goes down, I'm the first to sound off. Let me show you how we keep this floor moving.",
+  },
+  {
+    mascotKey: 'controlman',
+    headline: 'THE FLOOR MAP',
+    body: "Every press on your floor, live. Colored buttons show what's happening right now. Tap a row tab to expand it and see its machines.",
+  },
+  {
+    mascotKey: 'maintenance',
+    headline: 'REPORT AN ISSUE',
+    body: "See something wrong? Tap the press button, then hit + Add. Fill in the note and attach a photo if you've got one. Takes 20 seconds.",
+  },
+  {
+    mascotKey: 'alert',
+    headline: 'ROUTE TO THE RIGHT TEAM',
+    body: "Swipe right on any issue card to route it — Maintenance, Tool & Die, Quality, whoever needs to respond. Pick a sub-status for more detail.",
+  },
+  {
+    mascotKey: null,
+    wf: true,
+    headline: 'TRACK THE WORKFLOW',
+    body: "Every issue moves through four stages. Tap the workflow badge on a card to advance it toward resolution.",
+  },
+  {
+    mascotKey: 'resolved',
+    headline: 'CLOSE IT OUT',
+    body: "Fix is done? Open the card, hit Resolve, and leave a note. CLEAR will put the stamp on it.",
+  },
+  {
+    mascotKey: 'processengineer',
+    headline: "YOU'RE ALL SET",
+    body: "Use the filter bar to focus by team, machine, or time period. Export a PDF for your end-of-shift report. Now go keep the floor moving.",
+    isLast: true,
+  },
+];
+
+let _tutStep = 0;
+
+window.openTutorial = function(step = 0) {
+  _tutStep = step;
+  _renderTutSlide();
+  document.getElementById('tutorial-overlay')?.classList.add('visible');
+};
+
+window.closeTutorial = function() {
+  localStorage.setItem(TUTORIAL_KEY, '1');
+  document.getElementById('tutorial-overlay')?.classList.remove('visible');
+};
+
+window.tutorialNext = function() {
+  if (_tutStep >= TUTORIAL_SLIDES.length - 1) { window.closeTutorial(); return; }
+  _tutStep++;
+  _renderTutSlide();
+};
+
+window.tutorialBack = function() {
+  if (_tutStep <= 0) return;
+  _tutStep--;
+  _renderTutSlide();
+};
+
+function _renderTutSlide() {
+  const slide = TUTORIAL_SLIDES[_tutStep];
+  if (!slide) return;
+  const m = slide.mascotKey ? MASCOTS[slide.mascotKey] : null;
+  const accent = m ? m.color : '#3b82f6';
+
+  const accentBar  = document.getElementById('tutorial-accent-bar');
+  const mascotArea = document.getElementById('tutorial-mascot-area');
+  const headline   = document.getElementById('tutorial-headline');
+  const body       = document.getElementById('tutorial-body');
+  const progress   = document.getElementById('tutorial-progress');
+  const nextBtn    = document.getElementById('tutorial-next-btn');
+  const backBtn    = document.getElementById('tutorial-back-btn');
+  const card       = document.getElementById('tutorial-card');
+
+  if (accentBar) accentBar.style.background = accent;
+  card?.style.setProperty('--tut-accent', accent);
+
+  if (mascotArea) {
+    if (slide.wf) {
+      mascotArea.innerHTML = `<div class="tutorial-wf-vis">
+        <div class="tutorial-wf-step wf-done"><div class="tutorial-wf-dot"></div><div class="tutorial-wf-label">Called</div></div>
+        <div class="tutorial-wf-line"></div>
+        <div class="tutorial-wf-step wf-done"><div class="tutorial-wf-dot"></div><div class="tutorial-wf-label">Accepted</div></div>
+        <div class="tutorial-wf-line"></div>
+        <div class="tutorial-wf-step wf-active"><div class="tutorial-wf-dot"></div><div class="tutorial-wf-label">In Progress</div></div>
+        <div class="tutorial-wf-line pending"></div>
+        <div class="tutorial-wf-step"><div class="tutorial-wf-dot"></div><div class="tutorial-wf-label">Finished</div></div>
+      </div>`;
+    } else if (m) {
+      mascotArea.innerHTML = `<div>${m.svg(130, 130)}</div><div class="tutorial-mascot-name" style="color:${m.color}">${m.name}</div>`;
+    } else {
+      mascotArea.innerHTML = '';
+    }
+  }
+
+  if (headline) headline.textContent = slide.headline;
+  if (body)     body.textContent     = slide.body;
+
+  if (progress) {
+    progress.innerHTML = TUTORIAL_SLIDES.map((_, i) =>
+      `<span class="tutorial-dot${i === _tutStep ? ' active' : ''}"></span>`
+    ).join('');
+  }
+
+  if (nextBtn) nextBtn.textContent = slide.isLast ? "Let's Go!" : 'Next →';
+  if (backBtn) backBtn.style.visibility = _tutStep === 0 ? 'hidden' : 'visible';
+
+  if (card) { card.classList.remove('slide-in'); void card.offsetWidth; card.classList.add('slide-in'); }
 }
 
 // ── LIGHTBOX ──
@@ -6584,6 +7004,29 @@ document.getElementById('admin-page-btn')?.addEventListener('click', e => {
   window.location.href = 'admin.html';
 });
 </script>
+
+<!-- MASCOT CHARACTER CARD POPOVER -->
+<div class="mascot-popover-backdrop" id="mascot-popover-backdrop" onclick="if(event.target===this)closeMascotPopover()">
+  <div class="mascot-popover" id="mascot-popover"></div>
+</div>
+
+<!-- TUTORIAL MODAL -->
+<div class="tutorial-overlay" id="tutorial-overlay" onclick="if(event.target===this)closeTutorial()">
+  <div class="tutorial-card" id="tutorial-card">
+    <div class="tutorial-accent-bar" id="tutorial-accent-bar"></div>
+    <button class="tutorial-skip" onclick="closeTutorial()">Skip</button>
+    <div class="tutorial-mascot-area" id="tutorial-mascot-area"></div>
+    <div class="tutorial-content">
+      <div class="tutorial-headline" id="tutorial-headline"></div>
+      <div class="tutorial-body" id="tutorial-body"></div>
+    </div>
+    <div class="tutorial-progress" id="tutorial-progress"></div>
+    <div class="tutorial-nav">
+      <button class="btn btn-ghost tutorial-back-btn" id="tutorial-back-btn" onclick="tutorialBack()">← Back</button>
+      <button class="btn btn-primary tutorial-next-btn" id="tutorial-next-btn" onclick="tutorialNext()">Next →</button>
+    </div>
+  </div>
+</div>
 
 </body>
 </html>
