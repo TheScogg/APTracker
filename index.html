@@ -766,13 +766,13 @@
   .wf-state-label.accepted    { color: #22c55e; }
   .wf-state-label.in-progress { color: #3b82f6; }
   .wf-state-label.finished    { color: #a855f7; }
-  /* Mascot prompt shown before first workflow action */
-  .wf-prompt-mascot { font-size: 18px; line-height: 1; flex-shrink: 0; animation: wfMascotPulse 1.1s ease-in-out infinite; pointer-events: none; }
-  .wf-prompt-mascot.wf-arrow-dismissed { animation: wfArrowDismiss 0.35s ease-out forwards; }
-  @keyframes wfMascotPulse {
+  /* Pulsing prompt arrow shown before first workflow action */
+  .wf-prompt-arrow { color: #22c55e; font-size: 13px; line-height: 1; flex-shrink: 0; margin-left: -6px; margin-right: 2px; animation: wfArrowPulse 1.05s ease-in-out infinite; pointer-events: none; }
+  .wf-prompt-arrow.wf-arrow-dismissed { animation: wfArrowDismiss 0.35s ease-out forwards; }
+  @keyframes wfArrowPulse {
     0%, 100% { transform: translateX(0) scale(1);     opacity: 1;   }
-    45%       { transform: translateX(5px) scale(1.2); opacity: 0.5; }
-    65%       { transform: translateX(3px) scale(1.1); opacity: 0.8; }
+    45%       { transform: translateX(5px) scale(1.2); opacity: 0.45; }
+    65%       { transform: translateX(3px) scale(1.1); opacity: 0.75; }
   }
   @keyframes wfArrowDismiss {
     to { opacity: 0; transform: translateX(14px) scale(0.2); width: 0; margin: 0; padding: 0; overflow: hidden; }
@@ -5012,7 +5012,7 @@ function renderIssues() {
     // Build compact 4-step header buttons with state label below
     const wfHeaderHtml = `<div class="wf-steps-wrap" onclick="event.stopPropagation()">
       <div class="wf-steps-row">
-        ${hasNoWorkflowState ? `<div class="wf-prompt-mascot" id="wf-arrow-${issue.id}">${scfg.icon}</div>` : ''}
+        ${hasNoWorkflowState ? `<div class="wf-prompt-arrow" id="wf-arrow-${issue.id}">▶</div>` : ''}
         <div class="wf-steps">${wfOrder.map(state => {
           const cfg = workflowConfig[state];
           const cls = state === workflowState ? `active ${cfg.cssState}` : isCompleted(state) ? 'completed' : 'pending';
