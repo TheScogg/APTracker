@@ -620,6 +620,81 @@ function extractSchedulePayload(parsed) {
   return parsed;
 }
 
+function adaptDailyScheduleGptOutput(raw) {
+  const normalizeDate = value => {
+    const text = String(value || '').trim();
+    if (!text) return '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+    const isoMatch = text.match(/^(\d{4}-\d{2}-\d{2})T/);
+    if (isoMatch) return isoMatch[1];
+    return text;
+  };
+
+  const toObject = input => {
+    if (input && typeof input === 'object') return input;
+    const rawText = String(input || '').trim();
+    if (!rawText) throw new Error('DailyScheduleGPT output is empty. Paste a JSON response before generating.');
+
+    const fencedMatch = rawText.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    const jsonCandidate = fencedMatch ? fencedMatch[1].trim() : rawText;
+    try {
+      return JSON.parse(jsonCandidate);
+    } catch (e) {
+      throw new Error('DailyScheduleGPT output must be valid JSON. Tip: paste only the JSON body (or a ```json fenced block).');
+    }
+  };
+
+  const pick = (obj, keys, fallback = '') => {
+    for (const key of keys) {
+      if (obj && Object.prototype.hasOwnProperty.call(obj, key) && obj[key] !== undefined && obj[key] !== null) {
+        return obj[key];
+      }
+    }
+    return fallback;
+  };
+
+  const asArray = value => {
+    if (Array.isArray(value)) return value;
+    if (value && typeof value === 'object') return Object.values(value);
+    return [];
+  };
+
+  const mapRow = row => ({
+    press: String(pick(row, ['press', 'Press'], '') || ''),
+    part_storage_location: Array.isArray(pick(row, ['part_storage_location', 'partStorageLocation'], []))
+      ? pick(row, ['part_storage_location', 'partStorageLocation'], []).map(v => String(v ?? ''))
+      : [],
+    part_number: String(pick(row, ['part_number', 'partNumber'], '') || ''),
+    description: String(pick(row, ['description', 'desc'], '') || ''),
+    cavity: String(pick(row, ['cavity'], '') || ''),
+    doh: pick(row, ['doh', 'DOH'], ''),
+    labels_per_shift: pick(row, ['labels_per_shift', 'labelsPerShift', 'labels_perShifts'], ''),
+    mc: String(pick(row, ['mc', 'MC'], '') || ''),
+    notes: String(pick(row, ['notes', 'note'], '') || '')
+  });
+
+  const parsed = toObject(raw);
+  const payload = extractSchedulePayload(parsed);
+  const info = payload?.schedule_info && typeof payload.schedule_info === 'object' ? payload.schedule_info : payload;
+
+  const adaptedPayload = {
+    schedule_info: {
+      date: normalizeDate(pick(info, ['date', 'scheduleDate', 'schedule_date'], '')),
+      shift: pick(info, ['shift', 'Shift'], ''),
+      line_speed: pick(info, ['line_speed', 'lineSpeed'], ''),
+      total_planned_pcs: pick(info, ['total_planned_pcs', 'totalPlannedPcs'], ''),
+      note: String(pick(info, ['note', 'notes'], '') || '')
+    },
+    page1: asArray(pick(payload, ['page1', 'page_1'], [])).map(mapRow),
+    page2: asArray(pick(payload, ['page2', 'page_2'], [])).map(mapRow),
+    north_bay_changes: asArray(pick(payload, ['north_bay_changes', 'northBayChanges', 'north_bay_change'], [])).map(mapRow),
+    south_bay_changes: asArray(pick(payload, ['south_bay_changes', 'southBayChanges', 'south_bay_change'], [])).map(mapRow)
+  };
+
+  const normalized = normalizeSchedulePayload(adaptedPayload);
+  return { adaptedPayload, normalized };
+}
+
 async function commitInChunks(ops, maxPerBatch = 450) {
   if (!ops.length) return;
   for (let i = 0; i < ops.length; i += maxPerBatch) {
@@ -1288,35 +1363,18 @@ async function generateScheduleJsonFromDailyScheduleGPT() {
   feedback('schedule-gpt-feedback', '', '');
 
   try {
-    const generatedDate = String(dateInput?.value || '').trim() || new Date().toISOString().slice(0, 10);
     const strictValidation = String(strictValidationInput?.value || 'true') === 'true';
     const shiftOverride = String(shiftInput?.value || '').trim();
-    const payload = {
-      scheduleDate: generatedDate,
-      shift: shiftOverride || null,
-      lineSpeed: null,
-      totalPlannedPcs: null,
-      notes: 'Generated from DailyScheduleGPT input. Review all values before import.',
-      sections: {
-        page1: [],
-        page2: [],
-        northBayChanges: [],
-        southBayChanges: []
-      },
-      generator: {
-        source: 'DailyScheduleGPT',
-        modelPreset: String(modelPresetInput?.value || 'balanced'),
-        strictValidation,
-        generatedAt: new Date().toISOString(),
-        sourceSnippet: sourceText.slice(0, 3000)
-      }
-    };
+    const { adaptedPayload, normalized } = adaptDailyScheduleGptOutput(sourceText);
+    if (shiftOverride) adaptedPayload.schedule_info.shift = shiftOverride;
+    if (dateInput?.value) adaptedPayload.schedule_info.date = String(dateInput.value).trim();
+    if (strictValidation) normalizeSchedulePayload(adaptedPayload);
 
-    jsonInput.value = JSON.stringify(payload, null, 2);
+    jsonInput.value = JSON.stringify(adaptedPayload, null, 2);
     if (sourceNameInput && !String(sourceNameInput.value || '').trim()) {
-      sourceNameInput.value = `DailyScheduleGPT_${generatedDate}.txt`;
+      sourceNameInput.value = `DailyScheduleGPT_${adaptedPayload.schedule_info.date}.txt`;
     }
-    feedback('schedule-gpt-feedback', 'ok', 'Generated JSON draft. Review and click Import Daily Schedule when ready.');
+    feedback('schedule-gpt-feedback', 'ok', `Generated canonical JSON draft (${normalized.sections.page1.length + normalized.sections.page2.length + normalized.sections.northBayChanges.length + normalized.sections.southBayChanges.length} rows). Review and click Import Daily Schedule when ready.`);
   } catch (e) {
     console.error(e);
     feedback('schedule-gpt-feedback', 'error', e.message || 'Failed to generate schedule JSON.');
