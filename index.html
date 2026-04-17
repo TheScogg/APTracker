@@ -1059,7 +1059,8 @@
   .spotlight-overlay.visible { pointer-events: all; }
   .spotlight-hl { position: fixed; z-index: 9195; border-radius: 14px; pointer-events: none; box-shadow: 0 0 0 9999px rgba(0,0,0,0.72); border: 2px solid rgba(255,255,255,0.18); opacity: 0; transition: top 0.38s cubic-bezier(0.4,0,0.2,1), left 0.38s cubic-bezier(0.4,0,0.2,1), width 0.38s cubic-bezier(0.4,0,0.2,1), height 0.38s cubic-bezier(0.4,0,0.2,1), opacity 0.25s; }
   .spotlight-hl.active { opacity: 1; }
-  .spt-wrap { position: fixed; z-index: 9200; pointer-events: none; width: min(300px, calc(100vw - 24px)); }
+  .spt-wrap { display: none; position: fixed; z-index: 9200; pointer-events: none; width: min(300px, calc(100vw - 24px)); }
+  .spt-wrap.visible { display: block; }
   .spt-card { pointer-events: all; background: var(--bg2); border: 1px solid var(--border); border-radius: 18px; padding: 0 0 14px; overflow: hidden; position: relative; }
   .spt-accent-bar { height: 3px; width: 100%; transition: background 0.3s; }
   .spt-skip-btn { position: absolute; top: 10px; right: 12px; background: none; border: none; color: var(--text3); font-size: 10px; font-family: 'Share Tech Mono', monospace; letter-spacing: 1px; text-transform: uppercase; cursor: pointer; padding: 3px 7px; border-radius: 5px; line-height: 1; z-index: 1; }
@@ -5960,12 +5961,14 @@ let _sptStep = 0;
 window.openTutorial = function(step = 0) {
   _sptStep = step;
   document.getElementById('spotlight-overlay')?.classList.add('visible');
+  document.getElementById('spt-wrap')?.classList.add('visible');
   _renderSptStep();
 };
 
 window.closeTutorial = function() {
   localStorage.setItem(TUTORIAL_KEY, '1');
   document.getElementById('spotlight-overlay')?.classList.remove('visible');
+  document.getElementById('spt-wrap')?.classList.remove('visible');
   const hl = document.getElementById('spotlight-hl');
   if (hl) { hl.style.transition = 'none'; hl.style.opacity = '0'; hl.classList.remove('active'); }
 };
