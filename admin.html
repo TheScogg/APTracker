@@ -208,6 +208,26 @@
             <button class="btn" id="load-schedule-file-btn" style="max-width:220px;">Load JSON from file</button>
             <button class="btn btn-primary" id="import-schedule-btn" style="max-width:240px;">Import Daily Schedule</button>
           </div>
+          <div class="divider"></div>
+          <h3 style="font-family:'Rajdhani',sans-serif;font-size:16px;letter-spacing:0.7px;">Generate from DailyScheduleGPT</h3>
+          <p class="muted" style="margin:4px 0 8px;">Provide schedule text/PDF metadata and generate a JSON draft before importing.</p>
+          <textarea id="schedule-gpt-source" placeholder="Paste schedule text or PDF metadata for DailyScheduleGPT" style="min-height:110px;"></textarea>
+          <div class="grid-2" style="margin-top:8px;">
+            <input id="schedule-gpt-shift-override" placeholder="Shift override (optional, e.g. A or B)" />
+            <select id="schedule-gpt-model-preset">
+              <option value="balanced">Model preset: Balanced</option>
+              <option value="fast">Model preset: Fast</option>
+              <option value="accurate">Model preset: Accurate</option>
+            </select>
+          </div>
+          <div class="grid-2" style="margin-top:8px;">
+            <select id="schedule-gpt-strict-validation">
+              <option value="true">Strict validation: On</option>
+              <option value="false">Strict validation: Off</option>
+            </select>
+            <button class="btn" id="generate-schedule-json-btn" style="max-width:240px;">Generate JSON</button>
+          </div>
+          <div id="schedule-gpt-feedback" class="feedback"></div>
           <textarea id="schedule-json-text" placeholder="Paste schedule JSON here" style="margin-top:10px;min-height:180px;"></textarea>
           <div id="schedule-import-feedback" class="feedback"></div>
         </div>
@@ -591,6 +611,27 @@ function normalizeSchedulePayload(raw) {
   };
 }
 
+function parseScheduleJsonInput(input, contextLabel = 'Schedule JSON') {
+  const rawText = String(input || '').replace(/^\uFEFF/, '').trim();
+  if (!rawText) throw new Error(`${contextLabel} is empty.`);
+
+  const fencedMatch = rawText.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const jsonCandidate = fencedMatch ? fencedMatch[1].trim() : rawText;
+
+  try {
+    return JSON.parse(jsonCandidate);
+  } catch (e) {
+    const message = String(e?.message || 'Invalid JSON.');
+    const knownHint = message.includes(`Expected '}'`)
+      ? ' This usually means a missing comma or closing brace in one of the objects.'
+      : '';
+    throw new Error(
+      `${contextLabel} is not valid JSON (${message}).${knownHint} ` +
+      'Tips: use double quotes for keys/strings, remove trailing commas, and paste only a JSON object (or ```json fenced block).'
+    );
+  }
+}
+
 function extractSchedulePayload(parsed) {
   if (parsed?.schedule_info) return parsed;
   if (parsed?.dailySchedules && typeof parsed.dailySchedules === 'object') {
@@ -598,6 +639,72 @@ function extractSchedulePayload(parsed) {
     if (firstEntry && typeof firstEntry === 'object') return firstEntry;
   }
   return parsed;
+}
+
+function adaptDailyScheduleGptOutput(raw) {
+  const normalizeDate = value => {
+    const text = String(value || '').trim();
+    if (!text) return '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+    const isoMatch = text.match(/^(\d{4}-\d{2}-\d{2})T/);
+    if (isoMatch) return isoMatch[1];
+    return text;
+  };
+
+  const toObject = input => {
+    if (input && typeof input === 'object') return input;
+    return parseScheduleJsonInput(input, 'DailyScheduleGPT output');
+  };
+
+  const pick = (obj, keys, fallback = '') => {
+    for (const key of keys) {
+      if (obj && Object.prototype.hasOwnProperty.call(obj, key) && obj[key] !== undefined && obj[key] !== null) {
+        return obj[key];
+      }
+    }
+    return fallback;
+  };
+
+  const asArray = value => {
+    if (Array.isArray(value)) return value;
+    if (value && typeof value === 'object') return Object.values(value);
+    return [];
+  };
+
+  const mapRow = row => ({
+    press: String(pick(row, ['press', 'Press'], '') || ''),
+    part_storage_location: Array.isArray(pick(row, ['part_storage_location', 'partStorageLocation'], []))
+      ? pick(row, ['part_storage_location', 'partStorageLocation'], []).map(v => String(v ?? ''))
+      : [],
+    part_number: String(pick(row, ['part_number', 'partNumber'], '') || ''),
+    description: String(pick(row, ['description', 'desc'], '') || ''),
+    cavity: String(pick(row, ['cavity'], '') || ''),
+    doh: pick(row, ['doh', 'DOH'], ''),
+    labels_per_shift: pick(row, ['labels_per_shift', 'labelsPerShift', 'labels_perShifts'], ''),
+    mc: String(pick(row, ['mc', 'MC'], '') || ''),
+    notes: String(pick(row, ['notes', 'note'], '') || '')
+  });
+
+  const parsed = toObject(raw);
+  const payload = extractSchedulePayload(parsed);
+  const info = payload?.schedule_info && typeof payload.schedule_info === 'object' ? payload.schedule_info : payload;
+
+  const adaptedPayload = {
+    schedule_info: {
+      date: normalizeDate(pick(info, ['date', 'scheduleDate', 'schedule_date'], '')),
+      shift: pick(info, ['shift', 'Shift'], ''),
+      line_speed: pick(info, ['line_speed', 'lineSpeed'], ''),
+      total_planned_pcs: pick(info, ['total_planned_pcs', 'totalPlannedPcs'], ''),
+      note: String(pick(info, ['note', 'notes'], '') || '')
+    },
+    page1: asArray(pick(payload, ['page1', 'page_1'], [])).map(mapRow),
+    page2: asArray(pick(payload, ['page2', 'page_2'], [])).map(mapRow),
+    north_bay_changes: asArray(pick(payload, ['north_bay_changes', 'northBayChanges', 'north_bay_change'], [])).map(mapRow),
+    south_bay_changes: asArray(pick(payload, ['south_bay_changes', 'southBayChanges', 'south_bay_change'], [])).map(mapRow)
+  };
+
+  const normalized = normalizeSchedulePayload(adaptedPayload);
+  return { adaptedPayload, normalized };
 }
 
 async function commitInChunks(ops, maxPerBatch = 450) {
@@ -1184,7 +1291,7 @@ async function importDailySchedule() {
   feedback('schedule-import-feedback', '', '');
 
   try {
-    const parsed = JSON.parse(rawText);
+    const parsed = parseScheduleJsonInput(rawText, 'Schedule import JSON');
     const payload = extractSchedulePayload(parsed);
     const normalized = normalizeSchedulePayload(payload);
     const scheduleDate = String(dateInput?.value || '').trim() || normalized.scheduleDate;
@@ -1244,6 +1351,48 @@ async function importDailySchedule() {
   } finally {
     importBtn.disabled = false;
     importBtn.textContent = 'Import Daily Schedule';
+  }
+}
+
+async function generateScheduleJsonFromDailyScheduleGPT() {
+  const generateBtn = document.getElementById('generate-schedule-json-btn');
+  const sourceInput = document.getElementById('schedule-gpt-source');
+  const shiftInput = document.getElementById('schedule-gpt-shift-override');
+  const modelPresetInput = document.getElementById('schedule-gpt-model-preset');
+  const strictValidationInput = document.getElementById('schedule-gpt-strict-validation');
+  const dateInput = document.getElementById('schedule-date');
+  const sourceNameInput = document.getElementById('schedule-source-name');
+  const jsonInput = document.getElementById('schedule-json-text');
+  const sourceText = String(sourceInput?.value || '').trim();
+
+  if (!sourceText) {
+    feedback('schedule-gpt-feedback', 'error', 'Paste schedule text or PDF metadata before generating.');
+    return;
+  }
+
+  generateBtn.disabled = true;
+  generateBtn.textContent = 'Generating…';
+  feedback('schedule-gpt-feedback', '', '');
+
+  try {
+    const strictValidation = String(strictValidationInput?.value || 'true') === 'true';
+    const shiftOverride = String(shiftInput?.value || '').trim();
+    const { adaptedPayload, normalized } = adaptDailyScheduleGptOutput(sourceText);
+    if (shiftOverride) adaptedPayload.schedule_info.shift = shiftOverride;
+    if (dateInput?.value) adaptedPayload.schedule_info.date = String(dateInput.value).trim();
+    if (strictValidation) normalizeSchedulePayload(adaptedPayload);
+
+    jsonInput.value = JSON.stringify(adaptedPayload, null, 2);
+    if (sourceNameInput && !String(sourceNameInput.value || '').trim()) {
+      sourceNameInput.value = `DailyScheduleGPT_${adaptedPayload.schedule_info.date}.txt`;
+    }
+    feedback('schedule-gpt-feedback', 'ok', `Generated canonical JSON draft (${normalized.sections.page1.length + normalized.sections.page2.length + normalized.sections.northBayChanges.length + normalized.sections.southBayChanges.length} rows). Review and click Import Daily Schedule when ready.`);
+  } catch (e) {
+    console.error(e);
+    feedback('schedule-gpt-feedback', 'error', e.message || 'Failed to generate schedule JSON.');
+  } finally {
+    generateBtn.disabled = false;
+    generateBtn.textContent = 'Generate JSON';
   }
 }
 
@@ -1929,6 +2078,7 @@ document.getElementById('google-signin-btn').addEventListener('click', signInWit
 document.getElementById('signout-btn').addEventListener('click', doSignOut);
 document.getElementById('create-plant-btn').addEventListener('click', createPlant);
 document.getElementById('load-schedule-file-btn').addEventListener('click', loadScheduleJsonFromFile);
+document.getElementById('generate-schedule-json-btn').addEventListener('click', generateScheduleJsonFromDailyScheduleGPT);
 document.getElementById('import-schedule-btn').addEventListener('click', importDailySchedule);
 </script>
 </body>
