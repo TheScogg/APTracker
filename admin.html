@@ -611,6 +611,27 @@ function normalizeSchedulePayload(raw) {
   };
 }
 
+function parseScheduleJsonInput(input, contextLabel = 'Schedule JSON') {
+  const rawText = String(input || '').replace(/^\uFEFF/, '').trim();
+  if (!rawText) throw new Error(`${contextLabel} is empty.`);
+
+  const fencedMatch = rawText.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const jsonCandidate = fencedMatch ? fencedMatch[1].trim() : rawText;
+
+  try {
+    return JSON.parse(jsonCandidate);
+  } catch (e) {
+    const message = String(e?.message || 'Invalid JSON.');
+    const knownHint = message.includes(`Expected '}'`)
+      ? ' This usually means a missing comma or closing brace in one of the objects.'
+      : '';
+    throw new Error(
+      `${contextLabel} is not valid JSON (${message}).${knownHint} ` +
+      'Tips: use double quotes for keys/strings, remove trailing commas, and paste only a JSON object (or ```json fenced block).'
+    );
+  }
+}
+
 function extractSchedulePayload(parsed) {
   if (parsed?.schedule_info) return parsed;
   if (parsed?.dailySchedules && typeof parsed.dailySchedules === 'object') {
@@ -632,16 +653,7 @@ function adaptDailyScheduleGptOutput(raw) {
 
   const toObject = input => {
     if (input && typeof input === 'object') return input;
-    const rawText = String(input || '').trim();
-    if (!rawText) throw new Error('DailyScheduleGPT output is empty. Paste a JSON response before generating.');
-
-    const fencedMatch = rawText.match(/```(?:json)?\s*([\s\S]*?)```/i);
-    const jsonCandidate = fencedMatch ? fencedMatch[1].trim() : rawText;
-    try {
-      return JSON.parse(jsonCandidate);
-    } catch (e) {
-      throw new Error('DailyScheduleGPT output must be valid JSON. Tip: paste only the JSON body (or a ```json fenced block).');
-    }
+    return parseScheduleJsonInput(input, 'DailyScheduleGPT output');
   };
 
   const pick = (obj, keys, fallback = '') => {
@@ -1279,7 +1291,7 @@ async function importDailySchedule() {
   feedback('schedule-import-feedback', '', '');
 
   try {
-    const parsed = JSON.parse(rawText);
+    const parsed = parseScheduleJsonInput(rawText, 'Schedule import JSON');
     const payload = extractSchedulePayload(parsed);
     const normalized = normalizeSchedulePayload(payload);
     const scheduleDate = String(dateInput?.value || '').trim() || normalized.scheduleDate;
