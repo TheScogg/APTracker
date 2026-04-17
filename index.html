@@ -948,7 +948,7 @@
   .load-more-btn { background: transparent; border: 1px solid var(--border); border-radius: 20px; color: var(--text2); font-family: 'Nunito', sans-serif; font-size: 13px; padding: 8px 20px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: border-color 0.15s, color 0.15s; }
   .load-more-btn:hover { border-color: var(--accent); color: var(--accent); }
   .load-more-count { font-family: 'Share Tech Mono', monospace; font-size: 11px; color: var(--text3); background: var(--bg3); border-radius: 10px; padding: 1px 7px; }
-  .shift-badge { font-family: 'Share Tech Mono', monospace; font-size: 10px; font-weight: 600; border: 1px solid; border-radius: 4px; padding: 1px 5px; white-space: nowrap; vertical-align: middle; margin-left: 4px; }
+  .shift-badge { font-family: 'Share Tech Mono', monospace; font-size: 10px; font-weight: 600; border: 1px solid; border-radius: 4px; padding: 1px 5px; white-space: nowrap; }
   .shift-filter-row { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
   .shift-filter-pill { background:var(--bg3); border:1px solid var(--border); border-radius:14px; color:var(--text2); font-family:'Nunito',sans-serif; font-size:12px; padding:4px 12px; cursor:pointer; transition:border-color 0.15s,color 0.15s,background 0.15s; }
   .shift-filter-pill.active { border-color:var(--accent); color:var(--accent); background:color-mix(in srgb,var(--accent) 10%,transparent); }
@@ -5246,10 +5246,10 @@ function renderIssues() {
     card.innerHTML=`
       <div class="issue-card-header" onclick="toggleCard('${issue.id}')">
         <div class="issue-card-top">
-          <div class="issue-machine-tag">${esc(issue.machine)}${shiftBadgeHtml}</div>
+          <div class="issue-machine-tag">${esc(issue.machine)}</div>
           <div class="issue-meta">
             <div class="issue-note-preview">${esc(issue.note)}</div>
-            <div class="issue-time">${datePart} ${submitterHtml}${(issue.photos||[]).length?`<span class="photo-count-badge">📷 ${issue.photos.length}</span>`:''}${issue.editedAt?'<span style="color:var(--text3)">(edited)</span>':''}</div>
+            <div class="issue-time">${datePart} ${submitterHtml}${shiftBadgeHtml}${(issue.photos||[]).length?`<span class="photo-count-badge">📷 ${issue.photos.length}</span>`:''}${issue.editedAt?'<span style="color:var(--text3)">(edited)</span>':''}</div>
           </div>
           <button class="priority-btn${issue.highPriority?' active':''}" onclick="event.stopPropagation(); togglePriority('${issue.id}')" title="${issue.highPriority?'Remove high priority':'Mark as high priority'}">!</button>
           <div class="issue-expand-icon ${wasOpen?'open':''}" id="chevron-${issue.id}">▼</div>
