@@ -380,7 +380,8 @@
   @keyframes tabPulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
   @keyframes statPillPulse { 0%,100%{opacity:1} 50%{opacity:0.55} }
   .row-panel { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 5px; animation: slideIn 0.18s ease; }
-  .row-panel-header { display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-bottom: 1px solid var(--border); }
+  .row-panel-header { display: flex; align-items: flex-start; gap: 6px; padding: 6px 10px; border-bottom: 1px solid var(--border); }
+  .row-header-actions { display: flex; gap: 4px; flex-shrink: 0; align-self: flex-start; }
   .row-resolved-toggle { font-size: 11px; font-weight: 700; font-family: 'Share Tech Mono', monospace; padding: 3px 9px; border-radius: 10px; border: 1px solid var(--border); background: transparent; color: var(--text3); cursor: pointer; white-space: nowrap; transition: all 0.15s; }
   .row-resolved-toggle.active { border-color: rgba(34,197,94,0.5); color: var(--green); background: var(--green-dim); }
   .row-sched-toggle { margin-left: 4px; }
@@ -652,6 +653,8 @@
   .swipe-status-tile:active { transform: scale(0.96); }
   .swipe-status-tile.current { background: #232120; border-color: currentColor; box-shadow: 0 0 10px currentColor; }
   .swipe-status-tile.selected { background: #232120; border-color: currentColor; box-shadow: 0 0 10px currentColor; animation: swipeTileSelectedPulse 1.4s ease-in-out infinite; }
+  /* Higher specificity to override the nth-child stagger rules when a tile is selected */
+  .swipe-category-panel.visible .swipe-status-tile.selected { animation: swipeTileSelectedPulse 1.4s ease-in-out infinite; }
   @keyframes swipeTileSelectedPulse {
     0%, 100% { box-shadow: 0 0 8px currentColor; }
     50%       { box-shadow: 0 0 18px currentColor, 0 0 32px color-mix(in srgb, currentColor 40%, transparent); }
@@ -3812,10 +3815,16 @@ function renderRowPanels() {
       area.appendChild(inner);
       expandAreas[sk] = area;
     });
-    // Resolved toggle — appended into pills wrap so it flows with the pills
+    header.appendChild(pillsWrap);
+
+    // Top-right action buttons
+    const actionsDiv = document.createElement('div');
+    actionsDiv.className = 'row-header-actions';
+
+    // Resolved toggle
     const resTog = document.createElement('button');
     resTog.className = 'row-resolved-toggle' + (showResolvedRows.has(rowName) ? ' active' : '');
-    resTog.textContent = showResolvedRows.has(rowName) ? '✓' : '✓';
+    resTog.textContent = '✓';
     resTog.title = showResolvedRows.has(rowName) ? 'Hide resolved' : 'Show resolved';
     resTog.onclick = () => {
       if (showResolvedRows.has(rowName)) showResolvedRows.delete(rowName);
@@ -3823,30 +3832,31 @@ function renderRowPanels() {
       saveResolvedRows();
       renderRowPanels();
     };
-    pillsWrap.appendChild(resTog);
+    actionsDiv.appendChild(resTog);
 
     // "No Schedule" toggle — only visible when a daily schedule is loaded for the active date
+    // Active = show unscheduled presses; inactive = hide unscheduled presses (show scheduled only)
     if (unscheduledSet !== null) {
-      const hiding = hideUnscheduledRows.has(rowName);
+      const showing = hideUnscheduledRows.has(rowName);
       const schedTog = document.createElement('button');
-      schedTog.className = 'row-resolved-toggle row-sched-toggle' + (hiding ? ' active' : '');
-      schedTog.textContent = hiding ? '✓ N/S' : 'N/S';
-      schedTog.title = hiding ? 'Showing scheduled presses only — click to show all' : 'Click to hide unscheduled presses';
+      schedTog.className = 'row-resolved-toggle row-sched-toggle' + (showing ? ' active' : '');
+      schedTog.textContent = showing ? '✓ N/S' : 'N/S';
+      schedTog.title = showing ? 'Showing all presses — click to hide unscheduled' : 'Click to show unscheduled presses';
       schedTog.onclick = () => {
         if (hideUnscheduledRows.has(rowName)) hideUnscheduledRows.delete(rowName);
         else hideUnscheduledRows.add(rowName);
         saveHideUnscheduledRows();
         renderRowPanels();
       };
-      pillsWrap.appendChild(schedTog);
+      actionsDiv.appendChild(schedTog);
     }
 
-    header.appendChild(pillsWrap);
+    header.appendChild(actionsDiv);
 
     panel.appendChild(header);
 
-    // Presses — new split-bar layout; filter out unscheduled if the toggle is active
-    const visiblePresses = (unscheduledSet && hideUnscheduledRows.has(rowName))
+    // Presses — show only scheduled by default; N/S toggle reveals unscheduled
+    const visiblePresses = (unscheduledSet && !hideUnscheduledRows.has(rowName))
       ? presses.filter(m => unscheduledSet.has(m))
       : presses;
     const btns = document.createElement('div'); btns.className = 'row-presses';
