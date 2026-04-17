@@ -620,8 +620,16 @@ function parseScheduleJsonInput(input, contextLabel = 'Schedule JSON') {
 
   try {
     return JSON.parse(jsonCandidate);
-  } catch (e) {
-    const message = String(e?.message || 'Invalid JSON.');
+  } catch (firstErr) {
+    // Auto-fix: escape inch-mark double quotes (e.g. 27" Basket) that aren't
+    // followed by a JSON structural character, making them valid JSON strings.
+    const sanitized = jsonCandidate.replace(/(\d)"(?!\s*[,\}\]\:])/g, '$1\\"');
+    try {
+      return JSON.parse(sanitized);
+    } catch (_) {
+      // Sanitization didn't help — report original error
+    }
+    const message = String(firstErr?.message || 'Invalid JSON.');
     const knownHint = message.includes(`Expected '}'`)
       ? ' This usually means a missing comma or closing brace in one of the objects.'
       : '';
