@@ -727,7 +727,11 @@
   .issue-note-preview { font-size: 17px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; letter-spacing: 0.025em; }
   .issue-time { font-family: 'Nunito', sans-serif; font-size: 13px; font-weight: 400; color: var(--text3); margin-top: 2px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; line-height: 1.4; }
   .issue-submitter { color: var(--text2); }
-  .issue-status { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 2px; font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 9999px; flex: 0 1 auto; width: fit-content; max-width: 100%; overflow: hidden; text-transform: uppercase; letter-spacing: 0.05em; }
+  .issue-status { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 2px; font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 9999px; flex: 0 1 auto; width: fit-content; max-width: 100%; overflow: hidden; text-transform: uppercase; letter-spacing: 0.05em; animation: statusGlowPulse 1.8s ease-in-out infinite; }
+  @keyframes statusGlowPulse {
+    0%, 100% { box-shadow: 0 0 0px transparent; }
+    50%       { box-shadow: 0 0 10px currentColor, 0 0 20px color-mix(in srgb, currentColor 40%, transparent); }
+  }
   .issue-status-main { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; max-width: 100%; }
   .issue-status-sub { display: block; max-width: 100%; font-size: 11.5px; font-weight: 600; opacity: 0.9; text-transform: none; letter-spacing: 0.02em; white-space: normal; overflow-wrap: anywhere; word-break: break-word; line-height: 1.35; margin-left: 12px; }
   /* ── SECONDARY STATUS DOTS (card header) ── */
