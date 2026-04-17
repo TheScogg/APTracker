@@ -208,6 +208,26 @@
             <button class="btn" id="load-schedule-file-btn" style="max-width:220px;">Load JSON from file</button>
             <button class="btn btn-primary" id="import-schedule-btn" style="max-width:240px;">Import Daily Schedule</button>
           </div>
+          <div class="divider"></div>
+          <h3 style="font-family:'Rajdhani',sans-serif;font-size:16px;letter-spacing:0.7px;">Generate from DailyScheduleGPT</h3>
+          <p class="muted" style="margin:4px 0 8px;">Provide schedule text/PDF metadata and generate a JSON draft before importing.</p>
+          <textarea id="schedule-gpt-source" placeholder="Paste schedule text or PDF metadata for DailyScheduleGPT" style="min-height:110px;"></textarea>
+          <div class="grid-2" style="margin-top:8px;">
+            <input id="schedule-gpt-shift-override" placeholder="Shift override (optional, e.g. A or B)" />
+            <select id="schedule-gpt-model-preset">
+              <option value="balanced">Model preset: Balanced</option>
+              <option value="fast">Model preset: Fast</option>
+              <option value="accurate">Model preset: Accurate</option>
+            </select>
+          </div>
+          <div class="grid-2" style="margin-top:8px;">
+            <select id="schedule-gpt-strict-validation">
+              <option value="true">Strict validation: On</option>
+              <option value="false">Strict validation: Off</option>
+            </select>
+            <button class="btn" id="generate-schedule-json-btn" style="max-width:240px;">Generate JSON</button>
+          </div>
+          <div id="schedule-gpt-feedback" class="feedback"></div>
           <textarea id="schedule-json-text" placeholder="Paste schedule JSON here" style="margin-top:10px;min-height:180px;"></textarea>
           <div id="schedule-import-feedback" class="feedback"></div>
         </div>
@@ -1247,6 +1267,65 @@ async function importDailySchedule() {
   }
 }
 
+async function generateScheduleJsonFromDailyScheduleGPT() {
+  const generateBtn = document.getElementById('generate-schedule-json-btn');
+  const sourceInput = document.getElementById('schedule-gpt-source');
+  const shiftInput = document.getElementById('schedule-gpt-shift-override');
+  const modelPresetInput = document.getElementById('schedule-gpt-model-preset');
+  const strictValidationInput = document.getElementById('schedule-gpt-strict-validation');
+  const dateInput = document.getElementById('schedule-date');
+  const sourceNameInput = document.getElementById('schedule-source-name');
+  const jsonInput = document.getElementById('schedule-json-text');
+  const sourceText = String(sourceInput?.value || '').trim();
+
+  if (!sourceText) {
+    feedback('schedule-gpt-feedback', 'error', 'Paste schedule text or PDF metadata before generating.');
+    return;
+  }
+
+  generateBtn.disabled = true;
+  generateBtn.textContent = 'Generating…';
+  feedback('schedule-gpt-feedback', '', '');
+
+  try {
+    const generatedDate = String(dateInput?.value || '').trim() || new Date().toISOString().slice(0, 10);
+    const strictValidation = String(strictValidationInput?.value || 'true') === 'true';
+    const shiftOverride = String(shiftInput?.value || '').trim();
+    const payload = {
+      scheduleDate: generatedDate,
+      shift: shiftOverride || null,
+      lineSpeed: null,
+      totalPlannedPcs: null,
+      notes: 'Generated from DailyScheduleGPT input. Review all values before import.',
+      sections: {
+        page1: [],
+        page2: [],
+        northBayChanges: [],
+        southBayChanges: []
+      },
+      generator: {
+        source: 'DailyScheduleGPT',
+        modelPreset: String(modelPresetInput?.value || 'balanced'),
+        strictValidation,
+        generatedAt: new Date().toISOString(),
+        sourceSnippet: sourceText.slice(0, 3000)
+      }
+    };
+
+    jsonInput.value = JSON.stringify(payload, null, 2);
+    if (sourceNameInput && !String(sourceNameInput.value || '').trim()) {
+      sourceNameInput.value = `DailyScheduleGPT_${generatedDate}.txt`;
+    }
+    feedback('schedule-gpt-feedback', 'ok', 'Generated JSON draft. Review and click Import Daily Schedule when ready.');
+  } catch (e) {
+    console.error(e);
+    feedback('schedule-gpt-feedback', 'error', e.message || 'Failed to generate schedule JSON.');
+  } finally {
+    generateBtn.disabled = false;
+    generateBtn.textContent = 'Generate JSON';
+  }
+}
+
 window.addMember = async function(plantId) {
   const userEl = document.getElementById(`add-user-${plantId}`);
   const roleEl = document.getElementById(`add-role-${plantId}`);
@@ -1929,6 +2008,7 @@ document.getElementById('google-signin-btn').addEventListener('click', signInWit
 document.getElementById('signout-btn').addEventListener('click', doSignOut);
 document.getElementById('create-plant-btn').addEventListener('click', createPlant);
 document.getElementById('load-schedule-file-btn').addEventListener('click', loadScheduleJsonFromFile);
+document.getElementById('generate-schedule-json-btn').addEventListener('click', generateScheduleJsonFromDailyScheduleGPT);
 document.getElementById('import-schedule-btn').addEventListener('click', importDailySchedule);
 </script>
 </body>
