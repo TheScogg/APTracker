@@ -652,9 +652,9 @@
   .swipe-status-tile:hover { background: var(--bg); }
   .swipe-status-tile:active { transform: scale(0.96); }
   .swipe-status-tile.current { background: #232120; border-color: currentColor; box-shadow: 0 0 10px currentColor; }
-  .swipe-status-tile.selected { background: #232120; border-color: currentColor; box-shadow: 0 0 10px currentColor; animation: swipeTileSelectedPulse 1.4s ease-in-out infinite; }
+  .swipe-status-tile.selected { opacity: 1; background: #232120; border-color: currentColor; box-shadow: 0 0 10px currentColor; animation: swipeTileSelectedPulse 1.4s ease-in-out infinite; }
   /* Higher specificity to override the nth-child stagger rules when a tile is selected */
-  .swipe-category-panel.visible .swipe-status-tile.selected { animation: swipeTileSelectedPulse 1.4s ease-in-out infinite; }
+  .swipe-category-panel.visible .swipe-status-tile.selected { opacity: 1; animation: swipeTileSelectedPulse 1.4s ease-in-out infinite; }
   @keyframes swipeTileSelectedPulse {
     0%, 100% { box-shadow: 0 0 8px currentColor; }
     50%       { box-shadow: 0 0 18px currentColor, 0 0 32px color-mix(in srgb, currentColor 40%, transparent); }
@@ -5493,7 +5493,14 @@ function renderIssues() {
         tracking = false;
         return;
       }
-      
+
+      // Don't start swipe tracking when touching category tiles or sub-chips —
+      // a slight horizontal drift would otherwise suppress the click or restart animations.
+      if (e.target.closest('.swipe-category-panel, .swipe-sub-panel')) {
+        tracking = false;
+        return;
+      }
+
       sx = e.touches[0].clientX;
       sy = e.touches[0].clientY;
       currentX = 0;
