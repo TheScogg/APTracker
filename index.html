@@ -376,8 +376,9 @@
   .row-tab.collapse-all-tab { color: var(--text3); border-color: var(--border); font-size: 10px; padding: 5px 9px; }
   .row-tab.collapse-all-tab:hover { color: var(--text2); border-color: var(--text2); background: transparent; }
   .tab-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
-  .tab-pulse { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex-shrink: 0; animation: tabPulse 1.5s infinite; }
+  .tab-pulse { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
   @keyframes tabPulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  @keyframes statPillPulse { 0%,100%{opacity:1} 50%{opacity:0.55} }
   .row-panel { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 5px; animation: slideIn 0.18s ease; }
   .row-panel-header { display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-bottom: 1px solid var(--border); }
   .row-resolved-toggle { font-size: 11px; font-weight: 700; font-family: 'Share Tech Mono', monospace; padding: 3px 9px; border-radius: 10px; border: 1px solid var(--border); background: transparent; color: var(--text3); cursor: pointer; white-space: nowrap; transition: all 0.15s; margin-left: auto; }
@@ -4816,10 +4817,12 @@ function updateStatPillStyles() {
       pill.style.borderColor = col;
       pill.style.background = alphaColor(col, 0.12);
       pill.style.color = col;
+      pill.style.animation = 'statPillPulse 1.5s ease-in-out infinite';
     } else {
       pill.style.borderColor = '';
       pill.style.background = '';
       pill.style.color = '';
+      pill.style.animation = '';
     }
   });
 }
