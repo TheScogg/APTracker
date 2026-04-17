@@ -2852,6 +2852,9 @@ function startGamificationListeners() {
   stopGamificationListeners();
   if (!currentPlantId || !currentUser?.uid) return;
 
+  // Reset so the first Firestore snapshot doesn't false-trigger a level-up celebration
+  gamePrevLevel = 0;
+
   // Config listener — keeps gameBadgeDefs + leaderboardPeriod live
   gameConfigUnsubscribe = onSnapshot(gameConfigDoc(), snap => {
     gameConfig = snap.exists() ? snap.data() : GAME_DEFAULT_CONFIG;
@@ -6105,15 +6108,23 @@ function _positionSpotlight(step) {
 
     wrap.style.transform = 'none';
     wrap.style.left = `${left}px`;
+
+    let preferredTop;
     if (placeBelow) {
-      wrap.style.top = `${r.bottom + pad + gap}px`;
-      if (cup)   { cup.style.display   = 'block'; cup.style.left   = `${caretLeft}px`; }
+      preferredTop = r.bottom + pad + gap;
+      if (cup)   { cup.style.display   = 'block'; cup.style.left = `${caretLeft}px`; }
       if (cdown)   cdown.style.display = 'none';
     } else {
-      wrap.style.top = `${r.top - pad - gap - tH}px`;
+      preferredTop = r.top - pad - gap - tH;
       if (cdown) { cdown.style.display = 'block'; cdown.style.left = `${caretLeft}px`; }
       if (cup)     cup.style.display   = 'none';
     }
+    const clampedTop = Math.max(12, Math.min(vh - tH - 12, preferredTop));
+    if (clampedTop !== preferredTop) {
+      if (cup)   cup.style.display = 'none';
+      if (cdown) cdown.style.display = 'none';
+    }
+    wrap.style.top = `${clampedTop}px`;
   }, 350);
 }
 
