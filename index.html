@@ -2672,7 +2672,7 @@ function gameLevelProgress(xp) {
 
 function renderGamePanel() {
   const xp = Number(gameUserStats?.totals?.xp || 0);
-  const level = Number(gameUserStats?.totals?.level || gameLevelFromXp(xp));
+  const level = gameLevelFromXp(xp);
   const streak = Number(gameUserStats?.streaks?.current || 0);
   const missionCount = gameMissions.length;
   const progressPct = gameLevelProgress(xp);
