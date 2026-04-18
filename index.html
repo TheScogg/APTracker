@@ -1192,10 +1192,6 @@
           </button>
           <div class="theme-select-grid" id="theme-select-grid"></div>
         </div>
-        <button class="game-pill" onclick="toggleGameDrawer()" title="Open gamification">
-          🏆 <span class="game-pill-xp">0 XP</span> <span>•</span> <span class="game-pill-mission">0 missions</span>
-          <span class="game-pill-badge" style="display:none"></span>
-        </button>
         <button class="user-dropdown-item danger" id="signout-btn">⏻ Sign Out</button>
       </div>
     </div>
@@ -2689,8 +2685,17 @@ function renderGamePanel() {
   }
   gamePrevLevel = level;
 
-  document.querySelectorAll('.game-pill .game-pill-xp').forEach(el => { el.textContent = `${xp} XP`; });
-  document.querySelectorAll('.game-pill .game-pill-mission').forEach(el => { el.textContent = `${missionCount} missions`; });
+  const pillXpPrimary = document.getElementById('game-pill-xp');
+  if (pillXpPrimary) pillXpPrimary.textContent = `${xp} XP`;
+  document.querySelectorAll('.game-pill .game-pill-xp').forEach(el => {
+    if (el !== pillXpPrimary) el.textContent = `${xp} XP`;
+  });
+
+  const pillMissionPrimary = document.getElementById('game-pill-mission');
+  if (pillMissionPrimary) pillMissionPrimary.textContent = `${missionCount} missions`;
+  document.querySelectorAll('.game-pill .game-pill-mission').forEach(el => {
+    if (el !== pillMissionPrimary) el.textContent = `${missionCount} missions`;
+  });
 
   const totalXpEl = document.getElementById('game-total-xp');
   const levelBadgeEl = document.getElementById('game-level-badge');
@@ -6305,19 +6310,9 @@ function fmtDate(d) {
 }
 function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
-// User dropdown
-function normalizeUserDropdownGamePill() {
-  const dropdown = document.getElementById('user-dropdown');
-  if (!dropdown) return;
-  const pills = Array.from(dropdown.querySelectorAll('.game-pill'));
-  if (pills.length <= 1) return;
-  pills.slice(0, -1).forEach(pill => pill.remove());
-}
-
 function toggleUserDropdown() {
   const pill=document.getElementById('user-pill');
   const dropdown=document.getElementById('user-dropdown');
-  normalizeUserDropdownGamePill();
   const isOpen=dropdown.classList.contains('visible');
   dropdown.classList.toggle('visible',!isOpen);
   pill.classList.toggle('open',!isOpen);
@@ -6338,7 +6333,6 @@ document.addEventListener('click', e => {
 });
 const signoutBtn=document.getElementById('signout-btn');
 if (signoutBtn) signoutBtn.addEventListener('click', doSignOut);
-normalizeUserDropdownGamePill();
 
 // ── THEME SELECTION ──
 const THEME_OPTIONS = [
