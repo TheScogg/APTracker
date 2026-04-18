@@ -1188,6 +1188,16 @@
         </div>
         <div class="user-dropdown-section">
           <div class="user-dropdown-section-label">Workspace</div>
+          <button class="user-dropdown-item" id="theme-quick-toggle" type="button">🌓 Toggle Light/Dark</button>
+          <div class="theme-select-row">
+            <button class="theme-select-toggle" id="theme-select-toggle" type="button" aria-expanded="false" aria-controls="theme-select-grid">
+              <span>🎨 Theme</span>
+              <span class="theme-select-current" id="theme-select-current">Midnight</span>
+              <span class="theme-select-chevron">▼</span>
+            </button>
+            <div class="theme-select-grid" id="theme-select-grid"></div>
+          </div>
+          <button class="user-dropdown-item" type="button" onclick="openThemeEditor()">🧪 Theme Color Editor</button>
           <button class="game-pill" id="game-pill" onclick="toggleGameDrawer()" title="Open gamification">
             🏆 <span class="game-pill-xp" id="game-pill-xp">0 XP</span> <span>•</span> <span class="game-pill-mission" id="game-pill-mission">0 missions</span>
             <span class="game-pill-badge" style="display:none"></span>
@@ -1578,7 +1588,7 @@
 
     <div class="te-section">
       <div class="te-section-label">Built-in Themes</div>
-      <div class="appearance-theme-grid" id="theme-select-grid"></div>
+      <div class="appearance-theme-grid" id="appearance-theme-grid"></div>
     </div>
 
     <div class="te-section">
@@ -6342,6 +6352,11 @@ function toggleUserDropdown() {
   const isOpen=dropdown.classList.contains('visible');
   dropdown.classList.toggle('visible',!isOpen);
   pill.classList.toggle('open',!isOpen);
+  if (isOpen) {
+    document.getElementById('theme-select-grid')?.classList.remove('open');
+    document.getElementById('theme-select-toggle')?.classList.remove('open');
+    document.getElementById('theme-select-toggle')?.setAttribute('aria-expanded', 'false');
+  }
 }
 document.getElementById('user-pill').addEventListener('click', toggleUserDropdown);
 document.addEventListener('click', e => {
@@ -6349,6 +6364,9 @@ document.addEventListener('click', e => {
   if (wrap && !wrap.contains(e.target)) {
     document.getElementById('user-dropdown')?.classList.remove('visible');
     document.getElementById('user-pill')?.classList.remove('open');
+    document.getElementById('theme-select-grid')?.classList.remove('open');
+    document.getElementById('theme-select-toggle')?.classList.remove('open');
+    document.getElementById('theme-select-toggle')?.setAttribute('aria-expanded', 'false');
   }
 });
 const signoutBtn=document.getElementById('signout-btn');
@@ -6544,13 +6562,27 @@ try {
     applyTheme(saved || 'midnight');
   }
 } catch(e) { applyTheme('midnight'); }
+renderThemeChoices();
 renderAppearanceCustomThemes();
 updateActiveThemeChoice(THEME_KEYS.includes(localStorage.getItem('pressTrackerTheme') || '') ? localStorage.getItem('pressTrackerTheme') : null);
+
+document.getElementById('theme-select-toggle')?.addEventListener('click', () => {
+  const toggle = document.getElementById('theme-select-toggle');
+  const grid = document.getElementById('theme-select-grid');
+  if (!toggle || !grid) return;
+  const open = !grid.classList.contains('open');
+  grid.classList.toggle('open', open);
+  toggle.classList.toggle('open', open);
+  toggle.setAttribute('aria-expanded', String(open));
+});
 
 document.getElementById('theme-select-grid')?.addEventListener('click', e => {
   const btn = e.target.closest('.theme-choice');
   if (!btn?.dataset?.theme) return;
   applyTheme(btn.dataset.theme);
+  document.getElementById('theme-select-grid')?.classList.remove('open');
+  document.getElementById('theme-select-toggle')?.classList.remove('open');
+  document.getElementById('theme-select-toggle')?.setAttribute('aria-expanded', 'false');
 });
 
 document.getElementById('appearance-custom-list')?.addEventListener('click', e => {
