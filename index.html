@@ -1584,6 +1584,31 @@
 </div>
 
 <!-- THEME EDITOR MODAL -->
+<div class="modal-overlay" id="appearance-modal">
+  <div class="modal theme-editor-modal">
+    <div class="modal-title" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
+      <span>🎨 Appearance</span>
+      <button style="background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer;line-height:1;" onclick="closeAppearanceModal()">✕</button>
+    </div>
+
+    <div class="te-section">
+      <div class="te-section-label">Built-in Themes</div>
+      <div class="appearance-theme-grid" id="theme-select-grid"></div>
+    </div>
+
+    <div class="te-section">
+      <div class="te-section-label">Saved Custom Themes</div>
+      <div class="appearance-custom-list" id="appearance-custom-list"></div>
+      <div class="appearance-empty" id="appearance-custom-empty" style="display:none;">No saved custom themes yet.</div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="openThemeEditor()">Open Color Editor…</button>
+      <button class="btn btn-ghost" onclick="closeAppearanceModal()">Close</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="theme-editor-modal">
   <div class="modal theme-editor-modal">
     <div class="modal-title" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
@@ -6333,10 +6358,6 @@ function toggleUserDropdown() {
   const isOpen=dropdown.classList.contains('visible');
   dropdown.classList.toggle('visible',!isOpen);
   pill.classList.toggle('open',!isOpen);
-  if (isOpen) {
-    document.getElementById('theme-select-grid')?.classList.remove('open');
-    document.getElementById('theme-select-toggle')?.classList.remove('open');
-  }
 }
 document.getElementById('user-pill').addEventListener('click', toggleUserDropdown);
 document.addEventListener('click', e => {
@@ -6344,8 +6365,6 @@ document.addEventListener('click', e => {
   if (wrap && !wrap.contains(e.target)) {
     document.getElementById('user-dropdown')?.classList.remove('visible');
     document.getElementById('user-pill')?.classList.remove('open');
-    document.getElementById('theme-select-grid')?.classList.remove('open');
-    document.getElementById('theme-select-toggle')?.classList.remove('open');
   }
 });
 const signoutBtn=document.getElementById('signout-btn');
@@ -6459,7 +6478,37 @@ function renderThemeChoices() {
   `).join('');
 }
 
+function renderAppearanceCustomThemes() {
+  const list = document.getElementById('appearance-custom-list');
+  const empty = document.getElementById('appearance-custom-empty');
+  if (!list || !empty) return;
+  const data = _loadCustomThemes();
+  if (!data.customThemes.length) {
+    list.innerHTML = '';
+    empty.style.display = '';
+    return;
+  }
+  empty.style.display = 'none';
+  list.innerHTML = '';
+  data.customThemes.slice().reverse().forEach(theme => {
+    const item = document.createElement('div');
+    item.className = 'appearance-custom-item';
+    const safeName = theme.name.replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    item.innerHTML = `
+      <span class="te-saved-name">${safeName}</span>
+      <span class="te-saved-swatches">
+        <span class="te-saved-swatch" style="background:${theme.vars['--bg'] || '#000'}"></span>
+        <span class="te-saved-swatch" style="background:${theme.vars['--accent'] || '#888'}"></span>
+        <span class="te-saved-swatch" style="background:${theme.vars['--text'] || '#fff'}"></span>
+      </span>
+      <button class="te-saved-apply" data-id="${theme.id}">Apply</button>
+      <button class="te-saved-delete" data-id="${theme.id}" title="Delete">🗑</button>`;
+    list.appendChild(item);
+  });
+}
+
 function updateActiveThemeChoice(theme) {
+  const savedTheme = theme ?? localStorage.getItem('pressTrackerTheme');
   const currentTheme = theme ? (THEME_OPTIONS.find(opt => opt.key === theme) || THEME_OPTIONS[0]) : null;
   const currentLabel = document.getElementById('theme-select-current');
   if (currentLabel) currentLabel.textContent = currentTheme ? currentTheme.label.replace(/^[^\s]+\s/, '') : 'Custom';
@@ -6467,6 +6516,10 @@ function updateActiveThemeChoice(theme) {
     const isActive = theme != null && btn.dataset.theme === theme;
     btn.classList.toggle('active', isActive);
     btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+  });
+  document.querySelectorAll('.appearance-custom-item').forEach(item => {
+    const applyBtn = item.querySelector('.te-saved-apply');
+    item.classList.toggle('active', savedTheme === `custom_${applyBtn?.dataset?.id || ''}`);
   });
 }
 
@@ -6477,7 +6530,14 @@ function applyTheme(theme) {
   if (resolvedTheme && resolvedTheme.startsWith('custom_')) {
     const data = _loadCustomThemes();
     const found = data.customThemes.find(t => 'custom_' + t.id === resolvedTheme);
-    if (found) { applyCustomThemeVars(found.vars); updateActiveThemeChoice(null); return; }
+    if (found) {
+      document.body.classList.remove(...THEME_KEYS.map(key => `theme-${key}`));
+      applyCustomThemeVars(found.vars);
+      document.body.dataset.themeMode = 'dark';
+      try { localStorage.setItem('pressTrackerTheme', resolvedTheme); } catch(e) {}
+      updateActiveThemeChoice(null);
+      return;
+    }
   }
   clearCustomThemeVars(); // strip any inline custom vars before applying a CSS class theme
   const normalizedTheme = THEME_KEYS.includes(resolvedTheme) ? resolvedTheme : 'midnight';
@@ -6490,18 +6550,19 @@ function applyTheme(theme) {
 }
 
 // Load saved theme (handles both built-in keys and custom_<id>)
-renderThemeChoices();
 try {
   const saved = localStorage.getItem('pressTrackerTheme');
   if (saved && saved.startsWith('custom_')) {
     const data = _loadCustomThemes();
     const found = data.customThemes.find(t => 'custom_' + t.id === saved);
-    if (found) { applyCustomThemeVars(found.vars); updateActiveThemeChoice(null); }
+    if (found) { document.body.classList.remove(...THEME_KEYS.map(key => `theme-${key}`)); applyCustomThemeVars(found.vars); document.body.dataset.themeMode = 'dark'; updateActiveThemeChoice(null); }
     else applyTheme('midnight');
   } else {
     applyTheme(saved || 'midnight');
   }
 } catch(e) { applyTheme('midnight'); }
+renderAppearanceCustomThemes();
+updateActiveThemeChoice(THEME_KEYS.includes(localStorage.getItem('pressTrackerTheme') || '') ? localStorage.getItem('pressTrackerTheme') : null);
 
 document.getElementById('theme-select-grid')?.addEventListener('click', e => {
   const btn = e.target.closest('.theme-choice');
@@ -6509,19 +6570,49 @@ document.getElementById('theme-select-grid')?.addEventListener('click', e => {
   applyTheme(btn.dataset.theme);
 });
 
-document.getElementById('theme-select-toggle')?.addEventListener('click', () => {
-  const toggle = document.getElementById('theme-select-toggle');
-  const grid = document.getElementById('theme-select-grid');
-  const isOpen = grid?.classList.contains('open');
-  grid?.classList.toggle('open', !isOpen);
-  toggle?.classList.toggle('open', !isOpen);
+document.getElementById('appearance-custom-list')?.addEventListener('click', e => {
+  const applyBtn = e.target.closest('.te-saved-apply');
+  const deleteBtn = e.target.closest('.te-saved-delete');
+  if (applyBtn?.dataset?.id) {
+    applyTheme('custom_' + applyBtn.dataset.id);
+    updateActiveThemeChoice(null);
+    return;
+  }
+  if (deleteBtn?.dataset?.id) {
+    const d = _loadCustomThemes();
+    d.customThemes = d.customThemes.filter(t => t.id !== deleteBtn.dataset.id);
+    if (d.activeCustomId === deleteBtn.dataset.id) d.activeCustomId = null;
+    _saveCustomThemesStorage(d);
+    if ((localStorage.getItem('pressTrackerTheme') || '') === 'custom_' + deleteBtn.dataset.id) applyTheme('midnight');
+    renderAppearanceCustomThemes();
+    updateActiveThemeChoice(THEME_KEYS.includes(localStorage.getItem('pressTrackerTheme') || '') ? localStorage.getItem('pressTrackerTheme') : null);
+  }
 });
+
+document.getElementById('theme-quick-toggle')?.addEventListener('click', () => {
+  const mode = document.body.dataset.themeMode || 'dark';
+  applyTheme(mode === 'light' ? 'midnight' : 'arctic');
+});
+
+window.openAppearanceModal = function() {
+  document.getElementById('user-dropdown').classList.remove('visible');
+  document.getElementById('user-pill').classList.remove('open');
+  renderThemeChoices();
+  renderAppearanceCustomThemes();
+  updateActiveThemeChoice(THEME_KEYS.includes(localStorage.getItem('pressTrackerTheme') || '') ? localStorage.getItem('pressTrackerTheme') : null);
+  document.getElementById('appearance-modal').classList.add('visible');
+};
+
+window.closeAppearanceModal = function() {
+  document.getElementById('appearance-modal').classList.remove('visible');
+};
 
 // ── THEME EDITOR (modal interaction) ──
 let _teCurrentVars = null;
 let _tePrevThemeKey = null;
 
 window.openThemeEditor = function() {
+  closeAppearanceModal();
   document.getElementById('user-dropdown').classList.remove('visible');
   document.getElementById('user-pill').classList.remove('open');
   _tePrevThemeKey = localStorage.getItem('pressTrackerTheme') || 'midnight';
@@ -6587,11 +6678,10 @@ window.saveCustomTheme = function() {
   data.customThemes.push({ id, name, vars: { ..._teCurrentVars }, createdAt: Date.now() });
   data.activeCustomId = id;
   _saveCustomThemesStorage(data);
-  try { localStorage.setItem('pressTrackerTheme', 'custom_' + id); } catch(e) {}
-  applyCustomThemeVars(_teCurrentVars);
-  updateActiveThemeChoice(null);
+  applyTheme('custom_' + id);
   nameEl.value = '';
   _renderTESavedList();
+  renderAppearanceCustomThemes();
 };
 
 function _renderTESavedList() {
@@ -6618,17 +6708,19 @@ function _renderTESavedList() {
     item.querySelector('.te-saved-apply').addEventListener('click', () => {
       _teCurrentVars = { ...theme.vars };
       _renderTEPickers();
-      applyCustomThemeVars(_teCurrentVars);
       const d = _loadCustomThemes(); d.activeCustomId = theme.id; _saveCustomThemesStorage(d);
-      try { localStorage.setItem('pressTrackerTheme', 'custom_' + theme.id); } catch(e) {}
+      applyTheme('custom_' + theme.id);
       updateActiveThemeChoice(null);
+      renderAppearanceCustomThemes();
     });
     item.querySelector('.te-saved-delete').addEventListener('click', () => {
       const d = _loadCustomThemes();
       d.customThemes = d.customThemes.filter(t => t.id !== theme.id);
       if (d.activeCustomId === theme.id) d.activeCustomId = null;
       _saveCustomThemesStorage(d);
+      if ((localStorage.getItem('pressTrackerTheme') || '') === 'custom_' + theme.id) applyTheme('midnight');
       _renderTESavedList();
+      renderAppearanceCustomThemes();
     });
     list.appendChild(item);
   });
@@ -6752,9 +6844,10 @@ document.querySelectorAll('.modal').forEach(modal => {
   modal.addEventListener('click', e => e.stopPropagation());
 });
 
-document.addEventListener('keydown', e=>{ if(e.key==='Escape'){closeModal();closeEditModal();closeResolveModal();closeReopenModal();closeLightbox();closeSortDropdown();closeExportModal();closeSerialModal();closeEditStatusModal();closeNotesModal();closeThemeEditor();} });
+document.addEventListener('keydown', e=>{ if(e.key==='Escape'){closeModal();closeEditModal();closeResolveModal();closeReopenModal();closeLightbox();closeSortDropdown();closeExportModal();closeSerialModal();closeEditStatusModal();closeNotesModal();closeAppearanceModal();closeThemeEditor();} });
 
 document.getElementById('theme-editor-modal').addEventListener('click', e => { if (e.target === document.getElementById('theme-editor-modal')) closeThemeEditor(); });
+document.getElementById('appearance-modal')?.addEventListener('click', e => { if (e.target === document.getElementById('appearance-modal')) closeAppearanceModal(); });
 
 // ── SERIAL NUMBER PROMPT ──
 // Define which status+sub combos require a serial number
