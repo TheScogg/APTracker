@@ -6538,7 +6538,6 @@ function applyTheme(theme) {
 }
 
 // Load saved theme (handles both built-in keys and custom_<id>)
-renderThemeChoices();
 try {
   const saved = localStorage.getItem('pressTrackerTheme');
   if (saved && saved.startsWith('custom_')) {
