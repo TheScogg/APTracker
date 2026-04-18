@@ -6370,6 +6370,67 @@ const THEME_VARS_MAP = {
   mint:       { '--bg':'#f0fdf9','--bg2':'#ffffff','--bg3':'#e6fff8','--border':'#a7f3d0','--text':'#064e3b','--text2':'#065f46','--text3':'#10b981','--accent':'#14b8a6','--accent2':'#10b981','--green':'#059669','--red':'#dc2626','--blue':'#0284c7','--yellow':'#ca8a04','--orange':'#ea580c' }
 };
 
+// ── THEME EDITOR ──
+const CUSTOM_THEMES_KEY = 'apTracker_customThemes';
+
+const THEME_EDITOR_VARS = [
+  ['--bg',      'Background',   'surfaces'],
+  ['--bg2',     'Surface',      'surfaces'],
+  ['--bg3',     'Inset',        'surfaces'],
+  ['--border',  'Border',       'surfaces'],
+  ['--text',    'Text Primary', 'text'],
+  ['--text2',   'Text Muted',   'text'],
+  ['--text3',   'Text Faint',   'text'],
+  ['--accent',  'Accent',       'accent'],
+  ['--accent2', 'Accent Light', 'accent'],
+  ['--green',   'Green',        'status'],
+  ['--red',     'Red',          'status'],
+  ['--blue',    'Blue',         'status'],
+  ['--yellow',  'Yellow',       'status'],
+  ['--orange',  'Orange',       'status'],
+];
+
+const CUSTOM_THEME_CLEAR_VARS = [
+  '--bg','--bg2','--bg3','--border','--text','--text2','--text3',
+  '--accent','--accent2','--accent-glow',
+  '--green','--green-dim','--red','--red-dim','--blue','--blue-dim',
+  '--yellow','--yellow-dim','--orange','--orange-dim',
+  '--purple','--purple-dim','--teal','--teal-dim','--babyblue','--babyblue-dim'
+];
+
+function _hexToRgba(hex, alpha) {
+  const h = hex.replace('#','');
+  const r = parseInt(h.slice(0,2),16), g = parseInt(h.slice(2,4),16), b = parseInt(h.slice(4,6),16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function clearCustomThemeVars() {
+  CUSTOM_THEME_CLEAR_VARS.forEach(v => document.documentElement.style.removeProperty(v));
+}
+
+function applyDerivedVars(vars) {
+  const root = document.documentElement.style;
+  if (vars['--accent']) root.setProperty('--accent-glow', _hexToRgba(vars['--accent'], 0.22));
+  ['--green','--red','--blue','--yellow','--orange','--purple','--teal','--babyblue'].forEach(k => {
+    if (vars[k]) root.setProperty(k + '-dim', _hexToRgba(vars[k], 0.12));
+  });
+}
+
+function applyCustomThemeVars(vars) {
+  clearCustomThemeVars();
+  Object.entries(vars).forEach(([k, v]) => document.documentElement.style.setProperty(k, v));
+  applyDerivedVars(vars);
+}
+
+function _loadCustomThemes() {
+  try { return JSON.parse(localStorage.getItem(CUSTOM_THEMES_KEY) || '{"customThemes":[],"activeCustomId":null}'); }
+  catch(e) { return { customThemes: [], activeCustomId: null }; }
+}
+
+function _saveCustomThemesStorage(data) {
+  try { localStorage.setItem(CUSTOM_THEMES_KEY, JSON.stringify(data)); } catch(e) {}
+}
+
 function renderThemeChoices() {
   const grid = document.getElementById('theme-select-grid');
   if (!grid) return;
@@ -6443,67 +6504,7 @@ document.getElementById('theme-select-toggle')?.addEventListener('click', () => 
   toggle?.classList.toggle('open', !isOpen);
 });
 
-// ── THEME EDITOR ──
-const CUSTOM_THEMES_KEY = 'apTracker_customThemes';
-
-const THEME_EDITOR_VARS = [
-  ['--bg',      'Background',   'surfaces'],
-  ['--bg2',     'Surface',      'surfaces'],
-  ['--bg3',     'Inset',        'surfaces'],
-  ['--border',  'Border',       'surfaces'],
-  ['--text',    'Text Primary', 'text'],
-  ['--text2',   'Text Muted',   'text'],
-  ['--text3',   'Text Faint',   'text'],
-  ['--accent',  'Accent',       'accent'],
-  ['--accent2', 'Accent Light', 'accent'],
-  ['--green',   'Green',        'status'],
-  ['--red',     'Red',          'status'],
-  ['--blue',    'Blue',         'status'],
-  ['--yellow',  'Yellow',       'status'],
-  ['--orange',  'Orange',       'status'],
-];
-
-const CUSTOM_THEME_CLEAR_VARS = [
-  '--bg','--bg2','--bg3','--border','--text','--text2','--text3',
-  '--accent','--accent2','--accent-glow',
-  '--green','--green-dim','--red','--red-dim','--blue','--blue-dim',
-  '--yellow','--yellow-dim','--orange','--orange-dim',
-  '--purple','--purple-dim','--teal','--teal-dim','--babyblue','--babyblue-dim'
-];
-
-function _hexToRgba(hex, alpha) {
-  const h = hex.replace('#','');
-  const r = parseInt(h.slice(0,2),16), g = parseInt(h.slice(2,4),16), b = parseInt(h.slice(4,6),16);
-  return `rgba(${r},${g},${b},${alpha})`;
-}
-
-function clearCustomThemeVars() {
-  CUSTOM_THEME_CLEAR_VARS.forEach(v => document.documentElement.style.removeProperty(v));
-}
-
-function applyDerivedVars(vars) {
-  const root = document.documentElement.style;
-  if (vars['--accent']) root.setProperty('--accent-glow', _hexToRgba(vars['--accent'], 0.22));
-  ['--green','--red','--blue','--yellow','--orange','--purple','--teal','--babyblue'].forEach(k => {
-    if (vars[k]) root.setProperty(k + '-dim', _hexToRgba(vars[k], 0.12));
-  });
-}
-
-function applyCustomThemeVars(vars) {
-  clearCustomThemeVars();
-  Object.entries(vars).forEach(([k, v]) => document.documentElement.style.setProperty(k, v));
-  applyDerivedVars(vars);
-}
-
-function _loadCustomThemes() {
-  try { return JSON.parse(localStorage.getItem(CUSTOM_THEMES_KEY) || '{"customThemes":[],"activeCustomId":null}'); }
-  catch(e) { return { customThemes: [], activeCustomId: null }; }
-}
-
-function _saveCustomThemesStorage(data) {
-  try { localStorage.setItem(CUSTOM_THEMES_KEY, JSON.stringify(data)); } catch(e) {}
-}
-
+// ── THEME EDITOR (modal interaction) ──
 let _teCurrentVars = null;
 let _tePrevThemeKey = null;
 
