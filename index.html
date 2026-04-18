@@ -6580,9 +6580,10 @@ document.getElementById('theme-select-grid')?.addEventListener('click', e => {
   const btn = e.target.closest('.theme-choice');
   if (!btn?.dataset?.theme) return;
   applyTheme(btn.dataset.theme);
-  document.getElementById('theme-select-grid')?.classList.remove('open');
-  document.getElementById('theme-select-toggle')?.classList.remove('open');
-  document.getElementById('theme-select-toggle')?.setAttribute('aria-expanded', 'false');
+  // Intentionally keep selector expanded after apply; close only via dropdown minimize/outside click.
+  document.getElementById('theme-select-grid')?.classList.add('open');
+  document.getElementById('theme-select-toggle')?.classList.add('open');
+  document.getElementById('theme-select-toggle')?.setAttribute('aria-expanded', 'true');
 });
 
 document.getElementById('appearance-custom-list')?.addEventListener('click', e => {
