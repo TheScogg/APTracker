@@ -1641,7 +1641,7 @@
       <div style="display:flex;gap:8px;align-items:center;">
         <input type="text" id="te-theme-name" placeholder="Name this theme…" maxlength="32"
           style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;outline:none;">
-        <button class="btn btn-primary" onclick="saveCustomTheme()" style="white-space:nowrap;flex-shrink:0;">💾 Save</button>
+        <button id="te-save-btn" class="btn btn-primary" onclick="saveCustomTheme()" style="white-space:nowrap;flex-shrink:0;">💾 Save</button>
       </div>
     </div>
 
@@ -6625,23 +6625,40 @@ window.closeAppearanceModal = function() {
 // ── THEME EDITOR (modal interaction) ──
 let _teCurrentVars = null;
 let _tePrevThemeKey = null;
+let _teEditingId = null;
 
 window.openThemeEditor = function() {
   closeAppearanceModal();
   document.getElementById('user-dropdown').classList.remove('visible');
   document.getElementById('user-pill').classList.remove('open');
   _tePrevThemeKey = localStorage.getItem('pressTrackerTheme') || 'midnight';
+  _teEditingId = null;
+  const saveBtn = document.getElementById('te-save-btn');
+  if (saveBtn) saveBtn.textContent = '💾 Save';
 
   // Populate base select
   const sel = document.getElementById('te-base-select');
   sel.innerHTML = THEME_OPTIONS.map(t => `<option value="${t.key}">${t.label}</option>`).join('');
-  const baseKey = THEME_KEYS.includes(_tePrevThemeKey) ? _tePrevThemeKey : 'midnight';
-  sel.value = baseKey;
 
-  // Seed editor vars from current base
-  _teCurrentVars = { ...(THEME_VARS_MAP[baseKey] || THEME_VARS_MAP.midnight) };
+  // Seed vars from current theme (custom or built-in)
+  if (_tePrevThemeKey.startsWith('custom_')) {
+    const data = _loadCustomThemes();
+    const found = data.customThemes.find(t => 'custom_' + t.id === _tePrevThemeKey);
+    _teCurrentVars = found ? { ...found.vars } : { ...THEME_VARS_MAP.midnight };
+    sel.value = 'midnight';
+  } else {
+    const baseKey = THEME_KEYS.includes(_tePrevThemeKey) ? _tePrevThemeKey : 'midnight';
+    sel.value = baseKey;
+    _teCurrentVars = { ...(THEME_VARS_MAP[baseKey] || THEME_VARS_MAP.midnight) };
+  }
+
+  // Remove CSS class theme so inline vars on :root are not overridden, enabling live preview
+  document.body.classList.remove(...THEME_KEYS.map(key => `theme-${key}`));
+  applyCustomThemeVars(_teCurrentVars);
+
   _renderTEPickers();
   _renderTESavedList();
+  document.getElementById('te-theme-name').value = '';
   document.getElementById('theme-editor-modal').classList.add('visible');
 };
 
@@ -6659,7 +6676,15 @@ window.closeThemeEditor = function() {
 
 document.getElementById('te-base-select')?.addEventListener('change', e => {
   const base = THEME_VARS_MAP[e.target.value];
-  if (base) { _teCurrentVars = { ...base }; _renderTEPickers(); applyCustomThemeVars(_teCurrentVars); }
+  if (base) {
+    _teCurrentVars = { ...base };
+    _teEditingId = null;
+    const saveBtn = document.getElementById('te-save-btn');
+    if (saveBtn) saveBtn.textContent = '💾 Save';
+    document.getElementById('te-theme-name').value = '';
+    _renderTEPickers();
+    applyCustomThemeVars(_teCurrentVars);
+  }
 });
 
 function _renderTEPickers() {
@@ -6689,11 +6714,21 @@ window.saveCustomTheme = function() {
   const name = nameEl.value.trim();
   if (!name) { nameEl.focus(); return; }
   const data = _loadCustomThemes();
-  const id = 'custom_' + Date.now();
-  data.customThemes.push({ id, name, vars: { ..._teCurrentVars }, createdAt: Date.now() });
-  data.activeCustomId = id;
-  _saveCustomThemesStorage(data);
-  applyTheme('custom_' + id);
+  if (_teEditingId) {
+    const idx = data.customThemes.findIndex(t => t.id === _teEditingId);
+    if (idx >= 0) data.customThemes[idx] = { ...data.customThemes[idx], name, vars: { ..._teCurrentVars } };
+    _saveCustomThemesStorage(data);
+    applyTheme('custom_' + _teEditingId);
+    _teEditingId = null;
+    const saveBtn = document.getElementById('te-save-btn');
+    if (saveBtn) saveBtn.textContent = '💾 Save';
+  } else {
+    const id = 'custom_' + Date.now();
+    data.customThemes.push({ id, name, vars: { ..._teCurrentVars }, createdAt: Date.now() });
+    data.activeCustomId = id;
+    _saveCustomThemesStorage(data);
+    applyTheme('custom_' + id);
+  }
   nameEl.value = '';
   _renderTESavedList();
   renderAppearanceCustomThemes();
@@ -6721,7 +6756,11 @@ function _renderTESavedList() {
       <button class="te-saved-apply" data-id="${theme.id}">Apply</button>
       <button class="te-saved-delete" data-id="${theme.id}" title="Delete">🗑</button>`;
     item.querySelector('.te-saved-apply').addEventListener('click', () => {
+      _teEditingId = theme.id;
       _teCurrentVars = { ...theme.vars };
+      document.getElementById('te-theme-name').value = theme.name;
+      const saveBtn = document.getElementById('te-save-btn');
+      if (saveBtn) saveBtn.textContent = '💾 Update';
       _renderTEPickers();
       const d = _loadCustomThemes(); d.activeCustomId = theme.id; _saveCustomThemesStorage(d);
       applyTheme('custom_' + theme.id);
