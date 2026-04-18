@@ -200,6 +200,13 @@ service cloud.firestore {
         allow delete: if isAdmin(plantId);
       }
 
+      // ── User badges ──
+      match /userBadges/{userId} {
+        allow read: if isPlantMember(plantId);
+        allow create, update: if isEditorOrAbove(plantId) && isSelf(userId);
+        allow delete: if isAdmin(plantId);
+      }
+
       // ── Missions ──
       match /missions/{missionId} {
         allow read: if isPlantMember(plantId);
