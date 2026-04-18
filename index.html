@@ -1097,6 +1097,26 @@
   .spt-caret-down { border-left: 9px solid transparent; border-right: 9px solid transparent; border-top: 9px solid var(--border); bottom: -10px; }
   .spt-caret-down::after { content: ''; position: absolute; top: -11px; left: -8px; width: 0; height: 0; border-left: 8px solid transparent; border-right: 8px solid transparent; border-top: 8px solid var(--bg2); }
 
+  /* THEME EDITOR MODAL */
+  .theme-editor-modal { width: 580px; max-width: 98vw; max-height: 88vh; overflow-y: auto; }
+  .te-section { margin-bottom: 18px; }
+  .te-section-label { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text3); margin-bottom: 8px; }
+  .te-color-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; }
+  .te-color-row { display: flex; align-items: center; gap: 8px; }
+  .te-color-label { font-size: 11px; color: var(--text2); flex: 1; font-weight: 600; }
+  .te-color-input { width: 34px; height: 26px; border: 1px solid var(--border); border-radius: 6px; padding: 2px 3px; background: var(--bg3); cursor: pointer; flex-shrink: 0; }
+  .te-color-hex { font-family: 'Share Tech Mono', monospace; font-size: 10px; color: var(--text3); width: 58px; flex-shrink: 0; }
+  .te-saved-list { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+  .te-saved-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; }
+  .te-saved-name { flex: 1; font-size: 12px; font-weight: 700; color: var(--text); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .te-saved-swatches { display: flex; gap: 3px; flex-shrink: 0; }
+  .te-saved-swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid rgba(255,255,255,0.15); }
+  .te-saved-apply { font-size: 10px; font-weight: 700; padding: 3px 9px; border-radius: 6px; background: var(--bg2); border: 1px solid var(--border); color: var(--text2); cursor: pointer; font-family: 'Nunito', sans-serif; transition: border-color 0.15s, color 0.15s; flex-shrink: 0; }
+  .te-saved-apply:hover { border-color: var(--accent); color: var(--accent); }
+  .te-saved-delete { font-size: 13px; color: var(--text3); background: none; border: none; cursor: pointer; padding: 2px 4px; flex-shrink: 0; transition: color 0.15s; }
+  .te-saved-delete:hover { color: var(--red); }
+  .te-base-select { width: 100%; background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; color: var(--text); font-size: 12px; font-family: 'Nunito', sans-serif; outline: none; cursor: pointer; }
+
 </style>
 </head>
 <body>
@@ -1150,6 +1170,7 @@
         </button>
         <button class="user-dropdown-item" id="admin-page-btn" style="display:none">🛠 Admin Portal</button>
         <button class="user-dropdown-item" id="tutorial-btn" onclick="document.getElementById('user-dropdown').classList.remove('visible');document.getElementById('user-pill').classList.remove('open');openTutorial();">❓ Tutorial</button>
+        <button class="user-dropdown-item" id="theme-editor-btn" onclick="openThemeEditor()">🎨 Theme Editor</button>
         <div class="theme-select-row">
           <button class="theme-select-toggle" id="theme-select-toggle" type="button">
             <span>🎨 Theme</span>
@@ -1533,6 +1554,60 @@
         </button>
       </div>
       <div class="chat-compose-hint">Shift+Enter for new line</div>
+    </div>
+  </div>
+</div>
+
+<!-- THEME EDITOR MODAL -->
+<div class="modal-overlay" id="theme-editor-modal">
+  <div class="modal theme-editor-modal">
+    <div class="modal-title" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
+      <span>🎨 Theme Editor</span>
+      <button style="background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer;line-height:1;" onclick="closeThemeEditor()">✕</button>
+    </div>
+
+    <!-- Base preset selector -->
+    <div class="te-section">
+      <div class="te-section-label">Start from a preset</div>
+      <select class="te-base-select" id="te-base-select"></select>
+    </div>
+
+    <!-- Color picker groups -->
+    <div class="te-section">
+      <div class="te-section-label">Surfaces</div>
+      <div class="te-color-grid" id="te-colors-surfaces"></div>
+    </div>
+    <div class="te-section">
+      <div class="te-section-label">Text</div>
+      <div class="te-color-grid" id="te-colors-text"></div>
+    </div>
+    <div class="te-section">
+      <div class="te-section-label">Accent</div>
+      <div class="te-color-grid" id="te-colors-accent"></div>
+    </div>
+    <div class="te-section">
+      <div class="te-section-label">Status Colors</div>
+      <div class="te-color-grid" id="te-colors-status"></div>
+    </div>
+
+    <!-- Save section -->
+    <div class="te-section" style="border-top:1px solid var(--border);padding-top:16px;">
+      <div class="te-section-label">Save this theme</div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input type="text" id="te-theme-name" placeholder="Name this theme…" maxlength="32"
+          style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;outline:none;">
+        <button class="btn btn-primary" onclick="saveCustomTheme()" style="white-space:nowrap;flex-shrink:0;">💾 Save</button>
+      </div>
+    </div>
+
+    <!-- Saved themes list -->
+    <div class="te-section" id="te-saved-section" style="display:none;">
+      <div class="te-section-label">Saved Themes</div>
+      <div class="te-saved-list" id="te-saved-list"></div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeThemeEditor()">Close</button>
     </div>
   </div>
 </div>
@@ -6267,6 +6342,20 @@ const THEME_OPTIONS = [
 ];
 const THEME_KEYS = THEME_OPTIONS.map(theme => theme.key);
 
+// Mirror of CSS vars for each built-in theme (used by the theme editor to seed pickers)
+const THEME_VARS_MAP = {
+  midnight:   { '--bg':'#0d1117','--bg2':'#161b22','--bg3':'#1c2333','--border':'#30363d','--text':'#e6edf3','--text2':'#8b949e','--text3':'#484f58','--accent':'#f97316','--accent2':'#fb923c','--green':'#22c55e','--red':'#ef4444','--blue':'#3b82f6','--yellow':'#eab308','--orange':'#f97316' },
+  arctic:     { '--bg':'#f8fafc','--bg2':'#ffffff','--bg3':'#f1f5f9','--border':'#cbd5e1','--text':'#0f172a','--text2':'#475569','--text3':'#94a3b8','--accent':'#0ea5e9','--accent2':'#38bdf8','--green':'#16a34a','--red':'#dc2626','--blue':'#0284c7','--yellow':'#ca8a04','--orange':'#f97316' },
+  forest:     { '--bg':'#0a120e','--bg2':'#0f1a14','--bg3':'#14241a','--border':'#1e3a28','--text':'#d1fae5','--text2':'#6ee7b7','--text3':'#34d399','--accent':'#10b981','--accent2':'#34d399','--green':'#34d399','--red':'#f87171','--blue':'#22d3ee','--yellow':'#facc15','--orange':'#fb923c' },
+  sunset:     { '--bg':'#1a0f0a','--bg2':'#2d1810','--bg3':'#3d2218','--border':'#54321f','--text':'#fef3c7','--text2':'#fcd34d','--text3':'#f59e0b','--accent':'#fb923c','--accent2':'#fdba74','--green':'#34d399','--red':'#f87171','--blue':'#60a5fa','--yellow':'#facc15','--orange':'#fb923c' },
+  ocean:      { '--bg':'#0a1628','--bg2':'#0f1e36','--bg3':'#152945','--border':'#1e3a5f','--text':'#e0f2fe','--text2':'#7dd3fc','--text3':'#0ea5e9','--accent':'#38bdf8','--accent2':'#7dd3fc','--green':'#22c55e','--red':'#f87171','--blue':'#38bdf8','--yellow':'#facc15','--orange':'#fb923c' },
+  royal:      { '--bg':'#18102a','--bg2':'#251638','--bg3':'#331f4d','--border':'#4a2d6b','--text':'#f3e8ff','--text2':'#d8b4fe','--text3':'#a78bfa','--accent':'#c084fc','--accent2':'#d8b4fe','--green':'#34d399','--red':'#f87171','--blue':'#60a5fa','--yellow':'#facc15','--orange':'#fb923c' },
+  slate:      { '--bg':'#0f1419','--bg2':'#1a1f25','--bg3':'#242a31','--border':'#30363d','--text':'#e2e8f0','--text2':'#94a3b8','--text3':'#64748b','--accent':'#64748b','--accent2':'#94a3b8','--green':'#22c55e','--red':'#ef4444','--blue':'#60a5fa','--yellow':'#eab308','--orange':'#f97316' },
+  cyberpunk:  { '--bg':'#0a0014','--bg2':'#150028','--bg3':'#1f003d','--border':'#3d0066','--text':'#00ffff','--text2':'#ff00ff','--text3':'#9d00ff','--accent':'#ff00ff','--accent2':'#00ffff','--green':'#00ff88','--red':'#ff4d6d','--blue':'#00ffff','--yellow':'#ffee00','--orange':'#ff7a00' },
+  industrial: { '--bg':'#1a1a1a','--bg2':'#252525','--bg3':'#2f2f2f','--border':'#404040','--text':'#e5e5e5','--text2':'#a0a0a0','--text3':'#707070','--accent':'#ff6b00','--accent2':'#ff8a33','--green':'#4ade80','--red':'#f87171','--blue':'#60a5fa','--yellow':'#facc15','--orange':'#ff6b00' },
+  mint:       { '--bg':'#f0fdf9','--bg2':'#ffffff','--bg3':'#e6fff8','--border':'#a7f3d0','--text':'#064e3b','--text2':'#065f46','--text3':'#10b981','--accent':'#14b8a6','--accent2':'#10b981','--green':'#059669','--red':'#dc2626','--blue':'#0284c7','--yellow':'#ca8a04','--orange':'#ea580c' }
+};
+
 function renderThemeChoices() {
   const grid = document.getElementById('theme-select-grid');
   if (!grid) return;
@@ -6283,11 +6372,11 @@ function renderThemeChoices() {
 }
 
 function updateActiveThemeChoice(theme) {
-  const currentTheme = THEME_OPTIONS.find(opt => opt.key === theme) || THEME_OPTIONS[0];
+  const currentTheme = theme ? (THEME_OPTIONS.find(opt => opt.key === theme) || THEME_OPTIONS[0]) : null;
   const currentLabel = document.getElementById('theme-select-current');
-  if (currentLabel) currentLabel.textContent = currentTheme.label.replace(/^[^\s]+\s/, '');
+  if (currentLabel) currentLabel.textContent = currentTheme ? currentTheme.label.replace(/^[^\s]+\s/, '') : 'Custom';
   document.querySelectorAll('.theme-choice').forEach(btn => {
-    const isActive = btn.dataset.theme === theme;
+    const isActive = theme != null && btn.dataset.theme === theme;
     btn.classList.toggle('active', isActive);
     btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
   });
@@ -6296,6 +6385,13 @@ function updateActiveThemeChoice(theme) {
 function applyTheme(theme) {
   const legacyThemeMap = { dark: 'midnight', light: 'arctic' };
   const resolvedTheme = legacyThemeMap[theme] || theme;
+  // Handle custom theme keys (stored as "custom_<id>")
+  if (resolvedTheme && resolvedTheme.startsWith('custom_')) {
+    const data = _loadCustomThemes();
+    const found = data.customThemes.find(t => 'custom_' + t.id === resolvedTheme);
+    if (found) { applyCustomThemeVars(found.vars); updateActiveThemeChoice(null); return; }
+  }
+  clearCustomThemeVars(); // strip any inline custom vars before applying a CSS class theme
   const normalizedTheme = THEME_KEYS.includes(resolvedTheme) ? resolvedTheme : 'midnight';
   document.body.classList.remove(...THEME_KEYS.map(key => `theme-${key}`));
   if (normalizedTheme !== 'midnight') document.body.classList.add(`theme-${normalizedTheme}`);
@@ -6305,12 +6401,19 @@ function applyTheme(theme) {
   try { localStorage.setItem('pressTrackerTheme', normalizedTheme); } catch(e) {}
 }
 
-// Load saved theme
+// Load saved theme (handles both built-in keys and custom_<id>)
 renderThemeChoices();
 try {
   const saved = localStorage.getItem('pressTrackerTheme');
-  applyTheme(saved || 'midnight');
-} catch(e) {}
+  if (saved && saved.startsWith('custom_')) {
+    const data = _loadCustomThemes();
+    const found = data.customThemes.find(t => 'custom_' + t.id === saved);
+    if (found) { applyCustomThemeVars(found.vars); updateActiveThemeChoice(null); }
+    else applyTheme('midnight');
+  } else {
+    applyTheme(saved || 'midnight');
+  }
+} catch(e) { applyTheme('midnight'); }
 
 document.getElementById('theme-select-grid')?.addEventListener('click', e => {
   const btn = e.target.closest('.theme-choice');
@@ -6325,6 +6428,183 @@ document.getElementById('theme-select-toggle')?.addEventListener('click', () => 
   grid?.classList.toggle('open', !isOpen);
   toggle?.classList.toggle('open', !isOpen);
 });
+
+// ── THEME EDITOR ──
+const CUSTOM_THEMES_KEY = 'apTracker_customThemes';
+
+const THEME_EDITOR_VARS = [
+  ['--bg',      'Background',   'surfaces'],
+  ['--bg2',     'Surface',      'surfaces'],
+  ['--bg3',     'Inset',        'surfaces'],
+  ['--border',  'Border',       'surfaces'],
+  ['--text',    'Text Primary', 'text'],
+  ['--text2',   'Text Muted',   'text'],
+  ['--text3',   'Text Faint',   'text'],
+  ['--accent',  'Accent',       'accent'],
+  ['--accent2', 'Accent Light', 'accent'],
+  ['--green',   'Green',        'status'],
+  ['--red',     'Red',          'status'],
+  ['--blue',    'Blue',         'status'],
+  ['--yellow',  'Yellow',       'status'],
+  ['--orange',  'Orange',       'status'],
+];
+
+const CUSTOM_THEME_CLEAR_VARS = [
+  '--bg','--bg2','--bg3','--border','--text','--text2','--text3',
+  '--accent','--accent2','--accent-glow',
+  '--green','--green-dim','--red','--red-dim','--blue','--blue-dim',
+  '--yellow','--yellow-dim','--orange','--orange-dim',
+  '--purple','--purple-dim','--teal','--teal-dim','--babyblue','--babyblue-dim'
+];
+
+function _hexToRgba(hex, alpha) {
+  const h = hex.replace('#','');
+  const r = parseInt(h.slice(0,2),16), g = parseInt(h.slice(2,4),16), b = parseInt(h.slice(4,6),16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function clearCustomThemeVars() {
+  CUSTOM_THEME_CLEAR_VARS.forEach(v => document.documentElement.style.removeProperty(v));
+}
+
+function applyDerivedVars(vars) {
+  const root = document.documentElement.style;
+  if (vars['--accent']) root.setProperty('--accent-glow', _hexToRgba(vars['--accent'], 0.22));
+  ['--green','--red','--blue','--yellow','--orange','--purple','--teal','--babyblue'].forEach(k => {
+    if (vars[k]) root.setProperty(k + '-dim', _hexToRgba(vars[k], 0.12));
+  });
+}
+
+function applyCustomThemeVars(vars) {
+  clearCustomThemeVars();
+  Object.entries(vars).forEach(([k, v]) => document.documentElement.style.setProperty(k, v));
+  applyDerivedVars(vars);
+}
+
+function _loadCustomThemes() {
+  try { return JSON.parse(localStorage.getItem(CUSTOM_THEMES_KEY) || '{"customThemes":[],"activeCustomId":null}'); }
+  catch(e) { return { customThemes: [], activeCustomId: null }; }
+}
+
+function _saveCustomThemesStorage(data) {
+  try { localStorage.setItem(CUSTOM_THEMES_KEY, JSON.stringify(data)); } catch(e) {}
+}
+
+let _teCurrentVars = null;
+let _tePrevThemeKey = null;
+
+window.openThemeEditor = function() {
+  document.getElementById('user-dropdown').classList.remove('visible');
+  document.getElementById('user-pill').classList.remove('open');
+  _tePrevThemeKey = localStorage.getItem('pressTrackerTheme') || 'midnight';
+
+  // Populate base select
+  const sel = document.getElementById('te-base-select');
+  sel.innerHTML = THEME_OPTIONS.map(t => `<option value="${t.key}">${t.label}</option>`).join('');
+  const baseKey = THEME_KEYS.includes(_tePrevThemeKey) ? _tePrevThemeKey : 'midnight';
+  sel.value = baseKey;
+
+  // Seed editor vars from current base
+  _teCurrentVars = { ...(THEME_VARS_MAP[baseKey] || THEME_VARS_MAP.midnight) };
+  _renderTEPickers();
+  _renderTESavedList();
+  document.getElementById('theme-editor-modal').classList.add('visible');
+};
+
+window.closeThemeEditor = function() {
+  document.getElementById('theme-editor-modal').classList.remove('visible');
+  // Revert to what was active before editor opened
+  const saved = localStorage.getItem('pressTrackerTheme') || 'midnight';
+  if (saved.startsWith('custom_')) {
+    const data = _loadCustomThemes();
+    const found = data.customThemes.find(t => 'custom_' + t.id === saved);
+    if (found) { applyCustomThemeVars(found.vars); return; }
+  }
+  applyTheme(saved);
+};
+
+document.getElementById('te-base-select')?.addEventListener('change', e => {
+  const base = THEME_VARS_MAP[e.target.value];
+  if (base) { _teCurrentVars = { ...base }; _renderTEPickers(); applyCustomThemeVars(_teCurrentVars); }
+});
+
+function _renderTEPickers() {
+  const groups = { surfaces: 'te-colors-surfaces', text: 'te-colors-text', accent: 'te-colors-accent', status: 'te-colors-status' };
+  Object.values(groups).forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = ''; });
+  THEME_EDITOR_VARS.forEach(([cssVar, label, group]) => {
+    const container = document.getElementById(groups[group]);
+    if (!container) return;
+    const val = _teCurrentVars[cssVar] || '#000000';
+    const row = document.createElement('div');
+    row.className = 'te-color-row';
+    row.innerHTML = `
+      <label class="te-color-label">${label}</label>
+      <input type="color" class="te-color-input" value="${val}" data-var="${cssVar}">
+      <span class="te-color-hex" data-hex-for="${cssVar}">${val}</span>`;
+    row.querySelector('input').addEventListener('input', e => {
+      _teCurrentVars[cssVar] = e.target.value;
+      row.querySelector('.te-color-hex').textContent = e.target.value;
+      applyCustomThemeVars(_teCurrentVars);
+    });
+    container.appendChild(row);
+  });
+}
+
+window.saveCustomTheme = function() {
+  const nameEl = document.getElementById('te-theme-name');
+  const name = nameEl.value.trim();
+  if (!name) { nameEl.focus(); return; }
+  const data = _loadCustomThemes();
+  const id = 'custom_' + Date.now();
+  data.customThemes.push({ id, name, vars: { ..._teCurrentVars }, createdAt: Date.now() });
+  data.activeCustomId = id;
+  _saveCustomThemesStorage(data);
+  try { localStorage.setItem('pressTrackerTheme', 'custom_' + id); } catch(e) {}
+  applyCustomThemeVars(_teCurrentVars);
+  updateActiveThemeChoice(null);
+  nameEl.value = '';
+  _renderTESavedList();
+};
+
+function _renderTESavedList() {
+  const data = _loadCustomThemes();
+  const section = document.getElementById('te-saved-section');
+  const list = document.getElementById('te-saved-list');
+  if (!section || !list) return;
+  if (!data.customThemes.length) { section.style.display = 'none'; return; }
+  section.style.display = '';
+  list.innerHTML = '';
+  data.customThemes.slice().reverse().forEach(theme => {
+    const item = document.createElement('div');
+    item.className = 'te-saved-item';
+    const safeName = theme.name.replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    item.innerHTML = `
+      <span class="te-saved-name">${safeName}</span>
+      <span class="te-saved-swatches">
+        <span class="te-saved-swatch" style="background:${theme.vars['--bg'] || '#000'}"></span>
+        <span class="te-saved-swatch" style="background:${theme.vars['--accent'] || '#888'}"></span>
+        <span class="te-saved-swatch" style="background:${theme.vars['--text'] || '#fff'}"></span>
+      </span>
+      <button class="te-saved-apply" data-id="${theme.id}">Apply</button>
+      <button class="te-saved-delete" data-id="${theme.id}" title="Delete">🗑</button>`;
+    item.querySelector('.te-saved-apply').addEventListener('click', () => {
+      _teCurrentVars = { ...theme.vars };
+      _renderTEPickers();
+      applyCustomThemeVars(_teCurrentVars);
+      const d = _loadCustomThemes(); d.activeCustomId = theme.id; _saveCustomThemesStorage(d);
+      try { localStorage.setItem('pressTrackerTheme', 'custom_' + theme.id); } catch(e) {}
+      updateActiveThemeChoice(null);
+    });
+    item.querySelector('.te-saved-delete').addEventListener('click', () => {
+      const d = _loadCustomThemes();
+      d.customThemes = d.customThemes.filter(t => t.id !== theme.id);
+      if (d.activeCustomId === theme.id) d.activeCustomId = null;
+      _saveCustomThemesStorage(d);
+      _renderTESavedList();
+    });
+    list.appendChild(item);
+  });
+}
 
 // ── FILTER DRAWER ──
 let filterDrawerOpen = false;
@@ -6444,7 +6724,9 @@ document.querySelectorAll('.modal').forEach(modal => {
   modal.addEventListener('click', e => e.stopPropagation());
 });
 
-document.addEventListener('keydown', e=>{ if(e.key==='Escape'){closeModal();closeEditModal();closeResolveModal();closeReopenModal();closeLightbox();closeSortDropdown();closeExportModal();closeSerialModal();closeEditStatusModal();closeNotesModal();} });
+document.addEventListener('keydown', e=>{ if(e.key==='Escape'){closeModal();closeEditModal();closeResolveModal();closeReopenModal();closeLightbox();closeSortDropdown();closeExportModal();closeSerialModal();closeEditStatusModal();closeNotesModal();closeThemeEditor();} });
+
+document.getElementById('theme-editor-modal').addEventListener('click', e => { if (e.target === document.getElementById('theme-editor-modal')) closeThemeEditor(); });
 
 // ── SERIAL NUMBER PROMPT ──
 // Define which status+sub combos require a serial number
