@@ -309,15 +309,6 @@
   .user-dropdown-item { display: flex; align-items: center; gap: 8px; padding: 10px 14px; font-size: 13px; color: var(--text2); cursor: pointer; transition: background 0.1s; border: none; background: none; width: 100%; text-align: left; font-family: 'Nunito', sans-serif; }
   .user-dropdown-item:hover { background: var(--bg3); color: var(--text); }
   .user-dropdown-item.danger:hover { background: var(--red-dim); color: var(--red); }
-  .theme-select-row { padding: 8px 14px; border-bottom: 1px solid var(--border); }
-  .theme-select-toggle { width: 100%; border: 1px solid var(--border); border-radius: 8px; background: var(--bg3); color: var(--text2); display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 9px; font-size: 11px; font-weight: 700; cursor: pointer; font-family: 'Nunito', sans-serif; transition: border-color 0.15s, color 0.15s; }
-  .theme-select-toggle:hover { border-color: var(--text2); color: var(--text); }
-  .theme-select-toggle.open { border-color: var(--accent); color: var(--accent); }
-  .theme-select-current { font-size: 11px; color: var(--text3); font-weight: 700; }
-  .theme-select-chevron { font-size: 9px; transition: transform 0.2s; color: var(--text3); }
-  .theme-select-toggle.open .theme-select-chevron { transform: rotate(180deg); }
-  .theme-select-grid { display: none; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }
-  .theme-select-grid.open { display: grid; }
   .theme-choice { border: 1px solid var(--border); background: var(--bg3); border-radius: 8px; padding: 6px; cursor: pointer; text-align: left; transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s; }
   .theme-choice:hover { border-color: var(--text2); transform: translateY(-1px); }
   .theme-choice.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent-glow); }
@@ -1183,15 +1174,7 @@
         </button>
         <button class="user-dropdown-item" id="admin-page-btn" style="display:none">🛠 Admin Portal</button>
         <button class="user-dropdown-item" id="tutorial-btn" onclick="document.getElementById('user-dropdown').classList.remove('visible');document.getElementById('user-pill').classList.remove('open');openTutorial();">❓ Tutorial</button>
-        <button class="user-dropdown-item" id="theme-editor-btn" onclick="openThemeEditor()">🎨 Theme Editor</button>
-        <div class="theme-select-row">
-          <button class="theme-select-toggle" id="theme-select-toggle" type="button">
-            <span>🎨 Theme</span>
-            <span class="theme-select-current" id="theme-select-current">Midnight</span>
-            <span class="theme-select-chevron">▼</span>
-          </button>
-          <div class="theme-select-grid" id="theme-select-grid"></div>
-        </div>
+        <button class="user-dropdown-item" id="theme-editor-btn" onclick="openThemeEditor()">🎨 Appearance…</button>
         <button class="game-pill" onclick="toggleGameDrawer()" title="Open gamification">
           🏆 <span class="game-pill-xp">0 XP</span> <span>•</span> <span class="game-pill-mission">0 missions</span>
           <span class="game-pill-badge" style="display:none"></span>
@@ -6321,10 +6304,6 @@ function toggleUserDropdown() {
   const isOpen=dropdown.classList.contains('visible');
   dropdown.classList.toggle('visible',!isOpen);
   pill.classList.toggle('open',!isOpen);
-  if (isOpen) {
-    document.getElementById('theme-select-grid')?.classList.remove('open');
-    document.getElementById('theme-select-toggle')?.classList.remove('open');
-  }
 }
 document.getElementById('user-pill').addEventListener('click', toggleUserDropdown);
 document.addEventListener('click', e => {
@@ -6332,8 +6311,6 @@ document.addEventListener('click', e => {
   if (wrap && !wrap.contains(e.target)) {
     document.getElementById('user-dropdown')?.classList.remove('visible');
     document.getElementById('user-pill')?.classList.remove('open');
-    document.getElementById('theme-select-grid')?.classList.remove('open');
-    document.getElementById('theme-select-toggle')?.classList.remove('open');
   }
 });
 const signoutBtn=document.getElementById('signout-btn');
@@ -6432,25 +6409,7 @@ function _saveCustomThemesStorage(data) {
   try { localStorage.setItem(CUSTOM_THEMES_KEY, JSON.stringify(data)); } catch(e) {}
 }
 
-function renderThemeChoices() {
-  const grid = document.getElementById('theme-select-grid');
-  if (!grid) return;
-  grid.innerHTML = THEME_OPTIONS.map(theme => `
-    <button class="theme-choice" type="button" data-theme="${theme.key}" title="${theme.label}" aria-label="Apply ${theme.label} theme" aria-pressed="false">
-      <span class="theme-choice-name">${theme.label}</span>
-      <span class="theme-choice-swatches">
-        <span class="theme-swatch" style="background:${theme.colors[0]}"></span>
-        <span class="theme-swatch" style="background:${theme.colors[1]}"></span>
-        <span class="theme-swatch" style="background:${theme.colors[2]}"></span>
-      </span>
-    </button>
-  `).join('');
-}
-
 function updateActiveThemeChoice(theme) {
-  const currentTheme = theme ? (THEME_OPTIONS.find(opt => opt.key === theme) || THEME_OPTIONS[0]) : null;
-  const currentLabel = document.getElementById('theme-select-current');
-  if (currentLabel) currentLabel.textContent = currentTheme ? currentTheme.label.replace(/^[^\s]+\s/, '') : 'Custom';
   document.querySelectorAll('.theme-choice').forEach(btn => {
     const isActive = theme != null && btn.dataset.theme === theme;
     btn.classList.toggle('active', isActive);
@@ -6478,7 +6437,6 @@ function applyTheme(theme) {
 }
 
 // Load saved theme (handles both built-in keys and custom_<id>)
-renderThemeChoices();
 try {
   const saved = localStorage.getItem('pressTrackerTheme');
   if (saved && saved.startsWith('custom_')) {
@@ -6490,20 +6448,6 @@ try {
     applyTheme(saved || 'midnight');
   }
 } catch(e) { applyTheme('midnight'); }
-
-document.getElementById('theme-select-grid')?.addEventListener('click', e => {
-  const btn = e.target.closest('.theme-choice');
-  if (!btn?.dataset?.theme) return;
-  applyTheme(btn.dataset.theme);
-});
-
-document.getElementById('theme-select-toggle')?.addEventListener('click', () => {
-  const toggle = document.getElementById('theme-select-toggle');
-  const grid = document.getElementById('theme-select-grid');
-  const isOpen = grid?.classList.contains('open');
-  grid?.classList.toggle('open', !isOpen);
-  toggle?.classList.toggle('open', !isOpen);
-});
 
 // ── THEME EDITOR (modal interaction) ──
 let _teCurrentVars = null;
