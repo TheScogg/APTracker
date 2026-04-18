@@ -138,6 +138,19 @@
     --orange: #ea580c; --orange-dim: rgba(234,88,12,0.10);
     --text: #064e3b; --text2: #065f46; --text3: #10b981;
   }
+  body.theme-engel {
+    --bg: #0c1209; --bg2: #141e0f; --bg3: #1b2a14; --border: #2d4820;
+    --accent: #78be20; --accent2: #96d63a; --accent-glow: rgba(120,190,32,0.28);
+    --green: #78be20; --green-dim: rgba(120,190,32,0.15);
+    --red: #f87171; --red-dim: rgba(248,113,113,0.14);
+    --blue: #00a3b5; --blue-dim: rgba(0,163,181,0.14);
+    --yellow: #ffc72c; --yellow-dim: rgba(255,199,44,0.14);
+    --purple: #c084fc; --purple-dim: rgba(192,132,252,0.14);
+    --babyblue: #22d3ee; --babyblue-dim: rgba(34,211,238,0.14);
+    --teal: #00a3b5; --teal-dim: rgba(0,163,181,0.14);
+    --orange: #fb923c; --orange-dim: rgba(251,146,60,0.14);
+    --text: #e8f5d8; --text2: #8ab870; --text3: #4d6e38;
+  }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: var(--bg); color: var(--text); font-family: 'Nunito', sans-serif; min-height: 100vh; }
 
@@ -6338,7 +6351,8 @@ const THEME_OPTIONS = [
   { key:'slate', label:'⚡ Slate', mode:'dark', colors:['#0f1419','#64748b','#e2e8f0'] },
   { key:'cyberpunk', label:'🎮 Cyberpunk', mode:'dark', colors:['#0a0014','#ff00ff','#00ffff'] },
   { key:'industrial', label:'🏭 Industrial', mode:'dark', colors:['#1a1a1a','#ff6b00','#e5e5e5'] },
-  { key:'mint', label:'🍃 Mint', mode:'light', colors:['#f0fdf9','#14b8a6','#064e3b'] }
+  { key:'mint', label:'🍃 Mint', mode:'light', colors:['#f0fdf9','#14b8a6','#064e3b'] },
+  { key:'engel', label:'🟢 Engel', mode:'dark', colors:['#0c1209','#78be20','#e8f5d8'] }
 ];
 const THEME_KEYS = THEME_OPTIONS.map(theme => theme.key);
 
