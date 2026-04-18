@@ -306,10 +306,13 @@
   .user-dropdown-header { padding: 12px 14px 10px; border-bottom: 1px solid var(--border); }
   .user-dropdown-name { font-size: 13px; font-weight: 700; color: var(--text); }
   .user-dropdown-email { font-size: 11px; color: var(--text3); margin-top: 2px; font-family: 'Share Tech Mono', monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .user-dropdown-item { display: flex; align-items: center; gap: 8px; padding: 10px 14px; font-size: 13px; color: var(--text2); cursor: pointer; transition: background 0.1s; border: none; background: none; width: 100%; text-align: left; font-family: 'Nunito', sans-serif; }
+  .user-dropdown-section { border-bottom: 1px solid var(--border); padding: 6px 0; }
+  .user-dropdown-section:last-of-type { border-bottom: none; }
+  .user-dropdown-section-label { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text3); padding: 3px 14px 6px; }
+  .user-dropdown-item { display: flex; align-items: center; gap: 8px; min-height: 38px; padding: 10px 14px; font-size: 13px; color: var(--text2); cursor: pointer; transition: background 0.1s; border: none; background: none; width: 100%; text-align: left; font-family: 'Nunito', sans-serif; }
   .user-dropdown-item:hover { background: var(--bg3); color: var(--text); }
   .user-dropdown-item.danger:hover { background: var(--red-dim); color: var(--red); }
-  .theme-select-row { padding: 8px 14px; border-bottom: 1px solid var(--border); }
+  .theme-select-row { padding: 10px 14px; min-height: 38px; }
   .theme-select-toggle { width: 100%; border: 1px solid var(--border); border-radius: 8px; background: var(--bg3); color: var(--text2); display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 9px; font-size: 11px; font-weight: 700; cursor: pointer; font-family: 'Nunito', sans-serif; transition: border-color 0.15s, color 0.15s; }
   .theme-select-toggle:hover { border-color: var(--text2); color: var(--text); }
   .theme-select-toggle.open { border-color: var(--accent); color: var(--accent); }
@@ -324,6 +327,7 @@
   .theme-choice-name { display: block; font-size: 10px; font-weight: 700; color: var(--text); line-height: 1.2; margin-bottom: 4px; }
   .theme-choice-swatches { display: flex; gap: 4px; }
   .theme-swatch { flex: 1; height: 12px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.15); }
+  .user-dropdown-bottom { border-top: 1px solid var(--border); background: color-mix(in srgb, var(--bg3) 45%, transparent); padding: 6px 0; }
 
   /* CONTROLS */
   .controls { padding: 10px 16px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; background: var(--bg2); border-bottom: 1px solid var(--border); }
@@ -1177,26 +1181,34 @@
           <div class="user-dropdown-name" id="dropdown-full-name">—</div>
           <div class="user-dropdown-email" id="dropdown-email">—</div>
         </div>
-        <button class="game-pill" id="game-pill" onclick="toggleGameDrawer()" title="Open gamification">
-          🏆 <span class="game-pill-xp" id="game-pill-xp">0 XP</span> <span>•</span> <span class="game-pill-mission" id="game-pill-mission">0 missions</span>
-          <span class="game-pill-badge" style="display:none"></span>
-        </button>
-        <button class="user-dropdown-item" id="admin-page-btn" style="display:none">🛠 Admin Portal</button>
-        <button class="user-dropdown-item" id="tutorial-btn" onclick="document.getElementById('user-dropdown').classList.remove('visible');document.getElementById('user-pill').classList.remove('open');openTutorial();">❓ Tutorial</button>
-        <button class="user-dropdown-item" id="theme-editor-btn" onclick="openThemeEditor()">🎨 Theme Editor</button>
-        <div class="theme-select-row">
-          <button class="theme-select-toggle" id="theme-select-toggle" type="button">
-            <span>🎨 Theme</span>
-            <span class="theme-select-current" id="theme-select-current">Midnight</span>
-            <span class="theme-select-chevron">▼</span>
-          </button>
-          <div class="theme-select-grid" id="theme-select-grid"></div>
+        <div class="user-dropdown-section">
+          <div class="user-dropdown-section-label">Account</div>
+          <button class="user-dropdown-item" id="admin-page-btn" style="display:none">🛠 Admin Portal</button>
+          <button class="user-dropdown-item" id="tutorial-btn" onclick="document.getElementById('user-dropdown').classList.remove('visible');document.getElementById('user-pill').classList.remove('open');openTutorial();">❓ Tutorial</button>
         </div>
-        <button class="game-pill" onclick="toggleGameDrawer()" title="Open gamification">
-          🏆 <span class="game-pill-xp">0 XP</span> <span>•</span> <span class="game-pill-mission">0 missions</span>
-          <span class="game-pill-badge" style="display:none"></span>
-        </button>
-        <button class="user-dropdown-item danger" id="signout-btn">⏻ Sign Out</button>
+        <div class="user-dropdown-section">
+          <div class="user-dropdown-section-label">Workspace</div>
+          <button class="game-pill" id="game-pill" onclick="toggleGameDrawer()" title="Open gamification">
+            🏆 <span class="game-pill-xp" id="game-pill-xp">0 XP</span> <span>•</span> <span class="game-pill-mission" id="game-pill-mission">0 missions</span>
+            <span class="game-pill-badge" style="display:none"></span>
+          </button>
+        </div>
+        <div class="user-dropdown-section">
+          <div class="user-dropdown-section-label">Appearance</div>
+          <button class="user-dropdown-item" id="theme-editor-btn" onclick="openThemeEditor()">🎨 Theme Editor</button>
+          <div class="theme-select-row">
+            <button class="theme-select-toggle" id="theme-select-toggle" type="button">
+              <span>🎨 Theme</span>
+              <span class="theme-select-current" id="theme-select-current">Midnight</span>
+              <span class="theme-select-chevron">▼</span>
+            </button>
+            <div class="theme-select-grid" id="theme-select-grid"></div>
+          </div>
+        </div>
+        <div class="user-dropdown-bottom">
+          <div class="user-dropdown-section-label">Danger zone</div>
+          <button class="user-dropdown-item danger" id="signout-btn">⏻ Sign Out</button>
+        </div>
       </div>
     </div>
   </header>
