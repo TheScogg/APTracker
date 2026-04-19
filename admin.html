@@ -181,6 +181,8 @@
     /* Badge modal (reuse mission modal styles + small tweaks) */
     .badge-type-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:16px; }
     @media (max-width:480px) { .badge-type-grid { grid-template-columns:repeat(2,1fr); } }
+    /* Store editor */
+    .store-admin-table td { padding: 5px 4px; vertical-align: middle; }
   </style>
 </head>
 <body>
@@ -498,6 +500,21 @@ let statusDraftByPlant = new Map();
 let gameDraftByPlant = new Map();
 let badgeDraftByPlant = new Map();
 let missionDraftByPlant = new Map();
+let storeDraftByPlant = new Map();
+
+const DEFAULT_STORE_ITEMS = [
+  { id: 'theme_cyberpunk', type: 'theme', themeKey: 'cyberpunk', customVars: null, name: 'Cyberpunk', price: 20, isActive: true },
+  { id: 'theme_mint',      type: 'theme', themeKey: 'mint',      customVars: null, name: 'Mint',      price: 20, isActive: true },
+];
+
+const ADMIN_THEME_OPTIONS = [
+  { key: 'midnight', label: 'Midnight' }, { key: 'arctic', label: 'Arctic' },
+  { key: 'forest', label: 'Forest' },    { key: 'sunset', label: 'Sunset' },
+  { key: 'ocean', label: 'Ocean' },      { key: 'royal', label: 'Royal' },
+  { key: 'slate', label: 'Slate' },      { key: 'cyberpunk', label: 'Cyberpunk' },
+  { key: 'industrial', label: 'Industrial' }, { key: 'mint', label: 'Mint' },
+  { key: 'engel', label: 'Engel' },
+];
 const statusPanelOpen = {};
 const statusRowOpen = {};
 const gamePanelOpen = {};
@@ -829,11 +846,12 @@ async function loadMembersAndStatusesForAdminPlants() {
   gameDraftByPlant.clear();
   missionDraftByPlant.clear();
   for (const plantId of adminPlantIds) {
-    const [membersSnap, statusesSnap, gameConfigSnap, missionsSnap] = await Promise.all([
+    const [membersSnap, statusesSnap, gameConfigSnap, missionsSnap, storeSnap] = await Promise.all([
       getDocs(collection(db, 'plants', plantId, 'members')),
       getDoc(doc(db, 'plants', plantId, 'config', 'statuses')),
       getDoc(doc(db, 'plants', plantId, 'gamificationConfig', 'main')),
-      getDocs(collection(db, 'plants', plantId, 'missions'))
+      getDocs(collection(db, 'plants', plantId, 'missions')),
+      getDoc(doc(db, 'plants', plantId, 'config', 'store')),
     ]);
 
     membersByPlant.set(plantId, membersSnap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -856,6 +874,8 @@ async function loadMembersAndStatusesForAdminPlants() {
     // Load badge definitions (stored in gamificationConfig/main.badges)
     const storedBadges = Array.isArray(gameConfig.badges) ? gameConfig.badges : null;
     badgeDraftByPlant.set(plantId, storedBadges ? storedBadges.map(b => ({ ...b })) : deepCopy(DEFAULT_BADGE_DEFS));
+    const storeData = storeSnap.exists() ? (storeSnap.data().items || []) : DEFAULT_STORE_ITEMS.map(i => ({ ...i }));
+    storeDraftByPlant.set(plantId, storeData.map(i => ({ ...i })));
   }
 }
 
@@ -1130,6 +1150,139 @@ function renderGamificationEditor(plantId, plantName) {
     <div id="game-fb-${plantId}" class="feedback"></div>
   `;
 }
+
+function renderStoreEditor(plantId) {
+  const items = storeDraftByPlant.get(plantId) || [];
+  const themeOpts = ADMIN_THEME_OPTIONS.map(t => `<option value="${t.key}">${t.label}</option>`).join('');
+  const rows = items.map((item, idx) => `
+    <tr>
+      <td style="font-weight:700;font-size:12px;">${esc(item.name)}<div style="font-size:10px;color:var(--text2);">${item.themeKey ? 'Built-in: ' + item.themeKey : 'Custom'}</div></td>
+      <td><input type="number" min="0" step="1" value="${Number(item.price)}" style="width:64px;background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:3px 6px;font-size:12px;" onchange="window.updateStoreItemPrice('${plantId}',${idx},this.value)"></td>
+      <td>
+        <select style="font-size:11px;background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:2px 4px;" onchange="window.toggleStoreItem('${plantId}',${idx},this.value)">
+          <option value="true" ${item.isActive !== false ? 'selected' : ''}>Active</option>
+          <option value="false" ${item.isActive === false ? 'selected' : ''}>Hidden</option>
+        </select>
+      </td>
+      <td><button class="small-btn danger" onclick="window.deleteStoreItem('${plantId}',${idx})">Remove</button></td>
+    </tr>`).join('');
+
+  return `
+  <div class="status-section" style="margin-top:14px;">
+    <div class="status-section-header" onclick="window.toggleStatusPanel('store_${plantId}')">
+      <span>🛒 Store Items</span>
+      <span>${items.length} item${items.length !== 1 ? 's' : ''}</span>
+    </div>
+    <div class="status-section-body ${statusPanelOpen['store_' + plantId] ? 'visible' : ''}">
+      ${items.length ? `
+      <table style="width:100%;font-size:12px;border-collapse:collapse;margin-bottom:12px;">
+        <thead><tr style="color:var(--text2);font-size:10px;">
+          <th style="text-align:left;padding:4px 0;">Item</th>
+          <th style="text-align:left;padding:4px 0;">Price (XP)</th>
+          <th style="text-align:left;padding:4px 0;">Status</th>
+          <th></th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>` : `<div class="muted" style="margin-bottom:10px;font-size:12px;">No store items yet.</div>`}
+
+      <div style="border-top:1px solid var(--border);padding-top:10px;display:flex;flex-direction:column;gap:10px;">
+        <div class="muted" style="font-size:11px;font-weight:700;">Add Built-in Theme</div>
+        <div class="row">
+          <select id="store-theme-key-${plantId}" style="background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:4px 6px;font-size:12px;">${themeOpts}</select>
+          <input type="text" id="store-theme-name-${plantId}" placeholder="Display name" style="background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:4px 8px;font-size:12px;flex:1;">
+          <input type="number" id="store-theme-price-${plantId}" value="50" min="0" placeholder="XP price" style="width:70px;background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:4px 6px;font-size:12px;">
+          <button class="small-btn" onclick="window.addBuiltinThemeToStore('${plantId}')">+ Add</button>
+        </div>
+
+        <div class="muted" style="font-size:11px;font-weight:700;">Add Custom Theme</div>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <input type="text" id="store-custom-name-${plantId}" placeholder="Theme name" style="background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:4px 8px;font-size:12px;">
+          <div class="row">
+            <label style="font-size:11px;color:var(--text2);display:flex;align-items:center;gap:4px;">BG<input type="color" id="store-custom-bg-${plantId}" value="#0d1117" style="width:36px;height:24px;border:none;background:none;cursor:pointer;"></label>
+            <label style="font-size:11px;color:var(--text2);display:flex;align-items:center;gap:4px;">Surface<input type="color" id="store-custom-bg2-${plantId}" value="#161b22" style="width:36px;height:24px;border:none;background:none;cursor:pointer;"></label>
+            <label style="font-size:11px;color:var(--text2);display:flex;align-items:center;gap:4px;">Accent<input type="color" id="store-custom-accent-${plantId}" value="#f97316" style="width:36px;height:24px;border:none;background:none;cursor:pointer;"></label>
+            <label style="font-size:11px;color:var(--text2);display:flex;align-items:center;gap:4px;">Text<input type="color" id="store-custom-text-${plantId}" value="#e6edf3" style="width:36px;height:24px;border:none;background:none;cursor:pointer;"></label>
+            <label style="font-size:11px;color:var(--text2);display:flex;align-items:center;gap:4px;">Border<input type="color" id="store-custom-border-${plantId}" value="#30363d" style="width:36px;height:24px;border:none;background:none;cursor:pointer;"></label>
+          </div>
+          <div class="row">
+            <input type="number" id="store-custom-price-${plantId}" value="50" min="0" placeholder="XP price" style="width:80px;background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:4px 6px;font-size:12px;">
+            <button class="small-btn" onclick="window.addCustomThemeToStore('${plantId}')">+ Add Custom</button>
+          </div>
+        </div>
+
+        <div class="status-toolbar" style="margin-top:4px;">
+          <button class="small-btn" style="border-color:var(--accent);color:var(--accent);" onclick="window.saveStoreDraft('${plantId}')">💾 Save Store</button>
+        </div>
+        <div id="store-fb-${plantId}" class="feedback"></div>
+      </div>
+    </div>
+  </div>`;
+}
+
+window.updateStoreItemPrice = function(plantId, idx, value) {
+  const items = storeDraftByPlant.get(plantId) || [];
+  if (items[idx]) items[idx].price = Math.max(0, Number(value) || 0);
+  storeDraftByPlant.set(plantId, items);
+};
+
+window.toggleStoreItem = function(plantId, idx, value) {
+  const items = storeDraftByPlant.get(plantId) || [];
+  if (items[idx]) items[idx].isActive = value === 'true';
+  storeDraftByPlant.set(plantId, items);
+};
+
+window.deleteStoreItem = function(plantId, idx) {
+  const items = storeDraftByPlant.get(plantId) || [];
+  items.splice(idx, 1);
+  storeDraftByPlant.set(plantId, items);
+  renderPlantsUsers();
+};
+
+window.addBuiltinThemeToStore = function(plantId) {
+  const themeKey = document.getElementById(`store-theme-key-${plantId}`)?.value;
+  const name = (document.getElementById(`store-theme-name-${plantId}`)?.value || '').trim();
+  const price = Math.max(0, Number(document.getElementById(`store-theme-price-${plantId}`)?.value || 0));
+  if (!themeKey || !name) { feedback(`store-fb-${plantId}`, 'err', 'Enter a display name.'); return; }
+  const items = storeDraftByPlant.get(plantId) || [];
+  if (items.some(i => i.themeKey === themeKey)) { feedback(`store-fb-${plantId}`, 'err', 'That theme is already in the store.'); return; }
+  const id = `theme_${themeKey}`;
+  items.push({ id, type: 'theme', themeKey, customVars: null, name, price, isActive: true });
+  storeDraftByPlant.set(plantId, items);
+  renderPlantsUsers();
+};
+
+window.addCustomThemeToStore = function(plantId) {
+  const name = (document.getElementById(`store-custom-name-${plantId}`)?.value || '').trim();
+  const price = Math.max(0, Number(document.getElementById(`store-custom-price-${plantId}`)?.value || 0));
+  if (!name) { feedback(`store-fb-${plantId}`, 'err', 'Enter a theme name.'); return; }
+  const bg     = document.getElementById(`store-custom-bg-${plantId}`)?.value     || '#0d1117';
+  const bg2    = document.getElementById(`store-custom-bg2-${plantId}`)?.value    || '#161b22';
+  const accent = document.getElementById(`store-custom-accent-${plantId}`)?.value || '#f97316';
+  const text   = document.getElementById(`store-custom-text-${plantId}`)?.value   || '#e6edf3';
+  const border = document.getElementById(`store-custom-border-${plantId}`)?.value || '#30363d';
+  const customVars = {
+    '--bg': bg, '--bg2': bg2, '--bg3': bg2, '--border': border,
+    '--text': text, '--text2': text + 'aa', '--text3': text + '66',
+    '--accent': accent, '--accent2': accent,
+    '--green': '#22c55e', '--red': '#ef4444', '--blue': '#3b82f6',
+    '--yellow': '#eab308', '--orange': '#f97316',
+  };
+  const id = `storeitem_${Date.now()}`;
+  const items = storeDraftByPlant.get(plantId) || [];
+  items.push({ id, type: 'theme', themeKey: null, customVars, name, price, isActive: true });
+  storeDraftByPlant.set(plantId, items);
+  renderPlantsUsers();
+};
+
+window.saveStoreDraft = async function(plantId) {
+  const items = storeDraftByPlant.get(plantId) || [];
+  try {
+    await setDoc(doc(db, 'plants', plantId, 'config', 'store'), { items }, { merge: false });
+    feedback(`store-fb-${plantId}`, 'ok', 'Store saved.');
+  } catch(e) {
+    feedback(`store-fb-${plantId}`, 'err', 'Save failed: ' + (e?.message || e));
+  }
+};
 
 function renderPlantsUsers() {
   const container = document.getElementById('plants-users-container');
