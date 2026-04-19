@@ -7,6 +7,7 @@
 <title>AP-Tracker</title>
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&family=Nunito:wght@300;400;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.min.js"></script>
 <style>
   :root {
     --bg: #0d1117; --bg2: #161b22; --bg3: #1c2333; --border: #30363d;
@@ -1299,6 +1300,10 @@
           <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;opacity:0.7;"><path d="M4 1h6l4 4v9a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3"/><path d="M10 1v4h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
           PDF
         </button>
+        <button class="sort-dropdown-btn" id="export-excel-btn" onclick="downloadExcel()" style="gap:4px;">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;opacity:0.7;"><rect x="1" y="1" width="14" height="14" rx="1.5" stroke="currentColor" stroke-width="1.3"/><path d="M1 5h14M5.5 5v10M5 8.5h6M5 11h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
+          XLS
+        </button>
       </div>
     </div>
     <div class="machine-breadcrumb" id="machine-breadcrumb">
@@ -2306,6 +2311,8 @@ function applyRoleUI() {
 
   const exportBtn = document.getElementById('export-pdf-btn');
   if (exportBtn) exportBtn.style.display = currentUserPermissions.canExport ? '' : 'none';
+  const excelBtn = document.getElementById('export-excel-btn');
+  if (excelBtn) excelBtn.style.display = currentUserPermissions.canExport ? '' : 'none';
 }
 
 // Load press layout for current plant
@@ -7118,6 +7125,174 @@ window.downloadPDF = async () => {
 
 // Close export modal on escape / overlay click
 document.getElementById('export-modal')?.addEventListener('click', e => { if(e.target===document.getElementById('export-modal')) closeExportModal(); });
+
+window.downloadExcel = async () => {
+  if (typeof XLSX === 'undefined') {
+    alert('Excel library not loaded. Please refresh and try again.');
+    return;
+  }
+  const btn = document.getElementById('export-excel-btn');
+  const origInner = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Building…';
+  try {
+    // Apply the same filters as the PDF export and the issue log view
+    const search = document.getElementById('search-input').value.toLowerCase();
+    const mf = document.getElementById('machine-filter').value;
+    const sf = document.getElementById('status-filter').value;
+    const sort = currentSort;
+
+    const activeRowMachines = new Set();
+    if (issueRowScope === 'active' && activeRows.size > 0) {
+      activeRows.forEach(rowName => { (PRESSES[rowName]||[]).forEach(m => activeRowMachines.add(m)); });
+    }
+
+    let filtered = issues.filter(i => {
+      if (issueScope === 'mine' && i.userId !== currentUser?.uid) return false;
+      if (!periodFilter(i)) return false;
+      if (issueRowScope === 'active' && activeRows.size > 0 && !activeRowMachines.has(i.machine)) return false;
+      if (mf && i.machine !== mf) return false;
+      if (sf && !issueHasActiveStatus(i, sf)) return false;
+      if (search) {
+        const mt = String(i.machine||'').toLowerCase(), nt = String(i.note||'').toLowerCase();
+        const rt = String(i.resolveNote||'').toLowerCase(), ut = String(i.userName||'').toLowerCase();
+        if (!mt.includes(search) && !nt.includes(search) && !rt.includes(search) && !ut.includes(search)) return false;
+      }
+      return true;
+    });
+    applySortOrder(filtered, sort);
+
+    // Ensure event history and photos are fetched for all filtered issues
+    await Promise.all(filtered.map(async issue => {
+      if (issue.schemaVersion === 2 && (!issue.eventHistory || issue.eventHistory.length === 0)) {
+        const h = await fetchIssueEventHistory(issue);
+        if (h.length > 0) issue.eventHistory = h;
+      }
+      if (Number(issue.photoCount || 0) > 0 && (!issue.photos || issue.photos.length === 0)) {
+        issue.photos = await fetchAttachmentPhotos(issue.id);
+      }
+    }));
+
+    // Build rowId → human-readable row name lookup
+    const rowIdToName = {};
+    Object.entries(PRESSES).forEach(([rowName, machines]) => {
+      rowIdToName[toRowId(rowName)] = rowName;
+    });
+
+    // Convert a Firestore Timestamp, epoch ms number, or Date to a JS Date (or null)
+    const toJsDate = ts => {
+      if (!ts) return null;
+      if (ts instanceof Date) return ts;
+      if (typeof ts.toDate === 'function') return ts.toDate();
+      if (typeof ts === 'number') return new Date(ts);
+      return null;
+    };
+
+    // ── Issues sheet ──
+    const ISSUE_HEADERS = ['Issue ID','Plant ID','Machine','Row','Date Logged','Note','Status','Sub-Status',
+      'Logged By','Resolved','Resolved At','Resolve Note','Resolved By','Photo Count','Photo URLs',
+      'Workflow State','Created At','Updated At'];
+    const issueRows = filtered.map(issue => {
+      const statusKey = currentStatusKey(issue);
+      const statusLabel = getStatusDef(statusKey).label || statusKey;
+      const subStatus = issue.currentStatus?.subStatusKey || '';
+      const rowName = rowIdToName[issue.rowId] || issue.rowId || '';
+      const isResolved = !!(issue.lifecycle?.isResolved || issue.resolved);
+      const history = issue.eventHistory || issue.statusHistory || [];
+      const resolvedEntry = history.slice().reverse().find(e => e.status === 'resolved');
+      const photoUrls = (issue.photos||[]).map(p=>p.dataUrl).filter(Boolean).join('\n');
+      return {
+        'Issue ID': issue.id,
+        'Plant ID': issue.plantId || currentPlantId,
+        'Machine': issue.machine || '',
+        'Row': rowName,
+        'Date Logged': toJsDate(issue.timestamp) || issue.dateTime || '',
+        'Note': issue.note || '',
+        'Status': statusLabel,
+        'Sub-Status': subStatus,
+        'Logged By': issue.userName || '',
+        'Resolved': isResolved ? 'Yes' : 'No',
+        'Resolved At': toJsDate(issue.lifecycle?.resolvedAt) || '',
+        'Resolve Note': issue.resolveNote || '',
+        'Resolved By': resolvedEntry?.by || issue.resolvedBy || '',
+        'Photo Count': Number(issue.photoCount || 0),
+        'Photo URLs': photoUrls,
+        'Workflow State': issue.workflowState || 'called',
+        'Created At': toJsDate(issue.createdAt) || '',
+        'Updated At': toJsDate(issue.updatedAt) || '',
+      };
+    });
+
+    // ── Events sheet ──
+    const EVENT_HEADERS = ['Issue ID','Machine','Event #','Date/Time','From Status','To Status','Sub-Status','Note','By'];
+    const eventRows = [];
+    filtered.forEach(issue => {
+      const history = issue.eventHistory || issue.statusHistory || [];
+      history.forEach((entry, idx) => {
+        const prevKey = idx > 0 ? history[idx-1].status : '';
+        eventRows.push({
+          'Issue ID': issue.id,
+          'Machine': issue.machine || '',
+          'Event #': idx + 1,
+          'Date/Time': entry.dateTime || '',
+          'From Status': prevKey ? (getStatusDef(prevKey).label || prevKey) : '',
+          'To Status': getStatusDef(entry.status).label || entry.status || '',
+          'Sub-Status': entry.subStatus || '',
+          'Note': entry.note || '',
+          'By': entry.by || '',
+        });
+      });
+    });
+
+    // ── Photos sheet ──
+    const PHOTO_HEADERS = ['Issue ID','Machine','File Name','Storage Path','Download URL','Content Type','Size (bytes)'];
+    const photoRows = [];
+    filtered.forEach(issue => {
+      (issue.photos||[]).forEach(p => {
+        photoRows.push({
+          'Issue ID': issue.id,
+          'Machine': issue.machine || '',
+          'File Name': p.name || '',
+          'Storage Path': p.storagePath || '',
+          'Download URL': p.dataUrl || '',
+          'Content Type': p.contentType || '',
+          'Size (bytes)': Number(p.sizeBytes || 0),
+        });
+      });
+    });
+
+    const mkSheet = (rows, headers) => XLSX.utils.json_to_sheet(
+      rows.length > 0 ? rows : [Object.fromEntries(headers.map(h=>[h,null]))],
+      { header: headers, cellDates: true }
+    );
+
+    const wsIssues = mkSheet(issueRows, ISSUE_HEADERS);
+    const wsEvents = mkSheet(eventRows, EVENT_HEADERS);
+    const wsPhotos = mkSheet(photoRows, PHOTO_HEADERS);
+
+    wsIssues['!cols'] = [24,14,10,12,20,44,18,18,20,10,20,44,20,12,60,16,20,20].map(w=>({wch:w}));
+    wsEvents['!cols'] = [24,10,8,20,18,18,18,44,20].map(w=>({wch:w}));
+    wsPhotos['!cols'] = [24,10,30,60,80,14,14].map(w=>({wch:w}));
+
+    if (issueRows.length > 0) {
+      const r = XLSX.utils.decode_range(wsIssues['!ref']);
+      wsIssues['!autofilter'] = { ref: XLSX.utils.encode_range({s:{r:0,c:0}, e:{r:0,c:r.e.c}}) };
+    }
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, wsIssues, 'Issues');
+    XLSX.utils.book_append_sheet(wb, wsEvents, 'Events');
+    XLSX.utils.book_append_sheet(wb, wsPhotos, 'Photos');
+
+    XLSX.writeFile(wb, 'AP-Tracker-Export-' + localDateStr(new Date()) + '.xlsx');
+  } catch(e) {
+    console.error('Excel export error:', e);
+    alert('Excel export failed. See console for details.');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = origInner;
+  }
+};
 
 // ── ADMIN PANEL ──
 const ADMIN_ICONS = ['🔧','🔩','⚙️','🎛️','🚀','🔍','⚠️','🛠️','🔬','📋','🏭','💡','🔄','📦','🧪','🔑','⛽','🖨️','🤖','🧲','🔒','🔓','📡','🧯','🔌','💧','🌡️','🔋','🪛','🪚','📏','🧰','🔦','🚨','🛞','⚡','🧹','🪝','🗜️','📐'];
