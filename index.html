@@ -7488,7 +7488,17 @@ window.downloadExcel = async () => {
     XLSX.utils.book_append_sheet(wb, wsEvents, 'Events');
     XLSX.utils.book_append_sheet(wb, wsPhotos, 'Photos');
 
-    XLSX.writeFile(wb, 'AP-Tracker-Export-' + localDateStr(new Date()) + '.xlsx');
+    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'AP-Tracker-Export-' + localDateStr(new Date()) + '.xlsx';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   } catch(e) {
     console.error('Excel export error:', e);
     alert('Excel export failed. See console for details.');
