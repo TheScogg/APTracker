@@ -1648,7 +1648,7 @@ function _buildStoreThemeCard(theme, activeKey, spendable) {
   const isFree = STORE_FREE_KEYS.has(theme.key);
   const isActive = theme.key === activeKey;
   const storeItem = getStoreItemForTheme(theme.key);
-  const owned = isFree || (storeItem ? isItemUnlocked(storeItem.id) : false);
+  const owned = isFree || !storeItem || isItemUnlocked(storeItem.id);
   const price = storeItem?.price || 0;
   const canAfford = spendable >= price;
 
@@ -1662,10 +1662,10 @@ function _buildStoreThemeCard(theme, activeKey, spendable) {
     badge = `<span class="stc-badge stc-badge-active">Active</span>`;
   } else if (owned) {
     badge = `<span class="stc-badge stc-badge-owned">${isFree ? 'Free' : '✓ Owned'}</span>`;
-  } else if (canAfford) {
+  } else if (storeItem && canAfford) {
     action = `<button class="stc-buy-btn" onclick="event.stopPropagation();openPurchaseConfirm('${storeItem.id}')">${price} XP</button>`;
   } else {
-    badge = `<span class="stc-badge stc-badge-locked">🔒 ${price}</span>`;
+    badge = `<span class="stc-badge stc-badge-locked">🔒 ${storeItem ? price : ''}</span>`;
   }
 
   const clickHandler = owned ? `onclick="applyTheme('${theme.key}');renderStoreModal();"` : '';
