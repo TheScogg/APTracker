@@ -1968,6 +1968,14 @@ window.togglePlantPanel = function(plantId) {
   renderPlantsUsers();
 };
 
+window.switchPageTab = function(tabName, btnEl) {
+  document.querySelectorAll('.page-tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.page-tab-pane').forEach(p => p.classList.remove('active'));
+  btnEl.classList.add('active');
+  const pane = document.getElementById(`page-tab-${tabName}`);
+  if (pane) pane.classList.add('active');
+};
+
 window.switchPlantTab = function(plantId, tabName, btnEl) {
   plantTab[plantId] = tabName;
   const body = btnEl.closest('.plant-body');
