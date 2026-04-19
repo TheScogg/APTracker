@@ -2509,6 +2509,7 @@ async function switchPlant(plantId) {
   await hydrateCurrentPlantView();
   gameConfig = null;
   await ensureGamificationConfig();
+  await backfillGlobalXpIfNeeded();
   startGamificationListeners();
   startListener();
   refreshVisibleData();
@@ -3093,6 +3094,18 @@ async function ensureGamificationConfig() {
   if (!snap.exists()) await setDoc(ref, { ...GAME_DEFAULT_CONFIG, schemaVersion: 1, updatedAt: serverTimestamp() }, { merge: true });
 }
 
+async function backfillGlobalXpIfNeeded() {
+  if (!currentPlantId || !currentUser || userGlobalXp > 0) return;
+  try {
+    const snap = await getDoc(gameUserStatsDoc(currentUser.uid));
+    const plantXp = Number(snap.exists() ? (snap.data()?.totals?.xp || 0) : 0);
+    if (plantXp > 0) {
+      await setDoc(doc(db, 'users', currentUser.uid), { globalXp: plantXp }, { merge: true });
+      userGlobalXp = plantXp;
+    }
+  } catch(e) { console.warn('globalXp backfill failed:', e?.message); }
+}
+
 function stopGamificationListeners() {
   if (gameStatsUnsubscribe) { gameStatsUnsubscribe(); gameStatsUnsubscribe = null; }
   if (gameMissionsUnsubscribe) { gameMissionsUnsubscribe(); gameMissionsUnsubscribe = null; }
@@ -3120,22 +3133,8 @@ function startGamificationListeners() {
     renderGamePanel();
   });
 
-  let _globalXpBackfilled = false;
-  gameStatsUnsubscribe = onSnapshot(gameUserStatsDoc(currentUser.uid), async snap => {
+  gameStatsUnsubscribe = onSnapshot(gameUserStatsDoc(currentUser.uid), snap => {
     gameUserStats = snap.exists() ? snap.data() : { totals: { xp: 0, level: 1 }, streaks: { current: 0 } };
-    // One-time backfill: if globalXp was never written (store feature added after XP accumulated),
-    // seed it from the plant stats total so the store balance matches reality.
-    if (!_globalXpBackfilled) {
-      _globalXpBackfilled = true;
-      const plantXp = Number(gameUserStats?.totals?.xp || 0);
-      if (plantXp > 0 && userGlobalXp === 0) {
-        try {
-          await setDoc(doc(db, 'users', currentUser.uid), { globalXp: plantXp }, { merge: true });
-          userGlobalXp = plantXp;
-          renderStoreCard();
-        } catch(e) { console.warn('globalXp backfill failed:', e?.message); }
-      }
-    }
     renderGamePanel();
     checkAndAwardBadges();
   });
@@ -3570,6 +3569,7 @@ async function bootstrapSignedInSession(user) {
   await hydrateCurrentPlantView();
   gameConfig = null;
   await ensureGamificationConfig();
+  await backfillGlobalXpIfNeeded();
   startGamificationListeners();
   startListener();
   setTodayDate();
