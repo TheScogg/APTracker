@@ -511,6 +511,10 @@ const THEME_ICONS = {
   mint: '🌿', cyberpunk: '🤖', industrial: '🏭', engel: '⚙️',
 };
 
+const ADMIN_THEME_OPTIONS = DEFAULT_STORE_ITEMS
+  .filter(i => i.type === 'theme' && i.themeKey)
+  .map(i => ({ key: i.themeKey, label: `${THEME_ICONS[i.themeKey] || '🎨'} ${i.name}` }));
+
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
