@@ -3311,6 +3311,9 @@ async function loadStoreConfig() {
   } catch(e) {
     storeItems = DEFAULT_STORE_ITEMS;
   }
+  ensureCurrentThemeAccess();
+  renderThemeChoices();
+  updateActiveThemeChoice(THEME_KEYS.includes(localStorage.getItem('pressTrackerTheme') || '') ? localStorage.getItem('pressTrackerTheme') : null);
 }
 
 function isItemUnlocked(itemId) {
@@ -3324,6 +3327,14 @@ function getStoreItemForTheme(themeKey) {
 function isThemeLocked(themeKey) {
   const item = getStoreItemForTheme(themeKey);
   return item ? !isItemUnlocked(item.id) : false;
+}
+
+function ensureCurrentThemeAccess() {
+  const savedTheme = localStorage.getItem('pressTrackerTheme') || 'midnight';
+  if (!THEME_KEYS.includes(savedTheme)) return;
+  if (!isThemeLocked(savedTheme)) return;
+  showGameToast('🔒 Theme locked — switched to Midnight');
+  applyTheme('midnight');
 }
 
 window.purchaseStoreItem = purchaseStoreItem;
@@ -3461,8 +3472,14 @@ let userInventory = { unlockedItems: [], activeMascot: null };
 let userGlobalXp = 0;
 
 const DEFAULT_STORE_ITEMS = [
-  { id: 'theme_cyberpunk', type: 'theme', themeKey: 'cyberpunk', customVars: null, name: 'Cyberpunk', price: 20, isActive: true },
-  { id: 'theme_mint',      type: 'theme', themeKey: 'mint',      customVars: null, name: 'Mint',      price: 20, isActive: true },
+  { id: 'theme_sunset',     type: 'theme', themeKey: 'sunset',     customVars: null, name: 'Sunset',     price: 50,  isActive: true },
+  { id: 'theme_ocean',      type: 'theme', themeKey: 'ocean',      customVars: null, name: 'Ocean',      price: 50,  isActive: true },
+  { id: 'theme_royal',      type: 'theme', themeKey: 'royal',      customVars: null, name: 'Royal',      price: 100, isActive: true },
+  { id: 'theme_slate',      type: 'theme', themeKey: 'slate',      customVars: null, name: 'Slate',      price: 100, isActive: true },
+  { id: 'theme_mint',       type: 'theme', themeKey: 'mint',       customVars: null, name: 'Mint',       price: 120, isActive: true },
+  { id: 'theme_cyberpunk',  type: 'theme', themeKey: 'cyberpunk',  customVars: null, name: 'Cyberpunk',  price: 220, isActive: true },
+  { id: 'theme_industrial', type: 'theme', themeKey: 'industrial', customVars: null, name: 'Industrial', price: 220, isActive: true },
+  { id: 'theme_engel',      type: 'theme', themeKey: 'engel',      customVars: null, name: 'Engel',      price: 250, isActive: true },
 ];
 
 let gameConfig = null;
@@ -6839,6 +6856,11 @@ function applyTheme(theme) {
   }
   clearCustomThemeVars(); // strip any inline custom vars before applying a CSS class theme
   const normalizedTheme = THEME_KEYS.includes(resolvedTheme) ? resolvedTheme : 'midnight';
+  if (isThemeLocked(normalizedTheme)) {
+    showGameToast('🔒 Unlock in the Store — open your Progress panel');
+    toggleGameDrawer(true);
+    return;
+  }
   document.body.classList.remove(...THEME_KEYS.map(key => `theme-${key}`));
   if (normalizedTheme !== 'midnight') document.body.classList.add(`theme-${normalizedTheme}`);
   const selectedTheme = THEME_OPTIONS.find(opt => opt.key === normalizedTheme) || THEME_OPTIONS[0];
