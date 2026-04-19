@@ -287,17 +287,6 @@
     </div>
   </div>
 
-        <div class="card" id="store-card" style="display:none;">
-          <h2>🛍 Store Catalog</h2>
-          <p class="muted" style="margin-bottom:10px;">Manage items available in the global store. Players spend XP to unlock themes and cosmetics.</p>
-          <div id="store-items-list"></div>
-          <div class="status-toolbar" style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
-            <button class="small-btn" style="border-color:var(--accent);color:var(--accent);" onclick="window.saveStore()">💾 Save Store</button>
-            <button class="small-btn" onclick="window.resetStoreDefaults()">↺ Reset to Defaults</button>
-          </div>
-          <div id="store-fb" class="feedback"></div>
-        </div>
-
         <div id="plants-users-container"></div>
       </div>
     </div>
@@ -530,7 +519,6 @@ let statusDraftByPlant = new Map();
 let gameDraftByPlant = new Map();
 let badgeDraftByPlant = new Map();
 let missionDraftByPlant = new Map();
-let storeDraft = [];
 let storeDraftByPlant = new Map();
 const statusPanelOpen = {};
 const statusRowOpen = {};
@@ -889,63 +877,12 @@ async function loadMembersAndStatusesForAdminPlants() {
       leaderboardPeriod: gameConfig.leaderboardPeriod || 'weekly',
     });
     missionDraftByPlant.set(plantId, missionsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-    storeDraftByPlant.set(plantId, Array.isArray(storeSnap.data()?.items) ? storeSnap.data().items.map(i => ({ ...i })) : []);
     // Load badge definitions (stored in gamificationConfig/main.badges)
     const storedBadges = Array.isArray(gameConfig.badges) ? gameConfig.badges : null;
     badgeDraftByPlant.set(plantId, storedBadges ? storedBadges.map(b => ({ ...b })) : deepCopy(DEFAULT_BADGE_DEFS));
     const storeData = storeSnap.exists() ? (storeSnap.data().items || []) : DEFAULT_STORE_ITEMS.map(i => ({ ...i }));
     storeDraftByPlant.set(plantId, storeData.map(i => ({ ...i })));
   }
-}
-
-async function loadStoreConfig() {
-  try {
-    const snap = await getDoc(doc(db, 'storeConfig', 'main'));
-    const stored = snap.exists() ? (snap.data().items || []) : null;
-    if (stored && stored.length > 0) {
-      const byId = new Map(stored.map(i => [i.id, i]));
-      storeDraft = DEFAULT_STORE_ITEMS.map(def => {
-        const saved = byId.get(def.id);
-        return saved ? { ...def, price: saved.price ?? def.price, isActive: saved.isActive ?? def.isActive } : { ...def };
-      });
-    } else {
-      storeDraft = deepCopy(DEFAULT_STORE_ITEMS);
-    }
-  } catch (e) {
-    console.warn('Could not load store config:', e);
-    storeDraft = deepCopy(DEFAULT_STORE_ITEMS);
-  }
-}
-
-function renderStorePanel() {
-  const card = document.getElementById('store-card');
-  const list = document.getElementById('store-items-list');
-  if (!card || !list) return;
-  card.style.display = '';
-
-  list.innerHTML = storeDraft.map(item => {
-    const icon = item.type === 'theme' ? (THEME_ICONS[item.themeKey] || '🎨') : '🎁';
-    return `
-      <div class="store-item-card">
-        <div class="store-item-icon">${icon}</div>
-        <div class="store-item-info">
-          <div class="store-item-name">${esc(item.name)}</div>
-          <div class="store-item-meta">${esc(item.type)} · key: ${esc(item.themeKey || item.id)}</div>
-        </div>
-        <div class="store-item-price">
-          <input type="number" min="0" step="5" value="${Number(item.price)}"
-                 oninput="window.patchStoreItem('${esc(item.id)}','price',this.value)" />
-          <span class="store-item-price-label">XP</span>
-        </div>
-        <div class="store-item-actions">
-          <label class="toggle-switch" title="${item.isActive ? 'Active' : 'Inactive'}">
-            <input type="checkbox" ${item.isActive ? 'checked' : ''}
-                   onchange="window.patchStoreItem('${esc(item.id)}','isActive',this.checked)">
-            <span class="toggle-slider"></span>
-          </label>
-        </div>
-      </div>`;
-  }).join('');
 }
 
 async function loadUserDirectory() {
@@ -2043,37 +1980,6 @@ window.switchPlantTab = function(plantId, tabName, btnEl) {
   }
 };
 
-window.patchStoreItem = function(id, field, value) {
-  const item = storeDraft.find(i => i.id === id);
-  if (!item) return;
-  if (field === 'price') item.price = Math.max(0, Number(value) || 0);
-  else if (field === 'isActive') item.isActive = Boolean(value);
-};
-
-window.saveStore = async function() {
-  try {
-    await setDoc(doc(db, 'storeConfig', 'main'), {
-      items: storeDraft.map(i => ({
-        id: i.id, type: i.type, themeKey: i.themeKey || null, customVars: i.customVars || null,
-        name: i.name, price: Number(i.price), isActive: i.isActive !== false,
-      })),
-      updatedAt: serverTimestamp(),
-      updatedBy: { uid: currentUser.uid, name: currentUser.displayName || currentUser.email || '' },
-    }, { merge: true });
-    feedback('store-fb', 'ok', 'Store catalog saved.');
-  } catch (e) {
-    console.error(e);
-    feedback('store-fb', 'error', e.message || 'Failed to save store.');
-  }
-};
-
-window.resetStoreDefaults = function() {
-  if (!confirm('Reset store to default items and prices?')) return;
-  storeDraft = deepCopy(DEFAULT_STORE_ITEMS);
-  renderStorePanel();
-  feedback('store-fb', 'ok', 'Reset to defaults — click Save to persist.');
-};
-
 window.switchGameTab = function(plantId, tabName, btnEl) {
   gamePanelOpen[`tab_${plantId}`] = tabName;
   const pane = document.getElementById(`ptab-gamification-${plantId}`);
@@ -2100,12 +2006,8 @@ async function refreshAdminData() {
   document.getElementById('admin-content').style.display = hasAdminAccess ? '' : 'none';
   if (!hasAdminAccess) return;
   renderSchedulePlantOptions();
-  await Promise.all([
-    loadMembersAndStatusesForAdminPlants(),
-    loadStoreConfig(),
-  ]);
+  await loadMembersAndStatusesForAdminPlants();
   renderPlantsUsers();
-  renderStorePanel();
 }
 
 onAuthStateChanged(auth, async user => {
