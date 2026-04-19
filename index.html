@@ -305,12 +305,81 @@
   .theme-select-toggle.open .theme-select-chevron { transform: rotate(180deg); }
   .theme-select-grid { display: none; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }
   .theme-select-grid.open { display: grid; }
-  .theme-choice { border: 1px solid var(--border); background: var(--bg3); border-radius: 8px; padding: 6px; cursor: pointer; text-align: left; transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s; }
-  .theme-choice:hover { border-color: var(--text2); transform: translateY(-1px); }
-  .theme-choice.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent-glow); }
-  .theme-choice-name { display: block; font-size: 10px; font-weight: 700; color: var(--text); line-height: 1.2; margin-bottom: 4px; }
-  .theme-choice-swatches { display: flex; gap: 4px; }
-  .theme-swatch { flex: 1; height: 12px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.15); }
+  /* ── STORE MODAL ── */
+  .store-backdrop { position:fixed; inset:0; background:rgba(0,0,0,0.72); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); z-index:400; display:flex; align-items:stretch; opacity:0; pointer-events:none; transition:opacity 0.25s; }
+  .store-backdrop.open { opacity:1; pointer-events:all; }
+  .store-modal { background:var(--bg); border-left:1px solid var(--border); width:100%; max-width:560px; margin-left:auto; display:flex; flex-direction:column; overflow:hidden; transform:translateX(110%); transition:transform 0.32s cubic-bezier(0.4,0,0.2,1); box-shadow:-24px 0 80px rgba(0,0,0,0.5); }
+  .store-backdrop.open .store-modal { transform:translateX(0); }
+  @media (max-width:600px) { .store-modal { max-width:100%; border-left:none; border-top:1px solid var(--border); margin-left:0; margin-top:auto; max-height:92vh; transform:translateY(110%); box-shadow:0 -16px 60px rgba(0,0,0,0.5); } .store-backdrop.open .store-modal { transform:translateY(0); } }
+  .store-header { padding:20px 20px 0; flex-shrink:0; background:var(--bg); }
+  .store-header-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+  .store-title { font-family:'Rajdhani',sans-serif; font-size:22px; font-weight:700; letter-spacing:1px; }
+  .store-title span { color:var(--accent); }
+  .store-close { background:var(--bg3); border:1px solid var(--border); border-radius:8px; color:var(--text2); width:32px; height:32px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:14px; transition:all 0.15s; flex-shrink:0; font-family:monospace; }
+  .store-close:hover { border-color:var(--text2); color:var(--text); }
+  .store-balance { background:var(--bg2); border:1px solid var(--border); border-radius:12px; padding:12px 16px; display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:14px; }
+  .store-balance-left .store-balance-label { font-size:10px; color:var(--text3); font-family:'Share Tech Mono',monospace; text-transform:uppercase; letter-spacing:0.07em; margin-bottom:2px; }
+  .store-balance-amount { font-family:'Rajdhani',sans-serif; font-size:26px; font-weight:700; color:var(--accent); line-height:1; }
+  .store-balance-sub { font-size:10px; color:var(--text3); margin-top:3px; font-family:'Share Tech Mono',monospace; }
+  .store-balance-right { text-align:right; }
+  .store-balance-right .store-balance-label { font-size:10px; color:var(--text3); font-family:'Share Tech Mono',monospace; text-transform:uppercase; letter-spacing:0.07em; margin-bottom:2px; }
+  .store-balance-lifetime { font-family:'Rajdhani',sans-serif; font-size:16px; font-weight:700; color:var(--text2); }
+  .store-tabs { display:flex; gap:0; border-bottom:1px solid var(--border); }
+  .store-tab { background:none; border:none; border-bottom:2px solid transparent; color:var(--text3); font-family:'Nunito',sans-serif; font-weight:700; font-size:12px; padding:10px 16px; cursor:pointer; margin-bottom:-1px; transition:color 0.15s,border-color 0.15s; white-space:nowrap; }
+  .store-tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+  .store-tab:hover:not(.active):not(.soon) { color:var(--text2); }
+  .store-tab.soon { opacity:0.35; cursor:default; }
+  .store-body { flex:1; overflow-y:auto; padding:16px 20px 32px; }
+  .store-section-label { font-family:'Share Tech Mono',monospace; font-size:10px; color:var(--text3); text-transform:uppercase; letter-spacing:0.07em; margin-bottom:10px; }
+  .store-theme-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; }
+  @media (max-width:340px) { .store-theme-grid { grid-template-columns:1fr; } }
+  .store-theme-card { background:var(--bg2); border:1px solid var(--border); border-radius:14px; overflow:hidden; display:flex; flex-direction:column; transition:border-color 0.18s,transform 0.18s,box-shadow 0.18s; position:relative; }
+  .store-theme-card:not(.locked):hover { border-color:var(--text2); transform:translateY(-2px); box-shadow:0 8px 28px rgba(0,0,0,0.35); }
+  .store-theme-card.active-theme { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent-glow,rgba(249,115,22,0.25)); }
+  .store-theme-card.locked { opacity:0.65; }
+  .store-theme-preview { height:64px; display:flex; overflow:hidden; }
+  .store-theme-swatch { flex:1; }
+  .store-theme-card-body { padding:10px 12px 12px; }
+  .store-theme-name { font-size:13px; font-weight:700; color:var(--text); margin-bottom:7px; }
+  .store-theme-footer { display:flex; align-items:center; justify-content:space-between; gap:6px; }
+  .store-theme-badge { font-size:10px; font-weight:700; padding:3px 8px; border-radius:999px; white-space:nowrap; flex-shrink:0; }
+  .store-theme-badge.owned  { background:rgba(34,197,94,0.1);  color:#22c55e; border:1px solid rgba(34,197,94,0.22); }
+  .store-theme-badge.free   { background:rgba(139,92,246,0.1); color:#a78bfa; border:1px solid rgba(139,92,246,0.22); }
+  .store-theme-badge.price  { background:rgba(234,179,8,0.1);  color:#eab308; border:1px solid rgba(234,179,8,0.22); }
+  .store-theme-badge.broke  { background:rgba(239,68,68,0.1);  color:#f87171; border:1px solid rgba(239,68,68,0.18); }
+  .store-theme-action { font-size:11px; font-weight:700; padding:5px 10px; border-radius:7px; border:1px solid var(--border); background:var(--bg3); color:var(--text2); cursor:pointer; font-family:'Nunito',sans-serif; transition:all 0.15s; white-space:nowrap; flex-shrink:0; }
+  .store-theme-action:not(:disabled):hover { border-color:var(--accent); color:var(--accent); }
+  .store-theme-action.apply   { border-color:var(--accent); color:var(--accent); background:var(--bg3); }
+  .store-theme-action.apply:hover { background:rgba(249,115,22,0.1); }
+  .store-theme-action.applied { border-color:var(--green); color:var(--green); background:rgba(34,197,94,0.06); cursor:default; }
+  .store-theme-action.buy     { border-color:#eab308; color:#eab308; background:rgba(234,179,8,0.06); }
+  .store-theme-action.buy:hover { background:rgba(234,179,8,0.14); }
+  .store-theme-action:disabled { opacity:0.38; cursor:not-allowed; border-color:var(--border); color:var(--text3); background:none; }
+  .store-lock-chip { position:absolute; top:8px; right:8px; background:rgba(0,0,0,0.55); border-radius:999px; font-size:12px; line-height:1; padding:3px 5px; backdrop-filter:blur(4px); }
+  .store-active-chip { position:absolute; top:8px; left:8px; background:var(--accent); color:#fff; font-size:9px; font-weight:700; padding:2px 7px; border-radius:999px; font-family:'Nunito',sans-serif; letter-spacing:0.05em; }
+  .store-empty { text-align:center; padding:40px 20px; color:var(--text3); font-size:13px; }
+  /* Purchase confirm */
+  .store-confirm-backdrop { position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:500; display:flex; align-items:center; justify-content:center; padding:20px; opacity:0; pointer-events:none; transition:opacity 0.2s; }
+  .store-confirm-backdrop.open { opacity:1; pointer-events:all; }
+  .store-confirm-card { background:var(--bg2); border:1px solid var(--border); border-radius:18px; width:340px; max-width:100%; padding:24px; box-shadow:0 28px 90px rgba(0,0,0,0.65); transform:scale(0.93) translateY(10px); transition:transform 0.22s cubic-bezier(0.4,0,0.2,1); }
+  .store-confirm-backdrop.open .store-confirm-card { transform:scale(1) translateY(0); }
+  .store-confirm-name { font-family:'Rajdhani',sans-serif; font-size:20px; font-weight:700; letter-spacing:0.5px; margin-bottom:14px; }
+  .store-confirm-preview { display:flex; height:44px; border-radius:10px; overflow:hidden; margin-bottom:14px; border:1px solid var(--border); }
+  .store-confirm-swatch { flex:1; }
+  .store-confirm-costs { background:var(--bg3); border:1px solid var(--border); border-radius:10px; padding:12px 14px; margin-bottom:18px; display:flex; flex-direction:column; gap:6px; }
+  .store-confirm-row { display:flex; align-items:center; justify-content:space-between; font-size:12px; }
+  .store-confirm-row.sep { border-top:1px solid var(--border); padding-top:6px; margin-top:0; }
+  .store-confirm-row .lbl { color:var(--text3); }
+  .store-confirm-row .val { font-family:'Share Tech Mono',monospace; font-weight:700; color:var(--text); }
+  .store-confirm-row .val.spend { color:#eab308; }
+  .store-confirm-row .val.remain { color:var(--accent); }
+  .store-confirm-btns { display:flex; gap:8px; }
+  .store-confirm-btns button { flex:1; padding:11px; border-radius:10px; font-family:'Nunito',sans-serif; font-weight:700; font-size:13px; cursor:pointer; transition:all 0.15s; border:1px solid; }
+  .scb-cancel { background:var(--bg3); color:var(--text2); border-color:var(--border); }
+  .scb-cancel:hover { border-color:var(--text2); color:var(--text); }
+  .scb-buy { background:linear-gradient(135deg,#ca8a04,#eab308); color:#1a0f00; border-color:#eab308; font-weight:800; }
+  .scb-buy:hover:not(:disabled) { box-shadow:0 4px 18px rgba(234,179,8,0.4); transform:translateY(-1px); }
+  .scb-buy:disabled { opacity:0.45; cursor:not-allowed; transform:none; box-shadow:none; }
 
   /* CONTROLS */
   .controls { padding: 10px 16px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; background: var(--bg2); border-bottom: 1px solid var(--border); }
@@ -1150,14 +1219,7 @@
         </button>
         <button class="user-dropdown-item" id="admin-page-btn" style="display:none">🛠 Admin Portal</button>
         <button class="user-dropdown-item" id="tutorial-btn" onclick="document.getElementById('user-dropdown').classList.remove('visible');document.getElementById('user-pill').classList.remove('open');openTutorial();">❓ Tutorial</button>
-        <div class="theme-select-row">
-          <button class="theme-select-toggle" id="theme-select-toggle" type="button">
-            <span>🎨 Theme</span>
-            <span class="theme-select-current" id="theme-select-current">Midnight</span>
-            <span class="theme-select-chevron">▼</span>
-          </button>
-          <div class="theme-select-grid" id="theme-select-grid"></div>
-        </div>
+        <button class="user-dropdown-item" id="open-store-btn" onclick="openStore()">🛍 Store</button>
         <button class="game-pill" onclick="toggleGameDrawer()" title="Open gamification">
           🏆 <span class="game-pill-xp">0 XP</span> <span>•</span> <span class="game-pill-mission">0 missions</span>
           <span class="game-pill-badge" style="display:none"></span>
@@ -1660,6 +1722,9 @@ function gameLeaderboardDoc(boardId) { return doc(db, 'plants', currentPlantId, 
 function userBadgesDoc(userId) { return doc(db, 'plants', currentPlantId, 'userBadges', userId); }
 function gameEventsCol() { return collection(db, 'plants', currentPlantId, 'gameEvents'); }
 function missionProgressDoc(missionId, subjectId) { return doc(db, 'plants', currentPlantId, 'missions', missionId, 'progress', subjectId); }
+function storeItemsCol() { return collection(db, 'storeItems'); }
+function storeItemDocRef(id) { return doc(db, 'storeItems', id); }
+function userGlobalDocRef() { return doc(db, 'users', currentUser.uid); }
 
 function currentActor() {
   return { uid: currentUser?.uid || '', name: currentUser?.displayName || currentUser?.email || 'Unknown' };
@@ -3001,6 +3066,9 @@ async function awardGamification(reason, context = {}) {
       updatedAt: serverTimestamp(),
       schemaVersion: 1
     }, { merge: true });
+    if (totalDelta > 0) {
+      batch.set(doc(db, 'users', currentUser.uid), { globalLifetimeXp: increment(totalDelta) }, { merge: true });
+    }
     await batch.commit();
 
     const currentXp = Number(gameUserStats?.totals?.xp || 0) + totalDelta;
@@ -3098,6 +3166,13 @@ const gameCapTracker = new Map();
 const gameMissionPrevPct = new Map();
 let gameBadgeDefs = [];
 let gameUserBadges = {};
+// ── STORE STATE ──
+let storeThemes = [];
+let userOwnedThemes = new Set(['midnight','arctic','forest','slate','mint']);
+let userGlobalLifetimeXp = 0;
+let userGlobalXpSpent = 0;
+let userDocUnsubscribe = null;
+let storeConfirmingThemeId = null;
 
 const DEFAULT_BADGE_DEFS = [
   { id: 'badge_first_resolve',  name: 'First Responder', icon: '✅', description: 'Resolve your first issue',   triggerType: 'issues_resolved',  threshold: 1,   xpReward: 25,  isEnabled: true },
@@ -3142,6 +3217,7 @@ document.getElementById('google-signin-btn').addEventListener('click', signInWit
 
 async function doSignOut() {
   if (unsubscribe) { unsubscribe(); unsubscribe = null; }
+  if (userDocUnsubscribe) { userDocUnsubscribe(); userDocUnsubscribe = null; }
   stopGamificationListeners();
   await fbSignOut(auth);
 }
@@ -3182,6 +3258,8 @@ async function bootstrapSignedInSession(user) {
   // then hydrate with plant-specific config and rebuild.
   buildFloorMap();
   await loadUserPlants();
+  await Promise.all([loadUserStoreData(), loadStoreThemes()]);
+  startUserDocListener();
   await hydrateCurrentPlantView();
   gameConfig = null;
   await ensureGamificationConfig();
@@ -6222,9 +6300,6 @@ function toggleUserDropdown() {
   const isOpen=dropdown.classList.contains('visible');
   dropdown.classList.toggle('visible',!isOpen);
   pill.classList.toggle('open',!isOpen);
-  if (isOpen) {
-    document.getElementById('theme-select-grid')?.classList.remove('open');
-    document.getElementById('theme-select-toggle')?.classList.remove('open');
   }
 }
 document.getElementById('user-pill').addEventListener('click', toggleUserDropdown);
@@ -6233,87 +6308,235 @@ document.addEventListener('click', e => {
   if (wrap && !wrap.contains(e.target)) {
     document.getElementById('user-dropdown')?.classList.remove('visible');
     document.getElementById('user-pill')?.classList.remove('open');
-    document.getElementById('theme-select-grid')?.classList.remove('open');
-    document.getElementById('theme-select-toggle')?.classList.remove('open');
   }
 });
 const signoutBtn=document.getElementById('signout-btn');
 if (signoutBtn) signoutBtn.addEventListener('click', doSignOut);
 normalizeUserDropdownGamePill();
 
-// ── THEME SELECTION ──
-const THEME_OPTIONS = [
-  { key:'midnight', label:'🌙 Midnight', mode:'dark', colors:['#0d1117','#f97316','#e6edf3'] },
-  { key:'arctic', label:'❄️ Arctic', mode:'light', colors:['#f8fafc','#0ea5e9','#0f172a'] },
-  { key:'forest', label:'🌲 Forest', mode:'dark', colors:['#0a120e','#10b981','#d1fae5'] },
-  { key:'sunset', label:'🌅 Sunset', mode:'dark', colors:['#1a0f0a','#fb923c','#fef3c7'] },
-  { key:'ocean', label:'🌊 Ocean', mode:'dark', colors:['#0a1628','#38bdf8','#e0f2fe'] },
-  { key:'royal', label:'👑 Royal', mode:'dark', colors:['#18102a','#c084fc','#f3e8ff'] },
-  { key:'slate', label:'⚡ Slate', mode:'dark', colors:['#0f1419','#64748b','#e2e8f0'] },
-  { key:'cyberpunk', label:'🎮 Cyberpunk', mode:'dark', colors:['#0a0014','#ff00ff','#00ffff'] },
-  { key:'industrial', label:'🏭 Industrial', mode:'dark', colors:['#1a1a1a','#ff6b00','#e5e5e5'] },
-  { key:'mint', label:'🍃 Mint', mode:'light', colors:['#f0fdf9','#14b8a6','#064e3b'] }
+// ── THEME & STORE ENGINE ──
+
+const BUILTIN_THEME_KEYS = ['midnight','arctic','forest','sunset','ocean','royal','slate','cyberpunk','industrial','mint'];
+
+const DEFAULT_STORE_THEMES = [
+  { id:'midnight',   name:'Midnight',   emoji:'🌙', mode:'dark',  price:0,   isFree:true,  isBuiltIn:true, sortOrder:0, previewColors:['#0d1117','#f97316','#e6edf3'] },
+  { id:'arctic',     name:'Arctic',     emoji:'❄️',  mode:'light', price:0,   isFree:true,  isBuiltIn:true, sortOrder:1, previewColors:['#f8fafc','#0ea5e9','#0f172a'] },
+  { id:'forest',     name:'Forest',     emoji:'🌲', mode:'dark',  price:0,   isFree:true,  isBuiltIn:true, sortOrder:2, previewColors:['#0a120e','#10b981','#d1fae5'] },
+  { id:'slate',      name:'Slate',      emoji:'⚡', mode:'dark',  price:0,   isFree:true,  isBuiltIn:true, sortOrder:3, previewColors:['#0f1419','#64748b','#e2e8f0'] },
+  { id:'mint',       name:'Mint',       emoji:'🍃', mode:'light', price:0,   isFree:true,  isBuiltIn:true, sortOrder:4, previewColors:['#f0fdf9','#14b8a6','#064e3b'] },
+  { id:'ocean',      name:'Ocean',      emoji:'🌊', mode:'dark',  price:150, isFree:false, isBuiltIn:true, sortOrder:5, previewColors:['#0a1628','#38bdf8','#e0f2fe'] },
+  { id:'sunset',     name:'Sunset',     emoji:'🌅', mode:'dark',  price:200, isFree:false, isBuiltIn:true, sortOrder:6, previewColors:['#1a0f0a','#fb923c','#fef3c7'] },
+  { id:'industrial', name:'Industrial', emoji:'🏭', mode:'dark',  price:200, isFree:false, isBuiltIn:true, sortOrder:7, previewColors:['#1a1a1a','#ff6b00','#e5e5e5'] },
+  { id:'royal',      name:'Royal',      emoji:'👑', mode:'dark',  price:250, isFree:false, isBuiltIn:true, sortOrder:8, previewColors:['#18102a','#c084fc','#f3e8ff'] },
+  { id:'cyberpunk',  name:'Cyberpunk',  emoji:'🎮', mode:'dark',  price:350, isFree:false, isBuiltIn:true, sortOrder:9, previewColors:['#0a0014','#ff00ff','#00ffff'] },
 ];
-const THEME_KEYS = THEME_OPTIONS.map(theme => theme.key);
 
-function renderThemeChoices() {
-  const grid = document.getElementById('theme-select-grid');
-  if (!grid) return;
-  grid.innerHTML = THEME_OPTIONS.map(theme => `
-    <button class="theme-choice" type="button" data-theme="${theme.key}" title="${theme.label}" aria-label="Apply ${theme.label} theme" aria-pressed="false">
-      <span class="theme-choice-name">${theme.label}</span>
-      <span class="theme-choice-swatches">
-        <span class="theme-swatch" style="background:${theme.colors[0]}"></span>
-        <span class="theme-swatch" style="background:${theme.colors[1]}"></span>
-        <span class="theme-swatch" style="background:${theme.colors[2]}"></span>
-      </span>
-    </button>
-  `).join('');
+function injectCustomThemeCSS(theme) {
+  const existing = document.getElementById(`custom-theme-${theme.id}`);
+  if (existing) existing.remove();
+  if (!theme.cssVars || typeof theme.cssVars !== 'object') return;
+  const vars = Object.entries(theme.cssVars).map(([k, v]) => `${k}: ${v}`).join('; ');
+  const style = document.createElement('style');
+  style.id = `custom-theme-${theme.id}`;
+  style.textContent = `body.theme-${theme.id} { ${vars}; }`;
+  document.head.appendChild(style);
 }
 
-function updateActiveThemeChoice(theme) {
-  const currentTheme = THEME_OPTIONS.find(opt => opt.key === theme) || THEME_OPTIONS[0];
-  const currentLabel = document.getElementById('theme-select-current');
-  if (currentLabel) currentLabel.textContent = currentTheme.label.replace(/^[^\s]+\s/, '');
-  document.querySelectorAll('.theme-choice').forEach(btn => {
-    const isActive = btn.dataset.theme === theme;
-    btn.classList.toggle('active', isActive);
-    btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+function applyTheme(themeId) {
+  const legacyMap = { dark: 'midnight', light: 'arctic' };
+  const resolved = legacyMap[themeId] || themeId;
+  const allKnownIds = [...BUILTIN_THEME_KEYS, ...storeThemes.filter(t => t.cssVars).map(t => t.id)];
+  const valid = allKnownIds.includes(resolved) ? resolved : 'midnight';
+  document.body.className = document.body.className.replace(/\btheme-\S+/g, '').trim();
+  if (valid !== 'midnight') document.body.classList.add(`theme-${valid}`);
+  const themeData = storeThemes.find(t => t.id === valid) || DEFAULT_STORE_THEMES.find(t => t.id === valid) || { mode: 'dark' };
+  document.body.dataset.themeMode = themeData.mode || 'dark';
+  try { localStorage.setItem('pressTrackerTheme', valid); } catch(e) {}
+}
+
+// Apply saved theme immediately (before Firestore loads — built-in themes work via CSS class)
+try { applyTheme(localStorage.getItem('pressTrackerTheme') || 'midnight'); } catch(e) {}
+
+async function seedDefaultStoreItems() {
+  const snap = await getDocs(storeItemsCol());
+  if (!snap.empty) return;
+  const batch = writeBatch(db);
+  DEFAULT_STORE_THEMES.forEach(theme => {
+    batch.set(storeItemDocRef(theme.id), {
+      ...theme, cssVars: null, isActive: true,
+      createdAt: serverTimestamp(), updatedAt: serverTimestamp()
+    });
   });
+  await batch.commit();
 }
 
-function applyTheme(theme) {
-  const legacyThemeMap = { dark: 'midnight', light: 'arctic' };
-  const resolvedTheme = legacyThemeMap[theme] || theme;
-  const normalizedTheme = THEME_KEYS.includes(resolvedTheme) ? resolvedTheme : 'midnight';
-  document.body.classList.remove(...THEME_KEYS.map(key => `theme-${key}`));
-  if (normalizedTheme !== 'midnight') document.body.classList.add(`theme-${normalizedTheme}`);
-  const selectedTheme = THEME_OPTIONS.find(opt => opt.key === normalizedTheme) || THEME_OPTIONS[0];
-  document.body.dataset.themeMode = selectedTheme.mode;
-  updateActiveThemeChoice(normalizedTheme);
-  try { localStorage.setItem('pressTrackerTheme', normalizedTheme); } catch(e) {}
+async function loadStoreThemes() {
+  try {
+    await seedDefaultStoreItems();
+    const snap = await getDocs(storeItemsCol());
+    storeThemes = snap.docs
+      .map(d => ({ ...d.data(), id: d.id }))
+      .filter(t => t.isActive !== false)
+      .sort((a, b) => (a.sortOrder ?? 99) - (b.sortOrder ?? 99));
+    storeThemes.forEach(t => { if (t.cssVars) injectCustomThemeCSS(t); });
+    // Re-apply theme now that custom theme CSS may have been injected
+    try { applyTheme(localStorage.getItem('pressTrackerTheme') || 'midnight'); } catch(e) {}
+  } catch(e) {
+    console.warn('loadStoreThemes failed:', e);
+    storeThemes = [...DEFAULT_STORE_THEMES];
+  }
 }
 
-// Load saved theme
-renderThemeChoices();
-try {
-  const saved = localStorage.getItem('pressTrackerTheme');
-  applyTheme(saved || 'midnight');
-} catch(e) {}
+async function loadUserStoreData() {
+  try {
+    const snap = await getDoc(userGlobalDocRef());
+    const data = snap.exists() ? snap.data() : {};
+    userGlobalLifetimeXp = Number(data.globalLifetimeXp || 0);
+    userGlobalXpSpent = Number(data.globalXpSpent || 0);
+    if (Array.isArray(data.ownedThemes)) {
+      userOwnedThemes = new Set(data.ownedThemes);
+    } else {
+      const freeIds = DEFAULT_STORE_THEMES.filter(t => t.isFree).map(t => t.id);
+      userOwnedThemes = new Set(freeIds);
+      setDoc(userGlobalDocRef(), { ownedThemes: freeIds }, { merge: true }).catch(() => {});
+    }
+  } catch(e) {
+    console.warn('loadUserStoreData failed:', e);
+  }
+}
 
-document.getElementById('theme-select-grid')?.addEventListener('click', e => {
-  const btn = e.target.closest('.theme-choice');
-  if (!btn?.dataset?.theme) return;
-  applyTheme(btn.dataset.theme);
-});
+function startUserDocListener() {
+  if (userDocUnsubscribe) userDocUnsubscribe();
+  if (!currentUser?.uid) return;
+  userDocUnsubscribe = onSnapshot(doc(db, 'users', currentUser.uid), snap => {
+    const data = snap.exists() ? snap.data() : {};
+    userGlobalLifetimeXp = Number(data.globalLifetimeXp || 0);
+    userGlobalXpSpent = Number(data.globalXpSpent || 0);
+    if (Array.isArray(data.ownedThemes)) userOwnedThemes = new Set(data.ownedThemes);
+    updateStoreXpDisplay();
+    if (document.getElementById('store-backdrop')?.classList.contains('open')) renderStoreThemes();
+  }, () => {});
+}
 
-document.getElementById('theme-select-toggle')?.addEventListener('click', () => {
-  const toggle = document.getElementById('theme-select-toggle');
-  const grid = document.getElementById('theme-select-grid');
-  const isOpen = grid?.classList.contains('open');
-  grid?.classList.toggle('open', !isOpen);
-  toggle?.classList.toggle('open', !isOpen);
-});
+function userSpendableXp() { return Math.max(0, userGlobalLifetimeXp - userGlobalXpSpent); }
+
+function updateStoreXpDisplay() {
+  const spendable = userSpendableXp();
+  const el = document.getElementById('store-xp-amount');
+  const sub = document.getElementById('store-xp-sub');
+  const lt = document.getElementById('store-lifetime-xp');
+  if (el) el.textContent = spendable.toLocaleString() + ' XP';
+  if (sub) sub.textContent = `${userGlobalLifetimeXp.toLocaleString()} lifetime · ${userGlobalXpSpent.toLocaleString()} spent`;
+  if (lt) lt.textContent = userGlobalLifetimeXp.toLocaleString() + ' XP';
+}
+
+function openStore() {
+  document.getElementById('user-dropdown')?.classList.remove('visible');
+  document.getElementById('user-pill')?.classList.remove('open');
+  updateStoreXpDisplay();
+  document.getElementById('store-backdrop')?.classList.add('open');
+  document.body.style.overflow = 'hidden';
+  renderStoreThemes();
+}
+
+function closeStore() {
+  document.getElementById('store-backdrop')?.classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+function switchStoreTab(tab) {
+  document.querySelectorAll('.store-tab:not(.soon)').forEach(t =>
+    t.classList.toggle('active', t.dataset.storeTab === tab));
+}
+
+function renderStoreThemes() {
+  const grid = document.getElementById('store-theme-grid');
+  if (!grid) return;
+  const themes = storeThemes.length ? storeThemes : DEFAULT_STORE_THEMES;
+  const spendable = userSpendableXp();
+  const current = localStorage.getItem('pressTrackerTheme') || 'midnight';
+
+  grid.innerHTML = themes.map(theme => {
+    const owned = theme.isFree || userOwnedThemes.has(theme.id);
+    const isApplied = current === theme.id;
+    const canAfford = spendable >= theme.price;
+    const colors = theme.previewColors || ['#111','#888','#ccc'];
+
+    let badge, action;
+    if (owned) {
+      badge = theme.isFree
+        ? `<span class="store-theme-badge free">FREE</span>`
+        : `<span class="store-theme-badge owned">✓ Owned</span>`;
+      action = isApplied
+        ? `<button class="store-theme-action applied" disabled>Applied</button>`
+        : `<button class="store-theme-action apply" onclick="applyThemeFromStore('${theme.id}')">Apply</button>`;
+    } else {
+      badge = `<span class="store-theme-badge ${canAfford ? 'price' : 'broke'}">${theme.price.toLocaleString()} XP</span>`;
+      action = `<button class="store-theme-action buy" ${canAfford ? '' : 'disabled'} onclick="openConfirmPurchase('${theme.id}')">${canAfford ? 'Buy' : 'Locked'}</button>`;
+    }
+
+    return `<div class="store-theme-card ${isApplied ? 'active-theme' : ''} ${!owned ? 'locked' : ''}">
+      ${isApplied ? '<span class="store-active-chip">ACTIVE</span>' : ''}
+      ${!owned ? '<span class="store-lock-chip">🔒</span>' : ''}
+      <div class="store-theme-preview">
+        ${colors.map(c => `<div class="store-theme-swatch" style="background:${c}"></div>`).join('')}
+      </div>
+      <div class="store-theme-card-body">
+        <div class="store-theme-name">${theme.emoji || ''} ${theme.name}</div>
+        <div class="store-theme-footer">${badge}${action}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function applyThemeFromStore(themeId) {
+  applyTheme(themeId);
+  renderStoreThemes();
+}
+
+function openConfirmPurchase(themeId) {
+  const theme = storeThemes.find(t => t.id === themeId) || DEFAULT_STORE_THEMES.find(t => t.id === themeId);
+  if (!theme) return;
+  storeConfirmingThemeId = themeId;
+  const spendable = userSpendableXp();
+  const colors = theme.previewColors || ['#111','#888','#ccc'];
+  const el = n => document.getElementById(n);
+  el('store-confirm-name').textContent = `${theme.emoji} ${theme.name}`;
+  el('store-confirm-preview').innerHTML = colors.map(c => `<div class="store-confirm-swatch" style="background:${c}"></div>`).join('');
+  el('store-confirm-costs').innerHTML = `
+    <div class="store-confirm-row"><span class="lbl">Theme price</span><span class="val spend">−${theme.price.toLocaleString()} XP</span></div>
+    <div class="store-confirm-row"><span class="lbl">Your balance</span><span class="val">${spendable.toLocaleString()} XP</span></div>
+    <div class="store-confirm-row sep"><span class="lbl">After purchase</span><span class="val remain">${(spendable - theme.price).toLocaleString()} XP</span></div>`;
+  const btn = el('store-confirm-buy-btn');
+  btn.textContent = `Buy — ${theme.price.toLocaleString()} XP`;
+  btn.disabled = false;
+  document.getElementById('store-confirm-backdrop')?.classList.add('open');
+}
+
+function closeConfirmPurchase() {
+  document.getElementById('store-confirm-backdrop')?.classList.remove('open');
+  storeConfirmingThemeId = null;
+}
+
+async function executePurchaseTheme() {
+  if (!storeConfirmingThemeId || !currentUser?.uid) return;
+  const theme = storeThemes.find(t => t.id === storeConfirmingThemeId) || DEFAULT_STORE_THEMES.find(t => t.id === storeConfirmingThemeId);
+  if (!theme || userSpendableXp() < theme.price) { closeConfirmPurchase(); return; }
+  const btn = document.getElementById('store-confirm-buy-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Processing…'; }
+  try {
+    await updateDoc(userGlobalDocRef(), {
+      globalXpSpent: increment(theme.price),
+      ownedThemes: arrayUnion(theme.id)
+    });
+    closeConfirmPurchase();
+    applyThemeFromStore(theme.id);
+    showGameToast(`🎨 ${theme.name} unlocked!`);
+  } catch(e) {
+    console.error('Purchase failed:', e);
+    if (btn) { btn.disabled = false; btn.textContent = `Buy — ${theme.price.toLocaleString()} XP`; }
+  }
+}
 
 // ── FILTER DRAWER ──
 let filterDrawerOpen = false;
@@ -7261,6 +7484,55 @@ document.getElementById('admin-page-btn')?.addEventListener('click', e => {
   window.location.href = 'admin.html';
 });
 </script>
+
+<!-- ── STORE MODAL ── -->
+<div class="store-backdrop" id="store-backdrop" onclick="if(event.target===this)closeStore()">
+  <div class="store-modal" id="store-modal">
+    <div class="store-header">
+      <div class="store-header-top">
+        <div class="store-title">AP <span>TRACKER</span> STORE</div>
+        <button class="store-close" onclick="closeStore()" aria-label="Close store">✕</button>
+      </div>
+      <div class="store-balance">
+        <div class="store-balance-left">
+          <div class="store-balance-label">Spendable XP</div>
+          <div class="store-balance-amount" id="store-xp-amount">0 XP</div>
+          <div class="store-balance-sub" id="store-xp-sub">0 lifetime · 0 spent</div>
+        </div>
+        <div class="store-balance-right">
+          <div class="store-balance-label">Lifetime XP</div>
+          <div class="store-balance-lifetime" id="store-lifetime-xp">0 XP</div>
+        </div>
+      </div>
+      <div class="store-tabs">
+        <button class="store-tab active" data-store-tab="themes" onclick="switchStoreTab('themes')">🎨 Themes</button>
+        <button class="store-tab soon" title="Coming soon">🏅 Badges</button>
+        <button class="store-tab soon" title="Coming soon">🤖 Characters</button>
+      </div>
+    </div>
+    <div class="store-body" id="store-body">
+      <div id="store-tab-themes">
+        <div class="store-section-label">Available Themes</div>
+        <div class="store-theme-grid" id="store-theme-grid">
+          <div class="store-empty">Loading themes…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── PURCHASE CONFIRM ── -->
+<div class="store-confirm-backdrop" id="store-confirm-backdrop" onclick="if(event.target===this)closeConfirmPurchase()">
+  <div class="store-confirm-card">
+    <div class="store-confirm-name" id="store-confirm-name">Unlock Theme?</div>
+    <div class="store-confirm-preview" id="store-confirm-preview"></div>
+    <div class="store-confirm-costs" id="store-confirm-costs"></div>
+    <div class="store-confirm-btns">
+      <button class="scb-cancel" onclick="closeConfirmPurchase()">Cancel</button>
+      <button class="scb-buy" id="store-confirm-buy-btn" onclick="executePurchaseTheme()">Buy</button>
+    </div>
+  </div>
+</div>
 
 <!-- MASCOT CHARACTER CARD POPOVER -->
 <div class="mascot-popover-backdrop" id="mascot-popover-backdrop" onclick="if(event.target===this)closeMascotPopover()">

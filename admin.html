@@ -158,6 +158,33 @@
     /* Badge modal (reuse mission modal styles + small tweaks) */
     .badge-type-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:16px; }
     @media (max-width:480px) { .badge-type-grid { grid-template-columns:repeat(2,1fr); } }
+
+    /* ── Store / Theme Manager ── */
+    .store-theme-row { background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:12px 14px; display:grid; grid-template-columns:auto 1fr auto auto auto auto; align-items:center; gap:10px; margin-bottom:8px; transition:border-color 0.15s; }
+    .store-theme-row:hover { border-color:var(--text2); }
+    .store-theme-swatches { display:flex; gap:3px; flex-shrink:0; }
+    .store-theme-swatch { width:18px; height:18px; border-radius:4px; border:1px solid rgba(255,255,255,0.1); }
+    .store-theme-info-name { font-size:13px; font-weight:700; color:var(--text); }
+    .store-theme-info-meta { font-size:10px; color:var(--text2); margin-top:2px; font-family:'Share Tech Mono',monospace; }
+    .store-price-badge { font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px; white-space:nowrap; }
+    .store-price-badge.free { background:rgba(139,92,246,0.1); color:#a78bfa; border:1px solid rgba(139,92,246,0.25); }
+    .store-price-badge.paid { background:rgba(234,179,8,0.1); color:#eab308; border:1px solid rgba(234,179,8,0.25); }
+    @media (max-width:640px) { .store-theme-row { grid-template-columns:auto 1fr; grid-template-rows:auto auto; } .store-theme-row > :nth-child(n+3) { justify-self:start; } }
+    /* Theme editor modal */
+    .theme-modal-backdrop { position:fixed; inset:0; background:rgba(0,0,0,0.65); z-index:800; display:flex; align-items:center; justify-content:center; padding:16px; opacity:0; pointer-events:none; transition:opacity 0.2s; overflow-y:auto; }
+    .theme-modal-backdrop.open { opacity:1; pointer-events:all; }
+    .theme-modal { background:var(--bg2); border:1px solid var(--border); border-radius:16px; width:640px; max-width:100%; max-height:90vh; overflow-y:auto; padding:24px; box-shadow:0 24px 80px rgba(0,0,0,0.6); transform:translateY(20px) scale(0.97); transition:transform 0.2s; }
+    .theme-modal-backdrop.open .theme-modal { transform:translateY(0) scale(1); }
+    .theme-modal-title { font-family:'Rajdhani',sans-serif; font-size:22px; font-weight:700; letter-spacing:0.8px; margin-bottom:16px; }
+    .theme-var-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:8px; }
+    .theme-var-row { display:flex; flex-direction:column; gap:3px; }
+    .theme-var-label { font-size:10px; color:var(--text2); font-family:'Share Tech Mono',monospace; }
+    .theme-var-inputs { display:flex; gap:4px; align-items:center; }
+    .theme-var-inputs input[type=color] { width:32px; height:32px; padding:2px; border-radius:6px; border:1px solid var(--border); background:var(--bg3); cursor:pointer; flex-shrink:0; }
+    .theme-var-inputs input[type=text] { flex:1; font-family:'Share Tech Mono',monospace; font-size:12px; }
+    .theme-preview-bar { display:flex; height:32px; border-radius:8px; overflow:hidden; border:1px solid var(--border); margin-top:12px; }
+    .theme-preview-swatch { flex:1; }
+    .theme-modal-section { font-family:'Share Tech Mono',monospace; font-size:10px; color:var(--text2); text-transform:uppercase; letter-spacing:0.07em; margin:16px 0 8px; }
   </style>
 </head>
 <body>
@@ -245,10 +272,82 @@
           <div id="plant-create-feedback" class="feedback"></div>
         </div>
 
+        <!-- ── STORE ── -->
+        <div class="card" id="store-card">
+          <h2>🛍 Store — Theme Catalog</h2>
+          <p class="muted" style="margin-bottom:12px;">Manage purchasable themes. Built-in themes use the app's built-in CSS; custom themes require CSS variable definitions.</p>
+          <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+            <button class="btn btn-primary" onclick="window.openThemeModal()">+ Add Theme</button>
+            <button class="btn" onclick="window.loadStoreThemes()">↻ Refresh</button>
+          </div>
+          <div id="store-themes-list"><div class="muted" style="padding:12px 0;">Loading…</div></div>
+          <div id="store-feedback" class="feedback"></div>
+        </div>
+
         <div id="plants-users-container"></div>
       </div>
     </div>
   </div>
+
+<!-- Theme Editor Modal -->
+<div class="theme-modal-backdrop" id="theme-modal-backdrop" onclick="if(event.target===this)window.closeThemeModal()">
+  <div class="theme-modal" onclick="event.stopPropagation()">
+    <div class="theme-modal-title" id="tm-title">New Theme</div>
+
+    <div class="grid-2" style="margin-bottom:12px;">
+      <div>
+        <label class="mission-field-label" for="tm-name">Theme Name</label>
+        <input id="tm-name" placeholder="e.g. Neon Jungle" />
+      </div>
+      <div>
+        <label class="mission-field-label" for="tm-emoji">Emoji</label>
+        <input id="tm-emoji" placeholder="🌴" maxlength="4" style="font-size:20px;text-align:center;width:100%;" />
+      </div>
+    </div>
+
+    <div class="grid-2" style="margin-bottom:12px;">
+      <div>
+        <label class="mission-field-label" for="tm-price">Price (XP) — 0 = Free</label>
+        <input id="tm-price" type="number" value="250" min="0" step="25" />
+      </div>
+      <div>
+        <label class="mission-field-label" for="tm-mode">Color Mode</label>
+        <select id="tm-mode">
+          <option value="dark">Dark</option>
+          <option value="light">Light</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="theme-modal-section">Preview</div>
+    <div class="theme-preview-bar" id="tm-preview-bar">
+      <div class="theme-preview-swatch" id="tm-prev-bg" style="background:#0d1117"></div>
+      <div class="theme-preview-swatch" id="tm-prev-accent" style="background:#f97316"></div>
+      <div class="theme-preview-swatch" id="tm-prev-text" style="background:#e6edf3"></div>
+    </div>
+
+    <div class="theme-modal-section">Background & Borders</div>
+    <div class="theme-var-grid" id="tm-bg-grid"></div>
+
+    <div class="theme-modal-section">Accent Colors</div>
+    <div class="theme-var-grid" id="tm-accent-grid"></div>
+
+    <div class="theme-modal-section">Text Colors</div>
+    <div class="theme-var-grid" id="tm-text-grid"></div>
+
+    <div class="theme-modal-section">Semantic Colors</div>
+    <div class="theme-var-grid" id="tm-semantic-grid"></div>
+
+    <div style="display:flex;gap:8px;margin-top:20px;flex-wrap:wrap;">
+      <button class="btn btn-primary" onclick="window.saveThemeModal()">Save Theme</button>
+      <button class="btn" onclick="window.closeThemeModal()">Cancel</button>
+      <button class="btn danger" id="tm-delete-btn" style="display:none;" onclick="window.deleteTheme()">Delete</button>
+    </div>
+    <div id="tm-feedback" class="feedback" style="margin-top:8px;"></div>
+    <input type="hidden" id="tm-editing-id" value="" />
+    <input type="hidden" id="tm-is-builtin" value="false" />
+  </div>
+</div>
 
 <!-- Badge Editor Modal -->
 <div class="mission-modal-backdrop" id="badge-modal-backdrop">
@@ -348,7 +447,7 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut as fbSignOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc, serverTimestamp, writeBatch, arrayUnion, arrayRemove, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyABjasNBbJnsqq4M_UxKruKrN6-O2FXCwc",
@@ -1794,7 +1893,7 @@ async function refreshAdminData() {
   document.getElementById('admin-content').style.display = hasAdminAccess ? '' : 'none';
   if (!hasAdminAccess) return;
   renderSchedulePlantOptions();
-  await loadMembersAndStatusesForAdminPlants();
+  await Promise.all([loadMembersAndStatusesForAdminPlants(), window.loadStoreThemes()]);
   renderPlantsUsers();
 }
 
@@ -2081,6 +2180,285 @@ window.saveMissionModal = function() {
 };
 
 // ── End Mission Modal ─────────────────────────────────────────────────────────
+
+// ── STORE / THEME MANAGER ─────────────────────────────────────────────────────
+
+const BUILTIN_STORE_THEMES = [
+  { id:'midnight',   name:'Midnight',   emoji:'🌙', mode:'dark',  price:0,   isFree:true,  isBuiltIn:true, sortOrder:0, previewColors:['#0d1117','#f97316','#e6edf3'] },
+  { id:'arctic',     name:'Arctic',     emoji:'❄️',  mode:'light', price:0,   isFree:true,  isBuiltIn:true, sortOrder:1, previewColors:['#f8fafc','#0ea5e9','#0f172a'] },
+  { id:'forest',     name:'Forest',     emoji:'🌲', mode:'dark',  price:0,   isFree:true,  isBuiltIn:true, sortOrder:2, previewColors:['#0a120e','#10b981','#d1fae5'] },
+  { id:'slate',      name:'Slate',      emoji:'⚡', mode:'dark',  price:0,   isFree:true,  isBuiltIn:true, sortOrder:3, previewColors:['#0f1419','#64748b','#e2e8f0'] },
+  { id:'mint',       name:'Mint',       emoji:'🍃', mode:'light', price:0,   isFree:true,  isBuiltIn:true, sortOrder:4, previewColors:['#f0fdf9','#14b8a6','#064e3b'] },
+  { id:'ocean',      name:'Ocean',      emoji:'🌊', mode:'dark',  price:150, isFree:false, isBuiltIn:true, sortOrder:5, previewColors:['#0a1628','#38bdf8','#e0f2fe'] },
+  { id:'sunset',     name:'Sunset',     emoji:'🌅', mode:'dark',  price:200, isFree:false, isBuiltIn:true, sortOrder:6, previewColors:['#1a0f0a','#fb923c','#fef3c7'] },
+  { id:'industrial', name:'Industrial', emoji:'🏭', mode:'dark',  price:200, isFree:false, isBuiltIn:true, sortOrder:7, previewColors:['#1a1a1a','#ff6b00','#e5e5e5'] },
+  { id:'royal',      name:'Royal',      emoji:'👑', mode:'dark',  price:250, isFree:false, isBuiltIn:true, sortOrder:8, previewColors:['#18102a','#c084fc','#f3e8ff'] },
+  { id:'cyberpunk',  name:'Cyberpunk',  emoji:'🎮', mode:'dark',  price:350, isFree:false, isBuiltIn:true, sortOrder:9, previewColors:['#0a0014','#ff00ff','#00ffff'] },
+];
+
+// CSS var groups shown in the editor
+const THEME_VAR_GROUPS = {
+  bg: [
+    { key:'--bg',     label:'Background (--bg)' },
+    { key:'--bg2',    label:'Surface (--bg2)' },
+    { key:'--bg3',    label:'Raised (--bg3)' },
+    { key:'--border', label:'Border (--border)' },
+  ],
+  accent: [
+    { key:'--accent',      label:'Accent (--accent)' },
+    { key:'--accent2',     label:'Accent 2 (--accent2)' },
+    { key:'--accent-glow', label:'Glow (--accent-glow)', type:'text' },
+  ],
+  text: [
+    { key:'--text',  label:'Text (--text)' },
+    { key:'--text2', label:'Text 2 (--text2)' },
+    { key:'--text3', label:'Text 3 (--text3)' },
+  ],
+  semantic: [
+    { key:'--green',   label:'Green (--green)' },
+    { key:'--red',     label:'Red (--red)' },
+    { key:'--blue',    label:'Blue (--blue)' },
+    { key:'--yellow',  label:'Yellow (--yellow)' },
+    { key:'--purple',  label:'Purple (--purple)' },
+    { key:'--orange',  label:'Orange (--orange)' },
+    { key:'--teal',    label:'Teal (--teal)' },
+    { key:'--babyblue',label:'Baby Blue (--babyblue)' },
+  ],
+};
+
+const SEMANTIC_DIM_MAP = { '--green':'--green-dim','--red':'--red-dim','--blue':'--blue-dim','--yellow':'--yellow-dim','--purple':'--purple-dim','--orange':'--orange-dim','--teal':'--teal-dim','--babyblue':'--babyblue-dim' };
+
+let storeThemesDraft = [];
+
+function hexToRgba(hex, alpha) {
+  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+window.loadStoreThemes = async function() {
+  const list = document.getElementById('store-themes-list');
+  if (list) list.innerHTML = '<div class="muted" style="padding:8px 0;">Loading…</div>';
+  try {
+    const snap = await getDocs(collection(db, 'storeItems'));
+    storeThemesDraft = snap.docs.map(d => ({ ...d.data(), id: d.id }))
+      .sort((a, b) => (a.sortOrder ?? 99) - (b.sortOrder ?? 99));
+    renderStoreThemesList();
+  } catch(e) {
+    if (list) list.innerHTML = `<div class="muted">Error: ${esc(e.message)}</div>`;
+  }
+};
+
+function renderStoreThemesList() {
+  const list = document.getElementById('store-themes-list');
+  if (!list) return;
+  if (!storeThemesDraft.length) {
+    list.innerHTML = '<div class="muted" style="padding:8px 0;">No themes yet. Add one or seed defaults from the tracker.</div>';
+    return;
+  }
+  list.innerHTML = storeThemesDraft.map(t => {
+    const colors = t.previewColors || ['#111','#888','#ccc'];
+    const priceBadge = t.isFree
+      ? `<span class="store-price-badge free">FREE</span>`
+      : `<span class="store-price-badge paid">${Number(t.price).toLocaleString()} XP</span>`;
+    const builtIn = t.isBuiltIn ? '<span class="mono" style="font-size:9px;color:var(--text3);">built-in</span>' : '';
+    const inactive = t.isActive === false ? '<span class="mono" style="font-size:9px;color:var(--red);">hidden</span>' : '';
+    return `<div class="store-theme-row">
+      <div class="store-theme-swatches">${colors.map(c=>`<div class="store-theme-swatch" style="background:${c}"></div>`).join('')}</div>
+      <div>
+        <div class="store-theme-info-name">${esc(t.emoji||'')} ${esc(t.name)}</div>
+        <div class="store-theme-info-meta">${t.mode||'dark'} · id: ${esc(t.id)} ${builtIn} ${inactive}</div>
+      </div>
+      ${priceBadge}
+      <button class="small-btn" onclick="window.openThemeModal('${esc(t.id)}')">Edit</button>
+      <button class="small-btn" onclick="window.toggleThemeActive('${esc(t.id)}', ${t.isActive === false})">${t.isActive === false ? 'Show' : 'Hide'}</button>
+      ${!t.isBuiltIn ? `<button class="small-btn danger" onclick="window.confirmDeleteTheme('${esc(t.id)}')">Delete</button>` : '<span></span>'}
+    </div>`;
+  }).join('');
+}
+
+function buildThemeVarInputs(groupId, vars, currentVars) {
+  const el = document.getElementById(groupId);
+  if (!el) return;
+  el.innerHTML = vars.map(v => {
+    const cur = (currentVars && currentVars[v.key]) || '';
+    const isColor = v.type !== 'text';
+    return `<div class="theme-var-row">
+      <div class="theme-var-label">${esc(v.label)}</div>
+      <div class="theme-var-inputs">
+        ${isColor ? `<input type="color" id="col-${v.key.replace(/--/g,'')}" value="${cur.startsWith('#') ? cur : '#888888'}" oninput="window.syncThemeVar('${v.key}', this.value)">` : ''}
+        <input type="text" id="var-${v.key.replace(/--/g,'')}" value="${esc(cur)}" placeholder="${v.key}" oninput="window.syncThemeVarText('${v.key}', this.value)">
+      </div>
+    </div>`;
+  }).join('');
+}
+
+window.syncThemeVar = function(key, hex) {
+  const textId = `var-${key.replace(/--/g,'')}`;
+  const ti = document.getElementById(textId);
+  if (ti) ti.value = hex;
+  // Auto-fill dim variant if exists
+  const dimKey = SEMANTIC_DIM_MAP[key];
+  if (dimKey && hex.startsWith('#')) {
+    const dimText = document.getElementById(`var-${dimKey.replace(/--/g,'')}`);
+    const dimColor = document.getElementById(`col-${dimKey.replace(/--/g,'')}`);
+    const rgba = hexToRgba(hex, 0.14);
+    if (dimText) dimText.value = rgba;
+    if (dimColor) dimColor.value = hex; // color picker stays on base color
+  }
+  updateThemePreview();
+};
+
+window.syncThemeVarText = function(key, val) {
+  const colId = `col-${key.replace(/--/g,'')}`;
+  const ci = document.getElementById(colId);
+  if (ci && val.startsWith('#') && val.length >= 7) ci.value = val;
+  updateThemePreview();
+};
+
+function updateThemePreview() {
+  const bg     = document.getElementById('var---bg')?.value || '#111';
+  const accent = document.getElementById('var---accent')?.value || '#f97316';
+  const text   = document.getElementById('var---text')?.value || '#eee';
+  document.getElementById('tm-prev-bg')?.setAttribute('style', `background:${bg}`);
+  document.getElementById('tm-prev-accent')?.setAttribute('style', `background:${accent}`);
+  document.getElementById('tm-prev-text')?.setAttribute('style', `background:${text}`);
+}
+
+window.openThemeModal = function(themeId) {
+  const existing = themeId ? storeThemesDraft.find(t => t.id === themeId) : null;
+  const isBuiltIn = existing?.isBuiltIn === true;
+  const vars = existing?.cssVars || {};
+
+  document.getElementById('tm-title').textContent = existing ? `Edit — ${existing.name}` : 'New Theme';
+  document.getElementById('tm-name').value = existing?.name || '';
+  document.getElementById('tm-emoji').value = existing?.emoji || '';
+  document.getElementById('tm-price').value = existing?.price ?? 250;
+  document.getElementById('tm-mode').value = existing?.mode || 'dark';
+  document.getElementById('tm-editing-id').value = themeId || '';
+  document.getElementById('tm-is-builtin').value = String(isBuiltIn);
+  document.getElementById('tm-delete-btn').style.display = (!isBuiltIn && themeId) ? 'block' : 'none';
+  document.getElementById('tm-feedback').textContent = '';
+
+  buildThemeVarInputs('tm-bg-grid',       THEME_VAR_GROUPS.bg,       vars);
+  buildThemeVarInputs('tm-accent-grid',   THEME_VAR_GROUPS.accent,   vars);
+  buildThemeVarInputs('tm-text-grid',     THEME_VAR_GROUPS.text,     vars);
+  buildThemeVarInputs('tm-semantic-grid', THEME_VAR_GROUPS.semantic, vars);
+  // Also render dim vars below semantic
+  const dimVars = Object.values(SEMANTIC_DIM_MAP).map(k => ({ key:k, label:`${k} (dim)`, type:'text' }));
+  const dimGrid = document.getElementById('tm-semantic-grid');
+  if (dimGrid) dimGrid.innerHTML += dimVars.map(v => {
+    const cur = vars[v.key] || '';
+    return `<div class="theme-var-row">
+      <div class="theme-var-label">${esc(v.label)}</div>
+      <div class="theme-var-inputs">
+        <input type="text" id="var-${v.key.replace(/--/g,'')}" value="${esc(cur)}" placeholder="${v.key}" oninput="window.syncThemeVarText('${v.key}', this.value)">
+      </div>
+    </div>`;
+  }).join('');
+
+  updateThemePreview();
+  document.getElementById('theme-modal-backdrop').classList.add('open');
+};
+
+window.closeThemeModal = function() {
+  document.getElementById('theme-modal-backdrop').classList.remove('open');
+};
+
+function collectThemeVars() {
+  const allKeys = [
+    ...THEME_VAR_GROUPS.bg.map(v=>v.key),
+    ...THEME_VAR_GROUPS.accent.map(v=>v.key),
+    ...THEME_VAR_GROUPS.text.map(v=>v.key),
+    ...THEME_VAR_GROUPS.semantic.map(v=>v.key),
+    ...Object.values(SEMANTIC_DIM_MAP),
+  ];
+  const out = {};
+  allKeys.forEach(k => {
+    const id = `var-${k.replace(/--/g,'')}`;
+    const val = document.getElementById(id)?.value?.trim();
+    if (val) out[k] = val;
+  });
+  return out;
+}
+
+window.saveThemeModal = async function() {
+  const name = document.getElementById('tm-name').value.trim();
+  const emoji = document.getElementById('tm-emoji').value.trim();
+  const price = Number(document.getElementById('tm-price').value) || 0;
+  const mode = document.getElementById('tm-mode').value || 'dark';
+  const editingId = document.getElementById('tm-editing-id').value;
+  const isBuiltIn = document.getElementById('tm-is-builtin').value === 'true';
+  const fb = id => { document.getElementById('tm-feedback').textContent = id; document.getElementById('tm-feedback').className = 'feedback error'; };
+  if (!name) { fb('Name is required.'); return; }
+
+  const cssVars = collectThemeVars();
+  const hasVars = Object.keys(cssVars).length > 0;
+  const bg = cssVars['--bg'] || '#111111';
+  const accent = cssVars['--accent'] || '#f97316';
+  const text = cssVars['--text'] || '#e6edf3';
+  const previewColors = [bg, accent, text];
+  const isFree = price === 0;
+
+  try {
+    document.getElementById('tm-feedback').textContent = 'Saving…';
+    document.getElementById('tm-feedback').className = 'feedback';
+
+    if (editingId) {
+      const ref = doc(db, 'storeItems', editingId);
+      const updates = { name, emoji, price, mode, isFree, previewColors, updatedAt: serverTimestamp() };
+      if (!isBuiltIn || hasVars) updates.cssVars = hasVars ? cssVars : null;
+      if (isBuiltIn) {
+        // For built-ins only update price/emoji/name, not cssVars unless provided
+        delete updates.cssVars;
+        if (hasVars) updates.cssVars = cssVars;
+      }
+      await updateDoc(ref, updates);
+    } else {
+      // New custom theme — generate a slug id
+      const slug = name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'') + '-' + Date.now().toString(36);
+      const maxOrder = storeThemesDraft.reduce((m,t) => Math.max(m, t.sortOrder ?? 0), 0);
+      await setDoc(doc(db, 'storeItems', slug), {
+        id: slug, name, emoji, price, mode, isFree, isBuiltIn: false,
+        isActive: true, sortOrder: maxOrder + 1,
+        previewColors, cssVars: hasVars ? cssVars : null,
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp()
+      });
+    }
+    document.getElementById('tm-feedback').textContent = '✓ Saved!';
+    document.getElementById('tm-feedback').className = 'feedback ok';
+    await window.loadStoreThemes();
+    setTimeout(() => window.closeThemeModal(), 800);
+  } catch(e) {
+    document.getElementById('tm-feedback').textContent = `Error: ${e.message}`;
+    document.getElementById('tm-feedback').className = 'feedback error';
+  }
+};
+
+window.toggleThemeActive = async function(themeId, makeActive) {
+  try {
+    await updateDoc(doc(db, 'storeItems', themeId), { isActive: makeActive, updatedAt: serverTimestamp() });
+    await window.loadStoreThemes();
+  } catch(e) { alert('Error: ' + e.message); }
+};
+
+window.confirmDeleteTheme = function(themeId) {
+  const t = storeThemesDraft.find(x => x.id === themeId);
+  if (!t) return;
+  if (!confirm(`Delete "${t.name}"? This cannot be undone. Users who own it will keep it, but it will disappear from the store.`)) return;
+  window.deleteTheme(themeId);
+};
+
+window.deleteTheme = async function(themeId) {
+  const id = themeId || document.getElementById('tm-editing-id').value;
+  if (!id) return;
+  try {
+    await deleteDoc(doc(db, 'storeItems', id));
+    window.closeThemeModal();
+    await window.loadStoreThemes();
+  } catch(e) { alert('Delete failed: ' + e.message); }
+};
+
+// ── End Store ─────────────────────────────────────────────────────────────────
 
 document.getElementById('google-signin-btn').addEventListener('click', signInWithGoogle);
 document.getElementById('signout-btn').addEventListener('click', doSignOut);
