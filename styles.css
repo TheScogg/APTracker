@@ -1152,6 +1152,148 @@
   .spt-caret-down { border-left: 9px solid transparent; border-right: 9px solid transparent; border-top: 9px solid var(--border); bottom: -10px; }
   .spt-caret-down::after { content: ''; position: absolute; top: -11px; left: -8px; width: 0; height: 0; border-left: 8px solid transparent; border-right: 8px solid transparent; border-top: 8px solid var(--bg2); }
 
+  /* STORE MODAL */
+  .store-modal-overlay { padding: 16px; }
+  .store-modal {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 18px; width: 100%; max-width: 680px; max-height: 90vh;
+    display: flex; flex-direction: column; overflow: hidden;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.55);
+  }
+  .store-modal-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 18px 20px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+  }
+  .store-modal-title {
+    display: flex; align-items: center; gap: 10px;
+    font-family: 'Rajdhani', sans-serif; font-size: 20px; font-weight: 700;
+    color: var(--text); letter-spacing: 0.02em; flex: 1;
+  }
+  .store-modal-xp {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 20px; padding: 5px 12px;
+    font-size: 12px; font-weight: 700; color: var(--yellow);
+    font-family: 'Share Tech Mono', monospace; white-space: nowrap; flex-shrink: 0;
+  }
+  .store-modal-close {
+    width: 32px; height: 32px; border-radius: 8px; background: var(--bg3);
+    border: 1px solid var(--border); color: var(--text3); cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s, color 0.15s; flex-shrink: 0;
+  }
+  .store-modal-close:hover { background: var(--bg); color: var(--text); }
+  .store-modal-tabs {
+    display: flex; gap: 4px; padding: 12px 20px 0; flex-shrink: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .store-tab {
+    padding: 8px 16px; border-radius: 8px 8px 0 0; border: 1px solid transparent;
+    border-bottom: none; background: transparent; color: var(--text3);
+    font-size: 13px; font-weight: 600; font-family: 'Nunito', sans-serif;
+    cursor: pointer; transition: color 0.15s, background 0.15s; display: flex; align-items: center; gap: 6px;
+  }
+  .store-tab:hover { color: var(--text2); }
+  .store-tab.active {
+    background: var(--bg2); border-color: var(--border); color: var(--accent);
+    margin-bottom: -1px; padding-bottom: 9px;
+  }
+  .store-tab-soon {
+    font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em;
+    background: var(--bg3); color: var(--text3); border-radius: 4px; padding: 1px 5px;
+  }
+  .store-modal-body { overflow-y: auto; flex: 1; padding: 20px; }
+  .store-tab-panel { display: none; }
+  .store-tab-panel.active { display: block; }
+  .store-section-label {
+    font-size: 10px; font-weight: 800; text-transform: uppercase;
+    letter-spacing: 1.5px; color: var(--text3); margin-bottom: 12px;
+  }
+  /* Theme grid */
+  .store-theme-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 12px;
+  }
+  .store-theme-card {
+    border-radius: 12px; border: 1.5px solid var(--border);
+    background: var(--bg3); overflow: hidden; cursor: pointer;
+    transition: border-color 0.18s, box-shadow 0.18s, transform 0.15s;
+    user-select: none;
+  }
+  .store-theme-card:hover { border-color: var(--text2); transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.25); }
+  .store-theme-card.stc-active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent), 0 6px 20px rgba(0,0,0,0.25); }
+  .store-theme-card.stc-dim { opacity: 0.55; cursor: default; }
+  .store-theme-card.stc-dim:hover { transform: none; box-shadow: none; }
+  /* Theme card preview area */
+  .stc-preview {
+    height: 88px; position: relative; overflow: hidden;
+    background: var(--stc-bg, #111);
+  }
+  .stc-preview-bg { position: absolute; inset: 0; background: var(--stc-bg, #111); }
+  .stc-preview-stripe {
+    position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    background: var(--stc-accent, #f97316);
+  }
+  .stc-preview-ui {
+    position: absolute; inset: 12px; display: flex; flex-direction: column; gap: 6px;
+  }
+  .stc-ui-bar {
+    height: 8px; border-radius: 4px; width: 100%;
+  }
+  .stc-ui-row { display: flex; align-items: center; gap: 6px; }
+  .stc-ui-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .stc-ui-dot-sm { width: 6px; height: 6px; }
+  .stc-ui-line { height: 5px; border-radius: 3px; flex: 1; }
+  .stc-ui-line-sm { height: 4px; }
+  .stc-active-check {
+    position: absolute; top: 6px; right: 8px;
+    color: var(--stc-accent, #f97316); font-size: 14px; font-weight: 900;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.5);
+  }
+  /* Theme card footer */
+  .stc-footer {
+    padding: 8px 10px 8px; display: flex; align-items: center;
+    justify-content: space-between; gap: 6px; background: var(--bg3);
+    border-top: 1px solid var(--border);
+  }
+  .stc-name {
+    font-size: 11px; font-weight: 700; color: var(--text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+  }
+  .stc-action { flex-shrink: 0; display: flex; align-items: center; }
+  .stc-badge {
+    font-size: 9px; font-weight: 800; text-transform: uppercase;
+    letter-spacing: 0.04em; padding: 2px 6px; border-radius: 4px;
+  }
+  .stc-badge-active { background: rgba(var(--accent-rgb,249,115,22),0.15); color: var(--accent); }
+  .stc-badge-owned { background: rgba(34,197,94,0.12); color: var(--green, #22c55e); }
+  .stc-badge-locked { background: var(--bg2); color: var(--text3); }
+  .stc-buy-btn {
+    font-size: 10px; font-weight: 800; padding: 3px 9px; border-radius: 6px;
+    background: var(--accent); color: #000; border: none; cursor: pointer;
+    font-family: 'Share Tech Mono', monospace; transition: opacity 0.15s, transform 0.1s;
+    white-space: nowrap;
+  }
+  .stc-buy-btn:hover { opacity: 0.88; transform: scale(1.04); }
+  /* Coming soon panels */
+  .store-coming-soon {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 60px 20px; text-align: center; gap: 10px;
+  }
+  .store-cs-icon { font-size: 40px; margin-bottom: 4px; }
+  .store-cs-title { font-size: 15px; font-weight: 700; color: var(--text2); }
+  .store-cs-sub { font-size: 13px; color: var(--text3); max-width: 260px; line-height: 1.5; }
+  /* Purchase confirm modal */
+  .store-confirm-icon { font-size: 36px; margin-bottom: 4px; }
+  /* Store XP in dropdown */
+  .ud-store-xp {
+    font-size: 10px; font-weight: 700; color: var(--yellow);
+    font-family: 'Share Tech Mono', monospace; background: var(--bg3);
+    border: 1px solid var(--border); border-radius: 10px; padding: 2px 7px;
+    flex-shrink: 0;
+  }
+
   /* THEME EDITOR MODAL */
   .theme-editor-modal { width: 580px; max-width: 98vw; max-height: 88vh; overflow-y: auto; }
   .te-section { margin-bottom: 18px; }

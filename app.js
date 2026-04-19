@@ -528,7 +528,8 @@ async function loadUserPlants() {
     const userSnap = await getDoc(doc(db, 'users', currentUser.uid));
     const userData = userSnap.exists() ? userSnap.data() : {};
     _applyFirestoreThemePrefs(userData.themePrefs);
-    userGlobalXp = Number(userData.globalXp || 0);
+    userLifetimeXp = Number(userData.globalLifetimeXp || 0);
+    userXpSpent = Number(userData.globalXpSpent || 0);
     const rawInv = userData.inventory || {};
     userInventory = {
       unlockedItems: Array.isArray(rawInv.unlockedItems) ? rawInv.unlockedItems : [],
@@ -1259,9 +1260,9 @@ async function checkAndAwardBadges() {
         const badgeXp = Number(badge.xpReward);
         await Promise.all([
           setDoc(gameUserStatsDoc(currentUser.uid), { totals: { xp: increment(badgeXp) } }, { merge: true }),
-          setDoc(doc(db, 'users', currentUser.uid), { globalXp: increment(badgeXp) }, { merge: true })
+          setDoc(doc(db, 'users', currentUser.uid), { globalLifetimeXp: increment(badgeXp) }, { merge: true })
         ]);
-        userGlobalXp = Math.max(0, userGlobalXp + badgeXp);
+        userLifetimeXp = Math.max(0, userLifetimeXp + badgeXp);
         renderStoreCard();
       }
     } catch (e) {
@@ -1278,15 +1279,7 @@ async function ensureGamificationConfig() {
 }
 
 async function backfillGlobalXpIfNeeded() {
-  if (!currentPlantId || !currentUser || userGlobalXp > 0) return;
-  try {
-    const snap = await getDoc(gameUserStatsDoc(currentUser.uid));
-    const plantXp = Number(snap.exists() ? (snap.data()?.totals?.xp || 0) : 0);
-    if (plantXp > 0) {
-      await setDoc(doc(db, 'users', currentUser.uid), { globalXp: plantXp }, { merge: true });
-      userGlobalXp = plantXp;
-    }
-  } catch(e) { console.warn('globalXp backfill failed:', e?.message); }
+  // Fresh-start: no migration from old globalXp field
 }
 
 function stopGamificationListeners() {
@@ -1453,9 +1446,10 @@ async function awardGamification(reason, context = {}) {
       updatedAt: serverTimestamp(),
       schemaVersion: 1
     }, { merge: true });
-    batch.set(doc(db, 'users', currentUser.uid), { globalXp: increment(totalDelta) }, { merge: true });
+    batch.set(doc(db, 'users', currentUser.uid), { globalLifetimeXp: increment(totalDelta) }, { merge: true });
     await batch.commit();
-    userGlobalXp = Math.max(0, userGlobalXp + totalDelta);
+    userLifetimeXp = Math.max(0, userLifetimeXp + totalDelta);
+    updateStoreXpDisplay();
 
     const currentXp = Number(gameUserStats?.totals?.xp || 0) + totalDelta;
     const nextLevel = gameLevelFromXp(currentXp);
@@ -1496,6 +1490,7 @@ async function loadStoreConfig() {
   }
   ensureCurrentThemeAccess();
   renderThemeChoices();
+  updateStoreXpDisplay();
   updateActiveThemeChoice(THEME_KEYS.includes(localStorage.getItem('pressTrackerTheme') || '') ? localStorage.getItem('pressTrackerTheme') : null);
 }
 
@@ -1525,8 +1520,8 @@ async function purchaseStoreItem(itemId) {
   const item = storeItems.find(i => i.id === itemId);
   if (!item || !currentUser) return;
   if (isItemUnlocked(itemId)) { showGameToast('Already owned!'); return; }
-  if (userGlobalXp < item.price) {
-    showGameToast(`Need ${item.price} XP — you have ${userGlobalXp}`);
+  if (userSpendableXp() < item.price) {
+    showGameToast(`Need ${item.price} XP — you have ${userSpendableXp()}`);
     return;
   }
   try {
@@ -1534,17 +1529,20 @@ async function purchaseStoreItem(itemId) {
     await runTransaction(db, async tx => {
       const snap = await tx.get(userRef);
       const data = snap.exists() ? snap.data() : {};
-      const currentXp = Number(data.globalXp || 0);
-      if (currentXp < item.price) throw new Error('insufficient_xp');
+      const lifetimeXp = Number(data.globalLifetimeXp || 0);
+      const xpSpent = Number(data.globalXpSpent || 0);
+      const spendable = Math.max(0, lifetimeXp - xpSpent);
+      if (spendable < item.price) throw new Error('insufficient_xp');
       const existing = Array.isArray(data.inventory?.unlockedItems) ? data.inventory.unlockedItems : [];
       tx.set(userRef, {
-        globalXp: currentXp - item.price,
+        globalXpSpent: xpSpent + item.price,
         inventory: { unlockedItems: [...new Set([...existing, itemId])] }
       }, { merge: true });
     });
-    userGlobalXp -= item.price;
+    userXpSpent += item.price;
     if (!userInventory.unlockedItems.includes(itemId)) userInventory.unlockedItems.push(itemId);
     renderStoreCard();
+    updateStoreXpDisplay();
     renderThemeChoices();
     updateActiveThemeChoice(THEME_KEYS.includes(localStorage.getItem('pressTrackerTheme') || '') ? localStorage.getItem('pressTrackerTheme') : null);
     showGameToast(`Unlocked ${item.name}!`);
@@ -1560,7 +1558,7 @@ async function purchaseStoreItem(itemId) {
 
 function renderStoreCard() {
   const xpLabel = document.getElementById('game-store-xp-label');
-  if (xpLabel) xpLabel.textContent = `${userGlobalXp} XP`;
+  if (xpLabel) xpLabel.textContent = `${userSpendableXp()} XP`;
 
   const list = document.getElementById('game-store-list');
   if (!list) return;
@@ -1571,7 +1569,7 @@ function renderStoreCard() {
   }
   list.innerHTML = active.map(item => {
     const owned = isItemUnlocked(item.id);
-    const canAfford = userGlobalXp >= item.price;
+    const canAfford = userSpendableXp() >= item.price;
     let swatches = '';
     if (item.type === 'theme') {
       let colors = [];
@@ -1596,6 +1594,141 @@ function renderStoreCard() {
     </div>`;
   }).join('');
 }
+
+// ── STORE MODAL ──
+
+const STORE_FREE_KEYS = new Set(['midnight', 'arctic', 'forest', 'slate', 'mint', 'engel']);
+let _pendingPurchaseItemId = null;
+
+function updateStoreXpDisplay() {
+  const spendable = userSpendableXp();
+  const el = document.getElementById('store-spendable-xp');
+  if (el) el.textContent = spendable;
+  const udEl = document.getElementById('ud-store-xp');
+  if (udEl) udEl.textContent = `${spendable} XP`;
+}
+
+function openStoreModal() {
+  renderStoreModal();
+  document.getElementById('store-modal')?.classList.add('visible');
+  document.body.style.overflow = 'hidden';
+}
+window.openStoreModal = openStoreModal;
+
+function closeStoreModal() {
+  document.getElementById('store-modal')?.classList.remove('visible');
+  document.body.style.overflow = '';
+}
+window.closeStoreModal = closeStoreModal;
+
+function switchStoreTab(tab) {
+  document.querySelectorAll('.store-tab').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
+  document.querySelectorAll('.store-tab-panel').forEach(panel => panel.classList.toggle('active', panel.id === `store-panel-${tab}`));
+}
+window.switchStoreTab = switchStoreTab;
+
+function renderStoreModal() {
+  updateStoreXpDisplay();
+  const activeKey = localStorage.getItem('pressTrackerTheme') || 'midnight';
+  const spendable = userSpendableXp();
+
+  const freeThemes = THEME_OPTIONS.filter(t => STORE_FREE_KEYS.has(t.key));
+  const paidThemes = THEME_OPTIONS.filter(t => !STORE_FREE_KEYS.has(t.key));
+
+  const freeGrid = document.getElementById('store-free-themes');
+  const paidGrid = document.getElementById('store-paid-themes');
+
+  if (freeGrid) freeGrid.innerHTML = freeThemes.map(t => _buildStoreThemeCard(t, activeKey, spendable)).join('');
+  if (paidGrid) paidGrid.innerHTML = paidThemes.map(t => _buildStoreThemeCard(t, activeKey, spendable)).join('');
+}
+
+function _buildStoreThemeCard(theme, activeKey, spendable) {
+  const [bg, accent, textColor] = theme.colors;
+  const nameOnly = theme.label.replace(/^\S+\s/, '');
+  const isFree = STORE_FREE_KEYS.has(theme.key);
+  const isActive = theme.key === activeKey;
+  const storeItem = getStoreItemForTheme(theme.key);
+  const owned = isFree || (storeItem ? isItemUnlocked(storeItem.id) : false);
+  const price = storeItem?.price || 0;
+  const canAfford = spendable >= price;
+
+  let cardCls = 'store-theme-card';
+  if (isActive) cardCls += ' stc-active';
+  if (!owned && !canAfford) cardCls += ' stc-dim';
+
+  let badge = '';
+  let action = '';
+  if (isActive) {
+    badge = `<span class="stc-badge stc-badge-active">Active</span>`;
+  } else if (owned) {
+    badge = `<span class="stc-badge stc-badge-owned">${isFree ? 'Free' : '✓ Owned'}</span>`;
+  } else if (canAfford) {
+    action = `<button class="stc-buy-btn" onclick="event.stopPropagation();openPurchaseConfirm('${storeItem.id}')">${price} XP</button>`;
+  } else {
+    badge = `<span class="stc-badge stc-badge-locked">🔒 ${price}</span>`;
+  }
+
+  const clickHandler = owned ? `onclick="applyTheme('${theme.key}');renderStoreModal();"` : '';
+
+  return `<div class="${cardCls}" role="button" tabindex="0" ${clickHandler}>
+    <div class="stc-preview" style="--stc-bg:${bg};--stc-accent:${accent};--stc-text:${textColor}">
+      <div class="stc-preview-bg"></div>
+      <div class="stc-preview-stripe"></div>
+      <div class="stc-preview-ui">
+        <div class="stc-ui-bar" style="background:${accent}22"></div>
+        <div class="stc-ui-row">
+          <div class="stc-ui-dot" style="background:${accent}"></div>
+          <div class="stc-ui-line" style="background:${textColor}22"></div>
+        </div>
+        <div class="stc-ui-row">
+          <div class="stc-ui-dot stc-ui-dot-sm" style="background:${textColor}44"></div>
+          <div class="stc-ui-line stc-ui-line-sm" style="background:${textColor}18"></div>
+        </div>
+      </div>
+      ${isActive ? '<div class="stc-active-check">✓</div>' : ''}
+    </div>
+    <div class="stc-footer">
+      <span class="stc-name">${esc(nameOnly)}</span>
+      <span class="stc-action">${badge}${action}</span>
+    </div>
+  </div>`;
+}
+
+function openPurchaseConfirm(itemId) {
+  const item = storeItems.find(i => i.id === itemId);
+  if (!item) return;
+  if (userSpendableXp() < item.price) { showGameToast(`Need ${item.price} XP`); return; }
+  _pendingPurchaseItemId = itemId;
+  const theme = THEME_OPTIONS.find(t => t.key === item.themeKey);
+  const icon = document.getElementById('purchase-confirm-icon');
+  const title = document.getElementById('purchase-confirm-title');
+  const desc = document.getElementById('purchase-confirm-desc');
+  const remaining = document.getElementById('purchase-confirm-remaining');
+  const btn = document.getElementById('purchase-confirm-btn');
+  if (icon) icon.textContent = theme?.label.match(/^\S+/)?.[0] || '🎨';
+  if (title) title.textContent = `Unlock ${esc(item.name)}?`;
+  if (desc) desc.textContent = `Spend ${item.price} XP to permanently unlock the ${esc(item.name)} theme.`;
+  if (remaining) remaining.textContent = `You'll have ${userSpendableXp() - item.price} XP remaining.`;
+  if (btn) btn.textContent = `Buy for ${item.price} XP`;
+  document.getElementById('purchase-confirm-modal')?.classList.add('visible');
+}
+window.openPurchaseConfirm = openPurchaseConfirm;
+
+function closePurchaseConfirm() {
+  _pendingPurchaseItemId = null;
+  document.getElementById('purchase-confirm-modal')?.classList.remove('visible');
+}
+window.closePurchaseConfirm = closePurchaseConfirm;
+
+async function confirmStorePurchase() {
+  if (!_pendingPurchaseItemId) return;
+  const itemId = _pendingPurchaseItemId;
+  closePurchaseConfirm();
+  await purchaseStoreItem(itemId);
+  renderStoreModal();
+  updateStoreXpDisplay();
+}
+window.confirmStorePurchase = confirmStorePurchase;
 
 // ── SHIFT SCHEDULE ──
 // startMinutes = minutes from midnight for shift start.
@@ -1652,17 +1785,16 @@ let issueLogResizeObserver = null;
 let gameDrawerOpen = false;
 let storeItems = [];
 let userInventory = { unlockedItems: [], activeMascot: null };
-let userGlobalXp = 0;
+let userLifetimeXp = 0;
+let userXpSpent = 0;
+function userSpendableXp() { return Math.max(0, userLifetimeXp - userXpSpent); }
 
 const DEFAULT_STORE_ITEMS = [
-  { id: 'theme_sunset',     type: 'theme', themeKey: 'sunset',     customVars: null, name: 'Sunset',     price: 50,  isActive: true },
-  { id: 'theme_ocean',      type: 'theme', themeKey: 'ocean',      customVars: null, name: 'Ocean',      price: 50,  isActive: true },
-  { id: 'theme_royal',      type: 'theme', themeKey: 'royal',      customVars: null, name: 'Royal',      price: 100, isActive: true },
-  { id: 'theme_slate',      type: 'theme', themeKey: 'slate',      customVars: null, name: 'Slate',      price: 100, isActive: true },
-  { id: 'theme_mint',       type: 'theme', themeKey: 'mint',       customVars: null, name: 'Mint',       price: 120, isActive: true },
-  { id: 'theme_cyberpunk',  type: 'theme', themeKey: 'cyberpunk',  customVars: null, name: 'Cyberpunk',  price: 220, isActive: true },
-  { id: 'theme_industrial', type: 'theme', themeKey: 'industrial', customVars: null, name: 'Industrial', price: 220, isActive: true },
-  { id: 'theme_engel',      type: 'theme', themeKey: 'engel',      customVars: null, name: 'Engel',      price: 250, isActive: true },
+  { id: 'theme_ocean',      type: 'theme', themeKey: 'ocean',      customVars: null, name: 'Ocean',      price: 150, isActive: true },
+  { id: 'theme_sunset',     type: 'theme', themeKey: 'sunset',     customVars: null, name: 'Sunset',     price: 200, isActive: true },
+  { id: 'theme_industrial', type: 'theme', themeKey: 'industrial', customVars: null, name: 'Industrial', price: 200, isActive: true },
+  { id: 'theme_royal',      type: 'theme', themeKey: 'royal',      customVars: null, name: 'Royal',      price: 250, isActive: true },
+  { id: 'theme_cyberpunk',  type: 'theme', themeKey: 'cyberpunk',  customVars: null, name: 'Cyberpunk',  price: 350, isActive: true },
 ];
 
 let gameConfig = null;
@@ -5040,8 +5172,7 @@ function applyTheme(theme) {
   clearCustomThemeVars(); // strip any inline custom vars before applying a CSS class theme
   const normalizedTheme = THEME_KEYS.includes(resolvedTheme) ? resolvedTheme : 'midnight';
   if (isThemeLocked(normalizedTheme)) {
-    showGameToast('🔒 Unlock in the Store — open your Progress panel');
-    toggleGameDrawer(true);
+    openStoreModal();
     return;
   }
   document.body.classList.remove(...THEME_KEYS.map(key => `theme-${key}`));
@@ -5071,30 +5202,6 @@ renderThemeChoices();
 renderAppearanceCustomThemes();
 updateActiveThemeChoice(THEME_KEYS.includes(localStorage.getItem('pressTrackerTheme') || '') ? localStorage.getItem('pressTrackerTheme') : null);
 
-document.getElementById('theme-select-toggle')?.addEventListener('click', () => {
-  const toggle = document.getElementById('theme-select-toggle');
-  const grid = document.getElementById('theme-select-grid');
-  if (!toggle || !grid) return;
-  const open = !grid.classList.contains('open');
-  grid.classList.toggle('open', open);
-  toggle.classList.toggle('open', open);
-  toggle.setAttribute('aria-expanded', String(open));
-});
-
-document.getElementById('theme-select-grid')?.addEventListener('click', e => {
-  const btn = e.target.closest('.theme-choice');
-  if (!btn?.dataset?.theme) return;
-  if (btn.classList.contains('theme-locked')) {
-    showGameToast('🔒 Unlock in the Store — open your Progress panel');
-    toggleGameDrawer(true);
-    return;
-  }
-  applyTheme(btn.dataset.theme);
-  // Intentionally keep selector expanded after apply; close only via dropdown minimize/outside click.
-  document.getElementById('theme-select-grid')?.classList.add('open');
-  document.getElementById('theme-select-toggle')?.classList.add('open');
-  document.getElementById('theme-select-toggle')?.setAttribute('aria-expanded', 'true');
-});
 
 document.getElementById('appearance-custom-list')?.addEventListener('click', e => {
   const applyBtn = e.target.closest('.te-saved-apply');
