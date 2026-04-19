@@ -2244,6 +2244,7 @@ async function loadUserPlants() {
   try {
     const userSnap = await getDoc(doc(db, 'users', currentUser.uid));
     const userData = userSnap.exists() ? userSnap.data() : {};
+    _applyFirestoreThemePrefs(userData.themePrefs);
 
     if (Array.isArray(userData.plantIds) && userData.plantIds.length > 0) {
       // ── New structure: fetch each plant doc for name/location ──
@@ -6469,6 +6470,31 @@ function _loadCustomThemes() {
 
 function _saveCustomThemesStorage(data) {
   try { localStorage.setItem(CUSTOM_THEMES_KEY, JSON.stringify(data)); } catch(e) {}
+  _syncThemePrefsToFirestore();
+}
+
+function _syncThemePrefsToFirestore() {
+  if (!currentUser) return;
+  try {
+    const activeTheme = localStorage.getItem('pressTrackerTheme') || 'midnight';
+    const { customThemes } = _loadCustomThemes();
+    setDoc(doc(db, 'users', currentUser.uid), {
+      themePrefs: { activeTheme, customThemes }
+    }, { merge: true }).catch(() => {});
+  } catch(e) {}
+}
+
+function _applyFirestoreThemePrefs(prefs) {
+  if (!prefs) return;
+  try {
+    if (Array.isArray(prefs.customThemes)) {
+      const local = _loadCustomThemes();
+      local.customThemes = prefs.customThemes;
+      try { localStorage.setItem(CUSTOM_THEMES_KEY, JSON.stringify(local)); } catch(e) {}
+      renderAppearanceCustomThemes();
+    }
+    if (prefs.activeTheme) applyTheme(prefs.activeTheme);
+  } catch(e) {}
 }
 
 function renderThemeChoices() {
@@ -6544,6 +6570,7 @@ function applyTheme(theme) {
       document.body.dataset.themeMode = 'dark';
       try { localStorage.setItem('pressTrackerTheme', resolvedTheme); } catch(e) {}
       updateActiveThemeChoice(null);
+      _syncThemePrefsToFirestore();
       return;
     }
   }
@@ -6555,6 +6582,7 @@ function applyTheme(theme) {
   document.body.dataset.themeMode = selectedTheme.mode;
   updateActiveThemeChoice(normalizedTheme);
   try { localStorage.setItem('pressTrackerTheme', normalizedTheme); } catch(e) {}
+  _syncThemePrefsToFirestore();
 }
 
 // Load saved theme (handles both built-in keys and custom_<id>)
