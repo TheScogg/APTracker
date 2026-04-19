@@ -3072,7 +3072,13 @@ async function checkAndAwardBadges() {
       showBadgeEarnedCelebration(badge);
       // Award badge XP as a direct stat increment (no dedup loop risk — badge already marked earned)
       if (Number(badge.xpReward || 0) > 0) {
-        await setDoc(gameUserStatsDoc(currentUser.uid), { totals: { xp: increment(Number(badge.xpReward)) } }, { merge: true });
+        const badgeXp = Number(badge.xpReward);
+        await Promise.all([
+          setDoc(gameUserStatsDoc(currentUser.uid), { totals: { xp: increment(badgeXp) } }, { merge: true }),
+          setDoc(doc(db, 'users', currentUser.uid), { globalXp: increment(badgeXp) }, { merge: true })
+        ]);
+        userGlobalXp = Math.max(0, userGlobalXp + badgeXp);
+        renderStoreCard();
       }
     } catch (e) {
       console.warn('Badge award failed:', e?.message);
