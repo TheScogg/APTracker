@@ -67,7 +67,8 @@ function gameLeaderboardDoc(boardId) { return doc(db, 'plants', currentPlantId, 
 function userBadgesDoc(userId) { return doc(db, 'plants', currentPlantId, 'userBadges', userId); }
 function gameEventsCol() { return collection(db, 'plants', currentPlantId, 'gameEvents'); }
 function missionProgressDoc(missionId, subjectId) { return doc(db, 'plants', currentPlantId, 'missions', missionId, 'progress', subjectId); }
-function storeConfigDoc() { return doc(db, 'plants', currentPlantId, 'config', 'store'); }
+function globalStoreConfigDoc() { return doc(db, 'globalConfig', 'store'); }
+function legacyPlantStoreConfigDoc() { return doc(db, 'plants', currentPlantId, 'config', 'store'); }
 
 function currentActor() {
   return { uid: currentUser?.uid || '', name: currentUser?.displayName || currentUser?.email || 'Unknown' };
@@ -1483,8 +1484,13 @@ async function awardGamification(reason, context = {}) {
 
 async function loadStoreConfig() {
   try {
-    const snap = await getDoc(storeConfigDoc());
-    storeItems = snap.exists() ? (snap.data().items || DEFAULT_STORE_ITEMS) : DEFAULT_STORE_ITEMS;
+    const globalSnap = await getDoc(globalStoreConfigDoc());
+    if (globalSnap.exists()) {
+      storeItems = globalSnap.data().items || DEFAULT_STORE_ITEMS;
+    } else {
+      const legacySnap = await getDoc(legacyPlantStoreConfigDoc());
+      storeItems = legacySnap.exists() ? (legacySnap.data().items || DEFAULT_STORE_ITEMS) : DEFAULT_STORE_ITEMS;
+    }
   } catch(e) {
     storeItems = DEFAULT_STORE_ITEMS;
   }
