@@ -1,0 +1,2860 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AP-Tracker — Admin</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #08090b;
+      --bg2: #0e1014;
+      --bg3: #141720;
+      --bg4: #1a1e2a;
+      --border: #22263a;
+      --border2: #2a2f45;
+      --accent: #f97316;
+      --accent-dim: rgba(249,115,22,0.12);
+      --accent-glow: rgba(249,115,22,0.25);
+      --text: #e8eaf0;
+      --text2: #6b7280;
+      --text3: #404660;
+      --red: #ef4444;
+      --red-dim: rgba(239,68,68,0.12);
+      --green: #22c55e;
+      --green-dim: rgba(34,197,94,0.12);
+      --blue: #3b82f6;
+      --blue-dim: rgba(59,130,246,0.12);
+      --yellow: #eab308;
+      --radius: 10px;
+      --radius-lg: 14px;
+      --shadow: 0 1px 3px rgba(0,0,0,0.4), 0 8px 24px rgba(0,0,0,0.3);
+      --shadow-lg: 0 8px 32px rgba(0,0,0,0.6), 0 24px 80px rgba(0,0,0,0.5);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Shell ── */
+    .shell { max-width: 1100px; margin: 0 auto; padding: 24px 20px 48px; }
+
+    /* ── Topbar ── */
+    .topbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 28px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .title {
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text2);
+    }
+    .title span { color: var(--accent); }
+    .title-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .title-logo-icon {
+      width: 32px; height: 32px;
+      background: var(--accent-dim);
+      border: 1px solid var(--accent-glow);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px;
+    }
+    .title-sub { font-size: 12px; color: var(--text3); margin-top: 1px; }
+
+    /* ── Actions ── */
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    /* ── Buttons ── */
+    .btn {
+      border: 1px solid var(--border2);
+      background: var(--bg3);
+      color: var(--text2);
+      border-radius: 8px;
+      padding: 7px 13px;
+      cursor: pointer;
+      font-weight: 500;
+      font-size: 13px;
+      font-family: 'Inter', sans-serif;
+      transition: border-color 0.15s, color 0.15s, background 0.15s;
+      white-space: nowrap;
+    }
+    .btn:hover { border-color: var(--border2); background: var(--bg4); color: var(--text); }
+    .btn-primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: white;
+      font-weight: 600;
+    }
+    .btn-primary:hover { background: #ea6c09; border-color: #ea6c09; color: white; }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 18px;
+      margin-bottom: 12px;
+    }
+    .card h2 {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      margin-bottom: 12px;
+      color: var(--text);
+    }
+
+    /* ── Typography ── */
+    .muted { color: var(--text2); font-size: 13px; }
+
+    /* ── Grid ── */
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    @media (max-width: 760px) { .grid-2 { grid-template-columns: 1fr; } }
+
+    /* ── Forms ── */
+    input, select, textarea {
+      width: 100%;
+      background: var(--bg3);
+      border: 1px solid var(--border2);
+      border-radius: 8px;
+      color: var(--text);
+      padding: 8px 11px;
+      font-size: 13px;
+      font-family: 'Inter', sans-serif;
+      transition: border-color 0.15s, box-shadow 0.15s;
+      outline: none;
+    }
+    input::placeholder, textarea::placeholder { color: var(--text3); }
+    textarea { resize: vertical; min-height: 70px; }
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-dim);
+    }
+    select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2 4l4 4 4-4' stroke='%236b7280' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 28px; }
+
+    .row { display: flex; gap: 8px; align-items: center; }
+    .row > * { flex: 1; }
+
+    /* ── Feedback ── */
+    .feedback { margin-top: 8px; font-size: 12px; min-height: 18px; font-weight: 500; }
+    .feedback.error { color: var(--red); }
+    .feedback.ok { color: var(--green); }
+
+    /* ── Divider ── */
+    .divider { height: 1px; background: var(--border); margin: 16px 0; }
+
+    /* ── Plant card ── */
+    .plant-head {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0;
+    }
+    .plant-name { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+    .plant-head-actions { display: flex; align-items: center; gap: 8px; }
+    .plant-body { display: none; padding-top: 18px; margin-top: 16px; border-top: 1px solid var(--border); }
+    .plant-body.visible { display: block; }
+
+    /* ── Pill ── */
+    .pill {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      border: 1px solid var(--blue-dim);
+      color: var(--blue);
+      background: var(--blue-dim);
+      border-radius: 999px;
+      padding: 2px 10px;
+    }
+
+    /* ── Tables ── */
+    table { width: 100%; border-collapse: collapse; }
+    th, td {
+      text-align: left;
+      padding: 9px 8px;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+      vertical-align: middle;
+    }
+    tr:last-child td { border-bottom: none; }
+    th {
+      color: var(--text2);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      background: var(--bg3);
+    }
+    th:first-child { border-radius: 6px 0 0 6px; }
+    th:last-child { border-radius: 0 6px 6px 0; }
+
+    /* ── Small buttons ── */
+    .small-btn {
+      border: 1px solid var(--border2);
+      background: transparent;
+      color: var(--text2);
+      border-radius: 6px;
+      padding: 5px 10px;
+      cursor: pointer;
+      font-size: 12px;
+      font-family: 'Inter', sans-serif;
+      font-weight: 500;
+      transition: border-color 0.15s, color 0.15s, background 0.15s;
+      white-space: nowrap;
+    }
+    .small-btn:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-dim); }
+    .small-btn.danger { color: var(--red); border-color: rgba(239,68,68,0.25); }
+    .small-btn.danger:hover { background: var(--red-dim); border-color: var(--red); }
+
+    /* ── Compact btn ── */
+    .compact-btn {
+      border: 1px solid var(--border2);
+      background: transparent;
+      color: var(--text2);
+      border-radius: 6px;
+      padding: 5px 10px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      font-family: 'Inter', sans-serif;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .compact-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* ── Screen ── */
+    .screen { display: none; }
+    .screen.visible { display: block; }
+
+    /* ── Login ── */
+    .login-wrap {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: radial-gradient(ellipse 60% 50% at 50% 0%, rgba(249,115,22,0.06) 0%, transparent 70%), var(--bg);
+    }
+    .login-card {
+      width: 380px;
+      max-width: 100%;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 36px 32px;
+      text-align: center;
+      box-shadow: var(--shadow-lg);
+    }
+    .login-logo {
+      width: 52px; height: 52px;
+      background: var(--accent-dim);
+      border: 1px solid var(--accent-glow);
+      border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px;
+      margin: 0 auto 20px;
+    }
+    .login-card h1 {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 6px;
+      color: var(--text);
+    }
+    .login-card h1 span { color: var(--accent); }
+    .login-card p { font-size: 13px; color: var(--text2); margin-bottom: 24px; }
+
+    /* ── Mono ── */
+    .mono { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text2); }
+    .mono-input { font-family: 'JetBrains Mono', monospace; }
+
+    /* ── Status rows ── */
+    .status-row {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      background: var(--bg3);
+      margin-bottom: 8px;
+      transition: border-color 0.15s;
+    }
+    .status-row:hover { border-color: var(--border2); }
+    .status-grid { display: grid; grid-template-columns: 1.3fr .8fr .8fr auto; gap: 8px; align-items: center; margin-bottom: 8px; }
+    @media (max-width:900px) { .status-grid { grid-template-columns: 1fr 1fr; } .status-grid .full { grid-column: 1 / -1; } }
+    .status-preview {
+      font-size: 12px;
+      font-weight: 600;
+      border: 1px solid;
+      border-radius: 999px;
+      padding: 4px 10px;
+      display: inline-flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .status-toolbar { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+    .status-panel { display: none; margin-top: 10px; }
+    .status-panel.visible { display: block; }
+    .status-header-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .status-header-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+    .status-row-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .status-row-actions { display: flex; gap: 6px; align-items: center; }
+    .status-row-body { display: none; padding-top: 12px; margin-top: 12px; border-top: 1px solid var(--border); }
+    .status-row-body.visible { display: block; }
+    .json-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+    @media (max-width:640px) {
+      .status-grid { grid-template-columns: 1fr; }
+      .status-row-top { align-items: flex-start; flex-direction: column; }
+      .status-row-actions { width: 100%; justify-content: flex-end; }
+    }
+
+    /* ── Gamification ── */
+    .game-tabs {
+      display: flex;
+      gap: 2px;
+      margin-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .game-tab-btn {
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--text2);
+      font-family: 'Inter', sans-serif;
+      font-weight: 600;
+      font-size: 12px;
+      padding: 8px 14px;
+      cursor: pointer;
+      margin-bottom: -1px;
+      transition: color 0.15s, border-color 0.15s;
+      white-space: nowrap;
+      letter-spacing: 0.01em;
+    }
+    .game-tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .game-tab-btn:hover:not(.active) { color: var(--text); }
+    .game-tab-pane { display: none; }
+    .game-tab-pane.active { display: block; }
+
+    /* XP weight cards */
+    .game-weight-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); gap: 8px; margin-bottom: 4px; }
+    .game-weight-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      transition: border-color 0.15s;
+    }
+    .game-weight-card:hover { border-color: var(--border2); }
+    .game-weight-card.penalty { border-color: rgba(239,68,68,0.2); }
+    .game-weight-icon { font-size: 18px; line-height: 1; }
+    .game-weight-label { font-size: 12px; color: var(--text); font-weight: 600; }
+    .game-weight-sub { font-size: 10px; color: var(--text2); }
+    .game-weight-card input[type=number] {
+      width: 100%;
+      font-size: 16px;
+      font-weight: 700;
+      text-align: center;
+      font-family: 'JetBrains Mono', monospace;
+      padding: 7px;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      color: var(--accent);
+      margin-top: 2px;
+    }
+    .game-weight-card.penalty input[type=number] { color: var(--red); }
+    .game-section-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text3);
+      margin: 14px 0 8px;
+    }
+
+    /* Toggle switch */
+    .game-enable-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 16px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 16px;
+      gap: 12px;
+    }
+    .game-enable-info strong { display: block; font-size: 13px; font-weight: 600; color: var(--text); }
+    .game-enable-info span { font-size: 12px; color: var(--text2); }
+    .toggle-switch { position: relative; width: 44px; height: 24px; flex-shrink: 0; }
+    .toggle-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+    .toggle-slider {
+      position: absolute; inset: 0;
+      background: var(--bg4);
+      border: 1px solid var(--border2);
+      border-radius: 999px;
+      cursor: pointer;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .toggle-slider::before {
+      content: '';
+      position: absolute;
+      width: 18px; height: 18px;
+      left: 2px; top: 2px;
+      background: var(--text2);
+      border-radius: 50%;
+      transition: transform 0.2s, background 0.2s;
+    }
+    .toggle-switch input:checked + .toggle-slider { background: var(--green-dim); border-color: var(--green); }
+    .toggle-switch input:checked + .toggle-slider::before { transform: translateX(20px); background: var(--green); }
+
+    /* Mission cards */
+    .game-mission-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 8px;
+      transition: border-color 0.15s;
+    }
+    .game-mission-card:hover { border-color: var(--border2); }
+    .game-mission-card-info { min-width: 0; }
+    .game-mission-card-name { font-size: 13px; font-weight: 600; color: var(--text); }
+    .game-mission-card-meta { font-size: 11px; color: var(--text2); margin-top: 3px; }
+    .game-mission-card-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+    .game-status-badge { font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 999px; }
+    .game-status-badge.active { color: var(--green); background: var(--green-dim); }
+    .game-status-badge.inactive { color: var(--text2); background: var(--bg3); border: 1px solid var(--border); }
+    .game-empty-state { text-align: center; padding: 28px 20px; color: var(--text2); font-size: 13px; border: 1px dashed var(--border2); border-radius: var(--radius); }
+    .game-empty-state .es-icon { font-size: 28px; display: block; margin-bottom: 8px; }
+
+    /* Modals */
+    .mission-modal-backdrop {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(4px);
+      z-index: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s;
+    }
+    .mission-modal-backdrop.open { opacity: 1; pointer-events: all; }
+    .mission-modal {
+      background: var(--bg2);
+      border: 1px solid var(--border2);
+      border-radius: 18px;
+      width: 560px;
+      max-width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+      padding: 28px;
+      box-shadow: var(--shadow-lg);
+      transform: translateY(16px) scale(0.97);
+      transition: transform 0.2s;
+    }
+    .mission-modal-backdrop.open .mission-modal { transform: translateY(0) scale(1); }
+    .mission-modal-title {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 4px;
+      color: var(--text);
+    }
+    .mission-modal-sub { font-size: 13px; color: var(--text2); margin-bottom: 20px; }
+    .mission-type-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin-bottom: 20px; }
+    .mission-type-tile {
+      border: 1px solid var(--border);
+      background: var(--bg3);
+      border-radius: var(--radius);
+      padding: 13px 8px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s, transform 0.12s;
+      user-select: none;
+    }
+    .mission-type-tile:hover { border-color: var(--border2); transform: translateY(-1px); background: var(--bg4); }
+    .mission-type-tile.selected { border-color: var(--accent); background: var(--accent-dim); }
+    .mission-type-tile .tile-icon { font-size: 20px; display: block; margin-bottom: 5px; }
+    .mission-type-tile .tile-label { font-size: 11px; font-weight: 600; color: var(--text); line-height: 1.3; }
+    .mission-type-tile .tile-sub { font-size: 10px; color: var(--text2); margin-top: 2px; }
+    .mission-field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+    .mission-field-label { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; color: var(--text2); display: block; margin-bottom: 5px; text-transform: uppercase; }
+    .mission-preview-card {
+      background: var(--bg3);
+      border: 1px solid rgba(59,130,246,0.2);
+      border-radius: var(--radius);
+      padding: 14px;
+      margin-top: 18px;
+    }
+    .mission-preview-label { font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text3); margin-bottom: 10px; }
+    .mm-progress { height: 6px; border-radius: 999px; background: rgba(255,255,255,0.07); overflow: hidden; margin: 6px 0; }
+    .mm-progress > span { display: block; height: 100%; background: linear-gradient(90deg,#a855f7,#3b82f6); width: 0%; }
+    @media (max-width:540px) { .mission-type-grid { grid-template-columns: repeat(2,1fr); } .mission-field-row { grid-template-columns: 1fr; } }
+
+    /* Page tabs */
+    .page-tabs {
+      display: flex;
+      gap: 2px;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 4px;
+      margin-bottom: 20px;
+      width: fit-content;
+    }
+    .page-tab-btn {
+      background: none;
+      border: none;
+      color: var(--text2);
+      font-family: 'Inter', sans-serif;
+      font-weight: 600;
+      font-size: 13px;
+      padding: 7px 16px;
+      cursor: pointer;
+      border-radius: 7px;
+      transition: color 0.15s, background 0.15s;
+      white-space: nowrap;
+    }
+    .page-tab-btn.active { color: var(--text); background: var(--bg4); }
+    .page-tab-btn:hover:not(.active) { color: var(--text); }
+    .page-tab-pane { display: none; }
+    .page-tab-pane.active { display: block; }
+
+    /* Plant tabs */
+    .plant-tabs {
+      display: flex;
+      gap: 2px;
+      margin-bottom: 16px;
+    }
+    .plant-tab-btn {
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--text2);
+      font-family: 'Inter', sans-serif;
+      font-weight: 600;
+      font-size: 12px;
+      padding: 7px 12px;
+      cursor: pointer;
+      margin-bottom: -1px;
+      transition: color 0.15s, border-color 0.15s;
+      white-space: nowrap;
+      border-radius: 6px 6px 0 0;
+    }
+    .plant-tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .plant-tab-btn:hover:not(.active) { color: var(--text); background: var(--bg3); }
+    .plant-tab-pane { display: none; }
+    .plant-tab-pane.active { display: block; }
+
+    /* Add Plant modal */
+    .ap-modal-bg {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(4px);
+      z-index: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s;
+    }
+    .ap-modal-bg.open { opacity: 1; pointer-events: all; }
+    .ap-modal {
+      background: var(--bg2);
+      border: 1px solid var(--border2);
+      border-radius: var(--radius-lg);
+      width: 460px;
+      max-width: 100%;
+      padding: 28px;
+      box-shadow: var(--shadow-lg);
+      transform: translateY(16px) scale(0.97);
+      transition: transform 0.2s;
+    }
+    .ap-modal-bg.open .ap-modal { transform: translateY(0) scale(1); }
+    .ap-modal-title { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 18px; }
+
+    /* Badge cards */
+    .badge-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 8px;
+      transition: border-color 0.15s;
+    }
+    .badge-card:hover { border-color: var(--border2); }
+    .badge-card-icon { font-size: 26px; flex-shrink: 0; width: 36px; text-align: center; }
+    .badge-card-info { flex: 1; min-width: 0; }
+    .badge-card-name { font-size: 13px; font-weight: 600; color: var(--text); }
+    .badge-card-meta { font-size: 11px; color: var(--text2); margin-top: 3px; }
+    .badge-card-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+
+    /* Leaderboard */
+    .lb-settings-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+    .lb-period-btn {
+      border: 1px solid var(--border);
+      background: var(--bg3);
+      color: var(--text2);
+      border-radius: 6px;
+      padding: 6px 14px;
+      cursor: pointer;
+      font-size: 12px;
+      font-family: 'Inter', sans-serif;
+      font-weight: 600;
+      transition: all 0.15s;
+    }
+    .lb-period-btn.active { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+    .lb-period-btn:hover:not(.active) { border-color: var(--border2); color: var(--text); }
+
+    /* Badge modal type grid */
+    .badge-type-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; margin-bottom: 18px; }
+    @media (max-width:480px) { .badge-type-grid { grid-template-columns: repeat(2,1fr); } }
+
+    /* Store */
+    .store-item-card { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; display: flex; align-items: center; gap: 12px; margin-bottom: 8px; transition: border-color 0.15s; }
+    .store-item-card:hover { border-color: var(--border2); }
+    .store-item-icon { font-size: 20px; flex-shrink: 0; width: 30px; text-align: center; }
+    .store-item-info { flex: 1; min-width: 0; }
+    .store-item-name { font-size: 13px; font-weight: 600; color: var(--text); }
+    .store-item-meta { font-size: 11px; color: var(--text2); margin-top: 2px; }
+    .store-item-price { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
+    .store-item-price input[type=number] { width: 74px; text-align: right; }
+    .store-item-price-label { font-size: 11px; color: var(--text2); }
+    .store-item-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+
+    /* Access denied card */
+    #denied-card { border-color: rgba(239,68,68,0.3); }
+
+    /* File input */
+    input[type=file] { padding: 7px 8px; color: var(--text2); cursor: pointer; }
+    input[type=file]::file-selector-button {
+      background: var(--bg4);
+      border: 1px solid var(--border2);
+      border-radius: 6px;
+      color: var(--text2);
+      padding: 4px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      margin-right: 8px;
+      font-family: 'Inter', sans-serif;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text3); }
+
+    /* Section sub-heading */
+    h3 { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; color: var(--text); }
+
+    code { font-family: 'JetBrains Mono', monospace; font-size: 11px; background: var(--bg3); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; color: var(--text2); }
+  </style>
+</head>
+<body>
+  <div id="login-screen" class="screen visible">
+    <div class="login-wrap">
+      <div class="login-card">
+        <div class="login-logo">🏭</div>
+        <h1>AP <span>Tracker</span></h1>
+        <p>Sign in to access the Admin Portal.</p>
+        <button id="google-signin-btn" class="btn btn-primary" style="width:100%;padding:10px 16px;font-size:14px;justify-content:center;display:flex;align-items:center;gap:8px;">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M15.545 6.558a9.42 9.42 0 0 1 .139 1.626c0 2.434-.87 4.492-2.384 5.885h.002C11.978 15.292 10.158 16 8 16A8 8 0 1 1 8 0a7.689 7.689 0 0 1 5.352 2.082l-2.284 2.284A4.347 4.347 0 0 0 8 3.166c-2.087 0-3.86 1.408-4.492 3.304a4.792 4.792 0 0 0 0 3.063h.003c.635 1.893 2.405 3.301 4.492 3.301 1.078 0 2.004-.276 2.722-.764h-.003a3.702 3.702 0 0 0 1.599-2.431H8v-3.08h7.545z" fill="currentColor"/></svg>
+          Continue with Google
+        </button>
+        <div id="login-feedback" class="feedback" style="margin-top:12px;text-align:center;"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="app-screen" class="screen">
+    <div class="shell">
+      <div class="topbar">
+        <div class="title-logo">
+          <div class="title-logo-icon">🏭</div>
+          <div>
+            <div class="title">AP <span>Tracker</span> · Admin</div>
+            <div class="title-sub" id="whoami">—</div>
+          </div>
+        </div>
+        <div class="actions">
+          <button class="btn" onclick="window.location.href='index.html'">← Back to Tracker</button>
+          <button class="btn" id="signout-btn">Sign out</button>
+        </div>
+      </div>
+
+      <div id="denied-card" class="card" style="display:none;border-color:rgba(239,68,68,0.25);">
+        <h2 style="color:var(--red);">Access denied</h2>
+        <p class="muted">Your account does not have admin access in any plant. Ask an existing plant admin to grant your role as <strong style="color:var(--text);">admin</strong>.</p>
+      </div>
+
+      <div id="admin-content" style="display:none;">
+        <!-- Page-level tab bar -->
+        <div class="page-tabs">
+          <button class="page-tab-btn active" id="ptab-btn-plants" onclick="window.switchPageTab('plants',this)">Plants</button>
+          <button class="page-tab-btn" id="ptab-btn-schedule" onclick="window.switchPageTab('schedule',this)">Schedule Import</button>
+        </div>
+
+        <!-- Plants tab -->
+        <div class="page-tab-pane active" id="page-tab-plants">
+          <div style="display:flex;justify-content:flex-end;margin-bottom:12px;">
+            <button class="btn btn-primary" onclick="window.openAddPlantModal()">+ New Plant</button>
+          </div>
+          <div id="plants-users-container"></div>
+        </div>
+
+        <!-- Schedule Import tab -->
+        <div class="page-tab-pane" id="page-tab-schedule">
+          <div class="card">
+            <h2>Daily Schedule Import</h2>
+            <p class="muted" style="margin-bottom:16px;">Upload or paste schedule JSON to import daily schedules into Firestore.</p>
+
+            <div style="display:flex;flex-direction:column;gap:10px;">
+              <div class="grid-2">
+                <div>
+                  <div class="mission-field-label">Date</div>
+                  <input id="schedule-date" class="mono-input" type="date" />
+                </div>
+                <div>
+                  <div class="mission-field-label">Source file name <span style="font-weight:400;color:var(--text3)">(optional)</span></div>
+                  <input id="schedule-source-name" placeholder="e.g. Apr 10, 2026.pdf" />
+                </div>
+              </div>
+              <div>
+                <div class="mission-field-label">Plant</div>
+                <select id="schedule-plant-id"><option value="">Select plant…</option></select>
+              </div>
+              <div class="json-actions" style="margin-top:0;">
+                <input id="schedule-json-file" type="file" accept="application/json,.json" style="max-width:300px;" />
+                <button class="btn" id="load-schedule-file-btn">Load from file</button>
+                <button class="btn btn-primary" id="import-schedule-btn">Import Schedule</button>
+              </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <h3 style="margin-bottom:4px;">Generate from DailyScheduleGPT</h3>
+            <p class="muted" style="margin-bottom:12px;font-size:12px;">Provide schedule text or PDF metadata to generate a JSON draft before importing.</p>
+
+            <div style="display:flex;flex-direction:column;gap:10px;">
+              <textarea id="schedule-gpt-source" placeholder="Paste schedule text or PDF metadata for DailyScheduleGPT" style="min-height:110px;"></textarea>
+              <div class="grid-2">
+                <div>
+                  <div class="mission-field-label">Shift override <span style="font-weight:400;color:var(--text3)">(optional)</span></div>
+                  <input id="schedule-gpt-shift-override" placeholder="e.g. A or B" />
+                </div>
+                <div>
+                  <div class="mission-field-label">Model preset</div>
+                  <select id="schedule-gpt-model-preset">
+                    <option value="balanced">Balanced</option>
+                    <option value="fast">Fast</option>
+                    <option value="accurate">Accurate</option>
+                  </select>
+                </div>
+              </div>
+              <div class="grid-2">
+                <div>
+                  <div class="mission-field-label">Strict validation</div>
+                  <select id="schedule-gpt-strict-validation">
+                    <option value="true">On</option>
+                    <option value="false">Off</option>
+                  </select>
+                </div>
+                <div style="display:flex;align-items:flex-end;">
+                  <button class="btn" id="generate-schedule-json-btn" style="width:100%;">Generate JSON</button>
+                </div>
+              </div>
+              <div id="schedule-gpt-feedback" class="feedback"></div>
+              <div>
+                <div class="mission-field-label">Schedule JSON</div>
+                <textarea id="schedule-json-text" placeholder="Paste or generate schedule JSON here" style="min-height:200px;font-family:'JetBrains Mono',monospace;font-size:12px;"></textarea>
+              </div>
+              <div id="schedule-import-feedback" class="feedback"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<!-- Add Plant Modal -->
+<div class="ap-modal-bg" id="add-plant-modal-bg" onclick="if(event.target===this)window.closeAddPlantModal()">
+  <div class="ap-modal">
+    <div class="ap-modal-title">New Plant</div>
+    <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:16px;">
+      <div>
+        <div class="mission-field-label">Plant name</div>
+        <input id="new-plant-name" placeholder="e.g. North Bay" />
+      </div>
+      <div>
+        <div class="mission-field-label">Location <span style="font-weight:400;color:var(--text3)">(optional)</span></div>
+        <input id="new-plant-location" placeholder="e.g. Building 3" />
+      </div>
+    </div>
+    <div id="plant-create-feedback" class="feedback" style="margin-bottom:10px;"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button class="btn" onclick="window.closeAddPlantModal()">Cancel</button>
+      <button class="btn btn-primary" id="create-plant-btn" onclick="createPlant()">Create Plant</button>
+    </div>
+  </div>
+</div>
+
+<!-- Badge Editor Modal -->
+<div class="mission-modal-backdrop" id="badge-modal-backdrop">
+  <div class="mission-modal" id="badge-modal" onclick="event.stopPropagation()">
+    <div class="mission-modal-title" id="bm-title">New Badge</div>
+    <div class="mission-modal-sub">Define a one-time achievement users can earn.</div>
+
+    <label class="mission-field-label" style="margin-bottom:8px;">Trigger Type</label>
+    <div class="badge-type-grid" id="bm-type-grid"></div>
+
+    <div class="mission-field-row">
+      <div>
+        <label class="mission-field-label" for="bm-name">Badge Name</label>
+        <input id="bm-name" placeholder="e.g. Problem Solver" />
+      </div>
+      <div>
+        <label class="mission-field-label" for="bm-icon">Icon (emoji)</label>
+        <input id="bm-icon" placeholder="🏅" maxlength="4" style="font-size:20px;text-align:center;" />
+      </div>
+    </div>
+
+    <div class="mission-field-row">
+      <div>
+        <label class="mission-field-label" for="bm-threshold">Threshold</label>
+        <input id="bm-threshold" type="number" value="1" min="1" />
+      </div>
+      <div>
+        <label class="mission-field-label" for="bm-xp">XP Reward</label>
+        <input id="bm-xp" type="number" value="50" min="0" />
+      </div>
+    </div>
+
+    <div>
+      <label class="mission-field-label" for="bm-description">Description (shown to users)</label>
+      <input id="bm-description" placeholder="e.g. Resolve 10 issues" />
+    </div>
+
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px;">
+      <button class="btn" onclick="window.closeBadgeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="window.saveBadgeModal()">Save Badge</button>
+    </div>
+    <input type="hidden" id="bm-plant-id" />
+    <input type="hidden" id="bm-badge-idx" value="-1" />
+  </div>
+</div>
+
+<!-- Mission Editor Modal -->
+<div class="mission-modal-backdrop" id="mission-modal-backdrop">
+  <div class="mission-modal" id="mission-modal" onclick="event.stopPropagation()">
+    <div class="mission-modal-title" id="mm-title">New Mission</div>
+    <div class="mission-modal-sub">Choose a type, set a target, and assign an XP reward.</div>
+
+    <label class="mission-field-label" style="margin-bottom:8px;">Objective Type</label>
+    <div class="mission-type-grid" id="mm-type-grid"></div>
+
+    <div class="mission-field-row">
+      <div>
+        <label class="mission-field-label" for="mm-name">Mission Name</label>
+        <input id="mm-name" placeholder="e.g. Resolution Rush" oninput="window.renderMissionPreview()" />
+      </div>
+      <div>
+        <label class="mission-field-label" for="mm-threshold">Target Count</label>
+        <input id="mm-threshold" type="number" value="5" min="1" oninput="window.renderMissionPreview()" />
+      </div>
+    </div>
+
+    <div class="mission-field-row">
+      <div>
+        <label class="mission-field-label" for="mm-xp">XP Reward</label>
+        <input id="mm-xp" type="number" value="100" min="0" oninput="window.renderMissionPreview()" />
+      </div>
+      <div>
+        <label class="mission-field-label" for="mm-active">Status</label>
+        <select id="mm-active">
+          <option value="true">Active</option>
+          <option value="false">Inactive (draft)</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Live preview -->
+    <div class="mission-preview-card">
+      <div class="mission-preview-label">Preview — how users see this</div>
+      <div id="mm-preview-inner"></div>
+    </div>
+
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px;">
+      <button class="btn" onclick="window.closeMissionModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="window.saveMissionModal()">Save Mission</button>
+    </div>
+
+    <input type="hidden" id="mm-plant-id" />
+    <input type="hidden" id="mm-mission-idx" value="-1" />
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut as fbSignOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyABjasNBbJnsqq4M_UxKruKrN6-O2FXCwc",
+  authDomain: "press-tracker-9d9c9.firebaseapp.com",
+  projectId: "press-tracker-9d9c9",
+  storageBucket: "press-tracker-9d9c9.firebasestorage.app",
+  messagingSenderId: "943200266003",
+  appId: "1:943200266003:web:4d24eab551a3fb145c1ce6"
+};
+
+const DEFAULT_PERMISSIONS = {
+  canViewPlant: true, canCreateIssue: true, canEditIssue: true,
+  canResolveIssue: true, canManageStatuses: true, canManagePresses: true, canExport: true
+};
+
+const DEFAULT_PRESSES = {
+  "Row 1": ["1.01","1.02","1.03","1.04","1.05","1.06","1.07","1.08","1.09","1.10","1.11","1.12","1.13","1.14","1.15","1.16","1.17"],
+  "Row 2": ["2.01","2.02","2.03","2.04","2.05","2.06","2.07","2.08","2.09","2.10","2.11","2.12","2.13","2.14","2.15","2.16","2.17","2.18","2.19","2.20","2.21","2.22"],
+  "Row 3": ["3.01","3.02","3.03","3.04","3.05","3.06","3.07","3.08","3.09","3.10","3.12","3.13","3.14","3.15","3.16","3.17","3.18","3.19"],
+  "Row 4": ["4.01","4.02","4.03","4.04","4.05","4.06","4.07","4.08","4.09","4.10","4.11","4.12","4.13","4.14","4.15","4.16","4.17"],
+  "Row 5": ["5.01","5.02","5.03","5.04","5.05","5.06","5.07","5.08","5.09","5.10","5.11","5.12"],
+  "Row 6": ["6.01","6.02","6.03","6.05","6.06","6.07"],
+  "Other": ["Auto Cell","BR-1","CR-1","CR-2"]
+};
+
+const DEFAULT_STATUSES = {
+  open:            { label:'Open',             shortLabel:'Open',         icon:'●',  cssColor:'#ef4444', swipeColor:'#ef4444', floorCls:'has-open',            cls:'status-open',            subs:['New Fault / Issue','Pending Triage','Scheduled Mold Change','Re-opened'], statLabel:'Open', order:0 },
+  alert:           { label:'Alert',            shortLabel:'Alert',        icon:'🚨', cssColor:'#dc2626', swipeColor:'#dc2626', floorCls:'has-alert',           cls:'status-alert',           subs:['Mold Protection Fault','E-Stop / Safety Hazard','Press Down - Critical','Major Oil / Fluid Leak'], statLabel:'Alert', order:1 },
+  controlman:      { label:'Controlman',       shortLabel:'Controlman',   icon:'🎛️', cssColor:'#38bdf8', swipeColor:'#38bdf8', floorCls:'has-controlman',      cls:'status-controlman',      subs:['Robot / EOAT (End of Arm Tooling) Fault','Vision System / Camera Error','Conveyor / Auxiliary Comm Loss','PLC / HMI Error'], statLabel:'Controlman', order:2 },
+  maintenance:     { label:'Maintenance',      shortLabel:'Maintenance',  icon:'🔧', cssColor:'#eab308', swipeColor:'#eab308', floorCls:'has-maintenance',     cls:'status-maintenance',     subs:['Hydraulic Leak / Pressure Drop','Heater Band / Thermocouple Failure','Barrel / Screw / Check Ring Issue','Chiller / Thermolator Failure'], statLabel:'Maintenance', order:3 },
+  materials:       { label:'Materials',        shortLabel:'Materials',    icon:'📦', cssColor:'#8b5cf6', swipeColor:'#8b5cf6', floorCls:'has-materials',       cls:'status-materials',       subs:['Resin Moisture / Drying Issue','Colorant / Masterbatch Ratio Error','Vacuum / Material Loader Blockage','Wrong Resin / Regrind Issue'], statLabel:'Materials', order:4 },
+  processengineer: { label:'Process Engineer', shortLabel:'Process Eng.', icon:'⚙️', cssColor:'#a855f7', swipeColor:'#a855f7', floorCls:'has-processengineer', cls:'status-processengineer', subs:['Fill / Pack Pressure Adjustment','Temperature Profile Tuning','Cycle Time Optimization','Process Drift / Instability'], statLabel:'Process Eng.', order:5 },
+  quality:         { label:'Quality',          shortLabel:'Quality',      icon:'✨', cssColor:'#06b6d4', swipeColor:'#06b6d4', floorCls:'has-quality',         cls:'status-quality',         subs:['Short Shot / Non-fill','Flash / Burrs','Sink Marks / Voids','Splay / Silver Streaks','Burn Marks / Degradation','Warp / Dimensional Out-of-Spec'], statLabel:'Quality', order:6 },
+  startup:         { label:'Startup',          shortLabel:'Startup',      icon:'🚀', cssColor:'#14b8a6', swipeColor:'#14b8a6', floorCls:'has-startup',         cls:'status-startup',         subs:['Purging / Color Change','Mold Heat-Up / Stabilization','First Article Inspection (FAI)','Robot Homing / Path Setup'], statLabel:'Startup', order:7 },
+  tooldie:         { label:'Tool & Die',       shortLabel:'Tool & Die',   icon:'🔩', cssColor:'#f97316', swipeColor:'#f97316', floorCls:'has-tooldie',         cls:'status-tooldie',         subs:['Broken / Bent Ejector Pin','Hot Runner / Gate Issue','Water Leak in Mold','Stuck Part / Sprue','Mold Greasing / PM'], statLabel:'Tool & Die', order:8 },
+  resolved:        { label:'Resolved',         shortLabel:'Resolved',     icon:'✓',  cssColor:'#22c55e', swipeColor:'#22c55e', floorCls:'all-resolved',        cls:'status-resolved',        subs:['Process Parameter Adjusted','Mold Cleaned / Repaired','Hardware Replaced','Temporary Workaround'], statLabel:'Resolved', order:9 },
+};
+
+const DEFAULT_GAME_CONFIG = {
+  enabled: true,
+  weights: { issue_created_complete: 5, status_changed_valid: 2, workflow_step_advance: 3, issue_resolved: 8, photo_attached: 2, serial_captured_when_required: 4 },
+  penalties: { issue_reopened: -6, missing_required_serial: -5, invalid_status_bounce: -2 },
+  caps: { photo_attached_per_issue: 1, status_changed_valid_per_issue_per_hour: 3 },
+  customRules: []
+};
+
+const GAME_WEIGHT_META = {
+  issue_created_complete:        { icon: '📋', label: 'Issue Created',     sub: 'Fully filled out' },
+  status_changed_valid:          { icon: '🔄', label: 'Status Change',      sub: 'Valid transition' },
+  workflow_step_advance:         { icon: '⚙️',  label: 'Workflow Step',      sub: 'Advance a step' },
+  issue_resolved:                { icon: '✅', label: 'Issue Resolved',     sub: 'Mark as resolved' },
+  photo_attached:                { icon: '📸', label: 'Photo Attached',     sub: 'Per issue (capped)' },
+  serial_captured_when_required: { icon: '🔢', label: 'Serial Captured',    sub: 'When required' },
+  issue_reopened:                { icon: '↩️',  label: 'Issue Reopened',     sub: 'Penalty', penalty: true },
+  missing_required_serial:       { icon: '⚠️', label: 'Missing Serial',     sub: 'Penalty', penalty: true },
+  invalid_status_bounce:         { icon: '🚫', label: 'Invalid Bounce',     sub: 'Penalty', penalty: true },
+};
+
+const MISSION_TYPE_META = {
+  issues_created:    { icon: '📋', label: 'Create Issues',   sub: 'Log new issues' },
+  issue_resolved:    { icon: '✅', label: 'Resolve Issues',   sub: 'Mark issues done' },
+  photo_attachments: { icon: '📸', label: 'Attach Photos',    sub: 'Add photos to issues' },
+  status_changes:    { icon: '🔄', label: 'Status Changes',   sub: 'Change issue status' },
+  workflow_advances: { icon: '⚙️',  label: 'Workflow Steps',   sub: 'Advance workflow' },
+  serial_captures:   { icon: '🔢', label: 'Serial Captures',  sub: 'Capture serials' },
+};
+
+const BADGE_TRIGGER_META = {
+  xp_milestone:       { icon: '⚡', label: 'XP Milestone',     sub: 'Total XP earned' },
+  level_reached:      { icon: '⭐', label: 'Level Reached',     sub: 'User level' },
+  streak_days:        { icon: '🔥', label: 'Streak Days',       sub: 'Consecutive days' },
+  issues_resolved:    { icon: '✅', label: 'Issues Resolved',   sub: 'Total resolved' },
+  photos_attached:    { icon: '📸', label: 'Photos Attached',   sub: 'Total photos' },
+  issues_created:     { icon: '📋', label: 'Issues Created',    sub: 'Total created' },
+  missions_completed: { icon: '🎯', label: 'Missions Done',     sub: 'Total completed' },
+};
+
+const DEFAULT_BADGE_DEFS = [
+  { id: 'badge_first_resolve',  name: 'First Responder', icon: '✅', description: 'Resolve your first issue',   triggerType: 'issues_resolved',  threshold: 1,   xpReward: 25,  isEnabled: true },
+  { id: 'badge_streak_3',       name: 'On a Roll',       icon: '🔥', description: 'Maintain a 3-day streak',  triggerType: 'streak_days',      threshold: 3,   xpReward: 30,  isEnabled: true },
+  { id: 'badge_streak_10',      name: 'Committed',       icon: '💪', description: '10-day streak',             triggerType: 'streak_days',      threshold: 10,  xpReward: 100, isEnabled: true },
+  { id: 'badge_photo_pro',      name: 'Photo Pro',       icon: '📸', description: 'Attach 50 photos',          triggerType: 'photos_attached',  threshold: 50,  xpReward: 75,  isEnabled: true },
+  { id: 'badge_level_5',        name: 'Veteran',         icon: '⭐', description: 'Reach Level 5',             triggerType: 'level_reached',    threshold: 5,   xpReward: 150, isEnabled: true },
+  { id: 'badge_xp_500',         name: 'XP Hunter',       icon: '⚡', description: 'Earn 500 total XP',         triggerType: 'xp_milestone',     threshold: 500, xpReward: 50,  isEnabled: true },
+  { id: 'badge_resolver_10',    name: 'Problem Solver',  icon: '🏆', description: 'Resolve 10 issues',         triggerType: 'issues_resolved',  threshold: 10,  xpReward: 100, isEnabled: true },
+];
+
+const DEFAULT_STORE_ITEMS = [
+  { id: 'theme_sunset',     type: 'theme', themeKey: 'sunset',     customVars: null, name: 'Sunset',     price: 50,  isActive: true },
+  { id: 'theme_ocean',      type: 'theme', themeKey: 'ocean',      customVars: null, name: 'Ocean',      price: 50,  isActive: true },
+  { id: 'theme_royal',      type: 'theme', themeKey: 'royal',      customVars: null, name: 'Royal',      price: 100, isActive: true },
+  { id: 'theme_slate',      type: 'theme', themeKey: 'slate',      customVars: null, name: 'Slate',      price: 100, isActive: true },
+  { id: 'theme_mint',       type: 'theme', themeKey: 'mint',       customVars: null, name: 'Mint',       price: 120, isActive: true },
+  { id: 'theme_cyberpunk',  type: 'theme', themeKey: 'cyberpunk',  customVars: null, name: 'Cyberpunk',  price: 220, isActive: true },
+  { id: 'theme_industrial', type: 'theme', themeKey: 'industrial', customVars: null, name: 'Industrial', price: 220, isActive: true },
+  { id: 'theme_engel',      type: 'theme', themeKey: 'engel',      customVars: null, name: 'Engel',      price: 250, isActive: true },
+];
+
+const THEME_ICONS = {
+  sunset: '🌅', ocean: '🌊', royal: '👑', slate: '🪨',
+  mint: '🌿', cyberpunk: '🤖', industrial: '🏭', engel: '⚙️',
+};
+
+const ADMIN_THEME_OPTIONS = DEFAULT_STORE_ITEMS
+  .filter(i => i.type === 'theme' && i.themeKey)
+  .map(i => ({ key: i.themeKey, label: `${THEME_ICONS[i.themeKey] || '🎨'} ${i.name}` }));
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+const provider = new GoogleAuthProvider();
+provider.setCustomParameters({ prompt: 'select_account' });
+
+let currentUser = null;
+let userPlants = [];
+let adminPlantIds = [];
+let membersByPlant = new Map();
+let userDirectory = [];
+let statusDraftByPlant = new Map();
+let gameDraftByPlant = new Map();
+let badgeDraftByPlant = new Map();
+let missionDraftByPlant = new Map();
+let storeDraftByPlant = new Map();
+const statusPanelOpen = {};
+const statusRowOpen = {};
+const gamePanelOpen = {};
+const plantPanelOpen = {};
+const plantTab = {};
+const SCHEDULE_SECTIONS = [
+  { inputKey: 'page_1', section: 'page1', isChange: false },
+  { inputKey: 'page_2', section: 'page2', isChange: false },
+  { inputKey: 'north_bay_changes', section: 'northBayChanges', isChange: true },
+  { inputKey: 'south_bay_changes', section: 'southBayChanges', isChange: true }
+];
+
+function esc(v) {
+  return String(v || '').replace(/[&<>'"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[ch]));
+}
+
+function deepCopy(obj) {
+  return JSON.parse(JSON.stringify(obj));
+}
+
+function feedback(elId, type, message) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  el.className = `feedback ${type}`;
+  el.textContent = message || '';
+}
+
+function defaultPermsForRole(role) {
+  if (role === 'admin') return { ...DEFAULT_PERMISSIONS };
+  if (role === 'editor') return { canViewPlant: true, canCreateIssue: true, canEditIssue: true, canResolveIssue: true, canManageStatuses: false, canManagePresses: false, canExport: true };
+  return { canViewPlant: true, canCreateIssue: false, canEditIssue: false, canResolveIssue: false, canManageStatuses: false, canManagePresses: false, canExport: false };
+}
+
+function normalizeSubsInput(value) {
+  return String(value || '')
+    .split(/\n|,/)
+    .map(v => v.trim())
+    .filter(Boolean);
+}
+
+function slugifyStatusLabel(label) {
+  return String(label || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '') || 'status';
+}
+
+function statusKeyFromLabel(label, statuses) {
+  const base = slugifyStatusLabel(label);
+  let key = base;
+  let n = 2;
+  while (statuses[key]) {
+    key = `${base}${n}`;
+    n += 1;
+  }
+  return key;
+}
+
+function normalizeStatusRecord(key, item, order) {
+  const safeLabel = String(item?.label || key || 'Status').trim() || key;
+  const slug = slugifyStatusLabel(safeLabel);
+  const color = String(item?.cssColor || item?.swipeColor || '#8b949e');
+  return {
+    label: safeLabel,
+    shortLabel: String(item?.shortLabel || safeLabel),
+    icon: String(item?.icon || '●'),
+    cssColor: color,
+    swipeColor: String(item?.swipeColor || color),
+    floorCls: String(item?.floorCls || (key === 'resolved' ? 'all-resolved' : `has-${slug}`)),
+    cls: String(item?.cls || `status-${slug}`),
+    subs: Array.isArray(item?.subs) ? item.subs.map(v => String(v).trim()).filter(Boolean) : [],
+    statLabel: String(item?.statLabel || safeLabel),
+    order: Number.isFinite(Number(item?.order)) ? Number(item.order) : order
+  };
+}
+
+function normalizeRowId(press, cavity, usedIds) {
+  const rawPress = String(press || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\./g, '_')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'row';
+  const safeCavity = String(cavity || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '');
+
+  const preferred = rawPress;
+  if (!usedIds.has(preferred)) {
+    usedIds.add(preferred);
+    return preferred;
+  }
+
+  if (safeCavity) {
+    const cavityCandidate = `${rawPress}_cav${safeCavity}`;
+    if (!usedIds.has(cavityCandidate)) {
+      usedIds.add(cavityCandidate);
+      return cavityCandidate;
+    }
+  }
+
+  let counter = 2;
+  let candidate = `${preferred}_${counter}`;
+  while (usedIds.has(candidate)) {
+    counter += 1;
+    candidate = `${preferred}_${counter}`;
+  }
+  usedIds.add(candidate);
+  return candidate;
+}
+
+function parseMaybeNumber(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+}
+
+function normalizeSchedulePayload(raw) {
+  if (!raw || typeof raw !== 'object') throw new Error('Schedule JSON must be an object.');
+  const info = raw.schedule_info || {};
+  const scheduleDate = String(info.date || '').trim();
+  if (!scheduleDate) throw new Error('schedule_info.date is required (yyyy-mm-dd).');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(scheduleDate)) throw new Error('schedule_info.date must use yyyy-mm-dd format.');
+
+  const normalizedSections = {};
+  for (const cfg of SCHEDULE_SECTIONS) {
+    const rows = Array.isArray(raw[cfg.inputKey]) ? raw[cfg.inputKey] : [];
+    const usedIds = new Set();
+    normalizedSections[cfg.section] = rows.map((row, idx) => {
+      const rowId = normalizeRowId(row?.press, row?.cavity, usedIds);
+      return {
+        rowId,
+        scheduleDate,
+        shift: Number(info.shift) || 1,
+        section: cfg.section,
+        press: String(row?.press || ''),
+        partStorageLocation: Array.isArray(row?.part_storage_location) ? row.part_storage_location.map(v => String(v ?? '')) : [],
+        partNumber: String(row?.part_number || ''),
+        description: String(row?.description || ''),
+        cavity: String(row?.cavity || ''),
+        doh: parseMaybeNumber(row?.doh),
+        labelsPerShift: parseMaybeNumber(row?.labels_per_shift),
+        mc: String(row?.mc || ''),
+        notes: String(row?.notes || ''),
+        displayOrder: idx + 1,
+        isChange: cfg.isChange
+      };
+    });
+  }
+
+  return {
+    scheduleDate,
+    shift: Number(info.shift) || 1,
+    lineSpeed: parseMaybeNumber(info.line_speed),
+    totalPlannedPcs: parseMaybeNumber(info.total_planned_pcs),
+    notes: String(info.note || ''),
+    sections: normalizedSections
+  };
+}
+
+function parseScheduleJsonInput(input, contextLabel = 'Schedule JSON') {
+  const rawText = String(input || '').replace(/^\uFEFF/, '').trim();
+  if (!rawText) throw new Error(`${contextLabel} is empty.`);
+
+  const fencedMatch = rawText.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const jsonCandidate = fencedMatch ? fencedMatch[1].trim() : rawText;
+
+  try {
+    return JSON.parse(jsonCandidate);
+  } catch (firstErr) {
+    // Auto-fix: escape inch-mark double quotes (e.g. 27" Basket) that aren't
+    // followed by a JSON structural character, making them valid JSON strings.
+    const sanitized = jsonCandidate.replace(/(\d)"(?!\s*[,\}\]\:])/g, '$1\\"');
+    try {
+      return JSON.parse(sanitized);
+    } catch (_) {
+      // Sanitization didn't help — report original error
+    }
+    const message = String(firstErr?.message || 'Invalid JSON.');
+    const knownHint = message.includes(`Expected '}'`)
+      ? ' This usually means a missing comma or closing brace in one of the objects.'
+      : '';
+    throw new Error(
+      `${contextLabel} is not valid JSON (${message}).${knownHint} ` +
+      'Tips: use double quotes for keys/strings, remove trailing commas, and paste only a JSON object (or ```json fenced block).'
+    );
+  }
+}
+
+function extractSchedulePayload(parsed) {
+  if (parsed?.schedule_info) return parsed;
+  if (parsed?.dailySchedules && typeof parsed.dailySchedules === 'object') {
+    const firstEntry = Object.values(parsed.dailySchedules)[0];
+    if (firstEntry && typeof firstEntry === 'object') return firstEntry;
+  }
+  return parsed;
+}
+
+function adaptDailyScheduleGptOutput(raw) {
+  const normalizeDate = value => {
+    const text = String(value || '').trim();
+    if (!text) return '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+    const isoMatch = text.match(/^(\d{4}-\d{2}-\d{2})T/);
+    if (isoMatch) return isoMatch[1];
+    return text;
+  };
+
+  const toObject = input => {
+    if (input && typeof input === 'object') return input;
+    return parseScheduleJsonInput(input, 'DailyScheduleGPT output');
+  };
+
+  const pick = (obj, keys, fallback = '') => {
+    for (const key of keys) {
+      if (obj && Object.prototype.hasOwnProperty.call(obj, key) && obj[key] !== undefined && obj[key] !== null) {
+        return obj[key];
+      }
+    }
+    return fallback;
+  };
+
+  const asArray = value => {
+    if (Array.isArray(value)) return value;
+    if (value && typeof value === 'object') return Object.values(value);
+    return [];
+  };
+
+  const mapRow = row => ({
+    press: String(pick(row, ['press', 'Press'], '') || ''),
+    part_storage_location: Array.isArray(pick(row, ['part_storage_location', 'partStorageLocation'], []))
+      ? pick(row, ['part_storage_location', 'partStorageLocation'], []).map(v => String(v ?? ''))
+      : [],
+    part_number: String(pick(row, ['part_number', 'partNumber'], '') || ''),
+    description: String(pick(row, ['description', 'desc'], '') || ''),
+    cavity: String(pick(row, ['cavity'], '') || ''),
+    doh: pick(row, ['doh', 'DOH'], ''),
+    labels_per_shift: pick(row, ['labels_per_shift', 'labelsPerShift', 'labels_perShifts'], ''),
+    mc: String(pick(row, ['mc', 'MC'], '') || ''),
+    notes: String(pick(row, ['notes', 'note'], '') || '')
+  });
+
+  const parsed = toObject(raw);
+  const payload = extractSchedulePayload(parsed);
+  const info = payload?.schedule_info && typeof payload.schedule_info === 'object' ? payload.schedule_info : payload;
+
+  const adaptedPayload = {
+    schedule_info: {
+      date: normalizeDate(pick(info, ['date', 'scheduleDate', 'schedule_date'], '')),
+      shift: pick(info, ['shift', 'Shift'], ''),
+      line_speed: pick(info, ['line_speed', 'lineSpeed'], ''),
+      total_planned_pcs: pick(info, ['total_planned_pcs', 'totalPlannedPcs'], ''),
+      note: String(pick(info, ['note', 'notes'], '') || '')
+    },
+    page1: asArray(pick(payload, ['page1', 'page_1'], [])).map(mapRow),
+    page2: asArray(pick(payload, ['page2', 'page_2'], [])).map(mapRow),
+    north_bay_changes: asArray(pick(payload, ['north_bay_changes', 'northBayChanges', 'north_bay_change'], [])).map(mapRow),
+    south_bay_changes: asArray(pick(payload, ['south_bay_changes', 'southBayChanges', 'south_bay_change'], [])).map(mapRow)
+  };
+
+  const normalized = normalizeSchedulePayload(adaptedPayload);
+  return { adaptedPayload, normalized };
+}
+
+async function commitInChunks(ops, maxPerBatch = 450) {
+  if (!ops.length) return;
+  for (let i = 0; i < ops.length; i += maxPerBatch) {
+    const batch = writeBatch(db);
+    const chunk = ops.slice(i, i + maxPerBatch);
+    chunk.forEach(op => {
+      if (op.type === 'delete') batch.delete(op.ref);
+      if (op.type === 'set') batch.set(op.ref, op.data, op.options);
+    });
+    await batch.commit();
+  }
+}
+
+function normalizeStatusesForSave(rawStatuses) {
+  const normalized = {};
+  const entries = Object.entries(rawStatuses || {}).sort((a,b) => (a[1]?.order ?? 999) - (b[1]?.order ?? 999));
+  entries.forEach(([key, item], idx) => {
+    normalized[key] = normalizeStatusRecord(key, item, idx);
+  });
+  if (!normalized.open) normalized.open = normalizeStatusRecord('open', DEFAULT_STATUSES.open, 0);
+  if (!normalized.resolved) normalized.resolved = normalizeStatusRecord('resolved', DEFAULT_STATUSES.resolved, Object.keys(normalized).length);
+  return normalized;
+}
+
+async function signInWithGoogle() {
+  const btn = document.getElementById('google-signin-btn');
+  btn.disabled = true;
+  btn.textContent = 'Signing in…';
+  feedback('login-feedback', '', '');
+  try {
+    await signInWithPopup(auth, provider);
+  } catch (e) {
+    console.error(e);
+    feedback('login-feedback', 'error', e.message || 'Sign-in failed.');
+    btn.disabled = false;
+    btn.textContent = 'Sign in with Google';
+  }
+}
+
+async function doSignOut() {
+  await fbSignOut(auth);
+}
+
+async function loadUserPlants() {
+  const userSnap = await getDoc(doc(db, 'users', currentUser.uid));
+  const userData = userSnap.exists() ? userSnap.data() : {};
+  const plantIds = Array.isArray(userData.plantIds) ? userData.plantIds : [];
+
+  const plantDocs = await Promise.all(plantIds.map(id => getDoc(doc(db, 'plants', id))));
+  userPlants = plantDocs.filter(s => s.exists()).map(s => ({ id: s.id, name: s.data().name || s.id, location: s.data().location || '' }));
+
+  adminPlantIds = [];
+  for (const plant of userPlants) {
+    const meMember = await getDoc(doc(db, 'plants', plant.id, 'members', currentUser.uid));
+    if (meMember.exists() && meMember.data().isActive && meMember.data().role === 'admin') {
+      adminPlantIds.push(plant.id);
+    }
+  }
+}
+
+async function loadMembersAndStatusesForAdminPlants() {
+  membersByPlant.clear();
+  statusDraftByPlant.clear();
+  gameDraftByPlant.clear();
+  missionDraftByPlant.clear();
+  storeDraftByPlant.clear();
+  for (const plantId of adminPlantIds) {
+    const [membersSnap, statusesSnap, gameConfigSnap, missionsSnap, storeSnap] = await Promise.all([
+      getDocs(collection(db, 'plants', plantId, 'members')),
+      getDoc(doc(db, 'plants', plantId, 'config', 'statuses')),
+      getDoc(doc(db, 'plants', plantId, 'gamificationConfig', 'main')),
+      getDocs(collection(db, 'plants', plantId, 'missions')),
+      getDoc(doc(db, 'plants', plantId, 'config', 'store')),
+    ]);
+
+    membersByPlant.set(plantId, membersSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+
+    const rawStatuses = statusesSnap.exists() && statusesSnap.data()?.statuses
+      ? statusesSnap.data().statuses
+      : deepCopy(DEFAULT_STATUSES);
+    statusDraftByPlant.set(plantId, normalizeStatusesForSave(rawStatuses));
+
+    const gameConfig = gameConfigSnap.exists() ? gameConfigSnap.data() : deepCopy(DEFAULT_GAME_CONFIG);
+    gameDraftByPlant.set(plantId, {
+      enabled: gameConfig.enabled !== false,
+      weights: { ...deepCopy(DEFAULT_GAME_CONFIG.weights), ...(gameConfig.weights || {}) },
+      penalties: { ...deepCopy(DEFAULT_GAME_CONFIG.penalties), ...(gameConfig.penalties || {}) },
+      caps: { ...deepCopy(DEFAULT_GAME_CONFIG.caps), ...(gameConfig.caps || {}) },
+      customRules: Array.isArray(gameConfig.customRules) ? gameConfig.customRules.map(r => ({ ...r })) : [],
+      leaderboardPeriod: gameConfig.leaderboardPeriod || 'weekly',
+    });
+    missionDraftByPlant.set(plantId, missionsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+    // Load badge definitions (stored in gamificationConfig/main.badges)
+    const storedBadges = Array.isArray(gameConfig.badges) ? gameConfig.badges : null;
+    badgeDraftByPlant.set(plantId, storedBadges ? storedBadges.map(b => ({ ...b })) : deepCopy(DEFAULT_BADGE_DEFS));
+    const storeData = storeSnap.exists() ? (storeSnap.data().items || []) : DEFAULT_STORE_ITEMS.map(i => ({ ...i }));
+    storeDraftByPlant.set(plantId, storeData.map(i => ({ ...i })));
+  }
+}
+
+async function loadUserDirectory() {
+  const usersSnap = await getDocs(collection(db, 'userLookup'));
+  const deduped = new Map();
+  usersSnap.forEach(d => {
+    const data = d.data() || {};
+    const uid = String(data.uid || '').trim();
+    if (!uid || deduped.has(uid)) return;
+    deduped.set(uid, {
+      uid,
+      displayName: String(data.displayName || '').trim(),
+      email: String(data.email || d.id || '').trim().toLowerCase()
+    });
+  });
+  userDirectory = Array.from(deduped.values()).sort((a, b) =>
+    (a.displayName || a.email || a.uid).localeCompare(b.displayName || b.email || b.uid)
+  );
+}
+
+function renderStatusEditor(plantId, plantName) {
+  const statuses = statusDraftByPlant.get(plantId) || deepCopy(DEFAULT_STATUSES);
+  const panelOpen = statusPanelOpen[plantId] ?? false;
+  const keys = Object.entries(statuses).sort((a,b) => (a[1].order ?? 999) - (b[1].order ?? 999)).map(([k]) => k);
+
+  const rows = keys.map(key => {
+    const s = statuses[key];
+    const deleteBtn = (key === 'open' || key === 'resolved')
+      ? `<span class="mono">Locked</span>`
+      : `<button class="small-btn danger" onclick="window.deleteStatus('${plantId}','${key}')">Delete</button>`;
+    const rowKey = `${plantId}:${key}`;
+    const rowOpen = statusRowOpen[rowKey] ?? false;
+
+    return `
+      <div class="status-row">
+        <div class="status-row-top">
+          <div class="status-preview" style="color:${esc(s.swipeColor || s.cssColor || '#8b949e')}; border-color:${esc(s.swipeColor || s.cssColor || '#8b949e')};">
+            <span>${esc(s.icon || '●')}</span>
+            <span>${esc(s.label || key)}</span>
+          </div>
+          <div class="status-row-actions">
+            <span class="mono">key: ${esc(key)}</span>
+            ${deleteBtn}
+            <button class="compact-btn" onclick="window.toggleStatusRow('${plantId}','${key}')">${rowOpen ? 'Hide' : 'Edit'}</button>
+          </div>
+        </div>
+        <div class="status-row-body ${rowOpen ? 'visible' : ''}">
+          <div class="status-grid">
+            <input value="${esc(s.label)}" placeholder="Label" onchange="window.patchStatus('${plantId}','${key}','label', this.value)">
+            <input value="${esc(s.icon || '●')}" placeholder="Icon" onchange="window.patchStatus('${plantId}','${key}','icon', this.value)">
+            <input value="${esc(s.cssColor || '#8b949e')}" placeholder="#hex color" onchange="window.patchStatus('${plantId}','${key}','cssColor', this.value)">
+            <div></div>
+          </div>
+          <textarea placeholder="Sub-categories (one per line or comma-separated)" onchange="window.patchStatus('${plantId}','${key}','subsRaw', this.value)">${esc((s.subs || []).join('\n'))}</textarea>
+        </div>
+      </div>`;
+  }).join('');
+
+  return `
+    ${rows}
+
+    <div class="status-row">
+      <div class="mono" style="margin-bottom:6px;">Add new category</div>
+      <div class="status-grid">
+        <input id="new-status-label-${plantId}" placeholder="New category label">
+        <input id="new-status-icon-${plantId}" placeholder="Icon" value="●">
+        <input id="new-status-color-${plantId}" placeholder="#hex color" value="#8b949e">
+        <button class="small-btn" onclick="window.addStatus('${plantId}')">Add</button>
+      </div>
+      <textarea id="new-status-subs-${plantId}" placeholder="Optional sub-categories"></textarea>
+    </div>
+
+    <div class="status-toolbar">
+      <button class="small-btn" onclick="window.exportStatuses('${plantId}')">Export JSON</button>
+      <input type="file" id="import-file-${plantId}" accept="application/json" style="max-width:240px;padding:6px 8px;" />
+      <button class="small-btn" onclick="window.importStatuses('${plantId}')">Import JSON</button>
+      <button class="small-btn" onclick="window.resetStatuses('${plantId}')">Reset Defaults</button>
+      <button class="small-btn" style="border-color:var(--accent);color:var(--accent);" onclick="window.saveStatuses('${plantId}')">Save Statuses</button>
+    </div>
+    <div id="status-fb-${plantId}" class="feedback"></div>
+  `;
+}
+
+function renderGamificationEditor(plantId, plantName) {
+  const cfg = gameDraftByPlant.get(plantId) || deepCopy(DEFAULT_GAME_CONFIG);
+  const missions = missionDraftByPlant.get(plantId) || [];
+  const badgeDefs = badgeDraftByPlant.get(plantId) || deepCopy(DEFAULT_BADGE_DEFS);
+  const customRules = Array.isArray(cfg.customRules) ? cfg.customRules : [];
+  const panelOpen = gamePanelOpen[plantId] ?? false;
+  const activeTab = gamePanelOpen[`tab_${plantId}`] || 'points';
+
+  // ── Weight cards ──────────────────────────────────────────
+  const weightCards = Object.keys(cfg.weights || {}).map(k => {
+    const meta = GAME_WEIGHT_META[k] || { icon: '🎯', label: k, sub: '' };
+    return `<div class="game-weight-card">
+      <div class="game-weight-icon">${meta.icon}</div>
+      <div class="game-weight-label">${esc(meta.label)}</div>
+      <div class="game-weight-sub">${esc(meta.sub)}</div>
+      <input type="number" value="${Number(cfg.weights[k] || 0)}"
+             oninput="window.patchGameField('${plantId}','weights','${k}',this.value)" />
+    </div>`;
+  }).join('');
+
+  // ── Penalty cards ─────────────────────────────────────────
+  const penaltyCards = Object.keys(cfg.penalties || {}).map(k => {
+    const meta = GAME_WEIGHT_META[k] || { icon: '⚠️', label: k, sub: 'Penalty' };
+    return `<div class="game-weight-card penalty">
+      <div class="game-weight-icon">${meta.icon}</div>
+      <div class="game-weight-label">${esc(meta.label)}</div>
+      <div class="game-weight-sub">${esc(meta.sub)}</div>
+      <input type="number" value="${Number(cfg.penalties[k] || 0)}"
+             oninput="window.patchGameField('${plantId}','penalties','${k}',this.value)" />
+    </div>`;
+  }).join('');
+
+  // ── Cap rows ──────────────────────────────────────────────
+  const capRows = Object.keys(cfg.caps || {}).map(k => {
+    const label = k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    return `<div class="row" style="margin-bottom:6px;align-items:center;">
+      <div class="mono" style="flex:1;">${esc(label)}</div>
+      <input type="number" style="max-width:90px;" value="${Number(cfg.caps[k] || 0)}"
+             oninput="window.patchGameField('${plantId}','caps','${k}',this.value)" />
+    </div>`;
+  }).join('');
+
+  // ── Custom rule rows ──────────────────────────────────────
+  const customRows = customRules.map((r, idx) => `
+    <tr>
+      <td><input value="${esc(r.label || '')}" onchange="window.patchCustomRule('${plantId}',${idx},'label',this.value)" /></td>
+      <td><input value="${esc(r.triggerKey || '')}" onchange="window.patchCustomRule('${plantId}',${idx},'triggerKey',this.value)" /></td>
+      <td><input type="number" value="${Number(r.points || 0)}" onchange="window.patchCustomRule('${plantId}',${idx},'points',this.value)" /></td>
+      <td>
+        <label class="toggle-switch" title="${r.isEnabled !== false ? 'Enabled' : 'Disabled'}">
+          <input type="checkbox" ${r.isEnabled !== false ? 'checked' : ''} onchange="window.patchCustomRule('${plantId}',${idx},'isEnabled',this.checked)">
+          <span class="toggle-slider"></span>
+        </label>
+      </td>
+      <td><button class="small-btn danger" onclick="window.removeCustomRule('${plantId}',${idx})">Remove</button></td>
+    </tr>
+  `).join('');
+
+  // ── Badge cards ───────────────────────────────────────────
+  const badgeCards = badgeDefs.length
+    ? badgeDefs.map((b, idx) => {
+        const trigMeta = BADGE_TRIGGER_META[b.triggerType] || { icon: '🎯', label: b.triggerType || '—' };
+        return `<div class="badge-card">
+          <div class="badge-card-icon">${b.icon || '🏅'}</div>
+          <div class="badge-card-info">
+            <div class="badge-card-name">${esc(b.name || 'Badge')}</div>
+            <div class="badge-card-meta">${trigMeta.icon} ${esc(trigMeta.label)} ≥ ${Number(b.threshold||1)} &nbsp;·&nbsp; <span style="color:#eab308">${Number(b.xpReward||0)} XP</span> &nbsp;·&nbsp; ${esc(b.description||'')}</div>
+          </div>
+          <div class="badge-card-actions">
+            <label class="toggle-switch" title="${b.isEnabled!==false?'Enabled':'Disabled'}">
+              <input type="checkbox" ${b.isEnabled!==false?'checked':''} onchange="window.patchBadge('${plantId}',${idx},'isEnabled',this.checked)">
+              <span class="toggle-slider"></span>
+            </label>
+            <button class="small-btn" onclick="window.openBadgeModal('${plantId}',${idx})">Edit</button>
+            <button class="small-btn danger" onclick="window.removeBadge('${plantId}',${idx})">Remove</button>
+          </div>
+        </div>`;
+      }).join('')
+    : `<div class="game-empty-state"><span class="es-icon">🏅</span>No badges yet. Add one to reward your team.</div>`;
+
+  // ── Mission cards ─────────────────────────────────────────
+  const missionCards = missions.length
+    ? missions.map((m, idx) => {
+        const typeMeta = MISSION_TYPE_META[m.objective?.type] || { icon: '🎯', label: m.objective?.type || '—' };
+        const isActive = m.isActive !== false;
+        return `<div class="game-mission-card">
+          <div class="game-mission-card-info">
+            <div class="game-mission-card-name">${esc(m.name || 'Untitled Mission')}</div>
+            <div class="game-mission-card-meta">${typeMeta.icon} ${esc(typeMeta.label)} &nbsp;·&nbsp; ${Number(m.objective?.threshold || 1)} target &nbsp;·&nbsp; <span style="color:#eab308">${Number(m.rewards?.xp || 0)} XP</span></div>
+          </div>
+          <div class="game-mission-card-actions">
+            <span class="game-status-badge ${isActive ? 'active' : 'inactive'}">${isActive ? 'Active' : 'Inactive'}</span>
+            <button class="small-btn" onclick="window.openMissionModal('${plantId}',${idx})">Edit</button>
+            <button class="small-btn danger" onclick="window.removeMission('${plantId}',${idx})">Remove</button>
+          </div>
+        </div>`;
+      }).join('')
+    : `<div class="game-empty-state"><span class="es-icon">🎯</span>No missions yet. Create one to get started.</div>`;
+
+  return `
+    <!-- Enable toggle -->
+    <div class="game-enable-row">
+        <div class="game-enable-info">
+          <strong>Enable Gamification</strong>
+          <span>Award XP and track missions for all users in this plant</span>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" ${cfg.enabled !== false ? 'checked' : ''}
+                 onchange="window.patchGameEnabled('${plantId}', this.checked)">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+
+      <!-- Tab bar -->
+      <div class="game-tabs">
+        <button class="game-tab-btn ${activeTab === 'points'   ? 'active' : ''}"
+                onclick="window.switchGameTab('${plantId}','points',this)">⚡ Points</button>
+        <button class="game-tab-btn ${activeTab === 'rules'    ? 'active' : ''}"
+                onclick="window.switchGameTab('${plantId}','rules',this)">🛠 Rules</button>
+        <button class="game-tab-btn ${activeTab === 'missions' ? 'active' : ''}"
+                onclick="window.switchGameTab('${plantId}','missions',this)">🎯 Missions</button>
+        <button class="game-tab-btn ${activeTab === 'badges'   ? 'active' : ''}"
+                onclick="window.switchGameTab('${plantId}','badges',this)">🏅 Badges</button>
+      </div>
+
+      <!-- Tab: Points -->
+      <div class="game-tab-pane ${activeTab === 'points' ? 'active' : ''}" id="game-tab-points-${plantId}">
+        <div class="game-section-label">XP Weights</div>
+        <div class="game-weight-grid">${weightCards}</div>
+        <div class="game-section-label" style="margin-top:16px;">Penalties</div>
+        <div class="game-weight-grid">${penaltyCards}</div>
+        <div class="game-section-label" style="margin-top:16px;">Rate Limits</div>
+        <div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:10px 14px;">${capRows}</div>
+        <div class="game-section-label" style="margin-top:20px;">Leaderboard</div>
+        <div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px 14px;">
+          <div style="font-size:12px;color:var(--text2);margin-bottom:10px;">Period shown to all users in this plant</div>
+          <div class="lb-settings-row">
+            ${['weekly','monthly','alltime'].map(p => {
+              const active = (cfg.leaderboardPeriod || 'weekly') === p;
+              const lbl = p === 'alltime' ? 'All Time' : p.charAt(0).toUpperCase() + p.slice(1);
+              return `<button class="lb-period-btn ${active ? 'active' : ''}"
+                onclick="window.patchLeaderboardPeriod('${plantId}','${p}',this)">${lbl}</button>`;
+            }).join('')}
+          </div>
+          <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+            <div>
+              <div style="font-size:12px;font-weight:700;color:var(--text);">Reset Leaderboard</div>
+              <div style="font-size:11px;color:var(--text2);">Clears all current-period scores — cannot be undone.</div>
+            </div>
+            <button class="small-btn danger" onclick="window.resetLeaderboard('${plantId}')">Reset</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: Rules -->
+      <div class="game-tab-pane ${activeTab === 'rules' ? 'active' : ''}" id="game-tab-rules-${plantId}">
+        <p class="muted" style="margin-bottom:10px;font-size:11px;">Custom rules fire on top of built-in weights. Trigger key examples: <code>status:maintenance</code>, <code>workflow:finished</code></p>
+        <table>
+          <thead><tr><th>Label</th><th>Trigger Key</th><th>Points</th><th>On</th><th></th></tr></thead>
+          <tbody>${customRows || '<tr><td colspan="5" class="muted" style="text-align:center;padding:12px;">No custom rules yet.</td></tr>'}</tbody>
+        </table>
+        <div class="row" style="margin-top:10px;flex-wrap:wrap;gap:6px;">
+          <input id="new-rule-label-${plantId}" placeholder="Rule label" style="flex:1;min-width:100px;" />
+          <input id="new-rule-trigger-${plantId}" placeholder="trigger key" style="flex:1;min-width:100px;" />
+          <input id="new-rule-points-${plantId}" type="number" placeholder="pts" style="width:70px;flex:0 0 70px;" />
+          <button class="small-btn" onclick="window.addCustomRule('${plantId}')">+ Add Rule</button>
+        </div>
+      </div>
+
+      <!-- Tab: Missions -->
+      <div class="game-tab-pane ${activeTab === 'missions' ? 'active' : ''}" id="game-tab-missions-${plantId}">
+        <div id="game-missions-cards-${plantId}">${missionCards}</div>
+        <button class="small-btn" style="border-color:var(--accent);color:var(--accent);margin-top:4px;"
+                onclick="window.openMissionModal('${plantId}')">+ New Mission</button>
+      </div>
+
+      <!-- Tab: Badges -->
+      <div class="game-tab-pane ${activeTab === 'badges' ? 'active' : ''}" id="game-tab-badges-${plantId}">
+        ${badgeCards}
+        <button class="small-btn" style="border-color:var(--accent);color:var(--accent);margin-top:4px;"
+                onclick="window.openBadgeModal('${plantId}')">+ New Badge</button>
+      </div>
+
+      <div class="status-toolbar" style="margin-top:14px;">
+        <button class="small-btn" style="border-color:var(--accent);color:var(--accent);"
+                onclick="window.saveGamification('${plantId}')">💾 Save Gamification</button>
+      </div>
+    <div id="game-fb-${plantId}" class="feedback"></div>
+  `;
+}
+
+function renderStoreEditor(plantId) {
+  const items = storeDraftByPlant.get(plantId) || [];
+  const themeOpts = ADMIN_THEME_OPTIONS.map(t => `<option value="${esc(t.key)}">${esc(t.label)}</option>`).join('');
+  const rows = items.map((item, idx) => `
+    <tr>
+      <td style="font-weight:700;font-size:12px;">${esc(item.name)}<div style="font-size:10px;color:var(--text2);">${item.themeKey ? 'Built-in: ' + esc(item.themeKey) : 'Custom'}</div></td>
+      <td><input type="number" min="0" step="1" value="${Number(item.price)}" style="width:64px;background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:3px 6px;font-size:12px;" onchange="window.updateStoreItemPrice('${plantId}',${idx},this.value)"></td>
+      <td>
+        <select style="font-size:11px;background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:2px 4px;" onchange="window.toggleStoreItem('${plantId}',${idx},this.value)">
+          <option value="true" ${item.isActive !== false ? 'selected' : ''}>Active</option>
+          <option value="false" ${item.isActive === false ? 'selected' : ''}>Hidden</option>
+        </select>
+      </td>
+      <td><button class="small-btn danger" onclick="window.deleteStoreItem('${plantId}',${idx})">Remove</button></td>
+    </tr>`).join('');
+
+  return `
+    ${items.length ? `
+    <table style="width:100%;font-size:12px;border-collapse:collapse;margin-bottom:12px;">
+      <thead><tr style="color:var(--text2);font-size:10px;">
+        <th style="text-align:left;padding:4px 0;">Item</th>
+        <th style="text-align:left;padding:4px 0;">Price (XP)</th>
+        <th style="text-align:left;padding:4px 0;">Status</th>
+        <th></th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>` : `<div class="muted" style="margin-bottom:10px;font-size:12px;">No store items yet.</div>`}
+
+    <div style="border-top:1px solid var(--border);padding-top:10px;display:flex;flex-direction:column;gap:10px;">
+      <div class="muted" style="font-size:11px;font-weight:700;">Add Built-in Theme</div>
+      <div class="row">
+        <select id="store-theme-key-${plantId}" style="background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:4px 6px;font-size:12px;">${themeOpts}</select>
+        <input type="text" id="store-theme-name-${plantId}" placeholder="Display name" style="background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:4px 8px;font-size:12px;flex:1;">
+        <input type="number" id="store-theme-price-${plantId}" value="50" min="0" placeholder="XP price" style="width:70px;background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:4px 6px;font-size:12px;">
+        <button class="small-btn" onclick="window.addBuiltinThemeToStore('${plantId}')">+ Add</button>
+      </div>
+
+      <div class="muted" style="font-size:11px;font-weight:700;">Add Custom Theme</div>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        <input type="text" id="store-custom-name-${plantId}" placeholder="Theme name" style="background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:4px 8px;font-size:12px;">
+        <div class="row">
+          <label style="font-size:11px;color:var(--text2);display:flex;align-items:center;gap:4px;">BG<input type="color" id="store-custom-bg-${plantId}" value="#0d1117" style="width:36px;height:24px;border:none;background:none;cursor:pointer;"></label>
+          <label style="font-size:11px;color:var(--text2);display:flex;align-items:center;gap:4px;">Surface<input type="color" id="store-custom-bg2-${plantId}" value="#161b22" style="width:36px;height:24px;border:none;background:none;cursor:pointer;"></label>
+          <label style="font-size:11px;color:var(--text2);display:flex;align-items:center;gap:4px;">Accent<input type="color" id="store-custom-accent-${plantId}" value="#f97316" style="width:36px;height:24px;border:none;background:none;cursor:pointer;"></label>
+          <label style="font-size:11px;color:var(--text2);display:flex;align-items:center;gap:4px;">Text<input type="color" id="store-custom-text-${plantId}" value="#e6edf3" style="width:36px;height:24px;border:none;background:none;cursor:pointer;"></label>
+          <label style="font-size:11px;color:var(--text2);display:flex;align-items:center;gap:4px;">Border<input type="color" id="store-custom-border-${plantId}" value="#30363d" style="width:36px;height:24px;border:none;background:none;cursor:pointer;"></label>
+        </div>
+        <div class="row">
+          <input type="number" id="store-custom-price-${plantId}" value="50" min="0" placeholder="XP price" style="width:80px;background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:4px 6px;font-size:12px;">
+          <button class="small-btn" onclick="window.addCustomThemeToStore('${plantId}')">+ Add Custom</button>
+        </div>
+      </div>
+
+      <div class="status-toolbar" style="margin-top:4px;">
+        <button class="small-btn" style="border-color:var(--accent);color:var(--accent);" onclick="window.saveStoreDraft('${plantId}')">💾 Save Store</button>
+      </div>
+      <div id="store-fb-${plantId}" class="feedback"></div>
+    </div>
+  `;
+}
+
+
+
+function renderPlantsUsers() {
+  const container = document.getElementById('plants-users-container');
+  container.innerHTML = '';
+
+  const sortedPlants = userPlants
+    .filter(p => adminPlantIds.includes(p.id))
+    .sort((a,b) => a.name.localeCompare(b.name));
+
+  for (const plant of sortedPlants) {
+    const members = (membersByPlant.get(plant.id) || []).sort((a,b) => (a.displayName || a.email || '').localeCompare(b.displayName || b.email || ''));
+    const memberIds = new Set(members.map(m => m.userId || m.id));
+    const availableUsers = userDirectory.filter(u => u.uid !== currentUser.uid && !memberIds.has(u.uid));
+    const userOptions = availableUsers.map(u => {
+      const label = `${u.displayName || u.email || u.uid}${u.email ? ` (${u.email})` : ''}`;
+      return `<option value="${esc(u.uid)}">${esc(label)}</option>`;
+    }).join('');
+    const card = document.createElement('div');
+    card.className = 'card';
+
+    const plantOpen = plantPanelOpen[plant.id] ?? false;
+    const rows = members.map(member => {
+      const canEdit = member.userId !== currentUser.uid;
+      const label = member.displayName || member.email || member.userId || 'Unknown';
+      return `
+        <tr>
+          <td>${esc(label)}<div class="muted" style="font-size:11px;">${esc(member.email || '')}</div></td>
+          <td>
+            ${canEdit
+              ? `<select onchange="window.updateRole('${plant.id}','${member.userId}', this.value)">
+                  <option value="admin" ${member.role==='admin' ? 'selected' : ''}>admin</option>
+                  <option value="editor" ${member.role==='editor' ? 'selected' : ''}>editor</option>
+                  <option value="viewer" ${member.role==='viewer' ? 'selected' : ''}>viewer</option>
+                </select>`
+              : `<span class="pill">${esc(member.role || 'admin')} (you)</span>`
+            }
+          </td>
+          <td>
+            ${canEdit ? `<button class="small-btn danger" onclick="window.removeMember('${plant.id}','${member.userId}','${esc(label)}')">Remove</button>` : ''}
+          </td>
+        </tr>`;
+    }).join('');
+
+    const activeTab = plantTab[plant.id] || 'members';
+    card.innerHTML = `
+      <div class="plant-head">
+        <div>
+          <div class="plant-name">${esc(plant.name)}</div>
+          <div class="muted">${esc(plant.location || 'No location')} · ${esc(plant.id)}</div>
+        </div>
+        <div class="plant-head-actions">
+          <button class="compact-btn" onclick="window.togglePlantPanel('${plant.id}')">${plantOpen ? 'Minimize' : 'Expand'}</button>
+          <span class="pill">admin</span>
+        </div>
+      </div>
+
+      <div class="plant-body ${plantOpen ? 'visible' : ''}">
+        <div class="plant-tabs">
+          <button class="plant-tab-btn ${activeTab === 'members' ? 'active' : ''}"
+                  onclick="window.switchPlantTab('${plant.id}','members',this)">Members</button>
+          <button class="plant-tab-btn ${activeTab === 'statuses' ? 'active' : ''}"
+                  onclick="window.switchPlantTab('${plant.id}','statuses',this)">Statuses</button>
+          <button class="plant-tab-btn ${activeTab === 'gamification' ? 'active' : ''}"
+                  onclick="window.switchPlantTab('${plant.id}','gamification',this)">Gamification</button>
+          <button class="plant-tab-btn ${activeTab === 'store' ? 'active' : ''}"
+                  onclick="window.switchPlantTab('${plant.id}','store',this)">🛒 Store</button>
+        </div>
+
+        <div class="plant-tab-pane ${activeTab === 'members' ? 'active' : ''}" id="ptab-members-${plant.id}">
+          <table>
+            <thead>
+              <tr><th>User</th><th>Role</th><th>Action</th></tr>
+            </thead>
+            <tbody>${rows || '<tr><td colspan="3" class="muted">No members found.</td></tr>'}</tbody>
+          </table>
+          <div style="margin-top:10px; border-top:1px solid var(--border); padding-top:10px;">
+            <div class="muted" style="margin-bottom:6px;">Add user to ${esc(plant.name)}</div>
+            <div class="row">
+              <select id="add-user-${plant.id}">
+                ${userOptions || '<option value="">No available users</option>'}
+              </select>
+              <select id="add-role-${plant.id}" style="max-width:120px;">
+                <option value="editor">editor</option>
+                <option value="viewer">viewer</option>
+                <option value="admin">admin</option>
+              </select>
+              <button class="small-btn" style="max-width:95px;" onclick="window.addMember('${plant.id}')">Add</button>
+            </div>
+            <div id="fb-${plant.id}" class="feedback"></div>
+          </div>
+        </div>
+
+        <div class="plant-tab-pane ${activeTab === 'statuses' ? 'active' : ''}" id="ptab-statuses-${plant.id}">
+          ${renderStatusEditor(plant.id, plant.name)}
+        </div>
+
+        <div class="plant-tab-pane ${activeTab === 'gamification' ? 'active' : ''}" id="ptab-gamification-${plant.id}">
+          ${renderGamificationEditor(plant.id, plant.name)}
+        </div>
+
+        <div class="plant-tab-pane ${activeTab === 'store' ? 'active' : ''}" id="ptab-store-${plant.id}">
+          ${renderStoreEditor(plant.id)}
+        </div>
+      </div>
+    `;
+    container.appendChild(card);
+  }
+}
+
+function renderSchedulePlantOptions() {
+  const select = document.getElementById('schedule-plant-id');
+  if (!select) return;
+  const selected = select.value;
+  const adminPlants = userPlants
+    .filter(p => adminPlantIds.includes(p.id))
+    .sort((a,b) => a.name.localeCompare(b.name));
+
+  select.innerHTML = '';
+  if (!adminPlants.length) {
+    select.innerHTML = '<option value="">No admin plants available</option>';
+    return;
+  }
+
+  adminPlants.forEach((plant, idx) => {
+    const opt = document.createElement('option');
+    opt.value = plant.id;
+    opt.textContent = `${plant.name} (${plant.id})`;
+    if ((selected && selected === plant.id) || (!selected && idx === 0)) opt.selected = true;
+    select.appendChild(opt);
+  });
+}
+
+async function createPlant() {
+  const btn = document.getElementById('create-plant-btn');
+  const name = document.getElementById('new-plant-name').value.trim();
+  const location = document.getElementById('new-plant-location').value.trim();
+  if (!name) {
+    feedback('plant-create-feedback', 'error', 'Plant name is required.');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Creating…';
+  feedback('plant-create-feedback', '', '');
+
+  try {
+    const id = name.toLowerCase().replace(/[^a-z0-9]/g, '_') + '_' + Date.now().toString(36);
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'plants', id), { name, location: location || '', createdAt: serverTimestamp(), isActive: true });
+    batch.set(doc(db, 'plants', id, 'members', currentUser.uid), {
+      userId: currentUser.uid,
+      displayName: currentUser.displayName || currentUser.email || '',
+      email: currentUser.email || '',
+      role: 'admin',
+      isActive: true,
+      addedAt: serverTimestamp(),
+      permissions: { ...DEFAULT_PERMISSIONS }
+    });
+    batch.set(doc(db, 'plants', id, 'config', 'presses'), { presses: DEFAULT_PRESSES });
+    batch.set(doc(db, 'plants', id, 'config', 'statuses'), { statuses: deepCopy(DEFAULT_STATUSES) });
+    batch.set(doc(db, 'plants', id, 'gamificationConfig', 'main'), { ...deepCopy(DEFAULT_GAME_CONFIG), updatedAt: serverTimestamp() }, { merge: true });
+    batch.set(doc(db, 'users', currentUser.uid), { plantIds: arrayUnion(id) }, { merge: true });
+    await batch.commit();
+
+    window.closeAddPlantModal();
+    await refreshAdminData();
+  } catch (e) {
+    console.error(e);
+    feedback('plant-create-feedback', 'error', e.message || 'Failed to create plant.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Create Plant';
+  }
+}
+
+async function loadScheduleJsonFromFile() {
+  const fileInput = document.getElementById('schedule-json-file');
+  const textArea = document.getElementById('schedule-json-text');
+  const file = fileInput?.files?.[0];
+  if (!file) {
+    feedback('schedule-import-feedback', 'error', 'Choose a JSON file first.');
+    return;
+  }
+  try {
+    const text = await file.text();
+    textArea.value = text;
+    feedback('schedule-import-feedback', 'ok', `Loaded ${file.name}. Review and click Import Daily Schedule.`);
+  } catch (e) {
+    console.error(e);
+    feedback('schedule-import-feedback', 'error', e.message || 'Failed to read JSON file.');
+  }
+}
+
+async function importDailySchedule() {
+  const importBtn = document.getElementById('import-schedule-btn');
+  const dateInput = document.getElementById('schedule-date');
+  const sourceNameInput = document.getElementById('schedule-source-name');
+  const plantSelect = document.getElementById('schedule-plant-id');
+  const jsonInput = document.getElementById('schedule-json-text');
+  const selectedFile = document.getElementById('schedule-json-file')?.files?.[0];
+  const rawText = (jsonInput?.value || '').trim();
+  const plantId = String(plantSelect?.value || '').trim();
+
+  if (!rawText) {
+    feedback('schedule-import-feedback', 'error', 'Paste JSON (or load from file) before importing.');
+    return;
+  }
+  if (!plantId) {
+    feedback('schedule-import-feedback', 'error', 'Select a plant before importing.');
+    return;
+  }
+
+  importBtn.disabled = true;
+  importBtn.textContent = 'Importing…';
+  feedback('schedule-import-feedback', '', '');
+
+  try {
+    const parsed = parseScheduleJsonInput(rawText, 'Schedule import JSON');
+    const payload = extractSchedulePayload(parsed);
+    const normalized = normalizeSchedulePayload(payload);
+    const scheduleDate = String(dateInput?.value || '').trim() || normalized.scheduleDate;
+    if (!scheduleDate) throw new Error('Schedule date is required.');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(scheduleDate)) throw new Error('Schedule date must use yyyy-mm-dd format.');
+
+    const dailyRef = doc(db, 'plants', plantId, 'dailySchedules', scheduleDate);
+    const sections = normalized.sections;
+    const existingDaily = await getDoc(dailyRef);
+    const deleteOps = [];
+    for (const cfg of SCHEDULE_SECTIONS) {
+      const sectionRef = collection(db, 'plants', plantId, 'dailySchedules', scheduleDate, cfg.section);
+      const existingRows = await getDocs(sectionRef);
+      existingRows.forEach(rowDoc => deleteOps.push({ type: 'delete', ref: rowDoc.ref }));
+    }
+    await commitInChunks(deleteOps);
+
+    const setOps = [];
+    setOps.push({ type: 'set', ref: dailyRef, data: {
+      scheduleDate,
+      plantId,
+      shift: normalized.shift,
+      lineSpeed: normalized.lineSpeed,
+      totalPlannedPcs: normalized.totalPlannedPcs,
+      sourceFileName: String(sourceNameInput?.value || selectedFile?.name || '').trim(),
+      sourceFileType: selectedFile?.type || (String(sourceNameInput?.value || '').toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'application/json'),
+      status: 'imported',
+      notes: normalized.notes,
+      page1Count: sections.page1.length,
+      page2Count: sections.page2.length,
+      northBayChangesCount: sections.northBayChanges.length,
+      southBayChangesCount: sections.southBayChanges.length,
+      updatedAt: serverTimestamp(),
+      createdAt: existingDaily.exists() ? (existingDaily.data().createdAt || serverTimestamp()) : serverTimestamp()
+    }, options: { merge: true } });
+
+    for (const cfg of SCHEDULE_SECTIONS) {
+      const sectionRows = sections[cfg.section];
+      sectionRows.forEach(row => {
+        setOps.push({ type: 'set', ref: doc(db, 'plants', plantId, 'dailySchedules', scheduleDate, cfg.section, row.rowId), data: {
+          ...row,
+          scheduleDate,
+          plantId,
+          shift: normalized.shift,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        }});
+      });
+    }
+    await commitInChunks(setOps);
+
+    if (dateInput && !dateInput.value) dateInput.value = scheduleDate;
+    feedback('schedule-import-feedback', 'ok', `Imported ${scheduleDate} for ${plantId}: ${sections.page1.length + sections.page2.length + sections.northBayChanges.length + sections.southBayChanges.length} rows.`);
+  } catch (e) {
+    console.error(e);
+    feedback('schedule-import-feedback', 'error', e.message || 'Failed to import schedule JSON.');
+  } finally {
+    importBtn.disabled = false;
+    importBtn.textContent = 'Import Daily Schedule';
+  }
+}
+
+async function generateScheduleJsonFromDailyScheduleGPT() {
+  const generateBtn = document.getElementById('generate-schedule-json-btn');
+  const sourceInput = document.getElementById('schedule-gpt-source');
+  const shiftInput = document.getElementById('schedule-gpt-shift-override');
+  const modelPresetInput = document.getElementById('schedule-gpt-model-preset');
+  const strictValidationInput = document.getElementById('schedule-gpt-strict-validation');
+  const dateInput = document.getElementById('schedule-date');
+  const sourceNameInput = document.getElementById('schedule-source-name');
+  const jsonInput = document.getElementById('schedule-json-text');
+  const sourceText = String(sourceInput?.value || '').trim();
+
+  if (!sourceText) {
+    feedback('schedule-gpt-feedback', 'error', 'Paste schedule text or PDF metadata before generating.');
+    return;
+  }
+
+  generateBtn.disabled = true;
+  generateBtn.textContent = 'Generating…';
+  feedback('schedule-gpt-feedback', '', '');
+
+  try {
+    const strictValidation = String(strictValidationInput?.value || 'true') === 'true';
+    const shiftOverride = String(shiftInput?.value || '').trim();
+    const { adaptedPayload, normalized } = adaptDailyScheduleGptOutput(sourceText);
+    if (shiftOverride) adaptedPayload.schedule_info.shift = shiftOverride;
+    if (dateInput?.value) adaptedPayload.schedule_info.date = String(dateInput.value).trim();
+    if (strictValidation) normalizeSchedulePayload(adaptedPayload);
+
+    jsonInput.value = JSON.stringify(adaptedPayload, null, 2);
+    if (sourceNameInput && !String(sourceNameInput.value || '').trim()) {
+      sourceNameInput.value = `DailyScheduleGPT_${adaptedPayload.schedule_info.date}.txt`;
+    }
+    feedback('schedule-gpt-feedback', 'ok', `Generated canonical JSON draft (${normalized.sections.page1.length + normalized.sections.page2.length + normalized.sections.northBayChanges.length + normalized.sections.southBayChanges.length} rows). Review and click Import Daily Schedule when ready.`);
+  } catch (e) {
+    console.error(e);
+    feedback('schedule-gpt-feedback', 'error', e.message || 'Failed to generate schedule JSON.');
+  } finally {
+    generateBtn.disabled = false;
+    generateBtn.textContent = 'Generate JSON';
+  }
+}
+
+window.addMember = async function(plantId) {
+  const userEl = document.getElementById(`add-user-${plantId}`);
+  const roleEl = document.getElementById(`add-role-${plantId}`);
+  const selectedUid = String(userEl?.value || '').trim();
+  const role = roleEl.value;
+  if (!selectedUid) {
+    feedback(`fb-${plantId}`, 'error', 'Select a user.');
+    return;
+  }
+  const target = userDirectory.find(u => u.uid === selectedUid);
+  if (!target) {
+    feedback(`fb-${plantId}`, 'error', 'Selected user is no longer available. Refresh and try again.');
+    return;
+  }
+  const email = String(target.email || '').toLowerCase();
+
+  try {
+    if (target.uid === currentUser.uid) throw new Error('You are already in this plant.');
+
+    const existing = await getDoc(doc(db, 'plants', plantId, 'members', target.uid));
+    if (existing.exists() && existing.data().isActive) throw new Error('User is already a member of this plant.');
+
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'plants', plantId, 'members', target.uid), {
+      userId: target.uid,
+      displayName: target.displayName || '',
+      email: target.email || email,
+      role,
+      isActive: true,
+      addedAt: serverTimestamp(),
+      addedBy: { uid: currentUser.uid, name: currentUser.displayName || currentUser.email || '' },
+      permissions: defaultPermsForRole(role)
+    });
+    batch.set(doc(db, 'users', target.uid), { plantIds: arrayUnion(plantId) }, { merge: true });
+    await batch.commit();
+
+    if (userEl) userEl.value = '';
+    feedback(`fb-${plantId}`, 'ok', `Added ${target.displayName || target.email || target.uid} as ${role}.`);
+    await refreshAdminData();
+  } catch (e) {
+    console.error(e);
+    feedback(`fb-${plantId}`, 'error', e.message || 'Failed to add member.');
+  }
+};
+
+window.updateRole = async function(plantId, userId, role) {
+  try {
+    await updateDoc(doc(db, 'plants', plantId, 'members', userId), {
+      role,
+      permissions: defaultPermsForRole(role),
+      updatedAt: serverTimestamp(),
+      updatedBy: { uid: currentUser.uid, name: currentUser.displayName || currentUser.email || '' }
+    });
+    await refreshAdminData();
+  } catch (e) {
+    console.error(e);
+    alert(e.message || 'Failed to update role.');
+  }
+};
+
+window.removeMember = async function(plantId, userId, label) {
+  if (!confirm(`Remove ${label} from this plant?`)) return;
+  try {
+    const batch = writeBatch(db);
+    batch.delete(doc(db, 'plants', plantId, 'members', userId));
+    batch.set(doc(db, 'users', userId), { plantIds: arrayRemove(plantId) }, { merge: true });
+    await batch.commit();
+    await refreshAdminData();
+  } catch (e) {
+    console.error(e);
+    alert(e.message || 'Failed to remove member.');
+  }
+};
+
+window.patchStatus = function(plantId, statusKey, field, value) {
+  const statuses = deepCopy(statusDraftByPlant.get(plantId) || {});
+  const item = statuses[statusKey];
+  if (!item) return;
+  if (field === 'subsRaw') {
+    item.subs = normalizeSubsInput(value);
+  } else if (field === 'cssColor') {
+    item.cssColor = String(value || '').trim() || item.cssColor;
+    item.swipeColor = item.cssColor;
+  } else if (field === 'label') {
+    item.label = String(value || '').trim() || item.label;
+    item.shortLabel = item.label;
+    item.statLabel = item.label;
+  } else if (field === 'icon') {
+    item.icon = String(value || '').trim() || '●';
+  }
+  statuses[statusKey] = item;
+  statusDraftByPlant.set(plantId, statuses);
+  renderPlantsUsers();
+};
+
+window.deleteStatus = function(plantId, statusKey) {
+  if (!confirm(`Delete status category "${statusKey}"?`)) return;
+  const statuses = deepCopy(statusDraftByPlant.get(plantId) || {});
+  if (statusKey === 'open' || statusKey === 'resolved') return;
+  delete statuses[statusKey];
+  statusDraftByPlant.set(plantId, statuses);
+  renderPlantsUsers();
+};
+
+window.addStatus = function(plantId) {
+  const label = (document.getElementById(`new-status-label-${plantId}`)?.value || '').trim();
+  const icon = (document.getElementById(`new-status-icon-${plantId}`)?.value || '●').trim() || '●';
+  const cssColor = (document.getElementById(`new-status-color-${plantId}`)?.value || '#8b949e').trim() || '#8b949e';
+  const subsRaw = document.getElementById(`new-status-subs-${plantId}`)?.value || '';
+  if (!label) {
+    feedback(`status-fb-${plantId}`, 'error', 'Category label is required.');
+    return;
+  }
+
+  const statuses = deepCopy(statusDraftByPlant.get(plantId) || {});
+  const existingSameLabel = Object.values(statuses).some(s => String(s.label || '').toLowerCase() === label.toLowerCase());
+  if (existingSameLabel) {
+    feedback(`status-fb-${plantId}`, 'error', 'A category with that label already exists.');
+    return;
+  }
+
+  const key = statusKeyFromLabel(label, statuses);
+  const maxOrder = Math.max(...Object.values(statuses).map(s => Number(s.order ?? 0)), 0);
+  statuses[key] = normalizeStatusRecord(key, {
+    label,
+    shortLabel: label,
+    statLabel: label,
+    icon,
+    cssColor,
+    swipeColor: cssColor,
+    subs: normalizeSubsInput(subsRaw),
+    order: maxOrder + 1
+  }, maxOrder + 1);
+
+  statusDraftByPlant.set(plantId, statuses);
+  renderPlantsUsers();
+  feedback(`status-fb-${plantId}`, 'ok', `Added ${label}.`);
+};
+
+window.resetStatuses = function(plantId) {
+  if (!confirm('Reset this plant to default status categories?')) return;
+  statusDraftByPlant.set(plantId, deepCopy(DEFAULT_STATUSES));
+  renderPlantsUsers();
+  feedback(`status-fb-${plantId}`, 'ok', 'Draft reset to defaults. Click Save Statuses to apply.');
+};
+
+window.exportStatuses = function(plantId) {
+  const statuses = normalizeStatusesForSave(statusDraftByPlant.get(plantId) || {});
+  const payload = {
+    plantId,
+    exportedAt: new Date().toISOString(),
+    statuses
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `aptracker-statuses-${plantId}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  feedback(`status-fb-${plantId}`, 'ok', 'Exported JSON file.');
+};
+
+window.importStatuses = async function(plantId) {
+  const input = document.getElementById(`import-file-${plantId}`);
+  const file = input?.files?.[0];
+  if (!file) {
+    feedback(`status-fb-${plantId}`, 'error', 'Choose a JSON file first.');
+    return;
+  }
+  try {
+    const text = await file.text();
+    const parsed = JSON.parse(text);
+    const candidate = parsed?.statuses || parsed;
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+      throw new Error('Invalid JSON format. Expected { statuses: { ... } } or a statuses object.');
+    }
+    const normalized = normalizeStatusesForSave(candidate);
+    statusDraftByPlant.set(plantId, normalized);
+    renderPlantsUsers();
+    feedback(`status-fb-${plantId}`, 'ok', 'Imported statuses into draft. Click Save Statuses to apply.');
+  } catch (e) {
+    console.error(e);
+    feedback(`status-fb-${plantId}`, 'error', e.message || 'Import failed.');
+  }
+};
+
+window.saveStatuses = async function(plantId) {
+  const statuses = normalizeStatusesForSave(statusDraftByPlant.get(plantId) || {});
+  try {
+    await setDoc(doc(db, 'plants', plantId, 'config', 'statuses'), { statuses });
+    statusDraftByPlant.set(plantId, statuses);
+    feedback(`status-fb-${plantId}`, 'ok', 'Saved statuses to Firestore.');
+  } catch (e) {
+    console.error(e);
+    feedback(`status-fb-${plantId}`, 'error', e.message || 'Failed to save statuses.');
+  }
+};
+
+window.patchGameEnabled = function(plantId, value) {
+  const cfg = deepCopy(gameDraftByPlant.get(plantId) || DEFAULT_GAME_CONFIG);
+  cfg.enabled = value === true || value === 'true';
+  gameDraftByPlant.set(plantId, cfg);
+};
+
+window.patchGameField = function(plantId, section, key, value) {
+  const cfg = deepCopy(gameDraftByPlant.get(plantId) || DEFAULT_GAME_CONFIG);
+  if (!cfg[section]) cfg[section] = {};
+  cfg[section][key] = Number(value || 0);
+  gameDraftByPlant.set(plantId, cfg);
+};
+
+window.patchCustomRule = function(plantId, idx, field, value) {
+  const cfg = deepCopy(gameDraftByPlant.get(plantId) || DEFAULT_GAME_CONFIG);
+  cfg.customRules = Array.isArray(cfg.customRules) ? cfg.customRules : [];
+  if (!cfg.customRules[idx]) return;
+  if (field === 'points') cfg.customRules[idx][field] = Number(value || 0);
+  else if (field === 'isEnabled') cfg.customRules[idx][field] = value === 'true';
+  else cfg.customRules[idx][field] = String(value || '');
+  gameDraftByPlant.set(plantId, cfg);
+};
+
+window.addCustomRule = function(plantId) {
+  const label = (document.getElementById(`new-rule-label-${plantId}`)?.value || '').trim();
+  const triggerKey = (document.getElementById(`new-rule-trigger-${plantId}`)?.value || '').trim();
+  const points = Number(document.getElementById(`new-rule-points-${plantId}`)?.value || 0);
+  if (!label || !triggerKey) {
+    feedback(`game-fb-${plantId}`, 'error', 'Rule label and trigger key are required.');
+    return;
+  }
+  const cfg = deepCopy(gameDraftByPlant.get(plantId) || DEFAULT_GAME_CONFIG);
+  cfg.customRules = Array.isArray(cfg.customRules) ? cfg.customRules : [];
+  cfg.customRules.push({ id: `rule_${Date.now().toString(36)}`, label, triggerKey, points, isEnabled: true });
+  gameDraftByPlant.set(plantId, cfg);
+  renderPlantsUsers();
+};
+
+window.removeCustomRule = function(plantId, idx) {
+  const cfg = deepCopy(gameDraftByPlant.get(plantId) || DEFAULT_GAME_CONFIG);
+  cfg.customRules = Array.isArray(cfg.customRules) ? cfg.customRules : [];
+  cfg.customRules.splice(idx, 1);
+  gameDraftByPlant.set(plantId, cfg);
+  renderPlantsUsers();
+};
+
+window.patchMission = function(plantId, idx, field, value) {
+  const missions = deepCopy(missionDraftByPlant.get(plantId) || []);
+  const item = missions[idx];
+  if (!item) return;
+  item.objective = item.objective || {};
+  item.rewards = item.rewards || {};
+  if (field === 'objectiveType') item.objective.type = String(value || '').trim();
+  else if (field === 'threshold') item.objective.threshold = Math.max(1, Number(value || 1));
+  else if (field === 'rewardXp') item.rewards.xp = Number(value || 0);
+  else if (field === 'isActive') item.isActive = value === 'true';
+  else item[field] = String(value || '').trim();
+  missions[idx] = item;
+  missionDraftByPlant.set(plantId, missions);
+};
+
+window.addMission = function(plantId) {
+  const name = (document.getElementById(`new-mission-name-${plantId}`)?.value || '').trim();
+  const objectiveType = (document.getElementById(`new-mission-type-${plantId}`)?.value || '').trim();
+  const threshold = Math.max(1, Number(document.getElementById(`new-mission-threshold-${plantId}`)?.value || 1));
+  const rewardXp = Number(document.getElementById(`new-mission-xp-${plantId}`)?.value || 0);
+  if (!name || !objectiveType) {
+    feedback(`game-fb-${plantId}`, 'error', 'Mission name and objective type are required.');
+    return;
+  }
+  const missions = deepCopy(missionDraftByPlant.get(plantId) || []);
+  missions.push({
+    id: `mission_${Date.now().toString(36)}`,
+    name,
+    objective: { type: objectiveType, threshold },
+    rewards: { xp: rewardXp },
+    isActive: true,
+    startsAt: new Date().toISOString(),
+    createdAt: null,
+    updatedAt: null
+  });
+  missionDraftByPlant.set(plantId, missions);
+  renderPlantsUsers();
+};
+
+window.removeMission = function(plantId, idx) {
+  const missions = deepCopy(missionDraftByPlant.get(plantId) || []);
+  missions.splice(idx, 1);
+  missionDraftByPlant.set(plantId, missions);
+  renderPlantsUsers();
+};
+
+window.saveGamification = async function(plantId) {
+  const cfg = deepCopy(gameDraftByPlant.get(plantId) || DEFAULT_GAME_CONFIG);
+  const missions = deepCopy(missionDraftByPlant.get(plantId) || []);
+  try {
+    const badges = deepCopy(badgeDraftByPlant.get(plantId) || DEFAULT_BADGE_DEFS);
+    await setDoc(doc(db, 'plants', plantId, 'gamificationConfig', 'main'), {
+      enabled: cfg.enabled !== false,
+      weights: cfg.weights || {},
+      penalties: cfg.penalties || {},
+      caps: cfg.caps || {},
+      customRules: Array.isArray(cfg.customRules) ? cfg.customRules : [],
+      badges: badges.map(b => ({
+        id: b.id || `badge_${Date.now().toString(36)}`,
+        name: b.name || 'Badge',
+        icon: b.icon || '🏅',
+        description: b.description || '',
+        triggerType: b.triggerType || 'xp_milestone',
+        threshold: Math.max(1, Number(b.threshold || 1)),
+        xpReward: Number(b.xpReward || 0),
+        isEnabled: b.isEnabled !== false,
+      })),
+      leaderboardPeriod: cfg.leaderboardPeriod || 'weekly',
+      updatedAt: serverTimestamp(),
+      updatedBy: { uid: currentUser.uid, name: currentUser.displayName || currentUser.email || '' }
+    }, { merge: true });
+
+    const existingSnap = await getDocs(collection(db, 'plants', plantId, 'missions'));
+    const desiredIds = new Set(missions.map(m => m.id));
+    for (const docSnap of existingSnap.docs) {
+      if (!desiredIds.has(docSnap.id)) await deleteDoc(docSnap.ref);
+    }
+    for (const mission of missions) {
+      const id = mission.id || `mission_${Date.now().toString(36)}`;
+      await setDoc(doc(db, 'plants', plantId, 'missions', id), {
+        name: mission.name || 'Mission',
+        objective: {
+          type: String(mission.objective?.type || '').trim(),
+          threshold: Math.max(1, Number(mission.objective?.threshold || 1))
+        },
+        rewards: { xp: Number(mission.rewards?.xp || 0) },
+        isActive: mission.isActive !== false,
+        startsAt: mission.startsAt || new Date().toISOString(),
+        updatedAt: serverTimestamp(),
+        updatedBy: { uid: currentUser.uid, name: currentUser.displayName || currentUser.email || '' }
+      }, { merge: true });
+    }
+    feedback(`game-fb-${plantId}`, 'ok', 'Saved gamification config and missions.');
+    await refreshAdminData();
+  } catch (e) {
+    console.error(e);
+    feedback(`game-fb-${plantId}`, 'error', e.message || 'Failed to save gamification settings.');
+  }
+};
+
+window.toggleStatusPanel = function(plantId) {
+  statusPanelOpen[plantId] = !(statusPanelOpen[plantId] ?? false);
+  renderPlantsUsers();
+};
+
+// ── Store editor ──────────────────────────────────────────────────────────────
+
+window.updateStoreItemPrice = function(plantId, idx, value) {
+  const items = storeDraftByPlant.get(plantId) || [];
+  if (items[idx]) items[idx].price = Math.max(0, Number(value) || 0);
+  storeDraftByPlant.set(plantId, items);
+};
+
+window.toggleStoreItem = function(plantId, idx, value) {
+  const items = storeDraftByPlant.get(plantId) || [];
+  if (items[idx]) items[idx].isActive = value === 'true';
+  storeDraftByPlant.set(plantId, items);
+};
+
+window.deleteStoreItem = function(plantId, idx) {
+  const items = storeDraftByPlant.get(plantId) || [];
+  items.splice(idx, 1);
+  storeDraftByPlant.set(plantId, items);
+  renderPlantsUsers();
+};
+
+window.addBuiltinThemeToStore = function(plantId) {
+  const themeKey = document.getElementById(`store-theme-key-${plantId}`)?.value;
+  const name = (document.getElementById(`store-theme-name-${plantId}`)?.value || '').trim();
+  const price = Math.max(0, Number(document.getElementById(`store-theme-price-${plantId}`)?.value || 0));
+  if (!themeKey || !name) { feedback(`store-fb-${plantId}`, 'error', 'Enter a display name.'); return; }
+  const items = storeDraftByPlant.get(plantId) || [];
+  if (items.some(i => i.themeKey === themeKey)) { feedback(`store-fb-${plantId}`, 'error', 'That theme is already in the store.'); return; }
+  items.push({ id: `theme_${themeKey}`, type: 'theme', themeKey, customVars: null, name, price, isActive: true });
+  storeDraftByPlant.set(plantId, items);
+  renderPlantsUsers();
+};
+
+window.addCustomThemeToStore = function(plantId) {
+  const name = (document.getElementById(`store-custom-name-${plantId}`)?.value || '').trim();
+  const price = Math.max(0, Number(document.getElementById(`store-custom-price-${plantId}`)?.value || 0));
+  if (!name) { feedback(`store-fb-${plantId}`, 'error', 'Enter a theme name.'); return; }
+  const bg     = document.getElementById(`store-custom-bg-${plantId}`)?.value     || '#0d1117';
+  const bg2    = document.getElementById(`store-custom-bg2-${plantId}`)?.value    || '#161b22';
+  const accent = document.getElementById(`store-custom-accent-${plantId}`)?.value || '#f97316';
+  const text   = document.getElementById(`store-custom-text-${plantId}`)?.value   || '#e6edf3';
+  const border = document.getElementById(`store-custom-border-${plantId}`)?.value || '#30363d';
+  const customVars = {
+    '--bg': bg, '--bg2': bg2, '--bg3': bg2, '--border': border,
+    '--text': text, '--text2': text + 'aa', '--text3': text + '66',
+    '--accent': accent, '--accent2': accent,
+    '--green': '#22c55e', '--red': '#ef4444', '--blue': '#3b82f6',
+    '--yellow': '#eab308', '--orange': '#f97316',
+  };
+  const items = storeDraftByPlant.get(plantId) || [];
+  items.push({ id: `storeitem_${Date.now()}`, type: 'theme', themeKey: null, customVars, name, price, isActive: true });
+  storeDraftByPlant.set(plantId, items);
+  renderPlantsUsers();
+};
+
+window.saveStoreDraft = async function(plantId) {
+  const items = storeDraftByPlant.get(plantId) || [];
+  try {
+    await setDoc(doc(db, 'plants', plantId, 'config', 'store'), { items }, { merge: false });
+    feedback(`store-fb-${plantId}`, 'ok', 'Store saved.');
+  } catch(e) {
+    feedback(`store-fb-${plantId}`, 'error', 'Save failed: ' + (e?.message || e));
+  }
+};
+
+window.toggleGamePanel = function(plantId) {
+  gamePanelOpen[plantId] = !(gamePanelOpen[plantId] ?? false);
+  renderPlantsUsers();
+};
+
+window.togglePlantPanel = function(plantId) {
+  plantPanelOpen[plantId] = !(plantPanelOpen[plantId] ?? false);
+  renderPlantsUsers();
+};
+
+window.switchPlantTab = function(plantId, tabName, btnEl) {
+  plantTab[plantId] = tabName;
+  const body = btnEl.closest('.plant-body');
+  if (body) {
+    body.querySelectorAll('.plant-tab-btn').forEach(b => b.classList.remove('active'));
+    btnEl.classList.add('active');
+    body.querySelectorAll('.plant-tab-pane').forEach(p => p.classList.remove('active'));
+    const target = body.querySelector(`#ptab-${tabName}-${plantId}`);
+    if (target) target.classList.add('active');
+  }
+};
+
+window.switchGameTab = function(plantId, tabName, btnEl) {
+  gamePanelOpen[`tab_${plantId}`] = tabName;
+  const pane = document.getElementById(`ptab-gamification-${plantId}`);
+  if (pane) {
+    pane.querySelectorAll('.game-tab-btn').forEach(b => b.classList.remove('active'));
+    btnEl.classList.add('active');
+    pane.querySelectorAll('.game-tab-pane').forEach(p => p.classList.remove('active'));
+    const target = pane.querySelector(`#game-tab-${tabName}-${plantId}`);
+    if (target) target.classList.add('active');
+  }
+};
+
+window.toggleStatusRow = function(plantId, statusKey) {
+  const rowKey = `${plantId}:${statusKey}`;
+  statusRowOpen[rowKey] = !(statusRowOpen[rowKey] ?? false);
+  renderPlantsUsers();
+};
+
+async function refreshAdminData() {
+  await loadUserPlants();
+  await loadUserDirectory();
+  const hasAdminAccess = adminPlantIds.length > 0;
+  document.getElementById('denied-card').style.display = hasAdminAccess ? 'none' : '';
+  document.getElementById('admin-content').style.display = hasAdminAccess ? '' : 'none';
+  if (!hasAdminAccess) return;
+  renderSchedulePlantOptions();
+  await loadMembersAndStatusesForAdminPlants();
+  renderPlantsUsers();
+}
+
+onAuthStateChanged(auth, async user => {
+  if (!user) {
+    currentUser = null;
+    document.getElementById('login-screen').classList.add('visible');
+    document.getElementById('app-screen').classList.remove('visible');
+    const btn = document.getElementById('google-signin-btn');
+    btn.disabled = false;
+    btn.textContent = 'Sign in with Google';
+    return;
+  }
+
+  currentUser = user;
+
+  if (user.email) {
+    setDoc(doc(db, 'userLookup', user.email.toLowerCase()), {
+      uid: user.uid,
+      displayName: user.displayName || '',
+      email: user.email,
+      lastSeen: serverTimestamp()
+    }, { merge: true }).catch(() => {});
+  }
+
+  document.getElementById('login-screen').classList.remove('visible');
+  document.getElementById('app-screen').classList.add('visible');
+  document.getElementById('whoami').textContent = `${user.displayName || user.email} (${user.email || user.uid})`;
+
+  await refreshAdminData();
+});
+
+// ── Badge & Leaderboard helpers ───────────────────────────────────────────────
+
+window.patchBadge = function(plantId, idx, field, value) {
+  const badges = deepCopy(badgeDraftByPlant.get(plantId) || DEFAULT_BADGE_DEFS);
+  if (!badges[idx]) return;
+  if (field === 'isEnabled') badges[idx].isEnabled = value === true || value === 'true';
+  else if (field === 'threshold' || field === 'xpReward') badges[idx][field] = Number(value || 0);
+  else badges[idx][field] = String(value || '').trim();
+  badgeDraftByPlant.set(plantId, badges);
+};
+
+window.removeBadge = function(plantId, idx) {
+  const badges = deepCopy(badgeDraftByPlant.get(plantId) || DEFAULT_BADGE_DEFS);
+  badges.splice(idx, 1);
+  badgeDraftByPlant.set(plantId, badges);
+  gamePanelOpen[`tab_${plantId}`] = 'badges';
+  renderPlantsUsers();
+};
+
+window.patchLeaderboardPeriod = function(plantId, period, btnEl) {
+  const cfg = deepCopy(gameDraftByPlant.get(plantId) || DEFAULT_GAME_CONFIG);
+  cfg.leaderboardPeriod = period;
+  gameDraftByPlant.set(plantId, cfg);
+  // Update button states without full re-render
+  btnEl.closest('.lb-settings-row')?.querySelectorAll('.lb-period-btn').forEach(b => {
+    b.classList.toggle('active', b.textContent.toLowerCase().replace(/\s/g,'') === period.replace('alltime','alltime'));
+  });
+  btnEl.closest('.lb-settings-row')?.querySelectorAll('.lb-period-btn').forEach(b => b.classList.remove('active'));
+  btnEl.classList.add('active');
+};
+
+window.resetLeaderboard = async function(plantId) {
+  if (!confirm('Reset the leaderboard for this plant? All current-period scores will be cleared. This cannot be undone.')) return;
+  const cfg = gameDraftByPlant.get(plantId) || DEFAULT_GAME_CONFIG;
+  const period = cfg.leaderboardPeriod || 'weekly';
+  try {
+    await setDoc(doc(db, 'plants', plantId, 'leaderboards', period), {
+      entriesByUid: {},
+      updatedAt: serverTimestamp(),
+      resetBy: { uid: currentUser.uid, name: currentUser.displayName || currentUser.email || '' }
+    });
+    feedback(`game-fb-${plantId}`, 'ok', `Leaderboard (${period}) reset successfully.`);
+  } catch (e) {
+    feedback(`game-fb-${plantId}`, 'error', e.message || 'Failed to reset leaderboard.');
+  }
+};
+
+// ── Badge Modal ───────────────────────────────────────────────────────────────
+
+let _bmSelectedType = '';
+
+function buildBadgeTypeGrid(selectedType) {
+  const grid = document.getElementById('bm-type-grid');
+  if (!grid) return;
+  grid.innerHTML = Object.entries(BADGE_TRIGGER_META).map(([key, meta]) => `
+    <div class="mission-type-tile ${selectedType === key ? 'selected' : ''}"
+         data-type="${esc(key)}"
+         onclick="window._bmSelectType('${esc(key)}')">
+      <span class="tile-icon">${meta.icon}</span>
+      <div class="tile-label">${esc(meta.label)}</div>
+      <div class="tile-sub">${esc(meta.sub)}</div>
+    </div>
+  `).join('');
+}
+
+window._bmSelectType = function(key) {
+  _bmSelectedType = key;
+  document.querySelectorAll('#bm-type-grid .mission-type-tile').forEach(el => {
+    el.classList.toggle('selected', el.dataset.type === key);
+  });
+};
+
+window.openBadgeModal = function(plantId, badgeIdx = -1) {
+  document.getElementById('bm-plant-id').value = plantId;
+  document.getElementById('bm-badge-idx').value = String(badgeIdx);
+
+  if (badgeIdx >= 0) {
+    const badges = badgeDraftByPlant.get(plantId) || DEFAULT_BADGE_DEFS;
+    const b = badges[badgeIdx];
+    document.getElementById('bm-title').textContent = 'Edit Badge';
+    document.getElementById('bm-name').value = b?.name || '';
+    document.getElementById('bm-icon').value = b?.icon || '🏅';
+    document.getElementById('bm-threshold').value = String(b?.threshold || 1);
+    document.getElementById('bm-xp').value = String(b?.xpReward || 50);
+    document.getElementById('bm-description').value = b?.description || '';
+    _bmSelectedType = b?.triggerType || '';
+  } else {
+    document.getElementById('bm-title').textContent = 'New Badge';
+    document.getElementById('bm-name').value = '';
+    document.getElementById('bm-icon').value = '🏅';
+    document.getElementById('bm-threshold').value = '1';
+    document.getElementById('bm-xp').value = '50';
+    document.getElementById('bm-description').value = '';
+    _bmSelectedType = '';
+  }
+  buildBadgeTypeGrid(_bmSelectedType);
+  document.getElementById('badge-modal-backdrop').classList.add('open');
+};
+
+window.closeBadgeModal = function() {
+  document.getElementById('badge-modal-backdrop').classList.remove('open');
+};
+
+document.getElementById('badge-modal-backdrop').addEventListener('click', function(e) {
+  if (e.target === this) window.closeBadgeModal();
+});
+
+window.saveBadgeModal = function() {
+  const plantId = document.getElementById('bm-plant-id').value;
+  const badgeIdx = Number(document.getElementById('bm-badge-idx').value);
+  const name = (document.getElementById('bm-name')?.value || '').trim();
+  const icon = (document.getElementById('bm-icon')?.value || '🏅').trim();
+  const threshold = Math.max(1, Number(document.getElementById('bm-threshold')?.value || 1));
+  const xpReward = Number(document.getElementById('bm-xp')?.value || 0);
+  const description = (document.getElementById('bm-description')?.value || '').trim();
+
+  if (!name) { alert('Badge name is required.'); return; }
+  if (!_bmSelectedType) { alert('Please select a trigger type.'); return; }
+
+  const badges = deepCopy(badgeDraftByPlant.get(plantId) || DEFAULT_BADGE_DEFS);
+  const badgeData = {
+    id: (badgeIdx >= 0 && badges[badgeIdx]?.id) ? badges[badgeIdx].id : `badge_${Date.now().toString(36)}`,
+    name, icon, description, triggerType: _bmSelectedType, threshold, xpReward,
+    isEnabled: badgeIdx >= 0 ? (badges[badgeIdx]?.isEnabled ?? true) : true,
+  };
+
+  if (badgeIdx >= 0) badges[badgeIdx] = badgeData;
+  else badges.push(badgeData);
+
+  badgeDraftByPlant.set(plantId, badges);
+  window.closeBadgeModal();
+  gamePanelOpen[`tab_${plantId}`] = 'badges';
+  renderPlantsUsers();
+};
+
+// ── Mission Modal ─────────────────────────────────────────────────────────────
+
+let _mmSelectedType = '';
+
+function buildMissionTypeGrid(selectedType) {
+  const grid = document.getElementById('mm-type-grid');
+  if (!grid) return;
+  grid.innerHTML = Object.entries(MISSION_TYPE_META).map(([key, meta]) => `
+    <div class="mission-type-tile ${selectedType === key ? 'selected' : ''}"
+         data-type="${esc(key)}"
+         onclick="window._mmSelectType('${esc(key)}')">
+      <span class="tile-icon">${meta.icon}</span>
+      <div class="tile-label">${esc(meta.label)}</div>
+      <div class="tile-sub">${esc(meta.sub)}</div>
+    </div>
+  `).join('');
+}
+
+window._mmSelectType = function(key) {
+  _mmSelectedType = key;
+  document.querySelectorAll('.mission-type-tile').forEach(el => {
+    el.classList.toggle('selected', el.dataset.type === key);
+  });
+  window.renderMissionPreview();
+};
+
+window.renderMissionPreview = function() {
+  const name = document.getElementById('mm-name')?.value || 'My Mission';
+  const threshold = Number(document.getElementById('mm-threshold')?.value || 5);
+  const xp = Number(document.getElementById('mm-xp')?.value || 100);
+  const meta = MISSION_TYPE_META[_mmSelectedType] || { icon: '🎯', label: _mmSelectedType || 'Select a type' };
+  const el = document.getElementById('mm-preview-inner');
+  if (!el) return;
+  const pEsc = (v) => String(v || '').replace(/[&<>'"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' }[c]));
+  el.innerHTML = `
+    <div style="font-size:11px;color:#8b949e;margin-bottom:6px;">${meta.icon} ${pEsc(meta.label)}</div>
+    <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;color:#e6edf3;margin-bottom:6px;">
+      <span>${pEsc(name)}</span><span>0%</span>
+    </div>
+    <div class="mm-progress"><span></span></div>
+    <div style="font-size:10px;color:#484f58;margin-top:5px;">0 / ${threshold} &nbsp;·&nbsp; <span style="color:#eab308">${xp} XP</span> reward</div>
+  `;
+};
+
+window.openMissionModal = function(plantId, missionIdx = -1) {
+  document.getElementById('mm-plant-id').value = plantId;
+  document.getElementById('mm-mission-idx').value = String(missionIdx);
+
+  if (missionIdx >= 0) {
+    const missions = missionDraftByPlant.get(plantId) || [];
+    const m = missions[missionIdx];
+    document.getElementById('mm-title').textContent = 'Edit Mission';
+    document.getElementById('mm-name').value = m?.name || '';
+    document.getElementById('mm-threshold').value = String(m?.objective?.threshold || 5);
+    document.getElementById('mm-xp').value = String(m?.rewards?.xp || 100);
+    document.getElementById('mm-active').value = m?.isActive !== false ? 'true' : 'false';
+    _mmSelectedType = m?.objective?.type || '';
+  } else {
+    document.getElementById('mm-title').textContent = 'New Mission';
+    document.getElementById('mm-name').value = '';
+    document.getElementById('mm-threshold').value = '5';
+    document.getElementById('mm-xp').value = '100';
+    document.getElementById('mm-active').value = 'true';
+    _mmSelectedType = '';
+  }
+
+  buildMissionTypeGrid(_mmSelectedType);
+  window.renderMissionPreview();
+  document.getElementById('mission-modal-backdrop').classList.add('open');
+};
+
+window.closeMissionModal = function() {
+  document.getElementById('mission-modal-backdrop').classList.remove('open');
+};
+
+// Close on backdrop click
+document.getElementById('mission-modal-backdrop').addEventListener('click', function(e) {
+  if (e.target === this) window.closeMissionModal();
+});
+
+window.saveMissionModal = function() {
+  const plantId = document.getElementById('mm-plant-id').value;
+  const missionIdx = Number(document.getElementById('mm-mission-idx').value);
+  const name = (document.getElementById('mm-name')?.value || '').trim();
+  const threshold = Math.max(1, Number(document.getElementById('mm-threshold')?.value || 1));
+  const rewardXp = Number(document.getElementById('mm-xp')?.value || 0);
+  const isActive = document.getElementById('mm-active')?.value === 'true';
+
+  if (!name) { alert('Mission name is required.'); return; }
+  if (!_mmSelectedType) { alert('Please select an objective type.'); return; }
+
+  const missions = deepCopy(missionDraftByPlant.get(plantId) || []);
+  const missionData = {
+    id: missionIdx >= 0 && missions[missionIdx]?.id
+      ? missions[missionIdx].id
+      : `mission_${Date.now().toString(36)}`,
+    name,
+    objective: { type: _mmSelectedType, threshold },
+    rewards: { xp: rewardXp },
+    isActive,
+    startsAt: (missionIdx >= 0 && missions[missionIdx]?.startsAt) || new Date().toISOString(),
+    createdAt: (missionIdx >= 0 && missions[missionIdx]?.createdAt) || null,
+    updatedAt: null,
+  };
+
+  if (missionIdx >= 0) {
+    missions[missionIdx] = missionData;
+  } else {
+    missions.push(missionData);
+  }
+
+  missionDraftByPlant.set(plantId, missions);
+  window.closeMissionModal();
+  // Switch to missions tab and re-render
+  gamePanelOpen[`tab_${plantId}`] = 'missions';
+  renderPlantsUsers();
+};
+
+// ── End Mission Modal ─────────────────────────────────────────────────────────
+
+document.getElementById('google-signin-btn').addEventListener('click', signInWithGoogle);
+document.getElementById('signout-btn').addEventListener('click', doSignOut);
+document.getElementById('load-schedule-file-btn').addEventListener('click', loadScheduleJsonFromFile);
+document.getElementById('generate-schedule-json-btn').addEventListener('click', generateScheduleJsonFromDailyScheduleGPT);
+document.getElementById('import-schedule-btn').addEventListener('click', importDailySchedule);
+
+window.openAddPlantModal = function() {
+  document.getElementById('add-plant-modal-bg').classList.add('open');
+  document.getElementById('new-plant-name').value = '';
+  document.getElementById('new-plant-location').value = '';
+  const fb = document.getElementById('plant-create-feedback');
+  if (fb) { fb.className = 'feedback'; fb.textContent = ''; }
+  setTimeout(() => document.getElementById('new-plant-name').focus(), 50);
+};
+
+window.closeAddPlantModal = function() {
+  document.getElementById('add-plant-modal-bg').classList.remove('open');
+};
+
+window.switchPageTab = function(tabName, btnEl) {
+  document.querySelectorAll('.page-tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.page-tab-pane').forEach(p => p.classList.remove('active'));
+  btnEl.classList.add('active');
+  const pane = document.getElementById('page-tab-' + tabName);
+  if (pane) pane.classList.add('active');
+};
+</script>
+</body>
+</html>
