@@ -1626,6 +1626,7 @@ function switchStoreTab(tab) {
   document.querySelectorAll('.store-tab-panel').forEach(panel => panel.classList.toggle('active', panel.id === `store-panel-${tab}`));
 }
 window.switchStoreTab = switchStoreTab;
+window.renderStoreModal = renderStoreModal;
 
 function renderStoreModal() {
   updateStoreXpDisplay();
@@ -5184,6 +5185,7 @@ function applyTheme(theme) {
   _syncThemePrefsToFirestore();
   updateThemeModeUI();
 }
+window.applyTheme = applyTheme;
 
 // Load saved theme (handles both built-in keys and custom_<id>)
 try {
