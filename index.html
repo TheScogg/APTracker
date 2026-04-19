@@ -3120,8 +3120,22 @@ function startGamificationListeners() {
     renderGamePanel();
   });
 
-  gameStatsUnsubscribe = onSnapshot(gameUserStatsDoc(currentUser.uid), snap => {
+  let _globalXpBackfilled = false;
+  gameStatsUnsubscribe = onSnapshot(gameUserStatsDoc(currentUser.uid), async snap => {
     gameUserStats = snap.exists() ? snap.data() : { totals: { xp: 0, level: 1 }, streaks: { current: 0 } };
+    // One-time backfill: if globalXp was never written (store feature added after XP accumulated),
+    // seed it from the plant stats total so the store balance matches reality.
+    if (!_globalXpBackfilled) {
+      _globalXpBackfilled = true;
+      const plantXp = Number(gameUserStats?.totals?.xp || 0);
+      if (plantXp > 0 && userGlobalXp === 0) {
+        try {
+          await setDoc(doc(db, 'users', currentUser.uid), { globalXp: plantXp }, { merge: true });
+          userGlobalXp = plantXp;
+          renderStoreCard();
+        } catch(e) { console.warn('globalXp backfill failed:', e?.message); }
+      }
+    }
     renderGamePanel();
     checkAndAwardBadges();
   });
