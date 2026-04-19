@@ -181,8 +181,18 @@
     /* Badge modal (reuse mission modal styles + small tweaks) */
     .badge-type-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:16px; }
     @media (max-width:480px) { .badge-type-grid { grid-template-columns:repeat(2,1fr); } }
-    /* Store editor */
-    .store-admin-table td { padding: 5px 4px; vertical-align: middle; }
+
+    /* Store item cards */
+    .store-item-card { background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:12px 14px; display:flex; align-items:center; gap:12px; margin-bottom:8px; transition:border-color 0.15s; }
+    .store-item-card:hover { border-color:var(--text2); }
+    .store-item-icon { font-size:22px; flex-shrink:0; width:32px; text-align:center; }
+    .store-item-info { flex:1; min-width:0; }
+    .store-item-name { font-size:13px; font-weight:700; color:var(--text); }
+    .store-item-meta { font-size:11px; color:var(--text2); margin-top:2px; }
+    .store-item-price { display:flex; align-items:center; gap:5px; flex-shrink:0; }
+    .store-item-price input[type=number] { width:74px; text-align:right; }
+    .store-item-price-label { font-size:11px; color:var(--text2); }
+    .store-item-actions { display:flex; gap:6px; align-items:center; flex-shrink:0; }
   </style>
 </head>
 <body>
@@ -277,18 +287,18 @@
     </div>
   </div>
 
-<!-- Add Plant Modal -->
-<div class="ap-modal-bg" id="add-plant-modal-bg" onclick="window.closeAddPlantModal()">
-  <div class="ap-modal" onclick="event.stopPropagation()">
-    <div class="ap-modal-title">New Plant</div>
-    <div class="grid-2" style="margin-bottom:10px;">
-      <div>
-        <label class="mission-field-label" for="new-plant-name">Plant Name</label>
-        <input id="new-plant-name" placeholder="e.g. AP1" />
-      </div>
-      <div>
-        <label class="mission-field-label" for="new-plant-location">Location</label>
-        <input id="new-plant-location" placeholder="Optional" />
+        <div class="card" id="store-card" style="display:none;">
+          <h2>🛍 Store Catalog</h2>
+          <p class="muted" style="margin-bottom:10px;">Manage items available in the global store. Players spend XP to unlock themes and cosmetics.</p>
+          <div id="store-items-list"></div>
+          <div class="status-toolbar" style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="small-btn" style="border-color:var(--accent);color:var(--accent);" onclick="window.saveStore()">💾 Save Store</button>
+            <button class="small-btn" onclick="window.resetStoreDefaults()">↺ Reset to Defaults</button>
+          </div>
+          <div id="store-fb" class="feedback"></div>
+        </div>
+
+        <div id="plants-users-container"></div>
       </div>
     </div>
     <div id="plant-create-feedback" class="feedback" style="margin-bottom:10px;"></div>
@@ -485,6 +495,22 @@ const DEFAULT_BADGE_DEFS = [
   { id: 'badge_resolver_10',    name: 'Problem Solver',  icon: '🏆', description: 'Resolve 10 issues',         triggerType: 'issues_resolved',  threshold: 10,  xpReward: 100, isEnabled: true },
 ];
 
+const DEFAULT_STORE_ITEMS = [
+  { id: 'theme_sunset',     type: 'theme', themeKey: 'sunset',     customVars: null, name: 'Sunset',     price: 50,  isActive: true },
+  { id: 'theme_ocean',      type: 'theme', themeKey: 'ocean',      customVars: null, name: 'Ocean',      price: 50,  isActive: true },
+  { id: 'theme_royal',      type: 'theme', themeKey: 'royal',      customVars: null, name: 'Royal',      price: 100, isActive: true },
+  { id: 'theme_slate',      type: 'theme', themeKey: 'slate',      customVars: null, name: 'Slate',      price: 100, isActive: true },
+  { id: 'theme_mint',       type: 'theme', themeKey: 'mint',       customVars: null, name: 'Mint',       price: 120, isActive: true },
+  { id: 'theme_cyberpunk',  type: 'theme', themeKey: 'cyberpunk',  customVars: null, name: 'Cyberpunk',  price: 220, isActive: true },
+  { id: 'theme_industrial', type: 'theme', themeKey: 'industrial', customVars: null, name: 'Industrial', price: 220, isActive: true },
+  { id: 'theme_engel',      type: 'theme', themeKey: 'engel',      customVars: null, name: 'Engel',      price: 250, isActive: true },
+];
+
+const THEME_ICONS = {
+  sunset: '🌅', ocean: '🌊', royal: '👑', slate: '🪨',
+  mint: '🌿', cyberpunk: '🤖', industrial: '🏭', engel: '⚙️',
+};
+
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
@@ -500,27 +526,7 @@ let statusDraftByPlant = new Map();
 let gameDraftByPlant = new Map();
 let badgeDraftByPlant = new Map();
 let missionDraftByPlant = new Map();
-let storeDraftByPlant = new Map();
-
-const DEFAULT_STORE_ITEMS = [
-  { id: 'theme_sunset',     type: 'theme', themeKey: 'sunset',     customVars: null, name: 'Sunset',     price: 50,  isActive: true },
-  { id: 'theme_ocean',      type: 'theme', themeKey: 'ocean',      customVars: null, name: 'Ocean',      price: 50,  isActive: true },
-  { id: 'theme_royal',      type: 'theme', themeKey: 'royal',      customVars: null, name: 'Royal',      price: 100, isActive: true },
-  { id: 'theme_slate',      type: 'theme', themeKey: 'slate',      customVars: null, name: 'Slate',      price: 100, isActive: true },
-  { id: 'theme_mint',       type: 'theme', themeKey: 'mint',       customVars: null, name: 'Mint',       price: 120, isActive: true },
-  { id: 'theme_cyberpunk',  type: 'theme', themeKey: 'cyberpunk',  customVars: null, name: 'Cyberpunk',  price: 220, isActive: true },
-  { id: 'theme_industrial', type: 'theme', themeKey: 'industrial', customVars: null, name: 'Industrial', price: 220, isActive: true },
-  { id: 'theme_engel',      type: 'theme', themeKey: 'engel',      customVars: null, name: 'Engel',      price: 250, isActive: true },
-];
-
-const ADMIN_THEME_OPTIONS = [
-  { key: 'midnight', label: 'Midnight' }, { key: 'arctic', label: 'Arctic' },
-  { key: 'forest', label: 'Forest' },    { key: 'sunset', label: 'Sunset' },
-  { key: 'ocean', label: 'Ocean' },      { key: 'royal', label: 'Royal' },
-  { key: 'slate', label: 'Slate' },      { key: 'cyberpunk', label: 'Cyberpunk' },
-  { key: 'industrial', label: 'Industrial' }, { key: 'mint', label: 'Mint' },
-  { key: 'engel', label: 'Engel' },
-];
+let storeDraft = [];
 const statusPanelOpen = {};
 const statusRowOpen = {};
 const gamePanelOpen = {};
@@ -885,6 +891,56 @@ async function loadMembersAndStatusesForAdminPlants() {
     const storeData = storeSnap.exists() ? (storeSnap.data().items || []) : DEFAULT_STORE_ITEMS.map(i => ({ ...i }));
     storeDraftByPlant.set(plantId, storeData.map(i => ({ ...i })));
   }
+}
+
+async function loadStoreConfig() {
+  try {
+    const snap = await getDoc(doc(db, 'storeConfig', 'main'));
+    const stored = snap.exists() ? (snap.data().items || []) : null;
+    if (stored && stored.length > 0) {
+      const byId = new Map(stored.map(i => [i.id, i]));
+      storeDraft = DEFAULT_STORE_ITEMS.map(def => {
+        const saved = byId.get(def.id);
+        return saved ? { ...def, price: saved.price ?? def.price, isActive: saved.isActive ?? def.isActive } : { ...def };
+      });
+    } else {
+      storeDraft = deepCopy(DEFAULT_STORE_ITEMS);
+    }
+  } catch (e) {
+    console.warn('Could not load store config:', e);
+    storeDraft = deepCopy(DEFAULT_STORE_ITEMS);
+  }
+}
+
+function renderStorePanel() {
+  const card = document.getElementById('store-card');
+  const list = document.getElementById('store-items-list');
+  if (!card || !list) return;
+  card.style.display = '';
+
+  list.innerHTML = storeDraft.map(item => {
+    const icon = item.type === 'theme' ? (THEME_ICONS[item.themeKey] || '🎨') : '🎁';
+    return `
+      <div class="store-item-card">
+        <div class="store-item-icon">${icon}</div>
+        <div class="store-item-info">
+          <div class="store-item-name">${esc(item.name)}</div>
+          <div class="store-item-meta">${esc(item.type)} · key: ${esc(item.themeKey || item.id)}</div>
+        </div>
+        <div class="store-item-price">
+          <input type="number" min="0" step="5" value="${Number(item.price)}"
+                 oninput="window.patchStoreItem('${esc(item.id)}','price',this.value)" />
+          <span class="store-item-price-label">XP</span>
+        </div>
+        <div class="store-item-actions">
+          <label class="toggle-switch" title="${item.isActive ? 'Active' : 'Inactive'}">
+            <input type="checkbox" ${item.isActive ? 'checked' : ''}
+                   onchange="window.patchStoreItem('${esc(item.id)}','isActive',this.checked)">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>`;
+  }).join('');
 }
 
 async function loadUserDirectory() {
@@ -1970,34 +2026,35 @@ window.togglePlantPanel = function(plantId) {
   renderPlantsUsers();
 };
 
-window.switchPlantTab = function(plantId, tabName, btnEl) {
-  plantTab[plantId] = tabName;
-  const body = btnEl.closest('.plant-body');
-  if (!body) return;
-  body.querySelectorAll('.plant-tab-btn').forEach(b => b.classList.remove('active'));
-  btnEl.classList.add('active');
-  body.querySelectorAll('.plant-tab-pane').forEach(p => p.classList.remove('active'));
-  const target = body.querySelector(`#ptab-${tabName}-${plantId}`);
-  if (target) target.classList.add('active');
+window.patchStoreItem = function(id, field, value) {
+  const item = storeDraft.find(i => i.id === id);
+  if (!item) return;
+  if (field === 'price') item.price = Math.max(0, Number(value) || 0);
+  else if (field === 'isActive') item.isActive = Boolean(value);
 };
 
-window.switchPageTab = function(tabName, btnEl) {
-  document.querySelectorAll('.page-tab-btn').forEach(b => b.classList.remove('active'));
-  btnEl.classList.add('active');
-  document.querySelectorAll('.page-tab-pane').forEach(p => p.classList.remove('active'));
-  const target = document.getElementById(`page-tab-${tabName}`);
-  if (target) target.classList.add('active');
+window.saveStore = async function() {
+  try {
+    await setDoc(doc(db, 'storeConfig', 'main'), {
+      items: storeDraft.map(i => ({
+        id: i.id, type: i.type, themeKey: i.themeKey || null, customVars: i.customVars || null,
+        name: i.name, price: Number(i.price), isActive: i.isActive !== false,
+      })),
+      updatedAt: serverTimestamp(),
+      updatedBy: { uid: currentUser.uid, name: currentUser.displayName || currentUser.email || '' },
+    }, { merge: true });
+    feedback('store-fb', 'ok', 'Store catalog saved.');
+  } catch (e) {
+    console.error(e);
+    feedback('store-fb', 'error', e.message || 'Failed to save store.');
+  }
 };
 
-window.openAddPlantModal = function() {
-  document.getElementById('new-plant-name').value = '';
-  document.getElementById('new-plant-location').value = '';
-  document.getElementById('plant-create-feedback').textContent = '';
-  document.getElementById('add-plant-modal-bg').classList.add('open');
-};
-
-window.closeAddPlantModal = function() {
-  document.getElementById('add-plant-modal-bg').classList.remove('open');
+window.resetStoreDefaults = function() {
+  if (!confirm('Reset store to default items and prices?')) return;
+  storeDraft = deepCopy(DEFAULT_STORE_ITEMS);
+  renderStorePanel();
+  feedback('store-fb', 'ok', 'Reset to defaults — click Save to persist.');
 };
 
 window.switchGameTab = function(plantId, tabName, btnEl) {
@@ -2026,8 +2083,12 @@ async function refreshAdminData() {
   document.getElementById('admin-content').style.display = hasAdminAccess ? '' : 'none';
   if (!hasAdminAccess) return;
   renderSchedulePlantOptions();
-  await loadMembersAndStatusesForAdminPlants();
+  await Promise.all([
+    loadMembersAndStatusesForAdminPlants(),
+    loadStoreConfig(),
+  ]);
   renderPlantsUsers();
+  renderStorePanel();
 }
 
 onAuthStateChanged(auth, async user => {
