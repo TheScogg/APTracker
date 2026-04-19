@@ -2031,6 +2031,18 @@ window.togglePlantPanel = function(plantId) {
   renderPlantsUsers();
 };
 
+window.switchPlantTab = function(plantId, tabName, btnEl) {
+  plantTab[plantId] = tabName;
+  const body = btnEl.closest('.plant-body');
+  if (body) {
+    body.querySelectorAll('.plant-tab-btn').forEach(b => b.classList.remove('active'));
+    btnEl.classList.add('active');
+    body.querySelectorAll('.plant-tab-pane').forEach(p => p.classList.remove('active'));
+    const target = body.querySelector(`#ptab-${tabName}-${plantId}`);
+    if (target) target.classList.add('active');
+  }
+};
+
 window.patchStoreItem = function(id, field, value) {
   const item = storeDraft.find(i => i.id === id);
   if (!item) return;
