@@ -140,7 +140,30 @@
     .mm-progress > span { display:block; height:100%; background:linear-gradient(90deg,#a855f7,#3b82f6); width:0%; }
     @media (max-width:540px) { .mission-type-grid { grid-template-columns:repeat(2,1fr); } .mission-field-row { grid-template-columns:1fr; } }
 
-    /* Badge cards in admin */
+    /* ── Page-level tabs ─────────────────────────────────────── */
+    .page-tabs { display:flex; gap:0; border-bottom:2px solid var(--border); margin-bottom:16px; }
+    .page-tab-btn { background:none; border:none; border-bottom:3px solid transparent; color:var(--text2); font-family:'Nunito',sans-serif; font-weight:700; font-size:14px; padding:10px 20px; cursor:pointer; margin-bottom:-2px; transition:color 0.15s,border-color 0.15s; white-space:nowrap; }
+    .page-tab-btn.active { color:var(--accent); border-bottom-color:var(--accent); }
+    .page-tab-btn:hover:not(.active) { color:var(--text); }
+    .page-tab-pane { display:none; }
+    .page-tab-pane.active { display:block; }
+
+    /* ── Per-plant tabs ──────────────────────────────────────── */
+    .plant-tabs { display:flex; gap:0; border-bottom:1px solid var(--border); margin-bottom:12px; }
+    .plant-tab-btn { background:none; border:none; border-bottom:2px solid transparent; color:var(--text2); font-family:'Nunito',sans-serif; font-weight:700; font-size:12px; padding:8px 14px; cursor:pointer; margin-bottom:-1px; transition:color 0.15s,border-color 0.15s; white-space:nowrap; }
+    .plant-tab-btn.active { color:var(--accent); border-bottom-color:var(--accent); }
+    .plant-tab-btn:hover:not(.active) { color:var(--text); }
+    .plant-tab-pane { display:none; }
+    .plant-tab-pane.active { display:block; }
+
+    /* ── Add Plant modal ─────────────────────────────────────── */
+    .ap-modal-bg { position:fixed; inset:0; background:rgba(0,0,0,0.65); z-index:800; display:flex; align-items:center; justify-content:center; padding:20px; opacity:0; pointer-events:none; transition:opacity 0.2s; }
+    .ap-modal-bg.open { opacity:1; pointer-events:all; }
+    .ap-modal { background:var(--bg2); border:1px solid var(--border); border-radius:14px; width:440px; max-width:100%; padding:24px; box-shadow:0 24px 80px rgba(0,0,0,0.6); transform:translateY(16px) scale(0.97); transition:transform 0.2s; }
+    .ap-modal-bg.open .ap-modal { transform:translateY(0) scale(1); }
+    .ap-modal-title { font-family:'Rajdhani',sans-serif; font-size:22px; font-weight:700; letter-spacing:0.8px; margin-bottom:16px; }
+
+    /* ── Badge cards in admin */
     .badge-card { background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:12px 14px; display:flex; align-items:center; gap:12px; margin-bottom:8px; transition:border-color 0.15s; }
     .badge-card:hover { border-color:var(--text2); }
     .badge-card-icon { font-size:28px; flex-shrink:0; width:36px; text-align:center; }
@@ -193,64 +216,88 @@
       </div>
 
       <div id="admin-content" style="display:none;">
-        <div class="card">
-          <h2>Daily Schedule Import</h2>
-          <p class="muted" style="margin-bottom:10px;">Upload or paste schedule JSON to import daily schedules into Firestore.</p>
-          <div class="grid-2">
-            <input id="schedule-date" class="mono-input" type="date" />
-            <input id="schedule-source-name" placeholder="Source file name (optional, e.g. Apr 10, 2026.pdf)" />
-          </div>
-          <div style="margin-top:8px;">
-            <select id="schedule-plant-id">
-              <option value="">Select plant…</option>
-            </select>
-          </div>
-          <div class="json-actions">
-            <input id="schedule-json-file" type="file" accept="application/json,.json" style="max-width:320px;padding:6px 8px;" />
-            <button class="btn" id="load-schedule-file-btn" style="max-width:220px;">Load JSON from file</button>
-            <button class="btn btn-primary" id="import-schedule-btn" style="max-width:240px;">Import Daily Schedule</button>
-          </div>
-          <div class="divider"></div>
-          <h3 style="font-family:'Rajdhani',sans-serif;font-size:16px;letter-spacing:0.7px;">Generate from DailyScheduleGPT</h3>
-          <p class="muted" style="margin:4px 0 8px;">Provide schedule text/PDF metadata and generate a JSON draft before importing.</p>
-          <textarea id="schedule-gpt-source" placeholder="Paste schedule text or PDF metadata for DailyScheduleGPT" style="min-height:110px;"></textarea>
-          <div class="grid-2" style="margin-top:8px;">
-            <input id="schedule-gpt-shift-override" placeholder="Shift override (optional, e.g. A or B)" />
-            <select id="schedule-gpt-model-preset">
-              <option value="balanced">Model preset: Balanced</option>
-              <option value="fast">Model preset: Fast</option>
-              <option value="accurate">Model preset: Accurate</option>
-            </select>
-          </div>
-          <div class="grid-2" style="margin-top:8px;">
-            <select id="schedule-gpt-strict-validation">
-              <option value="true">Strict validation: On</option>
-              <option value="false">Strict validation: Off</option>
-            </select>
-            <button class="btn" id="generate-schedule-json-btn" style="max-width:240px;">Generate JSON</button>
-          </div>
-          <div id="schedule-gpt-feedback" class="feedback"></div>
-          <textarea id="schedule-json-text" placeholder="Paste schedule JSON here" style="margin-top:10px;min-height:180px;"></textarea>
-          <div id="schedule-import-feedback" class="feedback"></div>
+        <!-- Page-level tab bar -->
+        <div class="page-tabs">
+          <button class="page-tab-btn active" id="ptab-btn-plants" onclick="window.switchPageTab('plants',this)">Plants</button>
+          <button class="page-tab-btn" id="ptab-btn-schedule" onclick="window.switchPageTab('schedule',this)">Schedule Import</button>
         </div>
 
-        <div class="card">
-          <h2>Add Plant</h2>
-          <p class="muted" style="margin-bottom:10px;">Plant creation has moved from the tracker page to this admin portal.</p>
-          <div class="grid-2">
-            <input id="new-plant-name" placeholder="Plant name (required)" />
-            <input id="new-plant-location" placeholder="Location (optional)" />
+        <!-- Plants tab -->
+        <div class="page-tab-pane active" id="page-tab-plants">
+          <div style="display:flex;justify-content:flex-end;margin-bottom:12px;">
+            <button class="btn btn-primary" onclick="window.openAddPlantModal()">+ New Plant</button>
           </div>
-          <div class="row" style="margin-top:8px;">
-            <button class="btn btn-primary" id="create-plant-btn" style="max-width:180px;">Create Plant</button>
-          </div>
-          <div id="plant-create-feedback" class="feedback"></div>
+          <div id="plants-users-container"></div>
         </div>
 
-        <div id="plants-users-container"></div>
+        <!-- Schedule Import tab -->
+        <div class="page-tab-pane" id="page-tab-schedule">
+          <div class="card">
+            <h2>Daily Schedule Import</h2>
+            <p class="muted" style="margin-bottom:10px;">Upload or paste schedule JSON to import daily schedules into Firestore.</p>
+            <div class="grid-2">
+              <input id="schedule-date" class="mono-input" type="date" />
+              <input id="schedule-source-name" placeholder="Source file name (optional, e.g. Apr 10, 2026.pdf)" />
+            </div>
+            <div style="margin-top:8px;">
+              <select id="schedule-plant-id">
+                <option value="">Select plant…</option>
+              </select>
+            </div>
+            <div class="json-actions">
+              <input id="schedule-json-file" type="file" accept="application/json,.json" style="max-width:320px;padding:6px 8px;" />
+              <button class="btn" id="load-schedule-file-btn" style="max-width:220px;">Load JSON from file</button>
+              <button class="btn btn-primary" id="import-schedule-btn" style="max-width:240px;">Import Daily Schedule</button>
+            </div>
+            <div class="divider"></div>
+            <h3 style="font-family:'Rajdhani',sans-serif;font-size:16px;letter-spacing:0.7px;">Generate from DailyScheduleGPT</h3>
+            <p class="muted" style="margin:4px 0 8px;">Provide schedule text/PDF metadata and generate a JSON draft before importing.</p>
+            <textarea id="schedule-gpt-source" placeholder="Paste schedule text or PDF metadata for DailyScheduleGPT" style="min-height:110px;"></textarea>
+            <div class="grid-2" style="margin-top:8px;">
+              <input id="schedule-gpt-shift-override" placeholder="Shift override (optional, e.g. A or B)" />
+              <select id="schedule-gpt-model-preset">
+                <option value="balanced">Model preset: Balanced</option>
+                <option value="fast">Model preset: Fast</option>
+                <option value="accurate">Model preset: Accurate</option>
+              </select>
+            </div>
+            <div class="grid-2" style="margin-top:8px;">
+              <select id="schedule-gpt-strict-validation">
+                <option value="true">Strict validation: On</option>
+                <option value="false">Strict validation: Off</option>
+              </select>
+              <button class="btn" id="generate-schedule-json-btn" style="max-width:240px;">Generate JSON</button>
+            </div>
+            <div id="schedule-gpt-feedback" class="feedback"></div>
+            <textarea id="schedule-json-text" placeholder="Paste schedule JSON here" style="margin-top:10px;min-height:180px;"></textarea>
+            <div id="schedule-import-feedback" class="feedback"></div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
+
+<!-- Add Plant Modal -->
+<div class="ap-modal-bg" id="add-plant-modal-bg" onclick="window.closeAddPlantModal()">
+  <div class="ap-modal" onclick="event.stopPropagation()">
+    <div class="ap-modal-title">New Plant</div>
+    <div class="grid-2" style="margin-bottom:10px;">
+      <div>
+        <label class="mission-field-label" for="new-plant-name">Plant Name</label>
+        <input id="new-plant-name" placeholder="e.g. AP1" />
+      </div>
+      <div>
+        <label class="mission-field-label" for="new-plant-location">Location</label>
+        <input id="new-plant-location" placeholder="Optional" />
+      </div>
+    </div>
+    <div id="plant-create-feedback" class="feedback" style="margin-bottom:10px;"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button class="btn" onclick="window.closeAddPlantModal()">Cancel</button>
+      <button class="btn btn-primary" id="create-plant-btn" onclick="createPlant()">Create Plant</button>
+    </div>
+  </div>
+</div>
 
 <!-- Badge Editor Modal -->
 <div class="mission-modal-backdrop" id="badge-modal-backdrop">
@@ -472,6 +519,7 @@ const statusPanelOpen = {};
 const statusRowOpen = {};
 const gamePanelOpen = {};
 const plantPanelOpen = {};
+const plantTab = {};
 const SCHEDULE_SECTIONS = [
   { inputKey: 'page_1', section: 'page1', isChange: false },
   { inputKey: 'page_2', section: 'page2', isChange: false },
@@ -888,35 +936,25 @@ function renderStatusEditor(plantId, plantName) {
   }).join('');
 
   return `
-    <div class="divider"></div>
-    <div class="status-header-row">
-      <h3 style="font-family:'Rajdhani',sans-serif;letter-spacing:0.6px;">Manage Statuses — ${esc(plantName)}</h3>
-      <div class="status-header-actions">
-        <button class="compact-btn" onclick="window.toggleStatusPanel('${plantId}')">${panelOpen ? 'Minimize' : 'Expand'}</button>
+    ${rows}
+
+    <div class="status-row">
+      <div class="mono" style="margin-bottom:6px;">Add new category</div>
+      <div class="status-grid">
+        <input id="new-status-label-${plantId}" placeholder="New category label">
+        <input id="new-status-icon-${plantId}" placeholder="Icon" value="●">
+        <input id="new-status-color-${plantId}" placeholder="#hex color" value="#8b949e">
+        <button class="small-btn" onclick="window.addStatus('${plantId}')">Add</button>
       </div>
+      <textarea id="new-status-subs-${plantId}" placeholder="Optional sub-categories"></textarea>
     </div>
-    <p class="muted" style="margin:8px 0;">Create, edit, delete categories/sub-categories. Import/export JSON for this plant.</p>
-    <div class="status-panel ${panelOpen ? 'visible' : ''}">
-      ${rows}
 
-      <div class="status-row">
-        <div class="mono" style="margin-bottom:6px;">Add new category</div>
-        <div class="status-grid">
-          <input id="new-status-label-${plantId}" placeholder="New category label">
-          <input id="new-status-icon-${plantId}" placeholder="Icon" value="●">
-          <input id="new-status-color-${plantId}" placeholder="#hex color" value="#8b949e">
-          <button class="small-btn" onclick="window.addStatus('${plantId}')">Add</button>
-        </div>
-        <textarea id="new-status-subs-${plantId}" placeholder="Optional sub-categories"></textarea>
-      </div>
-
-      <div class="status-toolbar">
-        <button class="small-btn" onclick="window.exportStatuses('${plantId}')">Export JSON</button>
-        <input type="file" id="import-file-${plantId}" accept="application/json" style="max-width:240px;padding:6px 8px;" />
-        <button class="small-btn" onclick="window.importStatuses('${plantId}')">Import JSON</button>
-        <button class="small-btn" onclick="window.resetStatuses('${plantId}')">Reset Defaults</button>
-        <button class="small-btn" style="border-color:var(--accent);color:var(--accent);" onclick="window.saveStatuses('${plantId}')">Save Statuses</button>
-      </div>
+    <div class="status-toolbar">
+      <button class="small-btn" onclick="window.exportStatuses('${plantId}')">Export JSON</button>
+      <input type="file" id="import-file-${plantId}" accept="application/json" style="max-width:240px;padding:6px 8px;" />
+      <button class="small-btn" onclick="window.importStatuses('${plantId}')">Import JSON</button>
+      <button class="small-btn" onclick="window.resetStatuses('${plantId}')">Reset Defaults</button>
+      <button class="small-btn" style="border-color:var(--accent);color:var(--accent);" onclick="window.saveStatuses('${plantId}')">Save Statuses</button>
     </div>
     <div id="status-fb-${plantId}" class="feedback"></div>
   `;
@@ -1022,17 +1060,8 @@ function renderGamificationEditor(plantId, plantName) {
     : `<div class="game-empty-state"><span class="es-icon">🎯</span>No missions yet. Create one to get started.</div>`;
 
   return `
-    <div class="divider"></div>
-    <div class="status-header-row">
-      <h3 style="font-family:'Rajdhani',sans-serif;letter-spacing:0.6px;">🎮 Gamification — ${esc(plantName)}</h3>
-      <div class="status-header-actions">
-        <button class="compact-btn" onclick="window.toggleGamePanel('${plantId}')">${panelOpen ? 'Minimize' : 'Expand'}</button>
-      </div>
-    </div>
-    <div class="status-panel ${panelOpen ? 'visible' : ''}">
-
-      <!-- Enable toggle -->
-      <div class="game-enable-row">
+    <!-- Enable toggle -->
+    <div class="game-enable-row">
         <div class="game-enable-info">
           <strong>Enable Gamification</strong>
           <span>Award XP and track missions for all users in this plant</span>
@@ -1118,7 +1147,6 @@ function renderGamificationEditor(plantId, plantName) {
         <button class="small-btn" style="border-color:var(--accent);color:var(--accent);"
                 onclick="window.saveGamification('${plantId}')">💾 Save Gamification</button>
       </div>
-    </div>
     <div id="game-fb-${plantId}" class="feedback"></div>
   `;
 }
@@ -1298,6 +1326,7 @@ function renderPlantsUsers() {
         </tr>`;
     }).join('');
 
+    const activeTab = plantTab[plant.id] || 'members';
     card.innerHTML = `
       <div class="plant-head">
         <div>
@@ -1311,32 +1340,46 @@ function renderPlantsUsers() {
       </div>
 
       <div class="plant-body ${plantOpen ? 'visible' : ''}">
-        <table>
-          <thead>
-            <tr><th>User</th><th>Role</th><th>Action</th></tr>
-          </thead>
-          <tbody>${rows || '<tr><td colspan="3" class="muted">No members found.</td></tr>'}</tbody>
-        </table>
-
-        <div style="margin-top:10px; border-top:1px solid var(--border); padding-top:10px;">
-          <div class="muted" style="margin-bottom:6px;">Add user to ${esc(plant.name)}</div>
-          <div class="row">
-            <select id="add-user-${plant.id}">
-              ${userOptions || '<option value="">No available users</option>'}
-            </select>
-            <select id="add-role-${plant.id}" style="max-width:120px;">
-              <option value="editor">editor</option>
-              <option value="viewer">viewer</option>
-              <option value="admin">admin</option>
-            </select>
-            <button class="small-btn" style="max-width:95px;" onclick="window.addMember('${plant.id}')">Add</button>
-          </div>
-          <div id="fb-${plant.id}" class="feedback"></div>
+        <div class="plant-tabs">
+          <button class="plant-tab-btn ${activeTab === 'members' ? 'active' : ''}"
+                  onclick="window.switchPlantTab('${plant.id}','members',this)">Members</button>
+          <button class="plant-tab-btn ${activeTab === 'statuses' ? 'active' : ''}"
+                  onclick="window.switchPlantTab('${plant.id}','statuses',this)">Statuses</button>
+          <button class="plant-tab-btn ${activeTab === 'gamification' ? 'active' : ''}"
+                  onclick="window.switchPlantTab('${plant.id}','gamification',this)">Gamification</button>
         </div>
 
-        ${renderStatusEditor(plant.id, plant.name)}
-        ${renderGamificationEditor(plant.id, plant.name)}
-        ${renderStoreEditor(plant.id)}
+        <div class="plant-tab-pane ${activeTab === 'members' ? 'active' : ''}" id="ptab-members-${plant.id}">
+          <table>
+            <thead>
+              <tr><th>User</th><th>Role</th><th>Action</th></tr>
+            </thead>
+            <tbody>${rows || '<tr><td colspan="3" class="muted">No members found.</td></tr>'}</tbody>
+          </table>
+          <div style="margin-top:10px; border-top:1px solid var(--border); padding-top:10px;">
+            <div class="muted" style="margin-bottom:6px;">Add user to ${esc(plant.name)}</div>
+            <div class="row">
+              <select id="add-user-${plant.id}">
+                ${userOptions || '<option value="">No available users</option>'}
+              </select>
+              <select id="add-role-${plant.id}" style="max-width:120px;">
+                <option value="editor">editor</option>
+                <option value="viewer">viewer</option>
+                <option value="admin">admin</option>
+              </select>
+              <button class="small-btn" style="max-width:95px;" onclick="window.addMember('${plant.id}')">Add</button>
+            </div>
+            <div id="fb-${plant.id}" class="feedback"></div>
+          </div>
+        </div>
+
+        <div class="plant-tab-pane ${activeTab === 'statuses' ? 'active' : ''}" id="ptab-statuses-${plant.id}">
+          ${renderStatusEditor(plant.id, plant.name)}
+        </div>
+
+        <div class="plant-tab-pane ${activeTab === 'gamification' ? 'active' : ''}" id="ptab-gamification-${plant.id}">
+          ${renderGamificationEditor(plant.id, plant.name)}
+        </div>
       </div>
     `;
     container.appendChild(card);
@@ -1398,9 +1441,7 @@ async function createPlant() {
     batch.set(doc(db, 'users', currentUser.uid), { plantIds: arrayUnion(id) }, { merge: true });
     await batch.commit();
 
-    document.getElementById('new-plant-name').value = '';
-    document.getElementById('new-plant-location').value = '';
-    feedback('plant-create-feedback', 'ok', `Created plant "${name}".`);
+    window.closeAddPlantModal();
     await refreshAdminData();
   } catch (e) {
     console.error(e);
@@ -1920,15 +1961,44 @@ window.togglePlantPanel = function(plantId) {
   renderPlantsUsers();
 };
 
+window.switchPlantTab = function(plantId, tabName, btnEl) {
+  plantTab[plantId] = tabName;
+  const body = btnEl.closest('.plant-body');
+  if (!body) return;
+  body.querySelectorAll('.plant-tab-btn').forEach(b => b.classList.remove('active'));
+  btnEl.classList.add('active');
+  body.querySelectorAll('.plant-tab-pane').forEach(p => p.classList.remove('active'));
+  const target = body.querySelector(`#ptab-${tabName}-${plantId}`);
+  if (target) target.classList.add('active');
+};
+
+window.switchPageTab = function(tabName, btnEl) {
+  document.querySelectorAll('.page-tab-btn').forEach(b => b.classList.remove('active'));
+  btnEl.classList.add('active');
+  document.querySelectorAll('.page-tab-pane').forEach(p => p.classList.remove('active'));
+  const target = document.getElementById(`page-tab-${tabName}`);
+  if (target) target.classList.add('active');
+};
+
+window.openAddPlantModal = function() {
+  document.getElementById('new-plant-name').value = '';
+  document.getElementById('new-plant-location').value = '';
+  document.getElementById('plant-create-feedback').textContent = '';
+  document.getElementById('add-plant-modal-bg').classList.add('open');
+};
+
+window.closeAddPlantModal = function() {
+  document.getElementById('add-plant-modal-bg').classList.remove('open');
+};
+
 window.switchGameTab = function(plantId, tabName, btnEl) {
   gamePanelOpen[`tab_${plantId}`] = tabName;
-  // Update button states
-  const panel = btnEl.closest('.status-panel');
-  if (panel) {
-    panel.querySelectorAll('.game-tab-btn').forEach(b => b.classList.remove('active'));
+  const pane = document.getElementById(`ptab-gamification-${plantId}`);
+  if (pane) {
+    pane.querySelectorAll('.game-tab-btn').forEach(b => b.classList.remove('active'));
     btnEl.classList.add('active');
-    panel.querySelectorAll('.game-tab-pane').forEach(p => p.classList.remove('active'));
-    const target = panel.querySelector(`#game-tab-${tabName}-${plantId}`);
+    pane.querySelectorAll('.game-tab-pane').forEach(p => p.classList.remove('active'));
+    const target = pane.querySelector(`#game-tab-${tabName}-${plantId}`);
     if (target) target.classList.add('active');
   }
 };
@@ -1936,7 +2006,6 @@ window.switchGameTab = function(plantId, tabName, btnEl) {
 window.toggleStatusRow = function(plantId, statusKey) {
   const rowKey = `${plantId}:${statusKey}`;
   statusRowOpen[rowKey] = !(statusRowOpen[rowKey] ?? false);
-  statusPanelOpen[plantId] = true;
   renderPlantsUsers();
 };
 
