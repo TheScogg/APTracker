@@ -7,6 +7,7 @@
 <title>AP-Tracker</title>
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&family=Nunito:wght@300;400;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   :root {
     --bg: #0d1117; --bg2: #161b22; --bg3: #1c2333; --border: #30363d;
@@ -137,6 +138,19 @@
     --teal: #0f766e; --teal-dim: rgba(15,118,110,0.10);
     --orange: #ea580c; --orange-dim: rgba(234,88,12,0.10);
     --text: #064e3b; --text2: #065f46; --text3: #10b981;
+  }
+  body.theme-engel {
+    --bg: #0c1209; --bg2: #141e0f; --bg3: #1b2a14; --border: #2d4820;
+    --accent: #78be20; --accent2: #96d63a; --accent-glow: rgba(120,190,32,0.28);
+    --green: #78be20; --green-dim: rgba(120,190,32,0.15);
+    --red: #f87171; --red-dim: rgba(248,113,113,0.14);
+    --blue: #00a3b5; --blue-dim: rgba(0,163,181,0.14);
+    --yellow: #ffc72c; --yellow-dim: rgba(255,199,44,0.14);
+    --purple: #c084fc; --purple-dim: rgba(192,132,252,0.14);
+    --babyblue: #22d3ee; --babyblue-dim: rgba(34,211,238,0.14);
+    --teal: #00a3b5; --teal-dim: rgba(0,163,181,0.14);
+    --orange: #fb923c; --orange-dim: rgba(251,146,60,0.14);
+    --text: #e8f5d8; --text2: #8ab870; --text3: #4d6e38;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: var(--bg); color: var(--text); font-family: 'Nunito', sans-serif; min-height: 100vh; }
@@ -280,37 +294,89 @@
   .game-badge-tile .badge-icon { font-size: 22px; line-height: 1; }
   .game-badge-tile .badge-name { font-size: 9px; color: var(--text2); font-weight: 700; text-align: center; line-height: 1.3; }
   .game-badge-tile.locked { opacity: 0.4; filter: grayscale(1); }
+  /* Store card */
+  .store-item-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 2px; border-bottom: 1px dashed rgba(255,255,255,0.06); gap: 8px; }
+  .store-item-row:last-child { border-bottom: none; }
+  .store-item-row.owned { opacity: 0.55; }
+  .store-item-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .store-item-name { font-size: 12px; font-weight: 700; color: var(--text); }
+  .store-item-swatches { display: flex; gap: 3px; }
+  .store-item-swatch { width: 16px; height: 9px; border-radius: 3px; border: 1px solid rgba(255,255,255,0.12); }
+  .store-item-owned { font-size: 10px; color: var(--green); font-weight: 700; white-space: nowrap; }
+  .store-item-action { flex-shrink: 0; }
+  .store-buy-btn { background: linear-gradient(135deg,rgba(168,85,247,0.2),rgba(168,85,247,0.08)); border: 1px solid rgba(168,85,247,0.45); color: var(--purple,#a855f7); border-radius: 6px; padding: 4px 9px; font-size: 10px; font-weight: 800; cursor: pointer; font-family: inherit; white-space: nowrap; transition: background 0.15s, border-color 0.15s; }
+  .store-buy-btn:hover:not(.cant-afford) { background: rgba(168,85,247,0.3); border-color: rgba(168,85,247,0.7); }
+  .store-buy-btn.cant-afford { opacity: 0.35; cursor: not-allowed; }
+  /* Locked theme indicator in theme picker */
+  .theme-choice.theme-locked { opacity: 0.6; }
+  .theme-lock-badge { display: block; font-size: 9px; color: var(--yellow,#eab308); font-weight: 700; margin-top: 3px; letter-spacing: 0.02em; }
+  /* ── USER PILL ── */
   .user-pill { display: flex; align-items: center; gap: 7px; background: var(--bg3); border: 1px solid var(--border); border-radius: 20px; padding: 3px 9px 3px 3px; cursor: pointer; transition: border-color 0.15s; user-select: none; }
   .user-pill:hover { border-color: var(--text2); }
   .user-pill.open { border-color: var(--accent); }
-  .user-avatar-fallback { width: 22px; height: 22px; border-radius: 50%; background: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: white; flex-shrink: 0; }
+  .user-avatar-fallback { width: 22px; height: 22px; border-radius: 50%; background: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: white; flex-shrink: 0; background-size: cover; background-position: center; }
   .user-name { font-size: 11px; color: var(--text2); max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .user-chevron { font-size: 8px; color: var(--text3); transition: transform 0.2s; }
   .user-pill.open .user-chevron { transform: rotate(180deg); }
-  .user-dropdown { display: none; position: absolute; top: calc(100% + 8px); right: 0; background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; min-width: 200px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); z-index: 300; overflow: hidden; animation: dropIn 0.15s ease; }
+  /* ── USER DROPDOWN (redesigned) ── */
+  .user-dropdown { display: none; position: absolute; top: calc(100% + 8px); right: 0; background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; width: 280px; box-shadow: 0 24px 60px rgba(0,0,0,0.7), 0 4px 12px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.04); z-index: 300; overflow: visible; animation: dropIn 0.15s ease; }
   .user-dropdown.visible { display: block; }
   @keyframes dropIn { from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)} }
-  .user-dropdown-header { padding: 12px 14px 10px; border-bottom: 1px solid var(--border); }
-  .user-dropdown-name { font-size: 13px; font-weight: 700; color: var(--text); }
-  .user-dropdown-email { font-size: 11px; color: var(--text3); margin-top: 2px; font-family: 'Share Tech Mono', monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .user-dropdown-item { display: flex; align-items: center; gap: 8px; padding: 10px 14px; font-size: 13px; color: var(--text2); cursor: pointer; transition: background 0.1s; border: none; background: none; width: 100%; text-align: left; font-family: 'Nunito', sans-serif; }
+  /* Header */
+  .user-dropdown-header { padding: 14px 14px 12px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--border); border-radius: 14px 14px 0 0; overflow: hidden; }
+  .ud-avatar { width: 38px; height: 38px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), var(--blue, #3b82f6)); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: white; flex-shrink: 0; box-shadow: 0 0 0 2px var(--bg2), 0 0 0 3.5px color-mix(in srgb, var(--accent) 40%, transparent); background-size: cover; background-position: center; font-family: 'Nunito', sans-serif; letter-spacing: -0.02em; }
+  .ud-header-info { min-width: 0; }
+  .user-dropdown-name { font-size: 14px; font-weight: 700; color: var(--text); letter-spacing: -0.02em; line-height: 1.2; }
+  .user-dropdown-email { font-size: 11.5px; color: var(--text3); margin-top: 2px; font-family: 'Share Tech Mono', monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* Sections */
+  .user-dropdown-section { padding: 6px 6px 0; }
+  .user-dropdown-section:last-of-type { padding-bottom: 6px; border-bottom: none; }
+  .user-dropdown-section-label { font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text3); padding: 6px 10px 2px; font-family: 'Share Tech Mono', monospace; }
+  /* Menu items */
+  .user-dropdown-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; font-size: 13.5px; color: var(--text2); cursor: pointer; transition: background 0.12s, color 0.12s; border: none; background: transparent; width: 100%; text-align: left; font-family: 'Nunito', sans-serif; font-weight: 500; border-radius: 8px; letter-spacing: -0.01em; }
   .user-dropdown-item:hover { background: var(--bg3); color: var(--text); }
-  .user-dropdown-item.danger:hover { background: var(--red-dim); color: var(--red); }
-  .theme-select-row { padding: 8px 14px; border-bottom: 1px solid var(--border); }
-  .theme-select-toggle { width: 100%; border: 1px solid var(--border); border-radius: 8px; background: var(--bg3); color: var(--text2); display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 9px; font-size: 11px; font-weight: 700; cursor: pointer; font-family: 'Nunito', sans-serif; transition: border-color 0.15s, color 0.15s; }
-  .theme-select-toggle:hover { border-color: var(--text2); color: var(--text); }
-  .theme-select-toggle.open { border-color: var(--accent); color: var(--accent); }
-  .theme-select-current { font-size: 11px; color: var(--text3); font-weight: 700; }
-  .theme-select-chevron { font-size: 9px; transition: transform 0.2s; color: var(--text3); }
+  .user-dropdown-item:hover .ud-item-icon { color: var(--accent); }
+  .user-dropdown-item.danger { color: var(--text2); }
+  .user-dropdown-item.danger:hover { background: var(--red-dim, rgba(239,68,68,0.1)); color: var(--red); }
+  .user-dropdown-item.danger .ud-item-icon { color: var(--text3); }
+  .user-dropdown-item.danger:hover .ud-item-icon { color: var(--red); }
+  /* Icon container */
+  .ud-item-icon { display: flex; align-items: center; flex-shrink: 0; color: var(--text3); transition: color 0.12s; }
+  /* Divider */
+  .ud-divider { height: 1px; background: var(--border); margin: 4px 0; }
+  /* Dark/Light toggle row */
+  .ud-toggle-row { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 8px; }
+  .ud-toggle-label { flex: 1; font-size: 13.5px; color: var(--text2); font-weight: 500; letter-spacing: -0.01em; }
+  .ud-toggle-switch { width: 40px; height: 22px; border-radius: 11px; border: none; cursor: pointer; background: var(--border); position: relative; transition: background 0.2s; flex-shrink: 0; padding: 0; }
+  .ud-toggle-switch.on { background: var(--accent); }
+  .ud-toggle-knob { position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: white; transition: left 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.4); display: block; }
+  .ud-toggle-switch.on .ud-toggle-knob { left: 21px; }
+  /* Theme select (inline row) */
+  .theme-select-row { padding: 2px 0; }
+  .theme-select-toggle { width: 100%; display: flex; align-items: center; gap: 10px; padding: 9px 12px; background: transparent; border: none; border-radius: 8px; cursor: pointer; color: var(--text2); font-size: 13.5px; font-family: 'Nunito', sans-serif; font-weight: 500; text-align: left; transition: background 0.12s; letter-spacing: -0.01em; }
+  .theme-select-toggle:hover, .theme-select-toggle.open { background: var(--bg3); }
+  .theme-select-toggle:hover .ud-item-icon, .theme-select-toggle.open .ud-item-icon { color: var(--accent); }
+  .theme-select-current { font-size: 12px; color: var(--text3); font-family: 'Share Tech Mono', monospace; }
+  .theme-select-chevron { display: flex; align-items: center; color: var(--text3); transition: transform 0.15s; }
   .theme-select-toggle.open .theme-select-chevron { transform: rotate(180deg); }
-  .theme-select-grid { display: none; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }
+  .theme-select-grid { display: none; grid-template-columns: 1fr 1fr; gap: 6px; margin: 0 6px 6px; }
   .theme-select-grid.open { display: grid; }
   .theme-choice { border: 1px solid var(--border); background: var(--bg3); border-radius: 8px; padding: 6px; cursor: pointer; text-align: left; transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s; }
   .theme-choice:hover { border-color: var(--text2); transform: translateY(-1px); }
-  .theme-choice.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent-glow); }
+  .theme-choice.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
   .theme-choice-name { display: block; font-size: 10px; font-weight: 700; color: var(--text); line-height: 1.2; margin-bottom: 4px; }
   .theme-choice-swatches { display: flex; gap: 4px; }
   .theme-swatch { flex: 1; height: 12px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.15); }
+  /* XP badge */
+  .ud-xp-section { padding: 4px 6px; }
+  .ud-xp-badge { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--accent) 10%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent); cursor: pointer; position: relative; overflow: hidden; transition: background 0.15s; }
+  .ud-xp-badge:hover { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+  .ud-xp-icon { color: var(--accent); display: flex; flex-shrink: 0; }
+  .ud-xp-info { flex: 1; min-width: 0; }
+  .ud-xp-amount { font-size: 13px; font-weight: 700; color: var(--accent); font-family: 'Share Tech Mono', monospace; letter-spacing: 0.02em; }
+  .ud-xp-missions { font-size: 11px; color: var(--text3); margin-top: 1px; }
+  .ud-xp-level { font-size: 11px; color: var(--text3); background: var(--bg3); padding: 2px 7px; border-radius: 4px; font-family: 'Share Tech Mono', monospace; flex-shrink: 0; }
+  .user-dropdown-bottom { border-top: 1px solid var(--border); background: color-mix(in srgb, var(--bg3) 45%, transparent); padding: 6px 0; }
 
   /* CONTROLS */
   .controls { padding: 10px 16px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; background: var(--bg2); border-bottom: 1px solid var(--border); }
@@ -1097,6 +1163,26 @@
   .spt-caret-down { border-left: 9px solid transparent; border-right: 9px solid transparent; border-top: 9px solid var(--border); bottom: -10px; }
   .spt-caret-down::after { content: ''; position: absolute; top: -11px; left: -8px; width: 0; height: 0; border-left: 8px solid transparent; border-right: 8px solid transparent; border-top: 8px solid var(--bg2); }
 
+  /* THEME EDITOR MODAL */
+  .theme-editor-modal { width: 580px; max-width: 98vw; max-height: 88vh; overflow-y: auto; }
+  .te-section { margin-bottom: 18px; }
+  .te-section-label { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text3); margin-bottom: 8px; }
+  .te-color-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; }
+  .te-color-row { display: flex; align-items: center; gap: 8px; }
+  .te-color-label { font-size: 11px; color: var(--text2); flex: 1; font-weight: 600; }
+  .te-color-input { width: 34px; height: 26px; border: 1px solid var(--border); border-radius: 6px; padding: 2px 3px; background: var(--bg3); cursor: pointer; flex-shrink: 0; }
+  .te-color-hex { font-family: 'Share Tech Mono', monospace; font-size: 10px; color: var(--text3); width: 58px; flex-shrink: 0; }
+  .te-saved-list { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+  .te-saved-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; }
+  .te-saved-name { flex: 1; font-size: 12px; font-weight: 700; color: var(--text); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .te-saved-swatches { display: flex; gap: 3px; flex-shrink: 0; }
+  .te-saved-swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid rgba(255,255,255,0.15); }
+  .te-saved-apply { font-size: 10px; font-weight: 700; padding: 3px 9px; border-radius: 6px; background: var(--bg2); border: 1px solid var(--border); color: var(--text2); cursor: pointer; font-family: 'Nunito', sans-serif; transition: border-color 0.15s, color 0.15s; flex-shrink: 0; }
+  .te-saved-apply:hover { border-color: var(--accent); color: var(--accent); }
+  .te-saved-delete { font-size: 13px; color: var(--text3); background: none; border: none; cursor: pointer; padding: 2px 4px; flex-shrink: 0; transition: color 0.15s; }
+  .te-saved-delete:hover { color: var(--red); }
+  .te-base-select { width: 100%; background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; color: var(--text); font-size: 12px; font-family: 'Nunito', sans-serif; outline: none; cursor: pointer; }
+
 </style>
 </head>
 <body>
@@ -1140,29 +1226,76 @@
         <span class="user-chevron">▼</span>
       </div>
       <div class="user-dropdown" id="user-dropdown">
+        <!-- Header: avatar + name + email -->
         <div class="user-dropdown-header">
-          <div class="user-dropdown-name" id="dropdown-full-name">—</div>
-          <div class="user-dropdown-email" id="dropdown-email">—</div>
+          <div class="ud-avatar" id="ud-avatar">?</div>
+          <div class="ud-header-info">
+            <div class="user-dropdown-name" id="dropdown-full-name">—</div>
+            <div class="user-dropdown-email" id="dropdown-email">—</div>
+          </div>
         </div>
-        <button class="game-pill" id="game-pill" onclick="toggleGameDrawer()" title="Open gamification">
-          🏆 <span class="game-pill-xp" id="game-pill-xp">0 XP</span> <span>•</span> <span class="game-pill-mission" id="game-pill-mission">0 missions</span>
-          <span class="game-pill-badge" style="display:none"></span>
-        </button>
-        <button class="user-dropdown-item" id="admin-page-btn" style="display:none">🛠 Admin Portal</button>
-        <button class="user-dropdown-item" id="tutorial-btn" onclick="document.getElementById('user-dropdown').classList.remove('visible');document.getElementById('user-pill').classList.remove('open');openTutorial();">❓ Tutorial</button>
-        <div class="theme-select-row">
-          <button class="theme-select-toggle" id="theme-select-toggle" type="button">
-            <span>🎨 Theme</span>
-            <span class="theme-select-current" id="theme-select-current">Midnight</span>
-            <span class="theme-select-chevron">▼</span>
+        <!-- Account -->
+        <div class="user-dropdown-section">
+          <div class="user-dropdown-section-label">Account</div>
+          <button class="user-dropdown-item" id="admin-page-btn" style="display:none">
+            <span class="ud-item-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 1L10 5H14L11 8L12.5 12L8 9.5L3.5 12L5 8L2 5H6L8 1Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" fill="none"/></svg></span>
+            Admin Portal
           </button>
-          <div class="theme-select-grid" id="theme-select-grid"></div>
+          <button class="user-dropdown-item" id="tutorial-btn" onclick="document.getElementById('user-dropdown').classList.remove('visible');document.getElementById('user-pill').classList.remove('open');openTutorial();">
+            <span class="ud-item-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.3"/><path d="M8 7v4M8 5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>
+            Tutorial
+          </button>
         </div>
-        <button class="game-pill" onclick="toggleGameDrawer()" title="Open gamification">
-          🏆 <span class="game-pill-xp">0 XP</span> <span>•</span> <span class="game-pill-mission">0 missions</span>
-          <span class="game-pill-badge" style="display:none"></span>
-        </button>
-        <button class="user-dropdown-item danger" id="signout-btn">⏻ Sign Out</button>
+        <div class="ud-divider"></div>
+        <!-- Workspace -->
+        <div class="user-dropdown-section">
+          <div class="user-dropdown-section-label">Workspace</div>
+          <!-- Dark/Light toggle -->
+          <div class="ud-toggle-row">
+            <span class="ud-item-icon" id="ud-mode-icon">
+              <svg id="ud-moon-icon" width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M12.5 9.5A6 6 0 0 1 5.5 2.5a6 6 0 1 0 7 7Z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <svg id="ud-sun-icon" width="15" height="15" viewBox="0 0 15 15" fill="none" style="display:none"><circle cx="7.5" cy="7.5" r="3" stroke="currentColor" stroke-width="1.3"/><path d="M7.5 1v1.5M7.5 12.5V14M1 7.5h1.5M12.5 7.5H14M3.2 3.2l1.1 1.1M10.7 10.7l1.1 1.1M3.2 11.8l1.1-1.1M10.7 4.3l1.1-1.1" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+            </span>
+            <span class="ud-toggle-label" id="ud-mode-label">Dark mode</span>
+            <button class="ud-toggle-switch on" id="theme-quick-toggle" type="button" aria-label="Toggle dark/light mode"><span class="ud-toggle-knob"></span></button>
+          </div>
+          <!-- Theme selector -->
+          <div class="theme-select-row">
+            <button class="theme-select-toggle" id="theme-select-toggle" type="button" aria-expanded="false" aria-controls="theme-select-grid">
+              <span class="ud-item-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 13c0-.8.6-1.5 1.5-1.5S6 12.2 6 13s-.7 2-1.5 2S3 13.8 3 13Z" stroke="currentColor" stroke-width="1.3"/><path d="M5.5 11.5L12 4a1.5 1.5 0 0 0-2-2L3.5 8.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span>
+              <span style="flex:1">Theme</span>
+              <span class="theme-select-current" id="theme-select-current">Midnight</span>
+              <span class="theme-select-chevron"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            </button>
+            <div class="theme-select-grid" id="theme-select-grid"></div>
+          </div>
+          <!-- Theme Color Editor -->
+          <button class="user-dropdown-item" type="button" onclick="openThemeEditor()">
+            <span class="ud-item-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.3"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span>
+            Theme Color Editor
+          </button>
+        </div>
+        <!-- XP badge -->
+        <div class="ud-divider"></div>
+        <div class="ud-xp-section">
+          <div class="ud-xp-badge" id="game-pill" onclick="document.getElementById('user-dropdown').classList.remove('visible');document.getElementById('user-pill').classList.remove('open');toggleGameDrawer();" title="Open Progress">
+            <span class="ud-xp-icon"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M4 1h6v5a3 3 0 0 1-6 0V1Z" stroke="currentColor" stroke-width="1.2"/><path d="M4 3H2a1 1 0 0 0-1 1v1a2 2 0 0 0 2 2M10 3h2a1 1 0 0 1 1 1v1a2 2 0 0 1-2 2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><path d="M7 9v3M5 12h4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg></span>
+            <div class="ud-xp-info">
+              <div class="ud-xp-amount"><span id="game-pill-xp">0 XP</span></div>
+              <div class="ud-xp-missions"><span id="game-pill-mission">0 missions</span></div>
+            </div>
+            <div class="ud-xp-level" id="ud-xp-level">Lv.1</div>
+            <span class="game-pill-badge" style="display:none"></span>
+          </div>
+        </div>
+        <div class="ud-divider"></div>
+        <!-- Sign out -->
+        <div class="user-dropdown-section" style="padding-bottom:6px">
+          <button class="user-dropdown-item danger" id="signout-btn">
+            <span class="ud-item-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 2H3a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3M11 11l3-3-3-3M14 8H6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            Sign Out
+          </button>
+        </div>
       </div>
     </div>
   </header>
@@ -1277,6 +1410,10 @@
         <button class="sort-dropdown-btn" id="export-pdf-btn" onclick="openExportModal()" style="gap:4px;">
           <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;opacity:0.7;"><path d="M4 1h6l4 4v9a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3"/><path d="M10 1v4h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
           PDF
+        </button>
+        <button class="sort-dropdown-btn" id="export-excel-btn" onclick="downloadExcel()" style="gap:4px;">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;opacity:0.7;"><rect x="1" y="1" width="14" height="14" rx="1.5" stroke="currentColor" stroke-width="1.3"/><path d="M1 5h14M5.5 5v10M5 8.5h6M5 11h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
+          XLS
         </button>
       </div>
     </div>
@@ -1537,6 +1674,85 @@
   </div>
 </div>
 
+<!-- THEME EDITOR MODAL -->
+<div class="modal-overlay" id="appearance-modal">
+  <div class="modal theme-editor-modal">
+    <div class="modal-title" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
+      <span>🎨 Appearance</span>
+      <button style="background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer;line-height:1;" onclick="closeAppearanceModal()">✕</button>
+    </div>
+
+    <div class="te-section">
+      <div class="te-section-label">Built-in Themes</div>
+      <div class="appearance-theme-grid" id="appearance-theme-grid"></div>
+    </div>
+
+    <div class="te-section">
+      <div class="te-section-label">Saved Custom Themes</div>
+      <div class="appearance-custom-list" id="appearance-custom-list"></div>
+      <div class="appearance-empty" id="appearance-custom-empty" style="display:none;">No saved custom themes yet.</div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="openThemeEditor()">Open Color Editor…</button>
+      <button class="btn btn-ghost" onclick="closeAppearanceModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="theme-editor-modal">
+  <div class="modal theme-editor-modal">
+    <div class="modal-title" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
+      <span>🎨 Theme Editor</span>
+      <button style="background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer;line-height:1;" onclick="closeThemeEditor()">✕</button>
+    </div>
+
+    <!-- Base preset selector -->
+    <div class="te-section">
+      <div class="te-section-label">Start from a preset</div>
+      <select class="te-base-select" id="te-base-select"></select>
+    </div>
+
+    <!-- Color picker groups -->
+    <div class="te-section">
+      <div class="te-section-label">Surfaces</div>
+      <div class="te-color-grid" id="te-colors-surfaces"></div>
+    </div>
+    <div class="te-section">
+      <div class="te-section-label">Text</div>
+      <div class="te-color-grid" id="te-colors-text"></div>
+    </div>
+    <div class="te-section">
+      <div class="te-section-label">Accent</div>
+      <div class="te-color-grid" id="te-colors-accent"></div>
+    </div>
+    <div class="te-section">
+      <div class="te-section-label">Status Colors</div>
+      <div class="te-color-grid" id="te-colors-status"></div>
+    </div>
+
+    <!-- Save section -->
+    <div class="te-section" style="border-top:1px solid var(--border);padding-top:16px;">
+      <div class="te-section-label">Save this theme</div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input type="text" id="te-theme-name" placeholder="Name this theme…" maxlength="32"
+          style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;outline:none;">
+        <button id="te-save-btn" class="btn btn-primary" onclick="saveCustomTheme()" style="white-space:nowrap;flex-shrink:0;">💾 Save</button>
+      </div>
+    </div>
+
+    <!-- Saved themes list -->
+    <div class="te-section" id="te-saved-section" style="display:none;">
+      <div class="te-section-label">Saved Themes</div>
+      <div class="te-saved-list" id="te-saved-list"></div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeThemeEditor()">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- STATUS SHEET -->
 
 </div>
@@ -1586,13 +1802,21 @@
       <div class="game-card-title">Badges</div>
       <div id="game-badges-list"></div>
     </div>
+    <!-- Store card -->
+    <div class="game-card">
+      <div class="game-card-title" style="display:flex;align-items:center;justify-content:space-between;">
+        <span>🛒 Store</span>
+        <span id="game-store-xp-label" style="font-size:10px;color:var(--yellow);font-weight:700;">0 XP</span>
+      </div>
+      <div id="game-store-list"></div>
+    </div>
   </div>
 </aside>
 <div class="game-toast" id="game-toast"></div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, collection, updateDoc, deleteDoc, doc, getDoc, getDocs, setDoc, addDoc, onSnapshot, serverTimestamp, query, orderBy, where, writeBatch, arrayUnion, arrayRemove, increment, limit } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, collection, updateDoc, deleteDoc, doc, getDoc, getDocs, setDoc, addDoc, onSnapshot, serverTimestamp, query, orderBy, where, writeBatch, arrayUnion, arrayRemove, increment, limit, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut as fbSignOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getStorage, ref as storageRef, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
@@ -1660,6 +1884,7 @@ function gameLeaderboardDoc(boardId) { return doc(db, 'plants', currentPlantId, 
 function userBadgesDoc(userId) { return doc(db, 'plants', currentPlantId, 'userBadges', userId); }
 function gameEventsCol() { return collection(db, 'plants', currentPlantId, 'gameEvents'); }
 function missionProgressDoc(missionId, subjectId) { return doc(db, 'plants', currentPlantId, 'missions', missionId, 'progress', subjectId); }
+function storeConfigDoc() { return doc(db, 'plants', currentPlantId, 'config', 'store'); }
 
 function currentActor() {
   return { uid: currentUser?.uid || '', name: currentUser?.displayName || currentUser?.email || 'Unknown' };
@@ -2105,7 +2330,7 @@ function refreshVisibleData() {
 }
 
 async function hydrateCurrentPlantView() {
-  await Promise.all([loadPlantPresses(), loadCurrentMember(currentPlantId)]);
+  await Promise.all([loadPlantPresses(), loadCurrentMember(currentPlantId), loadStoreConfig()]);
   buildFloorMap();
   await loadConfig();
   loadDailyScheduledPresses(scheduleDateForLookup()); // fire-and-forget; calls updatePressStates when done
@@ -2119,6 +2344,13 @@ async function loadUserPlants() {
   try {
     const userSnap = await getDoc(doc(db, 'users', currentUser.uid));
     const userData = userSnap.exists() ? userSnap.data() : {};
+    _applyFirestoreThemePrefs(userData.themePrefs);
+    userGlobalXp = Number(userData.globalXp || 0);
+    const rawInv = userData.inventory || {};
+    userInventory = {
+      unlockedItems: Array.isArray(rawInv.unlockedItems) ? rawInv.unlockedItems : [],
+      activeMascot: rawInv.activeMascot || null,
+    };
 
     if (Array.isArray(userData.plantIds) && userData.plantIds.length > 0) {
       // ── New structure: fetch each plant doc for name/location ──
@@ -2231,6 +2463,8 @@ function applyRoleUI() {
 
   const exportBtn = document.getElementById('export-pdf-btn');
   if (exportBtn) exportBtn.style.display = currentUserPermissions.canExport ? '' : 'none';
+  const excelBtn = document.getElementById('export-excel-btn');
+  if (excelBtn) excelBtn.style.display = currentUserPermissions.canExport ? '' : 'none';
 }
 
 // Load press layout for current plant
@@ -2275,6 +2509,7 @@ async function switchPlant(plantId) {
   await hydrateCurrentPlantView();
   gameConfig = null;
   await ensureGamificationConfig();
+  await backfillGlobalXpIfNeeded();
   startGamificationListeners();
   startListener();
   refreshVisibleData();
@@ -2314,7 +2549,8 @@ document.addEventListener('click', e => {
   if (wrap && !wrap.contains(e.target)) closePlantDropdown();
   const drawer = document.getElementById('game-drawer');
   const gamePills = Array.from(document.querySelectorAll('.game-pill'));
-  const clickedPill = gamePills.some(pill => pill.contains(e.target));
+  const gamePillEl = document.getElementById('game-pill');
+  const clickedPill = gamePills.some(pill => pill.contains(e.target)) || (gamePillEl && gamePillEl.contains(e.target));
   if (drawer && gameDrawerOpen && !drawer.contains(e.target) && !clickedPill) {
     toggleGameDrawer(false);
   }
@@ -2584,7 +2820,7 @@ function gameLevelProgress(xp) {
 
 function renderGamePanel() {
   const xp = Number(gameUserStats?.totals?.xp || 0);
-  const level = Number(gameUserStats?.totals?.level || gameLevelFromXp(xp));
+  const level = gameLevelFromXp(xp);
   const streak = Number(gameUserStats?.streaks?.current || 0);
   const missionCount = gameMissions.length;
   const progressPct = gameLevelProgress(xp);
@@ -2601,8 +2837,17 @@ function renderGamePanel() {
   }
   gamePrevLevel = level;
 
-  document.querySelectorAll('.game-pill .game-pill-xp').forEach(el => { el.textContent = `${xp} XP`; });
-  document.querySelectorAll('.game-pill .game-pill-mission').forEach(el => { el.textContent = `${missionCount} missions`; });
+  const pillXpPrimary = document.getElementById('game-pill-xp');
+  if (pillXpPrimary) pillXpPrimary.textContent = `${xp} XP`;
+  document.querySelectorAll('.game-pill .game-pill-xp').forEach(el => {
+    if (el !== pillXpPrimary) el.textContent = `${xp} XP`;
+  });
+
+  const pillMissionPrimary = document.getElementById('game-pill-mission');
+  if (pillMissionPrimary) pillMissionPrimary.textContent = `${missionCount} missions`;
+  document.querySelectorAll('.game-pill .game-pill-mission').forEach(el => {
+    if (el !== pillMissionPrimary) el.textContent = `${missionCount} missions`;
+  });
 
   const totalXpEl = document.getElementById('game-total-xp');
   const levelBadgeEl = document.getElementById('game-level-badge');
@@ -2613,6 +2858,8 @@ function renderGamePanel() {
 
   if (totalXpEl) totalXpEl.textContent = String(xp);
   if (levelBadgeEl) levelBadgeEl.textContent = String(level);
+  const udXpLevelEl = document.getElementById('ud-xp-level');
+  if (udXpLevelEl) udXpLevelEl.textContent = `Lv.${level}`;
   if (streakEl) streakEl.textContent = String(streak);
   if (progressEl) progressEl.style.width = `${progressPct}%`;
   if (xpCurrentEl) xpCurrentEl.textContent = `${xpInLevel} / ${xpNeeded} XP`;
@@ -2694,6 +2941,7 @@ function renderGamePanel() {
       }).join('');
     }
   }
+  renderStoreCard();
 }
 
 window.toggleGameDrawer = (forceOpen) => {
@@ -2825,7 +3073,13 @@ async function checkAndAwardBadges() {
       showBadgeEarnedCelebration(badge);
       // Award badge XP as a direct stat increment (no dedup loop risk — badge already marked earned)
       if (Number(badge.xpReward || 0) > 0) {
-        await setDoc(gameUserStatsDoc(currentUser.uid), { totals: { xp: increment(Number(badge.xpReward)) } }, { merge: true });
+        const badgeXp = Number(badge.xpReward);
+        await Promise.all([
+          setDoc(gameUserStatsDoc(currentUser.uid), { totals: { xp: increment(badgeXp) } }, { merge: true }),
+          setDoc(doc(db, 'users', currentUser.uid), { globalXp: increment(badgeXp) }, { merge: true })
+        ]);
+        userGlobalXp = Math.max(0, userGlobalXp + badgeXp);
+        renderStoreCard();
       }
     } catch (e) {
       console.warn('Badge award failed:', e?.message);
@@ -2840,6 +3094,18 @@ async function ensureGamificationConfig() {
   if (!snap.exists()) await setDoc(ref, { ...GAME_DEFAULT_CONFIG, schemaVersion: 1, updatedAt: serverTimestamp() }, { merge: true });
 }
 
+async function backfillGlobalXpIfNeeded() {
+  if (!currentPlantId || !currentUser || userGlobalXp > 0) return;
+  try {
+    const snap = await getDoc(gameUserStatsDoc(currentUser.uid));
+    const plantXp = Number(snap.exists() ? (snap.data()?.totals?.xp || 0) : 0);
+    if (plantXp > 0) {
+      await setDoc(doc(db, 'users', currentUser.uid), { globalXp: plantXp }, { merge: true });
+      userGlobalXp = plantXp;
+    }
+  } catch(e) { console.warn('globalXp backfill failed:', e?.message); }
+}
+
 function stopGamificationListeners() {
   if (gameStatsUnsubscribe) { gameStatsUnsubscribe(); gameStatsUnsubscribe = null; }
   if (gameMissionsUnsubscribe) { gameMissionsUnsubscribe(); gameMissionsUnsubscribe = null; }
@@ -2851,6 +3117,9 @@ function stopGamificationListeners() {
 function startGamificationListeners() {
   stopGamificationListeners();
   if (!currentPlantId || !currentUser?.uid) return;
+
+  // Reset so the first Firestore snapshot doesn't false-trigger a level-up celebration
+  gamePrevLevel = 0;
 
   // Config listener — keeps gameBadgeDefs + leaderboardPeriod live
   gameConfigUnsubscribe = onSnapshot(gameConfigDoc(), snap => {
@@ -3001,7 +3270,9 @@ async function awardGamification(reason, context = {}) {
       updatedAt: serverTimestamp(),
       schemaVersion: 1
     }, { merge: true });
+    batch.set(doc(db, 'users', currentUser.uid), { globalXp: increment(totalDelta) }, { merge: true });
     await batch.commit();
+    userGlobalXp = Math.max(0, userGlobalXp + totalDelta);
 
     const currentXp = Number(gameUserStats?.totals?.xp || 0) + totalDelta;
     const nextLevel = gameLevelFromXp(currentXp);
@@ -3029,6 +3300,118 @@ async function awardGamification(reason, context = {}) {
   } catch (e) {
     console.warn('Gamification award skipped:', e?.message || e);
   }
+}
+
+// ── XP STORE ──
+
+async function loadStoreConfig() {
+  try {
+    const snap = await getDoc(storeConfigDoc());
+    storeItems = snap.exists() ? (snap.data().items || DEFAULT_STORE_ITEMS) : DEFAULT_STORE_ITEMS;
+  } catch(e) {
+    storeItems = DEFAULT_STORE_ITEMS;
+  }
+  ensureCurrentThemeAccess();
+  renderThemeChoices();
+  updateActiveThemeChoice(THEME_KEYS.includes(localStorage.getItem('pressTrackerTheme') || '') ? localStorage.getItem('pressTrackerTheme') : null);
+}
+
+function isItemUnlocked(itemId) {
+  return userInventory.unlockedItems.includes(itemId);
+}
+
+function getStoreItemForTheme(themeKey) {
+  return storeItems.find(item => item.type === 'theme' && item.themeKey === themeKey && item.isActive !== false) || null;
+}
+
+function isThemeLocked(themeKey) {
+  const item = getStoreItemForTheme(themeKey);
+  return item ? !isItemUnlocked(item.id) : false;
+}
+
+function ensureCurrentThemeAccess() {
+  const savedTheme = localStorage.getItem('pressTrackerTheme') || 'midnight';
+  if (!THEME_KEYS.includes(savedTheme)) return;
+  if (!isThemeLocked(savedTheme)) return;
+  showGameToast('🔒 Theme locked — switched to Midnight');
+  applyTheme('midnight');
+}
+
+window.purchaseStoreItem = purchaseStoreItem;
+async function purchaseStoreItem(itemId) {
+  const item = storeItems.find(i => i.id === itemId);
+  if (!item || !currentUser) return;
+  if (isItemUnlocked(itemId)) { showGameToast('Already owned!'); return; }
+  if (userGlobalXp < item.price) {
+    showGameToast(`Need ${item.price} XP — you have ${userGlobalXp}`);
+    return;
+  }
+  try {
+    const userRef = doc(db, 'users', currentUser.uid);
+    await runTransaction(db, async tx => {
+      const snap = await tx.get(userRef);
+      const data = snap.exists() ? snap.data() : {};
+      const currentXp = Number(data.globalXp || 0);
+      if (currentXp < item.price) throw new Error('insufficient_xp');
+      const existing = Array.isArray(data.inventory?.unlockedItems) ? data.inventory.unlockedItems : [];
+      tx.set(userRef, {
+        globalXp: currentXp - item.price,
+        inventory: { unlockedItems: [...new Set([...existing, itemId])] }
+      }, { merge: true });
+    });
+    userGlobalXp -= item.price;
+    if (!userInventory.unlockedItems.includes(itemId)) userInventory.unlockedItems.push(itemId);
+    renderStoreCard();
+    renderThemeChoices();
+    updateActiveThemeChoice(THEME_KEYS.includes(localStorage.getItem('pressTrackerTheme') || '') ? localStorage.getItem('pressTrackerTheme') : null);
+    showGameToast(`Unlocked ${item.name}!`);
+    if (item.type === 'theme') {
+      if (item.themeKey) applyTheme(item.themeKey);
+      else if (item.customVars) { clearCustomThemeVars(); applyCustomThemeVars(item.customVars); }
+    }
+  } catch(e) {
+    if (e?.message === 'insufficient_xp') showGameToast('Not enough XP!');
+    else console.warn('Purchase failed:', e);
+  }
+}
+
+function renderStoreCard() {
+  const xpLabel = document.getElementById('game-store-xp-label');
+  if (xpLabel) xpLabel.textContent = `${userGlobalXp} XP`;
+
+  const list = document.getElementById('game-store-list');
+  if (!list) return;
+  const active = storeItems.filter(i => i.isActive !== false);
+  if (!active.length) {
+    list.innerHTML = `<div class="game-mission-meta" style="padding:8px 0;text-align:center;color:var(--text3);">No items in the store yet.</div>`;
+    return;
+  }
+  list.innerHTML = active.map(item => {
+    const owned = isItemUnlocked(item.id);
+    const canAfford = userGlobalXp >= item.price;
+    let swatches = '';
+    if (item.type === 'theme') {
+      let colors = [];
+      if (item.themeKey) {
+        const opt = THEME_OPTIONS.find(t => t.key === item.themeKey);
+        colors = opt?.colors || [];
+      } else if (item.customVars) {
+        colors = [item.customVars['--bg'] || '#111', item.customVars['--accent'] || '#888', item.customVars['--text'] || '#fff'];
+      }
+      if (colors.length) swatches = `<span class="store-item-swatches">${colors.map(c => `<span class="store-item-swatch" style="background:${c}"></span>`).join('')}</span>`;
+    }
+    return `<div class="store-item-row${owned ? ' owned' : ''}">
+      <div class="store-item-info">
+        <span class="store-item-name">${esc(item.name)}</span>
+        ${swatches}
+      </div>
+      <div class="store-item-action">
+        ${owned
+          ? `<span class="store-item-owned">✓ Owned</span>`
+          : `<button class="store-buy-btn${canAfford ? '' : ' cant-afford'}" onclick="purchaseStoreItem('${item.id}')" ${canAfford ? '' : 'disabled'}>${item.price} XP</button>`}
+      </div>
+    </div>`;
+  }).join('');
 }
 
 // ── SHIFT SCHEDULE ──
@@ -3084,6 +3467,21 @@ let issueLogLayoutRaf = null;
 let issueLogDeferredRelayoutTimer = null;
 let issueLogResizeObserver = null;
 let gameDrawerOpen = false;
+let storeItems = [];
+let userInventory = { unlockedItems: [], activeMascot: null };
+let userGlobalXp = 0;
+
+const DEFAULT_STORE_ITEMS = [
+  { id: 'theme_sunset',     type: 'theme', themeKey: 'sunset',     customVars: null, name: 'Sunset',     price: 50,  isActive: true },
+  { id: 'theme_ocean',      type: 'theme', themeKey: 'ocean',      customVars: null, name: 'Ocean',      price: 50,  isActive: true },
+  { id: 'theme_royal',      type: 'theme', themeKey: 'royal',      customVars: null, name: 'Royal',      price: 100, isActive: true },
+  { id: 'theme_slate',      type: 'theme', themeKey: 'slate',      customVars: null, name: 'Slate',      price: 100, isActive: true },
+  { id: 'theme_mint',       type: 'theme', themeKey: 'mint',       customVars: null, name: 'Mint',       price: 120, isActive: true },
+  { id: 'theme_cyberpunk',  type: 'theme', themeKey: 'cyberpunk',  customVars: null, name: 'Cyberpunk',  price: 220, isActive: true },
+  { id: 'theme_industrial', type: 'theme', themeKey: 'industrial', customVars: null, name: 'Industrial', price: 220, isActive: true },
+  { id: 'theme_engel',      type: 'theme', themeKey: 'engel',      customVars: null, name: 'Engel',      price: 250, isActive: true },
+];
+
 let gameConfig = null;
 let gameUserStats = { totals: { xp: 0, level: 1 }, streaks: { current: 0 } };
 let gameMissions = [];
@@ -3157,14 +3555,18 @@ async function bootstrapSignedInSession(user) {
   document.getElementById('dropdown-full-name').textContent = user.displayName || user.email || 'User';
   document.getElementById('dropdown-email').textContent = user.email || '';
 
+  const initials = name.split(' ').filter(Boolean).slice(0, 2).map(w => w.charAt(0)).join('').toUpperCase() || '?';
   const fallback = document.getElementById('user-avatar-fallback');
+  const udAvatar = document.getElementById('ud-avatar');
   if (user.photoURL) {
     fallback.style.backgroundImage = 'url('+user.photoURL+')';
     fallback.style.backgroundSize = 'cover';
     fallback.textContent = '';
+    if (udAvatar) { udAvatar.style.backgroundImage = 'url('+user.photoURL+')'; udAvatar.textContent = ''; }
   } else {
     fallback.style.backgroundImage = '';
     fallback.textContent = name.charAt(0).toUpperCase();
+    if (udAvatar) { udAvatar.style.backgroundImage = ''; udAvatar.textContent = initials; }
   }
 
   // Write user lookup record so admins can find this user by email when adding to plants.
@@ -3185,6 +3587,7 @@ async function bootstrapSignedInSession(user) {
   await hydrateCurrentPlantView();
   gameConfig = null;
   await ensureGamificationConfig();
+  await backfillGlobalXpIfNeeded();
   startGamificationListeners();
   startListener();
   setTodayDate();
@@ -6105,15 +6508,23 @@ function _positionSpotlight(step) {
 
     wrap.style.transform = 'none';
     wrap.style.left = `${left}px`;
+
+    let preferredTop;
     if (placeBelow) {
-      wrap.style.top = `${r.bottom + pad + gap}px`;
-      if (cup)   { cup.style.display   = 'block'; cup.style.left   = `${caretLeft}px`; }
+      preferredTop = r.bottom + pad + gap;
+      if (cup)   { cup.style.display   = 'block'; cup.style.left = `${caretLeft}px`; }
       if (cdown)   cdown.style.display = 'none';
     } else {
-      wrap.style.top = `${r.top - pad - gap - tH}px`;
+      preferredTop = r.top - pad - gap - tH;
       if (cdown) { cdown.style.display = 'block'; cdown.style.left = `${caretLeft}px`; }
       if (cup)     cup.style.display   = 'none';
     }
+    const clampedTop = Math.max(12, Math.min(vh - tH - 12, preferredTop));
+    if (clampedTop !== preferredTop) {
+      if (cup)   cup.style.display = 'none';
+      if (cdown) cdown.style.display = 'none';
+    }
+    wrap.style.top = `${clampedTop}px`;
   }, 350);
 }
 
@@ -6206,25 +6617,16 @@ function fmtDate(d) {
 }
 function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
-// User dropdown
-function normalizeUserDropdownGamePill() {
-  const dropdown = document.getElementById('user-dropdown');
-  if (!dropdown) return;
-  const pills = Array.from(dropdown.querySelectorAll('.game-pill'));
-  if (pills.length <= 1) return;
-  pills.slice(0, -1).forEach(pill => pill.remove());
-}
-
 function toggleUserDropdown() {
   const pill=document.getElementById('user-pill');
   const dropdown=document.getElementById('user-dropdown');
-  normalizeUserDropdownGamePill();
   const isOpen=dropdown.classList.contains('visible');
   dropdown.classList.toggle('visible',!isOpen);
   pill.classList.toggle('open',!isOpen);
   if (isOpen) {
     document.getElementById('theme-select-grid')?.classList.remove('open');
     document.getElementById('theme-select-toggle')?.classList.remove('open');
+    document.getElementById('theme-select-toggle')?.setAttribute('aria-expanded', 'false');
   }
 }
 document.getElementById('user-pill').addEventListener('click', toggleUserDropdown);
@@ -6235,11 +6637,11 @@ document.addEventListener('click', e => {
     document.getElementById('user-pill')?.classList.remove('open');
     document.getElementById('theme-select-grid')?.classList.remove('open');
     document.getElementById('theme-select-toggle')?.classList.remove('open');
+    document.getElementById('theme-select-toggle')?.setAttribute('aria-expanded', 'false');
   }
 });
 const signoutBtn=document.getElementById('signout-btn');
 if (signoutBtn) signoutBtn.addEventListener('click', doSignOut);
-normalizeUserDropdownGamePill();
 
 // ── THEME SELECTION ──
 const THEME_OPTIONS = [
@@ -6252,68 +6654,459 @@ const THEME_OPTIONS = [
   { key:'slate', label:'⚡ Slate', mode:'dark', colors:['#0f1419','#64748b','#e2e8f0'] },
   { key:'cyberpunk', label:'🎮 Cyberpunk', mode:'dark', colors:['#0a0014','#ff00ff','#00ffff'] },
   { key:'industrial', label:'🏭 Industrial', mode:'dark', colors:['#1a1a1a','#ff6b00','#e5e5e5'] },
-  { key:'mint', label:'🍃 Mint', mode:'light', colors:['#f0fdf9','#14b8a6','#064e3b'] }
+  { key:'mint', label:'🍃 Mint', mode:'light', colors:['#f0fdf9','#14b8a6','#064e3b'] },
+  { key:'engel', label:'🟢 Engel', mode:'dark', colors:['#0c1209','#78be20','#e8f5d8'] }
 ];
 const THEME_KEYS = THEME_OPTIONS.map(theme => theme.key);
+
+// Mirror of CSS vars for each built-in theme (used by the theme editor to seed pickers)
+const THEME_VARS_MAP = {
+  midnight:   { '--bg':'#0d1117','--bg2':'#161b22','--bg3':'#1c2333','--border':'#30363d','--text':'#e6edf3','--text2':'#8b949e','--text3':'#484f58','--accent':'#f97316','--accent2':'#fb923c','--green':'#22c55e','--red':'#ef4444','--blue':'#3b82f6','--yellow':'#eab308','--orange':'#f97316' },
+  arctic:     { '--bg':'#f8fafc','--bg2':'#ffffff','--bg3':'#f1f5f9','--border':'#cbd5e1','--text':'#0f172a','--text2':'#475569','--text3':'#94a3b8','--accent':'#0ea5e9','--accent2':'#38bdf8','--green':'#16a34a','--red':'#dc2626','--blue':'#0284c7','--yellow':'#ca8a04','--orange':'#f97316' },
+  forest:     { '--bg':'#0a120e','--bg2':'#0f1a14','--bg3':'#14241a','--border':'#1e3a28','--text':'#d1fae5','--text2':'#6ee7b7','--text3':'#34d399','--accent':'#10b981','--accent2':'#34d399','--green':'#34d399','--red':'#f87171','--blue':'#22d3ee','--yellow':'#facc15','--orange':'#fb923c' },
+  sunset:     { '--bg':'#1a0f0a','--bg2':'#2d1810','--bg3':'#3d2218','--border':'#54321f','--text':'#fef3c7','--text2':'#fcd34d','--text3':'#f59e0b','--accent':'#fb923c','--accent2':'#fdba74','--green':'#34d399','--red':'#f87171','--blue':'#60a5fa','--yellow':'#facc15','--orange':'#fb923c' },
+  ocean:      { '--bg':'#0a1628','--bg2':'#0f1e36','--bg3':'#152945','--border':'#1e3a5f','--text':'#e0f2fe','--text2':'#7dd3fc','--text3':'#0ea5e9','--accent':'#38bdf8','--accent2':'#7dd3fc','--green':'#22c55e','--red':'#f87171','--blue':'#38bdf8','--yellow':'#facc15','--orange':'#fb923c' },
+  royal:      { '--bg':'#18102a','--bg2':'#251638','--bg3':'#331f4d','--border':'#4a2d6b','--text':'#f3e8ff','--text2':'#d8b4fe','--text3':'#a78bfa','--accent':'#c084fc','--accent2':'#d8b4fe','--green':'#34d399','--red':'#f87171','--blue':'#60a5fa','--yellow':'#facc15','--orange':'#fb923c' },
+  slate:      { '--bg':'#0f1419','--bg2':'#1a1f25','--bg3':'#242a31','--border':'#30363d','--text':'#e2e8f0','--text2':'#94a3b8','--text3':'#64748b','--accent':'#64748b','--accent2':'#94a3b8','--green':'#22c55e','--red':'#ef4444','--blue':'#60a5fa','--yellow':'#eab308','--orange':'#f97316' },
+  cyberpunk:  { '--bg':'#0a0014','--bg2':'#150028','--bg3':'#1f003d','--border':'#3d0066','--text':'#00ffff','--text2':'#ff00ff','--text3':'#9d00ff','--accent':'#ff00ff','--accent2':'#00ffff','--green':'#00ff88','--red':'#ff4d6d','--blue':'#00ffff','--yellow':'#ffee00','--orange':'#ff7a00' },
+  industrial: { '--bg':'#1a1a1a','--bg2':'#252525','--bg3':'#2f2f2f','--border':'#404040','--text':'#e5e5e5','--text2':'#a0a0a0','--text3':'#707070','--accent':'#ff6b00','--accent2':'#ff8a33','--green':'#4ade80','--red':'#f87171','--blue':'#60a5fa','--yellow':'#facc15','--orange':'#ff6b00' },
+  mint:       { '--bg':'#f0fdf9','--bg2':'#ffffff','--bg3':'#e6fff8','--border':'#a7f3d0','--text':'#064e3b','--text2':'#065f46','--text3':'#10b981','--accent':'#14b8a6','--accent2':'#10b981','--green':'#059669','--red':'#dc2626','--blue':'#0284c7','--yellow':'#ca8a04','--orange':'#ea580c' },
+  engel:      { '--bg':'#0c1209','--bg2':'#141e0f','--bg3':'#1b2a14','--border':'#2d4820','--text':'#e8f5d8','--text2':'#8ab870','--text3':'#4d6e38','--accent':'#78be20','--accent2':'#96d63a','--green':'#78be20','--red':'#f87171','--blue':'#00a3b5','--yellow':'#ffc72c','--orange':'#fb923c' }
+};
+
+// ── THEME EDITOR ──
+const CUSTOM_THEMES_KEY = 'apTracker_customThemes';
+
+const THEME_EDITOR_VARS = [
+  ['--bg',      'Background',   'surfaces'],
+  ['--bg2',     'Surface',      'surfaces'],
+  ['--bg3',     'Inset',        'surfaces'],
+  ['--border',  'Border',       'surfaces'],
+  ['--text',    'Text Primary', 'text'],
+  ['--text2',   'Text Muted',   'text'],
+  ['--text3',   'Text Faint',   'text'],
+  ['--accent',  'Accent',       'accent'],
+  ['--accent2', 'Accent Light', 'accent'],
+  ['--green',   'Green',        'status'],
+  ['--red',     'Red',          'status'],
+  ['--blue',    'Blue',         'status'],
+  ['--yellow',  'Yellow',       'status'],
+  ['--orange',  'Orange',       'status'],
+];
+
+const CUSTOM_THEME_CLEAR_VARS = [
+  '--bg','--bg2','--bg3','--border','--text','--text2','--text3',
+  '--accent','--accent2','--accent-glow',
+  '--green','--green-dim','--red','--red-dim','--blue','--blue-dim',
+  '--yellow','--yellow-dim','--orange','--orange-dim',
+  '--purple','--purple-dim','--teal','--teal-dim','--babyblue','--babyblue-dim'
+];
+
+function _hexToRgba(hex, alpha) {
+  const h = hex.replace('#','');
+  const r = parseInt(h.slice(0,2),16), g = parseInt(h.slice(2,4),16), b = parseInt(h.slice(4,6),16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function clearCustomThemeVars() {
+  CUSTOM_THEME_CLEAR_VARS.forEach(v => document.documentElement.style.removeProperty(v));
+}
+
+function applyDerivedVars(vars) {
+  const root = document.documentElement.style;
+  if (vars['--accent']) root.setProperty('--accent-glow', _hexToRgba(vars['--accent'], 0.22));
+  ['--green','--red','--blue','--yellow','--orange','--purple','--teal','--babyblue'].forEach(k => {
+    if (vars[k]) root.setProperty(k + '-dim', _hexToRgba(vars[k], 0.12));
+  });
+}
+
+function applyCustomThemeVars(vars) {
+  clearCustomThemeVars();
+  Object.entries(vars).forEach(([k, v]) => document.documentElement.style.setProperty(k, v));
+  applyDerivedVars(vars);
+}
+
+function _loadCustomThemes() {
+  try { return JSON.parse(localStorage.getItem(CUSTOM_THEMES_KEY) || '{"customThemes":[],"activeCustomId":null}'); }
+  catch(e) { return { customThemes: [], activeCustomId: null }; }
+}
+
+function _saveCustomThemesStorage(data) {
+  try { localStorage.setItem(CUSTOM_THEMES_KEY, JSON.stringify(data)); } catch(e) {}
+  _syncThemePrefsToFirestore();
+}
+
+function _syncThemePrefsToFirestore() {
+  if (!currentUser) return;
+  try {
+    const activeTheme = localStorage.getItem('pressTrackerTheme') || 'midnight';
+    const { customThemes } = _loadCustomThemes();
+    setDoc(doc(db, 'users', currentUser.uid), {
+      themePrefs: { activeTheme, customThemes }
+    }, { merge: true }).catch(() => {});
+  } catch(e) {}
+}
+
+function _applyFirestoreThemePrefs(prefs) {
+  if (!prefs) return;
+  try {
+    if (Array.isArray(prefs.customThemes)) {
+      const local = _loadCustomThemes();
+      local.customThemes = prefs.customThemes;
+      try { localStorage.setItem(CUSTOM_THEMES_KEY, JSON.stringify(local)); } catch(e) {}
+      renderAppearanceCustomThemes();
+    }
+    if (prefs.activeTheme) applyTheme(prefs.activeTheme);
+  } catch(e) {}
+}
 
 function renderThemeChoices() {
   const grid = document.getElementById('theme-select-grid');
   if (!grid) return;
-  grid.innerHTML = THEME_OPTIONS.map(theme => `
-    <button class="theme-choice" type="button" data-theme="${theme.key}" title="${theme.label}" aria-label="Apply ${theme.label} theme" aria-pressed="false">
+  grid.innerHTML = THEME_OPTIONS.map(theme => {
+    const locked = isThemeLocked(theme.key);
+    const storeItem = locked ? getStoreItemForTheme(theme.key) : null;
+    return `
+    <button class="theme-choice${locked ? ' theme-locked' : ''}" type="button" data-theme="${theme.key}" title="${theme.label}" aria-label="${locked ? 'Locked — ' : ''}${theme.label}" aria-pressed="false"${storeItem ? ` data-store-item-id="${storeItem.id}"` : ''}>
       <span class="theme-choice-name">${theme.label}</span>
       <span class="theme-choice-swatches">
         <span class="theme-swatch" style="background:${theme.colors[0]}"></span>
         <span class="theme-swatch" style="background:${theme.colors[1]}"></span>
         <span class="theme-swatch" style="background:${theme.colors[2]}"></span>
       </span>
-    </button>
-  `).join('');
+      ${locked ? `<span class="theme-lock-badge">🔒 ${storeItem.price} XP</span>` : ''}
+    </button>`;
+  }).join('');
+}
+
+function renderAppearanceCustomThemes() {
+  const list = document.getElementById('appearance-custom-list');
+  const empty = document.getElementById('appearance-custom-empty');
+  if (!list || !empty) return;
+  const data = _loadCustomThemes();
+  if (!data.customThemes.length) {
+    list.innerHTML = '';
+    empty.style.display = '';
+    return;
+  }
+  empty.style.display = 'none';
+  list.innerHTML = '';
+  data.customThemes.slice().reverse().forEach(theme => {
+    const item = document.createElement('div');
+    item.className = 'appearance-custom-item';
+    const safeName = theme.name.replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    item.innerHTML = `
+      <span class="te-saved-name">${safeName}</span>
+      <span class="te-saved-swatches">
+        <span class="te-saved-swatch" style="background:${theme.vars['--bg'] || '#000'}"></span>
+        <span class="te-saved-swatch" style="background:${theme.vars['--accent'] || '#888'}"></span>
+        <span class="te-saved-swatch" style="background:${theme.vars['--text'] || '#fff'}"></span>
+      </span>
+      <button class="te-saved-apply" data-id="${theme.id}">Apply</button>
+      <button class="te-saved-delete" data-id="${theme.id}" title="Delete">🗑</button>`;
+    list.appendChild(item);
+  });
 }
 
 function updateActiveThemeChoice(theme) {
-  const currentTheme = THEME_OPTIONS.find(opt => opt.key === theme) || THEME_OPTIONS[0];
+  const savedTheme = theme ?? localStorage.getItem('pressTrackerTheme');
+  const currentTheme = theme ? (THEME_OPTIONS.find(opt => opt.key === theme) || THEME_OPTIONS[0]) : null;
   const currentLabel = document.getElementById('theme-select-current');
-  if (currentLabel) currentLabel.textContent = currentTheme.label.replace(/^[^\s]+\s/, '');
+  if (currentLabel) currentLabel.textContent = currentTheme ? currentTheme.label.replace(/^[^\s]+\s/, '') : 'Custom';
   document.querySelectorAll('.theme-choice').forEach(btn => {
-    const isActive = btn.dataset.theme === theme;
+    const isActive = theme != null && btn.dataset.theme === theme;
     btn.classList.toggle('active', isActive);
     btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
   });
+  document.querySelectorAll('.appearance-custom-item').forEach(item => {
+    const applyBtn = item.querySelector('.te-saved-apply');
+    item.classList.toggle('active', savedTheme === `custom_${applyBtn?.dataset?.id || ''}`);
+  });
+}
+
+function updateThemeModeUI() {
+  const isDark = (document.body.dataset.themeMode || 'dark') !== 'light';
+  const toggle = document.getElementById('theme-quick-toggle');
+  const label = document.getElementById('ud-mode-label');
+  const moonIcon = document.getElementById('ud-moon-icon');
+  const sunIcon = document.getElementById('ud-sun-icon');
+  if (toggle) toggle.classList.toggle('on', isDark);
+  if (label) label.textContent = isDark ? 'Dark mode' : 'Light mode';
+  if (moonIcon) moonIcon.style.display = isDark ? '' : 'none';
+  if (sunIcon) sunIcon.style.display = isDark ? 'none' : '';
 }
 
 function applyTheme(theme) {
   const legacyThemeMap = { dark: 'midnight', light: 'arctic' };
   const resolvedTheme = legacyThemeMap[theme] || theme;
+  // Handle custom theme keys (stored as "custom_<id>")
+  if (resolvedTheme && resolvedTheme.startsWith('custom_')) {
+    const data = _loadCustomThemes();
+    const found = data.customThemes.find(t => 'custom_' + t.id === resolvedTheme);
+    if (found) {
+      document.body.classList.remove(...THEME_KEYS.map(key => `theme-${key}`));
+      applyCustomThemeVars(found.vars);
+      document.body.dataset.themeMode = 'dark';
+      try { localStorage.setItem('pressTrackerTheme', resolvedTheme); } catch(e) {}
+      updateActiveThemeChoice(null);
+      _syncThemePrefsToFirestore();
+      updateThemeModeUI();
+      return;
+    }
+  }
+  clearCustomThemeVars(); // strip any inline custom vars before applying a CSS class theme
   const normalizedTheme = THEME_KEYS.includes(resolvedTheme) ? resolvedTheme : 'midnight';
+  if (isThemeLocked(normalizedTheme)) {
+    showGameToast('🔒 Unlock in the Store — open your Progress panel');
+    toggleGameDrawer(true);
+    return;
+  }
   document.body.classList.remove(...THEME_KEYS.map(key => `theme-${key}`));
   if (normalizedTheme !== 'midnight') document.body.classList.add(`theme-${normalizedTheme}`);
   const selectedTheme = THEME_OPTIONS.find(opt => opt.key === normalizedTheme) || THEME_OPTIONS[0];
   document.body.dataset.themeMode = selectedTheme.mode;
   updateActiveThemeChoice(normalizedTheme);
   try { localStorage.setItem('pressTrackerTheme', normalizedTheme); } catch(e) {}
+  _syncThemePrefsToFirestore();
+  updateThemeModeUI();
 }
 
-// Load saved theme
-renderThemeChoices();
+// Load saved theme (handles both built-in keys and custom_<id>)
 try {
   const saved = localStorage.getItem('pressTrackerTheme');
-  applyTheme(saved || 'midnight');
-} catch(e) {}
-
-document.getElementById('theme-select-grid')?.addEventListener('click', e => {
-  const btn = e.target.closest('.theme-choice');
-  if (!btn?.dataset?.theme) return;
-  applyTheme(btn.dataset.theme);
-});
+  if (saved && saved.startsWith('custom_')) {
+    const data = _loadCustomThemes();
+    const found = data.customThemes.find(t => 'custom_' + t.id === saved);
+    if (found) { document.body.classList.remove(...THEME_KEYS.map(key => `theme-${key}`)); applyCustomThemeVars(found.vars); document.body.dataset.themeMode = 'dark'; updateActiveThemeChoice(null); }
+    else applyTheme('midnight');
+  } else {
+    applyTheme(saved || 'midnight');
+  }
+} catch(e) { applyTheme('midnight'); }
+updateThemeModeUI();
+renderThemeChoices();
+renderAppearanceCustomThemes();
+updateActiveThemeChoice(THEME_KEYS.includes(localStorage.getItem('pressTrackerTheme') || '') ? localStorage.getItem('pressTrackerTheme') : null);
 
 document.getElementById('theme-select-toggle')?.addEventListener('click', () => {
   const toggle = document.getElementById('theme-select-toggle');
   const grid = document.getElementById('theme-select-grid');
-  const isOpen = grid?.classList.contains('open');
-  grid?.classList.toggle('open', !isOpen);
-  toggle?.classList.toggle('open', !isOpen);
+  if (!toggle || !grid) return;
+  const open = !grid.classList.contains('open');
+  grid.classList.toggle('open', open);
+  toggle.classList.toggle('open', open);
+  toggle.setAttribute('aria-expanded', String(open));
 });
+
+document.getElementById('theme-select-grid')?.addEventListener('click', e => {
+  const btn = e.target.closest('.theme-choice');
+  if (!btn?.dataset?.theme) return;
+  if (btn.classList.contains('theme-locked')) {
+    showGameToast('🔒 Unlock in the Store — open your Progress panel');
+    toggleGameDrawer(true);
+    return;
+  }
+  applyTheme(btn.dataset.theme);
+  // Intentionally keep selector expanded after apply; close only via dropdown minimize/outside click.
+  document.getElementById('theme-select-grid')?.classList.add('open');
+  document.getElementById('theme-select-toggle')?.classList.add('open');
+  document.getElementById('theme-select-toggle')?.setAttribute('aria-expanded', 'true');
+});
+
+document.getElementById('appearance-custom-list')?.addEventListener('click', e => {
+  const applyBtn = e.target.closest('.te-saved-apply');
+  const deleteBtn = e.target.closest('.te-saved-delete');
+  if (applyBtn?.dataset?.id) {
+    applyTheme('custom_' + applyBtn.dataset.id);
+    updateActiveThemeChoice(null);
+    return;
+  }
+  if (deleteBtn?.dataset?.id) {
+    const d = _loadCustomThemes();
+    d.customThemes = d.customThemes.filter(t => t.id !== deleteBtn.dataset.id);
+    if (d.activeCustomId === deleteBtn.dataset.id) d.activeCustomId = null;
+    _saveCustomThemesStorage(d);
+    if ((localStorage.getItem('pressTrackerTheme') || '') === 'custom_' + deleteBtn.dataset.id) applyTheme('midnight');
+    renderAppearanceCustomThemes();
+    updateActiveThemeChoice(THEME_KEYS.includes(localStorage.getItem('pressTrackerTheme') || '') ? localStorage.getItem('pressTrackerTheme') : null);
+  }
+});
+
+document.getElementById('theme-quick-toggle')?.addEventListener('click', () => {
+  const mode = document.body.dataset.themeMode || 'dark';
+  applyTheme(mode === 'light' ? 'midnight' : 'arctic');
+});
+
+window.openAppearanceModal = function() {
+  document.getElementById('user-dropdown').classList.remove('visible');
+  document.getElementById('user-pill').classList.remove('open');
+  renderThemeChoices();
+  renderAppearanceCustomThemes();
+  updateActiveThemeChoice(THEME_KEYS.includes(localStorage.getItem('pressTrackerTheme') || '') ? localStorage.getItem('pressTrackerTheme') : null);
+  document.getElementById('appearance-modal').classList.add('visible');
+};
+
+window.closeAppearanceModal = function() {
+  document.getElementById('appearance-modal').classList.remove('visible');
+};
+
+// ── THEME EDITOR (modal interaction) ──
+let _teCurrentVars = null;
+let _tePrevThemeKey = null;
+let _teEditingId = null;
+
+window.openThemeEditor = function() {
+  closeAppearanceModal();
+  document.getElementById('user-dropdown').classList.remove('visible');
+  document.getElementById('user-pill').classList.remove('open');
+  _tePrevThemeKey = localStorage.getItem('pressTrackerTheme') || 'midnight';
+  _teEditingId = null;
+  const saveBtn = document.getElementById('te-save-btn');
+  if (saveBtn) saveBtn.textContent = '💾 Save';
+
+  // Populate base select
+  const sel = document.getElementById('te-base-select');
+  sel.innerHTML = THEME_OPTIONS.map(t => `<option value="${t.key}">${t.label}</option>`).join('');
+
+  // Seed vars from current theme (custom or built-in)
+  if (_tePrevThemeKey.startsWith('custom_')) {
+    const data = _loadCustomThemes();
+    const found = data.customThemes.find(t => 'custom_' + t.id === _tePrevThemeKey);
+    _teCurrentVars = found ? { ...found.vars } : { ...THEME_VARS_MAP.midnight };
+    sel.value = 'midnight';
+  } else {
+    const baseKey = THEME_KEYS.includes(_tePrevThemeKey) ? _tePrevThemeKey : 'midnight';
+    sel.value = baseKey;
+    _teCurrentVars = { ...(THEME_VARS_MAP[baseKey] || THEME_VARS_MAP.midnight) };
+  }
+
+  // Remove CSS class theme so inline vars on :root are not overridden, enabling live preview
+  document.body.classList.remove(...THEME_KEYS.map(key => `theme-${key}`));
+  applyCustomThemeVars(_teCurrentVars);
+
+  _renderTEPickers();
+  _renderTESavedList();
+  document.getElementById('te-theme-name').value = '';
+  document.getElementById('theme-editor-modal').classList.add('visible');
+};
+
+window.closeThemeEditor = function() {
+  document.getElementById('theme-editor-modal').classList.remove('visible');
+  // Revert to what was active before editor opened
+  const saved = localStorage.getItem('pressTrackerTheme') || 'midnight';
+  if (saved.startsWith('custom_')) {
+    const data = _loadCustomThemes();
+    const found = data.customThemes.find(t => 'custom_' + t.id === saved);
+    if (found) { applyCustomThemeVars(found.vars); return; }
+  }
+  applyTheme(saved);
+};
+
+document.getElementById('te-base-select')?.addEventListener('change', e => {
+  const base = THEME_VARS_MAP[e.target.value];
+  if (base) {
+    _teCurrentVars = { ...base };
+    _teEditingId = null;
+    const saveBtn = document.getElementById('te-save-btn');
+    if (saveBtn) saveBtn.textContent = '💾 Save';
+    document.getElementById('te-theme-name').value = '';
+    _renderTEPickers();
+    applyCustomThemeVars(_teCurrentVars);
+  }
+});
+
+function _renderTEPickers() {
+  const groups = { surfaces: 'te-colors-surfaces', text: 'te-colors-text', accent: 'te-colors-accent', status: 'te-colors-status' };
+  Object.values(groups).forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = ''; });
+  THEME_EDITOR_VARS.forEach(([cssVar, label, group]) => {
+    const container = document.getElementById(groups[group]);
+    if (!container) return;
+    const val = _teCurrentVars[cssVar] || '#000000';
+    const row = document.createElement('div');
+    row.className = 'te-color-row';
+    row.innerHTML = `
+      <label class="te-color-label">${label}</label>
+      <input type="color" class="te-color-input" value="${val}" data-var="${cssVar}">
+      <span class="te-color-hex" data-hex-for="${cssVar}">${val}</span>`;
+    row.querySelector('input').addEventListener('input', e => {
+      _teCurrentVars[cssVar] = e.target.value;
+      row.querySelector('.te-color-hex').textContent = e.target.value;
+      applyCustomThemeVars(_teCurrentVars);
+    });
+    container.appendChild(row);
+  });
+}
+
+window.saveCustomTheme = function() {
+  const nameEl = document.getElementById('te-theme-name');
+  const name = nameEl.value.trim();
+  if (!name) { nameEl.focus(); return; }
+  const data = _loadCustomThemes();
+  if (_teEditingId) {
+    const idx = data.customThemes.findIndex(t => t.id === _teEditingId);
+    if (idx >= 0) data.customThemes[idx] = { ...data.customThemes[idx], name, vars: { ..._teCurrentVars } };
+    _saveCustomThemesStorage(data);
+    applyTheme('custom_' + _teEditingId);
+    _teEditingId = null;
+    const saveBtn = document.getElementById('te-save-btn');
+    if (saveBtn) saveBtn.textContent = '💾 Save';
+  } else {
+    const id = 'custom_' + Date.now();
+    data.customThemes.push({ id, name, vars: { ..._teCurrentVars }, createdAt: Date.now() });
+    data.activeCustomId = id;
+    _saveCustomThemesStorage(data);
+    applyTheme('custom_' + id);
+  }
+  nameEl.value = '';
+  _renderTESavedList();
+  renderAppearanceCustomThemes();
+};
+
+function _renderTESavedList() {
+  const data = _loadCustomThemes();
+  const section = document.getElementById('te-saved-section');
+  const list = document.getElementById('te-saved-list');
+  if (!section || !list) return;
+  if (!data.customThemes.length) { section.style.display = 'none'; return; }
+  section.style.display = '';
+  list.innerHTML = '';
+  data.customThemes.slice().reverse().forEach(theme => {
+    const item = document.createElement('div');
+    item.className = 'te-saved-item';
+    const safeName = theme.name.replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    item.innerHTML = `
+      <span class="te-saved-name">${safeName}</span>
+      <span class="te-saved-swatches">
+        <span class="te-saved-swatch" style="background:${theme.vars['--bg'] || '#000'}"></span>
+        <span class="te-saved-swatch" style="background:${theme.vars['--accent'] || '#888'}"></span>
+        <span class="te-saved-swatch" style="background:${theme.vars['--text'] || '#fff'}"></span>
+      </span>
+      <button class="te-saved-apply" data-id="${theme.id}">Apply</button>
+      <button class="te-saved-delete" data-id="${theme.id}" title="Delete">🗑</button>`;
+    item.querySelector('.te-saved-apply').addEventListener('click', () => {
+      _teEditingId = theme.id;
+      _teCurrentVars = { ...theme.vars };
+      document.getElementById('te-theme-name').value = theme.name;
+      const saveBtn = document.getElementById('te-save-btn');
+      if (saveBtn) saveBtn.textContent = '💾 Update';
+      _renderTEPickers();
+      const d = _loadCustomThemes(); d.activeCustomId = theme.id; _saveCustomThemesStorage(d);
+      applyTheme('custom_' + theme.id);
+      updateActiveThemeChoice(null);
+      renderAppearanceCustomThemes();
+    });
+    item.querySelector('.te-saved-delete').addEventListener('click', () => {
+      const d = _loadCustomThemes();
+      d.customThemes = d.customThemes.filter(t => t.id !== theme.id);
+      if (d.activeCustomId === theme.id) d.activeCustomId = null;
+      _saveCustomThemesStorage(d);
+      if ((localStorage.getItem('pressTrackerTheme') || '') === 'custom_' + theme.id) applyTheme('midnight');
+      _renderTESavedList();
+      renderAppearanceCustomThemes();
+    });
+    list.appendChild(item);
+  });
+}
 
 // ── FILTER DRAWER ──
 let filterDrawerOpen = false;
@@ -6433,7 +7226,10 @@ document.querySelectorAll('.modal').forEach(modal => {
   modal.addEventListener('click', e => e.stopPropagation());
 });
 
-document.addEventListener('keydown', e=>{ if(e.key==='Escape'){closeModal();closeEditModal();closeResolveModal();closeReopenModal();closeLightbox();closeSortDropdown();closeExportModal();closeSerialModal();closeEditStatusModal();closeNotesModal();} });
+document.addEventListener('keydown', e=>{ if(e.key==='Escape'){closeModal();closeEditModal();closeResolveModal();closeReopenModal();closeLightbox();closeSortDropdown();closeExportModal();closeSerialModal();closeEditStatusModal();closeNotesModal();closeAppearanceModal();closeThemeEditor();} });
+
+document.getElementById('theme-editor-modal').addEventListener('click', e => { if (e.target === document.getElementById('theme-editor-modal')) closeThemeEditor(); });
+document.getElementById('appearance-modal')?.addEventListener('click', e => { if (e.target === document.getElementById('appearance-modal')) closeAppearanceModal(); });
 
 // ── SERIAL NUMBER PROMPT ──
 // Define which status+sub combos require a serial number
@@ -6825,6 +7621,184 @@ window.downloadPDF = async () => {
 
 // Close export modal on escape / overlay click
 document.getElementById('export-modal')?.addEventListener('click', e => { if(e.target===document.getElementById('export-modal')) closeExportModal(); });
+
+window.downloadExcel = async () => {
+  if (typeof XLSX === 'undefined') {
+    alert('Excel library not loaded. Please refresh and try again.');
+    return;
+  }
+  const btn = document.getElementById('export-excel-btn');
+  const origInner = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Building…';
+  try {
+    // Apply the same filters as the PDF export and the issue log view
+    const search = document.getElementById('search-input').value.toLowerCase();
+    const mf = document.getElementById('machine-filter').value;
+    const sf = document.getElementById('status-filter').value;
+    const sort = currentSort;
+
+    const activeRowMachines = new Set();
+    if (issueRowScope === 'active' && activeRows.size > 0) {
+      activeRows.forEach(rowName => { (PRESSES[rowName]||[]).forEach(m => activeRowMachines.add(m)); });
+    }
+
+    let filtered = issues.filter(i => {
+      if (issueScope === 'mine' && i.userId !== currentUser?.uid) return false;
+      if (!periodFilter(i)) return false;
+      if (issueRowScope === 'active' && activeRows.size > 0 && !activeRowMachines.has(i.machine)) return false;
+      if (mf && i.machine !== mf) return false;
+      if (sf && !issueHasActiveStatus(i, sf)) return false;
+      if (search) {
+        const mt = String(i.machine||'').toLowerCase(), nt = String(i.note||'').toLowerCase();
+        const rt = String(i.resolveNote||'').toLowerCase(), ut = String(i.userName||'').toLowerCase();
+        if (!mt.includes(search) && !nt.includes(search) && !rt.includes(search) && !ut.includes(search)) return false;
+      }
+      return true;
+    });
+    applySortOrder(filtered, sort);
+
+    // Ensure event history and photos are fetched for all filtered issues
+    await Promise.all(filtered.map(async issue => {
+      if (issue.schemaVersion === 2 && (!issue.eventHistory || issue.eventHistory.length === 0)) {
+        const h = await fetchIssueEventHistory(issue);
+        if (h.length > 0) issue.eventHistory = h;
+      }
+      if (Number(issue.photoCount || 0) > 0 && (!issue.photos || issue.photos.length === 0)) {
+        issue.photos = await fetchAttachmentPhotos(issue.id);
+      }
+    }));
+
+    // Build rowId → human-readable row name lookup
+    const rowIdToName = {};
+    Object.entries(PRESSES).forEach(([rowName, machines]) => {
+      rowIdToName[toRowId(rowName)] = rowName;
+    });
+
+    // Convert a Firestore Timestamp, epoch ms number, or Date to a JS Date (or null)
+    const toJsDate = ts => {
+      if (!ts) return null;
+      if (ts instanceof Date) return ts;
+      if (typeof ts.toDate === 'function') return ts.toDate();
+      if (typeof ts === 'number') return new Date(ts);
+      return null;
+    };
+
+    // ── Issues sheet ──
+    const ISSUE_HEADERS = ['Issue ID','Plant ID','Machine','Row','Date Logged','Note','Status','Sub-Status',
+      'Logged By','Resolved','Resolved At','Resolve Note','Resolved By','Photo Count','Photo URLs',
+      'Workflow State','Created At','Updated At'];
+    const issueRows = filtered.map(issue => {
+      const statusKey = currentStatusKey(issue);
+      const statusLabel = getStatusDef(statusKey).label || statusKey;
+      const subStatus = issue.currentStatus?.subStatusKey || '';
+      const rowName = rowIdToName[issue.rowId] || issue.rowId || '';
+      const isResolved = !!(issue.lifecycle?.isResolved || issue.resolved);
+      const history = issue.eventHistory || issue.statusHistory || [];
+      const resolvedEntry = history.slice().reverse().find(e => e.status === 'resolved');
+      const photoUrls = (issue.photos||[]).map(p=>p.dataUrl).filter(Boolean).join('\n');
+      return {
+        'Issue ID': issue.id,
+        'Plant ID': issue.plantId || currentPlantId,
+        'Machine': issue.machine || '',
+        'Row': rowName,
+        'Date Logged': toJsDate(issue.timestamp) || issue.dateTime || '',
+        'Note': issue.note || '',
+        'Status': statusLabel,
+        'Sub-Status': subStatus,
+        'Logged By': issue.userName || '',
+        'Resolved': isResolved ? 'Yes' : 'No',
+        'Resolved At': toJsDate(issue.lifecycle?.resolvedAt) || '',
+        'Resolve Note': issue.resolveNote || '',
+        'Resolved By': resolvedEntry?.by || issue.resolvedBy || '',
+        'Photo Count': Number(issue.photoCount || 0),
+        'Photo URLs': photoUrls,
+        'Workflow State': issue.workflowState || 'called',
+        'Created At': toJsDate(issue.createdAt) || '',
+        'Updated At': toJsDate(issue.updatedAt) || '',
+      };
+    });
+
+    // ── Events sheet ──
+    const EVENT_HEADERS = ['Issue ID','Machine','Event #','Date/Time','From Status','To Status','Sub-Status','Note','By'];
+    const eventRows = [];
+    filtered.forEach(issue => {
+      const history = issue.eventHistory || issue.statusHistory || [];
+      history.forEach((entry, idx) => {
+        const prevKey = idx > 0 ? history[idx-1].status : '';
+        eventRows.push({
+          'Issue ID': issue.id,
+          'Machine': issue.machine || '',
+          'Event #': idx + 1,
+          'Date/Time': entry.dateTime || '',
+          'From Status': prevKey ? (getStatusDef(prevKey).label || prevKey) : '',
+          'To Status': getStatusDef(entry.status).label || entry.status || '',
+          'Sub-Status': entry.subStatus || '',
+          'Note': entry.note || '',
+          'By': entry.by || '',
+        });
+      });
+    });
+
+    // ── Photos sheet ──
+    const PHOTO_HEADERS = ['Issue ID','Machine','File Name','Storage Path','Download URL','Content Type','Size (bytes)'];
+    const photoRows = [];
+    filtered.forEach(issue => {
+      (issue.photos||[]).forEach(p => {
+        photoRows.push({
+          'Issue ID': issue.id,
+          'Machine': issue.machine || '',
+          'File Name': p.name || '',
+          'Storage Path': p.storagePath || '',
+          'Download URL': p.dataUrl || '',
+          'Content Type': p.contentType || '',
+          'Size (bytes)': Number(p.sizeBytes || 0),
+        });
+      });
+    });
+
+    const mkSheet = (rows, headers) => XLSX.utils.json_to_sheet(
+      rows.length > 0 ? rows : [Object.fromEntries(headers.map(h=>[h,null]))],
+      { header: headers, cellDates: true }
+    );
+
+    const wsIssues = mkSheet(issueRows, ISSUE_HEADERS);
+    const wsEvents = mkSheet(eventRows, EVENT_HEADERS);
+    const wsPhotos = mkSheet(photoRows, PHOTO_HEADERS);
+
+    wsIssues['!cols'] = [24,14,10,12,20,44,18,18,20,10,20,44,20,12,60,16,20,20].map(w=>({wch:w}));
+    wsEvents['!cols'] = [24,10,8,20,18,18,18,44,20].map(w=>({wch:w}));
+    wsPhotos['!cols'] = [24,10,30,60,80,14,14].map(w=>({wch:w}));
+
+    if (issueRows.length > 0) {
+      const r = XLSX.utils.decode_range(wsIssues['!ref']);
+      wsIssues['!autofilter'] = { ref: XLSX.utils.encode_range({s:{r:0,c:0}, e:{r:0,c:r.e.c}}) };
+    }
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, wsIssues, 'Issues');
+    XLSX.utils.book_append_sheet(wb, wsEvents, 'Events');
+    XLSX.utils.book_append_sheet(wb, wsPhotos, 'Photos');
+
+    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'AP-Tracker-Export-' + localDateStr(new Date()) + '.xlsx';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch(e) {
+    console.error('Excel export error:', e);
+    alert('Excel export failed. See console for details.');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = origInner;
+  }
+};
 
 // ── ADMIN PANEL ──
 const ADMIN_ICONS = ['🔧','🔩','⚙️','🎛️','🚀','🔍','⚠️','🛠️','🔬','📋','🏭','💡','🔄','📦','🧪','🔑','⛽','🖨️','🤖','🧲','🔒','🔓','📡','🧯','🔌','💧','🌡️','🔋','🪛','🪚','📏','🧰','🔦','🚨','🛞','⚡','🧹','🪝','🗜️','📐'];
