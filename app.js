@@ -1606,7 +1606,21 @@ function renderStoreCard() {
 // ── STORE MODAL ──
 
 const STORE_FREE_KEYS = new Set(['midnight', 'arctic', 'forest', 'slate', 'mint', 'engel']);
+const STORE_THEME_ITEM_PREFIX = 'storeitem:';
 let _pendingPurchaseItemId = null;
+
+function inferThemeModeFromVars(vars = {}) {
+  const bg = String(vars['--bg'] || '').trim();
+  const hex = bg.startsWith('#') ? bg.slice(1) : '';
+  if (![3, 6].includes(hex.length)) return 'dark';
+  const normalized = hex.length === 3 ? hex.split('').map(ch => ch + ch).join('') : hex;
+  const r = parseInt(normalized.slice(0, 2), 16);
+  const g = parseInt(normalized.slice(2, 4), 16);
+  const b = parseInt(normalized.slice(4, 6), 16);
+  if ([r, g, b].some(Number.isNaN)) return 'dark';
+  const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  return luminance > 0.62 ? 'light' : 'dark';
+}
 
 function updateStoreXpDisplay() {
   const spendable = userSpendableXp();
@@ -1638,7 +1652,7 @@ window.renderStoreModal = renderStoreModal;
 
 function renderStoreModal() {
   updateStoreXpDisplay();
-  const activeKey = localStorage.getItem('pressTrackerTheme') || 'midnight';
+  const activeSelection = localStorage.getItem('pressTrackerTheme') || 'midnight';
   const spendable = userSpendableXp();
   const catalog = getThemeCatalog();
   const freeThemes = catalog.filter(theme => theme.isFree);
@@ -1647,8 +1661,15 @@ function renderStoreModal() {
   const freeGrid = document.getElementById('store-free-themes');
   const paidGrid = document.getElementById('store-paid-themes');
 
-  if (freeGrid) freeGrid.innerHTML = freeThemes.map(t => _buildStoreThemeCard(t, activeKey, spendable)).join('');
-  if (paidGrid) paidGrid.innerHTML = paidThemes.map(t => _buildStoreThemeCard(t, activeKey, spendable)).join('');
+  if (freeGrid) freeGrid.innerHTML = freeThemes.map(entry => _buildStoreThemeCard(entry, activeSelection, spendable)).join('');
+  if (paidGrid) {
+    paidGrid.innerHTML = paidThemes.length
+      ? paidThemes.map(entry => _buildStoreThemeCard(entry, activeSelection, spendable)).join('')
+      : `<div class="store-coming-soon" style="padding:18px 14px;text-align:center;">
+          <div class="store-cs-title">No premium themes available</div>
+          <div class="store-cs-sub">Add theme items from the admin store editor to publish them here.</div>
+        </div>`;
+  }
 }
 
 function _buildStoreThemeCard(theme, activeKey, spendable) {
@@ -1675,7 +1696,11 @@ function _buildStoreThemeCard(theme, activeKey, spendable) {
     badge = `<span class="stc-badge stc-badge-locked">🔒 ${price}</span>`;
   }
 
-  const clickHandler = owned ? `onclick="applyTheme('${theme.key}');renderStoreModal();"` : '';
+  const clickHandler = owned
+    ? (entry.kind === 'custom-store'
+        ? `onclick="applyStoreThemeItem('${storeItem.id}')"`
+        : `onclick="applyTheme('${theme.key}');renderStoreModal();"`)
+    : '';
 
   return `<div class="${cardCls}" role="button" tabindex="0" ${clickHandler}>
     <div class="stc-preview" style="--stc-bg:${bg};--stc-accent:${accent};--stc-text:${textColor}">
@@ -1700,6 +1725,29 @@ function _buildStoreThemeCard(theme, activeKey, spendable) {
     </div>
   </div>`;
 }
+
+function applyStoreThemeItem(itemId) {
+  const item = storeItems.find(i => i.id === itemId && i.type === 'theme' && i.isActive !== false);
+  if (!item) return;
+  if (!isItemUnlocked(itemId)) {
+    openPurchaseConfirm(itemId);
+    return;
+  }
+  if (item.themeKey) {
+    applyTheme(item.themeKey);
+    renderStoreModal();
+    return;
+  }
+  clearCustomThemeVars();
+  document.body.classList.remove(...THEME_KEYS.map(key => `theme-${key}`));
+  applyCustomThemeVars(item.customVars || {});
+  document.body.dataset.themeMode = inferThemeModeFromVars(item.customVars || {});
+  try { localStorage.setItem('pressTrackerTheme', `${STORE_THEME_ITEM_PREFIX}${item.id}`); } catch(e) {}
+  _syncThemePrefsToFirestore();
+  updateThemeModeUI();
+  renderStoreModal();
+}
+window.applyStoreThemeItem = applyStoreThemeItem;
 
 function openPurchaseConfirm(itemId) {
   const item = storeItems.find(i => i.id === itemId);
@@ -5288,6 +5336,21 @@ function updateThemeModeUI() {
 function applyTheme(theme) {
   const legacyThemeMap = { dark: 'midnight', light: 'arctic' };
   const resolvedTheme = legacyThemeMap[theme] || theme;
+  if (resolvedTheme && resolvedTheme.startsWith(STORE_THEME_ITEM_PREFIX)) {
+    const itemId = resolvedTheme.slice(STORE_THEME_ITEM_PREFIX.length);
+    const item = storeItems.find(i => i.id === itemId && i.type === 'theme' && i.isActive !== false);
+    if (item?.customVars) {
+      clearCustomThemeVars();
+      document.body.classList.remove(...THEME_KEYS.map(key => `theme-${key}`));
+      applyCustomThemeVars(item.customVars);
+      document.body.dataset.themeMode = inferThemeModeFromVars(item.customVars);
+      try { localStorage.setItem('pressTrackerTheme', resolvedTheme); } catch(e) {}
+      updateActiveThemeChoice(null);
+      _syncThemePrefsToFirestore();
+      updateThemeModeUI();
+      return;
+    }
+  }
   // Handle custom theme keys (stored as "custom_<id>")
   if (resolvedTheme && resolvedTheme.startsWith('custom_')) {
     const data = _loadCustomThemes();
