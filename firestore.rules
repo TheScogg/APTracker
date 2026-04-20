@@ -274,5 +274,14 @@ service cloud.firestore {
       }
     }
 
+    // ── Global app config ──
+    // Store catalog is global across plants.
+    match /globalConfig/{configId} {
+      allow read: if signedIn();
+      // Keep writes limited to users that belong to at least one plant.
+      // (Admin UI additionally gates this client-side to plant admins.)
+      allow write: if hasPlantAccess();
+    }
+
   }
 }
