@@ -1497,7 +1497,7 @@ async function loadStoreConfig() {
   ensureCurrentThemeAccess();
   renderThemeChoices();
   updateStoreXpDisplay();
-  updateActiveThemeChoice(THEME_KEYS.includes(localStorage.getItem('pressTrackerTheme') || '') ? localStorage.getItem('pressTrackerTheme') : null);
+  updateActiveThemeChoice(localStorage.getItem('pressTrackerTheme') || 'midnight');
 }
 
 function isItemUnlocked(itemId) {
@@ -1509,22 +1509,14 @@ function getStoreItemForTheme(themeKey) {
 }
 
 function isThemeLocked(themeKey) {
-  if (STORE_FREE_KEYS.has(themeKey)) return false;
-  const item = getStoreItemForTheme(themeKey);
-  return item ? !isItemUnlocked(item.id) : false;
+  const theme = getThemeCatalogEntry(themeKey);
+  if (!theme) return false;
+  return !theme.isOwned;
 }
 
 function ensureCurrentThemeAccess() {
   const savedTheme = localStorage.getItem('pressTrackerTheme') || 'midnight';
-  if (savedTheme.startsWith(STORE_THEME_ITEM_PREFIX)) {
-    const itemId = savedTheme.slice(STORE_THEME_ITEM_PREFIX.length);
-    const item = storeItems.find(i => i.id === itemId && i.type === 'theme' && i.isActive !== false);
-    if (item?.customVars && isItemUnlocked(itemId)) return;
-    showGameToast('🔒 Theme unavailable — switched to Midnight');
-    applyTheme('midnight');
-    return;
-  }
-  if (!THEME_KEYS.includes(savedTheme)) return;
+  if (!getThemeCatalogEntry(savedTheme)) return;
   if (!isThemeLocked(savedTheme)) return;
   showGameToast('🔒 Theme locked — switched to Midnight');
   applyTheme('midnight');
@@ -1559,11 +1551,12 @@ async function purchaseStoreItem(itemId) {
     renderStoreCard();
     updateStoreXpDisplay();
     renderThemeChoices();
-    updateActiveThemeChoice(THEME_KEYS.includes(localStorage.getItem('pressTrackerTheme') || '') ? localStorage.getItem('pressTrackerTheme') : null);
+    renderStoreModal();
+    updateActiveThemeChoice(localStorage.getItem('pressTrackerTheme') || 'midnight');
     showGameToast(`Unlocked ${item.name}!`);
     if (item.type === 'theme') {
       if (item.themeKey) applyTheme(item.themeKey);
-      else if (item.customVars) applyStoreThemeItem(item.id);
+      else if (item.customVars) applyTheme(`storetheme_${item.id}`);
     }
   } catch(e) {
     if (e?.message === 'insufficient_xp') showGameToast('Not enough XP!');
@@ -1661,32 +1654,9 @@ function renderStoreModal() {
   updateStoreXpDisplay();
   const activeSelection = localStorage.getItem('pressTrackerTheme') || 'midnight';
   const spendable = userSpendableXp();
-  const activeStoreThemes = (storeItems || []).filter(item => item?.type === 'theme' && item.isActive !== false);
-  const paidThemeKeys = new Set(activeStoreThemes.map(item => item.themeKey).filter(key => key && !STORE_FREE_KEYS.has(key)));
-  const customThemes = activeStoreThemes.filter(item => !item.themeKey && item.customVars);
-  const freeThemes = THEME_OPTIONS
-    .filter(theme => STORE_FREE_KEYS.has(theme.key))
-    .map(theme => ({ kind: 'builtin', theme, storeItem: getStoreItemForTheme(theme.key), selectionKey: theme.key }));
-  const paidThemes = [
-    ...THEME_OPTIONS
-      .filter(theme => paidThemeKeys.has(theme.key))
-      .map(theme => ({ kind: 'builtin', theme, storeItem: getStoreItemForTheme(theme.key), selectionKey: theme.key })),
-    ...customThemes.map(item => ({
-      kind: 'custom-store',
-      theme: {
-        key: `${STORE_THEME_ITEM_PREFIX}${item.id}`,
-        label: `🎨 ${item.name || 'Custom Theme'}`,
-        mode: inferThemeModeFromVars(item.customVars || {}),
-        colors: [
-          item.customVars?.['--bg'] || '#111111',
-          item.customVars?.['--accent'] || '#888888',
-          item.customVars?.['--text'] || '#ffffff'
-        ]
-      },
-      storeItem: item,
-      selectionKey: `${STORE_THEME_ITEM_PREFIX}${item.id}`
-    }))
-  ];
+  const catalog = getThemeCatalog();
+  const freeThemes = catalog.filter(theme => theme.isFree);
+  const paidThemes = catalog.filter(theme => !theme.isFree);
 
   const freeGrid = document.getElementById('store-free-themes');
   const paidGrid = document.getElementById('store-paid-themes');
@@ -1706,11 +1676,10 @@ function _buildStoreThemeCard(entry, activeSelection, spendable) {
   const theme = entry.theme;
   const storeItem = entry.storeItem;
   const [bg, accent, textColor] = theme.colors;
-  const nameOnly = theme.label.replace(/^\S+\s/, '');
-  const isFree = STORE_FREE_KEYS.has(theme.key);
-  const isActive = entry.selectionKey === activeSelection;
-  const owned = isFree || !storeItem || isItemUnlocked(storeItem.id);
-  const price = storeItem?.price || 0;
+  const nameOnly = theme.shortLabel || themeLabelSansIcon(theme.label);
+  const isActive = theme.key === activeKey;
+  const owned = theme.isOwned;
+  const price = theme.price || 0;
   const canAfford = spendable >= price;
 
   let cardCls = 'store-theme-card';
@@ -1722,11 +1691,11 @@ function _buildStoreThemeCard(entry, activeSelection, spendable) {
   if (isActive) {
     badge = `<span class="stc-badge stc-badge-active">Active</span>`;
   } else if (owned) {
-    badge = `<span class="stc-badge stc-badge-owned">${isFree ? 'Free' : '✓ Owned'}</span>`;
-  } else if (storeItem && canAfford) {
-    action = `<button class="stc-buy-btn" onclick="event.stopPropagation();openPurchaseConfirm('${storeItem.id}')">${price} XP</button>`;
+    badge = `<span class="stc-badge stc-badge-owned">${theme.isFree ? (theme.source === 'saved-custom' ? 'Saved' : 'Free') : '✓ Owned'}</span>`;
+  } else if (theme.storeItemId && canAfford) {
+    action = `<button class="stc-buy-btn" onclick="event.stopPropagation();openPurchaseConfirm('${theme.storeItemId}')">${price} XP</button>`;
   } else {
-    badge = `<span class="stc-badge stc-badge-locked">🔒 ${storeItem ? price : ''}</span>`;
+    badge = `<span class="stc-badge stc-badge-locked">🔒 ${price}</span>`;
   }
 
   const clickHandler = owned
@@ -1787,7 +1756,9 @@ function openPurchaseConfirm(itemId) {
   if (!item) return;
   if (userSpendableXp() < item.price) { showGameToast(`Need ${item.price} XP`); return; }
   _pendingPurchaseItemId = itemId;
-  const theme = THEME_OPTIONS.find(t => t.key === item.themeKey);
+  const theme = item.themeKey
+    ? getThemeCatalogEntry(item.themeKey)
+    : getThemeCatalogEntry(`storetheme_${item.id}`);
   const icon = document.getElementById('purchase-confirm-icon');
   const title = document.getElementById('purchase-confirm-title');
   const desc = document.getElementById('purchase-confirm-desc');
@@ -5077,6 +5048,90 @@ const THEME_VARS_MAP = {
   engel:      { '--bg':'#0c1209','--bg2':'#141e0f','--bg3':'#1b2a14','--border':'#2d4820','--text':'#e8f5d8','--text2':'#8ab870','--text3':'#4d6e38','--accent':'#78be20','--accent2':'#96d63a','--green':'#78be20','--red':'#f87171','--blue':'#00a3b5','--yellow':'#ffc72c','--orange':'#fb923c' }
 };
 
+function themeLabelSansIcon(label) {
+  return String(label || '').replace(/^[^\s]+\s/, '');
+}
+
+function inferThemeModeFromBg(bgHex) {
+  const hex = String(bgHex || '').trim();
+  if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return 'dark';
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  return luminance > 0.68 ? 'light' : 'dark';
+}
+
+function getThemeCatalog() {
+  const builtIns = THEME_OPTIONS.map(theme => {
+    const storeItem = getStoreItemForTheme(theme.key);
+    const isFree = STORE_FREE_KEYS.has(theme.key);
+    return {
+      key: theme.key,
+      source: 'builtin',
+      label: theme.label,
+      shortLabel: themeLabelSansIcon(theme.label),
+      colors: theme.colors,
+      vars: { ...(THEME_VARS_MAP[theme.key] || {}) },
+      mode: theme.mode,
+      storeItemId: storeItem?.id || null,
+      price: Number(storeItem?.price || 0),
+      isFree,
+      isOwned: isFree || !storeItem || isItemUnlocked(storeItem.id),
+    };
+  });
+
+  const storeCustomThemes = storeItems
+    .filter(item => item.type === 'theme' && item.isActive !== false && !item.themeKey && item.customVars)
+    .map(item => {
+      const vars = { ...item.customVars };
+      return {
+        key: `storetheme_${item.id}`,
+        source: 'store-custom',
+        label: `🎨 ${item.name || 'Custom Theme'}`,
+        shortLabel: item.name || 'Custom Theme',
+        colors: [
+          vars['--bg'] || '#111111',
+          vars['--accent'] || '#888888',
+          vars['--text'] || '#ffffff',
+        ],
+        vars,
+        mode: inferThemeModeFromBg(vars['--bg']),
+        storeItemId: item.id,
+        price: Math.max(0, Number(item.price || 0)),
+        isFree: Number(item.price || 0) <= 0,
+        isOwned: Number(item.price || 0) <= 0 || isItemUnlocked(item.id),
+      };
+    });
+
+  const savedCustomThemes = _loadCustomThemes().customThemes
+    .slice()
+    .reverse()
+    .map(theme => ({
+      key: `custom_${theme.id}`,
+      source: 'saved-custom',
+      label: `🎨 ${theme.name}`,
+      shortLabel: theme.name || 'Custom',
+      colors: [
+        theme.vars['--bg'] || '#111111',
+        theme.vars['--accent'] || '#888888',
+        theme.vars['--text'] || '#ffffff',
+      ],
+      vars: { ...(theme.vars || {}) },
+      mode: inferThemeModeFromBg(theme.vars?.['--bg']),
+      storeItemId: null,
+      price: 0,
+      isFree: true,
+      isOwned: true,
+    }));
+
+  return [...builtIns, ...savedCustomThemes, ...storeCustomThemes];
+}
+
+function getThemeCatalogEntry(key) {
+  return getThemeCatalog().find(theme => theme.key === key) || null;
+}
+
 // ── THEME EDITOR ──
 const CUSTOM_THEMES_KEY = 'apTracker_customThemes';
 
@@ -5166,27 +5221,11 @@ function _applyFirestoreThemePrefs(prefs) {
 function renderThemeChoices() {
   const grid = document.getElementById('theme-select-grid');
   if (!grid) return;
-  const ownedBuiltIns = THEME_OPTIONS.filter(theme => !isThemeLocked(theme.key)).map(theme => ({
-    key: theme.key,
-    label: theme.label,
-    sublabel: theme.mode === 'light' ? 'Built-in light' : 'Built-in dark',
-    colors: theme.colors,
-  }));
-  const customThemes = _loadCustomThemes().customThemes.slice().reverse().map(theme => ({
-    key: `custom_${theme.id}`,
-    label: `Custom ${theme.name}`,
-    sublabel: 'Saved custom',
-    colors: [
-      theme.vars['--bg'] || '#111111',
-      theme.vars['--accent'] || '#888888',
-      theme.vars['--text'] || '#ffffff',
-    ],
-  }));
-  const availableThemes = [...ownedBuiltIns, ...customThemes];
+  const availableThemes = getThemeCatalog().filter(theme => theme.isOwned);
   grid.innerHTML = availableThemes.map(theme => `
     <button class="theme-choice" type="button" data-theme="${theme.key}" title="${theme.label}" aria-label="${theme.label}" aria-pressed="false">
-      <span class="theme-choice-name">${esc(theme.label)}</span>
-      <span class="theme-choice-sub">${esc(theme.sublabel)}</span>
+      <span class="theme-choice-name">${esc(theme.shortLabel || themeLabelSansIcon(theme.label))}</span>
+      <span class="theme-choice-sub">${esc(theme.isFree ? (theme.source === 'saved-custom' ? 'Saved theme' : 'Always available') : 'Owned unlock')}</span>
       <span class="theme-choice-swatches">
         <span class="theme-swatch" style="background:${theme.colors[0]}"></span>
         <span class="theme-swatch" style="background:${theme.colors[1]}"></span>
@@ -5226,15 +5265,10 @@ function renderAppearanceCustomThemes() {
 
 function updateActiveThemeChoice(theme) {
   const savedTheme = theme ?? localStorage.getItem('pressTrackerTheme');
-  const currentBuiltIn = THEME_OPTIONS.find(opt => opt.key === savedTheme) || null;
-  const currentCustom = savedTheme && String(savedTheme).startsWith('custom_')
-    ? _loadCustomThemes().customThemes.find(opt => `custom_${opt.id}` === savedTheme) || null
-    : null;
+  const currentTheme = getThemeCatalogEntry(savedTheme);
   const currentLabel = document.getElementById('theme-select-current');
   if (currentLabel) {
-    currentLabel.textContent = currentBuiltIn
-      ? currentBuiltIn.label.replace(/^[^\s]+\s/, '')
-      : (currentCustom?.name || 'Custom');
+    currentLabel.textContent = currentTheme?.shortLabel || 'Custom';
   }
   document.querySelectorAll('.theme-choice').forEach(btn => {
     const isActive = btn.dataset.theme === savedTheme;
@@ -5312,6 +5346,23 @@ function applyTheme(theme) {
       return;
     }
   }
+  if (resolvedTheme && resolvedTheme.startsWith('storetheme_')) {
+    const storeTheme = getThemeCatalogEntry(resolvedTheme);
+    if (storeTheme) {
+      if (!storeTheme.isOwned) {
+        openStoreModal();
+        return;
+      }
+      document.body.classList.remove(...THEME_KEYS.map(key => `theme-${key}`));
+      applyCustomThemeVars(storeTheme.vars || {});
+      document.body.dataset.themeMode = storeTheme.mode || 'dark';
+      try { localStorage.setItem('pressTrackerTheme', resolvedTheme); } catch(e) {}
+      updateActiveThemeChoice(resolvedTheme);
+      _syncThemePrefsToFirestore();
+      updateThemeModeUI();
+      return;
+    }
+  }
   clearCustomThemeVars(); // strip any inline custom vars before applying a CSS class theme
   const normalizedTheme = THEME_KEYS.includes(resolvedTheme) ? resolvedTheme : 'midnight';
   if (isThemeLocked(normalizedTheme)) {
@@ -5337,6 +5388,8 @@ try {
     const found = data.customThemes.find(t => 'custom_' + t.id === saved);
     if (found) { document.body.classList.remove(...THEME_KEYS.map(key => `theme-${key}`)); applyCustomThemeVars(found.vars); document.body.dataset.themeMode = 'dark'; updateActiveThemeChoice(null); }
     else applyTheme('midnight');
+  } else if (saved && saved.startsWith('storetheme_')) {
+    applyTheme(saved);
   } else {
     applyTheme(saved || 'midnight');
   }
@@ -5344,7 +5397,7 @@ try {
 updateThemeModeUI();
 renderThemeChoices();
 renderAppearanceCustomThemes();
-updateActiveThemeChoice(THEME_KEYS.includes(localStorage.getItem('pressTrackerTheme') || '') ? localStorage.getItem('pressTrackerTheme') : null);
+updateActiveThemeChoice(localStorage.getItem('pressTrackerTheme') || 'midnight');
 
 
 document.getElementById('appearance-custom-list')?.addEventListener('click', e => {
@@ -5353,6 +5406,8 @@ document.getElementById('appearance-custom-list')?.addEventListener('click', e =
   if (applyBtn?.dataset?.id) {
     applyTheme('custom_' + applyBtn.dataset.id);
     updateActiveThemeChoice(null);
+    renderThemeChoices();
+    renderStoreModal();
     return;
   }
   if (deleteBtn?.dataset?.id) {
@@ -5362,7 +5417,9 @@ document.getElementById('appearance-custom-list')?.addEventListener('click', e =
     _saveCustomThemesStorage(d);
     if ((localStorage.getItem('pressTrackerTheme') || '') === 'custom_' + deleteBtn.dataset.id) applyTheme('midnight');
     renderAppearanceCustomThemes();
-    updateActiveThemeChoice(THEME_KEYS.includes(localStorage.getItem('pressTrackerTheme') || '') ? localStorage.getItem('pressTrackerTheme') : null);
+    renderThemeChoices();
+    renderStoreModal();
+    updateActiveThemeChoice(localStorage.getItem('pressTrackerTheme') || 'midnight');
   }
 });
 
@@ -5376,7 +5433,7 @@ window.openAppearanceModal = function() {
   document.getElementById('user-pill').classList.remove('open');
   renderThemeChoices();
   renderAppearanceCustomThemes();
-  updateActiveThemeChoice(THEME_KEYS.includes(localStorage.getItem('pressTrackerTheme') || '') ? localStorage.getItem('pressTrackerTheme') : null);
+  updateActiveThemeChoice(localStorage.getItem('pressTrackerTheme') || 'midnight');
   document.getElementById('appearance-modal').classList.add('visible');
 };
 
@@ -5407,6 +5464,10 @@ window.openThemeEditor = function() {
     const data = _loadCustomThemes();
     const found = data.customThemes.find(t => 'custom_' + t.id === _tePrevThemeKey);
     _teCurrentVars = found ? { ...found.vars } : { ...THEME_VARS_MAP.midnight };
+    sel.value = 'midnight';
+  } else if (_tePrevThemeKey.startsWith('storetheme_')) {
+    const storeTheme = getThemeCatalogEntry(_tePrevThemeKey);
+    _teCurrentVars = storeTheme?.vars ? { ...storeTheme.vars } : { ...THEME_VARS_MAP.midnight };
     sel.value = 'midnight';
   } else {
     const baseKey = THEME_KEYS.includes(_tePrevThemeKey) ? _tePrevThemeKey : 'midnight';
@@ -5494,6 +5555,8 @@ window.saveCustomTheme = function() {
   nameEl.value = '';
   _renderTESavedList();
   renderAppearanceCustomThemes();
+  renderThemeChoices();
+  renderStoreModal();
 };
 
 function _renderTESavedList() {
@@ -5528,6 +5591,8 @@ function _renderTESavedList() {
       applyTheme('custom_' + theme.id);
       updateActiveThemeChoice(null);
       renderAppearanceCustomThemes();
+      renderThemeChoices();
+      renderStoreModal();
     });
     item.querySelector('.te-saved-delete').addEventListener('click', () => {
       const d = _loadCustomThemes();
@@ -5537,6 +5602,8 @@ function _renderTESavedList() {
       if ((localStorage.getItem('pressTrackerTheme') || '') === 'custom_' + theme.id) applyTheme('midnight');
       _renderTESavedList();
       renderAppearanceCustomThemes();
+      renderThemeChoices();
+      renderStoreModal();
     });
     list.appendChild(item);
   });
