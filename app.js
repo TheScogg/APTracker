@@ -1509,6 +1509,7 @@ function getStoreItemForTheme(themeKey) {
 }
 
 function isThemeLocked(themeKey) {
+  if (STORE_FREE_KEYS.has(themeKey)) return false;
   const item = getStoreItemForTheme(themeKey);
   return item ? !isItemUnlocked(item.id) : false;
 }
