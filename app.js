@@ -1652,7 +1652,7 @@ function renderStoreModal() {
 }
 
 function _buildStoreThemeCard(theme, activeKey, spendable) {
-  const [bg, accent, textColor] = theme.colors;
+  const [bg, accent, textColor] = getThemePreviewColors(theme);
   const nameOnly = theme.shortLabel || themeLabelSansIcon(theme.label);
   const isActive = theme.key === activeKey;
   const owned = theme.isOwned;
@@ -5021,6 +5021,11 @@ function normalizeThemeColors(colors, vars = {}) {
   return Array.isArray(colors) && colors.length >= 3 ? colors : fallback;
 }
 
+function getThemePreviewColors(theme) {
+  const vars = theme && typeof theme === 'object' ? (theme.vars || {}) : {};
+  return normalizeThemeColors(theme?.colors, vars);
+}
+
 function getThemeCatalog() {
   const builtIns = THEME_OPTIONS.map(theme => {
     const storeItem = getStoreItemForTheme(theme.key);
@@ -5186,16 +5191,19 @@ function renderThemeChoices() {
   const grid = document.getElementById('theme-select-grid');
   if (!grid) return;
   const availableThemes = getThemeCatalog().filter(theme => theme.isOwned);
-  grid.innerHTML = availableThemes.map(theme => `
+  grid.innerHTML = availableThemes.map(theme => {
+    const [bg, accent, textColor] = getThemePreviewColors(theme);
+    return `
     <button class="theme-choice" type="button" data-theme="${theme.key}" title="${theme.label}" aria-label="${theme.label}" aria-pressed="false">
       <span class="theme-choice-name">${esc(theme.shortLabel || themeLabelSansIcon(theme.label))}</span>
       <span class="theme-choice-sub">${esc(theme.isFree ? (theme.source === 'saved-custom' ? 'Saved theme' : 'Always available') : 'Owned unlock')}</span>
       <span class="theme-choice-swatches">
-        <span class="theme-swatch" style="background:${theme.colors[0]}"></span>
-        <span class="theme-swatch" style="background:${theme.colors[1]}"></span>
-        <span class="theme-swatch" style="background:${theme.colors[2]}"></span>
+        <span class="theme-swatch" style="background:${bg}"></span>
+        <span class="theme-swatch" style="background:${accent}"></span>
+        <span class="theme-swatch" style="background:${textColor}"></span>
       </span>
-    </button>`).join('');
+    </button>`;
+  }).join('');
 }
 
 function renderAppearanceCustomThemes() {
