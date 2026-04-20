@@ -1486,18 +1486,69 @@ async function loadStoreConfig() {
   try {
     const globalSnap = await getDoc(globalStoreConfigDoc());
     if (globalSnap.exists()) {
-      storeItems = globalSnap.data().items || DEFAULT_STORE_ITEMS;
+      storeItems = normalizeStoreItems(globalSnap.data().items);
     } else {
       const legacySnap = await getDoc(legacyPlantStoreConfigDoc());
-      storeItems = legacySnap.exists() ? (legacySnap.data().items || DEFAULT_STORE_ITEMS) : DEFAULT_STORE_ITEMS;
+      storeItems = normalizeStoreItems(legacySnap.exists() ? legacySnap.data().items : DEFAULT_STORE_ITEMS);
     }
   } catch(e) {
-    storeItems = DEFAULT_STORE_ITEMS;
+    storeItems = normalizeStoreItems(DEFAULT_STORE_ITEMS);
   }
   ensureCurrentThemeAccess();
   renderThemeChoices();
+  renderStoreCard();
+  renderStoreModal();
   updateStoreXpDisplay();
   updateActiveThemeChoice(localStorage.getItem('pressTrackerTheme') || 'midnight');
+  if (storeConfigUnsubscribe) storeConfigUnsubscribe();
+  storeConfigUnsubscribe = onSnapshot(globalStoreConfigDoc(), snap => {
+    const incoming = snap.exists() ? snap.data().items : DEFAULT_STORE_ITEMS;
+    storeItems = normalizeStoreItems(incoming);
+    ensureCurrentThemeAccess();
+    renderThemeChoices();
+    renderStoreCard();
+    renderStoreModal();
+    updateStoreXpDisplay();
+    updateActiveThemeChoice(localStorage.getItem('pressTrackerTheme') || 'midnight');
+  }, err => {
+    console.warn('Global store listener failed:', err);
+  });
+}
+
+function normalizeStoreItems(rawItems) {
+  const incoming = Array.isArray(rawItems) ? rawItems : [];
+  const byId = new Map();
+  incoming.forEach((item, idx) => {
+    if (!item || typeof item !== 'object') return;
+    const id = String(item.id || '').trim() || `storeitem_${idx}`;
+    byId.set(id, {
+      ...item,
+      id,
+      type: item.type || 'theme',
+      name: String(item.name || 'Store Item'),
+      price: Math.max(0, Number(item.price || 0)),
+      isActive: item.isActive !== false,
+      order: Number.isFinite(Number(item.order)) ? Number(item.order) : idx
+    });
+  });
+
+  THEME_OPTIONS.forEach((theme, idx) => {
+    const id = `theme_${theme.key}`;
+    if (byId.has(id)) return;
+    const seed = DEFAULT_STORE_ITEMS.find(item => item.id === id);
+    byId.set(id, {
+      id,
+      type: 'theme',
+      themeKey: theme.key,
+      customVars: null,
+      name: themeLabelSansIcon(theme.label),
+      price: Number(seed?.price || 0),
+      isActive: true,
+      order: Number(seed?.order ?? idx)
+    });
+  });
+
+  return [...byId.values()].sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
 }
 
 function isItemUnlocked(itemId) {
@@ -1605,7 +1656,6 @@ function renderStoreCard() {
 
 // ── STORE MODAL ──
 
-const STORE_FREE_KEYS = new Set(['midnight', 'arctic', 'forest', 'slate', 'mint', 'engel']);
 const STORE_THEME_ITEM_PREFIX = 'storeitem:';
 let _pendingPurchaseItemId = null;
 
@@ -1686,6 +1736,7 @@ function _buildStoreThemeCard(theme, activeKey, spendable) {
 
   let badge = '';
   let action = '';
+  let previewAction = `<button class="stc-buy-btn" onclick="event.stopPropagation();previewStoreTheme('${theme.key}')">Preview</button>`;
   if (isActive) {
     badge = `<span class="stc-badge stc-badge-active">Active</span>`;
   } else if (owned) {
@@ -1721,10 +1772,37 @@ function _buildStoreThemeCard(theme, activeKey, spendable) {
     </div>
     <div class="stc-footer">
       <span class="stc-name">${esc(nameOnly)}</span>
-      <span class="stc-action">${badge}${action}</span>
+      <span class="stc-action">${badge}${action}${previewAction}</span>
     </div>
   </div>`;
 }
+
+function previewStoreTheme(themeKey) {
+  if (!themeKey) return;
+  if (themeKey.startsWith('storetheme_')) {
+    const itemId = themeKey.replace('storetheme_', '');
+    const item = storeItems.find(i => i.id === itemId && i.type === 'theme' && i.isActive !== false);
+    if (!item?.customVars) return;
+    clearCustomThemeVars();
+    document.body.classList.remove(...THEME_KEYS.map(key => `theme-${key}`));
+    applyCustomThemeVars(item.customVars);
+    document.body.dataset.themeMode = inferThemeModeFromVars(item.customVars);
+    updateThemeModeUI();
+    return;
+  }
+  if (themeKey.startsWith('custom_')) {
+    applyTheme(themeKey);
+    return;
+  }
+  const builtIn = THEME_OPTIONS.find(t => t.key === themeKey);
+  if (!builtIn) return;
+  clearCustomThemeVars();
+  document.body.classList.remove(...THEME_KEYS.map(key => `theme-${key}`));
+  if (themeKey !== 'midnight') document.body.classList.add(`theme-${themeKey}`);
+  document.body.dataset.themeMode = builtIn.mode || 'dark';
+  updateThemeModeUI();
+}
+window.previewStoreTheme = previewStoreTheme;
 
 function applyStoreThemeItem(itemId) {
   const item = storeItems.find(i => i.id === itemId && i.type === 'theme' && i.isActive !== false);
@@ -1841,17 +1919,24 @@ let issueLogDeferredRelayoutTimer = null;
 let issueLogResizeObserver = null;
 let gameDrawerOpen = false;
 let storeItems = [];
+let storeConfigUnsubscribe = null;
 let userInventory = { unlockedItems: [], activeMascot: null };
 let userLifetimeXp = 0;
 let userXpSpent = 0;
 function userSpendableXp() { return Math.max(0, userLifetimeXp - userXpSpent); }
 
 const DEFAULT_STORE_ITEMS = [
-  { id: 'theme_ocean',      type: 'theme', themeKey: 'ocean',      customVars: null, name: 'Ocean',      price: 150, isActive: true },
-  { id: 'theme_sunset',     type: 'theme', themeKey: 'sunset',     customVars: null, name: 'Sunset',     price: 200, isActive: true },
-  { id: 'theme_industrial', type: 'theme', themeKey: 'industrial', customVars: null, name: 'Industrial', price: 200, isActive: true },
-  { id: 'theme_royal',      type: 'theme', themeKey: 'royal',      customVars: null, name: 'Royal',      price: 250, isActive: true },
-  { id: 'theme_cyberpunk',  type: 'theme', themeKey: 'cyberpunk',  customVars: null, name: 'Cyberpunk',  price: 350, isActive: true },
+  { id: 'theme_midnight',   type: 'theme', themeKey: 'midnight',   customVars: null, name: 'Midnight',   price: 0,   isActive: true, order: 0 },
+  { id: 'theme_arctic',     type: 'theme', themeKey: 'arctic',     customVars: null, name: 'Arctic',     price: 0,   isActive: true, order: 1 },
+  { id: 'theme_forest',     type: 'theme', themeKey: 'forest',     customVars: null, name: 'Forest',     price: 0,   isActive: true, order: 2 },
+  { id: 'theme_sunset',     type: 'theme', themeKey: 'sunset',     customVars: null, name: 'Sunset',     price: 75,  isActive: true, order: 3 },
+  { id: 'theme_ocean',      type: 'theme', themeKey: 'ocean',      customVars: null, name: 'Ocean',      price: 75,  isActive: true, order: 4 },
+  { id: 'theme_royal',      type: 'theme', themeKey: 'royal',      customVars: null, name: 'Royal',      price: 120, isActive: true, order: 5 },
+  { id: 'theme_slate',      type: 'theme', themeKey: 'slate',      customVars: null, name: 'Slate',      price: 0,   isActive: true, order: 6 },
+  { id: 'theme_mint',       type: 'theme', themeKey: 'mint',       customVars: null, name: 'Mint',       price: 0,   isActive: true, order: 7 },
+  { id: 'theme_cyberpunk',  type: 'theme', themeKey: 'cyberpunk',  customVars: null, name: 'Cyberpunk',  price: 220, isActive: true, order: 8 },
+  { id: 'theme_industrial', type: 'theme', themeKey: 'industrial', customVars: null, name: 'Industrial', price: 220, isActive: true, order: 9 },
+  { id: 'theme_engel',      type: 'theme', themeKey: 'engel',      customVars: null, name: 'Engel',      price: 0,   isActive: true, order: 10 },
 ];
 
 let gameConfig = null;
@@ -5090,9 +5175,9 @@ function getThemeCatalog() {
   const publishedBuiltInThemeKeys = getPublishedBuiltInThemeKeys();
   const builtIns = THEME_OPTIONS
     .filter(theme => publishedBuiltInThemeKeys.has(theme.key))
-    .map(theme => {
+    .map((theme, idx) => {
       const storeItem = getStoreItemForTheme(theme.key);
-      const isFree = STORE_FREE_KEYS.has(theme.key);
+      const isFree = !storeItem || Number(storeItem?.price || 0) <= 0;
       const vars = { ...(THEME_VARS_MAP[theme.key] || {}) };
       return {
         key: theme.key,
@@ -5103,7 +5188,8 @@ function getThemeCatalog() {
         vars,
         mode: theme.mode,
         storeItemId: storeItem?.id || null,
-        price: Number(storeItem?.price || 0),
+        sortOrder: Number(storeItem?.order ?? 9999),
+        price: Math.max(0, Number(storeItem?.price || 0)),
         isFree,
         isOwned: isFree || !storeItem || isItemUnlocked(storeItem.id),
       };
@@ -5126,6 +5212,7 @@ function getThemeCatalog() {
         vars,
         mode: inferThemeModeFromBg(vars['--bg']),
         storeItemId: item.id,
+        sortOrder: Number(item.order ?? 9999),
         price: Math.max(0, Number(item.price || 0)),
         isFree: Number(item.price || 0) <= 0,
         isOwned: Number(item.price || 0) <= 0 || isItemUnlocked(item.id),
@@ -5137,7 +5224,7 @@ function getThemeCatalog() {
     .slice()
     .reverse()
     .filter(theme => theme && typeof theme === 'object')
-    .map(theme => {
+    .map((theme, idx) => {
       const vars = { ...(theme.vars || {}) };
       return {
         key: `custom_${theme.id}`,
@@ -5148,6 +5235,7 @@ function getThemeCatalog() {
         vars,
         mode: inferThemeModeFromBg(vars['--bg']),
         storeItemId: null,
+        sortOrder: 50000 + idx,
         price: 0,
         isFree: true,
         isOwned: true,
@@ -5157,6 +5245,7 @@ function getThemeCatalog() {
 
   return [...builtIns, ...savedCustomThemes, ...storeCustomThemes]
     .filter(theme => theme && typeof theme === 'object' && !!theme.key)
+    .sort((a, b) => Number(a.sortOrder || 0) - Number(b.sortOrder || 0))
     .map(theme => ({ ...theme, colors: normalizeThemeColors(theme.colors, theme.vars) }));
 }
 
