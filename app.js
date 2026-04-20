@@ -5166,20 +5166,33 @@ function _applyFirestoreThemePrefs(prefs) {
 function renderThemeChoices() {
   const grid = document.getElementById('theme-select-grid');
   if (!grid) return;
-  grid.innerHTML = THEME_OPTIONS.map(theme => {
-    const locked = isThemeLocked(theme.key);
-    const storeItem = locked ? getStoreItemForTheme(theme.key) : null;
-    return `
-    <button class="theme-choice${locked ? ' theme-locked' : ''}" type="button" data-theme="${theme.key}" title="${theme.label}" aria-label="${locked ? 'Locked — ' : ''}${theme.label}" aria-pressed="false"${storeItem ? ` data-store-item-id="${storeItem.id}"` : ''}>
-      <span class="theme-choice-name">${theme.label}</span>
+  const ownedBuiltIns = THEME_OPTIONS.filter(theme => !isThemeLocked(theme.key)).map(theme => ({
+    key: theme.key,
+    label: theme.label,
+    sublabel: theme.mode === 'light' ? 'Built-in light' : 'Built-in dark',
+    colors: theme.colors,
+  }));
+  const customThemes = _loadCustomThemes().customThemes.slice().reverse().map(theme => ({
+    key: `custom_${theme.id}`,
+    label: `Custom ${theme.name}`,
+    sublabel: 'Saved custom',
+    colors: [
+      theme.vars['--bg'] || '#111111',
+      theme.vars['--accent'] || '#888888',
+      theme.vars['--text'] || '#ffffff',
+    ],
+  }));
+  const availableThemes = [...ownedBuiltIns, ...customThemes];
+  grid.innerHTML = availableThemes.map(theme => `
+    <button class="theme-choice" type="button" data-theme="${theme.key}" title="${theme.label}" aria-label="${theme.label}" aria-pressed="false">
+      <span class="theme-choice-name">${esc(theme.label)}</span>
+      <span class="theme-choice-sub">${esc(theme.sublabel)}</span>
       <span class="theme-choice-swatches">
         <span class="theme-swatch" style="background:${theme.colors[0]}"></span>
         <span class="theme-swatch" style="background:${theme.colors[1]}"></span>
         <span class="theme-swatch" style="background:${theme.colors[2]}"></span>
       </span>
-      ${locked ? `<span class="theme-lock-badge">🔒 ${storeItem.price} XP</span>` : ''}
-    </button>`;
-  }).join('');
+    </button>`).join('');
 }
 
 function renderAppearanceCustomThemes() {
@@ -5213,11 +5226,18 @@ function renderAppearanceCustomThemes() {
 
 function updateActiveThemeChoice(theme) {
   const savedTheme = theme ?? localStorage.getItem('pressTrackerTheme');
-  const currentTheme = theme ? (THEME_OPTIONS.find(opt => opt.key === theme) || THEME_OPTIONS[0]) : null;
+  const currentBuiltIn = THEME_OPTIONS.find(opt => opt.key === savedTheme) || null;
+  const currentCustom = savedTheme && String(savedTheme).startsWith('custom_')
+    ? _loadCustomThemes().customThemes.find(opt => `custom_${opt.id}` === savedTheme) || null
+    : null;
   const currentLabel = document.getElementById('theme-select-current');
-  if (currentLabel) currentLabel.textContent = currentTheme ? currentTheme.label.replace(/^[^\s]+\s/, '') : 'Custom';
+  if (currentLabel) {
+    currentLabel.textContent = currentBuiltIn
+      ? currentBuiltIn.label.replace(/^[^\s]+\s/, '')
+      : (currentCustom?.name || 'Custom');
+  }
   document.querySelectorAll('.theme-choice').forEach(btn => {
-    const isActive = theme != null && btn.dataset.theme === theme;
+    const isActive = btn.dataset.theme === savedTheme;
     btn.classList.toggle('active', isActive);
     btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
   });
@@ -5226,6 +5246,26 @@ function updateActiveThemeChoice(theme) {
     item.classList.toggle('active', savedTheme === `custom_${applyBtn?.dataset?.id || ''}`);
   });
 }
+
+document.getElementById('theme-select-toggle')?.addEventListener('click', () => {
+  const grid = document.getElementById('theme-select-grid');
+  const toggle = document.getElementById('theme-select-toggle');
+  if (!grid || !toggle) return;
+  renderThemeChoices();
+  const nextOpen = !grid.classList.contains('open');
+  grid.classList.toggle('open', nextOpen);
+  toggle.classList.toggle('open', nextOpen);
+  toggle.setAttribute('aria-expanded', nextOpen ? 'true' : 'false');
+});
+
+document.getElementById('theme-select-grid')?.addEventListener('click', e => {
+  const btn = e.target.closest('.theme-choice');
+  if (!btn?.dataset?.theme) return;
+  applyTheme(btn.dataset.theme);
+  document.getElementById('theme-select-grid')?.classList.remove('open');
+  document.getElementById('theme-select-toggle')?.classList.remove('open');
+  document.getElementById('theme-select-toggle')?.setAttribute('aria-expanded', 'false');
+});
 
 function updateThemeModeUI() {
   const isDark = (document.body.dataset.themeMode || 'dark') !== 'light';
