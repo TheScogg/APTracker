@@ -5420,9 +5420,6 @@ document.getElementById('theme-select-grid')?.addEventListener('click', e => {
   const btn = e.target.closest('.theme-choice');
   if (!btn?.dataset?.theme) return;
   applyTheme(btn.dataset.theme);
-  document.getElementById('theme-select-grid')?.classList.remove('open');
-  document.getElementById('theme-select-toggle')?.classList.remove('open');
-  document.getElementById('theme-select-toggle')?.setAttribute('aria-expanded', 'false');
 });
 
 function updateThemeModeUI() {
