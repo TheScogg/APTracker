@@ -5012,17 +5012,27 @@ function inferThemeModeFromBg(bgHex) {
   return luminance > 0.68 ? 'light' : 'dark';
 }
 
+function normalizeThemeColors(colors, vars = {}) {
+  const fallback = [
+    vars['--bg'] || '#111111',
+    vars['--accent'] || '#888888',
+    vars['--text'] || '#ffffff',
+  ];
+  return Array.isArray(colors) && colors.length >= 3 ? colors : fallback;
+}
+
 function getThemeCatalog() {
   const builtIns = THEME_OPTIONS.map(theme => {
     const storeItem = getStoreItemForTheme(theme.key);
     const isFree = STORE_FREE_KEYS.has(theme.key);
+    const vars = { ...(THEME_VARS_MAP[theme.key] || {}) };
     return {
       key: theme.key,
       source: 'builtin',
       label: theme.label,
       shortLabel: themeLabelSansIcon(theme.label),
-      colors: theme.colors,
-      vars: { ...(THEME_VARS_MAP[theme.key] || {}) },
+      colors: normalizeThemeColors(theme.colors, vars),
+      vars,
       mode: theme.mode,
       storeItemId: storeItem?.id || null,
       price: Number(storeItem?.price || 0),
@@ -5054,28 +5064,32 @@ function getThemeCatalog() {
       };
     });
 
-  const savedCustomThemes = _loadCustomThemes().customThemes
+  const savedCustomThemesRaw = _loadCustomThemes().customThemes;
+  const savedCustomThemes = (Array.isArray(savedCustomThemesRaw) ? savedCustomThemesRaw : [])
     .slice()
     .reverse()
-    .map(theme => ({
-      key: `custom_${theme.id}`,
-      source: 'saved-custom',
-      label: `🎨 ${theme.name}`,
-      shortLabel: theme.name || 'Custom',
-      colors: [
-        theme.vars['--bg'] || '#111111',
-        theme.vars['--accent'] || '#888888',
-        theme.vars['--text'] || '#ffffff',
-      ],
-      vars: { ...(theme.vars || {}) },
-      mode: inferThemeModeFromBg(theme.vars?.['--bg']),
-      storeItemId: null,
-      price: 0,
-      isFree: true,
-      isOwned: true,
-    }));
+    .filter(theme => theme && typeof theme === 'object')
+    .map(theme => {
+      const vars = { ...(theme.vars || {}) };
+      return {
+        key: `custom_${theme.id}`,
+        source: 'saved-custom',
+        label: `🎨 ${theme.name || 'Custom Theme'}`,
+        shortLabel: theme.name || 'Custom',
+        colors: normalizeThemeColors(null, vars),
+        vars,
+        mode: inferThemeModeFromBg(vars['--bg']),
+        storeItemId: null,
+        price: 0,
+        isFree: true,
+        isOwned: true,
+      };
+    })
+    .filter(theme => !!theme.key && !!theme.vars);
 
-  return [...builtIns, ...savedCustomThemes, ...storeCustomThemes];
+  return [...builtIns, ...savedCustomThemes, ...storeCustomThemes]
+    .filter(theme => theme && typeof theme === 'object' && !!theme.key)
+    .map(theme => ({ ...theme, colors: normalizeThemeColors(theme.colors, theme.vars) }));
 }
 
 function getThemeCatalogEntry(key) {
