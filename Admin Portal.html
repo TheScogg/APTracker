@@ -726,6 +726,7 @@
         <!-- Page-level tab bar -->
         <div class="page-tabs">
           <button class="page-tab-btn active" id="ptab-btn-plants" onclick="window.switchPageTab('plants',this)">Plants</button>
+          <button class="page-tab-btn" id="ptab-btn-store" onclick="window.switchPageTab('store',this)">Store</button>
           <button class="page-tab-btn" id="ptab-btn-schedule" onclick="window.switchPageTab('schedule',this)">Schedule Import</button>
         </div>
 
@@ -735,6 +736,15 @@
             <button class="btn btn-primary" onclick="window.openAddPlantModal()">+ New Plant</button>
           </div>
           <div id="plants-users-container"></div>
+        </div>
+
+        <!-- Store tab -->
+        <div class="page-tab-pane" id="page-tab-store">
+          <div class="card">
+            <h2>Global Store</h2>
+            <p class="muted" style="margin-bottom:10px;">These store items apply across all plants.</p>
+            <div id="store-editor-container"></div>
+          </div>
         </div>
 
         <!-- Schedule Import tab -->
@@ -1039,6 +1049,31 @@ const ADMIN_THEME_OPTIONS = DEFAULT_STORE_ITEMS
   .filter(i => i.type === 'theme' && i.themeKey)
   .map(i => ({ key: i.themeKey, label: `${THEME_ICONS[i.themeKey] || '🎨'} ${i.name}` }));
 
+const THEME_VARS_TEMPLATE = {
+  '--bg':'#0d1117','--bg2':'#161b22','--bg3':'#1c2333','--border':'#30363d',
+  '--text':'#e6edf3','--text2':'#8b949e','--text3':'#484f58',
+  '--accent':'#f97316','--accent2':'#fb923c',
+  '--green':'#22c55e','--red':'#ef4444','--blue':'#3b82f6','--yellow':'#eab308','--orange':'#f97316',
+};
+
+const BUILTIN_THEME_VARS = {
+  sunset:     { '--bg':'#1a0f0a','--bg2':'#2d1810','--bg3':'#3d2218','--border':'#54321f','--text':'#fef3c7','--text2':'#fcd34d','--text3':'#f59e0b','--accent':'#fb923c','--accent2':'#fdba74','--green':'#34d399','--red':'#f87171','--blue':'#60a5fa','--yellow':'#facc15','--orange':'#fb923c' },
+  ocean:      { '--bg':'#0a1628','--bg2':'#0f1e36','--bg3':'#152945','--border':'#1e3a5f','--text':'#e0f2fe','--text2':'#7dd3fc','--text3':'#0ea5e9','--accent':'#38bdf8','--accent2':'#7dd3fc','--green':'#22c55e','--red':'#f87171','--blue':'#38bdf8','--yellow':'#facc15','--orange':'#fb923c' },
+  royal:      { '--bg':'#18102a','--bg2':'#251638','--bg3':'#331f4d','--border':'#4a2d6b','--text':'#f3e8ff','--text2':'#d8b4fe','--text3':'#a78bfa','--accent':'#c084fc','--accent2':'#d8b4fe','--green':'#34d399','--red':'#f87171','--blue':'#60a5fa','--yellow':'#facc15','--orange':'#fb923c' },
+  slate:      { '--bg':'#0f1419','--bg2':'#1a1f25','--bg3':'#242a31','--border':'#30363d','--text':'#e2e8f0','--text2':'#94a3b8','--text3':'#64748b','--accent':'#64748b','--accent2':'#94a3b8','--green':'#22c55e','--red':'#ef4444','--blue':'#60a5fa','--yellow':'#eab308','--orange':'#f97316' },
+  mint:       { '--bg':'#f0fdf9','--bg2':'#ffffff','--bg3':'#e6fff8','--border':'#a7f3d0','--text':'#064e3b','--text2':'#065f46','--text3':'#10b981','--accent':'#14b8a6','--accent2':'#10b981','--green':'#059669','--red':'#dc2626','--blue':'#0284c7','--yellow':'#ca8a04','--orange':'#ea580c' },
+  cyberpunk:  { '--bg':'#0a0014','--bg2':'#150028','--bg3':'#1f003d','--border':'#3d0066','--text':'#00ffff','--text2':'#ff00ff','--text3':'#9d00ff','--accent':'#ff00ff','--accent2':'#00ffff','--green':'#00ff88','--red':'#ff4d6d','--blue':'#00ffff','--yellow':'#ffee00','--orange':'#ff7a00' },
+  industrial: { '--bg':'#1a1a1a','--bg2':'#252525','--bg3':'#2f2f2f','--border':'#404040','--text':'#e5e5e5','--text2':'#a0a0a0','--text3':'#707070','--accent':'#ff6b00','--accent2':'#ff8a33','--green':'#4ade80','--red':'#f87171','--blue':'#60a5fa','--yellow':'#facc15','--orange':'#ff6b00' },
+  engel:      { '--bg':'#0c1209','--bg2':'#141e0f','--bg3':'#1b2a14','--border':'#2d4820','--text':'#e8f5d8','--text2':'#8ab870','--text3':'#4d6e38','--accent':'#78be20','--accent2':'#96d63a','--green':'#78be20','--red':'#f87171','--blue':'#00a3b5','--yellow':'#ffc72c','--orange':'#fb923c' }
+};
+
+const THEME_EDITOR_FIELDS = [
+  ['--bg', 'Background'], ['--bg2', 'Surface'], ['--bg3', 'Inset'], ['--border', 'Border'],
+  ['--text', 'Text'], ['--text2', 'Text Muted'], ['--text3', 'Text Faint'],
+  ['--accent', 'Accent'], ['--accent2', 'Accent Alt'],
+  ['--green', 'Success'], ['--red', 'Danger'], ['--blue', 'Info'], ['--yellow', 'Warning'], ['--orange', 'Orange']
+];
+
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
@@ -1054,7 +1089,9 @@ let statusDraftByPlant = new Map();
 let gameDraftByPlant = new Map();
 let badgeDraftByPlant = new Map();
 let missionDraftByPlant = new Map();
-let storeDraftByPlant = new Map();
+let globalStoreDraft = [];
+let storeThemeEditorDraft = null;
+let storeThemeEditorIndex = -1;
 const statusPanelOpen = {};
 const statusRowOpen = {};
 const gamePanelOpen = {};
@@ -1385,14 +1422,12 @@ async function loadMembersAndStatusesForAdminPlants() {
   statusDraftByPlant.clear();
   gameDraftByPlant.clear();
   missionDraftByPlant.clear();
-  storeDraftByPlant.clear();
   for (const plantId of adminPlantIds) {
-    const [membersSnap, statusesSnap, gameConfigSnap, missionsSnap, storeSnap] = await Promise.all([
+    const [membersSnap, statusesSnap, gameConfigSnap, missionsSnap] = await Promise.all([
       getDocs(collection(db, 'plants', plantId, 'members')),
       getDoc(doc(db, 'plants', plantId, 'config', 'statuses')),
       getDoc(doc(db, 'plants', plantId, 'gamificationConfig', 'main')),
       getDocs(collection(db, 'plants', plantId, 'missions')),
-      getDoc(doc(db, 'plants', plantId, 'config', 'store')),
     ]);
 
     membersByPlant.set(plantId, membersSnap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -1415,9 +1450,21 @@ async function loadMembersAndStatusesForAdminPlants() {
     // Load badge definitions (stored in gamificationConfig/main.badges)
     const storedBadges = Array.isArray(gameConfig.badges) ? gameConfig.badges : null;
     badgeDraftByPlant.set(plantId, storedBadges ? storedBadges.map(b => ({ ...b })) : deepCopy(DEFAULT_BADGE_DEFS));
-    const storeData = storeSnap.exists() ? (storeSnap.data().items || []) : DEFAULT_STORE_ITEMS.map(i => ({ ...i }));
-    storeDraftByPlant.set(plantId, storeData.map(i => ({ ...i })));
   }
+}
+
+async function loadGlobalStoreDraft() {
+  try {
+    const snap = await getDoc(doc(db, 'globalConfig', 'store'));
+    globalStoreDraft = snap.exists()
+      ? (snap.data().items || []).map(i => ({ ...i }))
+      : DEFAULT_STORE_ITEMS.map(i => ({ ...i }));
+  } catch (e) {
+    console.warn('Failed to load global store config:', e);
+    globalStoreDraft = DEFAULT_STORE_ITEMS.map(i => ({ ...i }));
+  }
+  storeThemeEditorDraft = null;
+  storeThemeEditorIndex = -1;
 }
 
 async function loadUserDirectory() {
@@ -1692,21 +1739,44 @@ function renderGamificationEditor(plantId, plantName) {
   `;
 }
 
-function renderStoreEditor(plantId) {
-  const items = storeDraftByPlant.get(plantId) || [];
-  const themeOpts = ADMIN_THEME_OPTIONS.map(t => `<option value="${esc(t.key)}">${esc(t.label)}</option>`).join('');
+function renderStoreEditor() {
+  const items = globalStoreDraft || [];
+  const activeThemeKey = storeThemeEditorDraft?.themeKey || ADMIN_THEME_OPTIONS[0]?.key || '';
+  const themeOpts = ADMIN_THEME_OPTIONS.map(t => `<option value="${esc(t.key)}" ${t.key === activeThemeKey ? 'selected' : ''}>${esc(t.label)}</option>`).join('');
   const rows = items.map((item, idx) => `
     <tr>
       <td style="font-weight:700;font-size:12px;">${esc(item.name)}<div style="font-size:10px;color:var(--text2);">${item.themeKey ? 'Built-in: ' + esc(item.themeKey) : 'Custom'}</div></td>
-      <td><input type="number" min="0" step="1" value="${Number(item.price)}" style="width:64px;background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:3px 6px;font-size:12px;" onchange="window.updateStoreItemPrice('${plantId}',${idx},this.value)"></td>
+      <td><input type="number" min="0" step="1" value="${Number(item.price)}" style="width:64px;background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:3px 6px;font-size:12px;" onchange="window.updateStoreItemPrice(${idx},this.value)"></td>
       <td>
-        <select style="font-size:11px;background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:2px 4px;" onchange="window.toggleStoreItem('${plantId}',${idx},this.value)">
+        <select style="font-size:11px;background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:2px 4px;" onchange="window.toggleStoreItem(${idx},this.value)">
           <option value="true" ${item.isActive !== false ? 'selected' : ''}>Active</option>
           <option value="false" ${item.isActive === false ? 'selected' : ''}>Hidden</option>
         </select>
       </td>
-      <td><button class="small-btn danger" onclick="window.deleteStoreItem('${plantId}',${idx})">Remove</button></td>
+      <td style="display:flex;gap:6px;">
+        <button class="small-btn" onclick="window.openStoreThemeEditor(${idx})">Edit</button>
+        <button class="small-btn danger" onclick="window.deleteStoreItem(${idx})">Remove</button>
+      </td>
     </tr>`).join('');
+
+  const draft = storeThemeEditorDraft || {
+    id: `storeitem_${Date.now()}`,
+    type: 'theme',
+    themeKey: ADMIN_THEME_OPTIONS[0]?.key || null,
+    customVars: { ...THEME_VARS_TEMPLATE },
+    name: '',
+    price: 50,
+    isActive: true
+  };
+
+  const vars = { ...THEME_VARS_TEMPLATE, ...(draft.customVars || {}) };
+  const varInputs = THEME_EDITOR_FIELDS.map(([key, label]) => `
+    <label class="store-theme-var">
+      <span style="min-width:78px;">${label}</span>
+      <input type="color" value="${esc(vars[key])}" oninput="window.setStoreThemeEditorColor('${key}',this.value)">
+      <input type="text" value="${esc(vars[key])}" oninput="window.setStoreThemeEditorColor('${key}',this.value)">
+    </label>
+  `).join('');
 
   return `
     ${items.length ? `
@@ -1720,35 +1790,49 @@ function renderStoreEditor(plantId) {
       <tbody>${rows}</tbody>
     </table>` : `<div class="muted" style="margin-bottom:10px;font-size:12px;">No store items yet.</div>`}
 
-    <div style="border-top:1px solid var(--border);padding-top:10px;display:flex;flex-direction:column;gap:10px;">
-      <div class="muted" style="font-size:11px;font-weight:700;">Add Built-in Theme</div>
-      <div class="row">
-        <select id="store-theme-key-${plantId}" style="background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:4px 6px;font-size:12px;">${themeOpts}</select>
-        <input type="text" id="store-theme-name-${plantId}" placeholder="Display name" style="background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:4px 8px;font-size:12px;flex:1;">
-        <input type="number" id="store-theme-price-${plantId}" value="50" min="0" placeholder="XP price" style="width:70px;background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:4px 6px;font-size:12px;">
-        <button class="small-btn" onclick="window.addBuiltinThemeToStore('${plantId}')">+ Add</button>
+    <div class="store-theme-builder">
+      <div class="muted" style="font-size:11px;font-weight:700;">Theme Studio</div>
+      <div class="store-theme-toolbar">
+        <button class="small-btn" onclick="window.startNewStoreTheme('builtin')">+ New Built-in Item</button>
+        <button class="small-btn" onclick="window.startNewStoreTheme('custom')">+ New Custom Theme</button>
+        <button class="small-btn" onclick="window.loadStoreEditorFromBuiltin()">Load Built-in Colors</button>
+        <select id="store-editor-builtin-select" onchange="window.setStoreThemeEditorField('themeKey',this.value)">${themeOpts}</select>
       </div>
-
-      <div class="muted" style="font-size:11px;font-weight:700;">Add Custom Theme</div>
-      <div style="display:flex;flex-direction:column;gap:6px;">
-        <input type="text" id="store-custom-name-${plantId}" placeholder="Theme name" style="background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:4px 8px;font-size:12px;">
-        <div class="row">
-          <label style="font-size:11px;color:var(--text2);display:flex;align-items:center;gap:4px;">BG<input type="color" id="store-custom-bg-${plantId}" value="#0d1117" style="width:36px;height:24px;border:none;background:none;cursor:pointer;"></label>
-          <label style="font-size:11px;color:var(--text2);display:flex;align-items:center;gap:4px;">Surface<input type="color" id="store-custom-bg2-${plantId}" value="#161b22" style="width:36px;height:24px;border:none;background:none;cursor:pointer;"></label>
-          <label style="font-size:11px;color:var(--text2);display:flex;align-items:center;gap:4px;">Accent<input type="color" id="store-custom-accent-${plantId}" value="#f97316" style="width:36px;height:24px;border:none;background:none;cursor:pointer;"></label>
-          <label style="font-size:11px;color:var(--text2);display:flex;align-items:center;gap:4px;">Text<input type="color" id="store-custom-text-${plantId}" value="#e6edf3" style="width:36px;height:24px;border:none;background:none;cursor:pointer;"></label>
-          <label style="font-size:11px;color:var(--text2);display:flex;align-items:center;gap:4px;">Border<input type="color" id="store-custom-border-${plantId}" value="#30363d" style="width:36px;height:24px;border:none;background:none;cursor:pointer;"></label>
+      <div class="store-theme-layout">
+        <div class="store-theme-panel">
+          <div style="display:grid;grid-template-columns:1fr 90px 100px;gap:8px;margin-bottom:8px;">
+            <input type="text" placeholder="Theme display name" value="${esc(draft.name || '')}" oninput="window.setStoreThemeEditorField('name',this.value)">
+            <input type="number" min="0" value="${Number(draft.price || 0)}" oninput="window.setStoreThemeEditorField('price',this.value)">
+            <select onchange="window.setStoreThemeEditorField('isActive',this.value)">
+              <option value="true" ${draft.isActive !== false ? 'selected' : ''}>Active</option>
+              <option value="false" ${draft.isActive === false ? 'selected' : ''}>Hidden</option>
+            </select>
+          </div>
+          <div class="store-theme-vars">${varInputs}</div>
+          <div class="status-toolbar">
+            <button class="small-btn" onclick="window.commitStoreThemeEditor()">Save Theme Item</button>
+            ${storeThemeEditorIndex >= 0 ? `<button class="small-btn" onclick="window.startNewStoreTheme('${draft.themeKey ? 'builtin' : 'custom'}')">Clear Editor</button>` : ''}
+          </div>
         </div>
-        <div class="row">
-          <input type="number" id="store-custom-price-${plantId}" value="50" min="0" placeholder="XP price" style="width:80px;background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:4px 6px;font-size:12px;">
-          <button class="small-btn" onclick="window.addCustomThemeToStore('${plantId}')">+ Add Custom</button>
+        <div class="store-theme-panel">
+          <div class="store-theme-preview" style="background:${esc(vars['--bg'])};border-color:${esc(vars['--border'])};">
+            <div class="store-theme-preview-head" style="background:${esc(vars['--bg2'])};color:${esc(vars['--text'])};border-color:${esc(vars['--border'])};">
+              ${esc(draft.name || 'Theme Preview')}
+            </div>
+            <div class="store-theme-preview-body" style="background:${esc(vars['--bg3'])};color:${esc(vars['--text'])};">
+              <span class="store-theme-chip" style="background:${esc(vars['--bg'])};border-color:${esc(vars['--border'])};color:${esc(vars['--text2'])};">Muted label</span>
+              <button class="small-btn" style="border-color:${esc(vars['--accent'])};color:${esc(vars['--accent'])};">Accent button</button>
+              <div class="store-theme-row"><span style="width:34%;background:${esc(vars['--accent'])};"></span><span style="width:33%;background:${esc(vars['--green'])};"></span><span style="width:33%;background:${esc(vars['--blue'])};"></span></div>
+            </div>
+          </div>
+          <div class="muted" style="font-size:11px;margin-top:8px;">Editing ${storeThemeEditorIndex >= 0 ? `item #${storeThemeEditorIndex + 1}` : 'new item'}.</div>
         </div>
       </div>
 
       <div class="status-toolbar" style="margin-top:4px;">
-        <button class="small-btn" style="border-color:var(--accent);color:var(--accent);" onclick="window.saveStoreDraft('${plantId}')">💾 Save Store</button>
+        <button class="small-btn" style="border-color:var(--accent);color:var(--accent);" onclick="window.saveStoreDraft()">💾 Save Store</button>
       </div>
-      <div id="store-fb-${plantId}" class="feedback"></div>
+      <div id="store-fb-global" class="feedback"></div>
     </div>
   `;
 }
@@ -1818,8 +1902,6 @@ function renderPlantsUsers() {
                   onclick="window.switchPlantTab('${plant.id}','statuses',this)">Statuses</button>
           <button class="plant-tab-btn ${activeTab === 'gamification' ? 'active' : ''}"
                   onclick="window.switchPlantTab('${plant.id}','gamification',this)">Gamification</button>
-          <button class="plant-tab-btn ${activeTab === 'store' ? 'active' : ''}"
-                  onclick="window.switchPlantTab('${plant.id}','store',this)">🛒 Store</button>
         </div>
 
         <div class="plant-tab-pane ${activeTab === 'members' ? 'active' : ''}" id="ptab-members-${plant.id}">
@@ -1853,10 +1935,6 @@ function renderPlantsUsers() {
         <div class="plant-tab-pane ${activeTab === 'gamification' ? 'active' : ''}" id="ptab-gamification-${plant.id}">
           ${renderGamificationEditor(plant.id, plant.name)}
         </div>
-
-        <div class="plant-tab-pane ${activeTab === 'store' ? 'active' : ''}" id="ptab-store-${plant.id}">
-          ${renderStoreEditor(plant.id)}
-        </div>
       </div>
     `;
     container.appendChild(card);
@@ -1884,6 +1962,25 @@ function renderSchedulePlantOptions() {
     if ((selected && selected === plant.id) || (!selected && idx === 0)) opt.selected = true;
     select.appendChild(opt);
   });
+}
+
+function renderGlobalStoreEditor() {
+  const container = document.getElementById('store-editor-container');
+  if (!container) return;
+  if (!storeThemeEditorDraft) {
+    const first = globalStoreDraft?.[0];
+    if (first) {
+      storeThemeEditorIndex = 0;
+      storeThemeEditorDraft = {
+        ...first,
+        customVars: { ...THEME_VARS_TEMPLATE, ...(first.themeKey ? (BUILTIN_THEME_VARS[first.themeKey] || {}) : {}), ...(first.customVars || {}) }
+      };
+    } else {
+      storeThemeEditorIndex = -1;
+      storeThemeEditorDraft = null;
+    }
+  }
+  container.innerHTML = renderStoreEditor();
 }
 
 async function createPlant() {
@@ -2430,66 +2527,119 @@ window.toggleStatusPanel = function(plantId) {
 
 // ── Store editor ──────────────────────────────────────────────────────────────
 
-window.updateStoreItemPrice = function(plantId, idx, value) {
-  const items = storeDraftByPlant.get(plantId) || [];
-  if (items[idx]) items[idx].price = Math.max(0, Number(value) || 0);
-  storeDraftByPlant.set(plantId, items);
+window.updateStoreItemPrice = function(idx, value) {
+  if (globalStoreDraft[idx]) globalStoreDraft[idx].price = Math.max(0, Number(value) || 0);
 };
 
-window.toggleStoreItem = function(plantId, idx, value) {
-  const items = storeDraftByPlant.get(plantId) || [];
-  if (items[idx]) items[idx].isActive = value === 'true';
-  storeDraftByPlant.set(plantId, items);
+window.toggleStoreItem = function(idx, value) {
+  if (globalStoreDraft[idx]) globalStoreDraft[idx].isActive = value === 'true';
 };
 
-window.deleteStoreItem = function(plantId, idx) {
-  const items = storeDraftByPlant.get(plantId) || [];
-  items.splice(idx, 1);
-  storeDraftByPlant.set(plantId, items);
-  renderPlantsUsers();
+window.deleteStoreItem = function(idx) {
+  globalStoreDraft.splice(idx, 1);
+  if (storeThemeEditorIndex === idx) {
+    storeThemeEditorIndex = -1;
+    storeThemeEditorDraft = null;
+  } else if (storeThemeEditorIndex > idx) {
+    storeThemeEditorIndex -= 1;
+  }
+  renderGlobalStoreEditor();
 };
 
-window.addBuiltinThemeToStore = function(plantId) {
-  const themeKey = document.getElementById(`store-theme-key-${plantId}`)?.value;
-  const name = (document.getElementById(`store-theme-name-${plantId}`)?.value || '').trim();
-  const price = Math.max(0, Number(document.getElementById(`store-theme-price-${plantId}`)?.value || 0));
-  if (!themeKey || !name) { feedback(`store-fb-${plantId}`, 'error', 'Enter a display name.'); return; }
-  const items = storeDraftByPlant.get(plantId) || [];
-  if (items.some(i => i.themeKey === themeKey)) { feedback(`store-fb-${plantId}`, 'error', 'That theme is already in the store.'); return; }
-  items.push({ id: `theme_${themeKey}`, type: 'theme', themeKey, customVars: null, name, price, isActive: true });
-  storeDraftByPlant.set(plantId, items);
-  renderPlantsUsers();
-};
-
-window.addCustomThemeToStore = function(plantId) {
-  const name = (document.getElementById(`store-custom-name-${plantId}`)?.value || '').trim();
-  const price = Math.max(0, Number(document.getElementById(`store-custom-price-${plantId}`)?.value || 0));
-  if (!name) { feedback(`store-fb-${plantId}`, 'error', 'Enter a theme name.'); return; }
-  const bg     = document.getElementById(`store-custom-bg-${plantId}`)?.value     || '#0d1117';
-  const bg2    = document.getElementById(`store-custom-bg2-${plantId}`)?.value    || '#161b22';
-  const accent = document.getElementById(`store-custom-accent-${plantId}`)?.value || '#f97316';
-  const text   = document.getElementById(`store-custom-text-${plantId}`)?.value   || '#e6edf3';
-  const border = document.getElementById(`store-custom-border-${plantId}`)?.value || '#30363d';
-  const customVars = {
-    '--bg': bg, '--bg2': bg2, '--bg3': bg2, '--border': border,
-    '--text': text, '--text2': text + 'aa', '--text3': text + '66',
-    '--accent': accent, '--accent2': accent,
-    '--green': '#22c55e', '--red': '#ef4444', '--blue': '#3b82f6',
-    '--yellow': '#eab308', '--orange': '#f97316',
+window.openStoreThemeEditor = function(idx) {
+  const item = globalStoreDraft[idx];
+  if (!item) return;
+  storeThemeEditorIndex = idx;
+  storeThemeEditorDraft = {
+    ...item,
+    customVars: { ...THEME_VARS_TEMPLATE, ...(item.themeKey ? (BUILTIN_THEME_VARS[item.themeKey] || {}) : {}), ...(item.customVars || {}) }
   };
-  const items = storeDraftByPlant.get(plantId) || [];
-  items.push({ id: `storeitem_${Date.now()}`, type: 'theme', themeKey: null, customVars, name, price, isActive: true });
-  storeDraftByPlant.set(plantId, items);
-  renderPlantsUsers();
+  renderGlobalStoreEditor();
 };
 
-window.saveStoreDraft = async function(plantId) {
-  const items = storeDraftByPlant.get(plantId) || [];
+window.startNewStoreTheme = function(mode = 'custom') {
+  const themeKey = ADMIN_THEME_OPTIONS[0]?.key || null;
+  storeThemeEditorIndex = -1;
+  storeThemeEditorDraft = {
+    id: mode === 'builtin' ? `theme_${themeKey}` : `storeitem_${Date.now()}`,
+    type: 'theme',
+    themeKey: mode === 'builtin' ? themeKey : null,
+    customVars: { ...THEME_VARS_TEMPLATE, ...(mode === 'builtin' && themeKey ? (BUILTIN_THEME_VARS[themeKey] || {}) : {}) },
+    name: mode === 'builtin' ? (DEFAULT_STORE_ITEMS.find(i => i.themeKey === themeKey)?.name || 'Theme') : '',
+    price: 50,
+    isActive: true
+  };
+  renderGlobalStoreEditor();
+};
+
+window.setStoreThemeEditorField = function(field, value) {
+  if (!storeThemeEditorDraft) window.startNewStoreTheme('custom');
+  if (!storeThemeEditorDraft) return;
+  if (field === 'price') storeThemeEditorDraft.price = Math.max(0, Number(value || 0));
+  else if (field === 'isActive') storeThemeEditorDraft.isActive = value === 'true';
+  else if (field === 'name') storeThemeEditorDraft.name = String(value || '');
+  else if (field === 'themeKey') {
+    const nextKey = String(value || '');
+    storeThemeEditorDraft.themeKey = nextKey || null;
+    if (storeThemeEditorDraft.themeKey) {
+      storeThemeEditorDraft.id = `theme_${storeThemeEditorDraft.themeKey}`;
+      if (!storeThemeEditorDraft.name) storeThemeEditorDraft.name = DEFAULT_STORE_ITEMS.find(i => i.themeKey === nextKey)?.name || 'Theme';
+    }
+  }
+  renderGlobalStoreEditor();
+};
+
+window.setStoreThemeEditorColor = function(key, value) {
+  if (!storeThemeEditorDraft) window.startNewStoreTheme('custom');
+  if (!storeThemeEditorDraft) return;
+  storeThemeEditorDraft.customVars = storeThemeEditorDraft.customVars || { ...THEME_VARS_TEMPLATE };
+  const hex = String(value || '').trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(hex)) storeThemeEditorDraft.customVars[key] = hex;
+  renderGlobalStoreEditor();
+};
+
+window.loadStoreEditorFromBuiltin = function() {
+  if (!storeThemeEditorDraft) window.startNewStoreTheme('builtin');
+  if (!storeThemeEditorDraft?.themeKey) { feedback('store-fb-global', 'error', 'Select a built-in theme first.'); return; }
+  storeThemeEditorDraft.customVars = { ...THEME_VARS_TEMPLATE, ...(BUILTIN_THEME_VARS[storeThemeEditorDraft.themeKey] || {}) };
+  if (!storeThemeEditorDraft.name) storeThemeEditorDraft.name = DEFAULT_STORE_ITEMS.find(i => i.themeKey === storeThemeEditorDraft.themeKey)?.name || 'Theme';
+  renderGlobalStoreEditor();
+};
+
+window.commitStoreThemeEditor = function() {
+  if (!storeThemeEditorDraft) { feedback('store-fb-global', 'error', 'Open a theme in the editor first.'); return; }
+  const name = (storeThemeEditorDraft.name || '').trim();
+  if (!name) { feedback('store-fb-global', 'error', 'Theme name is required.'); return; }
+  const item = {
+    ...storeThemeEditorDraft,
+    name,
+    price: Math.max(0, Number(storeThemeEditorDraft.price || 0)),
+    isActive: storeThemeEditorDraft.isActive !== false,
+    customVars: { ...THEME_VARS_TEMPLATE, ...(storeThemeEditorDraft.customVars || {}) }
+  };
+  if (item.themeKey) item.id = `theme_${item.themeKey}`;
+  else if (!item.id || item.id.startsWith('theme_')) item.id = `storeitem_${Date.now()}`;
+
+  const duplicateBuiltin = item.themeKey
+    ? globalStoreDraft.findIndex((it, idx) => idx !== storeThemeEditorIndex && it.themeKey === item.themeKey)
+    : -1;
+  if (duplicateBuiltin >= 0) { feedback('store-fb-global', 'error', 'That built-in theme already exists in the store.'); return; }
+
+  if (storeThemeEditorIndex >= 0 && globalStoreDraft[storeThemeEditorIndex]) globalStoreDraft[storeThemeEditorIndex] = item;
+  else globalStoreDraft.push(item);
+  feedback('store-fb-global', 'ok', 'Theme item saved in draft.');
+  storeThemeEditorIndex = globalStoreDraft.findIndex(i => i.id === item.id);
+  storeThemeEditorDraft = { ...item, customVars: { ...item.customVars } };
+  renderGlobalStoreEditor();
+};
+
+window.saveStoreDraft = async function() {
+  const items = globalStoreDraft || [];
   try {
-    await setDoc(doc(db, 'plants', plantId, 'config', 'store'), { items }, { merge: false });
-    feedback(`store-fb-${plantId}`, 'ok', 'Store saved.');
+    await setDoc(doc(db, 'globalConfig', 'store'), { items, updatedAt: serverTimestamp() }, { merge: true });
+    feedback('store-fb-global', 'ok', 'Global store saved.');
   } catch(e) {
-    feedback(`store-fb-${plantId}`, 'error', 'Save failed: ' + (e?.message || e));
+    feedback('store-fb-global', 'error', 'Save failed: ' + (e?.message || e));
   }
 };
 
@@ -2501,6 +2651,14 @@ window.toggleGamePanel = function(plantId) {
 window.togglePlantPanel = function(plantId) {
   plantPanelOpen[plantId] = !(plantPanelOpen[plantId] ?? false);
   renderPlantsUsers();
+};
+
+window.switchPageTab = function(tabName, btnEl) {
+  document.querySelectorAll('.page-tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.page-tab-pane').forEach(p => p.classList.remove('active'));
+  btnEl.classList.add('active');
+  const pane = document.getElementById(`page-tab-${tabName}`);
+  if (pane) pane.classList.add('active');
 };
 
 window.switchPlantTab = function(plantId, tabName, btnEl) {
@@ -2542,7 +2700,9 @@ async function refreshAdminData() {
   if (!hasAdminAccess) return;
   renderSchedulePlantOptions();
   await loadMembersAndStatusesForAdminPlants();
+  await loadGlobalStoreDraft();
   renderPlantsUsers();
+  renderGlobalStoreEditor();
 }
 
 onAuthStateChanged(auth, async user => {
@@ -2831,6 +2991,7 @@ window.saveMissionModal = function() {
 
 document.getElementById('google-signin-btn').addEventListener('click', signInWithGoogle);
 document.getElementById('signout-btn').addEventListener('click', doSignOut);
+document.getElementById('create-plant-btn').addEventListener('click', createPlant);
 document.getElementById('load-schedule-file-btn').addEventListener('click', loadScheduleJsonFromFile);
 document.getElementById('generate-schedule-json-btn').addEventListener('click', generateScheduleJsonFromDailyScheduleGPT);
 document.getElementById('import-schedule-btn').addEventListener('click', importDailySchedule);
@@ -2848,13 +3009,6 @@ window.closeAddPlantModal = function() {
   document.getElementById('add-plant-modal-bg').classList.remove('open');
 };
 
-window.switchPageTab = function(tabName, btnEl) {
-  document.querySelectorAll('.page-tab-btn').forEach(b => b.classList.remove('active'));
-  document.querySelectorAll('.page-tab-pane').forEach(p => p.classList.remove('active'));
-  btnEl.classList.add('active');
-  const pane = document.getElementById('page-tab-' + tabName);
-  if (pane) pane.classList.add('active');
-};
 </script>
 </body>
 </html>
