@@ -587,19 +587,22 @@ const DEFAULT_BADGE_DEFS = [
 ];
 
 const DEFAULT_STORE_ITEMS = [
-  { id: 'theme_sunset',     type: 'theme', themeKey: 'sunset',     customVars: null, name: 'Sunset',     price: 50,  isActive: true },
-  { id: 'theme_ocean',      type: 'theme', themeKey: 'ocean',      customVars: null, name: 'Ocean',      price: 50,  isActive: true },
-  { id: 'theme_royal',      type: 'theme', themeKey: 'royal',      customVars: null, name: 'Royal',      price: 100, isActive: true },
-  { id: 'theme_slate',      type: 'theme', themeKey: 'slate',      customVars: null, name: 'Slate',      price: 100, isActive: true },
-  { id: 'theme_mint',       type: 'theme', themeKey: 'mint',       customVars: null, name: 'Mint',       price: 120, isActive: true },
-  { id: 'theme_cyberpunk',  type: 'theme', themeKey: 'cyberpunk',  customVars: null, name: 'Cyberpunk',  price: 220, isActive: true },
-  { id: 'theme_industrial', type: 'theme', themeKey: 'industrial', customVars: null, name: 'Industrial', price: 220, isActive: true },
-  { id: 'theme_engel',      type: 'theme', themeKey: 'engel',      customVars: null, name: 'Engel',      price: 250, isActive: true },
+  { id: 'theme_midnight',   type: 'theme', themeKey: 'midnight',   customVars: null, name: 'Midnight',   price: 0,   isActive: true, order: 0 },
+  { id: 'theme_arctic',     type: 'theme', themeKey: 'arctic',     customVars: null, name: 'Arctic',     price: 0,   isActive: true, order: 1 },
+  { id: 'theme_forest',     type: 'theme', themeKey: 'forest',     customVars: null, name: 'Forest',     price: 0,   isActive: true, order: 2 },
+  { id: 'theme_sunset',     type: 'theme', themeKey: 'sunset',     customVars: null, name: 'Sunset',     price: 75,  isActive: true, order: 3 },
+  { id: 'theme_ocean',      type: 'theme', themeKey: 'ocean',      customVars: null, name: 'Ocean',      price: 75,  isActive: true, order: 4 },
+  { id: 'theme_royal',      type: 'theme', themeKey: 'royal',      customVars: null, name: 'Royal',      price: 120, isActive: true, order: 5 },
+  { id: 'theme_slate',      type: 'theme', themeKey: 'slate',      customVars: null, name: 'Slate',      price: 0,   isActive: true, order: 6 },
+  { id: 'theme_mint',       type: 'theme', themeKey: 'mint',       customVars: null, name: 'Mint',       price: 0,   isActive: true, order: 7 },
+  { id: 'theme_cyberpunk',  type: 'theme', themeKey: 'cyberpunk',  customVars: null, name: 'Cyberpunk',  price: 220, isActive: true, order: 8 },
+  { id: 'theme_industrial', type: 'theme', themeKey: 'industrial', customVars: null, name: 'Industrial', price: 220, isActive: true, order: 9 },
+  { id: 'theme_engel',      type: 'theme', themeKey: 'engel',      customVars: null, name: 'Engel',      price: 0,   isActive: true, order: 10 },
 ];
 
 const THEME_ICONS = {
-  sunset: '🌅', ocean: '🌊', royal: '👑', slate: '🪨',
-  mint: '🌿', cyberpunk: '🤖', industrial: '🏭', engel: '⚙️',
+  midnight: '🌙', arctic: '❄️', forest: '🌲', sunset: '🌅', ocean: '🌊',
+  royal: '👑', slate: '🪨', mint: '🌿', cyberpunk: '🤖', industrial: '🏭', engel: '⚙️',
 };
 
 const ADMIN_THEME_OPTIONS = DEFAULT_STORE_ITEMS
@@ -614,6 +617,9 @@ const THEME_VARS_TEMPLATE = {
 };
 
 const BUILTIN_THEME_VARS = {
+  midnight:   { '--bg':'#0d1117','--bg2':'#161b22','--bg3':'#1c2333','--border':'#30363d','--text':'#e6edf3','--text2':'#8b949e','--text3':'#484f58','--accent':'#f97316','--accent2':'#fb923c','--green':'#22c55e','--red':'#ef4444','--blue':'#3b82f6','--yellow':'#eab308','--orange':'#f97316' },
+  arctic:     { '--bg':'#f8fafc','--bg2':'#ffffff','--bg3':'#f1f5f9','--border':'#cbd5e1','--text':'#0f172a','--text2':'#475569','--text3':'#94a3b8','--accent':'#0ea5e9','--accent2':'#38bdf8','--green':'#16a34a','--red':'#dc2626','--blue':'#0284c7','--yellow':'#ca8a04','--orange':'#f97316' },
+  forest:     { '--bg':'#0a120e','--bg2':'#0f1a14','--bg3':'#14241a','--border':'#1e3a28','--text':'#d1fae5','--text2':'#6ee7b7','--text3':'#34d399','--accent':'#10b981','--accent2':'#34d399','--green':'#34d399','--red':'#f87171','--blue':'#22d3ee','--yellow':'#facc15','--orange':'#fb923c' },
   sunset:     { '--bg':'#1a0f0a','--bg2':'#2d1810','--bg3':'#3d2218','--border':'#54321f','--text':'#fef3c7','--text2':'#fcd34d','--text3':'#f59e0b','--accent':'#fb923c','--accent2':'#fdba74','--green':'#34d399','--red':'#f87171','--blue':'#60a5fa','--yellow':'#facc15','--orange':'#fb923c' },
   ocean:      { '--bg':'#0a1628','--bg2':'#0f1e36','--bg3':'#152945','--border':'#1e3a5f','--text':'#e0f2fe','--text2':'#7dd3fc','--text3':'#0ea5e9','--accent':'#38bdf8','--accent2':'#7dd3fc','--green':'#22c55e','--red':'#f87171','--blue':'#38bdf8','--yellow':'#facc15','--orange':'#fb923c' },
   royal:      { '--bg':'#18102a','--bg2':'#251638','--bg3':'#331f4d','--border':'#4a2d6b','--text':'#f3e8ff','--text2':'#d8b4fe','--text3':'#a78bfa','--accent':'#c084fc','--accent2':'#d8b4fe','--green':'#34d399','--red':'#f87171','--blue':'#60a5fa','--yellow':'#facc15','--orange':'#fb923c' },
@@ -1013,15 +1019,49 @@ async function loadMembersAndStatusesForAdminPlants() {
 async function loadGlobalStoreDraft() {
   try {
     const snap = await getDoc(doc(db, 'globalConfig', 'store'));
-    globalStoreDraft = snap.exists()
-      ? (snap.data().items || []).map(i => ({ ...i }))
-      : DEFAULT_STORE_ITEMS.map(i => ({ ...i }));
+    globalStoreDraft = normalizeGlobalStoreItems(snap.exists() ? snap.data().items : DEFAULT_STORE_ITEMS);
   } catch (e) {
     console.warn('Failed to load global store config:', e);
-    globalStoreDraft = DEFAULT_STORE_ITEMS.map(i => ({ ...i }));
+    globalStoreDraft = normalizeGlobalStoreItems(DEFAULT_STORE_ITEMS);
   }
   storeThemeEditorDraft = null;
   storeThemeEditorIndex = -1;
+}
+
+function normalizeGlobalStoreItems(rawItems) {
+  const incoming = Array.isArray(rawItems) ? rawItems : [];
+  const map = new Map();
+  incoming.forEach((item, idx) => {
+    if (!item || typeof item !== 'object') return;
+    const id = String(item.id || '').trim() || `storeitem_${idx}`;
+    map.set(id, {
+      ...item,
+      id,
+      type: item.type || 'theme',
+      name: String(item.name || 'Store Item'),
+      price: Math.max(0, Number(item.price || 0)),
+      isActive: item.isActive !== false,
+      order: Number.isFinite(Number(item.order)) ? Number(item.order) : idx
+    });
+  });
+
+  ADMIN_THEME_OPTIONS.forEach((theme, idx) => {
+    const id = `theme_${theme.key}`;
+    if (map.has(id)) return;
+    const seed = DEFAULT_STORE_ITEMS.find(i => i.id === id);
+    map.set(id, {
+      id,
+      type: 'theme',
+      themeKey: theme.key,
+      customVars: null,
+      name: (seed?.name || String(theme.label || '').replace(/^[^\s]+\s/, '')) || 'Theme',
+      price: Number(seed?.price || 0),
+      isActive: true,
+      order: Number(seed?.order ?? idx)
+    });
+  });
+
+  return [...map.values()].sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
 }
 
 async function loadUserDirectory() {
@@ -1297,12 +1337,13 @@ function renderGamificationEditor(plantId, plantName) {
 }
 
 function renderStoreEditor() {
-  const items = globalStoreDraft || [];
+  const items = (globalStoreDraft || []).slice().sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
+  globalStoreDraft = items;
   const activeThemeKey = storeThemeEditorDraft?.themeKey || ADMIN_THEME_OPTIONS[0]?.key || '';
   const themeOpts = ADMIN_THEME_OPTIONS.map(t => `<option value="${esc(t.key)}" ${t.key === activeThemeKey ? 'selected' : ''}>${esc(t.label)}</option>`).join('');
   const rows = items.map((item, idx) => `
     <tr>
-      <td style="font-weight:700;font-size:12px;">${esc(item.name)}<div style="font-size:10px;color:var(--text2);">${item.themeKey ? 'Built-in: ' + esc(item.themeKey) : 'Custom'}</div></td>
+      <td style="font-weight:700;font-size:12px;">${idx + 1}. ${esc(item.name)}<div style="font-size:10px;color:var(--text2);">${item.themeKey ? 'Built-in: ' + esc(item.themeKey) : 'Custom'}</div></td>
       <td><input type="number" min="0" step="1" value="${Number(item.price)}" style="width:64px;background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:3px 6px;font-size:12px;" onchange="window.updateStoreItemPrice(${idx},this.value)"></td>
       <td>
         <select style="font-size:11px;background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:2px 4px;" onchange="window.toggleStoreItem(${idx},this.value)">
@@ -1311,6 +1352,8 @@ function renderStoreEditor() {
         </select>
       </td>
       <td style="display:flex;gap:6px;">
+        <button class="small-btn" ${idx === 0 ? 'disabled' : ''} onclick="window.moveStoreItem(${idx},-1)">↑</button>
+        <button class="small-btn" ${idx === items.length - 1 ? 'disabled' : ''} onclick="window.moveStoreItem(${idx},1)">↓</button>
         <button class="small-btn" onclick="window.openStoreThemeEditor(${idx})">Edit</button>
         <button class="small-btn danger" onclick="window.deleteStoreItem(${idx})">Remove</button>
       </td>
@@ -1342,7 +1385,7 @@ function renderStoreEditor() {
         <th style="text-align:left;padding:4px 0;">Item</th>
         <th style="text-align:left;padding:4px 0;">Price (XP)</th>
         <th style="text-align:left;padding:4px 0;">Status</th>
-        <th></th>
+        <th style="text-align:left;padding:4px 0;">Actions</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>` : `<div class="muted" style="margin-bottom:10px;font-size:12px;">No store items yet.</div>`}
@@ -2101,12 +2144,25 @@ window.updateStoreItemPrice = function(idx, value) {
   if (globalStoreDraft[idx]) globalStoreDraft[idx].price = Math.max(0, Number(value) || 0);
 };
 
+window.moveStoreItem = function(idx, direction) {
+  const next = idx + Number(direction || 0);
+  if (next < 0 || next >= globalStoreDraft.length) return;
+  const temp = globalStoreDraft[idx];
+  globalStoreDraft[idx] = globalStoreDraft[next];
+  globalStoreDraft[next] = temp;
+  globalStoreDraft.forEach((item, i) => { item.order = i; });
+  if (storeThemeEditorIndex === idx) storeThemeEditorIndex = next;
+  else if (storeThemeEditorIndex === next) storeThemeEditorIndex = idx;
+  renderGlobalStoreEditor();
+};
+
 window.toggleStoreItem = function(idx, value) {
   if (globalStoreDraft[idx]) globalStoreDraft[idx].isActive = value === 'true';
 };
 
 window.deleteStoreItem = function(idx) {
   globalStoreDraft.splice(idx, 1);
+  globalStoreDraft.forEach((item, i) => { item.order = i; });
   if (storeThemeEditorIndex === idx) {
     storeThemeEditorIndex = -1;
     storeThemeEditorDraft = null;
@@ -2137,7 +2193,8 @@ window.startNewStoreTheme = function(mode = 'custom') {
     customVars: { ...THEME_VARS_TEMPLATE, ...(mode === 'builtin' && themeKey ? (BUILTIN_THEME_VARS[themeKey] || {}) : {}) },
     name: mode === 'builtin' ? (DEFAULT_STORE_ITEMS.find(i => i.themeKey === themeKey)?.name || 'Theme') : '',
     price: 50,
-    isActive: true
+    isActive: true,
+    order: globalStoreDraft.length
   };
   renderGlobalStoreEditor();
 };
@@ -2185,7 +2242,8 @@ window.commitStoreThemeEditor = function() {
     name,
     price: Math.max(0, Number(storeThemeEditorDraft.price || 0)),
     isActive: storeThemeEditorDraft.isActive !== false,
-    customVars: { ...THEME_VARS_TEMPLATE, ...(storeThemeEditorDraft.customVars || {}) }
+    customVars: { ...THEME_VARS_TEMPLATE, ...(storeThemeEditorDraft.customVars || {}) },
+    order: Number(storeThemeEditorDraft.order ?? (storeThemeEditorIndex >= 0 ? storeThemeEditorIndex : globalStoreDraft.length))
   };
   if (item.themeKey) item.id = `theme_${item.themeKey}`;
   else if (!item.id || item.id.startsWith('theme_')) item.id = `storeitem_${Date.now()}`;
@@ -2197,6 +2255,7 @@ window.commitStoreThemeEditor = function() {
 
   if (storeThemeEditorIndex >= 0 && globalStoreDraft[storeThemeEditorIndex]) globalStoreDraft[storeThemeEditorIndex] = item;
   else globalStoreDraft.push(item);
+  globalStoreDraft.forEach((it, i) => { it.order = i; });
   feedback('store-fb-global', 'ok', 'Theme item saved in draft.');
   storeThemeEditorIndex = globalStoreDraft.findIndex(i => i.id === item.id);
   storeThemeEditorDraft = { ...item, customVars: { ...item.customVars } };
@@ -2204,7 +2263,7 @@ window.commitStoreThemeEditor = function() {
 };
 
 window.saveStoreDraft = async function() {
-  const items = globalStoreDraft || [];
+  const items = (globalStoreDraft || []).map((item, idx) => ({ ...item, order: idx }));
   try {
     await setDoc(doc(db, 'globalConfig', 'store'), { items, updatedAt: serverTimestamp() }, { merge: true });
     feedback('store-fb-global', 'ok', 'Global store saved.');
