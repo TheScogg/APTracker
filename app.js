@@ -1672,10 +1672,8 @@ function renderStoreModal() {
   }
 }
 
-function _buildStoreThemeCard(entry, activeSelection, spendable) {
-  const theme = entry.theme;
-  const storeItem = entry.storeItem;
-  const [bg, accent, textColor] = theme.colors;
+function _buildStoreThemeCard(theme, activeKey, spendable) {
+  const [bg, accent, textColor] = getThemePreviewColors(theme);
   const nameOnly = theme.shortLabel || themeLabelSansIcon(theme.label);
   const isActive = theme.key === activeKey;
   const owned = theme.isOwned;
@@ -5062,17 +5060,32 @@ function inferThemeModeFromBg(bgHex) {
   return luminance > 0.68 ? 'light' : 'dark';
 }
 
+function normalizeThemeColors(colors, vars = {}) {
+  const fallback = [
+    vars['--bg'] || '#111111',
+    vars['--accent'] || '#888888',
+    vars['--text'] || '#ffffff',
+  ];
+  return Array.isArray(colors) && colors.length >= 3 ? colors : fallback;
+}
+
+function getThemePreviewColors(theme) {
+  const vars = theme && typeof theme === 'object' ? (theme.vars || {}) : {};
+  return normalizeThemeColors(theme?.colors, vars);
+}
+
 function getThemeCatalog() {
   const builtIns = THEME_OPTIONS.map(theme => {
     const storeItem = getStoreItemForTheme(theme.key);
     const isFree = STORE_FREE_KEYS.has(theme.key);
+    const vars = { ...(THEME_VARS_MAP[theme.key] || {}) };
     return {
       key: theme.key,
       source: 'builtin',
       label: theme.label,
       shortLabel: themeLabelSansIcon(theme.label),
-      colors: theme.colors,
-      vars: { ...(THEME_VARS_MAP[theme.key] || {}) },
+      colors: normalizeThemeColors(theme.colors, vars),
+      vars,
       mode: theme.mode,
       storeItemId: storeItem?.id || null,
       price: Number(storeItem?.price || 0),
@@ -5104,28 +5117,32 @@ function getThemeCatalog() {
       };
     });
 
-  const savedCustomThemes = _loadCustomThemes().customThemes
+  const savedCustomThemesRaw = _loadCustomThemes().customThemes;
+  const savedCustomThemes = (Array.isArray(savedCustomThemesRaw) ? savedCustomThemesRaw : [])
     .slice()
     .reverse()
-    .map(theme => ({
-      key: `custom_${theme.id}`,
-      source: 'saved-custom',
-      label: `🎨 ${theme.name}`,
-      shortLabel: theme.name || 'Custom',
-      colors: [
-        theme.vars['--bg'] || '#111111',
-        theme.vars['--accent'] || '#888888',
-        theme.vars['--text'] || '#ffffff',
-      ],
-      vars: { ...(theme.vars || {}) },
-      mode: inferThemeModeFromBg(theme.vars?.['--bg']),
-      storeItemId: null,
-      price: 0,
-      isFree: true,
-      isOwned: true,
-    }));
+    .filter(theme => theme && typeof theme === 'object')
+    .map(theme => {
+      const vars = { ...(theme.vars || {}) };
+      return {
+        key: `custom_${theme.id}`,
+        source: 'saved-custom',
+        label: `🎨 ${theme.name || 'Custom Theme'}`,
+        shortLabel: theme.name || 'Custom',
+        colors: normalizeThemeColors(null, vars),
+        vars,
+        mode: inferThemeModeFromBg(vars['--bg']),
+        storeItemId: null,
+        price: 0,
+        isFree: true,
+        isOwned: true,
+      };
+    })
+    .filter(theme => !!theme.key && !!theme.vars);
 
-  return [...builtIns, ...savedCustomThemes, ...storeCustomThemes];
+  return [...builtIns, ...savedCustomThemes, ...storeCustomThemes]
+    .filter(theme => theme && typeof theme === 'object' && !!theme.key)
+    .map(theme => ({ ...theme, colors: normalizeThemeColors(theme.colors, theme.vars) }));
 }
 
 function getThemeCatalogEntry(key) {
@@ -5222,16 +5239,19 @@ function renderThemeChoices() {
   const grid = document.getElementById('theme-select-grid');
   if (!grid) return;
   const availableThemes = getThemeCatalog().filter(theme => theme.isOwned);
-  grid.innerHTML = availableThemes.map(theme => `
+  grid.innerHTML = availableThemes.map(theme => {
+    const [bg, accent, textColor] = getThemePreviewColors(theme);
+    return `
     <button class="theme-choice" type="button" data-theme="${theme.key}" title="${theme.label}" aria-label="${theme.label}" aria-pressed="false">
       <span class="theme-choice-name">${esc(theme.shortLabel || themeLabelSansIcon(theme.label))}</span>
       <span class="theme-choice-sub">${esc(theme.isFree ? (theme.source === 'saved-custom' ? 'Saved theme' : 'Always available') : 'Owned unlock')}</span>
       <span class="theme-choice-swatches">
-        <span class="theme-swatch" style="background:${theme.colors[0]}"></span>
-        <span class="theme-swatch" style="background:${theme.colors[1]}"></span>
-        <span class="theme-swatch" style="background:${theme.colors[2]}"></span>
+        <span class="theme-swatch" style="background:${bg}"></span>
+        <span class="theme-swatch" style="background:${accent}"></span>
+        <span class="theme-swatch" style="background:${textColor}"></span>
       </span>
-    </button>`).join('');
+    </button>`;
+  }).join('');
 }
 
 function renderAppearanceCustomThemes() {
