@@ -1516,6 +1516,14 @@ function isThemeLocked(themeKey) {
 
 function ensureCurrentThemeAccess() {
   const savedTheme = localStorage.getItem('pressTrackerTheme') || 'midnight';
+  if (savedTheme.startsWith(STORE_THEME_ITEM_PREFIX)) {
+    const itemId = savedTheme.slice(STORE_THEME_ITEM_PREFIX.length);
+    const item = storeItems.find(i => i.id === itemId && i.type === 'theme' && i.isActive !== false);
+    if (item?.customVars && isItemUnlocked(itemId)) return;
+    showGameToast('🔒 Theme unavailable — switched to Midnight');
+    applyTheme('midnight');
+    return;
+  }
   if (!THEME_KEYS.includes(savedTheme)) return;
   if (!isThemeLocked(savedTheme)) return;
   showGameToast('🔒 Theme locked — switched to Midnight');
@@ -1555,7 +1563,7 @@ async function purchaseStoreItem(itemId) {
     showGameToast(`Unlocked ${item.name}!`);
     if (item.type === 'theme') {
       if (item.themeKey) applyTheme(item.themeKey);
-      else if (item.customVars) { clearCustomThemeVars(); applyCustomThemeVars(item.customVars); }
+      else if (item.customVars) applyStoreThemeItem(item.id);
     }
   } catch(e) {
     if (e?.message === 'insufficient_xp') showGameToast('Not enough XP!');
@@ -1605,7 +1613,21 @@ function renderStoreCard() {
 // ── STORE MODAL ──
 
 const STORE_FREE_KEYS = new Set(['midnight', 'arctic', 'forest', 'slate', 'mint', 'engel']);
+const STORE_THEME_ITEM_PREFIX = 'storeitem:';
 let _pendingPurchaseItemId = null;
+
+function inferThemeModeFromVars(vars = {}) {
+  const bg = String(vars['--bg'] || '').trim();
+  const hex = bg.startsWith('#') ? bg.slice(1) : '';
+  if (![3, 6].includes(hex.length)) return 'dark';
+  const normalized = hex.length === 3 ? hex.split('').map(ch => ch + ch).join('') : hex;
+  const r = parseInt(normalized.slice(0, 2), 16);
+  const g = parseInt(normalized.slice(2, 4), 16);
+  const b = parseInt(normalized.slice(4, 6), 16);
+  if ([r, g, b].some(Number.isNaN)) return 'dark';
+  const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  return luminance > 0.62 ? 'light' : 'dark';
+}
 
 function updateStoreXpDisplay() {
   const spendable = userSpendableXp();
@@ -1637,25 +1659,56 @@ window.renderStoreModal = renderStoreModal;
 
 function renderStoreModal() {
   updateStoreXpDisplay();
-  const activeKey = localStorage.getItem('pressTrackerTheme') || 'midnight';
+  const activeSelection = localStorage.getItem('pressTrackerTheme') || 'midnight';
   const spendable = userSpendableXp();
-
-  const freeThemes = THEME_OPTIONS.filter(t => STORE_FREE_KEYS.has(t.key));
-  const paidThemes = THEME_OPTIONS.filter(t => !STORE_FREE_KEYS.has(t.key));
+  const activeStoreThemes = (storeItems || []).filter(item => item?.type === 'theme' && item.isActive !== false);
+  const paidThemeKeys = new Set(activeStoreThemes.map(item => item.themeKey).filter(key => key && !STORE_FREE_KEYS.has(key)));
+  const customThemes = activeStoreThemes.filter(item => !item.themeKey && item.customVars);
+  const freeThemes = THEME_OPTIONS
+    .filter(theme => STORE_FREE_KEYS.has(theme.key))
+    .map(theme => ({ kind: 'builtin', theme, storeItem: getStoreItemForTheme(theme.key), selectionKey: theme.key }));
+  const paidThemes = [
+    ...THEME_OPTIONS
+      .filter(theme => paidThemeKeys.has(theme.key))
+      .map(theme => ({ kind: 'builtin', theme, storeItem: getStoreItemForTheme(theme.key), selectionKey: theme.key })),
+    ...customThemes.map(item => ({
+      kind: 'custom-store',
+      theme: {
+        key: `${STORE_THEME_ITEM_PREFIX}${item.id}`,
+        label: `🎨 ${item.name || 'Custom Theme'}`,
+        mode: inferThemeModeFromVars(item.customVars || {}),
+        colors: [
+          item.customVars?.['--bg'] || '#111111',
+          item.customVars?.['--accent'] || '#888888',
+          item.customVars?.['--text'] || '#ffffff'
+        ]
+      },
+      storeItem: item,
+      selectionKey: `${STORE_THEME_ITEM_PREFIX}${item.id}`
+    }))
+  ];
 
   const freeGrid = document.getElementById('store-free-themes');
   const paidGrid = document.getElementById('store-paid-themes');
 
-  if (freeGrid) freeGrid.innerHTML = freeThemes.map(t => _buildStoreThemeCard(t, activeKey, spendable)).join('');
-  if (paidGrid) paidGrid.innerHTML = paidThemes.map(t => _buildStoreThemeCard(t, activeKey, spendable)).join('');
+  if (freeGrid) freeGrid.innerHTML = freeThemes.map(entry => _buildStoreThemeCard(entry, activeSelection, spendable)).join('');
+  if (paidGrid) {
+    paidGrid.innerHTML = paidThemes.length
+      ? paidThemes.map(entry => _buildStoreThemeCard(entry, activeSelection, spendable)).join('')
+      : `<div class="store-coming-soon" style="padding:18px 14px;text-align:center;">
+          <div class="store-cs-title">No premium themes available</div>
+          <div class="store-cs-sub">Add theme items from the admin store editor to publish them here.</div>
+        </div>`;
+  }
 }
 
-function _buildStoreThemeCard(theme, activeKey, spendable) {
+function _buildStoreThemeCard(entry, activeSelection, spendable) {
+  const theme = entry.theme;
+  const storeItem = entry.storeItem;
   const [bg, accent, textColor] = theme.colors;
   const nameOnly = theme.label.replace(/^\S+\s/, '');
   const isFree = STORE_FREE_KEYS.has(theme.key);
-  const isActive = theme.key === activeKey;
-  const storeItem = getStoreItemForTheme(theme.key);
+  const isActive = entry.selectionKey === activeSelection;
   const owned = isFree || !storeItem || isItemUnlocked(storeItem.id);
   const price = storeItem?.price || 0;
   const canAfford = spendable >= price;
@@ -1676,7 +1729,11 @@ function _buildStoreThemeCard(theme, activeKey, spendable) {
     badge = `<span class="stc-badge stc-badge-locked">🔒 ${storeItem ? price : ''}</span>`;
   }
 
-  const clickHandler = owned ? `onclick="applyTheme('${theme.key}');renderStoreModal();"` : '';
+  const clickHandler = owned
+    ? (entry.kind === 'custom-store'
+        ? `onclick="applyStoreThemeItem('${storeItem.id}')"`
+        : `onclick="applyTheme('${theme.key}');renderStoreModal();"`)
+    : '';
 
   return `<div class="${cardCls}" role="button" tabindex="0" ${clickHandler}>
     <div class="stc-preview" style="--stc-bg:${bg};--stc-accent:${accent};--stc-text:${textColor}">
@@ -1701,6 +1758,29 @@ function _buildStoreThemeCard(theme, activeKey, spendable) {
     </div>
   </div>`;
 }
+
+function applyStoreThemeItem(itemId) {
+  const item = storeItems.find(i => i.id === itemId && i.type === 'theme' && i.isActive !== false);
+  if (!item) return;
+  if (!isItemUnlocked(itemId)) {
+    openPurchaseConfirm(itemId);
+    return;
+  }
+  if (item.themeKey) {
+    applyTheme(item.themeKey);
+    renderStoreModal();
+    return;
+  }
+  clearCustomThemeVars();
+  document.body.classList.remove(...THEME_KEYS.map(key => `theme-${key}`));
+  applyCustomThemeVars(item.customVars || {});
+  document.body.dataset.themeMode = inferThemeModeFromVars(item.customVars || {});
+  try { localStorage.setItem('pressTrackerTheme', `${STORE_THEME_ITEM_PREFIX}${item.id}`); } catch(e) {}
+  _syncThemePrefsToFirestore();
+  updateThemeModeUI();
+  renderStoreModal();
+}
+window.applyStoreThemeItem = applyStoreThemeItem;
 
 function openPurchaseConfirm(itemId) {
   const item = storeItems.find(i => i.id === itemId);
@@ -5162,6 +5242,21 @@ function updateThemeModeUI() {
 function applyTheme(theme) {
   const legacyThemeMap = { dark: 'midnight', light: 'arctic' };
   const resolvedTheme = legacyThemeMap[theme] || theme;
+  if (resolvedTheme && resolvedTheme.startsWith(STORE_THEME_ITEM_PREFIX)) {
+    const itemId = resolvedTheme.slice(STORE_THEME_ITEM_PREFIX.length);
+    const item = storeItems.find(i => i.id === itemId && i.type === 'theme' && i.isActive !== false);
+    if (item?.customVars) {
+      clearCustomThemeVars();
+      document.body.classList.remove(...THEME_KEYS.map(key => `theme-${key}`));
+      applyCustomThemeVars(item.customVars);
+      document.body.dataset.themeMode = inferThemeModeFromVars(item.customVars);
+      try { localStorage.setItem('pressTrackerTheme', resolvedTheme); } catch(e) {}
+      updateActiveThemeChoice(null);
+      _syncThemePrefsToFirestore();
+      updateThemeModeUI();
+      return;
+    }
+  }
   // Handle custom theme keys (stored as "custom_<id>")
   if (resolvedTheme && resolvedTheme.startsWith('custom_')) {
     const data = _loadCustomThemes();
