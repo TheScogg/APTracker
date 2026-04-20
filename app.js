@@ -5074,25 +5074,40 @@ function getThemePreviewColors(theme) {
   return normalizeThemeColors(theme?.colors, vars);
 }
 
+function getPublishedBuiltInThemeKeys() {
+  const publishedKeys = new Set(
+    (Array.isArray(storeItems) ? storeItems : [])
+      .filter(item => item?.type === 'theme' && item?.isActive !== false && item?.themeKey)
+      .map(item => item.themeKey)
+  );
+  if (!publishedKeys.size) {
+    THEME_OPTIONS.forEach(theme => publishedKeys.add(theme.key));
+  }
+  return publishedKeys;
+}
+
 function getThemeCatalog() {
-  const builtIns = THEME_OPTIONS.map(theme => {
-    const storeItem = getStoreItemForTheme(theme.key);
-    const isFree = STORE_FREE_KEYS.has(theme.key);
-    const vars = { ...(THEME_VARS_MAP[theme.key] || {}) };
-    return {
-      key: theme.key,
-      source: 'builtin',
-      label: theme.label,
-      shortLabel: themeLabelSansIcon(theme.label),
-      colors: normalizeThemeColors(theme.colors, vars),
-      vars,
-      mode: theme.mode,
-      storeItemId: storeItem?.id || null,
-      price: Number(storeItem?.price || 0),
-      isFree,
-      isOwned: isFree || !storeItem || isItemUnlocked(storeItem.id),
-    };
-  });
+  const publishedBuiltInThemeKeys = getPublishedBuiltInThemeKeys();
+  const builtIns = THEME_OPTIONS
+    .filter(theme => publishedBuiltInThemeKeys.has(theme.key))
+    .map(theme => {
+      const storeItem = getStoreItemForTheme(theme.key);
+      const isFree = STORE_FREE_KEYS.has(theme.key);
+      const vars = { ...(THEME_VARS_MAP[theme.key] || {}) };
+      return {
+        key: theme.key,
+        source: 'builtin',
+        label: theme.label,
+        shortLabel: themeLabelSansIcon(theme.label),
+        colors: normalizeThemeColors(theme.colors, vars),
+        vars,
+        mode: theme.mode,
+        storeItemId: storeItem?.id || null,
+        price: Number(storeItem?.price || 0),
+        isFree,
+        isOwned: isFree || !storeItem || isItemUnlocked(storeItem.id),
+      };
+    });
 
   const storeCustomThemes = storeItems
     .filter(item => item.type === 'theme' && item.isActive !== false && !item.themeKey && item.customVars)
