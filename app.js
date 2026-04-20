@@ -1697,8 +1697,8 @@ function _buildStoreThemeCard(theme, activeKey, spendable) {
   }
 
   const clickHandler = owned
-    ? (entry.kind === 'custom-store'
-        ? `onclick="applyStoreThemeItem('${storeItem.id}')"`
+    ? (theme.source === 'store-custom' && theme.storeItemId
+        ? `onclick="applyStoreThemeItem('${theme.storeItemId}')"`
         : `onclick="applyTheme('${theme.key}');renderStoreModal();"`)
     : '';
 
