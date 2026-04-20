@@ -202,12 +202,85 @@
     .store-theme-var { display:flex; align-items:center; gap:6px; font-size:11px; color:var(--text2); }
     .store-theme-var input[type=color] { width:38px; min-width:38px; height:28px; padding:0; border:none; background:none; }
     .store-theme-var input[type=text] { font-family:'Share Tech Mono',monospace; font-size:11px; padding:6px 8px; }
-    .store-theme-preview { border-radius:8px; border:1px solid var(--border); overflow:hidden; }
-    .store-theme-preview-head { padding:8px 10px; font-size:12px; font-weight:700; border-bottom:1px solid var(--border); }
-    .store-theme-preview-body { padding:10px; display:flex; flex-direction:column; gap:8px; }
-    .store-theme-chip { display:inline-flex; align-items:center; gap:4px; border:1px solid var(--border); border-radius:999px; padding:2px 8px; font-size:11px; }
-    .store-theme-row { display:flex; gap:6px; }
-    .store-theme-row > span { height:8px; border-radius:999px; display:block; }
+    .store-theme-preview-wrap { max-width:220px; }
+    .store-theme-preview-card {
+      border-radius:12px;
+      border:1.5px solid var(--border);
+      background:var(--bg3);
+      overflow:hidden;
+      user-select:none;
+    }
+    .store-theme-preview-hero {
+      height:88px;
+      position:relative;
+      overflow:hidden;
+      background:var(--stc-bg, #111);
+    }
+    .store-theme-preview-hero::before {
+      content:"";
+      position:absolute;
+      inset:0;
+      background:var(--stc-bg, #111);
+    }
+    .store-theme-preview-stripe {
+      position:absolute;
+      top:0;
+      left:0;
+      right:0;
+      height:3px;
+      background:var(--stc-accent, #f97316);
+    }
+    .store-theme-preview-ui {
+      position:absolute;
+      inset:12px;
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+    }
+    .store-theme-preview-bar { height:8px; border-radius:4px; width:100%; }
+    .store-theme-preview-row { display:flex; align-items:center; gap:6px; }
+    .store-theme-preview-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+    .store-theme-preview-dot.sm { width:6px; height:6px; }
+    .store-theme-preview-line { height:5px; border-radius:3px; flex:1; }
+    .store-theme-preview-line.sm { height:4px; }
+    .store-theme-preview-check {
+      position:absolute;
+      top:6px;
+      right:8px;
+      color:var(--stc-accent, #f97316);
+      font-size:14px;
+      font-weight:900;
+      text-shadow:0 1px 4px rgba(0,0,0,0.5);
+    }
+    .store-theme-preview-footer {
+      padding:8px 10px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:6px;
+      background:var(--stc-footer-bg, var(--bg3));
+      border-top:1px solid var(--stc-border, var(--border));
+    }
+    .store-theme-preview-name {
+      font-size:11px;
+      font-weight:700;
+      color:var(--stc-text-main, var(--text));
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      min-width:0;
+    }
+    .store-theme-preview-badge {
+      font-size:9px;
+      font-weight:800;
+      text-transform:uppercase;
+      letter-spacing:0.04em;
+      padding:2px 6px;
+      border-radius:4px;
+      background:color-mix(in srgb, var(--stc-accent, #f97316) 16%, transparent);
+      color:var(--stc-accent, #f97316);
+      flex-shrink:0;
+    }
     @media (max-width: 900px) {
       .store-theme-layout { grid-template-columns:1fr; }
       .store-theme-vars { grid-template-columns:1fr; }
@@ -1299,14 +1372,27 @@ function renderStoreEditor() {
           </div>
         </div>
         <div class="store-theme-panel">
-          <div class="store-theme-preview" style="background:${esc(vars['--bg'])};border-color:${esc(vars['--border'])};">
-            <div class="store-theme-preview-head" style="background:${esc(vars['--bg2'])};color:${esc(vars['--text'])};border-color:${esc(vars['--border'])};">
-              ${esc(draft.name || 'Theme Preview')}
-            </div>
-            <div class="store-theme-preview-body" style="background:${esc(vars['--bg3'])};color:${esc(vars['--text'])};">
-              <span class="store-theme-chip" style="background:${esc(vars['--bg'])};border-color:${esc(vars['--border'])};color:${esc(vars['--text2'])};">Muted label</span>
-              <button class="small-btn" style="border-color:${esc(vars['--accent'])};color:${esc(vars['--accent'])};">Accent button</button>
-              <div class="store-theme-row"><span style="width:34%;background:${esc(vars['--accent'])};"></span><span style="width:33%;background:${esc(vars['--green'])};"></span><span style="width:33%;background:${esc(vars['--blue'])};"></span></div>
+          <div class="store-theme-preview-wrap">
+            <div class="store-theme-preview-card" style="--stc-bg:${esc(vars['--bg'])};--stc-accent:${esc(vars['--accent'])};--stc-text:${esc(vars['--text'])};--stc-footer-bg:${esc(vars['--bg3'])};--stc-border:${esc(vars['--border'])};--stc-text-main:${esc(vars['--text'])};">
+              <div class="store-theme-preview-hero">
+                <div class="store-theme-preview-stripe"></div>
+                <div class="store-theme-preview-ui">
+                  <div class="store-theme-preview-bar" style="background:${esc(vars['--accent'])}22"></div>
+                  <div class="store-theme-preview-row">
+                    <div class="store-theme-preview-dot" style="background:${esc(vars['--accent'])}"></div>
+                    <div class="store-theme-preview-line" style="background:${esc(vars['--text'])}22"></div>
+                  </div>
+                  <div class="store-theme-preview-row">
+                    <div class="store-theme-preview-dot sm" style="background:${esc(vars['--text'])}44"></div>
+                    <div class="store-theme-preview-line sm" style="background:${esc(vars['--text'])}18"></div>
+                  </div>
+                </div>
+                <div class="store-theme-preview-check">✓</div>
+              </div>
+              <div class="store-theme-preview-footer">
+                <span class="store-theme-preview-name">${esc(draft.name || 'Theme Preview')}</span>
+                <span class="store-theme-preview-badge">Preview</span>
+              </div>
             </div>
           </div>
           <div class="muted" style="font-size:11px;margin-top:8px;">Editing ${storeThemeEditorIndex >= 0 ? `item #${storeThemeEditorIndex + 1}` : 'new item'}.</div>
