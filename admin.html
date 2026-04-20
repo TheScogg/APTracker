@@ -361,26 +361,6 @@
               <button class="btn" id="load-schedule-file-btn" style="max-width:220px;">Load JSON from file</button>
               <button class="btn btn-primary" id="import-schedule-btn" style="max-width:240px;">Import Daily Schedule</button>
             </div>
-            <div class="divider"></div>
-            <h3 style="font-family:'Rajdhani',sans-serif;font-size:16px;letter-spacing:0.7px;">Generate from DailyScheduleGPT</h3>
-            <p class="muted" style="margin:4px 0 8px;">Provide schedule text/PDF metadata and generate a JSON draft before importing.</p>
-            <textarea id="schedule-gpt-source" placeholder="Paste schedule text or PDF metadata for DailyScheduleGPT" style="min-height:110px;"></textarea>
-            <div class="grid-2" style="margin-top:8px;">
-              <input id="schedule-gpt-shift-override" placeholder="Shift override (optional, e.g. A or B)" />
-              <select id="schedule-gpt-model-preset">
-                <option value="balanced">Model preset: Balanced</option>
-                <option value="fast">Model preset: Fast</option>
-                <option value="accurate">Model preset: Accurate</option>
-              </select>
-            </div>
-            <div class="grid-2" style="margin-top:8px;">
-              <select id="schedule-gpt-strict-validation">
-                <option value="true">Strict validation: On</option>
-                <option value="false">Strict validation: Off</option>
-              </select>
-              <button class="btn" id="generate-schedule-json-btn" style="max-width:240px;">Generate JSON</button>
-            </div>
-            <div id="schedule-gpt-feedback" class="feedback"></div>
             <textarea id="schedule-json-text" placeholder="Paste schedule JSON here" style="margin-top:10px;min-height:180px;"></textarea>
             <div id="schedule-import-feedback" class="feedback"></div>
           </div>
@@ -389,13 +369,18 @@
     </div>
   </div>
 
-        <div id="plants-users-container"></div>
-      </div>
+<!-- Add Plant Modal -->
+<div class="ap-modal-bg" id="add-plant-modal-bg">
+  <div class="ap-modal" onclick="event.stopPropagation()">
+    <div class="ap-modal-title">Create New Plant</div>
+    <div class="grid-2" style="grid-template-columns:1fr;gap:10px;">
+      <input id="new-plant-name" placeholder="Plant name" />
+      <input id="new-plant-location" placeholder="Location (optional)" />
     </div>
-    <div id="plant-create-feedback" class="feedback" style="margin-bottom:10px;"></div>
+    <div id="plant-create-feedback" class="feedback" style="margin:10px 0;"></div>
     <div style="display:flex;gap:8px;justify-content:flex-end;">
-      <button class="btn" onclick="window.closeAddPlantModal()">Cancel</button>
-      <button class="btn btn-primary" id="create-plant-btn" onclick="createPlant()">Create Plant</button>
+      <button class="btn" type="button" onclick="window.closeAddPlantModal()">Cancel</button>
+      <button class="btn btn-primary" type="button" id="create-plant-btn" onclick="createPlant()">Create Plant</button>
     </div>
   </div>
 </div>
@@ -1596,6 +1581,18 @@ function renderGlobalStoreEditor() {
   container.innerHTML = renderStoreEditor();
 }
 
+window.openAddPlantModal = function() {
+  document.getElementById('new-plant-name').value = '';
+  document.getElementById('new-plant-location').value = '';
+  feedback('plant-create-feedback', '', '');
+  document.getElementById('add-plant-modal-bg').classList.add('open');
+  setTimeout(() => document.getElementById('new-plant-name').focus(), 0);
+};
+
+window.closeAddPlantModal = function() {
+  document.getElementById('add-plant-modal-bg').classList.remove('open');
+};
+
 async function createPlant() {
   const btn = document.getElementById('create-plant-btn');
   const name = document.getElementById('new-plant-name').value.trim();
@@ -2577,6 +2574,9 @@ window.closeMissionModal = function() {
 document.getElementById('mission-modal-backdrop').addEventListener('click', function(e) {
   if (e.target === this) window.closeMissionModal();
 });
+document.getElementById('add-plant-modal-bg').addEventListener('click', function(e) {
+  if (e.target === this) window.closeAddPlantModal();
+});
 
 window.saveMissionModal = function() {
   const plantId = document.getElementById('mm-plant-id').value;
@@ -2622,7 +2622,6 @@ document.getElementById('google-signin-btn').addEventListener('click', signInWit
 document.getElementById('signout-btn').addEventListener('click', doSignOut);
 document.getElementById('create-plant-btn').addEventListener('click', createPlant);
 document.getElementById('load-schedule-file-btn').addEventListener('click', loadScheduleJsonFromFile);
-document.getElementById('generate-schedule-json-btn').addEventListener('click', generateScheduleJsonFromDailyScheduleGPT);
 document.getElementById('import-schedule-btn').addEventListener('click', importDailySchedule);
 </script>
 </body>
