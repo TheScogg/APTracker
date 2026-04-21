@@ -1470,9 +1470,9 @@ function renderStoreEditor() {
         <div class="store-theme-panel">
           <div class="store-theme-panel-title">Builder</div>
           <div class="store-theme-meta-grid">
-            <input type="text" placeholder="Theme display name" value="${esc(draft.name || '')}" oninput="window.setStoreThemeEditorField('name',this.value)">
-            <input type="number" min="0" value="${Number(draft.price || 0)}" oninput="window.setStoreThemeEditorField('price',this.value)">
-            <select onchange="window.setStoreThemeEditorField('isActive',this.value)">
+            <input data-store-theme-field="name" type="text" placeholder="Theme display name" value="${esc(draft.name || '')}" oninput="window.setStoreThemeEditorField('name',this.value)">
+            <input data-store-theme-field="price" type="number" min="0" value="${Number(draft.price || 0)}" oninput="window.setStoreThemeEditorField('price',this.value)">
+            <select data-store-theme-field="isActive" onchange="window.setStoreThemeEditorField('isActive',this.value)">
               <option value="true" ${draft.isActive !== false ? 'selected' : ''}>Active</option>
               <option value="false" ${draft.isActive === false ? 'selected' : ''}>Hidden</option>
             </select>
@@ -2318,6 +2318,12 @@ window.pickStoreBuiltinTheme = function(themeKey) {
 window.setStoreThemeEditorField = function(field, value) {
   if (!storeThemeEditorDraft) window.startNewStoreTheme('custom');
   if (!storeThemeEditorDraft) return;
+  const activeEl = document.activeElement;
+  const storeEditorContainer = document.getElementById('store-editor-container');
+  const shouldRestoreFocus = !!(activeEl && storeEditorContainer && storeEditorContainer.contains(activeEl));
+  const focusField = shouldRestoreFocus ? activeEl.dataset?.storeThemeField : null;
+  const selectionStart = (shouldRestoreFocus && typeof activeEl.selectionStart === 'number') ? activeEl.selectionStart : null;
+  const selectionEnd = (shouldRestoreFocus && typeof activeEl.selectionEnd === 'number') ? activeEl.selectionEnd : null;
   if (field === 'price') storeThemeEditorDraft.price = Math.max(0, Number(value || 0));
   else if (field === 'isActive') storeThemeEditorDraft.isActive = value === 'true';
   else if (field === 'name') storeThemeEditorDraft.name = String(value || '');
@@ -2333,6 +2339,16 @@ window.setStoreThemeEditorField = function(field, value) {
     }
   }
   renderGlobalStoreEditor();
+  if (!focusField) return;
+  const nextInput = document.querySelector(`[data-store-theme-field="${focusField}"]`);
+  if (!nextInput) return;
+  nextInput.focus();
+  if (typeof selectionStart === 'number' && typeof nextInput.setSelectionRange === 'function') {
+    const max = String(nextInput.value || '').length;
+    const start = Math.min(selectionStart, max);
+    const end = typeof selectionEnd === 'number' ? Math.min(selectionEnd, max) : start;
+    nextInput.setSelectionRange(start, end);
+  }
 };
 
 window.setStoreThemeEditorColor = function(key, value) {
