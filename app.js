@@ -1532,22 +1532,6 @@ function normalizeStoreItems(rawItems) {
     });
   });
 
-  THEME_OPTIONS.forEach((theme, idx) => {
-    const id = `theme_${theme.key}`;
-    if (byId.has(id)) return;
-    const seed = DEFAULT_STORE_ITEMS.find(item => item.id === id);
-    byId.set(id, {
-      id,
-      type: 'theme',
-      themeKey: theme.key,
-      customVars: null,
-      name: themeLabelSansIcon(theme.label),
-      price: Number(seed?.price || 0),
-      isActive: true,
-      order: Number(seed?.order ?? idx)
-    });
-  });
-
   return [...byId.values()].sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
 }
 
