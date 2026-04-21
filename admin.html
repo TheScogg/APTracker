@@ -1030,22 +1030,6 @@ function normalizeGlobalStoreItems(rawItems) {
     });
   });
 
-  ADMIN_THEME_OPTIONS.forEach((theme, idx) => {
-    const id = `theme_${theme.key}`;
-    if (map.has(id)) return;
-    const seed = DEFAULT_STORE_ITEMS.find(i => i.id === id);
-    map.set(id, {
-      id,
-      type: 'theme',
-      themeKey: theme.key,
-      customVars: null,
-      name: (seed?.name || String(theme.label || '').replace(/^[^\s]+\s/, '')) || 'Theme',
-      price: Number(seed?.price || 0),
-      isActive: true,
-      order: Number(seed?.order ?? idx)
-    });
-  });
-
   return [...map.values()].sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
 }
 
