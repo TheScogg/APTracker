@@ -1495,6 +1495,7 @@ async function loadStoreConfig() {
     storeItems = normalizeStoreItems(DEFAULT_STORE_ITEMS);
   }
   ensureCurrentThemeAccess();
+  restoreSavedThemeSelection();
   renderThemeChoices();
   renderStoreCard();
   renderStoreModal();
@@ -1505,6 +1506,7 @@ async function loadStoreConfig() {
     const incoming = snap.exists() ? snap.data().items : DEFAULT_STORE_ITEMS;
     storeItems = normalizeStoreItems(incoming);
     ensureCurrentThemeAccess();
+    restoreSavedThemeSelection();
     renderThemeChoices();
     renderStoreCard();
     renderStoreModal();
@@ -1513,6 +1515,13 @@ async function loadStoreConfig() {
   }, err => {
     console.warn('Global store listener failed:', err);
   });
+}
+
+function restoreSavedThemeSelection() {
+  const savedTheme = localStorage.getItem('pressTrackerTheme') || '';
+  if (!savedTheme || !savedTheme.startsWith('storetheme_')) return;
+  if (!getThemeCatalogEntry(savedTheme)) return;
+  applyTheme(savedTheme);
 }
 
 function normalizeStoreItems(rawItems) {
@@ -5550,6 +5559,8 @@ window.closeAppearanceModal = function() {
 let _teCurrentVars = null;
 let _tePrevThemeKey = null;
 let _teEditingId = null;
+let _teIgnoreBackdropClickUntil = 0;
+let _teColorPickerInteracting = false;
 
 window.openThemeEditor = function() {
   closeAppearanceModal();
@@ -5628,10 +5639,32 @@ function _renderTEPickers() {
       <label class="te-color-label">${label}</label>
       <input type="color" class="te-color-input" value="${val}" data-var="${cssVar}">
       <span class="te-color-hex" data-hex-for="${cssVar}">${val}</span>`;
-    row.querySelector('input').addEventListener('input', e => {
+    const colorInput = row.querySelector('input');
+    const extendBackdropGuard = (ms = 400) => {
+      _teIgnoreBackdropClickUntil = Date.now() + ms;
+    };
+    colorInput.addEventListener('pointerdown', () => {
+      _teColorPickerInteracting = true;
+      extendBackdropGuard(5000);
+    });
+    colorInput.addEventListener('focus', () => {
+      _teColorPickerInteracting = true;
+      extendBackdropGuard(5000);
+    });
+    colorInput.addEventListener('input', e => {
+      _teColorPickerInteracting = true;
+      extendBackdropGuard(5000);
       _teCurrentVars[cssVar] = e.target.value;
       row.querySelector('.te-color-hex').textContent = e.target.value;
       applyCustomThemeVars(_teCurrentVars);
+    });
+    colorInput.addEventListener('change', () => {
+      extendBackdropGuard(1200);
+      setTimeout(() => { _teColorPickerInteracting = false; }, 150);
+    });
+    colorInput.addEventListener('blur', () => {
+      extendBackdropGuard(800);
+      setTimeout(() => { _teColorPickerInteracting = false; }, 150);
     });
     container.appendChild(row);
   });
@@ -5834,7 +5867,12 @@ document.querySelectorAll('.modal').forEach(modal => {
 
 document.addEventListener('keydown', e=>{ if(e.key==='Escape'){closeModal();closeEditModal();closeResolveModal();closeReopenModal();closeLightbox();closeSortDropdown();closeExportModal();closeSerialModal();closeEditStatusModal();closeNotesModal();closeAppearanceModal();closeThemeEditor();} });
 
-document.getElementById('theme-editor-modal').addEventListener('click', e => { if (e.target === document.getElementById('theme-editor-modal')) closeThemeEditor(); });
+document.getElementById('theme-editor-modal').addEventListener('click', e => {
+  if (e.target !== document.getElementById('theme-editor-modal')) return;
+  if (_teColorPickerInteracting) return;
+  if (Date.now() < _teIgnoreBackdropClickUntil) return;
+  closeThemeEditor();
+});
 document.getElementById('appearance-modal')?.addEventListener('click', e => { if (e.target === document.getElementById('appearance-modal')) closeAppearanceModal(); });
 
 // ── SERIAL NUMBER PROMPT ──
