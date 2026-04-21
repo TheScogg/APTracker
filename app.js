@@ -5561,6 +5561,26 @@ let _tePrevThemeKey = null;
 let _teEditingId = null;
 let _teIgnoreBackdropClickUntil = 0;
 let _teColorPickerInteracting = false;
+let _teColorPickerPointerActive = false;
+
+function _teQueueColorPickerInteractionRelease(delay = 250) {
+  setTimeout(() => {
+    if (_teColorPickerPointerActive) return;
+    _teColorPickerInteracting = false;
+  }, delay);
+}
+
+const _teHandleColorPickerPointerRelease = () => {
+  if (!_teColorPickerInteracting && !_teColorPickerPointerActive) return;
+  _teColorPickerPointerActive = false;
+  _teIgnoreBackdropClickUntil = Math.max(_teIgnoreBackdropClickUntil, Date.now() + 1200);
+  _teQueueColorPickerInteractionRelease(250);
+};
+
+document.addEventListener('pointerup', _teHandleColorPickerPointerRelease, true);
+document.addEventListener('pointercancel', _teHandleColorPickerPointerRelease, true);
+document.addEventListener('touchend', _teHandleColorPickerPointerRelease, true);
+document.addEventListener('touchcancel', _teHandleColorPickerPointerRelease, true);
 
 window.openThemeEditor = function() {
   closeAppearanceModal();
@@ -5644,9 +5664,15 @@ function _renderTEPickers() {
       _teIgnoreBackdropClickUntil = Date.now() + ms;
     };
     colorInput.addEventListener('pointerdown', () => {
+      _teColorPickerPointerActive = true;
       _teColorPickerInteracting = true;
       extendBackdropGuard(5000);
     });
+    colorInput.addEventListener('touchstart', () => {
+      _teColorPickerPointerActive = true;
+      _teColorPickerInteracting = true;
+      extendBackdropGuard(5000);
+    }, { passive: true });
     colorInput.addEventListener('focus', () => {
       _teColorPickerInteracting = true;
       extendBackdropGuard(5000);
@@ -5659,12 +5685,12 @@ function _renderTEPickers() {
       applyCustomThemeVars(_teCurrentVars);
     });
     colorInput.addEventListener('change', () => {
-      extendBackdropGuard(1200);
-      setTimeout(() => { _teColorPickerInteracting = false; }, 150);
+      extendBackdropGuard(1500);
+      _teQueueColorPickerInteractionRelease(300);
     });
     colorInput.addEventListener('blur', () => {
-      extendBackdropGuard(800);
-      setTimeout(() => { _teColorPickerInteracting = false; }, 150);
+      extendBackdropGuard(1500);
+      _teQueueColorPickerInteractionRelease(350);
     });
     container.appendChild(row);
   });
