@@ -1720,13 +1720,13 @@ function _buildStoreThemeCard(theme, activeKey, spendable) {
 
   let badge = '';
   let action = '';
-  let previewAction = `<button class="stc-buy-btn" onclick="event.stopPropagation();previewStoreTheme('${theme.key}')">Preview</button>`;
+  let previewAction = `<button class="stc-btn stc-preview-btn" onclick="event.stopPropagation();previewStoreTheme('${theme.key}')">Preview</button>`;
   if (isActive) {
     badge = `<span class="stc-badge stc-badge-active">Active</span>`;
   } else if (owned) {
     badge = `<span class="stc-badge stc-badge-owned">${theme.isFree ? (theme.source === 'saved-custom' ? 'Saved' : 'Free') : '✓ Owned'}</span>`;
   } else if (theme.storeItemId && canAfford) {
-    action = `<button class="stc-buy-btn" onclick="event.stopPropagation();openPurchaseConfirm('${theme.storeItemId}')">${price} XP</button>`;
+    action = `<button class="stc-btn stc-price-btn" onclick="event.stopPropagation();openPurchaseConfirm('${theme.storeItemId}')">${price} XP</button>`;
   } else {
     badge = `<span class="stc-badge stc-badge-locked">🔒 ${price}</span>`;
   }
