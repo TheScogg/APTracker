@@ -1931,6 +1931,7 @@ const DEFAULT_STORE_ITEMS = [
   { id: 'theme_industrial', type: 'theme', themeKey: 'industrial', customVars: null, name: 'Industrial', price: 220, isActive: true, order: 9 },
   { id: 'theme_engel',      type: 'theme', themeKey: 'engel',      customVars: null, name: 'Engel',      price: 0,   isActive: true, order: 10 },
   { id: 'theme_cardinals',  type: 'theme', themeKey: 'cardinals',  customVars: null, name: 'Cardinals',  price: 25,  isActive: true, order: 11 },
+  { id: 'theme_wildcats',   type: 'theme', themeKey: 'wildcats',   customVars: null, name: 'Wildcats',   price: 25,  isActive: true, order: 12 },
 ];
 
 let gameConfig = null;
@@ -5107,7 +5108,8 @@ const THEME_OPTIONS = [
   { key:'industrial', label:'🏭 Industrial', mode:'dark', colors:['#1a1a1a','#ff6b00','#e5e5e5'] },
   { key:'mint', label:'🍃 Mint', mode:'light', colors:['#f0fdf9','#14b8a6','#064e3b'] },
   { key:'engel', label:'🟢 Engel', mode:'dark', colors:['#0c1209','#78be20','#e8f5d8'] },
-  { key:'cardinals', label:'🔴 Cardinals', mode:'dark', colors:['#0e0303','#c8102e','#f5e8e8'] }
+  { key:'cardinals', label:'🔴 Cardinals', mode:'dark', colors:['#0e0303','#c8102e','#f5e8e8'] },
+  { key:'wildcats', label:'🔵 Wildcats', mode:'dark', colors:['#020814','#0033a0','#e8f0ff'] }
 ];
 const THEME_KEYS = THEME_OPTIONS.map(theme => theme.key);
 
@@ -5124,7 +5126,8 @@ const THEME_VARS_MAP = {
   industrial: { '--bg':'#1a1a1a','--bg2':'#252525','--bg3':'#2f2f2f','--border':'#404040','--text':'#e5e5e5','--text2':'#a0a0a0','--text3':'#707070','--accent':'#ff6b00','--accent2':'#ff8a33','--green':'#4ade80','--red':'#f87171','--blue':'#60a5fa','--yellow':'#facc15','--orange':'#ff6b00' },
   mint:       { '--bg':'#f0fdf9','--bg2':'#ffffff','--bg3':'#e6fff8','--border':'#a7f3d0','--text':'#064e3b','--text2':'#065f46','--text3':'#10b981','--accent':'#14b8a6','--accent2':'#10b981','--green':'#059669','--red':'#dc2626','--blue':'#0284c7','--yellow':'#ca8a04','--orange':'#ea580c' },
   engel:      { '--bg':'#0c1209','--bg2':'#141e0f','--bg3':'#1b2a14','--border':'#2d4820','--text':'#e8f5d8','--text2':'#8ab870','--text3':'#4d6e38','--accent':'#78be20','--accent2':'#96d63a','--green':'#78be20','--red':'#f87171','--blue':'#00a3b5','--yellow':'#ffc72c','--orange':'#fb923c' },
-  cardinals:  { '--bg':'#0e0303','--bg2':'#1c0808','--bg3':'#260c0c','--border':'#3d1515','--text':'#f5e8e8','--text2':'#c48a8a','--text3':'#7a4444','--accent':'#c8102e','--accent2':'#e81f42','--green':'#22c55e','--red':'#ff4444','--blue':'#60a5fa','--yellow':'#eab308','--orange':'#f97316' }
+  cardinals:  { '--bg':'#0e0303','--bg2':'#1c0808','--bg3':'#260c0c','--border':'#3d1515','--text':'#f5e8e8','--text2':'#c48a8a','--text3':'#7a4444','--accent':'#c8102e','--accent2':'#e81f42','--green':'#22c55e','--red':'#ff4444','--blue':'#60a5fa','--yellow':'#eab308','--orange':'#f97316' },
+  wildcats:   { '--bg':'#020814','--bg2':'#051228','--bg3':'#071a38','--border':'#0d2d5e','--text':'#e8f0ff','--text2':'#7da8e8','--text3':'#3d6ab0','--accent':'#0033a0','--accent2':'#1a52cc','--green':'#22c55e','--red':'#ef4444','--blue':'#3b82f6','--yellow':'#eab308','--orange':'#f97316' }
 };
 
 function themeLabelSansIcon(label) {
