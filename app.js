@@ -5560,6 +5560,7 @@ let _teCurrentVars = null;
 let _tePrevThemeKey = null;
 let _teEditingId = null;
 let _teIgnoreBackdropClickUntil = 0;
+let _teColorPickerInteracting = false;
 
 window.openThemeEditor = function() {
   closeAppearanceModal();
@@ -5642,16 +5643,29 @@ function _renderTEPickers() {
     const extendBackdropGuard = (ms = 400) => {
       _teIgnoreBackdropClickUntil = Date.now() + ms;
     };
-    colorInput.addEventListener('pointerdown', () => extendBackdropGuard(1200));
-    colorInput.addEventListener('focus', () => extendBackdropGuard(1200));
+    colorInput.addEventListener('pointerdown', () => {
+      _teColorPickerInteracting = true;
+      extendBackdropGuard(5000);
+    });
+    colorInput.addEventListener('focus', () => {
+      _teColorPickerInteracting = true;
+      extendBackdropGuard(5000);
+    });
     colorInput.addEventListener('input', e => {
-      extendBackdropGuard(800);
+      _teColorPickerInteracting = true;
+      extendBackdropGuard(5000);
       _teCurrentVars[cssVar] = e.target.value;
       row.querySelector('.te-color-hex').textContent = e.target.value;
       applyCustomThemeVars(_teCurrentVars);
     });
-    colorInput.addEventListener('change', () => extendBackdropGuard(600));
-    colorInput.addEventListener('blur', () => extendBackdropGuard(300));
+    colorInput.addEventListener('change', () => {
+      extendBackdropGuard(1200);
+      setTimeout(() => { _teColorPickerInteracting = false; }, 150);
+    });
+    colorInput.addEventListener('blur', () => {
+      extendBackdropGuard(800);
+      setTimeout(() => { _teColorPickerInteracting = false; }, 150);
+    });
     container.appendChild(row);
   });
 }
@@ -5855,6 +5869,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape'){closeModal();clos
 
 document.getElementById('theme-editor-modal').addEventListener('click', e => {
   if (e.target !== document.getElementById('theme-editor-modal')) return;
+  if (_teColorPickerInteracting) return;
   if (Date.now() < _teIgnoreBackdropClickUntil) return;
   closeThemeEditor();
 });
