@@ -1527,10 +1527,18 @@ function restoreSavedThemeSelection() {
 function normalizeStoreItems(rawItems) {
   const incoming = Array.isArray(rawItems) ? rawItems : [];
   const byId = new Map();
+  // Seed with defaults so new code-defined items always appear even when
+  // Firestore has an older snapshot that predates them.
+  DEFAULT_STORE_ITEMS.forEach((item, idx) => {
+    const id = String(item.id || '').trim();
+    if (!id) return;
+    byId.set(id, { ...item, order: Number.isFinite(Number(item.order)) ? Number(item.order) : idx });
+  });
   incoming.forEach((item, idx) => {
     if (!item || typeof item !== 'object') return;
     const id = String(item.id || '').trim() || `storeitem_${idx}`;
     byId.set(id, {
+      ...(byId.get(id) || {}),
       ...item,
       id,
       type: item.type || 'theme',
