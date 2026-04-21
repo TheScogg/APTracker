@@ -350,7 +350,7 @@
   .theme-select-current { font-size: 12px; color: var(--text3); font-family: 'Share Tech Mono', monospace; }
   .theme-select-chevron { display: flex; align-items: center; color: var(--text3); transition: transform 0.15s; }
   .theme-select-toggle.open .theme-select-chevron { transform: rotate(180deg); }
-  .theme-select-grid { display: none; grid-template-columns: 1fr 1fr; gap: 6px; margin: 0 6px 6px; }
+  .theme-select-grid { display: none; grid-template-columns: 1fr 1fr; gap: 6px; margin: 4px 6px 6px; }
   .theme-select-grid.open { display: grid; }
   .theme-choice { border: 1px solid var(--border); background: var(--bg3); border-radius: 8px; padding: 6px; cursor: pointer; text-align: left; transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s; }
   .theme-choice:hover { border-color: var(--text2); transform: translateY(-1px); }
