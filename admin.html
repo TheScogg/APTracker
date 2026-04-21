@@ -193,16 +193,55 @@
     .store-item-price input[type=number] { width:74px; text-align:right; }
     .store-item-price-label { font-size:11px; color:var(--text2); }
     .store-item-actions { display:flex; gap:6px; align-items:center; flex-shrink:0; }
-    .store-theme-builder { border-top:1px solid var(--border); margin-top:12px; padding-top:12px; display:flex; flex-direction:column; gap:10px; }
-    .store-theme-toolbar { display:flex; flex-wrap:wrap; gap:8px; }
+    .store-theme-builder {
+      border-top:1px solid var(--border);
+      margin-top:12px;
+      padding-top:12px;
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+    }
+    .store-theme-toolbar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
     .store-theme-toolbar .small-btn { flex:0 0 auto; }
-    .store-theme-layout { display:grid; grid-template-columns:1.1fr 0.9fr; gap:10px; }
-    .store-theme-panel { background:var(--bg3); border:1px solid var(--border); border-radius:10px; padding:10px; }
+    .store-theme-toolbar select { min-width:190px; }
+    .store-theme-layout { display:grid; grid-template-columns:minmax(0,1.25fr) minmax(0,1fr); gap:12px; }
+    .store-theme-panel {
+      background:linear-gradient(180deg, color-mix(in srgb, var(--bg3) 80%, var(--accent) 6%), var(--bg3));
+      border:1px solid var(--border);
+      border-radius:12px;
+      padding:12px;
+    }
+    .store-theme-panel-title { font-size:11px; letter-spacing:0.04em; text-transform:uppercase; font-weight:800; color:var(--text2); margin-bottom:8px; }
+    .store-theme-meta-grid { display:grid; grid-template-columns:1fr 96px 112px; gap:8px; margin-bottom:10px; }
+    .store-theme-meta-grid input, .store-theme-meta-grid select { width:100%; }
+    .store-theme-builtin-grid {
+      display:grid;
+      grid-template-columns:repeat(3,minmax(0,1fr));
+      gap:8px;
+      margin-bottom:10px;
+    }
+    .store-theme-builtin-chip {
+      border:1px solid var(--border);
+      border-radius:10px;
+      background:var(--bg2);
+      color:var(--text2);
+      padding:8px;
+      cursor:pointer;
+      text-align:left;
+      transition:all 0.15s;
+    }
+    .store-theme-builtin-chip:hover { border-color:var(--text2); transform:translateY(-1px); }
+    .store-theme-builtin-chip.active { border-color:var(--accent); box-shadow:0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent); color:var(--text); }
+    .store-theme-chip-name { display:block; font-size:12px; font-weight:700; line-height:1.2; }
+    .store-theme-chip-sub { display:block; font-size:10px; color:var(--text3); margin-top:2px; }
+    .store-theme-chip-swatches { margin-top:6px; display:flex; gap:4px; }
+    .store-theme-chip-swatches i { flex:1; height:8px; border-radius:99px; border:1px solid rgba(255,255,255,0.2); }
     .store-theme-vars { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
     .store-theme-var { display:flex; align-items:center; gap:6px; font-size:11px; color:var(--text2); }
-    .store-theme-var input[type=color] { width:38px; min-width:38px; height:28px; padding:0; border:none; background:none; }
-    .store-theme-var input[type=text] { font-family:'Share Tech Mono',monospace; font-size:11px; padding:6px 8px; }
-    .store-theme-preview-wrap { max-width:220px; }
+    .store-theme-var span { min-width:78px; }
+    .store-theme-var input[type=color] { width:34px; min-width:34px; height:30px; padding:0; border:none; background:none; }
+    .store-theme-var input[type=text] { font-family:'Share Tech Mono',monospace; font-size:11px; padding:6px 8px; min-width:0; }
+    .store-theme-preview-wrap { width:100%; }
     .store-theme-preview-card {
       border-radius:12px;
       border:1.5px solid var(--border);
@@ -211,7 +250,7 @@
       user-select:none;
     }
     .store-theme-preview-hero {
-      height:88px;
+      height:108px;
       position:relative;
       overflow:hidden;
       background:var(--stc-bg, #111);
@@ -232,16 +271,16 @@
     }
     .store-theme-preview-ui {
       position:absolute;
-      inset:12px;
+      inset:14px;
       display:flex;
       flex-direction:column;
-      gap:6px;
+      gap:7px;
     }
-    .store-theme-preview-bar { height:8px; border-radius:4px; width:100%; }
+    .store-theme-preview-bar { height:9px; border-radius:4px; width:100%; }
     .store-theme-preview-row { display:flex; align-items:center; gap:6px; }
-    .store-theme-preview-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+    .store-theme-preview-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
     .store-theme-preview-dot.sm { width:6px; height:6px; }
-    .store-theme-preview-line { height:5px; border-radius:3px; flex:1; }
+    .store-theme-preview-line { height:6px; border-radius:3px; flex:1; }
     .store-theme-preview-line.sm { height:4px; }
     .store-theme-preview-check {
       position:absolute;
@@ -281,9 +320,44 @@
       color:var(--stc-accent, #f97316);
       flex-shrink:0;
     }
+    .store-theme-preview-pills { display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; }
+    .store-theme-preview-pill {
+      font-size:10px;
+      font-weight:700;
+      border-radius:999px;
+      padding:3px 8px;
+      border:1px solid color-mix(in srgb, var(--stc-border,#333) 80%, transparent);
+      background:color-mix(in srgb, var(--stc-bg,#111) 82%, white 2%);
+      color:var(--stc-text-main,var(--text));
+    }
+    .store-theme-palette {
+      margin-top:10px;
+      display:grid;
+      grid-template-columns:repeat(5,minmax(0,1fr));
+      gap:6px;
+    }
+    .store-theme-palette-swatch {
+      border-radius:8px;
+      border:1px solid var(--stc-border,var(--border));
+      min-height:32px;
+      overflow:hidden;
+      position:relative;
+    }
+    .store-theme-palette-swatch span {
+      position:absolute;
+      left:5px;
+      bottom:4px;
+      font-size:9px;
+      font-weight:800;
+      letter-spacing:0.02em;
+      text-shadow:0 1px 1px rgba(0,0,0,0.35);
+    }
+    .store-theme-editor-meta { margin-top:8px; font-size:11px; color:var(--text2); }
     @media (max-width: 900px) {
       .store-theme-layout { grid-template-columns:1fr; }
       .store-theme-vars { grid-template-columns:1fr; }
+      .store-theme-builtin-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .store-theme-meta-grid { grid-template-columns:1fr; }
     }
   </style>
 </head>
@@ -1332,20 +1406,35 @@ function renderStoreEditor() {
     id: `storeitem_${Date.now()}`,
     type: 'theme',
     themeKey: ADMIN_THEME_OPTIONS[0]?.key || null,
-    customVars: { ...THEME_VARS_TEMPLATE },
+    customVars: { ...THEME_VARS_TEMPLATE, ...(BUILTIN_THEME_VARS[ADMIN_THEME_OPTIONS[0]?.key] || {}) },
     name: '',
     price: 50,
     isActive: true
   };
 
-  const vars = { ...THEME_VARS_TEMPLATE, ...(draft.customVars || {}) };
+  const vars = { ...THEME_VARS_TEMPLATE, ...(draft.themeKey ? (BUILTIN_THEME_VARS[draft.themeKey] || {}) : {}), ...(draft.customVars || {}) };
   const varInputs = THEME_EDITOR_FIELDS.map(([key, label]) => `
     <label class="store-theme-var">
-      <span style="min-width:78px;">${label}</span>
+      <span>${label}</span>
       <input type="color" value="${esc(vars[key])}" oninput="window.setStoreThemeEditorColor('${key}',this.value)">
       <input type="text" value="${esc(vars[key])}" oninput="window.setStoreThemeEditorColor('${key}',this.value)">
     </label>
   `).join('');
+  const builtinChips = ADMIN_THEME_OPTIONS.map(opt => {
+    const base = BUILTIN_THEME_VARS[opt.key] || THEME_VARS_TEMPLATE;
+    const isActive = opt.key === (draft.themeKey || activeThemeKey);
+    return `
+      <button class="store-theme-builtin-chip ${isActive ? 'active' : ''}" onclick="window.pickStoreBuiltinTheme('${opt.key}')">
+        <span class="store-theme-chip-name">${esc(opt.label)}</span>
+        <span class="store-theme-chip-sub">${esc(opt.key)}</span>
+        <span class="store-theme-chip-swatches">
+          <i style="background:${esc(base['--bg'])}"></i>
+          <i style="background:${esc(base['--accent'])}"></i>
+          <i style="background:${esc(base['--text'])}"></i>
+        </span>
+      </button>
+    `;
+  }).join('');
 
   return `
     ${items.length ? `
@@ -1369,7 +1458,8 @@ function renderStoreEditor() {
       </div>
       <div class="store-theme-layout">
         <div class="store-theme-panel">
-          <div style="display:grid;grid-template-columns:1fr 90px 100px;gap:8px;margin-bottom:8px;">
+          <div class="store-theme-panel-title">Builder</div>
+          <div class="store-theme-meta-grid">
             <input type="text" placeholder="Theme display name" value="${esc(draft.name || '')}" oninput="window.setStoreThemeEditorField('name',this.value)">
             <input type="number" min="0" value="${Number(draft.price || 0)}" oninput="window.setStoreThemeEditorField('price',this.value)">
             <select onchange="window.setStoreThemeEditorField('isActive',this.value)">
@@ -1377,6 +1467,8 @@ function renderStoreEditor() {
               <option value="false" ${draft.isActive === false ? 'selected' : ''}>Hidden</option>
             </select>
           </div>
+          <div class="store-theme-panel-title">Built-in theme library</div>
+          <div class="store-theme-builtin-grid">${builtinChips}</div>
           <div class="store-theme-vars">${varInputs}</div>
           <div class="status-toolbar">
             <button class="small-btn" onclick="window.commitStoreThemeEditor()">Save Theme Item</button>
@@ -1384,6 +1476,7 @@ function renderStoreEditor() {
           </div>
         </div>
         <div class="store-theme-panel">
+          <div class="store-theme-panel-title">Live preview</div>
           <div class="store-theme-preview-wrap">
             <div class="store-theme-preview-card" style="--stc-bg:${esc(vars['--bg'])};--stc-accent:${esc(vars['--accent'])};--stc-text:${esc(vars['--text'])};--stc-footer-bg:${esc(vars['--bg3'])};--stc-border:${esc(vars['--border'])};--stc-text-main:${esc(vars['--text'])};">
               <div class="store-theme-preview-hero">
@@ -1407,7 +1500,20 @@ function renderStoreEditor() {
               </div>
             </div>
           </div>
-          <div class="muted" style="font-size:11px;margin-top:8px;">Editing ${storeThemeEditorIndex >= 0 ? `item #${storeThemeEditorIndex + 1}` : 'new item'}.</div>
+          <div class="store-theme-preview-pills">
+            <span class="store-theme-preview-pill" style="background:${esc(vars['--green'])}22;color:${esc(vars['--green'])};border-color:${esc(vars['--green'])}66;">Success</span>
+            <span class="store-theme-preview-pill" style="background:${esc(vars['--blue'])}22;color:${esc(vars['--blue'])};border-color:${esc(vars['--blue'])}66;">Info</span>
+            <span class="store-theme-preview-pill" style="background:${esc(vars['--yellow'])}22;color:${esc(vars['--yellow'])};border-color:${esc(vars['--yellow'])}66;">Warning</span>
+            <span class="store-theme-preview-pill" style="background:${esc(vars['--red'])}22;color:${esc(vars['--red'])};border-color:${esc(vars['--red'])}66;">Danger</span>
+          </div>
+          <div class="store-theme-palette">
+            <div class="store-theme-palette-swatch" style="background:${esc(vars['--bg'])};"><span style="color:${esc(vars['--text'])}">BG</span></div>
+            <div class="store-theme-palette-swatch" style="background:${esc(vars['--bg2'])};"><span style="color:${esc(vars['--text'])}">BG2</span></div>
+            <div class="store-theme-palette-swatch" style="background:${esc(vars['--bg3'])};"><span style="color:${esc(vars['--text'])}">BG3</span></div>
+            <div class="store-theme-palette-swatch" style="background:${esc(vars['--accent'])};"><span style="color:${esc(vars['--bg'])}">Accent</span></div>
+            <div class="store-theme-palette-swatch" style="background:${esc(vars['--text'])};"><span style="color:${esc(vars['--bg'])}">Text</span></div>
+          </div>
+          <div class="store-theme-editor-meta">Editing ${storeThemeEditorIndex >= 0 ? `item #${storeThemeEditorIndex + 1}` : 'new item'} • ${draft.themeKey ? `Built-in source: ${esc(draft.themeKey)}` : 'Custom theme'}</div>
         </div>
       </div>
 
@@ -2180,6 +2286,20 @@ window.startNewStoreTheme = function(mode = 'custom') {
   renderGlobalStoreEditor();
 };
 
+window.pickStoreBuiltinTheme = function(themeKey) {
+  const key = String(themeKey || '');
+  if (!key) return;
+  if (!storeThemeEditorDraft) window.startNewStoreTheme('builtin');
+  if (!storeThemeEditorDraft) return;
+  storeThemeEditorDraft.themeKey = key;
+  storeThemeEditorDraft.id = `theme_${key}`;
+  storeThemeEditorDraft.customVars = { ...THEME_VARS_TEMPLATE, ...(BUILTIN_THEME_VARS[key] || {}) };
+  if (!storeThemeEditorDraft.name) {
+    storeThemeEditorDraft.name = DEFAULT_STORE_ITEMS.find(i => i.themeKey === key)?.name || 'Theme';
+  }
+  renderGlobalStoreEditor();
+};
+
 window.setStoreThemeEditorField = function(field, value) {
   if (!storeThemeEditorDraft) window.startNewStoreTheme('custom');
   if (!storeThemeEditorDraft) return;
@@ -2191,6 +2311,7 @@ window.setStoreThemeEditorField = function(field, value) {
     storeThemeEditorDraft.themeKey = nextKey || null;
     if (storeThemeEditorDraft.themeKey) {
       storeThemeEditorDraft.id = `theme_${storeThemeEditorDraft.themeKey}`;
+      storeThemeEditorDraft.customVars = { ...THEME_VARS_TEMPLATE, ...(BUILTIN_THEME_VARS[nextKey] || {}), ...(storeThemeEditorDraft.customVars || {}) };
       if (!storeThemeEditorDraft.name) storeThemeEditorDraft.name = DEFAULT_STORE_ITEMS.find(i => i.themeKey === nextKey)?.name || 'Theme';
     }
   }
