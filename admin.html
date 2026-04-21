@@ -193,172 +193,56 @@
     .store-item-price input[type=number] { width:74px; text-align:right; }
     .store-item-price-label { font-size:11px; color:var(--text2); }
     .store-item-actions { display:flex; gap:6px; align-items:center; flex-shrink:0; }
-    .store-theme-builder {
-      border-top:1px solid var(--border);
-      margin-top:12px;
-      padding-top:12px;
-      display:flex;
-      flex-direction:column;
-      gap:12px;
-    }
-    .store-theme-toolbar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
-    .store-theme-toolbar .small-btn { flex:0 0 auto; }
-    .store-theme-toolbar select { min-width:190px; }
-    .store-theme-layout { display:grid; grid-template-columns:minmax(0,1.25fr) minmax(0,1fr); gap:12px; }
-    .store-theme-panel {
-      background:linear-gradient(180deg, color-mix(in srgb, var(--bg3) 80%, var(--accent) 6%), var(--bg3));
-      border:1px solid var(--border);
-      border-radius:12px;
-      padding:12px;
-    }
-    .store-theme-panel-title { font-size:11px; letter-spacing:0.04em; text-transform:uppercase; font-weight:800; color:var(--text2); margin-bottom:8px; }
-    .store-theme-meta-grid { display:grid; grid-template-columns:1fr 96px 112px; gap:8px; margin-bottom:10px; }
-    .store-theme-meta-grid input, .store-theme-meta-grid select { width:100%; }
-    .store-theme-builtin-grid {
-      display:grid;
-      grid-template-columns:repeat(3,minmax(0,1fr));
-      gap:8px;
-      margin-bottom:10px;
-    }
-    .store-theme-builtin-chip {
-      border:1px solid var(--border);
-      border-radius:10px;
-      background:var(--bg2);
-      color:var(--text2);
-      padding:8px;
-      cursor:pointer;
-      text-align:left;
-      transition:all 0.15s;
-    }
-    .store-theme-builtin-chip:hover { border-color:var(--text2); transform:translateY(-1px); }
-    .store-theme-builtin-chip.active { border-color:var(--accent); box-shadow:0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent); color:var(--text); }
-    .store-theme-chip-name { display:block; font-size:12px; font-weight:700; line-height:1.2; }
-    .store-theme-chip-sub { display:block; font-size:10px; color:var(--text3); margin-top:2px; }
-    .store-theme-chip-swatches { margin-top:6px; display:flex; gap:4px; }
-    .store-theme-chip-swatches i { flex:1; height:8px; border-radius:99px; border:1px solid rgba(255,255,255,0.2); }
-    .store-theme-vars { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
-    .store-theme-var { display:flex; align-items:center; gap:6px; font-size:11px; color:var(--text2); }
-    .store-theme-var span { min-width:78px; }
-    .store-theme-var input[type=color] { width:34px; min-width:34px; height:30px; padding:0; border:none; background:none; }
-    .store-theme-var input[type=text] { font-family:'Share Tech Mono',monospace; font-size:11px; padding:6px 8px; min-width:0; }
-    .store-theme-preview-wrap { width:100%; }
-    .store-theme-preview-card {
-      border-radius:12px;
-      border:1.5px solid var(--border);
-      background:var(--bg3);
-      overflow:hidden;
-      user-select:none;
-    }
-    .store-theme-preview-hero {
-      height:108px;
-      position:relative;
-      overflow:hidden;
-      background:var(--stc-bg, #111);
-    }
-    .store-theme-preview-hero::before {
-      content:"";
-      position:absolute;
-      inset:0;
-      background:var(--stc-bg, #111);
-    }
-    .store-theme-preview-stripe {
-      position:absolute;
-      top:0;
-      left:0;
-      right:0;
-      height:3px;
-      background:var(--stc-accent, #f97316);
-    }
-    .store-theme-preview-ui {
-      position:absolute;
-      inset:14px;
-      display:flex;
-      flex-direction:column;
-      gap:7px;
-    }
-    .store-theme-preview-bar { height:9px; border-radius:4px; width:100%; }
-    .store-theme-preview-row { display:flex; align-items:center; gap:6px; }
-    .store-theme-preview-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
-    .store-theme-preview-dot.sm { width:6px; height:6px; }
-    .store-theme-preview-line { height:6px; border-radius:3px; flex:1; }
-    .store-theme-preview-line.sm { height:4px; }
-    .store-theme-preview-check {
-      position:absolute;
-      top:6px;
-      right:8px;
-      color:var(--stc-accent, #f97316);
-      font-size:14px;
-      font-weight:900;
-      text-shadow:0 1px 4px rgba(0,0,0,0.5);
-    }
-    .store-theme-preview-footer {
-      padding:8px 10px;
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:6px;
-      background:var(--stc-footer-bg, var(--bg3));
-      border-top:1px solid var(--stc-border, var(--border));
-    }
-    .store-theme-preview-name {
-      font-size:11px;
-      font-weight:700;
-      color:var(--stc-text-main, var(--text));
-      white-space:nowrap;
-      overflow:hidden;
-      text-overflow:ellipsis;
-      min-width:0;
-    }
-    .store-theme-preview-badge {
-      font-size:9px;
-      font-weight:800;
-      text-transform:uppercase;
-      letter-spacing:0.04em;
-      padding:2px 6px;
-      border-radius:4px;
-      background:color-mix(in srgb, var(--stc-accent, #f97316) 16%, transparent);
-      color:var(--stc-accent, #f97316);
-      flex-shrink:0;
-    }
-    .store-theme-preview-pills { display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; }
-    .store-theme-preview-pill {
-      font-size:10px;
-      font-weight:700;
-      border-radius:999px;
-      padding:3px 8px;
-      border:1px solid color-mix(in srgb, var(--stc-border,#333) 80%, transparent);
-      background:color-mix(in srgb, var(--stc-bg,#111) 82%, white 2%);
-      color:var(--stc-text-main,var(--text));
-    }
-    .store-theme-palette {
-      margin-top:10px;
-      display:grid;
-      grid-template-columns:repeat(5,minmax(0,1fr));
-      gap:6px;
-    }
-    .store-theme-palette-swatch {
-      border-radius:8px;
-      border:1px solid var(--stc-border,var(--border));
-      min-height:32px;
-      overflow:hidden;
-      position:relative;
-    }
-    .store-theme-palette-swatch span {
-      position:absolute;
-      left:5px;
-      bottom:4px;
-      font-size:9px;
-      font-weight:800;
-      letter-spacing:0.02em;
-      text-shadow:0 1px 1px rgba(0,0,0,0.35);
-    }
-    .store-theme-editor-meta { margin-top:8px; font-size:11px; color:var(--text2); }
-    @media (max-width: 900px) {
-      .store-theme-layout { grid-template-columns:1fr; }
-      .store-theme-vars { grid-template-columns:1fr; }
-      .store-theme-builtin-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
-      .store-theme-meta-grid { grid-template-columns:1fr; }
-    }
+    /* Theme Studio – compact redesign */
+    .store-theme-builder { border-top:1px solid var(--border); margin-top:12px; padding-top:12px; display:flex; flex-direction:column; gap:10px; }
+    .stb-header { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .stb-title { font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:0.06em; color:var(--text3); white-space:nowrap; }
+    .stb-meta-row { display:flex; align-items:center; gap:6px; flex:1; min-width:200px; flex-wrap:wrap; background:color-mix(in srgb, var(--bg3) 80%, var(--accent) 4%); border:1px solid var(--border); border-radius:8px; padding:5px 8px; }
+    .stb-meta-row input[type=text] { flex:1; min-width:100px; }
+    .stb-meta-row input[type=number] { width:62px; }
+    .stb-meta-row select { width:90px; }
+    /* Horizontal chip scroller */
+    .stb-chip-scroll { display:flex; gap:6px; overflow-x:auto; padding-bottom:3px; scrollbar-width:thin; scrollbar-color:var(--border) transparent; }
+    .stb-chip-scroll::-webkit-scrollbar { height:3px; }
+    .stb-chip-scroll::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+    .stb-chip { flex:0 0 auto; border:1.5px solid var(--border); border-radius:8px; background:var(--bg2); color:var(--text2); padding:5px 9px; cursor:pointer; text-align:center; transition:all 0.15s; min-width:60px; font-family:inherit; }
+    .stb-chip:hover { border-color:var(--text3); color:var(--text); transform:translateY(-1px); }
+    .stb-chip.active { border-color:var(--accent); color:var(--text); box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 40%,transparent); }
+    .stb-chip-icon { font-size:15px; display:block; line-height:1; }
+    .stb-chip-name { display:block; font-size:9px; font-weight:700; margin-top:2px; letter-spacing:0.01em; }
+    .stb-chip-swatches { display:flex; gap:2px; margin-top:4px; justify-content:center; }
+    .stb-chip-swatches i { flex:1; max-width:14px; height:3px; border-radius:99px; }
+    /* Main two-column: colors + preview */
+    .stb-main { display:grid; grid-template-columns:1fr 172px; gap:12px; align-items:start; }
+    .stb-colors { background:color-mix(in srgb,var(--bg3) 80%,var(--accent) 4%); border:1px solid var(--border); border-radius:10px; padding:10px 12px; display:flex; flex-direction:column; gap:9px; }
+    .stb-color-group { display:flex; align-items:center; gap:10px; }
+    .stb-group-label { font-size:9px; font-weight:800; color:var(--text3); text-transform:uppercase; letter-spacing:0.05em; min-width:66px; }
+    .stb-swatches { display:flex; gap:5px; flex-wrap:wrap; }
+    .stb-swatch-btn { display:flex; flex-direction:column; align-items:center; gap:2px; cursor:pointer; position:relative; border:none; background:none; padding:0; font-family:inherit; }
+    .stb-swatch-color { width:30px; height:24px; border-radius:5px; border:1.5px solid rgba(255,255,255,0.1); transition:transform 0.1s,border-color 0.1s; display:block; pointer-events:none; }
+    .stb-swatch-btn:hover .stb-swatch-color { transform:scale(1.12); border-color:rgba(255,255,255,0.28); }
+    .stb-swatch-label { font-size:7.5px; color:var(--text3); font-weight:700; text-transform:uppercase; letter-spacing:0.02em; font-family:'Share Tech Mono',monospace; pointer-events:none; }
+    .stb-swatch-btn input[type=color] { position:absolute; top:0; left:0; width:100%; height:100%; opacity:0; cursor:pointer; border:none; padding:0; }
+    /* Preview panel */
+    .stb-preview { display:flex; flex-direction:column; gap:6px; }
+    .stb-preview-card { border-radius:10px; border:1.5px solid var(--stc-border,var(--border)); overflow:hidden; user-select:none; }
+    .stb-preview-hero { height:76px; position:relative; overflow:hidden; background:var(--stc-bg,#111); }
+    .stb-preview-stripe { position:absolute; top:0; left:0; right:0; height:2px; background:var(--stc-accent,#f97316); }
+    .stb-preview-ui { position:absolute; inset:10px; display:flex; flex-direction:column; gap:5px; }
+    .stb-preview-bar { height:7px; border-radius:3px; }
+    .stb-preview-row { display:flex; align-items:center; gap:4px; }
+    .stb-preview-dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+    .stb-preview-line { height:4px; border-radius:2px; flex:1; }
+    .stb-preview-footer { padding:5px 8px; display:flex; align-items:center; justify-content:space-between; background:var(--stc-footer-bg,var(--bg3)); border-top:1px solid var(--stc-border,var(--border)); }
+    .stb-preview-name { font-size:9.5px; font-weight:700; color:var(--stc-text-main,var(--text)); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
+    .stb-preview-badge { font-size:8px; font-weight:800; text-transform:uppercase; letter-spacing:0.04em; padding:1px 5px; border-radius:3px; background:color-mix(in srgb,var(--stc-accent,#f97316) 16%,transparent); color:var(--stc-accent,#f97316); flex-shrink:0; }
+    .stb-palette { display:flex; gap:3px; }
+    .stb-palette-swatch { flex:1; height:18px; border-radius:3px; border:1px solid rgba(255,255,255,0.08); position:relative; }
+    .stb-palette-swatch span { position:absolute; bottom:2px; left:3px; font-size:6.5px; font-weight:800; text-shadow:0 1px 2px rgba(0,0,0,0.5); }
+    .stb-preview-pills { display:flex; gap:3px; flex-wrap:wrap; }
+    .stb-preview-pill { font-size:8.5px; font-weight:700; border-radius:999px; padding:2px 6px; border:1px solid; }
+    .stb-preview-meta { font-size:10px; color:var(--text3); }
+    @media (max-width:900px) { .stb-main { grid-template-columns:1fr; } }
   </style>
 </head>
 <body>
@@ -1423,27 +1307,39 @@ function renderStoreEditor() {
   };
 
   const vars = { ...THEME_VARS_TEMPLATE, ...(draft.themeKey ? (BUILTIN_THEME_VARS[draft.themeKey] || {}) : {}), ...(draft.customVars || {}) };
-  const varInputs = THEME_EDITOR_FIELDS.map(([key, label]) => `
-    <label class="store-theme-var">
-      <span>${label}</span>
-      <input type="color" value="${esc(vars[key])}" oninput="window.setStoreThemeEditorColor('${key}',this.value)">
-      <input type="text" value="${esc(vars[key])}" oninput="window.setStoreThemeEditorColor('${key}',this.value)">
-    </label>
-  `).join('');
+  const COLOR_GROUPS = [
+    { label: 'Backgrounds', vars: [['--bg','BG'],['--bg2','Surf'],['--bg3','Inset']] },
+    { label: 'Text', vars: [['--text','Text'],['--text2','Muted'],['--text3','Faint']] },
+    { label: 'Border', vars: [['--border','Line']] },
+    { label: 'Accent', vars: [['--accent','Main'],['--accent2','Alt']] },
+    { label: 'Status', vars: [['--green','OK'],['--red','Err'],['--blue','Info'],['--yellow','Warn'],['--orange','Org']] },
+  ];
+  const varGroups = COLOR_GROUPS.map(group => {
+    const swatches = group.vars.map(([key, label]) => {
+      const id = `stb-color-${key.replace('--','')}`;
+      return `<label class="stb-swatch-btn" title="${label}: ${esc(vars[key])}">
+        <div class="stb-swatch-color" style="background:${esc(vars[key])}"></div>
+        <div class="stb-swatch-label">${label}</div>
+        <input type="color" id="${id}" value="${esc(vars[key])}"
+          oninput="window.setStoreThemeEditorColorLive('${key}',this.value)"
+          onchange="window.setStoreThemeEditorColor('${key}',this.value)">
+      </label>`;
+    }).join('');
+    return `<div class="stb-color-group"><span class="stb-group-label">${group.label}</span><div class="stb-swatches">${swatches}</div></div>`;
+  }).join('');
   const builtinChips = ADMIN_THEME_OPTIONS.map(opt => {
     const base = BUILTIN_THEME_VARS[opt.key] || THEME_VARS_TEMPLATE;
     const isActive = opt.key === (draft.themeKey || activeThemeKey);
-    return `
-      <button class="store-theme-builtin-chip ${isActive ? 'active' : ''}" onclick="window.pickStoreBuiltinTheme('${opt.key}')">
-        <span class="store-theme-chip-name">${esc(opt.label)}</span>
-        <span class="store-theme-chip-sub">${esc(opt.key)}</span>
-        <span class="store-theme-chip-swatches">
-          <i style="background:${esc(base['--bg'])}"></i>
-          <i style="background:${esc(base['--accent'])}"></i>
-          <i style="background:${esc(base['--text'])}"></i>
-        </span>
-      </button>
-    `;
+    const icon = THEME_ICONS[opt.key] || '🎨';
+    return `<button class="stb-chip ${isActive ? 'active' : ''}" onclick="window.pickStoreBuiltinTheme('${opt.key}')">
+      <span class="stb-chip-icon">${icon}</span>
+      <span class="stb-chip-name">${esc(opt.key)}</span>
+      <span class="stb-chip-swatches">
+        <i style="background:${esc(base['--bg'])}"></i>
+        <i style="background:${esc(base['--accent'])}"></i>
+        <i style="background:${esc(base['--text'])}"></i>
+      </span>
+    </button>`;
   }).join('');
 
   return `
@@ -1459,75 +1355,69 @@ function renderStoreEditor() {
     </table>` : `<div class="muted" style="margin-bottom:10px;font-size:12px;">No store items yet.</div>`}
 
     <div class="store-theme-builder">
-      <div class="muted" style="font-size:11px;font-weight:700;">Theme Studio</div>
-      <div class="store-theme-toolbar">
-        <button class="small-btn" onclick="window.startNewStoreTheme('builtin')">+ New Built-in Item</button>
-        <button class="small-btn" onclick="window.startNewStoreTheme('custom')">+ New Custom Theme</button>
-        <button class="small-btn" onclick="window.loadStoreEditorFromBuiltin()">Load Built-in Colors</button>
-        <select id="store-editor-builtin-select" onchange="window.setStoreThemeEditorField('themeKey',this.value)">${themeOpts}</select>
-      </div>
-      <div class="store-theme-layout">
-        <div class="store-theme-panel">
-          <div class="store-theme-panel-title">Builder</div>
-          <div class="store-theme-meta-grid">
-            <input data-store-theme-field="name" type="text" placeholder="Theme display name" value="${esc(draft.name || '')}" oninput="window.setStoreThemeEditorField('name',this.value)">
-            <input data-store-theme-field="price" type="number" min="0" value="${Number(draft.price || 0)}" oninput="window.setStoreThemeEditorField('price',this.value)">
-            <select data-store-theme-field="isActive" onchange="window.setStoreThemeEditorField('isActive',this.value)">
-              <option value="true" ${draft.isActive !== false ? 'selected' : ''}>Active</option>
-              <option value="false" ${draft.isActive === false ? 'selected' : ''}>Hidden</option>
-            </select>
-          </div>
-          <div class="store-theme-panel-title">Built-in theme library</div>
-          <div class="store-theme-builtin-grid">${builtinChips}</div>
-          <div class="store-theme-vars">${varInputs}</div>
-          <div class="status-toolbar">
-            <button class="small-btn" onclick="window.commitStoreThemeEditor()">Save Theme Item</button>
-            ${storeThemeEditorIndex >= 0 ? `<button class="small-btn" onclick="window.startNewStoreTheme('${draft.themeKey ? 'builtin' : 'custom'}')">Clear Editor</button>` : ''}
-          </div>
-        </div>
-        <div class="store-theme-panel">
-          <div class="store-theme-panel-title">Live preview</div>
-          <div class="store-theme-preview-wrap">
-            <div class="store-theme-preview-card" style="--stc-bg:${esc(vars['--bg'])};--stc-accent:${esc(vars['--accent'])};--stc-text:${esc(vars['--text'])};--stc-footer-bg:${esc(vars['--bg3'])};--stc-border:${esc(vars['--border'])};--stc-text-main:${esc(vars['--text'])};">
-              <div class="store-theme-preview-hero">
-                <div class="store-theme-preview-stripe"></div>
-                <div class="store-theme-preview-ui">
-                  <div class="store-theme-preview-bar" style="background:${esc(vars['--accent'])}22"></div>
-                  <div class="store-theme-preview-row">
-                    <div class="store-theme-preview-dot" style="background:${esc(vars['--accent'])}"></div>
-                    <div class="store-theme-preview-line" style="background:${esc(vars['--text'])}22"></div>
-                  </div>
-                  <div class="store-theme-preview-row">
-                    <div class="store-theme-preview-dot sm" style="background:${esc(vars['--text'])}44"></div>
-                    <div class="store-theme-preview-line sm" style="background:${esc(vars['--text'])}18"></div>
-                  </div>
-                </div>
-                <div class="store-theme-preview-check">✓</div>
-              </div>
-              <div class="store-theme-preview-footer">
-                <span class="store-theme-preview-name">${esc(draft.name || 'Theme Preview')}</span>
-                <span class="store-theme-preview-badge">Preview</span>
-              </div>
-            </div>
-          </div>
-          <div class="store-theme-preview-pills">
-            <span class="store-theme-preview-pill" style="background:${esc(vars['--green'])}22;color:${esc(vars['--green'])};border-color:${esc(vars['--green'])}66;">Success</span>
-            <span class="store-theme-preview-pill" style="background:${esc(vars['--blue'])}22;color:${esc(vars['--blue'])};border-color:${esc(vars['--blue'])}66;">Info</span>
-            <span class="store-theme-preview-pill" style="background:${esc(vars['--yellow'])}22;color:${esc(vars['--yellow'])};border-color:${esc(vars['--yellow'])}66;">Warning</span>
-            <span class="store-theme-preview-pill" style="background:${esc(vars['--red'])}22;color:${esc(vars['--red'])};border-color:${esc(vars['--red'])}66;">Danger</span>
-          </div>
-          <div class="store-theme-palette">
-            <div class="store-theme-palette-swatch" style="background:${esc(vars['--bg'])};"><span style="color:${esc(vars['--text'])}">BG</span></div>
-            <div class="store-theme-palette-swatch" style="background:${esc(vars['--bg2'])};"><span style="color:${esc(vars['--text'])}">BG2</span></div>
-            <div class="store-theme-palette-swatch" style="background:${esc(vars['--bg3'])};"><span style="color:${esc(vars['--text'])}">BG3</span></div>
-            <div class="store-theme-palette-swatch" style="background:${esc(vars['--accent'])};"><span style="color:${esc(vars['--bg'])}">Accent</span></div>
-            <div class="store-theme-palette-swatch" style="background:${esc(vars['--text'])};"><span style="color:${esc(vars['--bg'])}">Text</span></div>
-          </div>
-          <div class="store-theme-editor-meta">Editing ${storeThemeEditorIndex >= 0 ? `item #${storeThemeEditorIndex + 1}` : 'new item'} • ${draft.themeKey ? `Built-in source: ${esc(draft.themeKey)}` : 'Custom theme'}</div>
+      <!-- Header: label + action buttons + meta fields -->
+      <div class="stb-header">
+        <span class="stb-title">Theme Studio</span>
+        <button class="small-btn" onclick="window.startNewStoreTheme('builtin')">+ Built-in</button>
+        <button class="small-btn" onclick="window.startNewStoreTheme('custom')">+ Custom</button>
+        <div class="stb-meta-row">
+          <input data-store-theme-field="name" type="text" placeholder="Theme name…" value="${esc(draft.name || '')}" oninput="window.setStoreThemeEditorField('name',this.value)">
+          <input data-store-theme-field="price" type="number" min="0" value="${Number(draft.price || 0)}" oninput="window.setStoreThemeEditorField('price',this.value)" placeholder="XP" title="Price in XP">
+          <select data-store-theme-field="isActive" onchange="window.setStoreThemeEditorField('isActive',this.value)">
+            <option value="true" ${draft.isActive !== false ? 'selected' : ''}>Active</option>
+            <option value="false" ${draft.isActive === false ? 'selected' : ''}>Hidden</option>
+          </select>
+          <button class="small-btn" onclick="window.loadStoreEditorFromBuiltin()" title="Reset colors to built-in defaults" ${draft.themeKey ? '' : 'disabled'}>↺</button>
+          <button class="small-btn" style="border-color:var(--accent);color:var(--accent);" onclick="window.commitStoreThemeEditor()">Save</button>
+          ${storeThemeEditorIndex >= 0 ? `<button class="small-btn" onclick="window.startNewStoreTheme('${draft.themeKey ? 'builtin' : 'custom'}')">Clear</button>` : ''}
         </div>
       </div>
 
-      <div class="status-toolbar" style="margin-top:4px;">
+      <!-- Built-in theme picker: horizontal scrollable chip strip -->
+      <div class="stb-chip-scroll">${builtinChips}</div>
+
+      <!-- Main: color groups (left) + live preview (right) -->
+      <div class="stb-main">
+        <div class="stb-colors">${varGroups}</div>
+        <div class="stb-preview">
+          <div class="stb-preview-card" id="stb-preview-card" style="--stc-bg:${esc(vars['--bg'])};--stc-accent:${esc(vars['--accent'])};--stc-text-main:${esc(vars['--text'])};--stc-footer-bg:${esc(vars['--bg3'])};--stc-border:${esc(vars['--border'])};">
+            <div class="stb-preview-hero">
+              <div class="stb-preview-stripe"></div>
+              <div class="stb-preview-ui">
+                <div class="stb-preview-bar" style="background:color-mix(in srgb,${esc(vars['--accent'])} 22%,transparent)"></div>
+                <div class="stb-preview-row">
+                  <div class="stb-preview-dot" style="background:${esc(vars['--accent'])}"></div>
+                  <div class="stb-preview-line" style="background:color-mix(in srgb,${esc(vars['--text'])} 22%,transparent)"></div>
+                </div>
+                <div class="stb-preview-row">
+                  <div class="stb-preview-dot" style="background:color-mix(in srgb,${esc(vars['--text'])} 40%,transparent)"></div>
+                  <div class="stb-preview-line" style="background:color-mix(in srgb,${esc(vars['--text'])} 14%,transparent)"></div>
+                </div>
+              </div>
+            </div>
+            <div class="stb-preview-footer">
+              <span class="stb-preview-name">${esc(draft.name || 'Preview')}</span>
+              <span class="stb-preview-badge">${Number(draft.price||0)} XP</span>
+            </div>
+          </div>
+          <div class="stb-palette">
+            <div class="stb-palette-swatch" style="background:${esc(vars['--bg'])};"><span style="color:${esc(vars['--text'])}">BG</span></div>
+            <div class="stb-palette-swatch" style="background:${esc(vars['--bg2'])};"><span style="color:${esc(vars['--text'])}">S</span></div>
+            <div class="stb-palette-swatch" style="background:${esc(vars['--bg3'])};"><span style="color:${esc(vars['--text'])}">I</span></div>
+            <div class="stb-palette-swatch" style="background:${esc(vars['--accent'])};"><span style="color:${esc(vars['--bg'])}">Ac</span></div>
+            <div class="stb-palette-swatch" style="background:${esc(vars['--text'])};"><span style="color:${esc(vars['--bg'])}">Tx</span></div>
+          </div>
+          <div class="stb-preview-pills">
+            <span class="stb-preview-pill" style="background:color-mix(in srgb,${esc(vars['--green'])} 18%,transparent);color:${esc(vars['--green'])};border-color:color-mix(in srgb,${esc(vars['--green'])} 50%,transparent);">OK</span>
+            <span class="stb-preview-pill" style="background:color-mix(in srgb,${esc(vars['--red'])} 18%,transparent);color:${esc(vars['--red'])};border-color:color-mix(in srgb,${esc(vars['--red'])} 50%,transparent);">Err</span>
+            <span class="stb-preview-pill" style="background:color-mix(in srgb,${esc(vars['--blue'])} 18%,transparent);color:${esc(vars['--blue'])};border-color:color-mix(in srgb,${esc(vars['--blue'])} 50%,transparent);">Info</span>
+            <span class="stb-preview-pill" style="background:color-mix(in srgb,${esc(vars['--yellow'])} 18%,transparent);color:${esc(vars['--yellow'])};border-color:color-mix(in srgb,${esc(vars['--yellow'])} 50%,transparent);">Warn</span>
+          </div>
+          <div class="stb-preview-meta">${storeThemeEditorIndex >= 0 ? `#${storeThemeEditorIndex+1}` : 'New'} · ${draft.themeKey ? esc(draft.themeKey) : 'custom'}</div>
+        </div>
+      </div>
+
+      <div class="status-toolbar" style="margin-top:2px;">
         <button class="small-btn" style="border-color:var(--accent);color:var(--accent);" onclick="window.saveStoreDraft()">💾 Save Store</button>
       </div>
       <div id="store-fb-global" class="feedback"></div>
@@ -2358,6 +2248,33 @@ window.setStoreThemeEditorColor = function(key, value) {
   const hex = String(value || '').trim();
   if (/^#[0-9a-fA-F]{6}$/.test(hex)) storeThemeEditorDraft.customVars[key] = hex;
   renderGlobalStoreEditor();
+};
+
+window.setStoreThemeEditorColorLive = function(key, value) {
+  if (!storeThemeEditorDraft) return;
+  const hex = String(value || '').trim();
+  if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return;
+  storeThemeEditorDraft.customVars = storeThemeEditorDraft.customVars || { ...THEME_VARS_TEMPLATE };
+  storeThemeEditorDraft.customVars[key] = hex;
+  // Update preview card CSS vars directly without re-render
+  const previewCard = document.getElementById('stb-preview-card');
+  if (previewCard) {
+    const varMap = { '--bg':'--stc-bg', '--accent':'--stc-accent', '--text':'--stc-text-main', '--bg3':'--stc-footer-bg', '--border':'--stc-border' };
+    if (varMap[key]) previewCard.style.setProperty(varMap[key], hex);
+  }
+  // Update the swatch color square directly
+  const colorInput = document.getElementById(`stb-color-${key.replace('--','')}`);
+  if (colorInput) {
+    const swatchColor = colorInput.closest('.stb-swatch-btn')?.querySelector('.stb-swatch-color');
+    if (swatchColor) swatchColor.style.background = hex;
+  }
+  // Update palette swatches
+  const paletteKeys = ['--bg','--bg2','--bg3','--accent','--text'];
+  const pIdx = paletteKeys.indexOf(key);
+  if (pIdx >= 0) {
+    const palettes = document.querySelectorAll('.stb-palette-swatch');
+    if (palettes[pIdx]) palettes[pIdx].style.background = hex;
+  }
 };
 
 window.loadStoreEditorFromBuiltin = function() {
