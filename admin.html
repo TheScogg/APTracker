@@ -1114,7 +1114,7 @@ function getNextAvailableBuiltinThemeKey(excludeIndex = -1) {
       .map(item => String(item.themeKey))
   );
   const next = ADMIN_THEME_OPTIONS.find(opt => !used.has(opt.key));
-  return next?.key || ADMIN_THEME_OPTIONS[0]?.key || null;
+  return next?.key || null;
 }
 
 async function loadUserDirectory() {
@@ -1392,8 +1392,8 @@ function renderGamificationEditor(plantId, plantName) {
 function renderStoreEditor() {
   const items = (globalStoreDraft || []).slice().sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
   globalStoreDraft = items;
-  const activeThemeKey = storeThemeEditorDraft?.themeKey || ADMIN_THEME_OPTIONS[0]?.key || '';
-  const themeOpts = ADMIN_THEME_OPTIONS.map(t => `<option value="${esc(t.key)}" ${t.key === activeThemeKey ? 'selected' : ''}>${esc(t.label)}</option>`).join('');
+  const activeThemeKey = storeThemeEditorDraft?.themeKey || '';
+  const themeOpts = [`<option value="" ${activeThemeKey ? '' : 'selected'}>Custom Theme</option>`, ...ADMIN_THEME_OPTIONS.map(t => `<option value="${esc(t.key)}" ${t.key === activeThemeKey ? 'selected' : ''}>${esc(t.label)}</option>`)] .join('');
   const rows = items.map((item, idx) => `
     <tr>
       <td style="font-weight:700;font-size:12px;">${idx + 1}. ${esc(item.name)}<div style="font-size:10px;color:var(--text2);">${item.themeKey ? 'Built-in: ' + esc(item.themeKey) : 'Custom'}</div></td>
@@ -1415,8 +1415,8 @@ function renderStoreEditor() {
   const draft = storeThemeEditorDraft || {
     id: `storeitem_${Date.now()}`,
     type: 'theme',
-    themeKey: ADMIN_THEME_OPTIONS[0]?.key || null,
-    customVars: { ...THEME_VARS_TEMPLATE, ...(BUILTIN_THEME_VARS[ADMIN_THEME_OPTIONS[0]?.key] || {}) },
+    themeKey: null,
+    customVars: { ...THEME_VARS_TEMPLATE },
     name: '',
     price: 50,
     isActive: true
@@ -2283,6 +2283,10 @@ window.openStoreThemeEditor = function(idx) {
 
 window.startNewStoreTheme = function(mode = 'custom') {
   const themeKey = mode === 'builtin' ? getNextAvailableBuiltinThemeKey() : null;
+  if (mode === 'builtin' && !themeKey) {
+    feedback('store-fb-global', 'error', 'All built-in themes are already in the store. Start a custom theme instead.');
+    mode = 'custom';
+  }
   storeThemeEditorIndex = -1;
   storeThemeEditorDraft = {
     id: mode === 'builtin' && themeKey ? `theme_${themeKey}` : `storeitem_${Date.now()}`,
@@ -2324,6 +2328,8 @@ window.setStoreThemeEditorField = function(field, value) {
       storeThemeEditorDraft.id = `theme_${storeThemeEditorDraft.themeKey}`;
       storeThemeEditorDraft.customVars = { ...THEME_VARS_TEMPLATE, ...(BUILTIN_THEME_VARS[nextKey] || {}), ...(storeThemeEditorDraft.customVars || {}) };
       if (!storeThemeEditorDraft.name) storeThemeEditorDraft.name = DEFAULT_STORE_ITEMS.find(i => i.themeKey === nextKey)?.name || 'Theme';
+    } else if (!storeThemeEditorDraft.id || String(storeThemeEditorDraft.id).startsWith('theme_')) {
+      storeThemeEditorDraft.id = `storeitem_${Date.now()}`;
     }
   }
   renderGlobalStoreEditor();
