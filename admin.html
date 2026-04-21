@@ -1107,6 +1107,16 @@ function normalizeGlobalStoreItems(rawItems) {
   return [...map.values()].sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
 }
 
+function getNextAvailableBuiltinThemeKey(excludeIndex = -1) {
+  const used = new Set(
+    (globalStoreDraft || [])
+      .filter((item, idx) => idx !== excludeIndex && item?.themeKey)
+      .map(item => String(item.themeKey))
+  );
+  const next = ADMIN_THEME_OPTIONS.find(opt => !used.has(opt.key));
+  return next?.key || ADMIN_THEME_OPTIONS[0]?.key || null;
+}
+
 async function loadUserDirectory() {
   const usersSnap = await getDocs(collection(db, 'userLookup'));
   const deduped = new Map();
@@ -1656,17 +1666,18 @@ function renderGlobalStoreEditor() {
   const container = document.getElementById('store-editor-container');
   if (!container) return;
   if (!storeThemeEditorDraft) {
-    const first = globalStoreDraft?.[0];
-    if (first) {
-      storeThemeEditorIndex = 0;
-      storeThemeEditorDraft = {
-        ...first,
-        customVars: { ...THEME_VARS_TEMPLATE, ...(first.themeKey ? (BUILTIN_THEME_VARS[first.themeKey] || {}) : {}), ...(first.customVars || {}) }
-      };
-    } else {
-      storeThemeEditorIndex = -1;
-      storeThemeEditorDraft = null;
-    }
+    const themeKey = getNextAvailableBuiltinThemeKey();
+    storeThemeEditorIndex = -1;
+    storeThemeEditorDraft = {
+      id: themeKey ? `theme_${themeKey}` : `storeitem_${Date.now()}`,
+      type: 'theme',
+      themeKey,
+      customVars: { ...THEME_VARS_TEMPLATE, ...(themeKey ? (BUILTIN_THEME_VARS[themeKey] || {}) : {}) },
+      name: themeKey ? (DEFAULT_STORE_ITEMS.find(i => i.themeKey === themeKey)?.name || 'Theme') : '',
+      price: 50,
+      isActive: true,
+      order: globalStoreDraft.length
+    };
   }
   container.innerHTML = renderStoreEditor();
 }
@@ -2271,10 +2282,10 @@ window.openStoreThemeEditor = function(idx) {
 };
 
 window.startNewStoreTheme = function(mode = 'custom') {
-  const themeKey = ADMIN_THEME_OPTIONS[0]?.key || null;
+  const themeKey = mode === 'builtin' ? getNextAvailableBuiltinThemeKey() : null;
   storeThemeEditorIndex = -1;
   storeThemeEditorDraft = {
-    id: mode === 'builtin' ? `theme_${themeKey}` : `storeitem_${Date.now()}`,
+    id: mode === 'builtin' && themeKey ? `theme_${themeKey}` : `storeitem_${Date.now()}`,
     type: 'theme',
     themeKey: mode === 'builtin' ? themeKey : null,
     customVars: { ...THEME_VARS_TEMPLATE, ...(mode === 'builtin' && themeKey ? (BUILTIN_THEME_VARS[themeKey] || {}) : {}) },
