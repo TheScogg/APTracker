@@ -520,7 +520,10 @@
   <div class="modal messaging-modal-shell">
     <div class="messaging-modal-header">
       <div class="modal-title" style="margin:0;">💬 Team Messaging</div>
-      <button class="notes-modal-b-close" onclick="closeMessagingModal()">✕ close</button>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="sort-dropdown-btn" onclick="createMessagingDm()">+ New DM</button>
+        <button class="notes-modal-b-close" onclick="closeMessagingModal()">✕ close</button>
+      </div>
     </div>
     <div class="messaging-modal-body">
       <aside class="messaging-list-panel">
@@ -534,6 +537,7 @@
           <textarea id="messaging-input" placeholder="Write a message…"></textarea>
           <button class="sort-dropdown-btn" onclick="sendMessagingModalMessage()">Send</button>
         </div>
+        <div id="messaging-error" class="messaging-error"></div>
       </section>
     </div>
   </div>

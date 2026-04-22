@@ -19,6 +19,7 @@ This phase adds the first implementation pieces for plant-scoped conversations:
 ## Notes
 
 - Phase 1.1 now includes a minimal messaging modal UI (conversation list + thread + composer) wired to the conversation APIs.
+- Messaging modal includes a `+ New DM` action (prompt-based member picker) so users can create a conversation before sending.
 - Existing Press Notes continue to work unchanged.
 - APIs are exposed on `window` to support progressive UI wiring.
 - DM creation dedupes existing active 1:1 conversations for the same two users.

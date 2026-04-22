@@ -6220,6 +6220,11 @@ const _messagingState = {
   activeConversationId: null
 };
 
+function _messagingSetError(message = '') {
+  const el = document.getElementById('messaging-error');
+  if (el) el.textContent = message;
+}
+
 function _messagingConversationName(conv) {
   if (!conv) return 'Conversation';
   if (conv.type === 'dm') return conv.title || 'Direct Message';
@@ -6285,6 +6290,7 @@ function _selectMessagingConversation(conversationId) {
 
 window.openMessagingModal = () => {
   document.getElementById('messaging-modal')?.classList.add('visible');
+  _messagingSetError('');
   document.getElementById('messaging-thread-title').textContent = 'Loading conversations…';
   document.getElementById('messaging-thread-messages').innerHTML = '<div class="messaging-empty">Loading…</div>';
   watchConversations(conversations => {
@@ -6311,9 +6317,57 @@ window.closeMessagingModal = () => {
 window.sendMessagingModalMessage = async () => {
   const ta = document.getElementById('messaging-input');
   const text = String(ta?.value || '').trim();
-  if (!text || !_messagingState.activeConversationId) return;
-  await sendConversationMessage(_messagingState.activeConversationId, text);
-  ta.value = '';
+  if (!text) return;
+  if (!_messagingState.activeConversationId) {
+    _messagingSetError('Select or create a conversation first.');
+    return;
+  }
+  try {
+    _messagingSetError('');
+    await sendConversationMessage(_messagingState.activeConversationId, text);
+    ta.value = '';
+  } catch (err) {
+    console.warn('sendMessagingModalMessage failed', err);
+    _messagingSetError('Could not send message. Check rules/index deployment and membership.');
+  }
+};
+
+window.createMessagingDm = async () => {
+  _messagingSetError('');
+  if (!currentPlantId || !currentUser?.uid) {
+    _messagingSetError('Sign in and select a plant before creating a DM.');
+    return;
+  }
+  try {
+    const membersSnap = await getDocs(collection(db, 'plants', currentPlantId, 'members'));
+    const options = membersSnap.docs
+      .map(d => ({ uid: d.id, ...d.data() }))
+      .filter(m => m.uid !== currentUser.uid && m.isActive !== false)
+      .sort((a, b) => String(a.displayName || a.name || a.email || a.uid).localeCompare(String(b.displayName || b.name || b.email || b.uid)));
+
+    if (!options.length) {
+      _messagingSetError('No other active members found for this plant.');
+      return;
+    }
+
+    const menu = options
+      .slice(0, 20)
+      .map((m, i) => `${i + 1}. ${m.displayName || m.name || m.email || m.uid}`)
+      .join('\n');
+
+    const picked = window.prompt(`Start DM with which member?\n\n${menu}\n\nEnter a number (1-${Math.min(options.length, 20)}).`);
+    const idx = Number(picked) - 1;
+    if (!Number.isInteger(idx) || idx < 0 || idx >= Math.min(options.length, 20)) return;
+
+    const target = options[idx];
+    const conversationId = await createConversation({ type: 'dm', memberIds: [target.uid] });
+    _messagingState.activeConversationId = conversationId;
+    _renderMessagingConversations();
+    _selectMessagingConversation(conversationId);
+  } catch (err) {
+    console.warn('createMessagingDm failed', err);
+    _messagingSetError('Could not create DM. Check Firestore rules and indexes deployment.');
+  }
 };
 
 document.getElementById('messaging-modal')?.addEventListener('click', e => {
