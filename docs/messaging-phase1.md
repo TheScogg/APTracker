@@ -25,3 +25,4 @@ This phase adds the first implementation pieces for plant-scoped conversations:
 - DM creation dedupes existing active 1:1 conversations for the same two users.
 - Conversation + member docs are created in a single batch write for atomic setup.
 - Rules support same-batch conversation bootstrap (using before/after doc checks) so DM creation can create conversation + members in one commit.
+- Conversation read access supports both member docs and `conversation.memberIds` to avoid list-listener permission failures during member-doc lag/recovery.

@@ -70,6 +70,15 @@ service cloud.firestore {
       return signedIn() && exists(conversationMemberPath(plantId, conversationId, currentUid()));
     }
 
+    function isConversationParticipant(plantId, conversationId) {
+      return signedIn()
+        && (isConversationMember(plantId, conversationId)
+          || (exists(conversationPath(plantId, conversationId))
+              && get(conversationPath(plantId, conversationId)).data.memberIds.hasAny([currentUid()]))
+          || (existsAfter(conversationPath(plantId, conversationId))
+              && getAfter(conversationPath(plantId, conversationId)).data.memberIds.hasAny([currentUid()])));
+    }
+
     function isConversationCreator(plantId, conversationId) {
       return signedIn()
         && ((exists(conversationPath(plantId, conversationId))
@@ -216,13 +225,15 @@ service cloud.firestore {
 
       // ── Conversations ──
       match /conversations/{conversationId} {
-        allow read: if isPlantMember(plantId) && isConversationMember(plantId, conversationId);
+        allow read: if isPlantMember(plantId)
+                    && (resource.data.memberIds.hasAny([currentUid()])
+                        || isConversationMember(plantId, conversationId));
         allow create: if isPlantMember(plantId)
                       && request.resource.data.plantId == plantId
                       && request.resource.data.memberIds is list
                       && request.resource.data.memberIds.size() >= 2
                       && request.resource.data.memberIds.hasAny([currentUid()]);
-        allow update: if isConversationMember(plantId, conversationId)
+        allow update: if isConversationParticipant(plantId, conversationId)
                       && request.resource.data.plantId == resource.data.plantId
                       && request.resource.data.createdAt == resource.data.createdAt
                       && request.resource.data.createdBy == resource.data.createdBy
@@ -233,8 +244,8 @@ service cloud.firestore {
         allow delete: if isAdmin(plantId);
 
         match /messages/{messageId} {
-          allow read: if isConversationMember(plantId, conversationId);
-          allow create: if isConversationMember(plantId, conversationId)
+          allow read: if isConversationParticipant(plantId, conversationId);
+          allow create: if isConversationParticipant(plantId, conversationId)
                         && request.resource.data.sender.uid == currentUid()
                         && request.resource.data.plantId == plantId
                         && request.resource.data.conversationId == conversationId;
@@ -243,7 +254,7 @@ service cloud.firestore {
         }
 
         match /members/{userId} {
-          allow read: if isConversationMember(plantId, conversationId);
+          allow read: if isConversationParticipant(plantId, conversationId);
           allow create: if isAdmin(plantId)
                         || (isPlantMember(plantId)
                             && isSelf(userId)

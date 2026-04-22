@@ -6122,7 +6122,7 @@ window.createConversation = async ({ type = 'group', title = '', memberIds = [],
   return conversationRef.id;
 };
 
-window.watchConversations = (onConversations, { type = null } = {}) => {
+window.watchConversations = (onConversations, { type = null } = {}, onError = null) => {
   _requireChatContext();
   if (_conversationListUnsubscribe) {
     _conversationListUnsubscribe();
@@ -6138,7 +6138,10 @@ window.watchConversations = (onConversations, { type = null } = {}) => {
   _conversationListUnsubscribe = onSnapshot(q, snap => {
     const conversations = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     if (typeof onConversations === 'function') onConversations(conversations);
-  }, err => console.warn('conversations listener error', err));
+  }, err => {
+    console.warn('conversations listener error', err);
+    if (typeof onError === 'function') onError(err);
+  });
   return _conversationListUnsubscribe;
 };
 
@@ -6305,6 +6308,10 @@ window.openMessagingModal = () => {
       document.getElementById('messaging-thread-title').textContent = 'No conversations';
       document.getElementById('messaging-thread-messages').innerHTML = '<div class="messaging-empty">Create a conversation to begin messaging.</div>';
     }
+  }, {}, err => {
+    _messagingSetError(`Could not load conversations: ${err?.message || 'permission denied'}`);
+    document.getElementById('messaging-thread-title').textContent = 'Messaging unavailable';
+    document.getElementById('messaging-thread-messages').innerHTML = '<div class="messaging-empty">Conversation access is currently denied. Verify Firestore rules deployment.</div>';
   });
 };
 
