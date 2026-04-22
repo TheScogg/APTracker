@@ -580,6 +580,11 @@ const THEME_EDITOR_FIELDS = [
   ['--green', 'Success'], ['--red', 'Danger'], ['--blue', 'Info'], ['--yellow', 'Warning'], ['--orange', 'Orange']
 ];
 
+const THEME_STORAGE_KEY = 'pressTrackerTheme';
+const CUSTOM_THEMES_STORAGE_KEY = 'apTracker_customThemes';
+const FALLBACK_THEME_KEY = 'midnight';
+let currentThemeSelection = FALLBACK_THEME_KEY;
+
 const THEME_ITEM_JSON_SCHEMA = {
   type: 'object',
   required: ['id', 'type', 'name', 'price', 'isActive', 'order', 'customVars'],
@@ -613,6 +618,45 @@ function sanitizeThemeVars(rawVars) {
   });
   return merged;
 }
+
+function readCustomThemeStorage() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(CUSTOM_THEMES_STORAGE_KEY) || '{"customThemes":[]}');
+    return Array.isArray(raw?.customThemes) ? raw.customThemes : [];
+  } catch {
+    return [];
+  }
+}
+
+function resolveThemeVars(themeSelection, storeItems = []) {
+  const selected = String(themeSelection || FALLBACK_THEME_KEY).trim() || FALLBACK_THEME_KEY;
+  if (selected.startsWith('custom_')) {
+    const customId = selected.slice('custom_'.length);
+    const custom = readCustomThemeStorage().find(item => String(item?.id || '') === customId);
+    if (custom?.vars) return sanitizeThemeVars(custom.vars);
+  }
+  if (selected.startsWith('storetheme_')) {
+    const itemId = selected.slice('storetheme_'.length);
+    const storeTheme = (storeItems || []).find(item => item?.id === itemId && item?.type === 'theme' && item?.customVars);
+    if (storeTheme?.customVars) return sanitizeThemeVars(storeTheme.customVars);
+  }
+  return sanitizeThemeVars(BUILTIN_THEME_VARS[selected] || BUILTIN_THEME_VARS[FALLBACK_THEME_KEY]);
+}
+
+function applyThemeVarsToAdmin(vars) {
+  const root = document.documentElement;
+  THEME_EDITOR_FIELDS.forEach(([key]) => {
+    root.style.setProperty(key, vars[key] || THEME_VARS_TEMPLATE[key]);
+  });
+}
+
+function syncAdminTheme(themeSelection, storeItems = []) {
+  currentThemeSelection = String(themeSelection || FALLBACK_THEME_KEY).trim() || FALLBACK_THEME_KEY;
+  const vars = resolveThemeVars(currentThemeSelection, storeItems);
+  applyThemeVarsToAdmin(vars);
+}
+
+syncAdminTheme(localStorage.getItem(THEME_STORAGE_KEY) || FALLBACK_THEME_KEY);
 
 function validateThemeItemCandidate(candidate, fallbackOrder = 0) {
   if (!candidate || typeof candidate !== 'object') return { ok: false, error: 'Theme payload is not an object.' };
@@ -962,6 +1006,14 @@ async function doSignOut() {
 async function loadUserPlants() {
   const userSnap = await getDoc(doc(db, 'users', currentUser.uid));
   const userData = userSnap.exists() ? userSnap.data() : {};
+  const preferredTheme = String(userData?.themePrefs?.activeTheme || '').trim();
+  if (preferredTheme) {
+    currentThemeSelection = preferredTheme;
+    try { localStorage.setItem(THEME_STORAGE_KEY, preferredTheme); } catch {}
+  } else {
+    currentThemeSelection = localStorage.getItem(THEME_STORAGE_KEY) || FALLBACK_THEME_KEY;
+  }
+  syncAdminTheme(currentThemeSelection, globalStoreDraft);
   const plantIds = Array.isArray(userData.plantIds) ? userData.plantIds : [];
 
   const plantDocs = await Promise.all(plantIds.map(id => getDoc(doc(db, 'plants', id))));
@@ -1022,6 +1074,7 @@ async function loadGlobalStoreDraft() {
   }
   storeThemeEditorDraft = null;
   storeThemeEditorIndex = -1;
+  syncAdminTheme(currentThemeSelection, globalStoreDraft);
 }
 
 function normalizeGlobalStoreItems(rawItems) {
