@@ -1567,7 +1567,21 @@ function normalizeStoreItems(rawItems) {
   });
   incoming.forEach((item, idx) => {
     if (!item || typeof item !== 'object') return;
-    if ((item.type || 'theme') !== 'theme') return;
+    const type = String(item.type || 'theme');
+    if (type !== 'theme') {
+      const id = String(item.id || '').trim() || `storeitem_${idx}`;
+      byId.set(id, {
+        ...(byId.get(id) || {}),
+        ...item,
+        id,
+        type,
+        name: String(item.name || 'Store Item'),
+        price: Math.max(0, Number(item.price || 0)),
+        isActive: item.isActive !== false,
+        order: Number.isFinite(Number(item.order)) ? Number(item.order) : idx
+      });
+      return;
+    }
     const normalized = normalizeThemeItem(item, idx);
     byId.set(normalized.id, {
       ...(byId.get(normalized.id) || {}),
