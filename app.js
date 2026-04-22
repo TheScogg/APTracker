@@ -5993,7 +5993,7 @@ document.querySelectorAll('.modal').forEach(modal => {
   modal.addEventListener('click', e => e.stopPropagation());
 });
 
-document.addEventListener('keydown', e=>{ if(e.key==='Escape'){closeModal();closeEditModal();closeResolveModal();closeReopenModal();closeLightbox();closeSortDropdown();closeExportModal();closeSerialModal();closeEditStatusModal();closeNotesModal();closeConversation();closeAppearanceModal();closeThemeEditor();} });
+document.addEventListener('keydown', e=>{ if(e.key==='Escape'){closeModal();closeEditModal();closeResolveModal();closeReopenModal();closeLightbox();closeSortDropdown();closeExportModal();closeSerialModal();closeEditStatusModal();closeNotesModal();window.closeMessagingModal?.();window.closeConversation?.();closeAppearanceModal();closeThemeEditor();} });
 
 document.getElementById('theme-editor-modal').addEventListener('click', e => {
   if (e.target !== document.getElementById('theme-editor-modal')) return;
@@ -6048,7 +6048,8 @@ window.confirmSerialModal = async () => {
 document.getElementById('serial-modal')?.addEventListener('click', e => { if(e.target===document.getElementById('serial-modal')) closeSerialModal(); });
 
 // ── CONVERSATIONS (DM + GROUP + PRESS CHANNELS) ──
-let _conversationUnsubscribe = null;
+let _conversationListUnsubscribe = null;
+let _conversationThreadUnsubscribe = null;
 
 function _conversationType(inputType) {
   const normalized = String(inputType || 'group').trim().toLowerCase();
@@ -6069,6 +6070,25 @@ window.createConversation = async ({ type = 'group', title = '', memberIds = [],
   if (normalizedType === 'dm' && uniqueMembers.length !== 2) throw new Error('DM conversations must have exactly two members.');
   if (normalizedType === 'group' && !String(title || '').trim()) throw new Error('Group conversations require a title.');
 
+  if (normalizedType === 'dm') {
+    const dmQuery = query(
+      conversationsCol(),
+      where('type', '==', 'dm'),
+      where('memberIds', 'array-contains', actor.uid),
+      limit(20)
+    );
+    const dmSnap = await getDocs(dmQuery);
+    const existing = dmSnap.docs.find(d => {
+      const data = d.data() || {};
+      const ids = Array.isArray(data.memberIds) ? data.memberIds : [];
+      return data.memberCount === 2
+        && !data.isArchived
+        && ids.includes(uniqueMembers[0])
+        && ids.includes(uniqueMembers[1]);
+    });
+    if (existing) return existing.id;
+  }
+
   const payload = {
     type: normalizedType,
     title: normalizedType === 'dm' ? null : String(title || '').trim(),
@@ -6083,33 +6103,58 @@ window.createConversation = async ({ type = 'group', title = '', memberIds = [],
     isArchived: false
   };
 
-  const conversationRef = await addDoc(conversationsCol(), payload);
-  await Promise.all(uniqueMembers.map(uid => setDoc(conversationMemberDoc(conversationRef.id, uid), {
-    userId: uid,
-    role: uid === actor.uid ? 'owner' : 'member',
-    joinedAt: serverTimestamp(),
-    lastReadAt: serverTimestamp(),
-    lastReadMessageId: null,
-    unreadCount: 0,
-    muted: false
-  }, { merge: true })));
+  const conversationRef = doc(conversationsCol());
+  const batch = writeBatch(db);
+  batch.set(conversationRef, payload);
+  uniqueMembers.forEach(uid => {
+    batch.set(conversationMemberDoc(conversationRef.id, uid), {
+      userId: uid,
+      role: uid === actor.uid ? 'owner' : 'member',
+      joinedAt: serverTimestamp(),
+      lastReadAt: serverTimestamp(),
+      lastReadMessageId: null,
+      unreadCount: 0,
+      muted: false
+    }, { merge: true });
+  });
+  await batch.commit();
 
   return conversationRef.id;
+};
+
+window.watchConversations = (onConversations, { type = null } = {}) => {
+  _requireChatContext();
+  if (_conversationListUnsubscribe) {
+    _conversationListUnsubscribe();
+    _conversationListUnsubscribe = null;
+  }
+  const constraints = [
+    where('memberIds', 'array-contains', currentUser.uid),
+    orderBy('lastMessageAt', 'desc')
+  ];
+  const normalizedType = type ? _conversationType(type) : null;
+  if (normalizedType) constraints.unshift(where('type', '==', normalizedType));
+  const q = query(conversationsCol(), ...constraints);
+  _conversationListUnsubscribe = onSnapshot(q, snap => {
+    const conversations = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (typeof onConversations === 'function') onConversations(conversations);
+  }, err => console.warn('conversations listener error', err));
+  return _conversationListUnsubscribe;
 };
 
 window.openConversation = (conversationId, onMessages) => {
   _requireChatContext();
   if (!conversationId) throw new Error('conversationId is required.');
-  if (_conversationUnsubscribe) {
-    _conversationUnsubscribe();
-    _conversationUnsubscribe = null;
+  if (_conversationThreadUnsubscribe) {
+    _conversationThreadUnsubscribe();
+    _conversationThreadUnsubscribe = null;
   }
   const q = query(conversationMessagesCol(conversationId), orderBy('createdAt', 'asc'));
-  _conversationUnsubscribe = onSnapshot(q, snap => {
+  _conversationThreadUnsubscribe = onSnapshot(q, snap => {
     const messages = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     if (typeof onMessages === 'function') onMessages(messages);
   }, err => console.warn('conversation listener error', err));
-  return _conversationUnsubscribe;
+  return _conversationThreadUnsubscribe;
 };
 
 window.sendConversationMessage = async (conversationId, text, { mentions = [] } = {}) => {
@@ -6162,11 +6207,125 @@ window.markConversationRead = async (conversationId, lastReadMessageId = null) =
 };
 
 window.closeConversation = () => {
-  if (_conversationUnsubscribe) {
-    _conversationUnsubscribe();
-    _conversationUnsubscribe = null;
-  }
+  if (_conversationThreadUnsubscribe) { _conversationThreadUnsubscribe(); _conversationThreadUnsubscribe = null; }
 };
+
+window.closeConversationList = () => {
+  if (_conversationListUnsubscribe) { _conversationListUnsubscribe(); _conversationListUnsubscribe = null; }
+};
+
+// ── MESSAGING MODAL (PHASE 1.1 UI) ──
+const _messagingState = {
+  conversations: [],
+  activeConversationId: null
+};
+
+function _messagingConversationName(conv) {
+  if (!conv) return 'Conversation';
+  if (conv.type === 'dm') return conv.title || 'Direct Message';
+  if (conv.type === 'press') return conv.title || `Press ${conv.pressId || ''}`.trim();
+  return conv.title || 'Group Chat';
+}
+
+function _renderMessagingConversations() {
+  const list = document.getElementById('messaging-conversations-list');
+  if (!list) return;
+  list.innerHTML = '';
+  if (!_messagingState.conversations.length) {
+    list.innerHTML = '<div class="messaging-empty">No conversations yet.</div>';
+    return;
+  }
+  _messagingState.conversations.forEach(conv => {
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'messaging-conv-item' + (_messagingState.activeConversationId === conv.id ? ' active' : '');
+    row.onclick = () => _selectMessagingConversation(conv.id);
+    const lastText = conv.lastMessage?.textPreview || 'No messages yet';
+    row.innerHTML = `<div class="messaging-conv-name">${esc(_messagingConversationName(conv))}</div><div class="messaging-conv-preview">${esc(lastText)}</div>`;
+    list.appendChild(row);
+  });
+}
+
+function _renderMessagingMessages(messages) {
+  const panel = document.getElementById('messaging-thread-messages');
+  if (!panel) return;
+  panel.innerHTML = '';
+  if (!messages.length) {
+    panel.innerHTML = '<div class="messaging-empty">No messages yet. Start the conversation.</div>';
+    return;
+  }
+  messages.forEach(msg => {
+    const mine = msg.sender?.uid === currentUser?.uid;
+    const item = document.createElement('div');
+    item.className = 'messaging-msg' + (mine ? ' mine' : '');
+    const meta = document.createElement('div');
+    meta.className = 'messaging-msg-meta';
+    meta.textContent = `${mine ? 'You' : (msg.sender?.name || 'Unknown')} · ${_relativeTime(msg.createdAt)}`;
+    const text = document.createElement('div');
+    text.className = 'messaging-msg-text';
+    text.textContent = msg.text || '';
+    item.appendChild(meta);
+    item.appendChild(text);
+    panel.appendChild(item);
+  });
+  panel.scrollTop = panel.scrollHeight;
+}
+
+function _selectMessagingConversation(conversationId) {
+  _messagingState.activeConversationId = conversationId;
+  _renderMessagingConversations();
+  const selected = _messagingState.conversations.find(c => c.id === conversationId);
+  document.getElementById('messaging-thread-title').textContent = _messagingConversationName(selected);
+  openConversation(conversationId, messages => {
+    _renderMessagingMessages(messages);
+    const lastId = messages[messages.length - 1]?.id || null;
+    markConversationRead(conversationId, lastId).catch(err => console.warn('markConversationRead failed', err));
+  });
+}
+
+window.openMessagingModal = () => {
+  document.getElementById('messaging-modal')?.classList.add('visible');
+  document.getElementById('messaging-thread-title').textContent = 'Loading conversations…';
+  document.getElementById('messaging-thread-messages').innerHTML = '<div class="messaging-empty">Loading…</div>';
+  watchConversations(conversations => {
+    _messagingState.conversations = conversations;
+    if (!_messagingState.activeConversationId && conversations.length) {
+      _messagingState.activeConversationId = conversations[0].id;
+    }
+    _renderMessagingConversations();
+    if (_messagingState.activeConversationId) {
+      _selectMessagingConversation(_messagingState.activeConversationId);
+    } else {
+      document.getElementById('messaging-thread-title').textContent = 'No conversations';
+      document.getElementById('messaging-thread-messages').innerHTML = '<div class="messaging-empty">Create a conversation to begin messaging.</div>';
+    }
+  });
+};
+
+window.closeMessagingModal = () => {
+  document.getElementById('messaging-modal')?.classList.remove('visible');
+  closeConversation();
+  closeConversationList();
+};
+
+window.sendMessagingModalMessage = async () => {
+  const ta = document.getElementById('messaging-input');
+  const text = String(ta?.value || '').trim();
+  if (!text || !_messagingState.activeConversationId) return;
+  await sendConversationMessage(_messagingState.activeConversationId, text);
+  ta.value = '';
+};
+
+document.getElementById('messaging-modal')?.addEventListener('click', e => {
+  if (e.target === document.getElementById('messaging-modal')) closeMessagingModal();
+});
+
+document.getElementById('messaging-input')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessagingModalMessage();
+  }
+});
 
 // ── PRESS NOTES ──
 // Toggle between 'a' (Logbook) and 'b' (Team Channel) to switch prototypes

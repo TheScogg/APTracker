@@ -62,8 +62,18 @@ service cloud.firestore {
       return /databases/$(database)/documents/plants/$(plantId)/conversations/$(conversationId)/members/$(userId);
     }
 
+    function conversationPath(plantId, conversationId) {
+      return /databases/$(database)/documents/plants/$(plantId)/conversations/$(conversationId);
+    }
+
     function isConversationMember(plantId, conversationId) {
       return signedIn() && exists(conversationMemberPath(plantId, conversationId, currentUid()));
+    }
+
+    function isConversationCreator(plantId, conversationId) {
+      return signedIn()
+        && exists(conversationPath(plantId, conversationId))
+        && get(conversationPath(plantId, conversationId)).data.createdBy.uid == currentUid();
     }
 
     // Only the plantIds field is being touched (used when adding/removing a user from a plant).
@@ -198,7 +208,7 @@ service cloud.firestore {
       // ── Conversations ──
       match /conversations/{conversationId} {
         allow read: if isPlantMember(plantId) && isConversationMember(plantId, conversationId);
-        allow create: if isEditorOrAbove(plantId)
+        allow create: if isPlantMember(plantId)
                       && request.resource.data.plantId == plantId
                       && request.resource.data.memberIds is list
                       && request.resource.data.memberIds.size() >= 2
@@ -206,7 +216,11 @@ service cloud.firestore {
         allow update: if isConversationMember(plantId, conversationId)
                       && request.resource.data.plantId == resource.data.plantId
                       && request.resource.data.createdAt == resource.data.createdAt
-                      && request.resource.data.createdBy == resource.data.createdBy;
+                      && request.resource.data.createdBy == resource.data.createdBy
+                      && request.resource.data.memberIds == resource.data.memberIds
+                      && request.resource.data.memberCount == resource.data.memberCount
+                      && request.resource.data.type == resource.data.type
+                      && request.resource.data.pressId == resource.data.pressId;
         allow delete: if isAdmin(plantId);
 
         match /messages/{messageId} {
@@ -221,8 +235,17 @@ service cloud.firestore {
 
         match /members/{userId} {
           allow read: if isConversationMember(plantId, conversationId);
-          allow create, update: if isAdmin(plantId)
-                                || (isSelf(userId) && isConversationMember(plantId, conversationId));
+          allow create: if isAdmin(plantId)
+                        || (isPlantMember(plantId)
+                            && isSelf(userId)
+                            && exists(conversationPath(plantId, conversationId))
+                            && get(conversationPath(plantId, conversationId)).data.memberIds.hasAny([userId]))
+                        || (isPlantMember(plantId)
+                            && isConversationCreator(plantId, conversationId)
+                            && exists(conversationPath(plantId, conversationId))
+                            && get(conversationPath(plantId, conversationId)).data.memberIds.hasAny([userId]));
+          allow update: if isAdmin(plantId)
+                        || (isSelf(userId) && isConversationMember(plantId, conversationId));
           allow delete: if isAdmin(plantId);
         }
       }
