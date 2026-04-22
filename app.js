@@ -1967,6 +1967,9 @@ let userXpSpent = 0;
 function userSpendableXp() { return Math.max(0, userLifetimeXp - userXpSpent); }
 
 const DEFAULT_STORE_ITEMS = [
+  // Canonical store catalog lives here. normalizeStoreItems() seeds these defaults
+  // before applying any Firestore config, so adding a new theme here does not
+  // require running scripts/add-store-themes.mjs.
   { id: 'theme_midnight',   type: 'theme', themeKey: 'midnight',   customVars: null, name: 'Midnight',   price: 0,   isActive: true, order: 0 },
   { id: 'theme_arctic',     type: 'theme', themeKey: 'arctic',     customVars: null, name: 'Arctic',     price: 0,   isActive: true, order: 1 },
   { id: 'theme_forest',     type: 'theme', themeKey: 'forest',     customVars: null, name: 'Forest',     price: 0,   isActive: true, order: 2 },
