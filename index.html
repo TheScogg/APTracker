@@ -529,6 +529,29 @@
     <div class="messaging-modal-body">
       <aside class="messaging-list-panel">
         <div class="messaging-list-title">Conversations</div>
+        <div class="messaging-controls">
+          <div class="messaging-row">
+            <select id="messaging-dm-select"></select>
+            <button class="sort-dropdown-btn" onclick="createMessagingDm()">Start DM</button>
+          </div>
+          <div class="messaging-row">
+            <input id="messaging-group-name" type="text" placeholder="Group name">
+          </div>
+          <details class="messaging-members-dropdown" id="messaging-group-members-wrap">
+            <summary>Select group members</summary>
+            <div class="messaging-members-list" id="messaging-group-members"></div>
+          </details>
+          <div class="messaging-row">
+            <button class="sort-dropdown-btn" onclick="createMessagingGroup()">Create Group</button>
+            <button class="sort-dropdown-btn" onclick="enableMessagingNotifications()">Enable Alerts</button>
+          </div>
+          <div class="messaging-row">
+            <select id="messaging-sort" onchange="setMessagingSort(this.value)">
+              <option value="recent">Sort: Most Recent</option>
+              <option value="name">Sort: Name</option>
+            </select>
+          </div>
+        </div>
         <div id="messaging-conversations-list" class="messaging-conversations-list"></div>
       </aside>
       <section class="messaging-thread-panel">
@@ -536,8 +559,11 @@
         <div id="messaging-thread-messages" class="messaging-thread-messages"></div>
         <div class="messaging-composer">
           <textarea id="messaging-input" placeholder="Write a message…"></textarea>
+          <input id="messaging-photo-input" type="file" accept="image/*" style="display:none;">
+          <button class="sort-dropdown-btn" onclick="document.getElementById('messaging-photo-input').click()">Photo</button>
           <button class="sort-dropdown-btn" onclick="sendMessagingModalMessage()">Send</button>
         </div>
+        <div id="messaging-photo-preview" class="messaging-photo-preview"></div>
         <div id="messaging-error" class="messaging-error"></div>
       </section>
     </div>

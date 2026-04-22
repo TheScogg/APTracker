@@ -6160,10 +6160,11 @@ window.openConversation = (conversationId, onMessages) => {
   return _conversationThreadUnsubscribe;
 };
 
-window.sendConversationMessage = async (conversationId, text, { mentions = [] } = {}) => {
+window.sendConversationMessage = async (conversationId, text, { mentions = [], attachments = [] } = {}) => {
   _requireChatContext();
   const trimmedText = String(text || '').trim();
-  if (!conversationId || !trimmedText) return null;
+  const normalizedAttachments = Array.isArray(attachments) ? attachments.filter(Boolean) : [];
+  if (!conversationId || (!trimmedText && !normalizedAttachments.length)) return null;
   const actor = currentActor();
 
   const messageRef = await addDoc(conversationMessagesCol(conversationId), {
@@ -6173,7 +6174,7 @@ window.sendConversationMessage = async (conversationId, text, { mentions = [] } 
     type: 'text',
     text: trimmedText,
     mentions: Array.from(new Set((mentions || []).map(v => String(v || '').trim()).filter(Boolean))),
-    attachments: [],
+    attachments: normalizedAttachments,
     createdAt: serverTimestamp(),
     editedAt: null,
     deletedAt: null
@@ -6181,7 +6182,7 @@ window.sendConversationMessage = async (conversationId, text, { mentions = [] } 
 
   await updateDoc(conversationDoc(conversationId), {
     lastMessage: {
-      textPreview: trimmedText.slice(0, 280),
+      textPreview: trimmedText ? trimmedText.slice(0, 280) : (normalizedAttachments.length ? '📷 Photo' : ''),
       senderUid: actor.uid,
       senderName: actor.name,
       at: serverTimestamp()
@@ -6220,12 +6221,40 @@ window.closeConversationList = () => {
 // ── MESSAGING MODAL (PHASE 1.1 UI) ──
 const _messagingState = {
   conversations: [],
-  activeConversationId: null
+  activeConversationId: null,
+  sortBy: 'recent',
+  selectedPhoto: null,
+  lastSeenByConversation: {}
 };
 
 function _messagingSetError(message = '') {
   const el = document.getElementById('messaging-error');
   if (el) el.textContent = message;
+}
+
+function _messagingSetPhotoPreview(file = null) {
+  _messagingState.selectedPhoto = file || null;
+  const wrap = document.getElementById('messaging-photo-preview');
+  if (!wrap) return;
+  if (!file) {
+    wrap.innerHTML = '';
+    return;
+  }
+  const objectUrl = URL.createObjectURL(file);
+  wrap.innerHTML = `<div>Photo selected: ${esc(file.name || 'image')}</div><img src="${objectUrl}" alt="selected photo preview">`;
+}
+
+function _messagingNotifyIncoming(message, conversationName) {
+  showGameToast(`💬 ${conversationName}: ${message.sender?.name || 'Someone'} sent a message`);
+  if (!('Notification' in window)) return;
+  if (Notification.permission !== 'granted') return;
+  try {
+    new Notification(conversationName, {
+      body: message.text || (message.attachments?.length ? 'Sent a photo' : 'New message')
+    });
+  } catch (e) {
+    console.warn('Notification failed', e);
+  }
 }
 
 function _messagingConversationName(conv) {
@@ -6239,11 +6268,21 @@ function _renderMessagingConversations() {
   const list = document.getElementById('messaging-conversations-list');
   if (!list) return;
   list.innerHTML = '';
-  if (!_messagingState.conversations.length) {
+  const conversations = [..._messagingState.conversations];
+  if (_messagingState.sortBy === 'name') {
+    conversations.sort((a, b) => _messagingConversationName(a).localeCompare(_messagingConversationName(b)));
+  } else {
+    conversations.sort((a, b) => {
+      const at = a.lastMessageAt?.toMillis?.() ?? a.lastMessageAt?.seconds * 1000 ?? 0;
+      const bt = b.lastMessageAt?.toMillis?.() ?? b.lastMessageAt?.seconds * 1000 ?? 0;
+      return bt - at;
+    });
+  }
+  if (!conversations.length) {
     list.innerHTML = '<div class="messaging-empty">No conversations yet.</div>';
     return;
   }
-  _messagingState.conversations.forEach(conv => {
+  conversations.forEach(conv => {
     const row = document.createElement('button');
     row.type = 'button';
     row.className = 'messaging-conv-item' + (_messagingState.activeConversationId === conv.id ? ' active' : '');
@@ -6273,7 +6312,15 @@ function _renderMessagingMessages(messages) {
     text.className = 'messaging-msg-text';
     text.textContent = msg.text || '';
     item.appendChild(meta);
-    item.appendChild(text);
+    if (msg.text) item.appendChild(text);
+    (msg.attachments || []).forEach(att => {
+      if (att.kind !== 'image' || !att.url) return;
+      const img = document.createElement('img');
+      img.className = 'messaging-msg-image';
+      img.src = att.url;
+      img.alt = att.fileName || 'message image';
+      item.appendChild(img);
+    });
     panel.appendChild(item);
   });
   panel.scrollTop = panel.scrollHeight;
@@ -6287,6 +6334,12 @@ function _selectMessagingConversation(conversationId) {
   openConversation(conversationId, messages => {
     _renderMessagingMessages(messages);
     const lastId = messages[messages.length - 1]?.id || null;
+    const lastMessage = messages[messages.length - 1] || null;
+    const seenId = _messagingState.lastSeenByConversation[conversationId] || null;
+    if (lastMessage && seenId && lastMessage.id !== seenId && lastMessage.sender?.uid !== currentUser?.uid) {
+      _messagingNotifyIncoming(lastMessage, _messagingConversationName(selected));
+    }
+    if (lastMessage) _messagingState.lastSeenByConversation[conversationId] = lastMessage.id;
     markConversationRead(conversationId, lastId).catch(err => console.warn('markConversationRead failed', err));
   });
 }
@@ -6294,6 +6347,11 @@ function _selectMessagingConversation(conversationId) {
 window.openMessagingModal = () => {
   document.getElementById('messaging-modal')?.classList.add('visible');
   _messagingSetError('');
+  _messagingSetPhotoPreview(null);
+  _messagingLoadMemberSelectors().catch(err => {
+    console.warn('messaging member load failed', err);
+    _messagingSetError(`Could not load members: ${err?.message || 'permission denied'}`);
+  });
   document.getElementById('messaging-thread-title').textContent = 'Loading conversations…';
   document.getElementById('messaging-thread-messages').innerHTML = '<div class="messaging-empty">Loading…</div>';
   watchConversations(conversations => {
@@ -6317,6 +6375,7 @@ window.openMessagingModal = () => {
 
 window.closeMessagingModal = () => {
   document.getElementById('messaging-modal')?.classList.remove('visible');
+  _messagingSetPhotoPreview(null);
   closeConversation();
   closeConversationList();
 };
@@ -6324,15 +6383,21 @@ window.closeMessagingModal = () => {
 window.sendMessagingModalMessage = async () => {
   const ta = document.getElementById('messaging-input');
   const text = String(ta?.value || '').trim();
-  if (!text) return;
+  if (!text && !_messagingState.selectedPhoto) return;
   if (!_messagingState.activeConversationId) {
     _messagingSetError('Select or create a conversation first.');
     return;
   }
   try {
     _messagingSetError('');
-    await sendConversationMessage(_messagingState.activeConversationId, text);
+    let attachments = [];
+    if (_messagingState.selectedPhoto) {
+      const photo = await _uploadMessagingPhoto(_messagingState.selectedPhoto, _messagingState.activeConversationId);
+      attachments = [photo];
+    }
+    await sendConversationMessage(_messagingState.activeConversationId, text || '', { attachments });
     ta.value = '';
+    _messagingSetPhotoPreview(null);
   } catch (err) {
     console.warn('sendMessagingModalMessage failed', err);
     _messagingSetError(`Could not send message: ${err?.message || 'permission denied'}`);
@@ -6346,23 +6411,16 @@ window.createMessagingDm = async () => {
     return;
   }
   try {
-    const options = await _messagingSelectableMembers();
-
-    if (!options.length) {
-      _messagingSetError('No other active members found for this plant.');
+    const targetUid = document.getElementById('messaging-dm-select')?.value || '';
+    if (!targetUid) {
+      _messagingSetError('Select a member from the DM dropdown.');
       return;
     }
-
-    const menu = options
-      .slice(0, 20)
-      .map((m, i) => `${i + 1}. ${m.displayName || m.name || m.email || m.uid}`)
-      .join('\n');
-
-    const picked = window.prompt(`Start DM with which member?\n\n${menu}\n\nEnter a number (1-${Math.min(options.length, 20)}).`);
-    const idx = Number(picked) - 1;
-    if (!Number.isInteger(idx) || idx < 0 || idx >= Math.min(options.length, 20)) return;
-
-    const target = options[idx];
+    const target = (await _messagingSelectableMembers()).find(m => m.uid === targetUid);
+    if (!target) {
+      _messagingSetError('Selected user is no longer available.');
+      return;
+    }
     const conversationId = await createConversation({ type: 'dm', memberIds: [target.uid] });
     _messagingState.activeConversationId = conversationId;
     _renderMessagingConversations();
@@ -6388,40 +6446,81 @@ window.createMessagingGroup = async () => {
     return;
   }
   try {
-    const options = await _messagingSelectableMembers();
-    if (!options.length) {
-      _messagingSetError('No other active members found for this plant.');
-      return;
-    }
-    const title = window.prompt('Enter a group name:');
-    const groupTitle = String(title || '').trim();
+    const groupTitle = String(document.getElementById('messaging-group-name')?.value || '').trim();
     if (!groupTitle) return;
-
-    const menu = options
-      .slice(0, 20)
-      .map((m, i) => `${i + 1}. ${m.displayName || m.name || m.email || m.uid}`)
-      .join('\n');
-    const picked = window.prompt(`Add members by number (comma separated).\nExample: 1,3,4\n\n${menu}`);
-    const max = Math.min(options.length, 20);
-    const picks = String(picked || '')
-      .split(',')
-      .map(v => Number(v.trim()) - 1)
-      .filter(v => Number.isInteger(v) && v >= 0 && v < max);
-    const unique = Array.from(new Set(picks));
-    if (!unique.length) {
+    const checks = Array.from(document.querySelectorAll('#messaging-group-members input[type=\"checkbox\"]:checked'));
+    const memberIds = checks.map(c => c.value).filter(Boolean);
+    if (!memberIds.length) {
       _messagingSetError('Select at least one member for the group.');
       return;
     }
-    const memberIds = unique.map(i => options[i].uid);
     const conversationId = await createConversation({ type: 'group', title: groupTitle, memberIds });
     _messagingState.activeConversationId = conversationId;
     _renderMessagingConversations();
     _selectMessagingConversation(conversationId);
+    document.getElementById('messaging-group-name').value = '';
+    checks.forEach(c => { c.checked = false; });
   } catch (err) {
     console.warn('createMessagingGroup failed', err);
     _messagingSetError(`Could not create group: ${err?.message || 'permission denied'}`);
   }
 };
+
+async function _messagingLoadMemberSelectors() {
+  const members = await _messagingSelectableMembers();
+  const dmSelect = document.getElementById('messaging-dm-select');
+  const groupWrap = document.getElementById('messaging-group-members');
+  if (dmSelect) {
+    dmSelect.innerHTML = '<option value=\"\">Select user…</option>' + members
+      .map(m => `<option value=\"${esc(m.uid)}\">${esc(m.displayName || m.name || m.email || m.uid)}</option>`)
+      .join('');
+  }
+  if (groupWrap) {
+    groupWrap.innerHTML = members
+      .map(m => `<label><input type=\"checkbox\" value=\"${esc(m.uid)}\"><span>${esc(m.displayName || m.name || m.email || m.uid)}</span></label>`)
+      .join('');
+  }
+}
+
+window.setMessagingSort = (value) => {
+  _messagingState.sortBy = value === 'name' ? 'name' : 'recent';
+  _renderMessagingConversations();
+};
+
+window.enableMessagingNotifications = async () => {
+  if (!('Notification' in window)) {
+    _messagingSetError('Notifications are not supported in this browser.');
+    return;
+  }
+  const result = await Notification.requestPermission();
+  if (result === 'granted') {
+    _messagingSetError('');
+    showGameToast('🔔 Messaging alerts enabled');
+  } else {
+    _messagingSetError('Notification permission was not granted.');
+  }
+};
+
+async function _uploadMessagingPhoto(file, conversationId) {
+  const path = `plants/${currentPlantId}/conversations/${conversationId}/photos/${Date.now()}_${Math.random().toString(36).slice(2)}_${file.name || 'image.jpg'}`;
+  const fileRef = storageRef(storage, path);
+  const dataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+  await uploadString(fileRef, dataUrl, 'data_url');
+  const url = await getDownloadURL(fileRef);
+  return {
+    kind: 'image',
+    url,
+    storagePath: path,
+    fileName: file.name || 'image.jpg',
+    contentType: file.type || 'image/jpeg',
+    sizeBytes: file.size || 0
+  };
+}
 
 document.getElementById('messaging-modal')?.addEventListener('click', e => {
   if (e.target === document.getElementById('messaging-modal')) closeMessagingModal();
@@ -6432,6 +6531,11 @@ document.getElementById('messaging-input')?.addEventListener('keydown', e => {
     e.preventDefault();
     sendMessagingModalMessage();
   }
+});
+
+document.getElementById('messaging-photo-input')?.addEventListener('change', e => {
+  const file = e.target?.files?.[0] || null;
+  _messagingSetPhotoPreview(file);
 });
 
 // ── PRESS NOTES ──
