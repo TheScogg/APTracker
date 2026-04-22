@@ -252,6 +252,10 @@
           <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;opacity:0.7;"><rect x="1" y="1" width="14" height="14" rx="1.5" stroke="currentColor" stroke-width="1.3"/><path d="M1 5h14M5.5 5v10M5 8.5h6M5 11h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
           XLS
         </button>
+        <button class="sort-dropdown-btn" id="messages-btn" onclick="openMessagingModal()" style="gap:4px;">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;opacity:0.7;"><path d="M3 2h10a1 1 0 011 1v8a1 1 0 01-1 1H5l-3 2V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
+          MSG
+        </button>
       </div>
     </div>
     <div class="machine-breadcrumb" id="machine-breadcrumb">
@@ -507,6 +511,34 @@
         </button>
       </div>
       <div class="chat-compose-hint">Shift+Enter for new line</div>
+    </div>
+  </div>
+</div>
+
+<!-- MESSAGING MODAL -->
+<div class="modal-overlay" id="messaging-modal">
+  <div class="modal messaging-modal-shell">
+    <div class="messaging-modal-header">
+      <div class="modal-title" style="margin:0;">💬 Team Messaging</div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="sort-dropdown-btn" onclick="createMessagingDm()">+ New DM</button>
+        <button class="notes-modal-b-close" onclick="closeMessagingModal()">✕ close</button>
+      </div>
+    </div>
+    <div class="messaging-modal-body">
+      <aside class="messaging-list-panel">
+        <div class="messaging-list-title">Conversations</div>
+        <div id="messaging-conversations-list" class="messaging-conversations-list"></div>
+      </aside>
+      <section class="messaging-thread-panel">
+        <div class="messaging-thread-title" id="messaging-thread-title">Select a conversation</div>
+        <div id="messaging-thread-messages" class="messaging-thread-messages"></div>
+        <div class="messaging-composer">
+          <textarea id="messaging-input" placeholder="Write a message…"></textarea>
+          <button class="sort-dropdown-btn" onclick="sendMessagingModalMessage()">Send</button>
+        </div>
+        <div id="messaging-error" class="messaging-error"></div>
+      </section>
     </div>
   </div>
 </div>
