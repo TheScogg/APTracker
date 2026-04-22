@@ -6346,11 +6346,7 @@ window.createMessagingDm = async () => {
     return;
   }
   try {
-    const membersSnap = await getDocs(collection(db, 'plants', currentPlantId, 'members'));
-    const options = membersSnap.docs
-      .map(d => ({ uid: d.id, ...d.data() }))
-      .filter(m => m.uid !== currentUser.uid && m.isActive !== false)
-      .sort((a, b) => String(a.displayName || a.name || a.email || a.uid).localeCompare(String(b.displayName || b.name || b.email || b.uid)));
+    const options = await _messagingSelectableMembers();
 
     if (!options.length) {
       _messagingSetError('No other active members found for this plant.');
@@ -6374,6 +6370,56 @@ window.createMessagingDm = async () => {
   } catch (err) {
     console.warn('createMessagingDm failed', err);
     _messagingSetError(`Could not create DM: ${err?.message || 'permission denied'}`);
+  }
+};
+
+async function _messagingSelectableMembers() {
+  const membersSnap = await getDocs(collection(db, 'plants', currentPlantId, 'members'));
+  return membersSnap.docs
+    .map(d => ({ uid: d.id, ...d.data() }))
+    .filter(m => m.uid !== currentUser.uid && m.isActive !== false)
+    .sort((a, b) => String(a.displayName || a.name || a.email || a.uid).localeCompare(String(b.displayName || b.name || b.email || b.uid)));
+}
+
+window.createMessagingGroup = async () => {
+  _messagingSetError('');
+  if (!currentPlantId || !currentUser?.uid) {
+    _messagingSetError('Sign in and select a plant before creating a group.');
+    return;
+  }
+  try {
+    const options = await _messagingSelectableMembers();
+    if (!options.length) {
+      _messagingSetError('No other active members found for this plant.');
+      return;
+    }
+    const title = window.prompt('Enter a group name:');
+    const groupTitle = String(title || '').trim();
+    if (!groupTitle) return;
+
+    const menu = options
+      .slice(0, 20)
+      .map((m, i) => `${i + 1}. ${m.displayName || m.name || m.email || m.uid}`)
+      .join('\n');
+    const picked = window.prompt(`Add members by number (comma separated).\nExample: 1,3,4\n\n${menu}`);
+    const max = Math.min(options.length, 20);
+    const picks = String(picked || '')
+      .split(',')
+      .map(v => Number(v.trim()) - 1)
+      .filter(v => Number.isInteger(v) && v >= 0 && v < max);
+    const unique = Array.from(new Set(picks));
+    if (!unique.length) {
+      _messagingSetError('Select at least one member for the group.');
+      return;
+    }
+    const memberIds = unique.map(i => options[i].uid);
+    const conversationId = await createConversation({ type: 'group', title: groupTitle, memberIds });
+    _messagingState.activeConversationId = conversationId;
+    _renderMessagingConversations();
+    _selectMessagingConversation(conversationId);
+  } catch (err) {
+    console.warn('createMessagingGroup failed', err);
+    _messagingSetError(`Could not create group: ${err?.message || 'permission denied'}`);
   }
 };
 
