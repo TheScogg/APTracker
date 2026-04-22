@@ -24,3 +24,4 @@ This phase adds the first implementation pieces for plant-scoped conversations:
 - APIs are exposed on `window` to support progressive UI wiring.
 - DM creation dedupes existing active 1:1 conversations for the same two users.
 - Conversation + member docs are created in a single batch write for atomic setup.
+- Rules support same-batch conversation bootstrap (using before/after doc checks) so DM creation can create conversation + members in one commit.

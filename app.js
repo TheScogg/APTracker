@@ -6328,7 +6328,7 @@ window.sendMessagingModalMessage = async () => {
     ta.value = '';
   } catch (err) {
     console.warn('sendMessagingModalMessage failed', err);
-    _messagingSetError('Could not send message. Check rules/index deployment and membership.');
+    _messagingSetError(`Could not send message: ${err?.message || 'permission denied'}`);
   }
 };
 
@@ -6366,7 +6366,7 @@ window.createMessagingDm = async () => {
     _selectMessagingConversation(conversationId);
   } catch (err) {
     console.warn('createMessagingDm failed', err);
-    _messagingSetError('Could not create DM. Check Firestore rules and indexes deployment.');
+    _messagingSetError(`Could not create DM: ${err?.message || 'permission denied'}`);
   }
 };
 

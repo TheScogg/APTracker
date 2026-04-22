@@ -72,8 +72,17 @@ service cloud.firestore {
 
     function isConversationCreator(plantId, conversationId) {
       return signedIn()
-        && exists(conversationPath(plantId, conversationId))
-        && get(conversationPath(plantId, conversationId)).data.createdBy.uid == currentUid();
+        && ((exists(conversationPath(plantId, conversationId))
+            && get(conversationPath(plantId, conversationId)).data.createdBy.uid == currentUid())
+            || (existsAfter(conversationPath(plantId, conversationId))
+            && getAfter(conversationPath(plantId, conversationId)).data.createdBy.uid == currentUid()));
+    }
+
+    function conversationMemberListHasUser(plantId, conversationId, userId) {
+      return (exists(conversationPath(plantId, conversationId))
+              && get(conversationPath(plantId, conversationId)).data.memberIds.hasAny([userId]))
+        || (existsAfter(conversationPath(plantId, conversationId))
+              && getAfter(conversationPath(plantId, conversationId)).data.memberIds.hasAny([userId]));
     }
 
     // Only the plantIds field is being touched (used when adding/removing a user from a plant).
@@ -238,12 +247,10 @@ service cloud.firestore {
           allow create: if isAdmin(plantId)
                         || (isPlantMember(plantId)
                             && isSelf(userId)
-                            && exists(conversationPath(plantId, conversationId))
-                            && get(conversationPath(plantId, conversationId)).data.memberIds.hasAny([userId]))
+                            && conversationMemberListHasUser(plantId, conversationId, userId))
                         || (isPlantMember(plantId)
                             && isConversationCreator(plantId, conversationId)
-                            && exists(conversationPath(plantId, conversationId))
-                            && get(conversationPath(plantId, conversationId)).data.memberIds.hasAny([userId]));
+                            && conversationMemberListHasUser(plantId, conversationId, userId));
           allow update: if isAdmin(plantId)
                         || (isSelf(userId) && isConversationMember(plantId, conversationId));
           allow delete: if isAdmin(plantId);
