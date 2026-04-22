@@ -69,6 +69,10 @@ function gameEventsCol() { return collection(db, 'plants', currentPlantId, 'game
 function missionProgressDoc(missionId, subjectId) { return doc(db, 'plants', currentPlantId, 'missions', missionId, 'progress', subjectId); }
 function globalStoreConfigDoc() { return doc(db, 'globalConfig', 'store'); }
 function legacyPlantStoreConfigDoc() { return doc(db, 'plants', currentPlantId, 'config', 'store'); }
+function conversationsCol() { return collection(db, 'plants', currentPlantId, 'conversations'); }
+function conversationDoc(conversationId) { return doc(db, 'plants', currentPlantId, 'conversations', conversationId); }
+function conversationMessagesCol(conversationId) { return collection(db, 'plants', currentPlantId, 'conversations', conversationId, 'messages'); }
+function conversationMemberDoc(conversationId, userId) { return doc(db, 'plants', currentPlantId, 'conversations', conversationId, 'members', userId); }
 
 function currentActor() {
   return { uid: currentUser?.uid || '', name: currentUser?.displayName || currentUser?.email || 'Unknown' };
@@ -5989,7 +5993,7 @@ document.querySelectorAll('.modal').forEach(modal => {
   modal.addEventListener('click', e => e.stopPropagation());
 });
 
-document.addEventListener('keydown', e=>{ if(e.key==='Escape'){closeModal();closeEditModal();closeResolveModal();closeReopenModal();closeLightbox();closeSortDropdown();closeExportModal();closeSerialModal();closeEditStatusModal();closeNotesModal();closeAppearanceModal();closeThemeEditor();} });
+document.addEventListener('keydown', e=>{ if(e.key==='Escape'){closeModal();closeEditModal();closeResolveModal();closeReopenModal();closeLightbox();closeSortDropdown();closeExportModal();closeSerialModal();closeEditStatusModal();closeNotesModal();window.closeMessagingModal?.();window.closeConversation?.();closeAppearanceModal();closeThemeEditor();} });
 
 document.getElementById('theme-editor-modal').addEventListener('click', e => {
   if (e.target !== document.getElementById('theme-editor-modal')) return;
@@ -6042,6 +6046,497 @@ window.confirmSerialModal = async () => {
 
 // Close serial modal on overlay click and escape
 document.getElementById('serial-modal')?.addEventListener('click', e => { if(e.target===document.getElementById('serial-modal')) closeSerialModal(); });
+
+// ── CONVERSATIONS (DM + GROUP + PRESS CHANNELS) ──
+let _conversationListUnsubscribe = null;
+let _conversationThreadUnsubscribe = null;
+
+function _conversationType(inputType) {
+  const normalized = String(inputType || 'group').trim().toLowerCase();
+  return ['dm', 'group', 'press'].includes(normalized) ? normalized : 'group';
+}
+
+function _requireChatContext() {
+  if (!currentPlantId) throw new Error('No active plant selected.');
+  if (!currentUser?.uid) throw new Error('You must be signed in.');
+}
+
+window.createConversation = async ({ type = 'group', title = '', memberIds = [], pressId = null } = {}) => {
+  _requireChatContext();
+  const actor = currentActor();
+  const normalizedType = _conversationType(type);
+  const uniqueMembers = Array.from(new Set([...(memberIds || []), actor.uid].map(v => String(v || '').trim()).filter(Boolean)));
+  if (uniqueMembers.length < 2) throw new Error('At least two members are required.');
+  if (normalizedType === 'dm' && uniqueMembers.length !== 2) throw new Error('DM conversations must have exactly two members.');
+  if (normalizedType === 'group' && !String(title || '').trim()) throw new Error('Group conversations require a title.');
+
+  if (normalizedType === 'dm') {
+    const dmQuery = query(
+      conversationsCol(),
+      where('type', '==', 'dm'),
+      where('memberIds', 'array-contains', actor.uid),
+      limit(20)
+    );
+    const dmSnap = await getDocs(dmQuery);
+    const existing = dmSnap.docs.find(d => {
+      const data = d.data() || {};
+      const ids = Array.isArray(data.memberIds) ? data.memberIds : [];
+      return data.memberCount === 2
+        && !data.isArchived
+        && ids.includes(uniqueMembers[0])
+        && ids.includes(uniqueMembers[1]);
+    });
+    if (existing) return existing.id;
+  }
+
+  const payload = {
+    type: normalizedType,
+    title: normalizedType === 'dm' ? null : String(title || '').trim(),
+    pressId: normalizedType === 'press' ? String(pressId || '').trim() || null : null,
+    plantId: currentPlantId,
+    createdAt: serverTimestamp(),
+    createdBy: actor,
+    memberIds: uniqueMembers,
+    memberCount: uniqueMembers.length,
+    lastMessage: null,
+    lastMessageAt: serverTimestamp(),
+    isArchived: false
+  };
+
+  const conversationRef = doc(conversationsCol());
+  const batch = writeBatch(db);
+  batch.set(conversationRef, payload);
+  uniqueMembers.forEach(uid => {
+    batch.set(conversationMemberDoc(conversationRef.id, uid), {
+      userId: uid,
+      role: uid === actor.uid ? 'owner' : 'member',
+      joinedAt: serverTimestamp(),
+      lastReadAt: serverTimestamp(),
+      lastReadMessageId: null,
+      unreadCount: 0,
+      muted: false
+    }, { merge: true });
+  });
+  await batch.commit();
+
+  return conversationRef.id;
+};
+
+window.watchConversations = (onConversations, { type = null } = {}, onError = null) => {
+  _requireChatContext();
+  if (_conversationListUnsubscribe) {
+    _conversationListUnsubscribe();
+    _conversationListUnsubscribe = null;
+  }
+  const constraints = [
+    where('memberIds', 'array-contains', currentUser.uid),
+    orderBy('lastMessageAt', 'desc')
+  ];
+  const normalizedType = type ? _conversationType(type) : null;
+  if (normalizedType) constraints.unshift(where('type', '==', normalizedType));
+  const q = query(conversationsCol(), ...constraints);
+  _conversationListUnsubscribe = onSnapshot(q, snap => {
+    const conversations = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (typeof onConversations === 'function') onConversations(conversations);
+  }, err => {
+    console.warn('conversations listener error', err);
+    if (typeof onError === 'function') onError(err);
+  });
+  return _conversationListUnsubscribe;
+};
+
+window.openConversation = (conversationId, onMessages) => {
+  _requireChatContext();
+  if (!conversationId) throw new Error('conversationId is required.');
+  if (_conversationThreadUnsubscribe) {
+    _conversationThreadUnsubscribe();
+    _conversationThreadUnsubscribe = null;
+  }
+  const q = query(conversationMessagesCol(conversationId), orderBy('createdAt', 'asc'));
+  _conversationThreadUnsubscribe = onSnapshot(q, snap => {
+    const messages = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (typeof onMessages === 'function') onMessages(messages);
+  }, err => console.warn('conversation listener error', err));
+  return _conversationThreadUnsubscribe;
+};
+
+window.sendConversationMessage = async (conversationId, text, { mentions = [], attachments = [] } = {}) => {
+  _requireChatContext();
+  const trimmedText = String(text || '').trim();
+  const normalizedAttachments = Array.isArray(attachments) ? attachments.filter(Boolean) : [];
+  if (!conversationId || (!trimmedText && !normalizedAttachments.length)) return null;
+  const actor = currentActor();
+
+  const messageRef = await addDoc(conversationMessagesCol(conversationId), {
+    conversationId,
+    plantId: currentPlantId,
+    sender: actor,
+    type: 'text',
+    text: trimmedText,
+    mentions: Array.from(new Set((mentions || []).map(v => String(v || '').trim()).filter(Boolean))),
+    attachments: normalizedAttachments,
+    createdAt: serverTimestamp(),
+    editedAt: null,
+    deletedAt: null
+  });
+
+  await updateDoc(conversationDoc(conversationId), {
+    lastMessage: {
+      textPreview: trimmedText ? trimmedText.slice(0, 280) : (normalizedAttachments.length ? '📷 Photo' : ''),
+      senderUid: actor.uid,
+      senderName: actor.name,
+      at: serverTimestamp()
+    },
+    lastMessageAt: serverTimestamp()
+  });
+
+  await setDoc(conversationMemberDoc(conversationId, actor.uid), {
+    userId: actor.uid,
+    lastReadAt: serverTimestamp(),
+    lastReadMessageId: messageRef.id
+  }, { merge: true });
+
+  return messageRef.id;
+};
+
+window.markConversationRead = async (conversationId, lastReadMessageId = null) => {
+  _requireChatContext();
+  if (!conversationId) return;
+  await setDoc(conversationMemberDoc(conversationId, currentUser.uid), {
+    userId: currentUser.uid,
+    lastReadAt: serverTimestamp(),
+    lastReadMessageId: lastReadMessageId || null,
+    unreadCount: 0
+  }, { merge: true });
+};
+
+window.closeConversation = () => {
+  if (_conversationThreadUnsubscribe) { _conversationThreadUnsubscribe(); _conversationThreadUnsubscribe = null; }
+};
+
+window.closeConversationList = () => {
+  if (_conversationListUnsubscribe) { _conversationListUnsubscribe(); _conversationListUnsubscribe = null; }
+};
+
+// ── MESSAGING MODAL (PHASE 1.1 UI) ──
+const _messagingState = {
+  conversations: [],
+  activeConversationId: null,
+  sortBy: 'recent',
+  selectedPhoto: null,
+  lastSeenByConversation: {}
+};
+
+function _messagingSetError(message = '') {
+  const el = document.getElementById('messaging-error');
+  if (el) el.textContent = message;
+}
+
+function _messagingSetPhotoPreview(file = null) {
+  _messagingState.selectedPhoto = file || null;
+  const wrap = document.getElementById('messaging-photo-preview');
+  if (!wrap) return;
+  if (!file) {
+    wrap.innerHTML = '';
+    return;
+  }
+  const objectUrl = URL.createObjectURL(file);
+  wrap.innerHTML = `<div>Photo selected: ${esc(file.name || 'image')}</div><img src="${objectUrl}" alt="selected photo preview">`;
+}
+
+function _messagingNotifyIncoming(message, conversationName) {
+  showGameToast(`💬 ${conversationName}: ${message.sender?.name || 'Someone'} sent a message`);
+  if (!('Notification' in window)) return;
+  if (Notification.permission !== 'granted') return;
+  try {
+    new Notification(conversationName, {
+      body: message.text || (message.attachments?.length ? 'Sent a photo' : 'New message')
+    });
+  } catch (e) {
+    console.warn('Notification failed', e);
+  }
+}
+
+function _messagingConversationName(conv) {
+  if (!conv) return 'Conversation';
+  if (conv.type === 'dm') return conv.title || 'Direct Message';
+  if (conv.type === 'press') return conv.title || `Press ${conv.pressId || ''}`.trim();
+  return conv.title || 'Group Chat';
+}
+
+function _renderMessagingConversations() {
+  const list = document.getElementById('messaging-conversations-list');
+  if (!list) return;
+  list.innerHTML = '';
+  const conversations = [..._messagingState.conversations];
+  if (_messagingState.sortBy === 'name') {
+    conversations.sort((a, b) => _messagingConversationName(a).localeCompare(_messagingConversationName(b)));
+  } else {
+    conversations.sort((a, b) => {
+      const at = a.lastMessageAt?.toMillis?.() ?? a.lastMessageAt?.seconds * 1000 ?? 0;
+      const bt = b.lastMessageAt?.toMillis?.() ?? b.lastMessageAt?.seconds * 1000 ?? 0;
+      return bt - at;
+    });
+  }
+  if (!conversations.length) {
+    list.innerHTML = '<div class="messaging-empty">No conversations yet.</div>';
+    return;
+  }
+  conversations.forEach(conv => {
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'messaging-conv-item' + (_messagingState.activeConversationId === conv.id ? ' active' : '');
+    row.onclick = () => _selectMessagingConversation(conv.id);
+    const lastText = conv.lastMessage?.textPreview || 'No messages yet';
+    row.innerHTML = `<div class="messaging-conv-name">${esc(_messagingConversationName(conv))}</div><div class="messaging-conv-preview">${esc(lastText)}</div>`;
+    list.appendChild(row);
+  });
+}
+
+function _renderMessagingMessages(messages) {
+  const panel = document.getElementById('messaging-thread-messages');
+  if (!panel) return;
+  panel.innerHTML = '';
+  if (!messages.length) {
+    panel.innerHTML = '<div class="messaging-empty">No messages yet. Start the conversation.</div>';
+    return;
+  }
+  messages.forEach(msg => {
+    const mine = msg.sender?.uid === currentUser?.uid;
+    const item = document.createElement('div');
+    item.className = 'messaging-msg' + (mine ? ' mine' : '');
+    const meta = document.createElement('div');
+    meta.className = 'messaging-msg-meta';
+    meta.textContent = `${mine ? 'You' : (msg.sender?.name || 'Unknown')} · ${_relativeTime(msg.createdAt)}`;
+    const text = document.createElement('div');
+    text.className = 'messaging-msg-text';
+    text.textContent = msg.text || '';
+    item.appendChild(meta);
+    if (msg.text) item.appendChild(text);
+    (msg.attachments || []).forEach(att => {
+      if (att.kind !== 'image' || !att.url) return;
+      const img = document.createElement('img');
+      img.className = 'messaging-msg-image';
+      img.src = att.url;
+      img.alt = att.fileName || 'message image';
+      item.appendChild(img);
+    });
+    panel.appendChild(item);
+  });
+  panel.scrollTop = panel.scrollHeight;
+}
+
+function _selectMessagingConversation(conversationId) {
+  _messagingState.activeConversationId = conversationId;
+  _renderMessagingConversations();
+  const selected = _messagingState.conversations.find(c => c.id === conversationId);
+  document.getElementById('messaging-thread-title').textContent = _messagingConversationName(selected);
+  openConversation(conversationId, messages => {
+    _renderMessagingMessages(messages);
+    const lastId = messages[messages.length - 1]?.id || null;
+    const lastMessage = messages[messages.length - 1] || null;
+    const seenId = _messagingState.lastSeenByConversation[conversationId] || null;
+    if (lastMessage && seenId && lastMessage.id !== seenId && lastMessage.sender?.uid !== currentUser?.uid) {
+      _messagingNotifyIncoming(lastMessage, _messagingConversationName(selected));
+    }
+    if (lastMessage) _messagingState.lastSeenByConversation[conversationId] = lastMessage.id;
+    markConversationRead(conversationId, lastId).catch(err => console.warn('markConversationRead failed', err));
+  });
+}
+
+window.openMessagingModal = () => {
+  document.getElementById('messaging-modal')?.classList.add('visible');
+  _messagingSetError('');
+  _messagingSetPhotoPreview(null);
+  _messagingLoadMemberSelectors().catch(err => {
+    console.warn('messaging member load failed', err);
+    _messagingSetError(`Could not load members: ${err?.message || 'permission denied'}`);
+  });
+  document.getElementById('messaging-thread-title').textContent = 'Loading conversations…';
+  document.getElementById('messaging-thread-messages').innerHTML = '<div class="messaging-empty">Loading…</div>';
+  watchConversations(conversations => {
+    _messagingState.conversations = conversations;
+    if (!_messagingState.activeConversationId && conversations.length) {
+      _messagingState.activeConversationId = conversations[0].id;
+    }
+    _renderMessagingConversations();
+    if (_messagingState.activeConversationId) {
+      _selectMessagingConversation(_messagingState.activeConversationId);
+    } else {
+      document.getElementById('messaging-thread-title').textContent = 'No conversations';
+      document.getElementById('messaging-thread-messages').innerHTML = '<div class="messaging-empty">Create a conversation to begin messaging.</div>';
+    }
+  }, {}, err => {
+    _messagingSetError(`Could not load conversations: ${err?.message || 'permission denied'}`);
+    document.getElementById('messaging-thread-title').textContent = 'Messaging unavailable';
+    document.getElementById('messaging-thread-messages').innerHTML = '<div class="messaging-empty">Conversation access is currently denied. Verify Firestore rules deployment.</div>';
+  });
+};
+
+window.closeMessagingModal = () => {
+  document.getElementById('messaging-modal')?.classList.remove('visible');
+  _messagingSetPhotoPreview(null);
+  closeConversation();
+  closeConversationList();
+};
+
+window.sendMessagingModalMessage = async () => {
+  const ta = document.getElementById('messaging-input');
+  const text = String(ta?.value || '').trim();
+  if (!text && !_messagingState.selectedPhoto) return;
+  if (!_messagingState.activeConversationId) {
+    _messagingSetError('Select or create a conversation first.');
+    return;
+  }
+  try {
+    _messagingSetError('');
+    let attachments = [];
+    if (_messagingState.selectedPhoto) {
+      const photo = await _uploadMessagingPhoto(_messagingState.selectedPhoto, _messagingState.activeConversationId);
+      attachments = [photo];
+    }
+    await sendConversationMessage(_messagingState.activeConversationId, text || '', { attachments });
+    ta.value = '';
+    _messagingSetPhotoPreview(null);
+  } catch (err) {
+    console.warn('sendMessagingModalMessage failed', err);
+    _messagingSetError(`Could not send message: ${err?.message || 'permission denied'}`);
+  }
+};
+
+window.createMessagingDm = async () => {
+  _messagingSetError('');
+  if (!currentPlantId || !currentUser?.uid) {
+    _messagingSetError('Sign in and select a plant before creating a DM.');
+    return;
+  }
+  try {
+    const targetUid = document.getElementById('messaging-dm-select')?.value || '';
+    if (!targetUid) {
+      _messagingSetError('Select a member from the DM dropdown.');
+      return;
+    }
+    const target = (await _messagingSelectableMembers()).find(m => m.uid === targetUid);
+    if (!target) {
+      _messagingSetError('Selected user is no longer available.');
+      return;
+    }
+    const conversationId = await createConversation({ type: 'dm', memberIds: [target.uid] });
+    _messagingState.activeConversationId = conversationId;
+    _renderMessagingConversations();
+    _selectMessagingConversation(conversationId);
+  } catch (err) {
+    console.warn('createMessagingDm failed', err);
+    _messagingSetError(`Could not create DM: ${err?.message || 'permission denied'}`);
+  }
+};
+
+async function _messagingSelectableMembers() {
+  const membersSnap = await getDocs(collection(db, 'plants', currentPlantId, 'members'));
+  return membersSnap.docs
+    .map(d => ({ uid: d.id, ...d.data() }))
+    .filter(m => m.uid !== currentUser.uid && m.isActive !== false)
+    .sort((a, b) => String(a.displayName || a.name || a.email || a.uid).localeCompare(String(b.displayName || b.name || b.email || b.uid)));
+}
+
+window.createMessagingGroup = async () => {
+  _messagingSetError('');
+  if (!currentPlantId || !currentUser?.uid) {
+    _messagingSetError('Sign in and select a plant before creating a group.');
+    return;
+  }
+  try {
+    const groupTitle = String(document.getElementById('messaging-group-name')?.value || '').trim();
+    if (!groupTitle) return;
+    const checks = Array.from(document.querySelectorAll('#messaging-group-members input[type=\"checkbox\"]:checked'));
+    const memberIds = checks.map(c => c.value).filter(Boolean);
+    if (!memberIds.length) {
+      _messagingSetError('Select at least one member for the group.');
+      return;
+    }
+    const conversationId = await createConversation({ type: 'group', title: groupTitle, memberIds });
+    _messagingState.activeConversationId = conversationId;
+    _renderMessagingConversations();
+    _selectMessagingConversation(conversationId);
+    document.getElementById('messaging-group-name').value = '';
+    checks.forEach(c => { c.checked = false; });
+  } catch (err) {
+    console.warn('createMessagingGroup failed', err);
+    _messagingSetError(`Could not create group: ${err?.message || 'permission denied'}`);
+  }
+};
+
+async function _messagingLoadMemberSelectors() {
+  const members = await _messagingSelectableMembers();
+  const dmSelect = document.getElementById('messaging-dm-select');
+  const groupWrap = document.getElementById('messaging-group-members');
+  if (dmSelect) {
+    dmSelect.innerHTML = '<option value=\"\">Select user…</option>' + members
+      .map(m => `<option value=\"${esc(m.uid)}\">${esc(m.displayName || m.name || m.email || m.uid)}</option>`)
+      .join('');
+  }
+  if (groupWrap) {
+    groupWrap.innerHTML = members
+      .map(m => `<label><input type=\"checkbox\" value=\"${esc(m.uid)}\"><span>${esc(m.displayName || m.name || m.email || m.uid)}</span></label>`)
+      .join('');
+  }
+}
+
+window.setMessagingSort = (value) => {
+  _messagingState.sortBy = value === 'name' ? 'name' : 'recent';
+  _renderMessagingConversations();
+};
+
+window.enableMessagingNotifications = async () => {
+  if (!('Notification' in window)) {
+    _messagingSetError('Notifications are not supported in this browser.');
+    return;
+  }
+  const result = await Notification.requestPermission();
+  if (result === 'granted') {
+    _messagingSetError('');
+    showGameToast('🔔 Messaging alerts enabled');
+  } else {
+    _messagingSetError('Notification permission was not granted.');
+  }
+};
+
+async function _uploadMessagingPhoto(file, conversationId) {
+  const path = `plants/${currentPlantId}/conversations/${conversationId}/photos/${Date.now()}_${Math.random().toString(36).slice(2)}_${file.name || 'image.jpg'}`;
+  const fileRef = storageRef(storage, path);
+  const dataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+  await uploadString(fileRef, dataUrl, 'data_url');
+  const url = await getDownloadURL(fileRef);
+  return {
+    kind: 'image',
+    url,
+    storagePath: path,
+    fileName: file.name || 'image.jpg',
+    contentType: file.type || 'image/jpeg',
+    sizeBytes: file.size || 0
+  };
+}
+
+document.getElementById('messaging-modal')?.addEventListener('click', e => {
+  if (e.target === document.getElementById('messaging-modal')) closeMessagingModal();
+});
+
+document.getElementById('messaging-input')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessagingModalMessage();
+  }
+});
+
+document.getElementById('messaging-photo-input')?.addEventListener('change', e => {
+  const file = e.target?.files?.[0] || null;
+  _messagingSetPhotoPreview(file);
+});
 
 // ── PRESS NOTES ──
 // Toggle between 'a' (Logbook) and 'b' (Team Channel) to switch prototypes
