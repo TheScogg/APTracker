@@ -580,6 +580,59 @@ const THEME_EDITOR_FIELDS = [
   ['--green', 'Success'], ['--red', 'Danger'], ['--blue', 'Info'], ['--yellow', 'Warning'], ['--orange', 'Orange']
 ];
 
+const THEME_ITEM_JSON_SCHEMA = {
+  type: 'object',
+  required: ['id', 'type', 'name', 'price', 'isActive', 'order', 'customVars'],
+  properties: {
+    id: { type: 'string', minLength: 1 },
+    type: { const: 'theme' },
+    themeKey: { anyOf: [{ type: 'string', minLength: 1 }, { type: 'null' }] },
+    name: { type: 'string', minLength: 1 },
+    price: { type: 'number', minimum: 0 },
+    isActive: { type: 'boolean' },
+    order: { type: 'number' },
+    customVars: {
+      type: 'object',
+      required: THEME_EDITOR_FIELDS.map(([key]) => key),
+      additionalProperties: false,
+      patternProperties: {
+        '^--[a-z0-9-]+$': { type: 'string', pattern: '^#[0-9a-fA-F]{6}$' }
+      }
+    }
+  }
+};
+
+const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+
+function sanitizeThemeVars(rawVars) {
+  const merged = { ...THEME_VARS_TEMPLATE };
+  if (!rawVars || typeof rawVars !== 'object') return merged;
+  THEME_EDITOR_FIELDS.forEach(([key]) => {
+    const value = String(rawVars[key] || '').trim();
+    if (HEX_COLOR_RE.test(value)) merged[key] = value;
+  });
+  return merged;
+}
+
+function validateThemeItemCandidate(candidate, fallbackOrder = 0) {
+  if (!candidate || typeof candidate !== 'object') return { ok: false, error: 'Theme payload is not an object.' };
+  const normalized = {
+    ...candidate,
+    id: String(candidate.id || '').trim(),
+    type: 'theme',
+    themeKey: candidate.themeKey ? String(candidate.themeKey).trim() : null,
+    name: String(candidate.name || '').trim(),
+    price: Math.max(0, Number(candidate.price || 0)),
+    isActive: candidate.isActive !== false,
+    order: Number.isFinite(Number(candidate.order)) ? Number(candidate.order) : fallbackOrder,
+    customVars: sanitizeThemeVars(candidate.customVars || {})
+  };
+  if (!normalized.name) return { ok: false, error: 'Theme name is required.' };
+  if (normalized.themeKey) normalized.id = `theme_${normalized.themeKey}`;
+  if (!normalized.id) normalized.id = `storeitem_${Date.now()}`;
+  return { ok: true, item: normalized };
+}
+
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
@@ -976,16 +1029,10 @@ function normalizeGlobalStoreItems(rawItems) {
   const map = new Map();
   incoming.forEach((item, idx) => {
     if (!item || typeof item !== 'object') return;
-    const id = String(item.id || '').trim() || `storeitem_${idx}`;
-    map.set(id, {
-      ...item,
-      id,
-      type: item.type || 'theme',
-      name: String(item.name || 'Store Item'),
-      price: Math.max(0, Number(item.price || 0)),
-      isActive: item.isActive !== false,
-      order: Number.isFinite(Number(item.order)) ? Number(item.order) : idx
-    });
+    if ((item.type || 'theme') !== 'theme') return;
+    const result = validateThemeItemCandidate(item, idx);
+    if (!result.ok || !result.item) return;
+    map.set(result.item.id, result.item);
   });
 
   return [...map.values()].sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
@@ -2246,14 +2293,14 @@ window.setStoreThemeEditorColor = function(key, value) {
   if (!storeThemeEditorDraft) return;
   storeThemeEditorDraft.customVars = storeThemeEditorDraft.customVars || { ...THEME_VARS_TEMPLATE };
   const hex = String(value || '').trim();
-  if (/^#[0-9a-fA-F]{6}$/.test(hex)) storeThemeEditorDraft.customVars[key] = hex;
+  if (HEX_COLOR_RE.test(hex)) storeThemeEditorDraft.customVars[key] = hex;
   renderGlobalStoreEditor();
 };
 
 window.setStoreThemeEditorColorLive = function(key, value) {
   if (!storeThemeEditorDraft) return;
   const hex = String(value || '').trim();
-  if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return;
+  if (!HEX_COLOR_RE.test(hex)) return;
   storeThemeEditorDraft.customVars = storeThemeEditorDraft.customVars || { ...THEME_VARS_TEMPLATE };
   storeThemeEditorDraft.customVars[key] = hex;
   // Update preview card CSS vars directly without re-render
@@ -2287,18 +2334,10 @@ window.loadStoreEditorFromBuiltin = function() {
 
 window.commitStoreThemeEditor = function() {
   if (!storeThemeEditorDraft) { feedback('store-fb-global', 'error', 'Open a theme in the editor first.'); return; }
-  const name = (storeThemeEditorDraft.name || '').trim();
-  if (!name) { feedback('store-fb-global', 'error', 'Theme name is required.'); return; }
-  const item = {
-    ...storeThemeEditorDraft,
-    name,
-    price: Math.max(0, Number(storeThemeEditorDraft.price || 0)),
-    isActive: storeThemeEditorDraft.isActive !== false,
-    customVars: { ...THEME_VARS_TEMPLATE, ...(storeThemeEditorDraft.customVars || {}) },
-    order: Number(storeThemeEditorDraft.order ?? (storeThemeEditorIndex >= 0 ? storeThemeEditorIndex : globalStoreDraft.length))
-  };
-  if (item.themeKey) item.id = `theme_${item.themeKey}`;
-  else if (!item.id || item.id.startsWith('theme_')) item.id = `storeitem_${Date.now()}`;
+  const draftOrder = Number(storeThemeEditorDraft.order ?? (storeThemeEditorIndex >= 0 ? storeThemeEditorIndex : globalStoreDraft.length));
+  const result = validateThemeItemCandidate(storeThemeEditorDraft, draftOrder);
+  if (!result.ok || !result.item) { feedback('store-fb-global', 'error', result.error || 'Invalid theme payload.'); return; }
+  const item = result.item;
 
   const duplicateBuiltin = item.themeKey
     ? globalStoreDraft.findIndex((it, idx) => idx !== storeThemeEditorIndex && it.themeKey === item.themeKey)

@@ -1527,25 +1527,51 @@ function restoreSavedThemeSelection() {
 function normalizeStoreItems(rawItems) {
   const incoming = Array.isArray(rawItems) ? rawItems : [];
   const byId = new Map();
+  const themeVarKeys = ['--bg','--bg2','--bg3','--border','--text','--text2','--text3','--accent','--accent2','--green','--red','--blue','--yellow','--orange'];
+  const themeVarDefaults = {
+    '--bg':'#0d1117','--bg2':'#161b22','--bg3':'#1c2333','--border':'#30363d',
+    '--text':'#e6edf3','--text2':'#8b949e','--text3':'#484f58',
+    '--accent':'#f97316','--accent2':'#fb923c',
+    '--green':'#22c55e','--red':'#ef4444','--blue':'#3b82f6','--yellow':'#eab308','--orange':'#f97316'
+  };
+  const hexRe = /^#[0-9a-fA-F]{6}$/;
+  const normalizeThemeVars = (vars = {}) => {
+    const out = { ...themeVarDefaults };
+    themeVarKeys.forEach(key => {
+      const value = String(vars?.[key] || '').trim();
+      if (hexRe.test(value)) out[key] = value;
+    });
+    return out;
+  };
+  const normalizeThemeItem = (item = {}, idx = 0) => {
+    const themeKey = item.themeKey ? String(item.themeKey).trim() : null;
+    const id = themeKey ? `theme_${themeKey}` : (String(item.id || '').trim() || `storeitem_${idx}`);
+    return {
+      ...item,
+      id,
+      type: 'theme',
+      themeKey,
+      name: String(item.name || 'Theme').trim() || 'Theme',
+      price: Math.max(0, Number(item.price || 0)),
+      isActive: item.isActive !== false,
+      customVars: normalizeThemeVars(item.customVars || {}),
+      order: Number.isFinite(Number(item.order)) ? Number(item.order) : idx
+    };
+  };
   // Seed with defaults so new code-defined items always appear even when
   // Firestore has an older snapshot that predates them.
   DEFAULT_STORE_ITEMS.forEach((item, idx) => {
     const id = String(item.id || '').trim();
     if (!id) return;
-    byId.set(id, { ...item, order: Number.isFinite(Number(item.order)) ? Number(item.order) : idx });
+    byId.set(id, normalizeThemeItem(item, idx));
   });
   incoming.forEach((item, idx) => {
     if (!item || typeof item !== 'object') return;
-    const id = String(item.id || '').trim() || `storeitem_${idx}`;
-    byId.set(id, {
-      ...(byId.get(id) || {}),
-      ...item,
-      id,
-      type: item.type || 'theme',
-      name: String(item.name || 'Store Item'),
-      price: Math.max(0, Number(item.price || 0)),
-      isActive: item.isActive !== false,
-      order: Number.isFinite(Number(item.order)) ? Number(item.order) : idx
+    if ((item.type || 'theme') !== 'theme') return;
+    const normalized = normalizeThemeItem(item, idx);
+    byId.set(normalized.id, {
+      ...(byId.get(normalized.id) || {}),
+      ...normalized
     });
   });
 
