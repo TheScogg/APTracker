@@ -58,6 +58,14 @@ service cloud.firestore {
         && (memberRole(plantId) == "admin" || memberRole(plantId) == "editor");
     }
 
+    function conversationMemberPath(plantId, conversationId, userId) {
+      return /databases/$(database)/documents/plants/$(plantId)/conversations/$(conversationId)/members/$(userId);
+    }
+
+    function isConversationMember(plantId, conversationId) {
+      return signedIn() && exists(conversationMemberPath(plantId, conversationId, currentUid()));
+    }
+
     // Only the plantIds field is being touched (used when adding/removing a user from a plant).
     function onlyUpdatesPlantIds() {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['plantIds']);
@@ -185,6 +193,38 @@ service cloud.firestore {
         allow delete: if isAdmin(plantId)
                       || (signedIn() && resource.data.createdBy.uid == currentUid());
         allow update: if false;
+      }
+
+      // ── Conversations ──
+      match /conversations/{conversationId} {
+        allow read: if isPlantMember(plantId) && isConversationMember(plantId, conversationId);
+        allow create: if isEditorOrAbove(plantId)
+                      && request.resource.data.plantId == plantId
+                      && request.resource.data.memberIds is list
+                      && request.resource.data.memberIds.size() >= 2
+                      && request.resource.data.memberIds.hasAny([currentUid()]);
+        allow update: if isConversationMember(plantId, conversationId)
+                      && request.resource.data.plantId == resource.data.plantId
+                      && request.resource.data.createdAt == resource.data.createdAt
+                      && request.resource.data.createdBy == resource.data.createdBy;
+        allow delete: if isAdmin(plantId);
+
+        match /messages/{messageId} {
+          allow read: if isConversationMember(plantId, conversationId);
+          allow create: if isConversationMember(plantId, conversationId)
+                        && request.resource.data.sender.uid == currentUid()
+                        && request.resource.data.plantId == plantId
+                        && request.resource.data.conversationId == conversationId;
+          allow update, delete: if isAdmin(plantId)
+                                || (signedIn() && resource.data.sender.uid == currentUid());
+        }
+
+        match /members/{userId} {
+          allow read: if isConversationMember(plantId, conversationId);
+          allow create, update: if isAdmin(plantId)
+                                || (isSelf(userId) && isConversationMember(plantId, conversationId));
+          allow delete: if isAdmin(plantId);
+        }
       }
 
       // ── Gamification config ──

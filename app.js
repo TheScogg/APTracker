@@ -69,6 +69,10 @@ function gameEventsCol() { return collection(db, 'plants', currentPlantId, 'game
 function missionProgressDoc(missionId, subjectId) { return doc(db, 'plants', currentPlantId, 'missions', missionId, 'progress', subjectId); }
 function globalStoreConfigDoc() { return doc(db, 'globalConfig', 'store'); }
 function legacyPlantStoreConfigDoc() { return doc(db, 'plants', currentPlantId, 'config', 'store'); }
+function conversationsCol() { return collection(db, 'plants', currentPlantId, 'conversations'); }
+function conversationDoc(conversationId) { return doc(db, 'plants', currentPlantId, 'conversations', conversationId); }
+function conversationMessagesCol(conversationId) { return collection(db, 'plants', currentPlantId, 'conversations', conversationId, 'messages'); }
+function conversationMemberDoc(conversationId, userId) { return doc(db, 'plants', currentPlantId, 'conversations', conversationId, 'members', userId); }
 
 function currentActor() {
   return { uid: currentUser?.uid || '', name: currentUser?.displayName || currentUser?.email || 'Unknown' };
@@ -5989,7 +5993,7 @@ document.querySelectorAll('.modal').forEach(modal => {
   modal.addEventListener('click', e => e.stopPropagation());
 });
 
-document.addEventListener('keydown', e=>{ if(e.key==='Escape'){closeModal();closeEditModal();closeResolveModal();closeReopenModal();closeLightbox();closeSortDropdown();closeExportModal();closeSerialModal();closeEditStatusModal();closeNotesModal();closeAppearanceModal();closeThemeEditor();} });
+document.addEventListener('keydown', e=>{ if(e.key==='Escape'){closeModal();closeEditModal();closeResolveModal();closeReopenModal();closeLightbox();closeSortDropdown();closeExportModal();closeSerialModal();closeEditStatusModal();closeNotesModal();closeConversation();closeAppearanceModal();closeThemeEditor();} });
 
 document.getElementById('theme-editor-modal').addEventListener('click', e => {
   if (e.target !== document.getElementById('theme-editor-modal')) return;
@@ -6042,6 +6046,127 @@ window.confirmSerialModal = async () => {
 
 // Close serial modal on overlay click and escape
 document.getElementById('serial-modal')?.addEventListener('click', e => { if(e.target===document.getElementById('serial-modal')) closeSerialModal(); });
+
+// ── CONVERSATIONS (DM + GROUP + PRESS CHANNELS) ──
+let _conversationUnsubscribe = null;
+
+function _conversationType(inputType) {
+  const normalized = String(inputType || 'group').trim().toLowerCase();
+  return ['dm', 'group', 'press'].includes(normalized) ? normalized : 'group';
+}
+
+function _requireChatContext() {
+  if (!currentPlantId) throw new Error('No active plant selected.');
+  if (!currentUser?.uid) throw new Error('You must be signed in.');
+}
+
+window.createConversation = async ({ type = 'group', title = '', memberIds = [], pressId = null } = {}) => {
+  _requireChatContext();
+  const actor = currentActor();
+  const normalizedType = _conversationType(type);
+  const uniqueMembers = Array.from(new Set([...(memberIds || []), actor.uid].map(v => String(v || '').trim()).filter(Boolean)));
+  if (uniqueMembers.length < 2) throw new Error('At least two members are required.');
+  if (normalizedType === 'dm' && uniqueMembers.length !== 2) throw new Error('DM conversations must have exactly two members.');
+  if (normalizedType === 'group' && !String(title || '').trim()) throw new Error('Group conversations require a title.');
+
+  const payload = {
+    type: normalizedType,
+    title: normalizedType === 'dm' ? null : String(title || '').trim(),
+    pressId: normalizedType === 'press' ? String(pressId || '').trim() || null : null,
+    plantId: currentPlantId,
+    createdAt: serverTimestamp(),
+    createdBy: actor,
+    memberIds: uniqueMembers,
+    memberCount: uniqueMembers.length,
+    lastMessage: null,
+    lastMessageAt: serverTimestamp(),
+    isArchived: false
+  };
+
+  const conversationRef = await addDoc(conversationsCol(), payload);
+  await Promise.all(uniqueMembers.map(uid => setDoc(conversationMemberDoc(conversationRef.id, uid), {
+    userId: uid,
+    role: uid === actor.uid ? 'owner' : 'member',
+    joinedAt: serverTimestamp(),
+    lastReadAt: serverTimestamp(),
+    lastReadMessageId: null,
+    unreadCount: 0,
+    muted: false
+  }, { merge: true })));
+
+  return conversationRef.id;
+};
+
+window.openConversation = (conversationId, onMessages) => {
+  _requireChatContext();
+  if (!conversationId) throw new Error('conversationId is required.');
+  if (_conversationUnsubscribe) {
+    _conversationUnsubscribe();
+    _conversationUnsubscribe = null;
+  }
+  const q = query(conversationMessagesCol(conversationId), orderBy('createdAt', 'asc'));
+  _conversationUnsubscribe = onSnapshot(q, snap => {
+    const messages = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (typeof onMessages === 'function') onMessages(messages);
+  }, err => console.warn('conversation listener error', err));
+  return _conversationUnsubscribe;
+};
+
+window.sendConversationMessage = async (conversationId, text, { mentions = [] } = {}) => {
+  _requireChatContext();
+  const trimmedText = String(text || '').trim();
+  if (!conversationId || !trimmedText) return null;
+  const actor = currentActor();
+
+  const messageRef = await addDoc(conversationMessagesCol(conversationId), {
+    conversationId,
+    plantId: currentPlantId,
+    sender: actor,
+    type: 'text',
+    text: trimmedText,
+    mentions: Array.from(new Set((mentions || []).map(v => String(v || '').trim()).filter(Boolean))),
+    attachments: [],
+    createdAt: serverTimestamp(),
+    editedAt: null,
+    deletedAt: null
+  });
+
+  await updateDoc(conversationDoc(conversationId), {
+    lastMessage: {
+      textPreview: trimmedText.slice(0, 280),
+      senderUid: actor.uid,
+      senderName: actor.name,
+      at: serverTimestamp()
+    },
+    lastMessageAt: serverTimestamp()
+  });
+
+  await setDoc(conversationMemberDoc(conversationId, actor.uid), {
+    userId: actor.uid,
+    lastReadAt: serverTimestamp(),
+    lastReadMessageId: messageRef.id
+  }, { merge: true });
+
+  return messageRef.id;
+};
+
+window.markConversationRead = async (conversationId, lastReadMessageId = null) => {
+  _requireChatContext();
+  if (!conversationId) return;
+  await setDoc(conversationMemberDoc(conversationId, currentUser.uid), {
+    userId: currentUser.uid,
+    lastReadAt: serverTimestamp(),
+    lastReadMessageId: lastReadMessageId || null,
+    unreadCount: 0
+  }, { merge: true });
+};
+
+window.closeConversation = () => {
+  if (_conversationUnsubscribe) {
+    _conversationUnsubscribe();
+    _conversationUnsubscribe = null;
+  }
+};
 
 // ── PRESS NOTES ──
 // Toggle between 'a' (Logbook) and 'b' (Team Channel) to switch prototypes
