@@ -1953,6 +1953,9 @@ let userXpSpent = 0;
 function userSpendableXp() { return Math.max(0, userLifetimeXp - userXpSpent); }
 
 const DEFAULT_STORE_ITEMS = [
+  // Canonical store catalog lives here. normalizeStoreItems() seeds these defaults
+  // before applying any Firestore config, so adding a new theme here does not
+  // require running scripts/add-store-themes.mjs.
   { id: 'theme_midnight',   type: 'theme', themeKey: 'midnight',   customVars: null, name: 'Midnight',   price: 0,   isActive: true, order: 0 },
   { id: 'theme_arctic',     type: 'theme', themeKey: 'arctic',     customVars: null, name: 'Arctic',     price: 0,   isActive: true, order: 1 },
   { id: 'theme_forest',     type: 'theme', themeKey: 'forest',     customVars: null, name: 'Forest',     price: 0,   isActive: true, order: 2 },
@@ -1966,6 +1969,31 @@ const DEFAULT_STORE_ITEMS = [
   { id: 'theme_engel',      type: 'theme', themeKey: 'engel',      customVars: null, name: 'Engel',      price: 0,   isActive: true, order: 10 },
   { id: 'theme_cardinals',  type: 'theme', themeKey: 'cardinals',  customVars: null, name: 'Cardinals',  price: 25,  isActive: true, order: 11 },
   { id: 'theme_wildcats',   type: 'theme', themeKey: 'wildcats',   customVars: null, name: 'Wildcats',   price: 25,  isActive: true, order: 12 },
+  {
+    id: 'theme_nocturne_slate',
+    type: 'theme',
+    themeKey: null,
+    customVars: {
+      '--bg': '#121722',
+      '--bg2': '#1a2130',
+      '--bg3': '#242d3f',
+      '--border': '#344055',
+      '--text': '#e7edf7',
+      '--text2': '#b5c0d4',
+      '--text3': '#8c99af',
+      '--accent': '#5d84d6',
+      '--accent2': '#7d9de0',
+      '--green': '#4bbf8a',
+      '--red': '#d96b7a',
+      '--blue': '#5d84d6',
+      '--yellow': '#d4b46a',
+      '--orange': '#c98a62'
+    },
+    name: 'Nocturne Slate',
+    price: 3,
+    isActive: true,
+    order: 13
+  },
 ];
 
 let gameConfig = null;
