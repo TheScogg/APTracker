@@ -5390,14 +5390,30 @@ function _saveCustomThemesStorage(data) {
   _syncThemePrefsToFirestore();
 }
 
+let _themePrefsSyncTimer = null;
+let _lastThemePrefsSyncSig = null;
+
+function _themePrefsPayloadSignature(uid, payload) {
+  return `${uid}:${JSON.stringify(payload)}`;
+}
+
 function _syncThemePrefsToFirestore() {
   if (!currentUser) return;
   try {
+    const uid = currentUser.uid;
     const activeTheme = localStorage.getItem('pressTrackerTheme') || 'midnight';
     const { customThemes } = _loadCustomThemes();
-    setDoc(doc(db, 'users', currentUser.uid), {
-      themePrefs: { activeTheme, customThemes }
-    }, { merge: true }).catch(() => {});
+    const payload = { activeTheme, customThemes };
+    const signature = _themePrefsPayloadSignature(uid, payload);
+    if (signature === _lastThemePrefsSyncSig) return;
+    if (_themePrefsSyncTimer) clearTimeout(_themePrefsSyncTimer);
+    _themePrefsSyncTimer = setTimeout(() => {
+      setDoc(doc(db, 'users', uid), {
+        themePrefs: payload
+      }, { merge: true })
+        .then(() => { _lastThemePrefsSyncSig = signature; })
+        .catch(() => {});
+    }, 350);
   } catch(e) {}
 }
 
