@@ -1966,6 +1966,31 @@ const DEFAULT_STORE_ITEMS = [
   { id: 'theme_engel',      type: 'theme', themeKey: 'engel',      customVars: null, name: 'Engel',      price: 0,   isActive: true, order: 10 },
   { id: 'theme_cardinals',  type: 'theme', themeKey: 'cardinals',  customVars: null, name: 'Cardinals',  price: 25,  isActive: true, order: 11 },
   { id: 'theme_wildcats',   type: 'theme', themeKey: 'wildcats',   customVars: null, name: 'Wildcats',   price: 25,  isActive: true, order: 12 },
+  {
+    id: 'theme_nocturne_slate',
+    type: 'theme',
+    themeKey: null,
+    customVars: {
+      '--bg': '#121722',
+      '--bg2': '#1a2130',
+      '--bg3': '#242d3f',
+      '--border': '#344055',
+      '--text': '#e7edf7',
+      '--text2': '#b5c0d4',
+      '--text3': '#8c99af',
+      '--accent': '#5d84d6',
+      '--accent2': '#7d9de0',
+      '--green': '#4bbf8a',
+      '--red': '#d96b7a',
+      '--blue': '#5d84d6',
+      '--yellow': '#d4b46a',
+      '--orange': '#c98a62'
+    },
+    name: 'Nocturne Slate',
+    price: 3,
+    isActive: true,
+    order: 13
+  },
 ];
 
 let gameConfig = null;
