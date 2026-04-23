@@ -6240,6 +6240,10 @@ function _messagingUserLabel(member = {}) {
   return member.displayName || member.name || member.email || member.uid || 'User';
 }
 
+function _messagingUserPhoto(member = {}) {
+  return member.photoURL || member.photoUrl || member.avatarUrl || member.avatarURL || member.picture || '';
+}
+
 function _messagingInitials(name = '') {
   return String(name || 'U').split(' ').filter(Boolean).map(x => x[0]).join('').slice(0, 2).toUpperCase();
 }
@@ -6293,8 +6297,24 @@ function _messagingNotifyIncoming(message, conversationName) {
 
 function _messagingMemberByUid(uid) {
   if (!uid) return null;
-  if (uid === currentUser?.uid) return { uid, displayName: currentUser?.displayName || currentUser?.email || 'You' };
+  if (uid === currentUser?.uid) {
+    return {
+      uid,
+      displayName: currentUser?.displayName || currentUser?.email || 'You',
+      email: currentUser?.email || '',
+      photoURL: currentUser?.photoURL || ''
+    };
+  }
   return _messagingState.selectableMembers.find(m => m.uid === uid) || null;
+}
+
+function _messagingPersonAvatar(member = {}, size = 40) {
+  const label = _messagingUserLabel(member);
+  const photo = _messagingUserPhoto(member);
+  if (photo) {
+    return `<div class="msg-avatar" style="position:relative;"><img class="msg-avatar-img" src="${esc(photo)}" alt="${esc(label)}" style="width:${size}px;height:${size}px;border-radius:50%;"></div>`;
+  }
+  return `<div class="msg-avatar" style="position:relative;"><div class="msg-avatar-initials" style="background:${_messagingColor(member.uid || label)};width:${size}px;height:${size}px;">${esc(_messagingInitials(label))}</div></div>`;
 }
 
 function _messagingConversationName(conv) {
@@ -6340,14 +6360,17 @@ function _messagingAvatarHtml(conv, size = 40) {
     const cells = others.map(uid => {
       const m = _messagingMemberByUid(uid);
       const label = _messagingUserLabel(m || { uid });
+      const photo = _messagingUserPhoto(m || {});
+      if (photo) {
+        return `<div class="msg-group-avatar-cell" style="padding:0;overflow:hidden;background:var(--bg4);"><img src="${esc(photo)}" alt="${esc(label)}" style="width:100%;height:100%;object-fit:cover;"></div>`;
+      }
       return `<div class="msg-group-avatar-cell" style="background:${_messagingColor(uid)}">${esc(_messagingInitials(label))}</div>`;
     }).join('');
     return `<div class="msg-group-avatar" style="width:${size}px;height:${size}px;">${cells || '<div class="msg-group-avatar-cell" style="grid-column:1/3;background:var(--bg4)">GR</div>'}</div>`;
   }
   const otherUid = (conv.memberIds || []).find(uid => uid !== currentUser?.uid);
-  const other = _messagingMemberByUid(otherUid);
-  const label = _messagingUserLabel(other || { uid: otherUid });
-  return `<div class="msg-avatar" style="position:relative;"><div class="msg-avatar-initials" style="background:${_messagingColor(otherUid || label)};width:${size}px;height:${size}px;">${esc(_messagingInitials(label))}</div></div>`;
+  const other = _messagingMemberByUid(otherUid) || { uid: otherUid, name: 'User' };
+  return _messagingPersonAvatar(other, size);
 }
 
 function _renderMessagingConversations() {
@@ -6470,7 +6493,7 @@ function _renderMessagingMemberPicks() {
       const label = _messagingUserLabel(m);
       const checked = _messagingState.selectedDmUid === m.uid;
       return `<div class="msg-member-row ${checked ? 'selected' : ''}" data-dm-uid="${esc(m.uid)}">
-        <div class="msg-avatar-initials" style="background:${_messagingColor(m.uid)};">${esc(_messagingInitials(label))}</div>
+        ${_messagingPersonAvatar(m, 36)}
         <div style="font-size:14px;font-weight:600;">${esc(label)}</div>
         <div class="msg-member-check">${checked ? '✓' : ''}</div>
       </div>`;
@@ -6488,7 +6511,7 @@ function _renderMessagingMemberPicks() {
       const label = _messagingUserLabel(m);
       const checked = _messagingState.selectedGroupMembers.has(m.uid);
       return `<div class="msg-member-row ${checked ? 'selected' : ''}" data-group-uid="${esc(m.uid)}">
-        <div class="msg-avatar-initials" style="background:${_messagingColor(m.uid)};">${esc(_messagingInitials(label))}</div>
+        ${_messagingPersonAvatar(m, 36)}
         <div style="font-size:14px;font-weight:600;">${esc(label)}</div>
         <div class="msg-member-check">${checked ? '✓' : ''}</div>
       </div>`;
