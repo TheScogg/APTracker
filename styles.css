@@ -652,6 +652,16 @@
   .sort-dropdown-btn:hover { border-color: var(--text2); color: var(--text); }
   .sort-dropdown-btn.open { border-color: var(--accent); color: var(--accent); }
   .sort-dropdown-btn.open .sort-chevron { transform: rotate(180deg); }
+  #messages-btn-header.messages-has-unread {
+    background: #22c55e;
+    border-color: #22c55e;
+    color: #fff;
+  }
+  #messages-btn-header.messages-has-unread:hover {
+    background: #16a34a;
+    border-color: #16a34a;
+    color: #fff;
+  }
   .sort-chevron { transition: transform 0.2s; }
   .sort-dropdown { display: none; position: absolute; top: calc(100% + 5px); right: 0; background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; min-width: 180px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); z-index: 200; overflow: hidden; animation: dropIn 0.15s ease; }
   .sort-dropdown.visible { display: block; }
