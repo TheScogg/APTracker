@@ -680,17 +680,27 @@
 
   @media (max-width: 700px) {
     header {
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
       justify-content: flex-start;
-      row-gap: 8px;
+      gap: 8px;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
     }
+    header::-webkit-scrollbar { display: none; }
+    .logo-text { font-size: 16px; }
+    .logo { gap: 8px; }
+    .plant-switcher-btn { padding: 5px 8px; font-size: 11px; }
+    #messages-btn-header { padding: 5px 8px; min-width: 34px; justify-content: center; }
+    .user-pill { padding: 4px 8px; }
+    .user-name { max-width: 72px; }
     .user-pill-wrap {
       margin-left: auto;
     }
     .game-pill {
-      order: 10;
-      flex: 1 1 100%;
-      justify-content: center;
+      order: 0;
+      flex: 0 0 auto;
+      justify-content: flex-start;
     }
   }
 
