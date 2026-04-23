@@ -9,6 +9,397 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <link rel="stylesheet" href="./styles.css">
+<style>
+  /* ── MESSAGING MODAL ── */
+  :root {
+    --ios-blue: #007AFF;
+    --ios-blue-dim: rgba(0,122,255,0.15);
+    --bubble-sent: #007AFF;
+    --bubble-recv: var(--bg3, #1e2535);
+    --radius-bubble: 18px;
+  }
+  .msg-btn-wrap { position: relative; }
+  .msg-badge {
+    position: absolute; top: -6px; right: -6px;
+    background: var(--red); color: #fff;
+    font-size: 10px; font-weight: 700;
+    min-width: 18px; height: 18px;
+    border-radius: 9px; padding: 0 4px;
+    display: flex; align-items: center; justify-content: center;
+    border: 2px solid var(--bg);
+    animation: msgBadgePop 0.3s cubic-bezier(0.175,0.885,0.32,1.275);
+  }
+  @keyframes msgBadgePop { from{transform:scale(0)} to{transform:scale(1)} }
+  .msg-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    z-index: 1000;
+    display: flex; align-items: center; justify-content: center;
+    padding: 16px;
+    animation: msgFadeIn 0.2s ease;
+  }
+  @keyframes msgFadeIn { from{opacity:0} to{opacity:1} }
+  .msg-modal {
+    width: 100%; max-width: 820px;
+    height: min(85vh, 680px);
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 32px 80px rgba(0,0,0,0.6);
+    animation: msgSlideUp 0.25s cubic-bezier(0.4,0,0.2,1);
+  }
+  @keyframes msgSlideUp { from{transform:translateY(24px);opacity:0} to{transform:translateY(0);opacity:1} }
+  .msg-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 18px 0;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    gap: 12px;
+  }
+  .msg-header-left { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+  .msg-header-title { font-size: 15px; font-weight: 700; color: var(--text); letter-spacing: 0.3px; }
+  .msg-header-tabs { display: flex; gap: 0; }
+  .msg-tab {
+    font-family: 'Nunito', sans-serif;
+    font-size: 12px; font-weight: 600;
+    padding: 8px 14px 10px;
+    color: var(--text3);
+    background: none; border: none; cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .msg-tab.active { color: var(--ios-blue); border-bottom-color: var(--ios-blue); }
+  .msg-tab-badge {
+    background: var(--red); color: #fff;
+    font-size: 9px; font-weight: 700;
+    min-width: 15px; height: 15px;
+    border-radius: 8px; padding: 0 3px;
+    display: inline-flex; align-items: center; justify-content: center;
+    margin-left: 4px; vertical-align: middle;
+  }
+  .msg-header-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .msg-icon-btn {
+    width: 32px; height: 32px; border-radius: 8px;
+    background: var(--bg3); border: 1px solid var(--border);
+    color: var(--text2); cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s, color 0.15s;
+    font-size: 15px;
+  }
+  .msg-icon-btn:hover { background: var(--bg4); color: var(--text); }
+  .msg-close-btn {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: var(--bg3); border: 1px solid var(--border);
+    color: var(--text2); cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; line-height: 1;
+    transition: background 0.15s, color 0.15s;
+  }
+  .msg-close-btn:hover { background: rgba(248,113,113,0.2); color: var(--red); }
+  .msg-body { display: flex; flex: 1; overflow: hidden; }
+  .msg-list-panel {
+    width: 260px; flex-shrink: 0;
+    display: flex; flex-direction: column;
+    border-right: 1px solid var(--border);
+    background: var(--bg);
+  }
+  .msg-search-wrap { padding: 10px 12px 8px; flex-shrink: 0; position: relative; }
+  .msg-search-input {
+    width: 100%;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 7px 12px 7px 32px;
+    color: var(--text);
+    font-family: 'Nunito', sans-serif;
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .msg-search-input:focus { border-color: var(--ios-blue); }
+  .msg-search-icon {
+    position: absolute; left: 22px; top: 50%;
+    transform: translateY(-50%);
+    color: var(--text3); pointer-events: none;
+  }
+  .msg-convos-list { flex: 1; overflow-y: auto; padding: 4px 0; }
+  .msg-convos-list::-webkit-scrollbar { width: 4px; }
+  .msg-convos-list::-webkit-scrollbar-track { background: transparent; }
+  .msg-convos-list::-webkit-scrollbar-thumb { background: var(--bg4); border-radius: 2px; }
+  .msg-convo-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 12px; cursor: pointer;
+    transition: background 0.12s;
+    border-radius: 10px; margin: 1px 6px;
+  }
+  .msg-convo-row:hover { background: var(--bg3); }
+  .msg-convo-row.active { background: var(--ios-blue-dim); }
+  .msg-convo-row.active .msg-convo-name { color: var(--ios-blue); }
+  .msg-avatar-online {
+    position: absolute; bottom: 1px; right: 1px;
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--green); border: 2px solid var(--bg);
+  }
+  .msg-convo-info { flex: 1; min-width: 0; }
+  .msg-convo-name-row { display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-bottom: 2px; }
+  .msg-convo-name { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .msg-convo-time { font-size: 10px; color: var(--text3); flex-shrink: 0; }
+  .msg-convo-preview { font-size: 12px; color: var(--text3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .msg-convo-preview.unread { color: var(--text2); font-weight: 600; }
+  .msg-unread-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ios-blue); flex-shrink: 0; }
+  .msg-pin-icon { font-size: 10px; color: var(--text3); flex-shrink: 0; }
+  .msg-new-btn {
+    margin: 8px 10px; padding: 9px 12px;
+    background: var(--ios-blue); border: none; border-radius: 10px;
+    color: #fff; font-family: 'Nunito', sans-serif;
+    font-size: 13px; font-weight: 700;
+    cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;
+    transition: opacity 0.15s; flex-shrink: 0;
+  }
+  .msg-new-btn:hover { opacity: 0.88; }
+  .msg-thread-panel {
+    flex: 1; display: flex; flex-direction: column;
+    overflow: hidden; background: var(--bg2); min-width: 0;
+  }
+  .msg-thread-header {
+    padding: 12px 16px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px;
+    flex-shrink: 0; background: var(--bg2);
+  }
+  .msg-thread-name { font-size: 14px; font-weight: 700; color: var(--text); }
+  .msg-thread-sub { font-size: 11px; color: var(--text3); margin-top: 1px; }
+  .msg-thread-header-actions { margin-left: auto; display: flex; gap: 6px; }
+  .msg-messages {
+    flex: 1; overflow-y: auto;
+    padding: 12px 16px;
+    display: flex; flex-direction: column; gap: 4px;
+    scroll-behavior: smooth;
+  }
+  .msg-messages::-webkit-scrollbar { width: 4px; }
+  .msg-messages::-webkit-scrollbar-track { background: transparent; }
+  .msg-messages::-webkit-scrollbar-thumb { background: var(--bg4); border-radius: 2px; }
+  .msg-date-sep {
+    display: flex; align-items: center; gap: 8px;
+    color: var(--text3); font-size: 10px; font-weight: 600;
+    letter-spacing: 0.5px; text-transform: uppercase; margin: 8px 0;
+  }
+  .msg-date-sep::before, .msg-date-sep::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+  .msg-row { display: flex; align-items: flex-end; gap: 8px; margin-bottom: 2px; }
+  .msg-row.sent { flex-direction: row-reverse; }
+  .msg-row.sent .msg-row-avatar { display: none; }
+  .msg-bubble-group { display: flex; flex-direction: column; gap: 2px; max-width: 72%; }
+  .msg-row.sent .msg-bubble-group { align-items: flex-end; }
+  .msg-sender-name { font-size: 10px; color: var(--text3); font-weight: 600; margin-bottom: 2px; padding-left: 4px; }
+  .msg-bubble-wrap { position: relative; display: inline-flex; flex-direction: column; }
+  .msg-bubble {
+    padding: 9px 13px; border-radius: var(--radius-bubble);
+    font-size: 14px; line-height: 1.45; word-break: break-word;
+    position: relative; cursor: pointer; transition: opacity 0.12s;
+  }
+  .msg-bubble:hover { opacity: 0.92; }
+  .msg-bubble.recv {
+    background: var(--bubble-recv); color: var(--text);
+    border: 1px solid var(--border); border-bottom-left-radius: 5px;
+  }
+  .msg-bubble.sent { background: var(--bubble-sent); color: #fff; border-bottom-right-radius: 5px; }
+  .msg-bubble-time {
+    font-size: 10px; color: var(--text3); margin-top: 3px;
+    display: flex; align-items: center; gap: 4px;
+  }
+  .msg-row.sent .msg-bubble-time { justify-content: flex-end; }
+  .msg-read-tick { font-size: 11px; }
+  .msg-read-tick.read { color: var(--ios-blue); }
+  .msg-read-tick.sent-only { color: var(--text3); }
+  .msg-reactions { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
+  .msg-reaction {
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 12px; padding: 2px 7px; font-size: 12px; cursor: pointer;
+    transition: background 0.12s, border-color 0.12s;
+    display: flex; align-items: center; gap: 3px;
+  }
+  .msg-reaction:hover { background: var(--bg4); border-color: var(--ios-blue); }
+  .msg-reaction.mine { background: var(--ios-blue-dim); border-color: var(--ios-blue); }
+  .msg-reaction-count { font-size: 10px; font-weight: 600; color: var(--text2); }
+  .msg-reaction-picker {
+    position: absolute; bottom: calc(100% + 6px);
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 14px; padding: 6px 8px;
+    display: flex; gap: 4px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    z-index: 10; white-space: nowrap;
+    animation: msgPickerPop 0.15s cubic-bezier(0.175,0.885,0.32,1.275);
+  }
+  .msg-row.sent .msg-reaction-picker { right: 0; }
+  .msg-row.recv .msg-reaction-picker { left: 0; }
+  @keyframes msgPickerPop { from{transform:scale(0.8);opacity:0} to{transform:scale(1);opacity:1} }
+  .msg-reaction-emoji { font-size: 20px; cursor: pointer; padding: 2px; border-radius: 6px; transition: background 0.1s, transform 0.1s; }
+  .msg-reaction-emoji:hover { background: var(--bg4); transform: scale(1.2); }
+  .msg-typing-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 4px 0 2px; opacity: 0; transition: opacity 0.2s; height: 0; overflow: hidden;
+  }
+  .msg-typing-row.visible { opacity: 1; height: auto; }
+  .msg-typing-bubble {
+    background: var(--bubble-recv); border: 1px solid var(--border);
+    border-radius: 18px; border-bottom-left-radius: 5px;
+    padding: 10px 14px; display: flex; gap: 4px; align-items: center;
+  }
+  .msg-typing-dot {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--text3);
+    animation: msgTypingBounce 1.2s infinite;
+  }
+  .msg-typing-dot:nth-child(2) { animation-delay: 0.2s; }
+  .msg-typing-dot:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes msgTypingBounce {
+    0%,60%,100% { transform: translateY(0); opacity: 0.4; }
+    30% { transform: translateY(-5px); opacity: 1; }
+  }
+  .msg-typing-text { font-size: 11px; color: var(--text3); }
+  .msg-composer {
+    border-top: 1px solid var(--border); padding: 10px 12px;
+    display: flex; align-items: flex-end; gap: 8px;
+    background: var(--bg2); flex-shrink: 0;
+  }
+  .msg-composer-input {
+    flex: 1; background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 20px; padding: 9px 14px; color: var(--text);
+    font-family: 'Nunito', sans-serif; font-size: 14px; outline: none;
+    resize: none; max-height: 100px; overflow-y: auto; line-height: 1.4;
+    transition: border-color 0.15s;
+  }
+  .msg-composer-input:focus { border-color: var(--ios-blue); }
+  .msg-composer-input::placeholder { color: var(--text3); }
+  .msg-send-btn {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: var(--ios-blue); border: none; color: #fff; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: opacity 0.15s, transform 0.1s; flex-shrink: 0;
+  }
+  .msg-send-btn:hover { opacity: 0.9; }
+  .msg-send-btn:active { transform: scale(0.93); }
+  .msg-send-btn:disabled { background: var(--bg4); cursor: default; }
+  .msg-emoji-btn {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: var(--bg3); border: 1px solid var(--border);
+    color: var(--text2); cursor: pointer; font-size: 18px;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s; flex-shrink: 0;
+  }
+  .msg-emoji-btn:hover { background: var(--bg4); }
+  .msg-empty {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; color: var(--text3); gap: 10px;
+  }
+  .msg-empty-icon { font-size: 40px; opacity: 0.4; }
+  .msg-empty-text { font-size: 13px; font-weight: 500; }
+  .msg-sheet-overlay {
+    position: fixed; inset: 0; z-index: 1100;
+    background: rgba(0,0,0,0.5);
+    display: flex; align-items: flex-end; justify-content: center;
+    animation: msgFadeIn 0.15s ease;
+  }
+  .msg-sheet {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 20px 20px 0 0; width: 100%; max-width: 480px;
+    padding: 20px 20px 32px;
+    animation: msgSheetUp 0.25s cubic-bezier(0.4,0,0.2,1);
+    max-height: 80vh; overflow-y: auto;
+  }
+  @keyframes msgSheetUp { from{transform:translateY(100%)} to{transform:translateY(0)} }
+  .msg-sheet-handle { width: 36px; height: 4px; border-radius: 2px; background: var(--border); margin: 0 auto 16px; }
+  .msg-sheet-title { font-size: 16px; font-weight: 700; margin-bottom: 16px; }
+  .msg-sheet-label { font-size: 11px; color: var(--text3); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+  .msg-sheet-input {
+    width: 100%; background: var(--bg3); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 13px; color: var(--text); font-family: 'Nunito', sans-serif; font-size: 14px;
+    outline: none; margin-bottom: 14px; transition: border-color 0.15s;
+  }
+  .msg-sheet-input:focus { border-color: var(--ios-blue); }
+  .msg-member-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 16px; max-height: 200px; overflow-y: auto; }
+  .msg-member-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 7px 10px; border-radius: 10px;
+    cursor: pointer; transition: background 0.12s;
+  }
+  .msg-member-row:hover { background: var(--bg3); }
+  .msg-member-row.selected { background: var(--ios-blue-dim); }
+  .msg-member-check {
+    margin-left: auto; width: 20px; height: 20px;
+    border-radius: 50%; border: 2px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; color: #fff; transition: background 0.15s, border-color 0.15s;
+  }
+  .msg-member-row.selected .msg-member-check { background: var(--ios-blue); border-color: var(--ios-blue); }
+  .msg-sheet-btn {
+    width: 100%; padding: 13px; background: var(--ios-blue); color: #fff;
+    border: none; border-radius: 12px; font-family: 'Nunito', sans-serif;
+    font-size: 15px; font-weight: 700; cursor: pointer; transition: opacity 0.15s;
+  }
+  .msg-sheet-btn:hover { opacity: 0.9; }
+  .msg-sheet-btn:disabled { background: var(--bg4); color: var(--text3); cursor: default; }
+  .msg-sheet-cancel {
+    width: 100%; padding: 13px; background: var(--bg3); color: var(--text2);
+    border: 1px solid var(--border); border-radius: 12px;
+    font-family: 'Nunito', sans-serif; font-size: 15px; font-weight: 600;
+    cursor: pointer; margin-top: 8px; transition: background 0.15s;
+  }
+  .msg-sheet-cancel:hover { background: var(--bg4); }
+  .msg-toast-container {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    z-index: 2000; display: flex; flex-direction: column; gap: 8px;
+    pointer-events: none;
+  }
+  .msg-toast {
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 14px; padding: 10px 16px;
+    display: flex; align-items: center; gap: 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    animation: msgToastIn 0.3s cubic-bezier(0.175,0.885,0.32,1.275);
+    pointer-events: auto; min-width: 220px; max-width: 320px; cursor: pointer;
+  }
+  @keyframes msgToastIn { from{transform:translateY(20px);opacity:0} to{transform:translateY(0);opacity:1} }
+  .msg-toast-name { font-size: 12px; font-weight: 700; color: var(--text); }
+  .msg-toast-msg { font-size: 12px; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .msg-ctx-menu {
+    position: fixed; z-index: 1500;
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 12px; padding: 4px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4); min-width: 150px;
+    animation: msgPickerPop 0.15s cubic-bezier(0.175,0.885,0.32,1.275);
+  }
+  .msg-ctx-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px; border-radius: 8px;
+    font-size: 13px; color: var(--text); cursor: pointer; transition: background 0.1s;
+  }
+  .msg-ctx-item:hover { background: var(--bg4); }
+  .msg-ctx-item.danger { color: var(--red); }
+  .msg-back-btn { display: none; }
+  @media (max-width: 600px) {
+    .msg-modal { border-radius: 16px 16px 0 0; height: 92vh; max-height: none; }
+    .msg-overlay { align-items: flex-end; padding: 0; }
+    .msg-list-panel { width: 100%; position: absolute; inset: 0; z-index: 2; transition: transform 0.25s; }
+    .msg-list-panel.hidden { transform: translateX(-100%); }
+    .msg-thread-panel { width: 100%; }
+    .msg-back-btn { display: flex !important; }
+    .msg-body { position: relative; }
+  }
+  #messages-btn { position: relative; }
+  .msg-btn-badge {
+    position: absolute; top: -5px; right: -5px;
+    background: var(--red); color: #fff;
+    font-size: 9px; font-weight: 700;
+    min-width: 16px; height: 16px;
+    border-radius: 8px; padding: 0 3px;
+    display: flex; align-items: center; justify-content: center;
+    border: 2px solid var(--bg);
+    animation: msgBadgePop 0.3s cubic-bezier(0.175,0.885,0.32,1.275);
+  }
+</style>
 
 </head>
 <body>
@@ -517,12 +908,15 @@
 
 <!-- MESSAGING MODAL (replaced with user-provided system) -->
 <div class="modal-overlay" id="messaging-modal">
-  <div class="modal messaging-modal-shell">
+  <div class="modal messaging-modal-shell" onclick="event.stopPropagation()">
     <div class="messaging-modal-header">
-      <div class="modal-title" style="margin:0;">💬 Team Messaging</div>
-      <div style="display:flex;gap:8px;align-items:center;">
-        <button class="sort-dropdown-btn" onclick="createMessagingDm()">+ New DM</button>
-        <button class="sort-dropdown-btn" onclick="createMessagingGroup()">+ New Group</button>
+      <div class="modal-title">Messages</div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+        <select class="sort-dropdown-btn" onchange="setMessagingSort(this.value)">
+          <option value="recent">Most Recent</option>
+          <option value="name">Name</option>
+        </select>
+        <button class="sort-dropdown-btn" onclick="enableMessagingNotifications()">Enable Alerts</button>
         <button class="notes-modal-b-close" onclick="closeMessagingModal()">✕ close</button>
       </div>
     </div>
@@ -532,38 +926,28 @@
         <div class="messaging-controls">
           <div class="messaging-row">
             <select id="messaging-dm-select"></select>
-            <button class="sort-dropdown-btn" onclick="createMessagingDm()">Start DM</button>
+            <button class="sort-dropdown-btn" onclick="createMessagingDm()">+ New DM</button>
           </div>
           <div class="messaging-row">
             <input id="messaging-group-name" type="text" placeholder="Group name">
+            <button class="sort-dropdown-btn" onclick="createMessagingGroup()">+ Group</button>
           </div>
-          <details class="messaging-members-dropdown" id="messaging-group-members-wrap">
-            <summary>Select group members</summary>
-            <div class="messaging-members-list" id="messaging-group-members"></div>
+          <details class="messaging-members-dropdown">
+            <summary>Group members</summary>
+            <div id="messaging-group-members" class="messaging-members-list"></div>
           </details>
-          <div class="messaging-row">
-            <button class="sort-dropdown-btn" onclick="createMessagingGroup()">Create Group</button>
-            <button class="sort-dropdown-btn" onclick="enableMessagingNotifications()">Enable Alerts</button>
-          </div>
-          <div class="messaging-row">
-            <select id="messaging-sort" onchange="setMessagingSort(this.value)">
-              <option value="recent">Sort: Most Recent</option>
-              <option value="name">Sort: Name</option>
-            </select>
-          </div>
         </div>
         <div id="messaging-conversations-list" class="messaging-conversations-list"></div>
       </aside>
       <section class="messaging-thread-panel">
-        <div class="messaging-thread-title" id="messaging-thread-title">Select a conversation</div>
+        <div id="messaging-thread-title" class="messaging-thread-title">Select a conversation</div>
         <div id="messaging-thread-messages" class="messaging-thread-messages"></div>
+        <div id="messaging-photo-preview" class="messaging-photo-preview"></div>
         <div class="messaging-composer">
           <textarea id="messaging-input" placeholder="Write a message…"></textarea>
-          <input id="messaging-photo-input" type="file" accept="image/*" style="display:none;">
-          <button class="sort-dropdown-btn" onclick="document.getElementById('messaging-photo-input').click()">Photo</button>
+          <input id="messaging-photo-input" type="file" accept="image/*">
           <button class="sort-dropdown-btn" onclick="sendMessagingModalMessage()">Send</button>
         </div>
-        <div id="messaging-photo-preview" class="messaging-photo-preview"></div>
         <div id="messaging-error" class="messaging-error"></div>
       </section>
     </div>
