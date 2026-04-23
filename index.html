@@ -9,9 +9,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <link rel="stylesheet" href="./styles.css">
-<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
-<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
-<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <style>
   /* ── MESSAGING MODAL ── */
   :root {
@@ -909,496 +906,53 @@
   </div>
 </div>
 
-<!-- MESSAGING MODAL (React) -->
-<div id="msg-root"></div>
-<script type="text/babel">
-(function() {
-const { useState, useEffect, useRef, useCallback, useMemo } = React;
-
-const COLORS = ['#007AFF','#34C759','#FF9500','#FF3B30','#AF52DE','#5AC8FA','#FF2D55','#00C7BE'];
-const colorFor = str => COLORS[str.split('').reduce((a,c)=>a+c.charCodeAt(0),0) % COLORS.length];
-const initials = name => name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
-const fmtTime = ts => {
-  const d=new Date(ts),now=new Date(),diffDays=Math.floor((now-d)/86400000);
-  if(diffDays===0) return d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
-  if(diffDays===1) return 'Yesterday';
-  if(diffDays<7) return d.toLocaleDateString([],{weekday:'short'});
-  return d.toLocaleDateString([],{month:'short',day:'numeric'});
-};
-const fmtFull = ts => new Date(ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
-const fmtDateSep = ts => {
-  const d=new Date(ts),now=new Date(),diffDays=Math.floor((now-d)/86400000);
-  if(diffDays===0) return 'Today';
-  if(diffDays===1) return 'Yesterday';
-  return d.toLocaleDateString([],{weekday:'long',month:'long',day:'numeric'});
-};
-
-const USERS = [
-  {id:'u1',name:'Alex Morgan',photo:null},
-  {id:'u2',name:'Jordan Lee',photo:null},
-  {id:'u3',name:'Sam Rivera',photo:null},
-  {id:'u4',name:'Casey Kim',photo:null},
-  {id:'u5',name:'Taylor Pham',photo:null},
-];
-const ME = {id:'me',name:'You',photo:null};
-const now0 = Date.now();
-const seed = [
-  {id:'c1',type:'dm',members:['me','u1'],name:'Alex Morgan',pinned:true,muted:false,messages:[
-    {id:'m1',senderId:'u1',text:'Hey, the press on Row 3 is throwing alerts again',ts:now0-3600000*3,reactions:{},readBy:['me','u1']},
-    {id:'m2',senderId:'me',text:'On it — going to check the sensor now',ts:now0-3600000*3+60000,reactions:{'👍':['u1']},readBy:['me','u1']},
-    {id:'m3',senderId:'u1',text:'Thanks! Also the shift report is ready whenever you get a chance',ts:now0-1800000,reactions:{},readBy:['u1']},
-  ]},
-  {id:'c2',type:'group',members:['me','u1','u2','u3'],name:'Maintenance Crew',pinned:false,muted:false,messages:[
-    {id:'m4',senderId:'u2',text:'Morning everyone 👋 All machines nominal on 1st shift so far',ts:now0-7200000,reactions:{'👋':['u1','me']},readBy:['me','u1','u2','u3']},
-    {id:'m5',senderId:'u3',text:'Nice! Row 2 had a brief jam but it cleared. Logged it.',ts:now0-7000000,reactions:{},readBy:['me','u1','u2','u3']},
-    {id:'m6',senderId:'me',text:'Good work team. Keep the logs updated please',ts:now0-6800000,reactions:{'✅':['u1','u2','u3']},readBy:['me','u1','u2','u3']},
-    {id:'m7',senderId:'u1',text:'Will do 👍',ts:now0-6700000,reactions:{},readBy:['me','u1']},
-  ]},
-  {id:'c3',type:'dm',members:['me','u4'],name:'Casey Kim',pinned:false,muted:false,messages:[
-    {id:'m8',senderId:'u4',text:'Do you have the part number for the feeder belt on Press 7?',ts:now0-86400000,reactions:{},readBy:['me','u4']},
-    {id:'m9',senderId:'me',text:"PB-4472-C, it's in the parts cabinet drawer 3",ts:now0-86400000+120000,reactions:{'🙏':['u4']},readBy:['me','u4']},
-  ]},
-  {id:'c4',type:'group',members:['me','u2','u5'],name:'Supervisors',pinned:false,muted:false,messages:[
-    {id:'m10',senderId:'u5',text:'Reminder: safety walk at 2pm today',ts:now0-172800000,reactions:{},readBy:['me','u2','u5']},
-  ]},
-];
-
-function MsgAvatar({user,size=40,online=false}) {
-  const s={width:size,height:size,borderRadius:'50%',objectFit:'cover',flexShrink:0};
-  return (
-    <div style={{position:'relative',flexShrink:0}}>
-      {user.photo
-        ? <img src={user.photo} style={s} alt={user.name}/>
-        : <div style={{...s,background:colorFor(user.id),display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:size*0.33,fontWeight:700}}>{initials(user.name)}</div>
-      }
-      {online && <div className="msg-avatar-online"/>}
+<!-- MESSAGING MODAL -->
+<div class="modal-overlay" id="messaging-modal">
+  <div class="modal messaging-modal-shell" onclick="event.stopPropagation()">
+    <div class="messaging-modal-header">
+      <div class="modal-title">Messages</div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+        <select class="sort-dropdown-btn" onchange="setMessagingSort(this.value)">
+          <option value="recent">Most Recent</option>
+          <option value="name">Name</option>
+        </select>
+        <button class="sort-dropdown-btn" onclick="enableMessagingNotifications()">Enable Alerts</button>
+        <button class="notes-modal-b-close" onclick="closeMessagingModal()">✕ close</button>
+      </div>
     </div>
-  );
-}
-function MsgGroupAvatar({members,size=40}) {
-  const shown=members.filter(u=>u.id!=='me').slice(0,4);
-  return (
-    <div style={{width:size,height:size,borderRadius:size*0.3,display:'grid',gridTemplateColumns:'1fr 1fr',gap:1,overflow:'hidden',flexShrink:0}}>
-      {shown.map(u=>(
-        <div key={u.id} style={{background:colorFor(u.id),display:'flex',alignItems:'center',justifyContent:'center',fontSize:size*0.18,fontWeight:700,color:'#fff'}}>{initials(u.name)}</div>
-      ))}
-    </div>
-  );
-}
-
-const TOAST_EMITTER={listeners:[]};
-function emitToast(data){TOAST_EMITTER.listeners.forEach(fn=>fn(data));}
-function ToastContainer() {
-  const [toasts,setToasts]=useState([]);
-  useEffect(()=>{
-    const fn=data=>{
-      const id=Math.random().toString(36).slice(2);
-      setToasts(p=>[...p,{...data,id}]);
-      try{
-        const ctx=new(window.AudioContext||window.webkitAudioContext)();
-        const osc=ctx.createOscillator(),g=ctx.createGain();
-        osc.connect(g);g.connect(ctx.destination);
-        osc.frequency.setValueAtTime(880,ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(1200,ctx.currentTime+0.05);
-        g.gain.setValueAtTime(0.12,ctx.currentTime);
-        g.gain.exponentialRampToValueAtTime(0.0001,ctx.currentTime+0.3);
-        osc.start();osc.stop(ctx.currentTime+0.35);
-      }catch(e){}
-      setTimeout(()=>setToasts(p=>p.filter(t=>t.id!==id)),4000);
-    };
-    TOAST_EMITTER.listeners.push(fn);
-    return()=>{TOAST_EMITTER.listeners=TOAST_EMITTER.listeners.filter(x=>x!==fn);};
-  },[]);
-  return (
-    <div className="msg-toast-container">
-      {toasts.map(t=>(
-        <div key={t.id} className="msg-toast" onClick={()=>{t.onOpen&&t.onOpen();setToasts(p=>p.filter(x=>x.id!==t.id));}}>
-          <MsgAvatar user={t.sender} size={32}/>
-          <div style={{flex:1,minWidth:0}}>
-            <div className="msg-toast-name">{t.sender.name}{t.groupName&&<span style={{color:'var(--text3)',fontWeight:400}}> in {t.groupName}</span>}</div>
-            <div className="msg-toast-msg">{t.text}</div>
+    <div class="messaging-modal-body">
+      <aside class="messaging-list-panel">
+        <div class="messaging-list-title">Conversations</div>
+        <div class="messaging-controls">
+          <div class="messaging-row">
+            <select id="messaging-dm-select"></select>
+            <button class="sort-dropdown-btn" onclick="createMessagingDm()">+ New DM</button>
           </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-const EMOJIS=['❤️','👍','😂','😮','😢','🔥','✅','👀'];
-function ReactionPicker({onPick,onClose}) {
-  const ref=useRef();
-  useEffect(()=>{
-    const fn=e=>{if(ref.current&&!ref.current.contains(e.target))onClose();};
-    document.addEventListener('mousedown',fn);
-    return()=>document.removeEventListener('mousedown',fn);
-  },[onClose]);
-  return (
-    <div className="msg-reaction-picker" ref={ref}>
-      {EMOJIS.map(e=><span key={e} className="msg-reaction-emoji" onClick={()=>onPick(e)}>{e}</span>)}
-    </div>
-  );
-}
-function ContextMenu({x,y,items,onClose}) {
-  const ref=useRef();
-  useEffect(()=>{
-    const fn=e=>{if(ref.current&&!ref.current.contains(e.target))onClose();};
-    document.addEventListener('mousedown',fn);
-    return()=>document.removeEventListener('mousedown',fn);
-  },[onClose]);
-  return (
-    <div className="msg-ctx-menu" ref={ref} style={{top:y,left:x}}>
-      {items.map((item,i)=>(
-        <div key={i} className={`msg-ctx-item${item.danger?' danger':''}`} onClick={()=>{item.action();onClose();}}>
-          <span>{item.icon}</span> {item.label}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function Bubble({msg,isSent,convo,onReact,onCopy,onDelete,allUsers}) {
-  const [showPicker,setShowPicker]=useState(false);
-  const [ctxMenu,setCtxMenu]=useState(null);
-  const sender=allUsers.find(u=>u.id===msg.senderId)||ME;
-  const isGroup=convo.type==='group';
-  const isRead=msg.readBy&&msg.readBy.some(id=>id!=='me');
-  const handleContextMenu=e=>{e.preventDefault();setCtxMenu({x:e.clientX,y:e.clientY});};
-  const reactions=Object.entries(msg.reactions||{}).filter(([,users])=>users.length>0);
-  return (
-    <div className={`msg-row ${isSent?'sent':'recv'}`}>
-      {!isSent&&<div className="msg-row-avatar"><MsgAvatar user={sender} size={28}/></div>}
-      <div className="msg-bubble-group">
-        {!isSent&&isGroup&&<div className="msg-sender-name">{sender.name}</div>}
-        <div className="msg-bubble-wrap">
-          <div className={`msg-bubble ${isSent?'sent':'recv'}`} onContextMenu={handleContextMenu} onDoubleClick={()=>setShowPicker(p=>!p)}>{msg.text}</div>
-          {showPicker&&<ReactionPicker onPick={e=>{onReact(msg.id,e);setShowPicker(false);}} onClose={()=>setShowPicker(false)}/>}
-        </div>
-        {reactions.length>0&&(
-          <div className="msg-reactions">
-            {reactions.map(([emoji,users])=>(
-              <div key={emoji} className={`msg-reaction${users.includes('me')?' mine':''}`} onClick={()=>onReact(msg.id,emoji)}>
-                {emoji}<span className="msg-reaction-count">{users.length>1?users.length:''}</span>
-              </div>
-            ))}
-            <div className="msg-reaction" style={{fontSize:13,color:'var(--text3)'}} onClick={()=>setShowPicker(p=>!p)}>+</div>
+          <div class="messaging-row">
+            <input id="messaging-group-name" type="text" placeholder="Group name">
+            <button class="sort-dropdown-btn" onclick="createMessagingGroup()">+ Group</button>
           </div>
-        )}
-        <div className="msg-bubble-time">
-          {fmtFull(msg.ts)}
-          {isSent&&<span className={`msg-read-tick ${isRead?'read':'sent-only'}`}>{isRead?'✓✓':'✓'}</span>}
+          <details class="messaging-members-dropdown">
+            <summary>Group members</summary>
+            <div id="messaging-group-members" class="messaging-members-list"></div>
+          </details>
         </div>
-      </div>
-      {ctxMenu&&(
-        <ContextMenu x={ctxMenu.x} y={ctxMenu.y} onClose={()=>setCtxMenu(null)}
-          items={[
-            {icon:'😊',label:'React',action:()=>setShowPicker(true)},
-            {icon:'📋',label:'Copy',action:()=>{navigator.clipboard?.writeText(msg.text);onCopy&&onCopy();}},
-            ...(isSent?[{icon:'🗑️',label:'Delete',danger:true,action:()=>onDelete(msg.id)}]:[]),
-          ]}
-        />
-      )}
+        <div id="messaging-conversations-list" class="messaging-conversations-list"></div>
+      </aside>
+      <section class="messaging-thread-panel">
+        <div id="messaging-thread-title" class="messaging-thread-title">Select a conversation</div>
+        <div id="messaging-thread-messages" class="messaging-thread-messages"></div>
+        <div id="messaging-photo-preview" class="messaging-photo-preview"></div>
+        <div class="messaging-composer">
+          <textarea id="messaging-input" placeholder="Write a message…"></textarea>
+          <input id="messaging-photo-input" type="file" accept="image/*">
+          <button class="sort-dropdown-btn" onclick="sendMessagingModalMessage()">Send</button>
+        </div>
+        <div id="messaging-error" class="messaging-error"></div>
+      </section>
     </div>
-  );
-}
-
-function ThreadPanel({convo,allUsers,onSend,onReact,onDeleteMsg,onBack}) {
-  const [input,setInput]=useState('');
-  const [typing,setTyping]=useState(false);
-  const endRef=useRef();
-  const inputRef=useRef();
-  const members=convo.members.map(id=>id==='me'?ME:allUsers.find(u=>u.id===id)).filter(Boolean);
-  const others=members.filter(u=>u.id!=='me');
-  useEffect(()=>{endRef.current?.scrollIntoView({block:'nearest'});},[convo.messages.length]);
-  useEffect(()=>{
-    const t=setTimeout(()=>setTyping(true),3000);
-    const t2=setTimeout(()=>setTyping(false),5500);
-    return()=>{clearTimeout(t);clearTimeout(t2);};
-  },[convo.id]);
-  const handleSend=()=>{if(!input.trim())return;onSend(convo.id,input.trim());setInput('');inputRef.current?.focus();};
-  const handleKey=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();handleSend();}};
-  const grouped=useMemo(()=>{
-    const groups=[];let curDate=null;
-    convo.messages.forEach(msg=>{
-      const d=new Date(msg.ts).toDateString();
-      if(d!==curDate){groups.push({type:'sep',ts:msg.ts});curDate=d;}
-      groups.push({type:'msg',msg});
-    });
-    return groups;
-  },[convo.messages]);
-  const headerSub=convo.type==='group'?`${others.length+1} members`:others[0]?.name||'';
-  return (
-    <div className="msg-thread-panel">
-      <div className="msg-thread-header">
-        <button className="msg-back-btn msg-icon-btn" onClick={onBack} style={{marginRight:4}}>‹</button>
-        {convo.type==='group'?<MsgGroupAvatar members={members} size={36}/>:<MsgAvatar user={others[0]||ME} size={36} online={true}/>}
-        <div style={{flex:1,minWidth:0}}>
-          <div className="msg-thread-name">{convo.name}</div>
-          <div className="msg-thread-sub">{headerSub}</div>
-        </div>
-        <div className="msg-thread-header-actions">
-          <button className="msg-icon-btn" title="Search">
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" strokeWidth="1.4"/><path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
-          </button>
-        </div>
-      </div>
-      <div className="msg-messages">
-        {grouped.map((item,i)=>{
-          if(item.type==='sep') return <div key={'sep'+i} className="msg-date-sep">{fmtDateSep(item.ts)}</div>;
-          const {msg}=item;
-          const isSent=msg.senderId==='me';
-          return <Bubble key={msg.id} msg={msg} isSent={isSent} convo={convo} allUsers={allUsers} onReact={onReact} onDelete={onDeleteMsg} onCopy={()=>{}}/>;
-        })}
-        <div className={`msg-typing-row${typing?' visible':''}`}>
-          <MsgAvatar user={others[0]||ME} size={24}/>
-          <div className="msg-typing-bubble">
-            <div className="msg-typing-dot"/><div className="msg-typing-dot"/><div className="msg-typing-dot"/>
-          </div>
-          <span className="msg-typing-text">{others[0]?.name?.split(' ')[0]} is typing…</span>
-        </div>
-        <div ref={endRef}/>
-      </div>
-      <div className="msg-composer">
-        <button className="msg-emoji-btn">😊</button>
-        <textarea ref={inputRef} className="msg-composer-input" placeholder="iMessage" value={input}
-          onChange={e=>setInput(e.target.value)} onKeyDown={handleKey} rows={1}
-          onInput={e=>{e.target.style.height='auto';e.target.style.height=Math.min(e.target.scrollHeight,100)+'px';}}
-        />
-        <button className="msg-send-btn" onClick={handleSend} disabled={!input.trim()}>
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13.5 2.5L7 9M13.5 2.5L9 13.5 7 9l-4.5-2 9-4.5z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function NewDMSheet({users,onCreate,onClose}) {
-  const [selected,setSelected]=useState(null);
-  return (
-    <div className="msg-sheet-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
-      <div className="msg-sheet">
-        <div className="msg-sheet-handle"/>
-        <div className="msg-sheet-title">New Message</div>
-        <div className="msg-sheet-label">Send to</div>
-        <div className="msg-member-list">
-          {users.map(u=>(
-            <div key={u.id} className={`msg-member-row${selected===u.id?' selected':''}`} onClick={()=>setSelected(u.id)}>
-              <MsgAvatar user={u} size={36}/>
-              <div style={{fontSize:14,fontWeight:600}}>{u.name}</div>
-              <div className="msg-member-check">{selected===u.id?'✓':''}</div>
-            </div>
-          ))}
-        </div>
-        <button className="msg-sheet-btn" disabled={!selected} onClick={()=>selected&&onCreate(selected)}>Start Conversation</button>
-        <button className="msg-sheet-cancel" onClick={onClose}>Cancel</button>
-      </div>
-    </div>
-  );
-}
-
-function NewGroupSheet({users,onCreate,onClose}) {
-  const [name,setName]=useState('');
-  const [selected,setSelected]=useState([]);
-  const toggle=id=>setSelected(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id]);
-  return (
-    <div className="msg-sheet-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
-      <div className="msg-sheet">
-        <div className="msg-sheet-handle"/>
-        <div className="msg-sheet-title">New Group</div>
-        <div className="msg-sheet-label">Group Name</div>
-        <input className="msg-sheet-input" placeholder="e.g. Maintenance Crew" value={name} onChange={e=>setName(e.target.value)}/>
-        <div className="msg-sheet-label">Add Members</div>
-        <div className="msg-member-list">
-          {users.map(u=>(
-            <div key={u.id} className={`msg-member-row${selected.includes(u.id)?' selected':''}`} onClick={()=>toggle(u.id)}>
-              <MsgAvatar user={u} size={36}/>
-              <div style={{fontSize:14,fontWeight:600}}>{u.name}</div>
-              <div className="msg-member-check">{selected.includes(u.id)?'✓':''}</div>
-            </div>
-          ))}
-        </div>
-        <button className="msg-sheet-btn" disabled={!name.trim()||selected.length<1} onClick={()=>onCreate(name.trim(),selected)}>Create Group</button>
-        <button className="msg-sheet-cancel" onClick={onClose}>Cancel</button>
-      </div>
-    </div>
-  );
-}
-
-function MessagingApp() {
-  const [open,setOpen]=useState(false);
-  const [convos,setConvos]=useState(seed);
-  const [activeId,setActiveId]=useState('c1');
-  const [tab,setTab]=useState('all');
-  const [search,setSearch]=useState('');
-  const [showNewDM,setShowNewDM]=useState(false);
-  const [showNewGroup,setShowNewGroup]=useState(false);
-  const [mobileShowThread,setMobileShowThread]=useState(false);
-
-  useEffect(()=>{
-    window.openMessagingModal=()=>setOpen(true);
-    window.closeMessagingModal=()=>setOpen(false);
-    if('Notification' in window&&Notification.permission==='default') Notification.requestPermission();
-  },[]);
-
-  useEffect(()=>{
-    const t=setTimeout(()=>{
-      const sender=USERS[1];
-      const newMsg={id:'incoming_'+Date.now(),senderId:'u2',text:'Quick heads up — the hydraulics on P4 need checking before 3rd shift',ts:Date.now(),reactions:{},readBy:['u2']};
-      setConvos(p=>p.map(c=>c.id==='c2'?{...c,messages:[...c.messages,newMsg]}:c));
-      emitToast({sender,groupName:'Maintenance Crew',text:newMsg.text,onOpen:()=>{setOpen(true);setActiveId('c2');}});
-      const btn=document.getElementById('messages-btn');
-      if(btn&&!btn.querySelector('.msg-btn-badge')){const b=document.createElement('div');b.className='msg-btn-badge';b.textContent='1';btn.appendChild(b);}
-      if(Notification.permission==='granted') new Notification('Jordan Lee',{body:newMsg.text});
-    },6000);
-    return()=>clearTimeout(t);
-  },[]);
-
-  const unreadCounts=useMemo(()=>{
-    const counts={};
-    convos.forEach(c=>{counts[c.id]=c.messages.filter(m=>m.senderId!=='me'&&!(m.readBy||[]).includes('me')).length;});
-    return counts;
-  },[convos]);
-
-  const tabCounts={
-    all:Object.values(unreadCounts).reduce((a,b)=>a+b,0),
-    dms:convos.filter(c=>c.type==='dm').reduce((s,c)=>s+unreadCounts[c.id],0),
-    groups:convos.filter(c=>c.type==='group').reduce((s,c)=>s+unreadCounts[c.id],0),
-    pinned:0,
-  };
-
-  const filteredConvos=useMemo(()=>{
-    let list=convos;
-    if(tab==='dms') list=list.filter(c=>c.type==='dm');
-    else if(tab==='groups') list=list.filter(c=>c.type==='group');
-    else if(tab==='pinned') list=list.filter(c=>c.pinned);
-    if(search.trim()){
-      const q=search.toLowerCase();
-      list=list.filter(c=>c.name.toLowerCase().includes(q)||c.messages.some(m=>m.text.toLowerCase().includes(q)));
-    }
-    return [...list].sort((a,b)=>{
-      if(a.pinned&&!b.pinned) return -1;
-      if(!a.pinned&&b.pinned) return 1;
-      const la=a.messages[a.messages.length-1],lb=b.messages[b.messages.length-1];
-      return (lb?.ts||0)-(la?.ts||0);
-    });
-  },[convos,tab,search]);
-
-  const handleSend=(convoId,text)=>{
-    const msg={id:'msg_'+Date.now(),senderId:'me',text,ts:Date.now(),reactions:{},readBy:['me']};
-    setConvos(p=>p.map(c=>c.id===convoId?{...c,messages:[...c.messages,msg]}:c));
-  };
-  const handleReact=(msgId,emoji)=>{
-    setConvos(p=>p.map(c=>({...c,messages:c.messages.map(m=>{
-      if(m.id!==msgId) return m;
-      const reactions={...m.reactions},cur=reactions[emoji]||[];
-      reactions[emoji]=cur.includes('me')?cur.filter(x=>x!=='me'):[...cur,'me'];
-      return {...m,reactions};
-    })})));
-  };
-  const handleDeleteMsg=msgId=>setConvos(p=>p.map(c=>({...c,messages:c.messages.filter(m=>m.id!==msgId)})));
-  const handleTogglePin=convoId=>setConvos(p=>p.map(c=>c.id===convoId?{...c,pinned:!c.pinned}:c));
-  const handleSelectConvo=id=>{
-    setActiveId(id);setMobileShowThread(true);
-    setConvos(p=>p.map(c=>c.id===id?{...c,messages:c.messages.map(m=>({...m,readBy:[...(m.readBy||[]),'me']}))}:c));
-    const badge=document.querySelector('#messages-btn .msg-btn-badge');
-    if(badge) badge.remove();
-  };
-  const handleCreateDM=userId=>{
-    const user=USERS.find(u=>u.id===userId);
-    const exists=convos.find(c=>c.type==='dm'&&c.members.includes(userId));
-    if(exists){setActiveId(exists.id);setShowNewDM(false);return;}
-    const nc={id:'c_'+Date.now(),type:'dm',members:['me',userId],name:user.name,pinned:false,muted:false,messages:[]};
-    setConvos(p=>[nc,...p]);setActiveId(nc.id);setShowNewDM(false);setMobileShowThread(true);
-  };
-  const handleCreateGroup=(name,memberIds)=>{
-    const nc={id:'c_'+Date.now(),type:'group',members:['me',...memberIds],name,pinned:false,muted:false,messages:[]};
-    setConvos(p=>[nc,...p]);setActiveId(nc.id);setShowNewGroup(false);setMobileShowThread(true);
-  };
-  const activeConvo=convos.find(c=>c.id===activeId);
-  const lastMsg=c=>c.messages[c.messages.length-1];
-
-  return (
-    <>
-      {open&&(
-        <div className="msg-overlay" onClick={e=>e.target===e.currentTarget&&setOpen(false)}>
-          <div className="msg-modal" onClick={e=>e.stopPropagation()}>
-            <div className="msg-header">
-              <div className="msg-header-left">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 2h10a1 1 0 011 1v8a1 1 0 01-1 1H5l-3 2V3a1 1 0 011-1z" fill="var(--ios-blue)" opacity="0.9"/></svg>
-                <span className="msg-header-title">Messages</span>
-              </div>
-              <div className="msg-header-tabs">
-                {[['all','All'],['dms','DMs'],['groups','Groups'],['pinned','📌']].map(([key,label])=>(
-                  <button key={key} className={`msg-tab${tab===key?' active':''}`} onClick={()=>setTab(key)}>
-                    {label}{tabCounts[key]>0&&<span className="msg-tab-badge">{tabCounts[key]}</span>}
-                  </button>
-                ))}
-              </div>
-              <div className="msg-header-actions">
-                <button className="msg-icon-btn" title="New DM" onClick={()=>setShowNewDM(true)}>
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
-                </button>
-                <button className="msg-close-btn" onClick={()=>setOpen(false)}>×</button>
-              </div>
-            </div>
-            <div className="msg-body">
-              <div className={`msg-list-panel${mobileShowThread?' hidden':''}`}>
-                <div className="msg-search-wrap">
-                  <span className="msg-search-icon">
-                    <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" strokeWidth="1.4"/><path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
-                  </span>
-                  <input className="msg-search-input" placeholder="Search…" value={search} onChange={e=>setSearch(e.target.value)}/>
-                </div>
-                <div className="msg-convos-list">
-                  {filteredConvos.map(c=>{
-                    const last=lastMsg(c);
-                    const lSender=last?(last.senderId==='me'?'You':USERS.find(u=>u.id===last.senderId)?.name?.split(' ')[0]||''):'';
-                    const preview=last?`${lSender}: ${last.text}`:'No messages yet';
-                    const members=c.members.map(id=>id==='me'?ME:USERS.find(u=>u.id===id)).filter(Boolean);
-                    const other=members.find(u=>u.id!=='me')||ME;
-                    const unread=unreadCounts[c.id]||0;
-                    return (
-                      <div key={c.id} className={`msg-convo-row${activeId===c.id?' active':''}`}
-                        onClick={()=>handleSelectConvo(c.id)}
-                        onContextMenu={e=>{e.preventDefault();handleTogglePin(c.id);}}>
-                        {c.type==='group'?<MsgGroupAvatar members={members} size={40}/>:<MsgAvatar user={other} size={40} online={c.id==='c1'}/>}
-                        <div className="msg-convo-info">
-                          <div className="msg-convo-name-row">
-                            <span className="msg-convo-name">{c.name}</span>
-                            <div style={{display:'flex',alignItems:'center',gap:4}}>
-                              {c.pinned&&<span className="msg-pin-icon">📌</span>}
-                              {last&&<span className="msg-convo-time">{fmtTime(last.ts)}</span>}
-                            </div>
-                          </div>
-                          <div className={`msg-convo-preview${unread>0?' unread':''}`}>{preview}</div>
-                        </div>
-                        {unread>0&&<div className="msg-unread-dot"/>}
-                      </div>
-                    );
-                  })}
-                </div>
-                <button className="msg-new-btn" onClick={()=>setShowNewGroup(true)}>
-                  <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 8a5 5 0 109.998 0A5 5 0 003 8zM8 5v6M5 8h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-                  New Group
-                </button>
-              </div>
-              {activeConvo
-                ?<ThreadPanel convo={activeConvo} allUsers={USERS} onSend={handleSend} onReact={handleReact} onDeleteMsg={handleDeleteMsg} onBack={()=>setMobileShowThread(false)}/>
-                :<div className="msg-empty"><div className="msg-empty-icon">💬</div><div className="msg-empty-text">Select a conversation</div></div>
-              }
-            </div>
-          </div>
-        </div>
-      )}
-      {showNewDM&&<NewDMSheet users={USERS} onCreate={handleCreateDM} onClose={()=>setShowNewDM(false)}/>}
-      {showNewGroup&&<NewGroupSheet users={USERS} onCreate={handleCreateGroup} onClose={()=>setShowNewGroup(false)}/>}
-      <ToastContainer/>
-    </>
-  );
-}
-
-ReactDOM.createRoot(document.getElementById('msg-root')).render(<MessagingApp/>);
-})();
-</script>
+  </div>
+</div>
 
 <!-- STORE MODAL -->
 <div class="modal-overlay store-modal-overlay" id="store-modal" onclick="if(event.target===this)closeStoreModal()">
