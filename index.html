@@ -390,7 +390,7 @@
     .msg-back-btn { display: flex !important; }
     .msg-body { position: relative; }
   }
-  #messages-btn { position: relative; }
+  [data-messages-trigger] { position: relative; }
   .msg-btn-badge {
     position: absolute; top: -5px; right: -5px;
     background: var(--red); color: #fff;
@@ -438,9 +438,10 @@
       <div class="plant-dropdown" id="plant-dropdown"></div>
     </div>
 
-    <button class="sort-dropdown-btn" id="messages-btn" onclick="openMessagingModal()" style="gap:4px;">
+    <button class="sort-dropdown-btn" id="messages-btn-header" data-messages-trigger="true" onclick="openMessagingModal()" style="gap:4px;">
       <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;opacity:0.7;"><path d="M3 2h10a1 1 0 011 1v8a1 1 0 01-1 1H5l-3 2V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
       MSG
+      <span class="msg-btn-badge" data-messages-badge style="display:none;">0</span>
     </button>
 
     <div class="user-pill-wrap" id="user-pill-wrap">
@@ -474,9 +475,10 @@
         <!-- Workspace -->
         <div class="user-dropdown-section">
           <div class="user-dropdown-section-label">Workspace</div>
-          <button class="user-dropdown-item" id="messages-btn" type="button" onclick="document.getElementById('user-dropdown').classList.remove('visible');document.getElementById('user-pill').classList.remove('open');openMessagingModal();">
+          <button class="user-dropdown-item" id="messages-btn-menu" data-messages-trigger="true" type="button" onclick="document.getElementById('user-dropdown').classList.remove('visible');document.getElementById('user-pill').classList.remove('open');openMessagingModal();">
             <span class="ud-item-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 2h10a1 1 0 011 1v8a1 1 0 01-1 1H5l-3 2V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg></span>
             Messages
+            <span class="msg-btn-badge" data-messages-badge style="display:none;">0</span>
           </button>
           <!-- Dark/Light toggle -->
           <div class="ud-toggle-row">
@@ -922,7 +924,7 @@
         <span class="msg-header-title">Messages</span>
       </div>
       <div class="msg-header-tabs" id="messaging-tabs">
-        <button class="msg-tab active" data-tab="all" type="button">All</button>
+        <button class="msg-tab active" data-tab="all" type="button">All <span class="msg-tab-badge" id="messaging-tab-all-badge" style="display:none;">0</span></button>
         <button class="msg-tab" data-tab="dms" type="button">DMs</button>
         <button class="msg-tab" data-tab="groups" type="button">Groups</button>
       </div>

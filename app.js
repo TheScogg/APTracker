@@ -720,6 +720,7 @@ async function switchPlant(plantId) {
   await backfillGlobalXpIfNeeded();
   startGamificationListeners();
   startListener();
+  _startMessagingInboxWatcher();
   refreshVisibleData();
 }
 
@@ -2141,6 +2142,8 @@ async function bootstrapSignedInSession(user) {
   await backfillGlobalXpIfNeeded();
   startGamificationListeners();
   startListener();
+  _startMessagingInboxWatcher();
+  _bindMessagingKeyboardShortcut();
   setTodayDate();
   if (!localStorage.getItem(TUTORIAL_KEY)) setTimeout(() => window.openTutorial(), 900);
 }
@@ -2149,6 +2152,8 @@ onAuthStateChanged(auth, async user => {
   if (user) {
     await bootstrapSignedInSession(user);
   } else {
+    if (_messagingInboxUnsubscribe) { _messagingInboxUnsubscribe(); _messagingInboxUnsubscribe = null; }
+    _updateMessagingEntryBadges(0);
     currentUser = null;
     document.getElementById('login-screen').classList.add('visible');
     document.getElementById('app').classList.remove('visible');
@@ -6069,6 +6074,7 @@ document.getElementById('serial-modal')?.addEventListener('click', e => { if(e.t
 // ── CONVERSATIONS (DM + GROUP + PRESS CHANNELS) ──
 let _conversationListUnsubscribe = null;
 let _conversationThreadUnsubscribe = null;
+let _messagingInboxUnsubscribe = null;
 
 function _conversationType(inputType) {
   const normalized = String(inputType || 'group').trim().toLowerCase();
@@ -6249,6 +6255,63 @@ const _messagingState = {
   selectedDmUid: null,
   selectedGroupMembers: new Set()
 };
+
+function _updateMessagingEntryBadges(unreadCount = 0) {
+  const safeCount = Math.max(0, Number(unreadCount) || 0);
+  document.querySelectorAll('[data-messages-badge]').forEach(el => {
+    if (!safeCount) {
+      el.style.display = 'none';
+      el.textContent = '0';
+      return;
+    }
+    el.style.display = 'inline-flex';
+    el.textContent = safeCount > 99 ? '99+' : String(safeCount);
+  });
+}
+
+function _messagingUnreadTotal(conversations = []) {
+  return (conversations || []).reduce((sum, conv) => sum + (_messagingUnreadCount(conv) ? 1 : 0), 0);
+}
+
+function _startMessagingInboxWatcher() {
+  if (_messagingInboxUnsubscribe) {
+    _messagingInboxUnsubscribe();
+    _messagingInboxUnsubscribe = null;
+  }
+  if (!currentPlantId || !currentUser?.uid) {
+    _updateMessagingEntryBadges(0);
+    return;
+  }
+  const q = query(conversationsCol(), orderBy('lastMessageAt', 'desc'));
+  _messagingInboxUnsubscribe = onSnapshot(q, snap => {
+    const conversations = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const unreadCount = _messagingUnreadTotal(conversations);
+    _updateMessagingEntryBadges(unreadCount);
+    const tabBadge = document.getElementById('messaging-tab-all-badge');
+    if (tabBadge) {
+      tabBadge.textContent = unreadCount > 99 ? '99+' : String(unreadCount);
+      tabBadge.style.display = unreadCount ? 'inline-flex' : 'none';
+    }
+  }, err => {
+    console.warn('messaging inbox watcher error', err);
+    _updateMessagingEntryBadges(0);
+  });
+}
+
+function _bindMessagingKeyboardShortcut() {
+  if (window.__messagingShortcutBound) return;
+  window.__messagingShortcutBound = true;
+  document.addEventListener('keydown', e => {
+    const target = e.target;
+    const typing = !!(target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable));
+    if (typing) return;
+    const openShortcut = (e.key.toLowerCase() === 'k' && (e.metaKey || e.ctrlKey));
+    if (!openShortcut) return;
+    e.preventDefault();
+    window.openMessagingModal();
+    setTimeout(() => document.getElementById('messaging-search')?.focus(), 30);
+  });
+}
 
 function _messagingSetError(message = '') {
   const el = document.getElementById('messaging-error');
@@ -6781,10 +6844,6 @@ document.getElementById('messaging-input')?.addEventListener('input', e => {
   e.target.style.height = 'auto';
   e.target.style.height = Math.min(e.target.scrollHeight, 100) + 'px';
 });
-
-// Cleanup for legacy layouts: remove any stale header MSG trigger so
-// messaging is only accessed from the user dropdown entry.
-document.querySelectorAll('header > #messages-btn, header > .sort-dropdown-btn#messages-btn').forEach(btn => btn.remove());
 
 document.getElementById('messaging-photo-input')?.addEventListener('change', e => {
   const file = e.target?.files?.[0] || null;
