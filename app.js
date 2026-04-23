@@ -6763,6 +6763,10 @@ document.getElementById('messaging-input')?.addEventListener('input', e => {
   e.target.style.height = Math.min(e.target.scrollHeight, 100) + 'px';
 });
 
+// Cleanup for legacy layouts: remove any stale header MSG trigger so
+// messaging is only accessed from the user dropdown entry.
+document.querySelectorAll('header > #messages-btn, header > .sort-dropdown-btn#messages-btn').forEach(btn => btn.remove());
+
 document.getElementById('messaging-photo-input')?.addEventListener('change', e => {
   const file = e.target?.files?.[0] || null;
   _messagingSetPhotoPreview(file);
