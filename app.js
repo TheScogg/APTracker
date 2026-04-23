@@ -6218,18 +6218,53 @@ window.closeConversationList = () => {
   if (_conversationListUnsubscribe) { _conversationListUnsubscribe(); _conversationListUnsubscribe = null; }
 };
 
-// ── MESSAGING MODAL (PHASE 1.1 UI) ──
+// ── MESSAGING MODAL (UI refresh) ──
 const _messagingState = {
   conversations: [],
   activeConversationId: null,
-  sortBy: 'recent',
   selectedPhoto: null,
-  lastSeenByConversation: {}
+  lastSeenByConversation: {},
+  tab: 'all',
+  search: '',
+  selectableMembers: [],
+  selectedDmUid: null,
+  selectedGroupMembers: new Set()
 };
 
 function _messagingSetError(message = '') {
   const el = document.getElementById('messaging-error');
   if (el) el.textContent = message;
+}
+
+function _messagingUserLabel(member = {}) {
+  return member.displayName || member.name || member.email || member.uid || 'User';
+}
+
+function _messagingInitials(name = '') {
+  return String(name || 'U').split(' ').filter(Boolean).map(x => x[0]).join('').slice(0, 2).toUpperCase();
+}
+
+function _messagingColor(seed = '') {
+  const palette = ['#007AFF','#34C759','#FF9500','#FF3B30','#AF52DE','#5AC8FA','#FF2D55','#00C7BE'];
+  const idx = String(seed).split('').reduce((a, c) => a + c.charCodeAt(0), 0) % palette.length;
+  return palette[idx];
+}
+
+function _fmtMsgTime(ts) {
+  if (!ts) return '';
+  const d = ts.toDate ? ts.toDate() : new Date(ts?.seconds ? ts.seconds * 1000 : ts);
+  if (Number.isNaN(+d)) return '';
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function _fmtMsgDateSep(ts) {
+  if (!ts) return '';
+  const d = ts.toDate ? ts.toDate() : new Date(ts?.seconds ? ts.seconds * 1000 : ts);
+  const now = new Date();
+  const diffDays = Math.floor((new Date(now.toDateString()) - new Date(d.toDateString())) / 86400000);
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+  return d.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
 }
 
 function _messagingSetPhotoPreview(file = null) {
@@ -6241,13 +6276,12 @@ function _messagingSetPhotoPreview(file = null) {
     return;
   }
   const objectUrl = URL.createObjectURL(file);
-  wrap.innerHTML = `<div>Photo selected: ${esc(file.name || 'image')}</div><img src="${objectUrl}" alt="selected photo preview">`;
+  wrap.innerHTML = `<div class="msg-reaction" style="display:inline-flex;margin:8px 0;">📷 ${esc(file.name || 'image')}</div><img src="${objectUrl}" alt="selected photo preview" style="max-width:180px;border-radius:10px;border:1px solid var(--border);margin-top:6px;">`;
 }
 
 function _messagingNotifyIncoming(message, conversationName) {
-  showGameToast(`💬 ${conversationName}: ${message.sender?.name || 'Someone'} sent a message`);
-  if (!('Notification' in window)) return;
-  if (Notification.permission !== 'granted') return;
+  showGameToast(`💬 ${conversationName}: ${(message?.sender?.name || 'Someone')} sent a message`);
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
   try {
     new Notification(conversationName, {
       body: message.text || (message.attachments?.length ? 'Sent a photo' : 'New message')
@@ -6257,84 +6291,168 @@ function _messagingNotifyIncoming(message, conversationName) {
   }
 }
 
+function _messagingMemberByUid(uid) {
+  if (!uid) return null;
+  if (uid === currentUser?.uid) return { uid, displayName: currentUser?.displayName || currentUser?.email || 'You' };
+  return _messagingState.selectableMembers.find(m => m.uid === uid) || null;
+}
+
 function _messagingConversationName(conv) {
   if (!conv) return 'Conversation';
-  if (conv.type === 'dm') return conv.title || 'Direct Message';
-  if (conv.type === 'press') return conv.title || `Press ${conv.pressId || ''}`.trim();
+  if (conv.type === 'dm') {
+    const otherUid = (conv.memberIds || []).find(uid => uid !== currentUser?.uid);
+    const other = _messagingMemberByUid(otherUid);
+    return _messagingUserLabel(other || { uid: otherUid, name: conv.title || 'Direct Message' });
+  }
+  if (conv.type === 'press') return conv.title || `Press ${conv.pressId || ''}`.trim() || 'Press Chat';
   return conv.title || 'Group Chat';
+}
+
+function _messagingFilteredConversations() {
+  const tab = _messagingState.tab;
+  const q = String(_messagingState.search || '').trim().toLowerCase();
+  const sorted = [..._messagingState.conversations].sort((a, b) => {
+    const at = a.lastMessageAt?.toMillis?.() ?? a.lastMessageAt?.seconds * 1000 ?? 0;
+    const bt = b.lastMessageAt?.toMillis?.() ?? b.lastMessageAt?.seconds * 1000 ?? 0;
+    return bt - at;
+  });
+  return sorted.filter(conv => {
+    if (tab === 'dms' && conv.type !== 'dm') return false;
+    if (tab === 'groups' && conv.type === 'dm') return false;
+    if (!q) return true;
+    const name = _messagingConversationName(conv).toLowerCase();
+    const preview = String(conv.lastMessage?.textPreview || '').toLowerCase();
+    return name.includes(q) || preview.includes(q);
+  });
+}
+
+function _messagingUnreadCount(conv) {
+  const lastId = conv?.lastMessage?.id;
+  const lastSenderUid = conv?.lastMessage?.sender?.uid;
+  if (!lastId || !lastSenderUid || lastSenderUid === currentUser?.uid) return 0;
+  return _messagingState.lastSeenByConversation[conv.id] === lastId ? 0 : 1;
+}
+
+function _messagingAvatarHtml(conv, size = 40) {
+  if (!conv) return '';
+  if (conv.type !== 'dm') {
+    const others = (conv.memberIds || []).filter(uid => uid !== currentUser?.uid).slice(0, 4);
+    const cells = others.map(uid => {
+      const m = _messagingMemberByUid(uid);
+      const label = _messagingUserLabel(m || { uid });
+      return `<div class="msg-group-avatar-cell" style="background:${_messagingColor(uid)}">${esc(_messagingInitials(label))}</div>`;
+    }).join('');
+    return `<div class="msg-group-avatar" style="width:${size}px;height:${size}px;">${cells || '<div class="msg-group-avatar-cell" style="grid-column:1/3;background:var(--bg4)">GR</div>'}</div>`;
+  }
+  const otherUid = (conv.memberIds || []).find(uid => uid !== currentUser?.uid);
+  const other = _messagingMemberByUid(otherUid);
+  const label = _messagingUserLabel(other || { uid: otherUid });
+  return `<div class="msg-avatar" style="position:relative;"><div class="msg-avatar-initials" style="background:${_messagingColor(otherUid || label)};width:${size}px;height:${size}px;">${esc(_messagingInitials(label))}</div></div>`;
 }
 
 function _renderMessagingConversations() {
   const list = document.getElementById('messaging-conversations-list');
   if (!list) return;
-  list.innerHTML = '';
-  const conversations = [..._messagingState.conversations];
-  if (_messagingState.sortBy === 'name') {
-    conversations.sort((a, b) => _messagingConversationName(a).localeCompare(_messagingConversationName(b)));
-  } else {
-    conversations.sort((a, b) => {
-      const at = a.lastMessageAt?.toMillis?.() ?? a.lastMessageAt?.seconds * 1000 ?? 0;
-      const bt = b.lastMessageAt?.toMillis?.() ?? b.lastMessageAt?.seconds * 1000 ?? 0;
-      return bt - at;
-    });
-  }
+  const conversations = _messagingFilteredConversations();
   if (!conversations.length) {
-    list.innerHTML = '<div class="messaging-empty">No conversations yet.</div>';
+    list.innerHTML = '<div class="msg-empty"><div class="msg-empty-icon">💬</div><div class="msg-empty-text">No conversations yet.</div></div>';
     return;
   }
-  conversations.forEach(conv => {
-    const row = document.createElement('button');
-    row.type = 'button';
-    row.className = 'messaging-conv-item' + (_messagingState.activeConversationId === conv.id ? ' active' : '');
-    row.onclick = () => _selectMessagingConversation(conv.id);
-    const lastText = conv.lastMessage?.textPreview || 'No messages yet';
-    row.innerHTML = `<div class="messaging-conv-name">${esc(_messagingConversationName(conv))}</div><div class="messaging-conv-preview">${esc(lastText)}</div>`;
-    list.appendChild(row);
+  list.innerHTML = conversations.map(conv => {
+    const unread = _messagingUnreadCount(conv);
+    const isActive = conv.id === _messagingState.activeConversationId;
+    const name = _messagingConversationName(conv);
+    const preview = conv.lastMessage?.textPreview || 'No messages yet';
+    const time = conv.lastMessageAt ? _relativeTime(conv.lastMessageAt) : '';
+    return `<div class="msg-convo-row ${isActive ? 'active' : ''}" data-convo-id="${esc(conv.id)}">
+      ${_messagingAvatarHtml(conv)}
+      <div class="msg-convo-info">
+        <div class="msg-convo-name-row">
+          <span class="msg-convo-name">${esc(name)}</span>
+          <span class="msg-convo-time">${esc(time)}</span>
+        </div>
+        <div class="msg-convo-preview ${unread ? 'unread' : ''}">${esc(preview)}</div>
+      </div>
+      ${unread ? '<div class="msg-unread-dot"></div>' : ''}
+    </div>`;
+  }).join('');
+
+  list.querySelectorAll('.msg-convo-row').forEach(row => {
+    row.addEventListener('click', () => {
+      const convoId = row.getAttribute('data-convo-id');
+      if (convoId) _selectMessagingConversation(convoId);
+      if (window.innerWidth <= 600) document.getElementById('msg-list-panel')?.classList.add('hidden');
+    });
   });
+}
+
+function _renderMessagingThreadHeader(conv) {
+  const title = document.getElementById('messaging-thread-title');
+  const sub = document.getElementById('messaging-thread-sub');
+  const avatar = document.getElementById('messaging-thread-avatar');
+  const header = document.getElementById('messaging-thread-header');
+  if (!title || !sub || !avatar || !header) return;
+  if (!conv) {
+    header.style.display = 'none';
+    title.textContent = 'Select a conversation';
+    sub.textContent = '';
+    avatar.innerHTML = '';
+    return;
+  }
+  header.style.display = 'flex';
+  title.textContent = _messagingConversationName(conv);
+  const memberCount = Array.isArray(conv.memberIds) ? conv.memberIds.length : 0;
+  sub.textContent = conv.type === 'dm' ? 'Direct message' : `${memberCount} members`;
+  avatar.innerHTML = _messagingAvatarHtml(conv, 36);
 }
 
 function _renderMessagingMessages(messages) {
   const panel = document.getElementById('messaging-thread-messages');
   if (!panel) return;
-  panel.innerHTML = '';
   if (!messages.length) {
-    panel.innerHTML = '<div class="messaging-empty">No messages yet. Start the conversation.</div>';
+    panel.innerHTML = '<div class="msg-empty"><div class="msg-empty-icon">💬</div><div class="msg-empty-text">No messages yet. Start the conversation.</div></div>';
     return;
   }
+  const convo = _messagingState.conversations.find(c => c.id === _messagingState.activeConversationId);
+  let prevDate = '';
+  const html = [];
   messages.forEach(msg => {
+    const dt = msg.createdAt?.toDate ? msg.createdAt.toDate() : new Date(msg.createdAt?.seconds ? msg.createdAt.seconds * 1000 : msg.createdAt);
+    const dateKey = dt.toDateString();
+    if (dateKey !== prevDate) {
+      html.push(`<div class="msg-date-sep">${esc(_fmtMsgDateSep(msg.createdAt))}</div>`);
+      prevDate = dateKey;
+    }
     const mine = msg.sender?.uid === currentUser?.uid;
-    const item = document.createElement('div');
-    item.className = 'messaging-msg' + (mine ? ' mine' : '');
-    const meta = document.createElement('div');
-    meta.className = 'messaging-msg-meta';
-    meta.textContent = `${mine ? 'You' : (msg.sender?.name || 'Unknown')} · ${_relativeTime(msg.createdAt)}`;
-    const text = document.createElement('div');
-    text.className = 'messaging-msg-text';
-    text.textContent = msg.text || '';
-    item.appendChild(meta);
-    if (msg.text) item.appendChild(text);
-    (msg.attachments || []).forEach(att => {
-      if (att.kind !== 'image' || !att.url) return;
-      const img = document.createElement('img');
-      img.className = 'messaging-msg-image';
-      img.src = att.url;
-      img.alt = att.fileName || 'message image';
-      item.appendChild(img);
-    });
-    panel.appendChild(item);
+    const senderName = mine ? 'You' : (msg.sender?.name || _messagingUserLabel(_messagingMemberByUid(msg.sender?.uid) || {}));
+    const avatar = mine ? '' : `<div class="msg-row-avatar">${_messagingAvatarHtml({ type: 'dm', memberIds: [currentUser?.uid, msg.sender?.uid] }, 28)}</div>`;
+    const attachments = (msg.attachments || []).filter(att => att.kind === 'image' && att.url)
+      .map(att => `<img class="messaging-msg-image" src="${esc(att.url)}" alt="${esc(att.fileName || 'image')}" style="max-width:200px;border-radius:10px;border:1px solid var(--border);margin-top:4px;">`).join('');
+    html.push(`<div class="msg-row ${mine ? 'sent' : 'recv'}">
+      ${avatar}
+      <div class="msg-bubble-group">
+        ${(!mine && convo?.type !== 'dm') ? `<div class="msg-sender-name">${esc(senderName)}</div>` : ''}
+        <div class="msg-bubble-wrap">
+          <div class="msg-bubble ${mine ? 'sent' : 'recv'}">${esc(msg.text || '')}</div>
+          ${attachments}
+        </div>
+        <div class="msg-bubble-time">${esc(_fmtMsgTime(msg.createdAt))}</div>
+      </div>
+    </div>`);
   });
+  panel.innerHTML = html.join('');
   panel.scrollTop = panel.scrollHeight;
 }
 
 function _selectMessagingConversation(conversationId) {
   _messagingState.activeConversationId = conversationId;
-  _renderMessagingConversations();
   const selected = _messagingState.conversations.find(c => c.id === conversationId);
-  document.getElementById('messaging-thread-title').textContent = _messagingConversationName(selected);
+  _renderMessagingConversations();
+  _renderMessagingThreadHeader(selected);
   openConversation(conversationId, messages => {
     _renderMessagingMessages(messages);
-    const lastId = messages[messages.length - 1]?.id || null;
     const lastMessage = messages[messages.length - 1] || null;
+    const lastId = lastMessage?.id || null;
     const seenId = _messagingState.lastSeenByConversation[conversationId] || null;
     if (lastMessage && seenId && lastMessage.id !== seenId && lastMessage.sender?.uid !== currentUser?.uid) {
       _messagingNotifyIncoming(lastMessage, _messagingConversationName(selected));
@@ -6344,37 +6462,101 @@ function _selectMessagingConversation(conversationId) {
   });
 }
 
+function _renderMessagingMemberPicks() {
+  const dmWrap = document.getElementById('messaging-dm-list');
+  const groupWrap = document.getElementById('messaging-group-members');
+  if (dmWrap) {
+    dmWrap.innerHTML = _messagingState.selectableMembers.map(m => {
+      const label = _messagingUserLabel(m);
+      const checked = _messagingState.selectedDmUid === m.uid;
+      return `<div class="msg-member-row ${checked ? 'selected' : ''}" data-dm-uid="${esc(m.uid)}">
+        <div class="msg-avatar-initials" style="background:${_messagingColor(m.uid)};">${esc(_messagingInitials(label))}</div>
+        <div style="font-size:14px;font-weight:600;">${esc(label)}</div>
+        <div class="msg-member-check">${checked ? '✓' : ''}</div>
+      </div>`;
+    }).join('');
+    dmWrap.querySelectorAll('[data-dm-uid]').forEach(row => {
+      row.addEventListener('click', () => {
+        _messagingState.selectedDmUid = row.getAttribute('data-dm-uid');
+        _renderMessagingMemberPicks();
+      });
+    });
+  }
+
+  if (groupWrap) {
+    groupWrap.innerHTML = _messagingState.selectableMembers.map(m => {
+      const label = _messagingUserLabel(m);
+      const checked = _messagingState.selectedGroupMembers.has(m.uid);
+      return `<div class="msg-member-row ${checked ? 'selected' : ''}" data-group-uid="${esc(m.uid)}">
+        <div class="msg-avatar-initials" style="background:${_messagingColor(m.uid)};">${esc(_messagingInitials(label))}</div>
+        <div style="font-size:14px;font-weight:600;">${esc(label)}</div>
+        <div class="msg-member-check">${checked ? '✓' : ''}</div>
+      </div>`;
+    }).join('');
+    groupWrap.querySelectorAll('[data-group-uid]').forEach(row => {
+      row.addEventListener('click', () => {
+        const uid = row.getAttribute('data-group-uid');
+        if (_messagingState.selectedGroupMembers.has(uid)) _messagingState.selectedGroupMembers.delete(uid);
+        else _messagingState.selectedGroupMembers.add(uid);
+        _renderMessagingMemberPicks();
+      });
+    });
+  }
+
+  document.getElementById('messaging-create-dm-btn').disabled = !_messagingState.selectedDmUid;
+  const groupName = String(document.getElementById('messaging-group-name')?.value || '').trim();
+  document.getElementById('messaging-create-group-btn').disabled = !groupName || _messagingState.selectedGroupMembers.size < 1;
+}
+
+async function _messagingSelectableMembers() {
+  const membersSnap = await getDocs(collection(db, 'plants', currentPlantId, 'members'));
+  return membersSnap.docs
+    .map(d => ({ uid: d.id, ...d.data() }))
+    .filter(m => m.uid !== currentUser.uid && m.isActive !== false)
+    .sort((a, b) => String(_messagingUserLabel(a)).localeCompare(String(_messagingUserLabel(b))));
+}
+
+async function _messagingLoadMemberSelectors() {
+  _messagingState.selectableMembers = await _messagingSelectableMembers();
+  _messagingState.selectedDmUid = null;
+  _messagingState.selectedGroupMembers = new Set();
+  _renderMessagingMemberPicks();
+}
+
 window.openMessagingModal = () => {
   document.getElementById('messaging-modal')?.classList.add('visible');
   _messagingSetError('');
   _messagingSetPhotoPreview(null);
+  document.getElementById('msg-list-panel')?.classList.remove('hidden');
   _messagingLoadMemberSelectors().catch(err => {
     console.warn('messaging member load failed', err);
     _messagingSetError(`Could not load members: ${err?.message || 'permission denied'}`);
   });
-  document.getElementById('messaging-thread-title').textContent = 'Loading conversations…';
-  document.getElementById('messaging-thread-messages').innerHTML = '<div class="messaging-empty">Loading…</div>';
+
+  const panel = document.getElementById('messaging-thread-messages');
+  if (panel) panel.innerHTML = '<div class="msg-empty"><div class="msg-empty-text">Loading…</div></div>';
+
   watchConversations(conversations => {
     _messagingState.conversations = conversations;
-    if (!_messagingState.activeConversationId && conversations.length) {
-      _messagingState.activeConversationId = conversations[0].id;
-    }
+    const stillExists = conversations.some(c => c.id === _messagingState.activeConversationId);
+    if (!stillExists) _messagingState.activeConversationId = conversations[0]?.id || null;
     _renderMessagingConversations();
     if (_messagingState.activeConversationId) {
       _selectMessagingConversation(_messagingState.activeConversationId);
     } else {
-      document.getElementById('messaging-thread-title').textContent = 'No conversations';
-      document.getElementById('messaging-thread-messages').innerHTML = '<div class="messaging-empty">Create a conversation to begin messaging.</div>';
+      _renderMessagingThreadHeader(null);
+      if (panel) panel.innerHTML = '<div class="msg-empty"><div class="msg-empty-icon">💬</div><div class="msg-empty-text">Create a conversation to begin messaging.</div></div>';
     }
   }, {}, err => {
     _messagingSetError(`Could not load conversations: ${err?.message || 'permission denied'}`);
-    document.getElementById('messaging-thread-title').textContent = 'Messaging unavailable';
-    document.getElementById('messaging-thread-messages').innerHTML = '<div class="messaging-empty">Conversation access is currently denied. Verify Firestore rules deployment.</div>';
+    _renderMessagingThreadHeader(null);
+    if (panel) panel.innerHTML = '<div class="msg-empty"><div class="msg-empty-text">Conversation access is currently denied.</div></div>';
   });
 };
 
 window.closeMessagingModal = () => {
   document.getElementById('messaging-modal')?.classList.remove('visible');
+  hideMessagingSheets();
   _messagingSetPhotoPreview(null);
   closeConversation();
   closeConversationList();
@@ -6396,7 +6578,10 @@ window.sendMessagingModalMessage = async () => {
       attachments = [photo];
     }
     await sendConversationMessage(_messagingState.activeConversationId, text || '', { attachments });
-    ta.value = '';
+    if (ta) {
+      ta.value = '';
+      ta.style.height = 'auto';
+    }
     _messagingSetPhotoPreview(null);
   } catch (err) {
     console.warn('sendMessagingModalMessage failed', err);
@@ -6410,20 +6595,14 @@ window.createMessagingDm = async () => {
     _messagingSetError('Sign in and select a plant before creating a DM.');
     return;
   }
+  if (!_messagingState.selectedDmUid) {
+    _messagingSetError('Select someone to message.');
+    return;
+  }
   try {
-    const targetUid = document.getElementById('messaging-dm-select')?.value || '';
-    if (!targetUid) {
-      _messagingSetError('Select a member from the DM dropdown.');
-      return;
-    }
-    const target = (await _messagingSelectableMembers()).find(m => m.uid === targetUid);
-    if (!target) {
-      _messagingSetError('Selected user is no longer available.');
-      return;
-    }
-    const conversationId = await createConversation({ type: 'dm', memberIds: [target.uid] });
+    const conversationId = await createConversation({ type: 'dm', memberIds: [_messagingState.selectedDmUid] });
+    hideMessagingSheets();
     _messagingState.activeConversationId = conversationId;
-    _renderMessagingConversations();
     _selectMessagingConversation(conversationId);
   } catch (err) {
     console.warn('createMessagingDm failed', err);
@@ -6431,60 +6610,53 @@ window.createMessagingDm = async () => {
   }
 };
 
-async function _messagingSelectableMembers() {
-  const membersSnap = await getDocs(collection(db, 'plants', currentPlantId, 'members'));
-  return membersSnap.docs
-    .map(d => ({ uid: d.id, ...d.data() }))
-    .filter(m => m.uid !== currentUser.uid && m.isActive !== false)
-    .sort((a, b) => String(a.displayName || a.name || a.email || a.uid).localeCompare(String(b.displayName || b.name || b.email || b.uid)));
-}
-
 window.createMessagingGroup = async () => {
   _messagingSetError('');
   if (!currentPlantId || !currentUser?.uid) {
     _messagingSetError('Sign in and select a plant before creating a group.');
     return;
   }
+  const groupTitle = String(document.getElementById('messaging-group-name')?.value || '').trim();
+  const memberIds = Array.from(_messagingState.selectedGroupMembers);
+  if (!groupTitle) {
+    _messagingSetError('Enter a group name.');
+    return;
+  }
+  if (!memberIds.length) {
+    _messagingSetError('Select at least one member for the group.');
+    return;
+  }
   try {
-    const groupTitle = String(document.getElementById('messaging-group-name')?.value || '').trim();
-    if (!groupTitle) return;
-    const checks = Array.from(document.querySelectorAll('#messaging-group-members input[type=\"checkbox\"]:checked'));
-    const memberIds = checks.map(c => c.value).filter(Boolean);
-    if (!memberIds.length) {
-      _messagingSetError('Select at least one member for the group.');
-      return;
-    }
     const conversationId = await createConversation({ type: 'group', title: groupTitle, memberIds });
-    _messagingState.activeConversationId = conversationId;
-    _renderMessagingConversations();
-    _selectMessagingConversation(conversationId);
     document.getElementById('messaging-group-name').value = '';
-    checks.forEach(c => { c.checked = false; });
+    hideMessagingSheets();
+    _messagingState.activeConversationId = conversationId;
+    _selectMessagingConversation(conversationId);
   } catch (err) {
     console.warn('createMessagingGroup failed', err);
     _messagingSetError(`Could not create group: ${err?.message || 'permission denied'}`);
   }
 };
 
-async function _messagingLoadMemberSelectors() {
-  const members = await _messagingSelectableMembers();
-  const dmSelect = document.getElementById('messaging-dm-select');
-  const groupWrap = document.getElementById('messaging-group-members');
-  if (dmSelect) {
-    dmSelect.innerHTML = '<option value=\"\">Select user…</option>' + members
-      .map(m => `<option value=\"${esc(m.uid)}\">${esc(m.displayName || m.name || m.email || m.uid)}</option>`)
-      .join('');
-  }
-  if (groupWrap) {
-    groupWrap.innerHTML = members
-      .map(m => `<label><input type=\"checkbox\" value=\"${esc(m.uid)}\"><span>${esc(m.displayName || m.name || m.email || m.uid)}</span></label>`)
-      .join('');
-  }
-}
+window.showMessagingNewDm = () => {
+  const sheet = document.getElementById('messaging-new-dm');
+  if (sheet) sheet.style.display = 'flex';
+  document.getElementById('messaging-new-group').style.display = 'none';
+  _renderMessagingMemberPicks();
+};
 
-window.setMessagingSort = (value) => {
-  _messagingState.sortBy = value === 'name' ? 'name' : 'recent';
-  _renderMessagingConversations();
+window.showMessagingNewGroup = () => {
+  const sheet = document.getElementById('messaging-new-group');
+  if (sheet) sheet.style.display = 'flex';
+  document.getElementById('messaging-new-dm').style.display = 'none';
+  _renderMessagingMemberPicks();
+};
+
+window.hideMessagingSheets = () => {
+  const dm = document.getElementById('messaging-new-dm');
+  const group = document.getElementById('messaging-new-group');
+  if (dm) dm.style.display = 'none';
+  if (group) group.style.display = 'none';
 };
 
 window.enableMessagingNotifications = async () => {
@@ -6526,11 +6698,46 @@ document.getElementById('messaging-modal')?.addEventListener('click', e => {
   if (e.target === document.getElementById('messaging-modal')) closeMessagingModal();
 });
 
+document.getElementById('messaging-new-dm')?.addEventListener('click', e => {
+  if (e.target === e.currentTarget) hideMessagingSheets();
+});
+
+document.getElementById('messaging-new-group')?.addEventListener('click', e => {
+  if (e.target === e.currentTarget) hideMessagingSheets();
+});
+
+document.getElementById('messaging-create-dm-btn')?.addEventListener('click', () => createMessagingDm());
+document.getElementById('messaging-create-group-btn')?.addEventListener('click', () => createMessagingGroup());
+
+document.getElementById('messaging-tabs')?.addEventListener('click', e => {
+  const btn = e.target.closest('[data-tab]');
+  if (!btn) return;
+  _messagingState.tab = btn.getAttribute('data-tab') || 'all';
+  document.querySelectorAll('#messaging-tabs .msg-tab').forEach(tabBtn => tabBtn.classList.toggle('active', tabBtn === btn));
+  _renderMessagingConversations();
+});
+
+document.getElementById('messaging-search')?.addEventListener('input', e => {
+  _messagingState.search = e.target.value || '';
+  _renderMessagingConversations();
+});
+
+document.getElementById('messaging-back-btn')?.addEventListener('click', () => {
+  document.getElementById('msg-list-panel')?.classList.remove('hidden');
+});
+
+document.getElementById('messaging-group-name')?.addEventListener('input', () => _renderMessagingMemberPicks());
+
 document.getElementById('messaging-input')?.addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
     sendMessagingModalMessage();
   }
+});
+
+document.getElementById('messaging-input')?.addEventListener('input', e => {
+  e.target.style.height = 'auto';
+  e.target.style.height = Math.min(e.target.scrollHeight, 100) + 'px';
 });
 
 document.getElementById('messaging-photo-input')?.addEventListener('change', e => {
