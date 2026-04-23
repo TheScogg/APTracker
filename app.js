@@ -570,6 +570,9 @@ async function loadUserPlants() {
     currentPlantName = (userPlants.find(p => p.id === currentPlantId) || {}).name || currentPlantId;
     document.getElementById('plant-name-display').textContent = currentPlantName;
     buildPlantDropdown();
+    _syncCurrentUserMembershipProfile(userPlants.map(p => p.id)).catch(e => {
+      console.warn('Could not sync membership profile fields', e);
+    });
   } catch(e) {
     console.warn('Error loading plants, using default', e);
     currentPlantId = 'default';
@@ -577,6 +580,20 @@ async function loadUserPlants() {
     userPlants = [{ id: 'default', name: 'Main Plant', location: '' }];
     document.getElementById('plant-name-display').textContent = currentPlantName;
   }
+}
+
+async function _syncCurrentUserMembershipProfile(plantIds = []) {
+  if (!currentUser?.uid || !Array.isArray(plantIds) || !plantIds.length) return;
+  const batch = writeBatch(db);
+  plantIds.filter(Boolean).forEach(plantId => {
+    batch.set(plantMemberDocRef(plantId, currentUser.uid), {
+      userId: currentUser.uid,
+      displayName: currentUser.displayName || currentUser.email || '',
+      email: currentUser.email || '',
+      photoURL: currentUser.photoURL || ''
+    }, { merge: true });
+  });
+  await batch.commit();
 }
 
 // Write a plant doc + member doc for a brand new plant (no presses config yet)
@@ -587,6 +604,7 @@ async function _initNewPlant(plantId, name, location) {
     userId: currentUser.uid,
     displayName: currentUser.displayName || currentUser.email || '',
     email: currentUser.email || '',
+    photoURL: currentUser.photoURL || '',
     role: 'admin',
     isActive: true,
     addedAt: serverTimestamp(),
@@ -608,6 +626,7 @@ async function _migratePlantsToNewStructure(plants) {
         userId: currentUser.uid,
         displayName: currentUser.displayName || currentUser.email || '',
         email: currentUser.email || '',
+        photoURL: currentUser.photoURL || '',
         role: 'admin',
         isActive: true,
         addedAt: serverTimestamp(),
@@ -6762,6 +6781,10 @@ document.getElementById('messaging-input')?.addEventListener('input', e => {
   e.target.style.height = 'auto';
   e.target.style.height = Math.min(e.target.scrollHeight, 100) + 'px';
 });
+
+// Cleanup for legacy layouts: remove any stale header MSG trigger so
+// messaging is only accessed from the user dropdown entry.
+document.querySelectorAll('header > #messages-btn, header > .sort-dropdown-btn#messages-btn').forEach(btn => btn.remove());
 
 document.getElementById('messaging-photo-input')?.addEventListener('change', e => {
   const file = e.target?.files?.[0] || null;
