@@ -36,10 +36,11 @@
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     z-index: 1000;
-    display: flex; align-items: center; justify-content: center;
+    display: none; align-items: center; justify-content: center;
     padding: 16px;
     animation: msgFadeIn 0.2s ease;
   }
+  .msg-overlay.visible { display: flex; }
   @keyframes msgFadeIn { from{opacity:0} to{opacity:1} }
   .msg-modal {
     width: 100%; max-width: 820px;
@@ -302,6 +303,7 @@
     display: flex; align-items: flex-end; justify-content: center;
     animation: msgFadeIn 0.15s ease;
   }
+  .msg-sheet-overlay.visible { display: flex !important; }
   .msg-sheet {
     background: var(--bg2); border: 1px solid var(--border);
     border-radius: 20px 20px 0 0; width: 100%; max-width: 480px;
@@ -906,51 +908,92 @@
   </div>
 </div>
 
-<!-- MESSAGING MODAL (replaced with user-provided system) -->
-<div class="modal-overlay" id="messaging-modal">
-  <div class="modal messaging-modal-shell" onclick="event.stopPropagation()">
-    <div class="messaging-modal-header">
-      <div class="modal-title">Messages</div>
-      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-        <select class="sort-dropdown-btn" onchange="setMessagingSort(this.value)">
-          <option value="recent">Most Recent</option>
-          <option value="name">Name</option>
-        </select>
-        <button class="sort-dropdown-btn" onclick="enableMessagingNotifications()">Enable Alerts</button>
-        <button class="notes-modal-b-close" onclick="closeMessagingModal()">✕ close</button>
+<!-- MESSAGING MODAL -->
+<div class="msg-overlay" id="messaging-modal">
+  <div class="msg-modal" onclick="event.stopPropagation()">
+    <div class="msg-header">
+      <div class="msg-header-left">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 2h10a1 1 0 011 1v8a1 1 0 01-1 1H5l-3 2V3a1 1 0 011-1z" fill="var(--ios-blue)" opacity="0.9"/></svg>
+        <span class="msg-header-title">Messages</span>
+      </div>
+      <div class="msg-header-tabs" id="messaging-tabs">
+        <button class="msg-tab active" data-tab="all" type="button">All</button>
+        <button class="msg-tab" data-tab="dms" type="button">DMs</button>
+        <button class="msg-tab" data-tab="groups" type="button">Groups</button>
+      </div>
+      <div class="msg-header-actions">
+        <button class="msg-icon-btn" title="Enable Alerts" onclick="enableMessagingNotifications()">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 14a2 2 0 0 0 2-2H6a2 2 0 0 0 2 2Zm5-4H3l1.2-1.7V6a3.8 3.8 0 0 1 7.6 0v2.3L13 10Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="msg-icon-btn" title="New DM" onclick="showMessagingNewDm()">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
+        <button class="msg-close-btn" onclick="closeMessagingModal()">×</button>
       </div>
     </div>
-    <div class="messaging-modal-body">
-      <aside class="messaging-list-panel">
-        <div class="messaging-list-title">Conversations</div>
-        <div class="messaging-controls">
-          <div class="messaging-row">
-            <select id="messaging-dm-select"></select>
-            <button class="sort-dropdown-btn" onclick="createMessagingDm()">+ New DM</button>
-          </div>
-          <div class="messaging-row">
-            <input id="messaging-group-name" type="text" placeholder="Group name">
-            <button class="sort-dropdown-btn" onclick="createMessagingGroup()">+ Group</button>
-          </div>
-          <details class="messaging-members-dropdown">
-            <summary>Group members</summary>
-            <div id="messaging-group-members" class="messaging-members-list"></div>
-          </details>
+
+    <div class="msg-body">
+      <div class="msg-list-panel" id="msg-list-panel">
+        <div class="msg-search-wrap">
+          <span class="msg-search-icon">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+          </span>
+          <input class="msg-search-input" id="messaging-search" placeholder="Search conversations…">
         </div>
-        <div id="messaging-conversations-list" class="messaging-conversations-list"></div>
-      </aside>
-      <section class="messaging-thread-panel">
-        <div id="messaging-thread-title" class="messaging-thread-title">Select a conversation</div>
-        <div id="messaging-thread-messages" class="messaging-thread-messages"></div>
+        <div class="msg-convos-list" id="messaging-conversations-list"></div>
+        <button class="msg-new-btn" type="button" onclick="showMessagingNewGroup()">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 8a5 5 0 109.998 0A5 5 0 003 8zM8 5v6M5 8h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          New Group
+        </button>
+      </div>
+
+      <div class="msg-thread-panel" id="messaging-thread-panel">
+        <div class="msg-thread-header" id="messaging-thread-header" style="display:none;">
+          <button class="msg-back-btn msg-icon-btn" id="messaging-back-btn" type="button">‹</button>
+          <div id="messaging-thread-avatar"></div>
+          <div style="flex:1;min-width:0;">
+            <div class="msg-thread-name" id="messaging-thread-title">Select a conversation</div>
+            <div class="msg-thread-sub" id="messaging-thread-sub"></div>
+          </div>
+        </div>
+        <div id="messaging-thread-messages" class="msg-messages"></div>
         <div id="messaging-photo-preview" class="messaging-photo-preview"></div>
-        <div class="messaging-composer">
-          <textarea id="messaging-input" placeholder="Write a message…"></textarea>
-          <input id="messaging-photo-input" type="file" accept="image/*">
-          <button class="sort-dropdown-btn" onclick="sendMessagingModalMessage()">Send</button>
+        <div class="msg-composer">
+          <button class="msg-emoji-btn" type="button">😊</button>
+          <textarea id="messaging-input" class="msg-composer-input" placeholder="iMessage" rows="1"></textarea>
+          <input id="messaging-photo-input" type="file" accept="image/*" style="display:none;">
+          <button class="msg-icon-btn" type="button" onclick="document.getElementById('messaging-photo-input').click()" title="Attach image">📎</button>
+          <button class="msg-send-btn" type="button" onclick="sendMessagingModalMessage()">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13.5 2.5L7 9M13.5 2.5L9 13.5 7 9l-4.5-2 9-4.5z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
         </div>
         <div id="messaging-error" class="messaging-error"></div>
-      </section>
+      </div>
     </div>
+  </div>
+</div>
+
+<div class="msg-sheet-overlay" id="messaging-new-dm" style="display:none;">
+  <div class="msg-sheet" onclick="event.stopPropagation()">
+    <div class="msg-sheet-handle"></div>
+    <div class="msg-sheet-title">New Message</div>
+    <div class="msg-sheet-label">Send to</div>
+    <div class="msg-member-list" id="messaging-dm-list"></div>
+    <button class="msg-sheet-btn" id="messaging-create-dm-btn" type="button" disabled>Start Conversation</button>
+    <button class="msg-sheet-cancel" type="button" onclick="hideMessagingSheets()">Cancel</button>
+  </div>
+</div>
+
+<div class="msg-sheet-overlay" id="messaging-new-group" style="display:none;">
+  <div class="msg-sheet" onclick="event.stopPropagation()">
+    <div class="msg-sheet-handle"></div>
+    <div class="msg-sheet-title">New Group</div>
+    <div class="msg-sheet-label">Group Name</div>
+    <input class="msg-sheet-input" id="messaging-group-name" placeholder="e.g. Maintenance Crew">
+    <div class="msg-sheet-label">Add Members</div>
+    <div class="msg-member-list" id="messaging-group-members"></div>
+    <button class="msg-sheet-btn" id="messaging-create-group-btn" type="button" disabled>Create Group</button>
+    <button class="msg-sheet-cancel" type="button" onclick="hideMessagingSheets()">Cancel</button>
   </div>
 </div>
 
