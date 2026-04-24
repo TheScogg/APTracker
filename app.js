@@ -6258,6 +6258,9 @@ const _messagingState = {
 
 function _updateMessagingEntryBadges(unreadCount = 0) {
   const safeCount = Math.max(0, Number(unreadCount) || 0);
+  document.querySelectorAll('[data-messages-trigger]').forEach(el => {
+    el.classList.toggle('messages-has-unread', safeCount > 0);
+  });
   document.querySelectorAll('[data-messages-badge]').forEach(el => {
     if (!safeCount) {
       el.style.display = 'none';
