@@ -723,6 +723,10 @@
     }
   }
 
+  @media (max-width: 560px) {
+    .logo-text { display: none; }
+  }
+
   .issue-row { display: flex; flex-direction: column; min-width: 0; width: 100%; margin: 0; }
   .issue-card { display: block; width: 100%; background: var(--bg2); border: 1px solid var(--border); border-radius: 18px; overflow: visible; animation: slideIn 0.25s ease; user-select: none; position: relative; z-index: 1; touch-action: manipulation; transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94); box-shadow: 0 4px 24px rgba(0,0,0,0.3); }
   .issue-card input, .issue-card select, .issue-card textarea { user-select: text !important; touch-action: auto !important; -webkit-user-select: text !important; }
