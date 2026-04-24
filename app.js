@@ -27,8 +27,11 @@ let currentPlantId = null;
 let currentPlantName = '';
 let userPlants = []; // [{ id, name, location }]
 const scheduleLookupCache = new Map();
-// Caches the set of scheduled machine codes for the current date.
-// { date: string, scheduled: Set<string> | null }
+const USER_LOOKUP_HEARTBEAT_MS = 12 * 60 * 60 * 1000;
+const MAX_LIVE_ISSUES = 250;
+let dailyScheduleIndexState = null; // { plantId, date, scheduled: Set<string>|null, lookupByPress: Map<string, { main: any[], changes: any[] }> }
+// Caches the set of scheduled machine codes for the current plant/date.
+// { plantId: string, date: string, scheduled: Set<string> | null }
 // scheduled === null means no dailySchedules doc exists for that date → don't highlight.
 let scheduledPressesState = null;
 
@@ -78,6 +81,19 @@ function currentActor() {
   return { uid: currentUser?.uid || '', name: currentUser?.displayName || currentUser?.email || 'Unknown' };
 }
 
+function shouldSyncUserLookup(email) {
+  try {
+    const key = `userLookupLastSeen:${String(email || '').toLowerCase()}`;
+    const now = Date.now();
+    const last = Number(localStorage.getItem(key) || 0);
+    if (Number.isFinite(last) && now - last < USER_LOOKUP_HEARTBEAT_MS) return false;
+    localStorage.setItem(key, String(now));
+    return true;
+  } catch(e) {
+    return true;
+  }
+}
+
 function toPressId(machineCode) {
   return 'press_' + String(machineCode || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 }
@@ -97,27 +113,72 @@ function scheduleDateForLookup() {
 // press buttons immediately reflect their scheduled/unscheduled state.
 async function loadDailyScheduledPresses(date) {
   if (!currentPlantId || !date) { scheduledPressesState = null; return; }
-  if (scheduledPressesState && scheduledPressesState.date === date) return; // already cached
-  let scheduled = null;
+  if (scheduledPressesState && scheduledPressesState.plantId === currentPlantId && scheduledPressesState.date === date) return; // already cached
   try {
-    const dailyRef = doc(db, 'plants', currentPlantId, 'dailySchedules', date);
-    const dailySnap = await getDoc(dailyRef);
-    if (dailySnap.exists()) {
-      const sections = ['page1', 'page2', 'northBayChanges', 'southBayChanges'];
-      const snaps = await Promise.all(
-        sections.map(s => getDocs(collection(db, 'plants', currentPlantId, 'dailySchedules', date, s)))
-      );
-      scheduled = new Set();
-      snaps.forEach(snap => snap.docs.forEach(d => {
-        const press = d.data().press;
-        if (press) scheduled.add(String(press).trim());
-      }));
-    }
+    const index = await loadDailyScheduleIndex(date);
+    scheduledPressesState = { plantId: currentPlantId, date, scheduled: index?.scheduled ?? null };
   } catch(e) {
     console.warn('loadDailyScheduledPresses failed:', e);
+    scheduledPressesState = { plantId: currentPlantId, date, scheduled: null };
   }
-  scheduledPressesState = { date, scheduled };
   updatePressStates();
+}
+
+function normalizeSchedulePress(machineCode) {
+  return String(machineCode || '').trim();
+}
+
+function buildScheduleIndexFromSnaps(snapsBySection) {
+  const scheduled = new Set();
+  const lookupByPress = new Map();
+  const sortByOrder = (a, b) => Number(a.displayOrder || 0) - Number(b.displayOrder || 0);
+  const pushRow = (machine, row) => {
+    if (!machine) return;
+    scheduled.add(machine);
+    const existing = lookupByPress.get(machine) || { main: [], changes: [] };
+    if (row.section === 'page1' || row.section === 'page2') existing.main.push(row);
+    else existing.changes.push({
+      ...row,
+      section: row.section === 'northBayChanges' ? 'North Bay Change' : 'South Bay Change'
+    });
+    lookupByPress.set(machine, existing);
+  };
+
+  Object.entries(snapsBySection).forEach(([section, snap]) => {
+    snap.docs.forEach(d => {
+      const data = d.data() || {};
+      const machine = normalizeSchedulePress(data.press);
+      pushRow(machine, { id: d.id, ...data, section });
+    });
+  });
+
+  lookupByPress.forEach(v => {
+    v.main.sort(sortByOrder);
+    v.changes.sort(sortByOrder);
+  });
+
+  return { scheduled, lookupByPress };
+}
+
+async function loadDailyScheduleIndex(date) {
+  if (!currentPlantId || !date) return null;
+  if (dailyScheduleIndexState && dailyScheduleIndexState.plantId === currentPlantId && dailyScheduleIndexState.date === date) {
+    return dailyScheduleIndexState;
+  }
+  const dailyRef = doc(db, 'plants', currentPlantId, 'dailySchedules', date);
+  const dailySnap = await getDoc(dailyRef);
+  if (!dailySnap.exists()) {
+    dailyScheduleIndexState = { plantId: currentPlantId, date, scheduled: null, lookupByPress: new Map() };
+    return dailyScheduleIndexState;
+  }
+  const sections = ['page1', 'page2', 'northBayChanges', 'southBayChanges'];
+  const sectionSnaps = await Promise.all(
+    sections.map(s => getDocs(collection(db, 'plants', currentPlantId, 'dailySchedules', date, s)))
+  );
+  const snapsBySection = Object.fromEntries(sections.map((s, idx) => [s, sectionSnaps[idx]]));
+  const { scheduled, lookupByPress } = buildScheduleIndexFromSnaps(snapsBySection);
+  dailyScheduleIndexState = { plantId: currentPlantId, date, scheduled, lookupByPress };
+  return dailyScheduleIndexState;
 }
 
 async function getPressScheduleLookup(machineCode, scheduleDate) {
@@ -129,38 +190,18 @@ async function getPressScheduleLookup(machineCode, scheduleDate) {
     return null;
   }
 
-  const machine = String(machineCode || '').trim();
-  const dailyRef = doc(db, 'plants', currentPlantId, 'dailySchedules', scheduleDate);
-  const dailySnap = await getDoc(dailyRef);
-  if (!dailySnap.exists()) {
+  const machine = normalizeSchedulePress(machineCode);
+  const index = await loadDailyScheduleIndex(scheduleDate);
+  if (!index?.scheduled) {
     scheduleLookupCache.set(cacheKey, null);
     return null;
   }
-
-  const sectionRows = async (section) => {
-    const sectionRef = collection(db, 'plants', currentPlantId, 'dailySchedules', scheduleDate, section);
-    const q = query(sectionRef, where('press', '==', machine));
-    const snap = await getDocs(q);
-    return snap.docs.map(d => ({ id: d.id, ...d.data(), section }));
-  };
-
-  const [page1Rows, page2Rows, northChanges, southChanges] = await Promise.all([
-    sectionRows('page1'),
-    sectionRows('page2'),
-    sectionRows('northBayChanges'),
-    sectionRows('southBayChanges')
-  ]);
-
-  const sortByOrder = (a, b) => Number(a.displayOrder || 0) - Number(b.displayOrder || 0);
-  const mainCandidates = [...page1Rows, ...page2Rows].sort(sortByOrder);
-  const changeRows = [...northChanges, ...southChanges]
-    .sort(sortByOrder)
-    .map(row => ({ ...row, section: row.section === 'northBayChanges' ? 'North Bay Change' : 'South Bay Change' }));
+  const rows = index.lookupByPress.get(machine) || { main: [], changes: [] };
 
   const data = {
-    mainRow: mainCandidates[0] || null,
-    hasChanges: changeRows.length > 0,
-    changes: changeRows
+    mainRow: rows.main[0] || null,
+    hasChanges: rows.changes.length > 0,
+    changes: rows.changes
   };
   scheduleLookupCache.set(cacheKey, data);
   return data;
@@ -1313,6 +1354,7 @@ function stopGamificationListeners() {
   if (gameLeaderboardUnsubscribe) { gameLeaderboardUnsubscribe(); gameLeaderboardUnsubscribe = null; }
   if (gameConfigUnsubscribe) { gameConfigUnsubscribe(); gameConfigUnsubscribe = null; }
   if (gameBadgesUnsubscribe) { gameBadgesUnsubscribe(); gameBadgesUnsubscribe = null; }
+  gameMissionProgressCache.clear();
 }
 
 function startGamificationListeners() {
@@ -1341,12 +1383,21 @@ function startGamificationListeners() {
   });
   gameMissionsUnsubscribe = onSnapshot(query(gameMissionsCol(), where('isActive', '==', true), orderBy('startsAt', 'desc'), limit(6)), async snap => {
     const missionRows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    const progressRows = await Promise.all(missionRows.map(async mission => {
-      const progressSnap = await getDoc(missionProgressDoc(mission.id, currentUser.uid));
-      return { missionId: mission.id, progress: progressSnap.exists() ? progressSnap.data() : null };
-    }));
-    const progressMap = new Map(progressRows.map(row => [row.missionId, row.progress]));
-    gameMissions = missionRows.map(m => ({ ...m, progress: progressMap.get(m.id) || null }));
+    const activeMissionIds = new Set(missionRows.map(m => m.id));
+    Array.from(gameMissionProgressCache.keys()).forEach(missionId => {
+      if (!activeMissionIds.has(missionId)) gameMissionProgressCache.delete(missionId);
+    });
+    const missingMissionIds = missionRows
+      .map(m => m.id)
+      .filter(missionId => !gameMissionProgressCache.has(missionId));
+    if (missingMissionIds.length) {
+      const progressRows = await Promise.all(missingMissionIds.map(async missionId => {
+        const progressSnap = await getDoc(missionProgressDoc(missionId, currentUser.uid));
+        return { missionId, progress: progressSnap.exists() ? progressSnap.data() : null };
+      }));
+      progressRows.forEach(row => gameMissionProgressCache.set(row.missionId, row.progress));
+    }
+    gameMissions = missionRows.map(m => ({ ...m, progress: gameMissionProgressCache.get(m.id) || null }));
     renderGamePanel();
   });
   gameLeaderboardUnsubscribe = onSnapshot(gameLeaderboardDoc('weekly'), snap => {
@@ -1380,21 +1431,29 @@ async function updateMissionProgress(reason) {
     if (!missionReasonMatches(mission, reason)) continue;
     const threshold = Math.max(1, Number(mission?.objective?.threshold || 1));
     const progressRef = missionProgressDoc(mission.id, currentUser.uid);
-    const progressSnap = await getDoc(progressRef);
-    const current = Number(progressSnap.exists() ? (progressSnap.data().current || 0) : 0);
+    let prevProgress = gameMissionProgressCache.get(mission.id) || null;
+    if (!prevProgress) {
+      const progressSnap = await getDoc(progressRef);
+      prevProgress = progressSnap.exists() ? progressSnap.data() : null;
+    }
+    const current = Number(prevProgress?.current || 0);
     const next = Math.min(threshold, current + 1);
     const completed = next >= threshold;
     const pct = Math.round((next / threshold) * 100);
-    await setDoc(progressRef, {
+    const nextProgress = {
       subjectId: currentUser.uid,
       subjectType: 'user',
       current: next,
       target: threshold,
       percent: pct,
-      completed,
+      completed
+    };
+    await setDoc(progressRef, {
+      ...nextProgress,
       updatedAt: serverTimestamp()
     }, { merge: true });
-    if (completed && !progressSnap.data()?.completed) {
+    gameMissionProgressCache.set(mission.id, nextProgress);
+    if (completed && !prevProgress?.completed) {
       await setDoc(gameUserStatsDoc(currentUser.uid), {
         totals: { missionsCompleted: increment(1) },
         updatedAt: serverTimestamp()
@@ -2046,6 +2105,7 @@ let gameBadgesUnsubscribe = null;
 let gamePrevLevel = 0;
 const gameCapTracker = new Map();
 const gameMissionPrevPct = new Map();
+const gameMissionProgressCache = new Map();
 let gameBadgeDefs = [];
 let gameUserBadges = {};
 
@@ -2123,7 +2183,7 @@ async function bootstrapSignedInSession(user) {
 
   // Write user lookup record so admins can find this user by email when adding to plants.
   // Fire-and-forget — failure is non-fatal.
-  if (user.email) {
+  if (user.email && shouldSyncUserLookup(user.email)) {
     setDoc(doc(db, 'userLookup', user.email.toLowerCase()), {
       uid: user.uid,
       displayName: user.displayName || '',
@@ -2175,7 +2235,7 @@ function startListener() {
   if (retryTimeout) { clearTimeout(retryTimeout); retryTimeout = null; }
   if (!currentPlantId) return;
 
-  const q = query(plantCol('issues'), orderBy('createdAt', 'desc'), limit(500));
+  const q = query(plantCol('issues'), orderBy('createdAt', 'desc'), limit(MAX_LIVE_ISSUES));
   unsubscribe = onSnapshot(q, snap => {
     retryCount = 0; // reset on success
     issues = snap.docs.map(d => {
@@ -3708,6 +3768,8 @@ window.setWorkflowState = async (id, state) => {
   const validStates = ['called', 'accepted', 'in-progress', 'finished'];
   if (!validStates.includes(state)) return;
   const actor = currentActor();
+  const issue = issues.find(i => i.id === id);
+  if (issue && (issue.workflowState || 'called') === state) return;
   try {
     await updateDoc(plantDoc('issues', id), {
       workflowState: state,
@@ -3726,6 +3788,10 @@ window.setWorkflowStateForStatus = async (issueId, statusKey, state) => {
   const actor = currentActor();
   const issue = issues.find(i => i.id === issueId);
   const primaryKey = issue ? currentStatusKey(issue) : null;
+  const current = (statusKey === primaryKey)
+    ? (issue?.workflowState || 'called')
+    : (issue?.workflowStateByStatus?.[statusKey] || 'called');
+  if (current === state) return;
   try {
     const patch = {
       [`workflowStateByStatus.${statusKey}`]: state,
@@ -6206,7 +6272,9 @@ window.sendConversationMessage = async (conversationId, text, { mentions = [], a
   if (!conversationId || (!trimmedText && !normalizedAttachments.length)) return null;
   const actor = currentActor();
 
-  const messageRef = await addDoc(conversationMessagesCol(conversationId), {
+  const messageRef = doc(conversationMessagesCol(conversationId));
+  const batch = writeBatch(db);
+  batch.set(messageRef, {
     conversationId,
     plantId: currentPlantId,
     sender: actor,
@@ -6218,8 +6286,7 @@ window.sendConversationMessage = async (conversationId, text, { mentions = [], a
     editedAt: null,
     deletedAt: null
   });
-
-  await updateDoc(conversationDoc(conversationId), {
+  batch.update(conversationDoc(conversationId), {
     lastMessage: {
       textPreview: trimmedText ? trimmedText.slice(0, 280) : (normalizedAttachments.length ? '📷 Photo' : ''),
       senderUid: actor.uid,
@@ -6228,12 +6295,12 @@ window.sendConversationMessage = async (conversationId, text, { mentions = [], a
     },
     lastMessageAt: serverTimestamp()
   });
-
-  await setDoc(conversationMemberDoc(conversationId, actor.uid), {
+  batch.set(conversationMemberDoc(conversationId, actor.uid), {
     userId: actor.uid,
     lastReadAt: serverTimestamp(),
     lastReadMessageId: messageRef.id
   }, { merge: true });
+  await batch.commit();
 
   return messageRef.id;
 };
