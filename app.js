@@ -5665,7 +5665,21 @@ document.getElementById('appearance-custom-list')?.addEventListener('click', e =
 
 document.getElementById('theme-quick-toggle')?.addEventListener('click', () => {
   const mode = document.body.dataset.themeMode || 'dark';
-  applyTheme(mode === 'light' ? 'midnight' : 'arctic');
+  const targetMode = mode === 'light' ? 'dark' : 'light';
+  const ownedThemes = getThemeCatalog().filter(theme => theme?.isOwned);
+  const preferredThemeKey = targetMode === 'light' ? 'arctic' : 'midnight';
+  const targetTheme = ownedThemes.find(theme => theme.key === preferredThemeKey)
+    || ownedThemes.find(theme => theme.mode === targetMode);
+
+  if (targetTheme?.key) {
+    applyTheme(targetTheme.key);
+    return;
+  }
+
+  // Fallback: still flip mode even if no owned theme exists in the target mode.
+  document.body.dataset.themeMode = targetMode;
+  updateThemeModeUI();
+  _syncThemePrefsToFirestore();
 });
 
 window.openAppearanceModal = function() {
