@@ -3472,13 +3472,24 @@ function getMutableStatusHistory(issue) {
   return [];
 }
 
+async function getLatestIssueForStatusMutation(issueId, fallbackIssue) {
+  try {
+    const snap = await getDoc(plantDoc('issues', issueId));
+    if (!snap.exists()) return fallbackIssue || null;
+    return { ...(fallbackIssue || {}), ...snap.data() };
+  } catch (_) {
+    return fallbackIssue || null;
+  }
+}
+
 // Add a new status entry to history
 window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
   if (!currentUserPermissions.canEditIssue) return;
   const issue = issues.find(i=>i.id===id);
   if (!issue) return;
-  const prev = currentStatus(issue);
-  const history = getMutableStatusHistory(issue);
+  const latestIssue = await getLatestIssueForStatusMutation(id, issue);
+  const prev = currentStatus(latestIssue || issue);
+  const history = getMutableStatusHistory(latestIssue || issue);
   const entry = { status, subStatus: subStatus||'', note: note||'', dateTime: dateTime || fmtDate(new Date()), by: currentUser.displayName||currentUser.email };
   history.push(entry);
   try {
@@ -3491,13 +3502,13 @@ window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
         subStatus: subStatus || '',
         statusDateTime: entry.dateTime,
         note: note || '',
-        baseIssue: issue
+        baseIssue: latestIssue || issue
       })
     };
     const batch = writeBatch(db);
     batch.update(plantDoc('issues',id), issuePatch);
-    queueIssueEvent(batch, id, 'status_changed', {
-      fromStatusKey: prev?.status || currentStatusKey(issue),
+      queueIssueEvent(batch, id, 'status_changed', {
+      fromStatusKey: prev?.status || currentStatusKey(latestIssue || issue),
       fromSubStatusKey: prev?.subStatus || '',
       toStatusKey: status,
       toSubStatusKey: subStatus || '',
@@ -3514,20 +3525,21 @@ window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
 window.updateStatusEntry = async (id, idx, status, subStatus, note, dateTime) => {
   const issue = issues.find(i=>i.id===id);
   if (!issue) return;
-  const history = getMutableStatusHistory(issue);
+  const latestIssue = await getLatestIssueForStatusMutation(id, issue);
+  const history = getMutableStatusHistory(latestIssue || issue);
   // idx beyond real history means editing a synthetic current-status entry — materialize it first
   if (idx >= history.length) {
     history.push({
-      status: currentStatusKey(issue),
-      subStatus: issue.currentStatus?.subStatusKey || '',
-      note: issue.currentStatus?.notePreview || '',
-      dateTime: issue.currentStatus?.enteredDateTime || '',
-      by: issue.currentStatus?.enteredBy?.name || ''
+      status: currentStatusKey(latestIssue || issue),
+      subStatus: (latestIssue || issue).currentStatus?.subStatusKey || '',
+      note: (latestIssue || issue).currentStatus?.notePreview || '',
+      dateTime: (latestIssue || issue).currentStatus?.enteredDateTime || '',
+      by: (latestIssue || issue).currentStatus?.enteredBy?.name || ''
     });
     idx = history.length - 1;
   }
   if (!history[idx]) return;
-  const prev = currentStatus(issue);
+  const prev = currentStatus(latestIssue || issue);
   history[idx] = { ...history[idx], status, subStatus: subStatus||'', note: note||'' };
   if (dateTime) history[idx].dateTime = dateTime;
   // Recalculate current status from last entry
@@ -3541,14 +3553,14 @@ window.updateStatusEntry = async (id, idx, status, subStatus, note, dateTime) =>
         subStatus: last.subStatus || '',
         statusDateTime: last.dateTime || fmtDate(new Date()),
         note: last.note || '',
-        baseIssue: issue
+        baseIssue: latestIssue || issue
       })
     };
     const batch = writeBatch(db);
     batch.update(plantDoc('issues',id), issuePatch);
     if ((prev?.status || 'open') !== (last.status || 'open') || (prev?.subStatus || '') !== (last.subStatus || '')) {
       queueIssueEvent(batch, id, 'status_changed', {
-        fromStatusKey: prev?.status || currentStatusKey(issue),
+        fromStatusKey: prev?.status || currentStatusKey(latestIssue || issue),
         fromSubStatusKey: prev?.subStatus || '',
         toStatusKey: last.status || 'open',
         toSubStatusKey: last.subStatus || '',
@@ -3564,8 +3576,9 @@ window.updateStatusEntry = async (id, idx, status, subStatus, note, dateTime) =>
 window.removeStatusEntry = async (id, idx) => {
   const issue = issues.find(i=>i.id===id);
   if (!issue) return;
-  const history = getMutableStatusHistory(issue);
-  const prev = currentStatus(issue);
+  const latestIssue = await getLatestIssueForStatusMutation(id, issue);
+  const history = getMutableStatusHistory(latestIssue || issue);
+  const prev = currentStatus(latestIssue || issue);
   if (history.length <= 1) return;
   history.splice(idx, 1);
   const last = history[history.length - 1];
@@ -3578,14 +3591,14 @@ window.removeStatusEntry = async (id, idx) => {
         subStatus: last.subStatus || '',
         statusDateTime: last.dateTime || fmtDate(new Date()),
         note: last.note || '',
-        baseIssue: issue
+        baseIssue: latestIssue || issue
       })
     };
     const batch = writeBatch(db);
     batch.update(plantDoc('issues',id), issuePatch);
     if ((prev?.status || 'open') !== (last.status || 'open') || (prev?.subStatus || '') !== (last.subStatus || '')) {
       queueIssueEvent(batch, id, 'status_changed', {
-        fromStatusKey: prev?.status || currentStatusKey(issue),
+        fromStatusKey: prev?.status || currentStatusKey(latestIssue || issue),
         fromSubStatusKey: prev?.subStatus || '',
         toStatusKey: last.status || 'open',
         toSubStatusKey: last.subStatus || '',
