@@ -3518,9 +3518,16 @@ window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
       prev = currentStatus(base || issue);
       const history = getMutableStatusHistory(base || issue);
       history.push(entry);
+      const prevWorkflowState = (base?.workflowState || null);
       const issuePatch = {
         statusHistory: history,
-        ...(status === 'resolved' ? { workflowState: 'finished', 'workflowStateHistory.finished': { by: currentActor(), at: serverTimestamp() } } : {}),
+        ...(status === 'resolved'
+          ? { workflowState: 'finished', 'workflowStateHistory.finished': { by: currentActor(), at: serverTimestamp() } }
+          : { workflowState: null }),
+        ...(status !== 'resolved' && prev?.status && prevWorkflowState
+          ? { [`workflowStateByStatus.${prev.status}`]: prevWorkflowState }
+          : {}),
+        ...(status !== 'resolved' ? { [`workflowStateByStatus.${status}`]: null } : {}),
         ...buildIssueV2Compat({
           machineCode: base?.machine || base?.machineCode || issue.machine || '',
           statusKey: status,
