@@ -2319,7 +2319,13 @@ function startListener() {
   unsubscribe = onSnapshot(q, snap => {
     retryCount = 0; // reset on success
     snap.docChanges().forEach(change => {
-      if (change.type === 'removed') return;
+      if (change.type === 'removed') {
+        const removedIssueId = change.doc.id;
+        issuesById.delete(removedIssueId);
+        issueEventHistoryCache.delete(removedIssueId);
+        issueDetailsHydrationInFlight.delete(removedIssueId);
+        return;
+      }
       issuesById.set(change.doc.id, buildIssueFromSnapshot(change.doc));
     });
     rebuildIssuesArrayFromMap();
