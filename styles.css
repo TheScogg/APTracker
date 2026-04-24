@@ -233,6 +233,9 @@
   .plant-chevron { transition: transform 0.2s; }
   .plant-dropdown { display: none; position: absolute; top: calc(100% + 6px); left: 0; background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; min-width: 200px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); z-index: 300; overflow: hidden; animation: dropIn 0.15s ease; }
   .plant-dropdown.visible { display: block; }
+  #user-dropdown .plant-switcher-wrap { width: 100%; padding: 4px 6px 8px; }
+  #user-dropdown .plant-switcher-btn { width: 100%; justify-content: space-between; }
+  #user-dropdown .plant-dropdown { left: 6px; right: 6px; min-width: 0; width: auto; z-index: 360; }
   .plant-opt { display: flex; align-items: center; gap: 8px; padding: 10px 14px; font-size: 13px; color: var(--text2); cursor: pointer; transition: background 0.1s; border: none; background: none; width: 100%; text-align: left; font-family: 'Nunito', sans-serif; font-weight: 600; }
   .plant-opt:hover { background: var(--bg3); color: var(--text); }
   .plant-opt.active { color: var(--accent); }
