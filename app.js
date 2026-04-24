@@ -460,6 +460,7 @@ const attachmentPhotoCache = new Map(); // issueId -> [{name,dataUrl,...}]
 let attachmentsHydrationToken = 0;
 const issueEventHistoryCache = new Map(); // issueId -> [{status,subStatus,note,dateTime,by}]
 let eventsHydrationToken = 0;
+const issueDetailsHydrationInFlight = new Map(); // issueId -> Promise<void>
 
 async function fetchAttachmentPhotos(issueId) {
   if (attachmentPhotoCache.has(issueId)) return attachmentPhotoCache.get(issueId);
@@ -549,6 +550,35 @@ async function hydrateIssueHistoryFromEvents(issueList) {
   }));
   if (myToken !== eventsHydrationToken) return;
   renderIssues();
+}
+
+async function ensureIssueDetailsHydrated(issueId) {
+  if (!issueId) return;
+  if (issueDetailsHydrationInFlight.has(issueId)) return issueDetailsHydrationInFlight.get(issueId);
+  const issue = issues.find(i => i.id === issueId);
+  if (!issue) return;
+
+  const p = (async () => {
+    let changed = false;
+    if (Number(issue.photoCount || 0) > 0 && (!Array.isArray(issue.photos) || issue.photos.length === 0)) {
+      issue.photos = await fetchAttachmentPhotos(issue.id);
+      changed = true;
+    }
+    const hasStatusHistory = Array.isArray(issue.statusHistory) && issue.statusHistory.length > 0;
+    if (issue.schemaVersion === 2 && !hasStatusHistory) {
+      const h = await fetchIssueEventHistory(issue);
+      if (h.length > 0) {
+        issue.eventHistory = h;
+        changed = true;
+      }
+    }
+    if (changed) renderIssues();
+  })().finally(() => {
+    issueDetailsHydrationInFlight.delete(issueId);
+  });
+
+  issueDetailsHydrationInFlight.set(issueId, p);
+  return p;
 }
 
 // ── APP LIFECYCLE HELPERS (Phase 1: structure-only refactor) ──
@@ -2240,16 +2270,18 @@ function startListener() {
     retryCount = 0; // reset on success
     issues = snap.docs.map(d => {
       const data = d.data();
+      const cachedPhotos = attachmentPhotoCache.get(d.id);
+      const cachedHistory = issueEventHistoryCache.get(d.id);
       return {
         id: d.id,
         ...data,
         machine: data.machine || data.machineCode || '',
-        resolved: typeof data.resolved === 'boolean' ? data.resolved : !!data.lifecycle?.isResolved
+        resolved: typeof data.resolved === 'boolean' ? data.resolved : !!data.lifecycle?.isResolved,
+        photos: Array.isArray(data.photos) && data.photos.length ? data.photos : (cachedPhotos || data.photos || []),
+        eventHistory: cachedHistory || data.eventHistory || []
       };
     });
     refreshVisibleData();
-    hydrateIssuePhotosFromAttachments(issues);
-    hydrateIssueHistoryFromEvents(issues);
     setSyncStatus('ok', 'Live — synced across all devices');
   }, err => {
     console.error('Snapshot error:', err);
@@ -4711,8 +4743,12 @@ window.toggleCard = id => {
   // Don't toggle if a swipe gesture just completed or card is swiped open
   if (_swipeJustHappened) { _swipeJustHappened = false; return; }
   if (openSwipeRow) return;
-  document.getElementById('body-'+id)?.classList.toggle('visible');
-  document.getElementById('chevron-'+id)?.classList.toggle('open');
+  const bodyEl = document.getElementById('body-'+id);
+  const chevronEl = document.getElementById('chevron-'+id);
+  const willOpen = bodyEl ? !bodyEl.classList.contains('visible') : false;
+  bodyEl?.classList.toggle('visible');
+  chevronEl?.classList.toggle('open');
+  if (willOpen) ensureIssueDetailsHydrated(id).catch(() => {});
   scheduleIssueLogRelayout();
 };
 
