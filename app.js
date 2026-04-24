@@ -3475,6 +3475,15 @@ function getMutableStatusHistory(issue) {
   if (Array.isArray(issue.eventHistory) && issue.eventHistory.length > 0) {
     return issue.eventHistory.map(entry => ({ ...entry }));
   }
+  if (issue?.currentStatus?.statusKey || issue?.status || issue?.dateTime) {
+    return [{
+      status: currentStatusKey(issue),
+      subStatus: issue.currentStatus?.subStatusKey || issue.subStatus || '',
+      note: issue.currentStatus?.notePreview || '',
+      dateTime: issue.currentStatus?.enteredDateTime || issue.dateTime || fmtDate(new Date()),
+      by: issue.currentStatus?.enteredBy?.name || issue.userName || ''
+    }];
+  }
   return [];
 }
 
