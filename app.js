@@ -29,8 +29,9 @@ let userPlants = []; // [{ id, name, location }]
 const scheduleLookupCache = new Map();
 const USER_LOOKUP_HEARTBEAT_MS = 12 * 60 * 60 * 1000;
 const MAX_LIVE_ISSUES = 250;
-// Caches the set of scheduled machine codes for the current date.
-// { date: string, scheduled: Set<string> | null }
+let dailyScheduleIndexState = null; // { plantId, date, scheduled: Set<string>|null, lookupByPress: Map<string, { main: any[], changes: any[] }> }
+// Caches the set of scheduled machine codes for the current plant/date.
+// { plantId: string, date: string, scheduled: Set<string> | null }
 // scheduled === null means no dailySchedules doc exists for that date → don't highlight.
 let scheduledPressesState = null;
 
@@ -112,27 +113,72 @@ function scheduleDateForLookup() {
 // press buttons immediately reflect their scheduled/unscheduled state.
 async function loadDailyScheduledPresses(date) {
   if (!currentPlantId || !date) { scheduledPressesState = null; return; }
-  if (scheduledPressesState && scheduledPressesState.date === date) return; // already cached
-  let scheduled = null;
+  if (scheduledPressesState && scheduledPressesState.plantId === currentPlantId && scheduledPressesState.date === date) return; // already cached
   try {
-    const dailyRef = doc(db, 'plants', currentPlantId, 'dailySchedules', date);
-    const dailySnap = await getDoc(dailyRef);
-    if (dailySnap.exists()) {
-      const sections = ['page1', 'page2', 'northBayChanges', 'southBayChanges'];
-      const snaps = await Promise.all(
-        sections.map(s => getDocs(collection(db, 'plants', currentPlantId, 'dailySchedules', date, s)))
-      );
-      scheduled = new Set();
-      snaps.forEach(snap => snap.docs.forEach(d => {
-        const press = d.data().press;
-        if (press) scheduled.add(String(press).trim());
-      }));
-    }
+    const index = await loadDailyScheduleIndex(date);
+    scheduledPressesState = { plantId: currentPlantId, date, scheduled: index?.scheduled ?? null };
   } catch(e) {
     console.warn('loadDailyScheduledPresses failed:', e);
+    scheduledPressesState = { plantId: currentPlantId, date, scheduled: null };
   }
-  scheduledPressesState = { date, scheduled };
   updatePressStates();
+}
+
+function normalizeSchedulePress(machineCode) {
+  return String(machineCode || '').trim();
+}
+
+function buildScheduleIndexFromSnaps(snapsBySection) {
+  const scheduled = new Set();
+  const lookupByPress = new Map();
+  const sortByOrder = (a, b) => Number(a.displayOrder || 0) - Number(b.displayOrder || 0);
+  const pushRow = (machine, row) => {
+    if (!machine) return;
+    scheduled.add(machine);
+    const existing = lookupByPress.get(machine) || { main: [], changes: [] };
+    if (row.section === 'page1' || row.section === 'page2') existing.main.push(row);
+    else existing.changes.push({
+      ...row,
+      section: row.section === 'northBayChanges' ? 'North Bay Change' : 'South Bay Change'
+    });
+    lookupByPress.set(machine, existing);
+  };
+
+  Object.entries(snapsBySection).forEach(([section, snap]) => {
+    snap.docs.forEach(d => {
+      const data = d.data() || {};
+      const machine = normalizeSchedulePress(data.press);
+      pushRow(machine, { id: d.id, ...data, section });
+    });
+  });
+
+  lookupByPress.forEach(v => {
+    v.main.sort(sortByOrder);
+    v.changes.sort(sortByOrder);
+  });
+
+  return { scheduled, lookupByPress };
+}
+
+async function loadDailyScheduleIndex(date) {
+  if (!currentPlantId || !date) return null;
+  if (dailyScheduleIndexState && dailyScheduleIndexState.plantId === currentPlantId && dailyScheduleIndexState.date === date) {
+    return dailyScheduleIndexState;
+  }
+  const dailyRef = doc(db, 'plants', currentPlantId, 'dailySchedules', date);
+  const dailySnap = await getDoc(dailyRef);
+  if (!dailySnap.exists()) {
+    dailyScheduleIndexState = { plantId: currentPlantId, date, scheduled: null, lookupByPress: new Map() };
+    return dailyScheduleIndexState;
+  }
+  const sections = ['page1', 'page2', 'northBayChanges', 'southBayChanges'];
+  const sectionSnaps = await Promise.all(
+    sections.map(s => getDocs(collection(db, 'plants', currentPlantId, 'dailySchedules', date, s)))
+  );
+  const snapsBySection = Object.fromEntries(sections.map((s, idx) => [s, sectionSnaps[idx]]));
+  const { scheduled, lookupByPress } = buildScheduleIndexFromSnaps(snapsBySection);
+  dailyScheduleIndexState = { plantId: currentPlantId, date, scheduled, lookupByPress };
+  return dailyScheduleIndexState;
 }
 
 async function getPressScheduleLookup(machineCode, scheduleDate) {
@@ -144,38 +190,18 @@ async function getPressScheduleLookup(machineCode, scheduleDate) {
     return null;
   }
 
-  const machine = String(machineCode || '').trim();
-  const dailyRef = doc(db, 'plants', currentPlantId, 'dailySchedules', scheduleDate);
-  const dailySnap = await getDoc(dailyRef);
-  if (!dailySnap.exists()) {
+  const machine = normalizeSchedulePress(machineCode);
+  const index = await loadDailyScheduleIndex(scheduleDate);
+  if (!index?.scheduled) {
     scheduleLookupCache.set(cacheKey, null);
     return null;
   }
-
-  const sectionRows = async (section) => {
-    const sectionRef = collection(db, 'plants', currentPlantId, 'dailySchedules', scheduleDate, section);
-    const q = query(sectionRef, where('press', '==', machine));
-    const snap = await getDocs(q);
-    return snap.docs.map(d => ({ id: d.id, ...d.data(), section }));
-  };
-
-  const [page1Rows, page2Rows, northChanges, southChanges] = await Promise.all([
-    sectionRows('page1'),
-    sectionRows('page2'),
-    sectionRows('northBayChanges'),
-    sectionRows('southBayChanges')
-  ]);
-
-  const sortByOrder = (a, b) => Number(a.displayOrder || 0) - Number(b.displayOrder || 0);
-  const mainCandidates = [...page1Rows, ...page2Rows].sort(sortByOrder);
-  const changeRows = [...northChanges, ...southChanges]
-    .sort(sortByOrder)
-    .map(row => ({ ...row, section: row.section === 'northBayChanges' ? 'North Bay Change' : 'South Bay Change' }));
+  const rows = index.lookupByPress.get(machine) || { main: [], changes: [] };
 
   const data = {
-    mainRow: mainCandidates[0] || null,
-    hasChanges: changeRows.length > 0,
-    changes: changeRows
+    mainRow: rows.main[0] || null,
+    hasChanges: rows.changes.length > 0,
+    changes: rows.changes
   };
   scheduleLookupCache.set(cacheKey, data);
   return data;
