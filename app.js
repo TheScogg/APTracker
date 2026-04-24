@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, collection, updateDoc, deleteDoc, doc, getDoc, getDocs, setDoc, addDoc, onSnapshot, serverTimestamp, query, orderBy, where, writeBatch, arrayUnion, arrayRemove, increment, limit, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, collection, updateDoc, deleteDoc, doc, getDoc, getDocs, setDoc, addDoc, onSnapshot, serverTimestamp, query, orderBy, where, writeBatch, arrayUnion, arrayRemove, increment, limit, runTransaction, startAfter } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut as fbSignOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getStorage, ref as storageRef, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
@@ -29,6 +29,7 @@ let userPlants = []; // [{ id, name, location }]
 const scheduleLookupCache = new Map();
 const USER_LOOKUP_HEARTBEAT_MS = 12 * 60 * 60 * 1000;
 const MAX_LIVE_ISSUES = 250;
+const HISTORY_ISSUES_PAGE_SIZE = 200;
 let dailyScheduleIndexState = null; // { plantId, date, scheduled: Set<string>|null, lookupByPress: Map<string, { main: any[], changes: any[] }> }
 // Caches the set of scheduled machine codes for the current plant/date.
 // { plantId: string, date: string, scheduled: Set<string> | null }
@@ -2051,6 +2052,9 @@ function getShiftForTime(date, schedule) {
 }
 
 let issues = [];
+const issuesById = new Map();
+let issueHistoryCursor = null;
+let issueHistoryFetchInFlight = null;
 let issueDisplayLimit = 50;
 const PAGE_SIZE = 50;
 let pendingPhotos = [];   // for add modal
@@ -2248,6 +2252,9 @@ onAuthStateChanged(auth, async user => {
     document.getElementById('login-screen').classList.add('visible');
     document.getElementById('app').classList.remove('visible');
     issues = [];
+    issuesById.clear();
+    issueHistoryCursor = null;
+    issueHistoryFetchInFlight = null;
     attachmentPhotoCache.clear();
     issueEventHistoryCache.clear();
     attachmentsHydrationToken++;
@@ -2260,28 +2267,67 @@ onAuthStateChanged(auth, async user => {
 let retryTimeout = null;
 let retryCount = 0;
 
+function buildIssueFromSnapshot(docSnap) {
+  const data = docSnap.data() || {};
+  const cachedPhotos = attachmentPhotoCache.get(docSnap.id);
+  const cachedHistory = issueEventHistoryCache.get(docSnap.id);
+  return {
+    id: docSnap.id,
+    ...data,
+    machine: data.machine || data.machineCode || '',
+    resolved: typeof data.resolved === 'boolean' ? data.resolved : !!data.lifecycle?.isResolved,
+    photos: Array.isArray(data.photos) && data.photos.length ? data.photos : (cachedPhotos || data.photos || []),
+    eventHistory: cachedHistory || data.eventHistory || []
+  };
+}
+
+function rebuildIssuesArrayFromMap() {
+  issues = Array.from(issuesById.values());
+}
+
+async function loadIssueHistoryPage() {
+  if (!currentPlantId || !issueHistoryCursor || issueHistoryFetchInFlight) return;
+  const cursor = issueHistoryCursor;
+  issueHistoryFetchInFlight = (async () => {
+    const q = query(plantCol('issues'), orderBy('createdAt', 'desc'), startAfter(cursor), limit(HISTORY_ISSUES_PAGE_SIZE));
+    const snap = await getDocs(q);
+    if (snap.empty) {
+      issueHistoryCursor = null;
+      return;
+    }
+    snap.docs.forEach(d => {
+      if (!issuesById.has(d.id)) issuesById.set(d.id, buildIssueFromSnapshot(d));
+    });
+    issueHistoryCursor = snap.docs[snap.docs.length - 1] || null;
+    rebuildIssuesArrayFromMap();
+    refreshVisibleData();
+  })().finally(() => {
+    issueHistoryFetchInFlight = null;
+  });
+  return issueHistoryFetchInFlight;
+}
+
 function startListener() {
   if (unsubscribe) unsubscribe();
   if (retryTimeout) { clearTimeout(retryTimeout); retryTimeout = null; }
   if (!currentPlantId) return;
+  issuesById.clear();
+  issueHistoryCursor = null;
+  issueHistoryFetchInFlight = null;
 
   const q = query(plantCol('issues'), orderBy('createdAt', 'desc'), limit(MAX_LIVE_ISSUES));
   unsubscribe = onSnapshot(q, snap => {
     retryCount = 0; // reset on success
-    issues = snap.docs.map(d => {
-      const data = d.data();
-      const cachedPhotos = attachmentPhotoCache.get(d.id);
-      const cachedHistory = issueEventHistoryCache.get(d.id);
-      return {
-        id: d.id,
-        ...data,
-        machine: data.machine || data.machineCode || '',
-        resolved: typeof data.resolved === 'boolean' ? data.resolved : !!data.lifecycle?.isResolved,
-        photos: Array.isArray(data.photos) && data.photos.length ? data.photos : (cachedPhotos || data.photos || []),
-        eventHistory: cachedHistory || data.eventHistory || []
-      };
+    snap.docChanges().forEach(change => {
+      if (change.type === 'removed') return;
+      issuesById.set(change.doc.id, buildIssueFromSnapshot(change.doc));
     });
+    rebuildIssuesArrayFromMap();
     refreshVisibleData();
+    if (!issueHistoryCursor && snap.docs.length) {
+      issueHistoryCursor = snap.docs[snap.docs.length - 1];
+      loadIssueHistoryPage().catch(() => {});
+    }
     setSyncStatus('ok', 'Live — synced across all devices');
   }, err => {
     console.error('Snapshot error:', err);
