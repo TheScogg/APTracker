@@ -3500,36 +3500,52 @@ async function getLatestIssueForStatusMutation(issueId, fallbackIssue) {
 // Add a new status entry to history
 window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
   if (!currentUserPermissions.canEditIssue) return;
-  const issue = issues.find(i=>i.id===id);
+  const issue = issues.find(i => i.id === id);
   if (!issue) return;
-  const latestIssue = await getLatestIssueForStatusMutation(id, issue);
-  const prev = currentStatus(latestIssue || issue);
-  const history = getMutableStatusHistory(latestIssue || issue);
-  const entry = { status, subStatus: subStatus||'', note: note||'', dateTime: dateTime || fmtDate(new Date()), by: currentUser.displayName||currentUser.email };
-  history.push(entry);
+  const entry = {
+    status,
+    subStatus: subStatus || '',
+    note: note || '',
+    dateTime: dateTime || fmtDate(new Date()),
+    by: currentUser.displayName || currentUser.email
+  };
+  let prev = currentStatus(issue);
   try {
-    const issuePatch = {
-      statusHistory: history,
-      ...(status === 'resolved' ? { workflowState: 'finished', 'workflowStateHistory.finished': { by: currentActor(), at: serverTimestamp() } } : {}),
-      ...buildIssueV2Compat({
-        machineCode: issue.machine || issue.machineCode || '',
-        statusKey: status,
-        subStatus: subStatus || '',
-        statusDateTime: entry.dateTime,
-        note: note || '',
-        baseIssue: latestIssue || issue
-      })
-    };
-    const batch = writeBatch(db);
-    batch.update(plantDoc('issues',id), issuePatch);
-      queueIssueEvent(batch, id, 'status_changed', {
-      fromStatusKey: prev?.status || currentStatusKey(latestIssue || issue),
-      fromSubStatusKey: prev?.subStatus || '',
-      toStatusKey: status,
-      toSubStatusKey: subStatus || '',
-      note: note || ''
+    await runTransaction(db, async tx => {
+      const ref = plantDoc('issues', id);
+      const snap = await tx.get(ref);
+      const base = snap.exists() ? { id, ...snap.data() } : issue;
+      prev = currentStatus(base || issue);
+      const history = getMutableStatusHistory(base || issue);
+      history.push(entry);
+      const issuePatch = {
+        statusHistory: history,
+        ...(status === 'resolved' ? { workflowState: 'finished', 'workflowStateHistory.finished': { by: currentActor(), at: serverTimestamp() } } : {}),
+        ...buildIssueV2Compat({
+          machineCode: base?.machine || base?.machineCode || issue.machine || '',
+          statusKey: status,
+          subStatus: subStatus || '',
+          statusDateTime: entry.dateTime,
+          note: note || '',
+          baseIssue: base || issue
+        })
+      };
+      tx.update(ref, issuePatch);
     });
-    await batch.commit();
+
+    await addDoc(issueEventsCol(id), {
+      type: 'status_changed',
+      eventAt: serverTimestamp(),
+      actor: currentActor(),
+      payload: {
+        fromStatusKey: prev?.status || currentStatusKey(issue),
+        fromSubStatusKey: prev?.subStatus || '',
+        toStatusKey: status,
+        toSubStatusKey: subStatus || '',
+        note: note || ''
+      },
+      schemaVersion: 2
+    });
     issueEventHistoryCache.delete(id);
     await awardGamification('status_changed_valid', { issueId: id, dedupeSuffix: entry.dateTime || String(Date.now()), tags: ['status:changed', `status:${status}`] });
     if (status === 'resolved') await awardGamification('issue_resolved', { issueId: id, dedupeSuffix: 'status-resolved', tags: ['issue:resolved', 'status:resolved'] });
@@ -3895,8 +3911,8 @@ window.setWorkflowStateForStatus = async (issueId, statusKey, state) => {
   const issue = issues.find(i => i.id === issueId);
   const primaryKey = issue ? currentStatusKey(issue) : null;
   const current = (statusKey === primaryKey)
-    ? (issue?.workflowState || 'called')
-    : (issue?.workflowStateByStatus?.[statusKey] || 'called');
+    ? (issue?.workflowState || null)
+    : (issue?.workflowStateByStatus?.[statusKey] || null);
   if (current === state) return;
   try {
     const patch = {
@@ -3921,9 +3937,10 @@ window.cycleWorkflowStateForStatus = async (issueId, statusKey) => {
   if (!issue) return;
   const primaryKey = currentStatusKey(issue);
   const current = statusKey === primaryKey
-    ? (issue.workflowState || 'called')
-    : (issue.workflowStateByStatus?.[statusKey] || 'called');
-  const next = states[(Math.max(0, states.indexOf(current)) + 1) % states.length];
+    ? (issue.workflowState || null)
+    : (issue.workflowStateByStatus?.[statusKey] || null);
+  const currentIdx = states.indexOf(current);
+  const next = currentIdx < 0 ? 'called' : states[(currentIdx + 1) % states.length];
   await setWorkflowStateForStatus(issueId, statusKey, next);
 };
 
