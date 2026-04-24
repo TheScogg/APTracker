@@ -2319,7 +2319,13 @@ function startListener() {
   unsubscribe = onSnapshot(q, snap => {
     retryCount = 0; // reset on success
     snap.docChanges().forEach(change => {
-      if (change.type === 'removed') return;
+      if (change.type === 'removed') {
+        const removedIssueId = change.doc.id;
+        issuesById.delete(removedIssueId);
+        issueEventHistoryCache.delete(removedIssueId);
+        issueDetailsHydrationInFlight.delete(removedIssueId);
+        return;
+      }
       issuesById.set(change.doc.id, buildIssueFromSnapshot(change.doc));
     });
     rebuildIssuesArrayFromMap();
@@ -3955,7 +3961,14 @@ window.togglePriority = async (id) => {
 window.deleteIssue = async id => {
   if (!currentUserPermissions.canEditIssue) return;
   if (!confirm('Delete this issue permanently?')) return;
-  try { await deleteDoc(plantDoc('issues',id)); }
+  try {
+    await deleteDoc(plantDoc('issues',id));
+    issuesById.delete(id);
+    issueEventHistoryCache.delete(id);
+    issueDetailsHydrationInFlight.delete(id);
+    rebuildIssuesArrayFromMap();
+    refreshVisibleData();
+  }
   catch(e) { setSyncStatus('err','Error deleting: '+e.message); }
 };
 
