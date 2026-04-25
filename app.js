@@ -4027,29 +4027,74 @@ async function _tryNativeIssueShare(issue, messageWithLink) {
   }
 }
 
-window.sendIssueViaSms = async (id, evt) => {
-  evt?.stopPropagation?.();
-  evt?.preventDefault?.();
+const SMS_COMPOSER_STATE = {
+  issueId: null,
+  issue: null,
+  messageWithLink: '',
+  recipientOptions: []
+};
 
-  const issue = issues.find(i => i.id === id);
-  if (!issue) {
-    setSyncStatus('err', 'Unable to send SMS: issue not found.');
+function _smsSanitizePhone(value) {
+  return String(value || '').replace(/[^\d+]/g, '');
+}
+
+function _smsExtractPhones(member) {
+  const candidates = [
+    member?.phone,
+    member?.phoneNumber,
+    member?.mobile,
+    member?.mobilePhone,
+    member?.smsPhone,
+    member?.profile?.phone,
+    member?.profile?.phoneNumber
+  ];
+  return candidates
+    .map(_smsSanitizePhone)
+    .filter(Boolean);
+}
+
+async function _smsRecipientOptions() {
+  if (!currentPlantId) return [];
+  try {
+    const membersSnap = await getDocs(collection(db, 'plants', currentPlantId, 'members'));
+    return membersSnap.docs
+      .map(d => ({ uid: d.id, ...d.data() }))
+      .filter(m => m.isActive !== false)
+      .map(m => {
+        const phones = _smsExtractPhones(m);
+        return {
+          uid: m.uid || '',
+          name: m.displayName || m.name || m.email || 'Unknown',
+          phone: phones[0] || ''
+        };
+      })
+      .filter(m => m.phone)
+      .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  } catch (err) {
+    console.warn('Unable to load SMS recipients from members.', err);
+    return [];
+  }
+}
+
+function _renderSmsRecipientPicker() {
+  const wrap = document.getElementById('sms-recipient-picker');
+  if (!wrap) return;
+  if (!SMS_COMPOSER_STATE.recipientOptions.length) {
+    wrap.innerHTML = '<div class="sms-recipient-empty">No saved member phone numbers found. Enter numbers manually below.</div>';
     return;
   }
+  wrap.innerHTML = SMS_COMPOSER_STATE.recipientOptions.map((r, idx) => `
+    <label class="sms-recipient-row">
+      <input type="checkbox" data-sms-recipient="${idx}">
+      <span>${esc(r.name)}</span>
+      <span class="sms-recipient-phone">${esc(r.phone)}</span>
+    </label>
+  `).join('');
+}
 
-  const message = formatIssueSmsBody(issue);
-  const issueLink = (() => {
-    try {
-      return window.location?.href ? `${window.location.origin}${window.location.pathname}?issue=${encodeURIComponent(issue.id)}` : '';
-    } catch (_) {
-      return '';
-    }
-  })();
-  const messageWithLink = issueLink ? `${message}\nLink: ${issueLink}` : message;
-  if (await _tryNativeIssueShare(issue, messageWithLink)) return;
+async function _performSmsFallback(messageWithLink) {
   const smsUri = `sms:?&body=${encodeURIComponent(messageWithLink)}`;
   const isMobile = /android|iphone|ipad|ipod|windows phone|mobile/i.test(navigator.userAgent || '');
-
   if (!isMobile) {
     try {
       await navigator.clipboard?.writeText(messageWithLink);
@@ -4070,6 +4115,104 @@ window.sendIssueViaSms = async (id, evt) => {
       prompt('Could not open SMS app. Copy this message:', messageWithLink);
     }
   }
+}
+
+async function _submitViaBackendOrFallback() {
+  const includePhotos = Boolean(document.getElementById('sms-include-photos')?.checked);
+  const manualNumbers = String(document.getElementById('sms-manual-phone')?.value || '')
+    .split(/[,\n;]/)
+    .map(_smsSanitizePhone)
+    .filter(Boolean);
+  const selectedNumbers = Array.from(document.querySelectorAll('[data-sms-recipient]:checked'))
+    .map(el => SMS_COMPOSER_STATE.recipientOptions[Number(el.getAttribute('data-sms-recipient'))]?.phone || '')
+    .map(_smsSanitizePhone)
+    .filter(Boolean);
+  const recipientPhones = Array.from(new Set([...selectedNumbers, ...manualNumbers]));
+  if (!recipientPhones.length) {
+    await _performSmsFallback(SMS_COMPOSER_STATE.messageWithLink);
+    return;
+  }
+
+  const backendSend = typeof window.sendIssueMms === 'function' ? window.sendIssueMms : null;
+  if (!backendSend) {
+    await _performSmsFallback(SMS_COMPOSER_STATE.messageWithLink);
+    return;
+  }
+
+  try {
+    const result = await backendSend({
+      issueId: SMS_COMPOSER_STATE.issueId,
+      recipients: recipientPhones,
+      includePhotos,
+      body: SMS_COMPOSER_STATE.messageWithLink,
+      issue: SMS_COMPOSER_STATE.issue
+    });
+    const sentCount = Number(result?.sentCount || recipientPhones.length || 0);
+    alert(`Sent via ${includePhotos ? 'MMS' : 'SMS'} to ${sentCount} recipient${sentCount === 1 ? '' : 's'}.`);
+  } catch (err) {
+    console.warn('sendIssueMms failed; falling back to sms: URI.', err);
+    await _performSmsFallback(SMS_COMPOSER_STATE.messageWithLink);
+  }
+}
+
+window.closeSmsComposer = async (fallback = false) => {
+  document.getElementById('sms-compose-modal')?.classList.remove('visible');
+  if (fallback && SMS_COMPOSER_STATE.messageWithLink) {
+    await _performSmsFallback(SMS_COMPOSER_STATE.messageWithLink);
+  }
+};
+
+window.submitSmsComposer = async () => {
+  const sendBtn = document.getElementById('sms-send-btn');
+  if (sendBtn) {
+    sendBtn.disabled = true;
+    sendBtn.textContent = 'Sending…';
+  }
+  try {
+    await _submitViaBackendOrFallback();
+    await closeSmsComposer(false);
+  } finally {
+    if (sendBtn) {
+      sendBtn.disabled = false;
+      sendBtn.textContent = 'Send';
+    }
+  }
+};
+
+window.sendIssueViaSms = async (id, evt) => {
+  evt?.stopPropagation?.();
+  evt?.preventDefault?.();
+
+  const issue = issues.find(i => i.id === id);
+  if (!issue) {
+    setSyncStatus('err', 'Unable to send SMS: issue not found.');
+    return;
+  }
+
+  const message = formatIssueSmsBody(issue);
+  const issueLink = (() => {
+    try {
+      return window.location?.href ? `${window.location.origin}${window.location.pathname}?issue=${encodeURIComponent(issue.id)}` : '';
+    } catch (_) {
+      return '';
+    }
+  })();
+  const messageWithLink = issueLink ? `${message}\nLink: ${issueLink}` : message;
+  if (await _tryNativeIssueShare(issue, messageWithLink)) return;
+  SMS_COMPOSER_STATE.issueId = issue.id;
+  SMS_COMPOSER_STATE.issue = issue;
+  SMS_COMPOSER_STATE.messageWithLink = messageWithLink;
+  SMS_COMPOSER_STATE.recipientOptions = await _smsRecipientOptions();
+  const subtitle = document.getElementById('sms-compose-subtitle');
+  if (subtitle) subtitle.textContent = `${issue.machine || issue.id} • Choose recipients and review before sending.`;
+  const manual = document.getElementById('sms-manual-phone');
+  if (manual) manual.value = '';
+  const includePhotos = document.getElementById('sms-include-photos');
+  if (includePhotos) includePhotos.checked = true;
+  const preview = document.getElementById('sms-preview-text');
+  if (preview) preview.value = messageWithLink;
+  _renderSmsRecipientPicker();
+  document.getElementById('sms-compose-modal')?.classList.add('visible');
 };
 
 // ── DELETE ──
@@ -6339,13 +6482,14 @@ document.getElementById('edit-modal').addEventListener('click',   e=>{if(e.targe
 document.getElementById('resolve-modal').addEventListener('click',e=>{if(e.target===document.getElementById('resolve-modal'))closeResolveModal();});
 document.getElementById('reopen-modal').addEventListener('click', e=>{if(e.target===document.getElementById('reopen-modal')) closeReopenModal();});
 document.getElementById('edit-status-modal').addEventListener('click', e=>{if(e.target===document.getElementById('edit-status-modal')) closeEditStatusModal();});
+document.getElementById('sms-compose-modal')?.addEventListener('click', e=>{ if(e.target===document.getElementById('sms-compose-modal')) closeSmsComposer(true); });
 
 // Prevent modal content clicks from bubbling to overlay
 document.querySelectorAll('.modal').forEach(modal => {
   modal.addEventListener('click', e => e.stopPropagation());
 });
 
-document.addEventListener('keydown', e=>{ if(e.key==='Escape'){closeModal();closeEditModal();closeResolveModal();closeReopenModal();closeLightbox();closeSortDropdown();closeExportModal();closeSerialModal();closeEditStatusModal();closeNotesModal();window.closeMessagingModal?.();window.closeConversation?.();closeAppearanceModal();closeThemeEditor();} });
+document.addEventListener('keydown', e=>{ if(e.key==='Escape'){closeModal();closeEditModal();closeResolveModal();closeReopenModal();closeLightbox();closeSortDropdown();closeExportModal();closeSerialModal();closeEditStatusModal();closeNotesModal();closeSmsComposer(true);window.closeMessagingModal?.();window.closeConversation?.();closeAppearanceModal();closeThemeEditor();} });
 
 document.getElementById('theme-editor-modal').addEventListener('click', e => {
   if (e.target !== document.getElementById('theme-editor-modal')) return;
