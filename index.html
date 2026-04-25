@@ -778,7 +778,7 @@
   </div>
 </div>
 
-<!-- SMS / MMS COMPOSER -->
+<!-- TEXT (SMS/RCS) / MMS COMPOSER -->
 <div class="modal-overlay" id="sms-compose-modal">
   <div class="modal sms-compose-modal" onclick="event.stopPropagation()">
     <div class="modal-title">📲 Send Issue Update</div>
@@ -787,6 +787,9 @@
     <div id="sms-recipient-picker" class="sms-recipient-picker"></div>
     <label for="sms-manual-phone">Manual Phone Number(s)</label>
     <input id="sms-manual-phone" type="text" placeholder="e.g. +15551234567, 555-123-4567">
+    <div style="display:flex;justify-content:flex-end;margin-top:6px;">
+      <button class="btn btn-ghost" type="button" onclick="addManualSmsRecipients()">Add Number(s) to Recipient Picker</button>
+    </div>
     <label class="sms-toggle-row" for="sms-include-photos">
       <input id="sms-include-photos" type="checkbox" checked>
       <span>Include photos (MMS)</span>

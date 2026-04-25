@@ -4033,9 +4033,9 @@ async function _tryNativeIssueShare(issue, messageWithLink) {
     await navigator.share(payload);
     return true;
   } catch (err) {
-    // User cancellation isn't an app error; just continue into SMS fallback.
+    // User cancellation isn't an app error; just continue into text-app fallback.
     const aborted = err?.name === 'AbortError';
-    if (!aborted) console.warn('Native share failed, falling back to SMS URI.', err);
+    if (!aborted) console.warn('Native share failed, falling back to sms: URI.', err);
     return false;
   }
 }
@@ -4095,7 +4095,8 @@ const SMS_COMPOSER_STATE = {
   issueId: null,
   issue: null,
   messageWithLink: '',
-  recipientOptions: []
+  recipientOptions: [],
+  selectedRecipientPhones: new Set()
 };
 
 function _smsSanitizePhone(value) {
@@ -4111,6 +4112,10 @@ function _smsNormalizeE164(value) {
   if (digitsOnly.length === 10) return `+1${digitsOnly}`;
   if (digitsOnly.length === 11 && digitsOnly.startsWith('1')) return `+${digitsOnly}`;
   return `+${digitsOnly}`;
+}
+
+function _smsRecipientKey(value) {
+  return _smsNormalizeE164(value) || _smsSanitizePhone(value);
 }
 
 function _smsExtractPhones(member) {
@@ -4146,7 +4151,7 @@ async function _smsRecipientOptions() {
       .filter(m => m.phone)
       .sort((a, b) => String(a.name).localeCompare(String(b.name)));
   } catch (err) {
-    console.warn('Unable to load SMS recipients from members.', err);
+    console.warn('Unable to load text recipients from members.', err);
     return [];
   }
 }
@@ -4160,15 +4165,60 @@ function _renderSmsRecipientPicker() {
   }
   wrap.innerHTML = SMS_COMPOSER_STATE.recipientOptions.map((r, idx) => `
     <label class="sms-recipient-row">
-      <input type="checkbox" data-sms-recipient="${idx}">
+      <input type="checkbox" data-sms-recipient="${idx}" ${SMS_COMPOSER_STATE.selectedRecipientPhones.has(_smsRecipientKey(r.phone)) ? 'checked' : ''}>
       <span>${esc(r.name)}</span>
       <span class="sms-recipient-phone">${esc(r.phone)}</span>
     </label>
   `).join('');
+  wrap.querySelectorAll('[data-sms-recipient]').forEach(el => {
+    el.addEventListener('change', () => {
+      const idx = Number(el.getAttribute('data-sms-recipient'));
+      const phone = SMS_COMPOSER_STATE.recipientOptions[idx]?.phone || '';
+      const key = _smsRecipientKey(phone);
+      if (!key) return;
+      if (el.checked) SMS_COMPOSER_STATE.selectedRecipientPhones.add(key);
+      else SMS_COMPOSER_STATE.selectedRecipientPhones.delete(key);
+    });
+  });
 }
+
+window.addManualSmsRecipients = () => {
+  const manualInput = document.getElementById('sms-manual-phone');
+  const raw = String(manualInput?.value || '');
+  const numbers = raw
+    .split(/[,\n;]/)
+    .map(_smsNormalizeE164)
+    .filter(Boolean);
+
+  if (!numbers.length) {
+    alert('Enter at least one valid phone number to add.');
+    return;
+  }
+
+  const existingByKey = new Set(SMS_COMPOSER_STATE.recipientOptions.map(r => _smsRecipientKey(r.phone)).filter(Boolean));
+  let addedCount = 0;
+  numbers.forEach((phone, idx) => {
+    const key = _smsRecipientKey(phone);
+    if (!key) return;
+    SMS_COMPOSER_STATE.selectedRecipientPhones.add(key);
+    if (existingByKey.has(key)) return;
+    SMS_COMPOSER_STATE.recipientOptions.push({
+      uid: `manual-${Date.now()}-${idx}`,
+      name: 'Manual Number',
+      phone
+    });
+    existingByKey.add(key);
+    addedCount++;
+  });
+
+  _renderSmsRecipientPicker();
+  if (manualInput) manualInput.value = '';
+  if (addedCount === 0) alert('Those number(s) are already in the recipient picker and were selected.');
+};
 
 async function _performSmsFallback(messageWithLink, recipientPhones = []) {
   const to = Array.isArray(recipientPhones) ? recipientPhones.filter(Boolean).join(',') : '';
+  // `sms:` intentionally opens the platform texting app; on many devices/carriers this can route over RCS automatically.
   const smsUri = to
     ? `sms:${encodeURIComponent(to)}?&body=${encodeURIComponent(messageWithLink)}`
     : `sms:?&body=${encodeURIComponent(messageWithLink)}`;
@@ -4176,9 +4226,9 @@ async function _performSmsFallback(messageWithLink, recipientPhones = []) {
   if (!isMobile) {
     try {
       await navigator.clipboard?.writeText(messageWithLink);
-      alert('SMS apps are usually unavailable on desktop. Message copied to clipboard.');
+      alert('Texting apps are usually unavailable on desktop. Message copied to clipboard.');
     } catch (_) {
-      prompt('Copy this message for SMS:', messageWithLink);
+      prompt('Copy this message for texting:', messageWithLink);
     }
     return;
   }
@@ -4188,9 +4238,9 @@ async function _performSmsFallback(messageWithLink, recipientPhones = []) {
   } catch (_) {
     try {
       await navigator.clipboard?.writeText(messageWithLink);
-      alert('Could not open your SMS app. Message copied to clipboard.');
+      alert('Could not open your texting app. Message copied to clipboard.');
     } catch (__){
-      prompt('Could not open SMS app. Copy this message:', messageWithLink);
+      prompt('Could not open texting app. Copy this message:', messageWithLink);
     }
   }
 }
@@ -4206,13 +4256,25 @@ async function _submitViaBackendOrFallback() {
     .map(_smsNormalizeE164)
     .filter(Boolean);
   const recipientPhones = Array.from(new Set([...selectedNumbers, ...manualNumbers]));
+  const tryNativeShare = async () => {
+    if (!includePhotos) return false;
+    return _tryNativeIssueShare(SMS_COMPOSER_STATE.issue, SMS_COMPOSER_STATE.messageWithLink);
+  };
+
   if (!recipientPhones.length) {
+    const shared = await tryNativeShare();
+    if (shared) return;
     await _performSmsFallback(SMS_COMPOSER_STATE.messageWithLink);
     return;
   }
 
   const backendSend = typeof window.sendIssueMms === 'function' ? window.sendIssueMms : null;
   if (!backendSend) {
+    const shared = await tryNativeShare();
+    if (shared) return;
+    if (includePhotos) {
+      alert('Photo attachments require native share support or an MMS backend. Falling back to text-only compose.');
+    }
     await _performSmsFallback(SMS_COMPOSER_STATE.messageWithLink, recipientPhones);
     return;
   }
@@ -4245,9 +4307,14 @@ async function _submitViaBackendOrFallback() {
     };
     const result = await backendSend(payload);
     const sentCount = Number(result?.sentCount || recipientPhones.length || 0);
-    alert(`Sent via ${includePhotos ? 'MMS' : 'SMS'} to ${sentCount} recipient${sentCount === 1 ? '' : 's'}.`);
+    alert(`Sent via ${includePhotos ? 'MMS' : 'text (SMS/RCS based on device + carrier)'} to ${sentCount} recipient${sentCount === 1 ? '' : 's'}.`);
   } catch (err) {
     console.warn('sendIssueMms failed; falling back to sms: URI.', err);
+    const shared = await tryNativeShare();
+    if (shared) return;
+    if (includePhotos) {
+      alert('Could not send MMS attachments from backend. Falling back to text-only compose.');
+    }
     await _performSmsFallback(SMS_COMPOSER_STATE.messageWithLink, recipientPhones);
   }
 }
@@ -4282,7 +4349,7 @@ window.sendIssueViaSms = async (id, evt) => {
 
   const issue = issues.find(i => i.id === id);
   if (!issue) {
-    setSyncStatus('err', 'Unable to send SMS: issue not found.');
+    setSyncStatus('err', 'Unable to send text: issue not found.');
     return;
   }
 
@@ -4299,6 +4366,7 @@ window.sendIssueViaSms = async (id, evt) => {
   SMS_COMPOSER_STATE.issue = issue;
   SMS_COMPOSER_STATE.messageWithLink = messageWithLink;
   SMS_COMPOSER_STATE.recipientOptions = await _smsRecipientOptions();
+  SMS_COMPOSER_STATE.selectedRecipientPhones = new Set();
   const subtitle = document.getElementById('sms-compose-subtitle');
   if (subtitle) subtitle.textContent = `${issue.machine || issue.id} • Choose recipients and review before sending.`;
   const manual = document.getElementById('sms-manual-phone');
@@ -4657,10 +4725,11 @@ function renderIssues() {
       </div>
       ${addRowHtml}
     </div>
-    ${canEdit ? `<div class="action-row" style="justify-content:flex-end;margin-top:10px;">
-      <button class="btn btn-edit" onclick="openEditModal('${issue.id}')">✏️ Edit</button>
-      <button class="btn btn-danger" onclick="deleteIssue('${issue.id}')">🗑 Delete</button>
-    </div>` : ''}`;
+    <div class="action-row" style="justify-content:flex-end;margin-top:10px;">
+      <button class="issue-text-btn" onclick="event.stopPropagation(); sendIssueViaSms('${issue.id}', event)" title="Send issue by SMS">📲 Text</button>
+      ${canEdit ? `<button class="btn btn-edit" onclick="openEditModal('${issue.id}')">✏️ Edit</button>
+      <button class="btn btn-danger" onclick="deleteIssue('${issue.id}')">🗑 Delete</button>` : ''}
+    </div>`;
 
     const datePart = issue.dateTime ? issue.dateTime.replace(/,\s*\d{4}/, '') : '';
     const submitterHtml=issue.userName?`<span class="issue-submitter">${esc(issue.userName.split(' ')[0])}${isMyIssue?' (you)':''}</span>`:'';
@@ -4769,7 +4838,7 @@ function renderIssues() {
         <div class="divider"></div>
         ${resolveHtml}
         <div class="issue-body-footer">
-          <button class="issue-text-btn" onclick="event.stopPropagation(); sendIssueViaSms('${issue.id}', event)" title="Send issue by SMS">📲 Text</button>
+          <button class="issue-text-btn" onclick="event.stopPropagation(); sendIssueViaSms('${issue.id}', event)" title="Send issue by text">📲 Text</button>
         </div>
       </div>`;
     // Safety cleanup: remove any legacy "Workflow: ..." pill buttons from status history rows.
