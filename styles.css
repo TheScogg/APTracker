@@ -1049,6 +1049,14 @@
   .photo-preview-img { width: 66px; height: 66px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); }
   .photo-remove { position: absolute; top: -5px; right: -5px; background: var(--red); color: white; border: none; border-radius: 50%; width: 17px; height: 17px; font-size: 9px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
   .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6px; }
+  .sms-compose-modal { width: min(560px, 95vw); }
+  .sms-recipient-picker { max-height: 140px; overflow-y: auto; background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 6px; margin-bottom: 10px; }
+  .sms-recipient-empty { font-size: 12px; color: var(--text3); padding: 6px; }
+  .sms-recipient-row { display: flex; align-items: center; gap: 8px; padding: 6px; border-radius: 6px; font-size: 12px; color: var(--text); }
+  .sms-recipient-row:hover { background: var(--bg4); }
+  .sms-recipient-row input { margin: 0; }
+  .sms-recipient-phone { color: var(--text3); font-family: 'Share Tech Mono', monospace; font-size: 11px; margin-left: auto; }
+  .sms-toggle-row { display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 10px 0; text-transform: none; letter-spacing: 0; font-family: 'Nunito', sans-serif; color: var(--text); }
 
   /* LIGHTBOX */
   .lightbox { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 2000; align-items: center; justify-content: center; }
