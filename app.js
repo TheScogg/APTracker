@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, collection, updateDoc, deleteDoc, doc, getDoc, getDocs, setDoc, addDoc, onSnapshot, serverTimestamp, query, orderBy, where, writeBatch, arrayUnion, arrayRemove, increment, limit, runTransaction, startAfter } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, collection, updateDoc, deleteDoc, doc, getDoc, getDocs, setDoc, addDoc, onSnapshot, serverTimestamp, query, orderBy, where, writeBatch, arrayUnion, arrayRemove, increment, limit, runTransaction, startAfter } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut as fbSignOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getStorage, ref as storageRef, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
@@ -13,7 +13,9 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+});
 const storage = getStorage(app);
 const storageFallback = firebaseConfig.storageBucket && firebaseConfig.storageBucket.includes('.appspot.com')
   ? null
@@ -652,11 +654,12 @@ async function loadUserPlants() {
       console.warn('Could not sync membership profile fields', e);
     });
   } catch(e) {
-    console.warn('Error loading plants, using default', e);
-    currentPlantId = 'default';
-    currentPlantName = 'Main Plant';
-    userPlants = [{ id: 'default', name: 'Main Plant', location: '' }];
-    document.getElementById('plant-name-display').textContent = currentPlantName;
+    console.warn('Error loading plants', e);
+    currentPlantId = null;
+    currentPlantName = '';
+    userPlants = [];
+    document.getElementById('plant-name-display').textContent = 'Unable to load plants';
+    throw e;
   }
 }
 
@@ -2303,7 +2306,18 @@ async function bootstrapSignedInSession(user) {
 
 onAuthStateChanged(auth, async user => {
   if (user) {
-    await bootstrapSignedInSession(user);
+    try {
+      await bootstrapSignedInSession(user);
+    } catch (e) {
+      console.error('Session bootstrap failed:', e);
+      setSyncStatus('err', 'Could not load your plant data. Check connection and retry.');
+      document.getElementById('issues-list').innerHTML = `
+        <div class="empty-state">
+          <div class="empty-state-icon">⚠️</div>
+          <div class="empty-state-text" style="margin-bottom:12px;">Unable to load your data right now.</div>
+          <button onclick="window.location.reload()" style="font-size:13px;padding:8px 18px;border-radius:8px;border:1px solid var(--accent);background:transparent;color:var(--accent);cursor:pointer;font-family:'Nunito',sans-serif;">Reload</button>
+        </div>`;
+    }
   } else {
     if (_messagingInboxUnsubscribe) { _messagingInboxUnsubscribe(); _messagingInboxUnsubscribe = null; }
     _updateMessagingEntryBadges(0);
@@ -2325,6 +2339,7 @@ onAuthStateChanged(auth, async user => {
 
 let retryTimeout = null;
 let retryCount = 0;
+let issueBootstrapTimeout = null;
 
 function buildIssueFromSnapshot(docSnap) {
   const data = docSnap.data() || {};
@@ -2369,13 +2384,17 @@ async function loadIssueHistoryPage() {
 function startListener() {
   if (unsubscribe) unsubscribe();
   if (retryTimeout) { clearTimeout(retryTimeout); retryTimeout = null; }
+  if (issueBootstrapTimeout) { clearTimeout(issueBootstrapTimeout); issueBootstrapTimeout = null; }
   if (!currentPlantId) return;
   issuesById.clear();
   issueHistoryCursor = null;
   issueHistoryFetchInFlight = null;
 
   const q = query(plantCol('issues'), orderBy('createdAt', 'desc'), limit(MAX_LIVE_ISSUES));
+  let firstSnapshotReceived = false;
   unsubscribe = onSnapshot(q, snap => {
+    firstSnapshotReceived = true;
+    if (issueBootstrapTimeout) { clearTimeout(issueBootstrapTimeout); issueBootstrapTimeout = null; }
     retryCount = 0; // reset on success
     snap.docChanges().forEach(change => {
       if (change.type === 'removed') {
@@ -2408,6 +2427,24 @@ function startListener() {
       </div>`;
     retryTimeout = setTimeout(() => startListener(), delay);
   });
+  issueBootstrapTimeout = setTimeout(async () => {
+    if (firstSnapshotReceived || !currentPlantId) return;
+    try {
+      const snap = await getDocs(q);
+      if (firstSnapshotReceived || !currentPlantId) return;
+      issuesById.clear();
+      snap.docs.forEach(d => issuesById.set(d.id, buildIssueFromSnapshot(d)));
+      rebuildIssuesArrayFromMap();
+      refreshVisibleData();
+      if (snap.docs.length) {
+        issueHistoryCursor = snap.docs[snap.docs.length - 1];
+        loadIssueHistoryPage().catch(() => {});
+      }
+      setSyncStatus('ok', 'Live connection delayed — loaded cached/latest data');
+    } catch (e) {
+      console.warn('Bootstrap issues fallback read failed:', e);
+    }
+  }, 6000);
 }
 
 // ── SYNC ──
@@ -6950,7 +6987,11 @@ function _startMessagingInboxWatcher() {
     _updateMessagingEntryBadges(0);
     return;
   }
-  const q = query(conversationsCol(), orderBy('lastMessageAt', 'desc'));
+  const q = query(
+    conversationsCol(),
+    where('memberIds', 'array-contains', currentUser.uid),
+    orderBy('lastMessageAt', 'desc')
+  );
   _messagingInboxUnsubscribe = onSnapshot(q, snap => {
     const conversations = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     const unreadCount = _messagingUnreadTotal(conversations);
