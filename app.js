@@ -4028,7 +4028,19 @@ async function _tryNativeIssueShare(issue, messageWithLink) {
 }
 
 async function _issueMmsAttachments(issue, maxFiles = 3) {
-  const photos = Array.isArray(issue?.photos) ? issue.photos.filter(Boolean).slice(0, maxFiles) : [];
+  let photoList = Array.isArray(issue?.photos) ? issue.photos.filter(Boolean) : [];
+  if (!photoList.length && Number(issue?.photoCount || 0) > 0 && issue?.id) {
+    try {
+      const hydrated = await fetchAttachmentPhotos(issue.id);
+      if (Array.isArray(hydrated) && hydrated.length) {
+        photoList = hydrated.filter(Boolean);
+        issue.photos = photoList;
+      }
+    } catch (_) {
+      // Keep going; we'll send text-only if attachments cannot be hydrated.
+    }
+  }
+  const photos = photoList.slice(0, maxFiles);
   const attachments = [];
   for (let idx = 0; idx < photos.length; idx++) {
     const photo = photos[idx];
@@ -4036,10 +4048,11 @@ async function _issueMmsAttachments(issue, maxFiles = 3) {
     if (!source) continue;
     try {
       if (String(source).startsWith('data:')) {
-        attachments.push({
-          name: photo?.name || `issue-photo-${idx + 1}.jpg`,
-          type: String(source).slice(5, String(source).indexOf(';')) || 'image/jpeg',
-          dataUrl: source
+      attachments.push({
+        name: photo?.name || `issue-photo-${idx + 1}.jpg`,
+        type: String(source).slice(5, String(source).indexOf(';')) || 'image/jpeg',
+          dataUrl: source,
+          url: photo?.url || ''
         });
         continue;
       }
@@ -4055,7 +4068,8 @@ async function _issueMmsAttachments(issue, maxFiles = 3) {
       attachments.push({
         name: photo?.name || `issue-photo-${idx + 1}.${blob.type === 'image/png' ? 'png' : 'jpg'}`,
         type: blob.type || 'image/jpeg',
-        dataUrl
+        dataUrl,
+        url: source
       });
     } catch (_) {
       // Skip photos that fail to fetch/convert so send can still proceed.
@@ -4178,13 +4192,19 @@ async function _submitViaBackendOrFallback() {
 
   try {
     const attachments = includePhotos ? await _issueMmsAttachments(SMS_COMPOSER_STATE.issue) : [];
+    if (includePhotos && !attachments.length) {
+      console.warn('Include photos was selected, but no issue photos were available to attach.');
+    }
     const result = await backendSend({
       issueId: SMS_COMPOSER_STATE.issueId,
       recipients: recipientPhones,
       includePhotos,
       body: SMS_COMPOSER_STATE.messageWithLink,
       issue: SMS_COMPOSER_STATE.issue,
-      attachments
+      attachments,
+      photos: attachments,
+      media: attachments.map(a => a.url || a.dataUrl).filter(Boolean),
+      imageUrls: attachments.map(a => a.url).filter(Boolean)
     });
     const sentCount = Number(result?.sentCount || recipientPhones.length || 0);
     alert(`Sent via ${includePhotos ? 'MMS' : 'SMS'} to ${sentCount} recipient${sentCount === 1 ? '' : 's'}.`);
