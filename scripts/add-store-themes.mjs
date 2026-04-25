@@ -27,8 +27,10 @@ const isDryRun = !args.has('--commit');
 // Add future store-item entries here; the script will skip any whose id already
 // exists in Firestore so it is safe to re-run.
 const THEMES_TO_ADD = [
-  { id: 'theme_cardinals', type: 'theme', themeKey: 'cardinals', customVars: null, name: 'Cardinals', price: 25, isActive: true, order: 11 },
-  { id: 'theme_wildcats',  type: 'theme', themeKey: 'wildcats',  customVars: null, name: 'Wildcats',  price: 25, isActive: true, order: 12 },
+  { id: 'theme_starship',  type: 'theme', themeKey: 'starship',  customVars: null, name: 'Starship',  price: 180, isActive: true, order: 10 },
+  { id: 'theme_starforge', type: 'theme', themeKey: 'starforge', customVars: null, name: 'Starforge', price: 200, isActive: true, order: 11 },
+  { id: 'theme_cardinals', type: 'theme', themeKey: 'cardinals', customVars: null, name: 'Cardinals', price: 25,  isActive: true, order: 13 },
+  { id: 'theme_wildcats',  type: 'theme', themeKey: 'wildcats',  customVars: null, name: 'Wildcats',  price: 25,  isActive: true, order: 14 },
   {
     id: 'theme_nocturne_slate',
     type: 'theme',
@@ -52,7 +54,7 @@ const THEMES_TO_ADD = [
     name: 'Nocturne Slate',
     price: 3,
     isActive: true,
-    order: 13
+    order: 15
   }
 ];
 // ─────────────────────────────────────────────────────────────────────────────
