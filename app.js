@@ -4089,6 +4089,17 @@ function _smsSanitizePhone(value) {
   return String(value || '').replace(/[^\d+]/g, '');
 }
 
+function _smsNormalizeE164(value) {
+  const cleaned = _smsSanitizePhone(value);
+  if (!cleaned) return '';
+  if (cleaned.startsWith('+')) return cleaned;
+  const digitsOnly = cleaned.replace(/\D/g, '');
+  if (!digitsOnly) return '';
+  if (digitsOnly.length === 10) return `+1${digitsOnly}`;
+  if (digitsOnly.length === 11 && digitsOnly.startsWith('1')) return `+${digitsOnly}`;
+  return `+${digitsOnly}`;
+}
+
 function _smsExtractPhones(member) {
   const candidates = [
     member?.phone,
@@ -4143,8 +4154,11 @@ function _renderSmsRecipientPicker() {
   `).join('');
 }
 
-async function _performSmsFallback(messageWithLink) {
-  const smsUri = `sms:?&body=${encodeURIComponent(messageWithLink)}`;
+async function _performSmsFallback(messageWithLink, recipientPhones = []) {
+  const to = Array.isArray(recipientPhones) ? recipientPhones.filter(Boolean).join(',') : '';
+  const smsUri = to
+    ? `sms:${encodeURIComponent(to)}?&body=${encodeURIComponent(messageWithLink)}`
+    : `sms:?&body=${encodeURIComponent(messageWithLink)}`;
   const isMobile = /android|iphone|ipad|ipod|windows phone|mobile/i.test(navigator.userAgent || '');
   if (!isMobile) {
     try {
@@ -4172,21 +4186,31 @@ async function _submitViaBackendOrFallback() {
   const includePhotos = Boolean(document.getElementById('sms-include-photos')?.checked);
   const manualNumbers = String(document.getElementById('sms-manual-phone')?.value || '')
     .split(/[,\n;]/)
-    .map(_smsSanitizePhone)
+    .map(_smsNormalizeE164)
     .filter(Boolean);
   const selectedNumbers = Array.from(document.querySelectorAll('[data-sms-recipient]:checked'))
     .map(el => SMS_COMPOSER_STATE.recipientOptions[Number(el.getAttribute('data-sms-recipient'))]?.phone || '')
-    .map(_smsSanitizePhone)
+    .map(_smsNormalizeE164)
     .filter(Boolean);
   const recipientPhones = Array.from(new Set([...selectedNumbers, ...manualNumbers]));
   if (!recipientPhones.length) {
+    if (includePhotos) {
+      const didShare = await _tryNativeIssueShare(SMS_COMPOSER_STATE.issue, SMS_COMPOSER_STATE.messageWithLink);
+      if (didShare) return;
+      console.warn('Photo share unavailable; sms: links do not support media attachments on iOS/Android browsers.');
+    }
     await _performSmsFallback(SMS_COMPOSER_STATE.messageWithLink);
     return;
   }
 
   const backendSend = typeof window.sendIssueMms === 'function' ? window.sendIssueMms : null;
   if (!backendSend) {
-    await _performSmsFallback(SMS_COMPOSER_STATE.messageWithLink);
+    if (includePhotos) {
+      const didShare = await _tryNativeIssueShare(SMS_COMPOSER_STATE.issue, SMS_COMPOSER_STATE.messageWithLink);
+      if (didShare) return;
+      console.warn('No backend MMS sender found; sms: links do not support media attachments on iOS/Android browsers.');
+    }
+    await _performSmsFallback(SMS_COMPOSER_STATE.messageWithLink, recipientPhones);
     return;
   }
 
@@ -4195,22 +4219,38 @@ async function _submitViaBackendOrFallback() {
     if (includePhotos && !attachments.length) {
       console.warn('Include photos was selected, but no issue photos were available to attach.');
     }
-    const result = await backendSend({
+    const attachmentUrls = attachments.map(a => a.url || a.dataUrl).filter(Boolean);
+    const payload = {
       issueId: SMS_COMPOSER_STATE.issueId,
       recipients: recipientPhones,
+      recipientPhones,
+      phoneNumbers: recipientPhones,
+      phones: recipientPhones,
+      to: recipientPhones,
+      toNumbers: recipientPhones,
       includePhotos,
       body: SMS_COMPOSER_STATE.messageWithLink,
+      message: SMS_COMPOSER_STATE.messageWithLink,
+      text: SMS_COMPOSER_STATE.messageWithLink,
       issue: SMS_COMPOSER_STATE.issue,
       attachments,
+      images: attachments,
       photos: attachments,
-      media: attachments.map(a => a.url || a.dataUrl).filter(Boolean),
+      media: attachmentUrls,
+      mediaUrls: attachmentUrls,
       imageUrls: attachments.map(a => a.url).filter(Boolean)
-    });
+    };
+    const result = await backendSend(payload);
     const sentCount = Number(result?.sentCount || recipientPhones.length || 0);
     alert(`Sent via ${includePhotos ? 'MMS' : 'SMS'} to ${sentCount} recipient${sentCount === 1 ? '' : 's'}.`);
   } catch (err) {
     console.warn('sendIssueMms failed; falling back to sms: URI.', err);
-    await _performSmsFallback(SMS_COMPOSER_STATE.messageWithLink);
+    if (includePhotos) {
+      const didShare = await _tryNativeIssueShare(SMS_COMPOSER_STATE.issue, SMS_COMPOSER_STATE.messageWithLink);
+      if (didShare) return;
+      console.warn('Backend MMS send failed and native share is unavailable; sms: fallback will send text-only.');
+    }
+    await _performSmsFallback(SMS_COMPOSER_STATE.messageWithLink, recipientPhones);
   }
 }
 
