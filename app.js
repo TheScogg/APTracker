@@ -4027,6 +4027,43 @@ async function _tryNativeIssueShare(issue, messageWithLink) {
   }
 }
 
+async function _issueMmsAttachments(issue, maxFiles = 3) {
+  const photos = Array.isArray(issue?.photos) ? issue.photos.filter(Boolean).slice(0, maxFiles) : [];
+  const attachments = [];
+  for (let idx = 0; idx < photos.length; idx++) {
+    const photo = photos[idx];
+    const source = photo?.dataUrl || photo?.url || '';
+    if (!source) continue;
+    try {
+      if (String(source).startsWith('data:')) {
+        attachments.push({
+          name: photo?.name || `issue-photo-${idx + 1}.jpg`,
+          type: String(source).slice(5, String(source).indexOf(';')) || 'image/jpeg',
+          dataUrl: source
+        });
+        continue;
+      }
+      const res = await fetch(source);
+      const blob = await res.blob();
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+      if (!dataUrl) continue;
+      attachments.push({
+        name: photo?.name || `issue-photo-${idx + 1}.${blob.type === 'image/png' ? 'png' : 'jpg'}`,
+        type: blob.type || 'image/jpeg',
+        dataUrl
+      });
+    } catch (_) {
+      // Skip photos that fail to fetch/convert so send can still proceed.
+    }
+  }
+  return attachments;
+}
+
 const SMS_COMPOSER_STATE = {
   issueId: null,
   issue: null,
@@ -4140,12 +4177,14 @@ async function _submitViaBackendOrFallback() {
   }
 
   try {
+    const attachments = includePhotos ? await _issueMmsAttachments(SMS_COMPOSER_STATE.issue) : [];
     const result = await backendSend({
       issueId: SMS_COMPOSER_STATE.issueId,
       recipients: recipientPhones,
       includePhotos,
       body: SMS_COMPOSER_STATE.messageWithLink,
-      issue: SMS_COMPOSER_STATE.issue
+      issue: SMS_COMPOSER_STATE.issue,
+      attachments
     });
     const sentCount = Number(result?.sentCount || recipientPhones.length || 0);
     alert(`Sent via ${includePhotos ? 'MMS' : 'SMS'} to ${sentCount} recipient${sentCount === 1 ? '' : 's'}.`);
@@ -4198,7 +4237,6 @@ window.sendIssueViaSms = async (id, evt) => {
     }
   })();
   const messageWithLink = issueLink ? `${message}\nLink: ${issueLink}` : message;
-  if (await _tryNativeIssueShare(issue, messageWithLink)) return;
   SMS_COMPOSER_STATE.issueId = issue.id;
   SMS_COMPOSER_STATE.issue = issue;
   SMS_COMPOSER_STATE.messageWithLink = messageWithLink;
