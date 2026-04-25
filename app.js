@@ -4744,7 +4744,6 @@ function renderIssues() {
             <div class="issue-time">${datePart} ${submitterHtml}${shiftBadgeHtml}${(issue.photos||[]).length?`<span class="photo-count-badge">📷 ${issue.photos.length}</span>`:''}${issue.editedAt?'<span style="color:var(--text3)">(edited)</span>':''}</div>
           </div>
           <button class="priority-btn${issue.highPriority?' active':''}" onclick="event.stopPropagation(); togglePriority('${issue.id}')" title="${issue.highPriority?'Remove high priority':'Mark as high priority'}">!</button>
-          <button class="priority-btn" onclick="sendIssueViaSms('${issue.id}', event)" title="Send issue by SMS">📲 Text</button>
           <div class="issue-expand-icon ${wasOpen?'open':''}" id="chevron-${issue.id}">▼</div>
         </div>
         ${wfStatusRowsHtml}
@@ -4756,6 +4755,9 @@ function renderIssues() {
         ${photosHtml}
         <div class="divider"></div>
         ${resolveHtml}
+        <div class="issue-body-footer">
+          <button class="issue-text-btn" onclick="event.stopPropagation(); sendIssueViaSms('${issue.id}', event)" title="Send issue by SMS">📲 Text</button>
+        </div>
       </div>`;
     // Safety cleanup: remove any legacy "Workflow: ..." pill buttons from status history rows.
     card.querySelectorAll('.status-timeline button').forEach(btn => {
