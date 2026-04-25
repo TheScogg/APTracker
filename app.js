@@ -3990,6 +3990,67 @@ window.togglePriority = async (id) => {
   }
 };
 
+window.sendIssueViaSms = async (id, evt) => {
+  evt?.stopPropagation?.();
+  evt?.preventDefault?.();
+
+  const issue = issues.find(i => i.id === id);
+  if (!issue) {
+    setSyncStatus('err', 'Unable to send SMS: issue not found.');
+    return;
+  }
+
+  const statusKey = currentStatusKey(issue);
+  const statusDef = getStatusDef(statusKey);
+  const statusText = statusDef?.label || statusKey || 'Unknown';
+  const subStatus = issue.currentStatus?.subStatusKey || '';
+  const ts = issue.dateTime || (issue.timestamp ? formatDate(issue.timestamp) : 'Unknown time');
+  const submitter = issue.userName || issue.userEmail || 'Unknown submitter';
+  const issueLink = (() => {
+    try {
+      return window.location?.href ? `${window.location.origin}${window.location.pathname}?issue=${encodeURIComponent(issue.id)}` : '';
+    } catch (_) {
+      return '';
+    }
+  })();
+
+  const lines = [
+    `Issue update (${currentPlantName || 'Plant'})`,
+    `Machine: ${issue.machine || 'Unknown'}`,
+    `Note: ${issue.note || 'N/A'}`,
+    `Status: ${statusText}${subStatus ? ` / ${subStatus}` : ''}`,
+    `Timestamp: ${ts}`,
+    `Submitter: ${submitter}`,
+    `Issue ID: ${issue.id}`
+  ];
+  if (issueLink) lines.push(`Link: ${issueLink}`);
+
+  const message = lines.join('\n');
+  const smsUri = `sms:?&body=${encodeURIComponent(message)}`;
+  const isMobile = /android|iphone|ipad|ipod|windows phone|mobile/i.test(navigator.userAgent || '');
+
+  if (!isMobile) {
+    try {
+      await navigator.clipboard?.writeText(message);
+      alert('SMS apps are usually unavailable on desktop. Message copied to clipboard.');
+    } catch (_) {
+      prompt('Copy this message for SMS:', message);
+    }
+    return;
+  }
+
+  try {
+    window.location.href = smsUri;
+  } catch (_) {
+    try {
+      await navigator.clipboard?.writeText(message);
+      alert('Could not open your SMS app. Message copied to clipboard.');
+    } catch (__){
+      prompt('Could not open SMS app. Copy this message:', message);
+    }
+  }
+};
+
 // ── DELETE ──
 window.deleteIssue = async id => {
   if (!currentUserPermissions.canEditIssue) return;
@@ -4436,6 +4497,7 @@ function renderIssues() {
             <div class="issue-time">${datePart} ${submitterHtml}${shiftBadgeHtml}${(issue.photos||[]).length?`<span class="photo-count-badge">📷 ${issue.photos.length}</span>`:''}${issue.editedAt?'<span style="color:var(--text3)">(edited)</span>':''}</div>
           </div>
           <button class="priority-btn${issue.highPriority?' active':''}" onclick="event.stopPropagation(); togglePriority('${issue.id}')" title="${issue.highPriority?'Remove high priority':'Mark as high priority'}">!</button>
+          <button class="priority-btn" onclick="sendIssueViaSms('${issue.id}', event)" title="Send issue by SMS">📲 Text</button>
           <div class="issue-expand-icon ${wasOpen?'open':''}" id="chevron-${issue.id}">▼</div>
         </div>
         ${wfStatusRowsHtml}
