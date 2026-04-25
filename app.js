@@ -4713,10 +4713,11 @@ function renderIssues() {
       </div>
       ${addRowHtml}
     </div>
-    ${canEdit ? `<div class="action-row" style="justify-content:flex-end;margin-top:10px;">
-      <button class="btn btn-edit" onclick="openEditModal('${issue.id}')">✏️ Edit</button>
-      <button class="btn btn-danger" onclick="deleteIssue('${issue.id}')">🗑 Delete</button>
-    </div>` : ''}`;
+    <div class="action-row" style="justify-content:flex-end;margin-top:10px;">
+      <button class="issue-text-btn" onclick="event.stopPropagation(); sendIssueViaSms('${issue.id}', event)" title="Send issue by SMS">📲 Text</button>
+      ${canEdit ? `<button class="btn btn-edit" onclick="openEditModal('${issue.id}')">✏️ Edit</button>
+      <button class="btn btn-danger" onclick="deleteIssue('${issue.id}')">🗑 Delete</button>` : ''}
+    </div>`;
 
     const datePart = issue.dateTime ? issue.dateTime.replace(/,\s*\d{4}/, '') : '';
     const submitterHtml=issue.userName?`<span class="issue-submitter">${esc(issue.userName.split(' ')[0])}${isMyIssue?' (you)':''}</span>`:'';
