@@ -1051,6 +1051,13 @@
         <div class="store-theme-grid" id="store-free-themes"></div>
         <div class="store-section-label" style="margin-top:20px">Premium Themes</div>
         <div class="store-theme-grid" id="store-paid-themes"></div>
+        <div class="store-admin-tools" id="store-admin-tools" style="display:none;">
+          <div class="store-admin-tools-copy">
+            <div class="store-admin-tools-title">Admin Theme Sync</div>
+            <div class="store-admin-tools-sub">Push canonical built-in themes to Firestore store config.</div>
+          </div>
+          <button class="btn btn-ghost" type="button" id="store-sync-themes-btn" onclick="syncBuiltInThemesToFirestore()">Sync Built-ins</button>
+        </div>
       </div>
       <div class="store-tab-panel" id="store-panel-badges">
         <div class="store-coming-soon">
