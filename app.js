@@ -1854,6 +1854,36 @@ function switchStoreTab(tab) {
 }
 window.switchStoreTab = switchStoreTab;
 window.renderStoreModal = renderStoreModal;
+window.syncBuiltInThemesToFirestore = syncBuiltInThemesToFirestore;
+
+async function syncBuiltInThemesToFirestore() {
+  if (currentUserRole !== 'admin') {
+    showGameToast('Admins only');
+    return;
+  }
+  const syncBtn = document.getElementById('store-sync-themes-btn');
+  if (syncBtn) { syncBtn.disabled = true; syncBtn.textContent = 'Syncing…'; }
+  try {
+    const storeRef = globalStoreConfigDoc();
+    const snap = await getDoc(storeRef);
+    const incomingItems = Array.isArray(snap.data()?.items) ? snap.data().items : [];
+    const builtInIds = new Set(BUILT_IN_THEME_STORE_ITEMS.map(item => item.id));
+    const nonBuiltIns = incomingItems.filter(item => !builtInIds.has(String(item?.id || '').trim()));
+    const mergedItems = [...nonBuiltIns, ...BUILT_IN_THEME_STORE_ITEMS];
+    mergedItems.sort((a, b) => Number(a?.order || 0) - Number(b?.order || 0));
+    await setDoc(storeRef, {
+      items: mergedItems,
+      updatedAt: serverTimestamp(),
+      updatedBy: currentUser?.uid || null
+    }, { merge: true });
+    showGameToast('✅ Built-in themes synced to Firestore');
+  } catch (e) {
+    console.error('Theme sync failed:', e);
+    showGameToast('Could not sync themes');
+  } finally {
+    if (syncBtn) { syncBtn.disabled = false; syncBtn.textContent = 'Sync Built-ins'; }
+  }
+}
 
 function renderStoreModal() {
   updateStoreXpDisplay();
@@ -1875,6 +1905,9 @@ function renderStoreModal() {
           <div class="store-cs-sub">Add theme items from the admin store editor to publish them here.</div>
         </div>`;
   }
+
+  const adminTools = document.getElementById('store-admin-tools');
+  if (adminTools) adminTools.style.display = currentUserRole === 'admin' ? 'flex' : 'none';
 }
 
 function _buildStoreThemeCard(theme, activeKey, spendable) {
@@ -2099,20 +2132,21 @@ const BUILT_IN_THEME_DEFS = [
   { key:'cardinals',  name:'Cardinals',  label:'🔴 Cardinals',  mode:'dark',  colors:['#0e0303','#c8102e','#f5e8e8'], vars:{ '--bg':'#0e0303','--bg2':'#1c0808','--bg3':'#260c0c','--border':'#3d1515','--text':'#f5e8e8','--text2':'#c48a8a','--text3':'#7a4444','--accent':'#c8102e','--accent2':'#e81f42','--green':'#22c55e','--red':'#ff4444','--blue':'#60a5fa','--yellow':'#eab308','--orange':'#f97316' }, price:25, order:12 },
   { key:'wildcats',   name:'Wildcats',   label:'🔵 Wildcats',   mode:'dark',  colors:['#020814','#0033a0','#e8f0ff'], vars:{ '--bg':'#020814','--bg2':'#051228','--bg3':'#071a38','--border':'#0d2d5e','--text':'#e8f0ff','--text2':'#7da8e8','--text3':'#3d6ab0','--accent':'#0033a0','--accent2':'#1a52cc','--green':'#22c55e','--red':'#ef4444','--blue':'#3b82f6','--yellow':'#eab308','--orange':'#f97316' }, price:25, order:13 }
 ];
+const BUILT_IN_THEME_STORE_ITEMS = BUILT_IN_THEME_DEFS.map(theme => ({
+  id: `theme_${theme.key}`,
+  type: 'theme',
+  themeKey: theme.key,
+  customVars: null,
+  name: theme.name,
+  price: Number(theme.price || 0),
+  isActive: true,
+  order: Number(theme.order || 0)
+}));
 
 const DEFAULT_STORE_ITEMS = [
   // Canonical store catalog lives here. normalizeStoreItems() seeds these defaults
   // before applying any Firestore config, so new code-defined items still appear.
-  ...BUILT_IN_THEME_DEFS.map(theme => ({
-    id: `theme_${theme.key}`,
-    type: 'theme',
-    themeKey: theme.key,
-    customVars: null,
-    name: theme.name,
-    price: Number(theme.price || 0),
-    isActive: true,
-    order: Number(theme.order || 0)
-  })),
+  ...BUILT_IN_THEME_STORE_ITEMS,
   {
     id: 'theme_nocturne_slate',
     type: 'theme',

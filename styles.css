@@ -1349,6 +1349,20 @@
   .store-modal-body { overflow-y: auto; flex: 1; padding: 20px; }
   .store-tab-panel { display: none; }
   .store-tab-panel.active { display: block; }
+  .store-admin-tools {
+    margin-top: 14px;
+    border: 1px dashed var(--border);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--bg3) 82%, transparent);
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .store-admin-tools-copy { min-width: 0; }
+  .store-admin-tools-title { font-size: 11px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text2); }
+  .store-admin-tools-sub { margin-top: 2px; font-size: 11px; color: var(--text3); }
   .store-section-label {
     font-size: 10px; font-weight: 800; text-transform: uppercase;
     letter-spacing: 1.5px; color: var(--text3); margin-bottom: 12px;
