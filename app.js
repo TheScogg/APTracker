@@ -4000,12 +4000,7 @@ window.sendIssueViaSms = async (id, evt) => {
     return;
   }
 
-  const statusKey = currentStatusKey(issue);
-  const statusDef = getStatusDef(statusKey);
-  const statusText = statusDef?.label || statusKey || 'Unknown';
-  const subStatus = issue.currentStatus?.subStatusKey || '';
-  const ts = issue.dateTime || (issue.timestamp ? formatDate(issue.timestamp) : 'Unknown time');
-  const submitter = issue.userName || issue.userEmail || 'Unknown submitter';
+  const message = formatIssueSmsBody(issue);
   const issueLink = (() => {
     try {
       return window.location?.href ? `${window.location.origin}${window.location.pathname}?issue=${encodeURIComponent(issue.id)}` : '';
@@ -4013,28 +4008,16 @@ window.sendIssueViaSms = async (id, evt) => {
       return '';
     }
   })();
-
-  const lines = [
-    `Issue update (${currentPlantName || 'Plant'})`,
-    `Machine: ${issue.machine || 'Unknown'}`,
-    `Note: ${issue.note || 'N/A'}`,
-    `Status: ${statusText}${subStatus ? ` / ${subStatus}` : ''}`,
-    `Timestamp: ${ts}`,
-    `Submitter: ${submitter}`,
-    `Issue ID: ${issue.id}`
-  ];
-  if (issueLink) lines.push(`Link: ${issueLink}`);
-
-  const message = lines.join('\n');
-  const smsUri = `sms:?&body=${encodeURIComponent(message)}`;
+  const messageWithLink = issueLink ? `${message}\nLink: ${issueLink}` : message;
+  const smsUri = `sms:?&body=${encodeURIComponent(messageWithLink)}`;
   const isMobile = /android|iphone|ipad|ipod|windows phone|mobile/i.test(navigator.userAgent || '');
 
   if (!isMobile) {
     try {
-      await navigator.clipboard?.writeText(message);
+      await navigator.clipboard?.writeText(messageWithLink);
       alert('SMS apps are usually unavailable on desktop. Message copied to clipboard.');
     } catch (_) {
-      prompt('Copy this message for SMS:', message);
+      prompt('Copy this message for SMS:', messageWithLink);
     }
     return;
   }
@@ -4043,10 +4026,10 @@ window.sendIssueViaSms = async (id, evt) => {
     window.location.href = smsUri;
   } catch (_) {
     try {
-      await navigator.clipboard?.writeText(message);
+      await navigator.clipboard?.writeText(messageWithLink);
       alert('Could not open your SMS app. Message copied to clipboard.');
     } catch (__){
-      prompt('Could not open SMS app. Copy this message:', message);
+      prompt('Could not open SMS app. Copy this message:', messageWithLink);
     }
   }
 };
@@ -5054,6 +5037,30 @@ window.addEventListener('resize', () => {
 function currentStatusKey(issue) {
   if (issue?.currentStatus?.statusKey) return issue.currentStatus.statusKey;
   return issue?.lifecycle?.isResolved ? 'resolved' : 'open';
+}
+
+function formatIssueSmsBody(issue) {
+  if (!issue) return '';
+
+  const statusKey = currentStatusKey(issue);
+  const statusDef = getStatusDef(statusKey);
+  const statusText = statusDef?.label || statusKey || 'Unknown';
+  const subStatus = issue.currentStatus?.subLabel || issue.currentStatus?.subStatusKey || '';
+  const noteText = issue.currentStatus?.notePreview || issue.note || 'N/A';
+  const loggedAt = issue.dateTime || (issue.timestamp ? formatDate(issue.timestamp) : 'Unknown time');
+  const reporter = issue.userName || issue.userEmail || 'Unknown submitter';
+  const machineIdentifier = issue.machine || issue.machineCode || 'Unknown';
+
+  return [
+    `Issue update (${currentPlantName || 'Plant'})`,
+    `Machine: ${machineIdentifier}`,
+    `Status: ${statusText}${subStatus ? ` / ${subStatus}` : ''}`,
+    `Note: ${noteText}`,
+    `Logged: ${loggedAt}`,
+    `Reporter: ${reporter}`,
+    `Issue ID: ${issue.id || 'Unknown'}`,
+    `Plant ID: ${currentPlantId || issue.plantId || 'Unknown'}`
+  ].join('\n');
 }
 
 function issueIsResolvedV2(issue) {
