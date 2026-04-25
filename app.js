@@ -4644,10 +4644,13 @@ function renderIssues() {
       </div>
       ${addRowHtml}
     </div>
-    ${canEdit ? `<div class="action-row" style="justify-content:flex-end;margin-top:10px;">
+    <div class="action-row issue-footer-actions" style="margin-top:10px;">
+      <button class="issue-text-btn" onclick="event.stopPropagation(); sendIssueViaSms('${issue.id}', event)" title="Send issue by SMS">📲 Text</button>
+      ${canEdit ? `<div class="issue-footer-actions-right">
       <button class="btn btn-edit" onclick="openEditModal('${issue.id}')">✏️ Edit</button>
       <button class="btn btn-danger" onclick="deleteIssue('${issue.id}')">🗑 Delete</button>
-    </div>` : ''}`;
+      </div>` : ''}
+    </div>`;
 
     const datePart = issue.dateTime ? issue.dateTime.replace(/,\s*\d{4}/, '') : '';
     const submitterHtml=issue.userName?`<span class="issue-submitter">${esc(issue.userName.split(' ')[0])}${isMyIssue?' (you)':''}</span>`:'';
@@ -4744,7 +4747,6 @@ function renderIssues() {
             <div class="issue-time">${datePart} ${submitterHtml}${shiftBadgeHtml}${(issue.photos||[]).length?`<span class="photo-count-badge">📷 ${issue.photos.length}</span>`:''}${issue.editedAt?'<span style="color:var(--text3)">(edited)</span>':''}</div>
           </div>
           <button class="priority-btn${issue.highPriority?' active':''}" onclick="event.stopPropagation(); togglePriority('${issue.id}')" title="${issue.highPriority?'Remove high priority':'Mark as high priority'}">!</button>
-          <button class="priority-btn" onclick="sendIssueViaSms('${issue.id}', event)" title="Send issue by SMS">📲 Text</button>
           <div class="issue-expand-icon ${wasOpen?'open':''}" id="chevron-${issue.id}">▼</div>
         </div>
         ${wfStatusRowsHtml}
