@@ -167,8 +167,54 @@
     --orange: #f97316; --orange-dim: rgba(249,115,22,0.14);
     --text: #e8f0ff; --text2: #7da8e8; --text3: #3d6ab0;
   }
+  body.theme-starship {
+    --bg: #030914; --bg2: #071327; --bg3: #0d1d36; --border: #16466b;
+    --accent: #26d9ff; --accent2: #8bf5ff; --accent-glow: rgba(38,217,255,0.32);
+    --green: #2cff9c; --green-dim: rgba(44,255,156,0.16);
+    --red: #ff5a87; --red-dim: rgba(255,90,135,0.16);
+    --blue: #26d9ff; --blue-dim: rgba(38,217,255,0.18);
+    --yellow: #ffd447; --yellow-dim: rgba(255,212,71,0.16);
+    --purple: #7e82ff; --purple-dim: rgba(126,130,255,0.16);
+    --babyblue: #76ecff; --babyblue-dim: rgba(118,236,255,0.16);
+    --teal: #00e9c9; --teal-dim: rgba(0,233,201,0.16);
+    --orange: #ff9f43; --orange-dim: rgba(255,159,67,0.16);
+    --text: #ddf6ff; --text2: #8fc4dd; --text3: #4a7fa6;
+  }
+  body.theme-starship::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: -1;
+    background:
+      radial-gradient(circle at 20% 10%, rgba(38,217,255,0.10), transparent 30%),
+      radial-gradient(circle at 85% 20%, rgba(126,130,255,0.13), transparent 36%),
+      linear-gradient(transparent 96%, rgba(38,217,255,0.08) 100%),
+      linear-gradient(90deg, transparent 96%, rgba(38,217,255,0.08) 100%);
+    background-size: auto, auto, 34px 34px, 34px 34px;
+  }
+  body.theme-starship header,
+  body.theme-starship .panel,
+  body.theme-starship .card,
+  body.theme-starship .modal,
+  body.theme-starship .kpi-card,
+  body.theme-starship .issue-card,
+  body.theme-starship .log-card,
+  body.theme-starship .settings-card,
+  body.theme-starship .game-card {
+    box-shadow: 0 0 0 1px rgba(38,217,255,0.18), 0 14px 34px rgba(0,0,0,0.45);
+  }
+  body.theme-starship .scope-btn.active,
+  body.theme-starship .btn-primary,
+  body.theme-starship .theme-choice.active {
+    box-shadow: 0 0 0 1px rgba(38,217,255,0.35), 0 0 18px rgba(38,217,255,0.28);
+  }
+  body.theme-starship .stat-pill {
+    border-color: rgba(118,236,255,0.24);
+    background: linear-gradient(135deg, rgba(13,29,54,0.96), rgba(8,25,42,0.96));
+  }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--bg); color: var(--text); font-family: 'Nunito', sans-serif; min-height: 100vh; }
+  body { background: var(--bg); color: var(--text); font-family: 'Nunito', sans-serif; min-height: 100vh; position: relative; }
 
   /* LOGIN */
   #login-screen { display: none; position: fixed; inset: 0; background: var(--bg); z-index: 500; align-items: center; justify-content: center; flex-direction: column; gap: 24px; }

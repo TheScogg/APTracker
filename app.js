@@ -2097,9 +2097,10 @@ const DEFAULT_STORE_ITEMS = [
   { id: 'theme_mint',       type: 'theme', themeKey: 'mint',       customVars: null, name: 'Mint',       price: 0,   isActive: true, order: 7 },
   { id: 'theme_cyberpunk',  type: 'theme', themeKey: 'cyberpunk',  customVars: null, name: 'Cyberpunk',  price: 220, isActive: true, order: 8 },
   { id: 'theme_industrial', type: 'theme', themeKey: 'industrial', customVars: null, name: 'Industrial', price: 220, isActive: true, order: 9 },
-  { id: 'theme_engel',      type: 'theme', themeKey: 'engel',      customVars: null, name: 'Engel',      price: 0,   isActive: true, order: 10 },
-  { id: 'theme_cardinals',  type: 'theme', themeKey: 'cardinals',  customVars: null, name: 'Cardinals',  price: 25,  isActive: true, order: 11 },
-  { id: 'theme_wildcats',   type: 'theme', themeKey: 'wildcats',   customVars: null, name: 'Wildcats',   price: 25,  isActive: true, order: 12 },
+  { id: 'theme_starship',   type: 'theme', themeKey: 'starship',   customVars: null, name: 'Starship',   price: 180, isActive: true, order: 10 },
+  { id: 'theme_engel',      type: 'theme', themeKey: 'engel',      customVars: null, name: 'Engel',      price: 0,   isActive: true, order: 11 },
+  { id: 'theme_cardinals',  type: 'theme', themeKey: 'cardinals',  customVars: null, name: 'Cardinals',  price: 25,  isActive: true, order: 12 },
+  { id: 'theme_wildcats',   type: 'theme', themeKey: 'wildcats',   customVars: null, name: 'Wildcats',   price: 25,  isActive: true, order: 13 },
   {
     id: 'theme_nocturne_slate',
     type: 'theme',
@@ -2123,7 +2124,7 @@ const DEFAULT_STORE_ITEMS = [
     name: 'Nocturne Slate',
     price: 3,
     isActive: true,
-    order: 13
+    order: 14
   },
 ];
 
@@ -4020,9 +4021,9 @@ async function _tryNativeIssueShare(issue, messageWithLink) {
     await navigator.share(payload);
     return true;
   } catch (err) {
-    // User cancellation isn't an app error; just continue into SMS fallback.
+    // User cancellation isn't an app error; just continue into text-app fallback.
     const aborted = err?.name === 'AbortError';
-    if (!aborted) console.warn('Native share failed, falling back to SMS URI.', err);
+    if (!aborted) console.warn('Native share failed, falling back to sms: URI.', err);
     return false;
   }
 }
@@ -4082,7 +4083,8 @@ const SMS_COMPOSER_STATE = {
   issueId: null,
   issue: null,
   messageWithLink: '',
-  recipientOptions: []
+  recipientOptions: [],
+  selectedRecipientPhones: new Set()
 };
 
 function _smsSanitizePhone(value) {
@@ -4098,6 +4100,10 @@ function _smsNormalizeE164(value) {
   if (digitsOnly.length === 10) return `+1${digitsOnly}`;
   if (digitsOnly.length === 11 && digitsOnly.startsWith('1')) return `+${digitsOnly}`;
   return `+${digitsOnly}`;
+}
+
+function _smsRecipientKey(value) {
+  return _smsNormalizeE164(value) || _smsSanitizePhone(value);
 }
 
 function _smsExtractPhones(member) {
@@ -4133,7 +4139,7 @@ async function _smsRecipientOptions() {
       .filter(m => m.phone)
       .sort((a, b) => String(a.name).localeCompare(String(b.name)));
   } catch (err) {
-    console.warn('Unable to load SMS recipients from members.', err);
+    console.warn('Unable to load text recipients from members.', err);
     return [];
   }
 }
@@ -4147,15 +4153,60 @@ function _renderSmsRecipientPicker() {
   }
   wrap.innerHTML = SMS_COMPOSER_STATE.recipientOptions.map((r, idx) => `
     <label class="sms-recipient-row">
-      <input type="checkbox" data-sms-recipient="${idx}">
+      <input type="checkbox" data-sms-recipient="${idx}" ${SMS_COMPOSER_STATE.selectedRecipientPhones.has(_smsRecipientKey(r.phone)) ? 'checked' : ''}>
       <span>${esc(r.name)}</span>
       <span class="sms-recipient-phone">${esc(r.phone)}</span>
     </label>
   `).join('');
+  wrap.querySelectorAll('[data-sms-recipient]').forEach(el => {
+    el.addEventListener('change', () => {
+      const idx = Number(el.getAttribute('data-sms-recipient'));
+      const phone = SMS_COMPOSER_STATE.recipientOptions[idx]?.phone || '';
+      const key = _smsRecipientKey(phone);
+      if (!key) return;
+      if (el.checked) SMS_COMPOSER_STATE.selectedRecipientPhones.add(key);
+      else SMS_COMPOSER_STATE.selectedRecipientPhones.delete(key);
+    });
+  });
 }
+
+window.addManualSmsRecipients = () => {
+  const manualInput = document.getElementById('sms-manual-phone');
+  const raw = String(manualInput?.value || '');
+  const numbers = raw
+    .split(/[,\n;]/)
+    .map(_smsNormalizeE164)
+    .filter(Boolean);
+
+  if (!numbers.length) {
+    alert('Enter at least one valid phone number to add.');
+    return;
+  }
+
+  const existingByKey = new Set(SMS_COMPOSER_STATE.recipientOptions.map(r => _smsRecipientKey(r.phone)).filter(Boolean));
+  let addedCount = 0;
+  numbers.forEach((phone, idx) => {
+    const key = _smsRecipientKey(phone);
+    if (!key) return;
+    SMS_COMPOSER_STATE.selectedRecipientPhones.add(key);
+    if (existingByKey.has(key)) return;
+    SMS_COMPOSER_STATE.recipientOptions.push({
+      uid: `manual-${Date.now()}-${idx}`,
+      name: 'Manual Number',
+      phone
+    });
+    existingByKey.add(key);
+    addedCount++;
+  });
+
+  _renderSmsRecipientPicker();
+  if (manualInput) manualInput.value = '';
+  if (addedCount === 0) alert('Those number(s) are already in the recipient picker and were selected.');
+};
 
 async function _performSmsFallback(messageWithLink, recipientPhones = []) {
   const to = Array.isArray(recipientPhones) ? recipientPhones.filter(Boolean).join(',') : '';
+  // `sms:` intentionally opens the platform texting app; on many devices/carriers this can route over RCS automatically.
   const smsUri = to
     ? `sms:${encodeURIComponent(to)}?&body=${encodeURIComponent(messageWithLink)}`
     : `sms:?&body=${encodeURIComponent(messageWithLink)}`;
@@ -4163,9 +4214,9 @@ async function _performSmsFallback(messageWithLink, recipientPhones = []) {
   if (!isMobile) {
     try {
       await navigator.clipboard?.writeText(messageWithLink);
-      alert('SMS apps are usually unavailable on desktop. Message copied to clipboard.');
+      alert('Texting apps are usually unavailable on desktop. Message copied to clipboard.');
     } catch (_) {
-      prompt('Copy this message for SMS:', messageWithLink);
+      prompt('Copy this message for texting:', messageWithLink);
     }
     return;
   }
@@ -4175,9 +4226,9 @@ async function _performSmsFallback(messageWithLink, recipientPhones = []) {
   } catch (_) {
     try {
       await navigator.clipboard?.writeText(messageWithLink);
-      alert('Could not open your SMS app. Message copied to clipboard.');
+      alert('Could not open your texting app. Message copied to clipboard.');
     } catch (__){
-      prompt('Could not open SMS app. Copy this message:', messageWithLink);
+      prompt('Could not open texting app. Copy this message:', messageWithLink);
     }
   }
 }
@@ -4193,13 +4244,25 @@ async function _submitViaBackendOrFallback() {
     .map(_smsNormalizeE164)
     .filter(Boolean);
   const recipientPhones = Array.from(new Set([...selectedNumbers, ...manualNumbers]));
+  const tryNativeShare = async () => {
+    if (!includePhotos) return false;
+    return _tryNativeIssueShare(SMS_COMPOSER_STATE.issue, SMS_COMPOSER_STATE.messageWithLink);
+  };
+
   if (!recipientPhones.length) {
+    const shared = await tryNativeShare();
+    if (shared) return;
     await _performSmsFallback(SMS_COMPOSER_STATE.messageWithLink);
     return;
   }
 
   const backendSend = typeof window.sendIssueMms === 'function' ? window.sendIssueMms : null;
   if (!backendSend) {
+    const shared = await tryNativeShare();
+    if (shared) return;
+    if (includePhotos) {
+      alert('Photo attachments require native share support or an MMS backend. Falling back to text-only compose.');
+    }
     await _performSmsFallback(SMS_COMPOSER_STATE.messageWithLink, recipientPhones);
     return;
   }
@@ -4232,9 +4295,14 @@ async function _submitViaBackendOrFallback() {
     };
     const result = await backendSend(payload);
     const sentCount = Number(result?.sentCount || recipientPhones.length || 0);
-    alert(`Sent via ${includePhotos ? 'MMS' : 'SMS'} to ${sentCount} recipient${sentCount === 1 ? '' : 's'}.`);
+    alert(`Sent via ${includePhotos ? 'MMS' : 'text (SMS/RCS based on device + carrier)'} to ${sentCount} recipient${sentCount === 1 ? '' : 's'}.`);
   } catch (err) {
     console.warn('sendIssueMms failed; falling back to sms: URI.', err);
+    const shared = await tryNativeShare();
+    if (shared) return;
+    if (includePhotos) {
+      alert('Could not send MMS attachments from backend. Falling back to text-only compose.');
+    }
     await _performSmsFallback(SMS_COMPOSER_STATE.messageWithLink, recipientPhones);
   }
 }
@@ -4269,7 +4337,7 @@ window.sendIssueViaSms = async (id, evt) => {
 
   const issue = issues.find(i => i.id === id);
   if (!issue) {
-    setSyncStatus('err', 'Unable to send SMS: issue not found.');
+    setSyncStatus('err', 'Unable to send text: issue not found.');
     return;
   }
 
@@ -4286,6 +4354,7 @@ window.sendIssueViaSms = async (id, evt) => {
   SMS_COMPOSER_STATE.issue = issue;
   SMS_COMPOSER_STATE.messageWithLink = messageWithLink;
   SMS_COMPOSER_STATE.recipientOptions = await _smsRecipientOptions();
+  SMS_COMPOSER_STATE.selectedRecipientPhones = new Set();
   const subtitle = document.getElementById('sms-compose-subtitle');
   if (subtitle) subtitle.textContent = `${issue.machine || issue.id} • Choose recipients and review before sending.`;
   const manual = document.getElementById('sms-manual-phone');
@@ -4756,6 +4825,9 @@ function renderIssues() {
         ${photosHtml}
         <div class="divider"></div>
         ${resolveHtml}
+        <div class="issue-body-footer">
+          <button class="issue-text-btn" onclick="event.stopPropagation(); sendIssueViaSms('${issue.id}', event)" title="Send issue by text">📲 Text</button>
+        </div>
       </div>`;
     // Safety cleanup: remove any legacy "Workflow: ..." pill buttons from status history rows.
     card.querySelectorAll('.status-timeline button').forEach(btn => {
@@ -5750,6 +5822,7 @@ const THEME_OPTIONS = [
   { key:'slate', label:'⚡ Slate', mode:'dark', colors:['#0f1419','#64748b','#e2e8f0'] },
   { key:'cyberpunk', label:'🎮 Cyberpunk', mode:'dark', colors:['#0a0014','#ff00ff','#00ffff'] },
   { key:'industrial', label:'🏭 Industrial', mode:'dark', colors:['#1a1a1a','#ff6b00','#e5e5e5'] },
+  { key:'starship', label:'🛸 Starship', mode:'dark', colors:['#030914','#26d9ff','#ddf6ff'] },
   { key:'mint', label:'🍃 Mint', mode:'light', colors:['#f0fdf9','#14b8a6','#064e3b'] },
   { key:'engel', label:'🟢 Engel', mode:'dark', colors:['#0c1209','#78be20','#e8f5d8'] },
   { key:'cardinals', label:'🔴 Cardinals', mode:'dark', colors:['#0e0303','#c8102e','#f5e8e8'] },
@@ -5768,6 +5841,7 @@ const THEME_VARS_MAP = {
   slate:      { '--bg':'#0f1419','--bg2':'#1a1f25','--bg3':'#242a31','--border':'#30363d','--text':'#e2e8f0','--text2':'#94a3b8','--text3':'#64748b','--accent':'#64748b','--accent2':'#94a3b8','--green':'#22c55e','--red':'#ef4444','--blue':'#60a5fa','--yellow':'#eab308','--orange':'#f97316' },
   cyberpunk:  { '--bg':'#0a0014','--bg2':'#150028','--bg3':'#1f003d','--border':'#3d0066','--text':'#00ffff','--text2':'#ff00ff','--text3':'#9d00ff','--accent':'#ff00ff','--accent2':'#00ffff','--green':'#00ff88','--red':'#ff4d6d','--blue':'#00ffff','--yellow':'#ffee00','--orange':'#ff7a00' },
   industrial: { '--bg':'#1a1a1a','--bg2':'#252525','--bg3':'#2f2f2f','--border':'#404040','--text':'#e5e5e5','--text2':'#a0a0a0','--text3':'#707070','--accent':'#ff6b00','--accent2':'#ff8a33','--green':'#4ade80','--red':'#f87171','--blue':'#60a5fa','--yellow':'#facc15','--orange':'#ff6b00' },
+  starship:   { '--bg':'#030914','--bg2':'#071327','--bg3':'#0d1d36','--border':'#16466b','--text':'#ddf6ff','--text2':'#8fc4dd','--text3':'#4a7fa6','--accent':'#26d9ff','--accent2':'#8bf5ff','--green':'#2cff9c','--red':'#ff5a87','--blue':'#26d9ff','--yellow':'#ffd447','--orange':'#ff9f43' },
   mint:       { '--bg':'#f0fdf9','--bg2':'#ffffff','--bg3':'#e6fff8','--border':'#a7f3d0','--text':'#064e3b','--text2':'#065f46','--text3':'#10b981','--accent':'#14b8a6','--accent2':'#10b981','--green':'#059669','--red':'#dc2626','--blue':'#0284c7','--yellow':'#ca8a04','--orange':'#ea580c' },
   engel:      { '--bg':'#0c1209','--bg2':'#141e0f','--bg3':'#1b2a14','--border':'#2d4820','--text':'#e8f5d8','--text2':'#8ab870','--text3':'#4d6e38','--accent':'#78be20','--accent2':'#96d63a','--green':'#78be20','--red':'#f87171','--blue':'#00a3b5','--yellow':'#ffc72c','--orange':'#fb923c' },
   cardinals:  { '--bg':'#0e0303','--bg2':'#1c0808','--bg3':'#260c0c','--border':'#3d1515','--text':'#f5e8e8','--text2':'#c48a8a','--text3':'#7a4444','--accent':'#c8102e','--accent2':'#e81f42','--green':'#22c55e','--red':'#ff4444','--blue':'#60a5fa','--yellow':'#eab308','--orange':'#f97316' },
