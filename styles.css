@@ -987,7 +987,6 @@
   .issue-body { display: none; padding: 12px 16px 16px; border-top: 1px solid var(--border); }
   .issue-body.visible { display: block; }
   .issue-body input, .issue-body select, .issue-body textarea, .issue-body button { pointer-events: auto !important; user-select: auto !important; }
-  .issue-body-footer { display: flex; justify-content: flex-start; margin-top: 12px; }
   .issue-text-btn {
     display: inline-flex;
     align-items: center;
