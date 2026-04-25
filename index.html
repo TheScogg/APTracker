@@ -778,6 +778,28 @@
   </div>
 </div>
 
+<!-- SMS / MMS COMPOSER -->
+<div class="modal-overlay" id="sms-compose-modal">
+  <div class="modal sms-compose-modal" onclick="event.stopPropagation()">
+    <div class="modal-title">📲 Send Issue Update</div>
+    <div class="modal-subtitle" id="sms-compose-subtitle">Choose recipients and review before sending.</div>
+    <label>Recipient Picker</label>
+    <div id="sms-recipient-picker" class="sms-recipient-picker"></div>
+    <label for="sms-manual-phone">Manual Phone Number(s)</label>
+    <input id="sms-manual-phone" type="text" placeholder="e.g. +15551234567, 555-123-4567">
+    <label class="sms-toggle-row" for="sms-include-photos">
+      <input id="sms-include-photos" type="checkbox" checked>
+      <span>Include photos (MMS)</span>
+    </label>
+    <label>Outbound Preview</label>
+    <textarea id="sms-preview-text" readonly style="min-height:120px;"></textarea>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" type="button" onclick="closeSmsComposer(true)">Cancel</button>
+      <button class="btn btn-primary" id="sms-send-btn" type="button" onclick="submitSmsComposer()">Send</button>
+    </div>
+  </div>
+</div>
+
 <!-- EDIT STATUS ENTRY MODAL -->
 <div class="modal-overlay" id="edit-status-modal">
   <div class="modal">
