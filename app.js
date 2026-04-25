@@ -3990,6 +3990,43 @@ window.togglePriority = async (id) => {
   }
 };
 
+async function _issueShareFiles(issue, maxFiles = 3) {
+  const photos = Array.isArray(issue?.photos) ? issue.photos.filter(Boolean).slice(0, maxFiles) : [];
+  const files = [];
+  for (let idx = 0; idx < photos.length; idx++) {
+    const photo = photos[idx];
+    const source = photo?.dataUrl || photo?.url || '';
+    if (!source) continue;
+    try {
+      const res = await fetch(source);
+      const blob = await res.blob();
+      const extFromType = blob.type === 'image/png' ? 'png' : 'jpg';
+      const fileName = photo?.name || `issue-photo-${idx + 1}.${extFromType}`;
+      files.push(new File([blob], fileName, { type: blob.type || 'image/jpeg' }));
+    } catch (_) {
+      // Ignore individual photo conversion failures and continue with remaining images.
+    }
+  }
+  return files;
+}
+
+async function _tryNativeIssueShare(issue, messageWithLink) {
+  if (!navigator?.share) return false;
+  const files = await _issueShareFiles(issue);
+  const title = `Issue ${issue?.machine || issue?.id || ''}`.trim();
+  const payload = { title, text: messageWithLink };
+  if (files.length && navigator?.canShare?.({ files })) payload.files = files;
+  try {
+    await navigator.share(payload);
+    return true;
+  } catch (err) {
+    // User cancellation isn't an app error; just continue into SMS fallback.
+    const aborted = err?.name === 'AbortError';
+    if (!aborted) console.warn('Native share failed, falling back to SMS URI.', err);
+    return false;
+  }
+}
+
 window.sendIssueViaSms = async (id, evt) => {
   evt?.stopPropagation?.();
   evt?.preventDefault?.();
@@ -4009,6 +4046,7 @@ window.sendIssueViaSms = async (id, evt) => {
     }
   })();
   const messageWithLink = issueLink ? `${message}\nLink: ${issueLink}` : message;
+  if (await _tryNativeIssueShare(issue, messageWithLink)) return;
   const smsUri = `sms:?&body=${encodeURIComponent(messageWithLink)}`;
   const isMobile = /android|iphone|ipad|ipod|windows phone|mobile/i.test(navigator.userAgent || '');
 
