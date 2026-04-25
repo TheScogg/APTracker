@@ -44,6 +44,12 @@ const DEFAULT_PERMISSIONS = {
 let currentUserRole = 'admin'; // default until member doc loads
 let currentUserPermissions = { ...DEFAULT_PERMISSIONS };
 
+function normalizeMemberRole(roleValue) {
+  const normalized = String(roleValue || '').trim().toLowerCase();
+  if (normalized === 'admin' || normalized === 'editor' || normalized === 'viewer') return normalized;
+  return '';
+}
+
 // Default press layout — used when creating a new plant or if Firestore has none
 const DEFAULT_PRESSES = {
   "Row 1": ["1.01","1.02","1.03","1.04","1.05","1.06","1.07","1.08","1.09","1.10","1.11","1.12","1.13","1.14","1.15","1.16","1.17"],
@@ -719,8 +725,13 @@ async function loadCurrentMember(plantId) {
     const snap = await getDoc(plantMemberDocRef(plantId, currentUser.uid));
     if (snap.exists()) {
       const d = snap.data();
-      currentUserRole = d.role || 'editor';
       currentUserPermissions = { ...DEFAULT_PERMISSIONS, ...(d.permissions || {}) };
+      const normalizedRole = normalizeMemberRole(d.role);
+      const inferAdminFromLegacyPerms = !normalizedRole
+        && currentUserPermissions.canManageStatuses
+        && currentUserPermissions.canManagePresses
+        && currentUserPermissions.canExport;
+      currentUserRole = normalizedRole || (inferAdminFromLegacyPerms ? 'admin' : 'editor');
     } else {
       // No member doc yet — treat as admin (during migration window)
       currentUserRole = 'admin';
