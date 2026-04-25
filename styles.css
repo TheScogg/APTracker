@@ -268,6 +268,81 @@
   body.theme-starforge .theme-choice.active {
     box-shadow: 0 0 0 1px rgba(255,209,102,0.34), 0 0 20px rgba(255,159,28,0.24);
   }
+  body.theme-starmono {
+    --bg: #0f1012; --bg2: #17191c; --bg3: #24282d; --border: #424951;
+    --accent: #c6ccd3; --accent2: #e2e6ea; --accent-glow: rgba(198,204,211,0.25);
+    --green: #a3a3a3; --green-dim: rgba(163,163,163,0.14);
+    --red: #9a9a9a; --red-dim: rgba(154,154,154,0.14);
+    --blue: #b8b8b8; --blue-dim: rgba(184,184,184,0.14);
+    --yellow: #b0b0b0; --yellow-dim: rgba(176,176,176,0.14);
+    --purple: #acacac; --purple-dim: rgba(172,172,172,0.14);
+    --babyblue: #c4c4c4; --babyblue-dim: rgba(196,196,196,0.14);
+    --teal: #b6b6b6; --teal-dim: rgba(182,182,182,0.14);
+    --orange: #c0c0c0; --orange-dim: rgba(192,192,192,0.14);
+    --text: #eceff3; --text2: #b5bcc5; --text3: #747e89;
+  }
+  body.theme-starmono::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: -1;
+    background:
+      radial-gradient(circle at 20% 12%, rgba(200,205,212,0.10), transparent 34%),
+      radial-gradient(circle at 82% 10%, rgba(132,141,151,0.12), transparent 38%),
+      linear-gradient(transparent 95%, rgba(177,184,191,0.08) 100%),
+      linear-gradient(90deg, transparent 95%, rgba(177,184,191,0.08) 100%);
+    background-size: auto, auto, 28px 28px, 28px 28px;
+  }
+  body.theme-starmono .row-panel,
+  body.theme-starmono .issue-card,
+  body.theme-starmono .swipe-category-panel,
+  body.theme-starmono .swipe-sub-panel {
+    background: rgba(23,25,28,0.76);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+    border-color: rgba(198,204,211,0.24);
+    position: relative;
+  }
+  body.theme-starmono .row-panel::after,
+  body.theme-starmono .issue-card::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(120deg, transparent 0%, rgba(198,204,211,0.08) 50%, transparent 82%);
+    mix-blend-mode: screen;
+  }
+  body.theme-starmono .game-pill,
+  body.theme-starmono .stat-pill,
+  body.theme-starmono .row-tab {
+    background: rgba(36,40,45,0.72);
+    border-color: rgba(198,204,211,0.22);
+    color: var(--text2);
+  }
+  body.theme-starmono .scope-btn.active,
+  body.theme-starmono .btn-primary,
+  body.theme-starmono .theme-choice.active {
+    box-shadow: 0 0 0 1px rgba(198,204,211,0.32), 0 0 16px rgba(198,204,211,0.18);
+  }
+  /* Keep category/status pills colorful for at-a-glance triage */
+  body.theme-starmono .row-spill.open        { color: #ff6b6b; border-color: rgba(255,107,107,0.5); background: rgba(255,107,107,0.14); }
+  body.theme-starmono .row-spill.alert       { color: #f43f5e; border-color: rgba(244,63,94,0.5); background: rgba(244,63,94,0.14); }
+  body.theme-starmono .row-spill.maintenance { color: #fbbf24; border-color: rgba(251,191,36,0.5); background: rgba(251,191,36,0.14); }
+  body.theme-starmono .row-spill.materials   { color: #a78bfa; border-color: rgba(167,139,250,0.5); background: rgba(167,139,250,0.14); }
+  body.theme-starmono .row-spill.processengineer { color: #c084fc; border-color: rgba(192,132,252,0.5); background: rgba(192,132,252,0.14); }
+  body.theme-starmono .row-spill.quality     { color: #22d3ee; border-color: rgba(34,211,238,0.5); background: rgba(34,211,238,0.14); }
+  body.theme-starmono .row-spill.tooldie     { color: #fb923c; border-color: rgba(251,146,60,0.5); background: rgba(251,146,60,0.14); }
+  body.theme-starmono .row-spill.controlman  { color: #38bdf8; border-color: rgba(56,189,248,0.5); background: rgba(56,189,248,0.14); }
+  body.theme-starmono .row-spill.startup     { color: #2dd4bf; border-color: rgba(45,212,191,0.5); background: rgba(45,212,191,0.14); }
+  body.theme-starmono .row-spill.resolved    { color: #4ade80; border-color: rgba(74,222,128,0.5); background: rgba(74,222,128,0.14); }
+  body.theme-starmono .stat-pill.active-red    { border-color: #ff6b6b; background: rgba(255,107,107,0.14); color: #ff6b6b; }
+  body.theme-starmono .stat-pill.active-green  { border-color: #4ade80; background: rgba(74,222,128,0.14); color: #4ade80; }
+  body.theme-starmono .stat-pill.active-yellow { border-color: #fbbf24; background: rgba(251,191,36,0.14); color: #fbbf24; }
+  body.theme-starmono .stat-pill.active-purple { border-color: #c084fc; background: rgba(192,132,252,0.14); color: #c084fc; }
+  body.theme-starmono .stat-pill.active-baby   { border-color: #38bdf8; background: rgba(56,189,248,0.14); color: #38bdf8; }
+  body.theme-starmono .stat-pill.active-teal   { border-color: #2dd4bf; background: rgba(45,212,191,0.14); color: #2dd4bf; }
+  body.theme-starmono .stat-pill.active-orange { border-color: #fb923c; background: rgba(251,146,60,0.14); color: #fb923c; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: var(--bg); color: var(--text); font-family: 'Nunito', sans-serif; min-height: 100vh; position: relative; }
 
