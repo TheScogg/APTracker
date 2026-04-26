@@ -4437,7 +4437,6 @@ window.sendIssueViaSms = async (id, evt) => {
     return;
   }
 
-  const message = formatIssueSmsBody(issue);
   const issueLink = (() => {
     try {
       return window.location?.href ? `${window.location.origin}${window.location.pathname}?issue=${encodeURIComponent(issue.id)}` : '';
@@ -4445,7 +4444,7 @@ window.sendIssueViaSms = async (id, evt) => {
       return '';
     }
   })();
-  const messageWithLink = issueLink ? `${message}\nLink: ${issueLink}` : message;
+  const messageWithLink = formatIssueSmsBody(issue, issueLink);
   SMS_COMPOSER_STATE.issueId = issue.id;
   SMS_COMPOSER_STATE.issue = issue;
   SMS_COMPOSER_STATE.messageWithLink = messageWithLink;
@@ -5470,7 +5469,7 @@ function currentStatusKey(issue) {
   return issue?.lifecycle?.isResolved ? 'resolved' : 'open';
 }
 
-function formatIssueSmsBody(issue) {
+function formatIssueSmsBody(issue, issueLink = '') {
   if (!issue) return '';
 
   const statusKey = currentStatusKey(issue);
@@ -5479,19 +5478,17 @@ function formatIssueSmsBody(issue) {
   const subStatus = issue.currentStatus?.subLabel || issue.currentStatus?.subStatusKey || '';
   const noteText = issue.currentStatus?.notePreview || issue.note || 'N/A';
   const loggedAt = issue.dateTime || (issue.timestamp ? formatDate(issue.timestamp) : 'Unknown time');
-  const reporter = issue.userName || issue.userEmail || 'Unknown submitter';
   const machineIdentifier = issue.machine || issue.machineCode || 'Unknown';
 
-  return [
+  const lines = [
     `Issue update (${currentPlantName || 'Plant'})`,
     `Machine: ${machineIdentifier}`,
     `Status: ${statusText}${subStatus ? ` / ${subStatus}` : ''}`,
     `Note: ${noteText}`,
-    `Logged: ${loggedAt}`,
-    `Reporter: ${reporter}`,
-    `Issue ID: ${issue.id || 'Unknown'}`,
-    `Plant ID: ${currentPlantId || issue.plantId || 'Unknown'}`
-  ].join('\n');
+    `Logged: ${loggedAt}`
+  ];
+  if (issueLink) lines.push(`Link: ${issueLink}`);
+  return lines.join('\n');
 }
 
 function issueIsResolvedV2(issue) {
