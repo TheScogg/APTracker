@@ -8519,5 +8519,7 @@ document.getElementById('members-btn')?.addEventListener('touchend', e => { e.pr
 document.getElementById('members-btn')?.addEventListener('click', e => { e.stopPropagation(); openMembersPanel(); });
 document.getElementById('admin-page-btn')?.addEventListener('click', e => {
   e.stopPropagation();
-  window.location.href = 'admin.html';
+  document.getElementById('user-dropdown')?.classList.remove('visible');
+  document.getElementById('user-pill')?.classList.remove('open');
+  openAdminPanel();
 });
