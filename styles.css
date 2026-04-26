@@ -557,6 +557,10 @@
   .theme-select-toggle.open .theme-select-chevron { transform: rotate(180deg); }
   .theme-select-grid { display: none; grid-template-columns: 1fr 1fr; gap: 6px; margin: 4px 6px 6px; }
   .theme-select-grid.open { display: grid; }
+  .theme-select-store { display: none; padding: 0 6px 6px; }
+  .theme-select-grid.open + .theme-select-store { display: block; }
+  .theme-select-store .user-dropdown-item { background: var(--bg3); border: 1px solid var(--border); }
+  .theme-select-store .user-dropdown-item:hover { border-color: var(--text2); }
   .theme-choice { border: 1px solid var(--border); background: var(--bg3); border-radius: 8px; padding: 6px; cursor: pointer; text-align: left; transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s; }
   .theme-choice:hover { border-color: var(--text2); transform: translateY(-1px); }
   .theme-choice.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
