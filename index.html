@@ -501,13 +501,14 @@
               </span>
             </button>
             <div class="theme-select-grid" id="theme-select-grid"></div>
+            <div class="theme-select-store">
+              <button class="user-dropdown-item" type="button" id="open-store-btn" onclick="document.getElementById('user-dropdown').classList.remove('visible');document.getElementById('user-pill').classList.remove('open');openStoreModal();">
+                <span class="ud-item-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 2h1.5l1.5 7h7l1.5-5H5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="7" cy="13" r="1" fill="currentColor"/><circle cx="12" cy="13" r="1" fill="currentColor"/></svg></span>
+                <span style="flex:1">Themes &amp; Store</span>
+                <span class="ud-store-xp" id="ud-store-xp">0 XP</span>
+              </button>
+            </div>
           </div>
-          <!-- Store (themes + more) -->
-          <button class="user-dropdown-item" type="button" id="open-store-btn" onclick="document.getElementById('user-dropdown').classList.remove('visible');document.getElementById('user-pill').classList.remove('open');openStoreModal();">
-            <span class="ud-item-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 2h1.5l1.5 7h7l1.5-5H5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="7" cy="13" r="1" fill="currentColor"/><circle cx="12" cy="13" r="1" fill="currentColor"/></svg></span>
-            <span style="flex:1">Themes &amp; Store</span>
-            <span class="ud-store-xp" id="ud-store-xp">0 XP</span>
-          </button>
           <!-- Theme Color Editor -->
           <button class="user-dropdown-item" type="button" onclick="openThemeEditor()">
             <span class="ud-item-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.3"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span>
