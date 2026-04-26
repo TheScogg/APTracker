@@ -547,7 +547,8 @@
   .ud-toggle-switch.on .ud-toggle-knob { left: 21px; }
   /* Theme select (inline row) */
   .theme-select-row { padding: 2px 0; }
-  .theme-select-toggle { width: 100%; display: flex; align-items: center; gap: 10px; padding: 9px 12px; background: transparent; border: none; border-radius: 8px; cursor: pointer; color: var(--text2); font-size: 13.5px; font-family: 'Nunito', sans-serif; font-weight: 500; text-align: left; transition: background 0.12s; letter-spacing: -0.01em; }
+  .theme-select-header { display: flex; align-items: stretch; gap: 6px; padding: 0 6px; }
+  .theme-select-toggle { width: 100%; display: flex; align-items: center; gap: 10px; padding: 9px 12px; background: transparent; border: none; border-radius: 8px; cursor: pointer; color: var(--text2); font-size: 13.5px; font-family: 'Nunito', sans-serif; font-weight: 500; text-align: left; transition: background 0.12s; letter-spacing: -0.01em; flex: 1; min-width: 0; }
   .theme-select-toggle:hover, .theme-select-toggle.open { background: var(--bg3); }
   .theme-select-toggle:hover .ud-item-icon, .theme-select-toggle.open .ud-item-icon { color: var(--accent); }
   .theme-select-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
@@ -555,7 +556,10 @@
   .theme-select-current { font-size: 12px; color: var(--text3); font-family: 'Share Tech Mono', monospace; }
   .theme-select-chevron { display: flex; align-items: center; color: var(--text3); transition: transform 0.15s; }
   .theme-select-toggle.open .theme-select-chevron { transform: rotate(180deg); }
-  .theme-select-grid { display: none; grid-template-columns: 1fr 1fr; gap: 6px; margin: 4px 6px 6px; }
+  .theme-store-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg3); color: var(--text2); font-family: 'Nunito', sans-serif; font-size: 12px; font-weight: 700; cursor: pointer; flex-shrink: 0; transition: border-color 0.12s, color 0.12s, background 0.12s; }
+  .theme-store-btn:hover { border-color: var(--text2); color: var(--text); }
+  .theme-store-btn:hover .ud-item-icon { color: var(--accent); }
+  .theme-select-grid { display: none; grid-template-columns: 1fr 1fr; gap: 6px; margin: 4px 6px 6px; max-height: 230px; overflow-y: auto; padding-right: 2px; }
   .theme-select-grid.open { display: grid; }
   .theme-select-store { display: none; padding: 0 6px 6px; }
   .theme-select-grid.open + .theme-select-store { display: block; }
