@@ -507,19 +507,7 @@
               </button>
             </div>
             <div class="theme-select-grid" id="theme-select-grid"></div>
-            <div class="theme-select-store">
-              <button class="user-dropdown-item" type="button" id="open-store-btn" onclick="document.getElementById('user-dropdown').classList.remove('visible');document.getElementById('user-pill').classList.remove('open');openStoreModal();">
-                <span class="ud-item-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 2h1.5l1.5 7h7l1.5-5H5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="7" cy="13" r="1" fill="currentColor"/><circle cx="12" cy="13" r="1" fill="currentColor"/></svg></span>
-                <span style="flex:1">Themes &amp; Store</span>
-                <span class="ud-store-xp" id="ud-store-xp">0 XP</span>
-              </button>
-            </div>
           </div>
-          <!-- Theme Color Editor -->
-          <button class="user-dropdown-item" type="button" onclick="openThemeEditor()">
-            <span class="ud-item-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.3"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span>
-            Theme Color Editor
-          </button>
         </div>
         <!-- XP badge -->
         <div class="ud-divider"></div>
@@ -1121,61 +1109,7 @@
     </div>
 
     <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="openThemeEditor()">Open Color Editor…</button>
       <button class="btn btn-ghost" onclick="closeAppearanceModal()">Close</button>
-    </div>
-  </div>
-</div>
-
-<div class="modal-overlay" id="theme-editor-modal">
-  <div class="modal theme-editor-modal">
-    <div class="modal-title" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
-      <span>🎨 Theme Editor</span>
-      <button style="background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer;line-height:1;" onclick="closeThemeEditor()">✕</button>
-    </div>
-
-    <!-- Base preset selector -->
-    <div class="te-section">
-      <div class="te-section-label">Start from a preset</div>
-      <select class="te-base-select" id="te-base-select"></select>
-    </div>
-
-    <!-- Color picker groups -->
-    <div class="te-section">
-      <div class="te-section-label">Surfaces</div>
-      <div class="te-color-grid" id="te-colors-surfaces"></div>
-    </div>
-    <div class="te-section">
-      <div class="te-section-label">Text</div>
-      <div class="te-color-grid" id="te-colors-text"></div>
-    </div>
-    <div class="te-section">
-      <div class="te-section-label">Accent</div>
-      <div class="te-color-grid" id="te-colors-accent"></div>
-    </div>
-    <div class="te-section">
-      <div class="te-section-label">Status Colors</div>
-      <div class="te-color-grid" id="te-colors-status"></div>
-    </div>
-
-    <!-- Save section -->
-    <div class="te-section" style="border-top:1px solid var(--border);padding-top:16px;">
-      <div class="te-section-label">Save this theme</div>
-      <div style="display:flex;gap:8px;align-items:center;">
-        <input type="text" id="te-theme-name" placeholder="Name this theme…" maxlength="32"
-          style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;outline:none;">
-        <button id="te-save-btn" class="btn btn-primary" onclick="saveCustomTheme()" style="white-space:nowrap;flex-shrink:0;">💾 Save</button>
-      </div>
-    </div>
-
-    <!-- Saved themes list -->
-    <div class="te-section" id="te-saved-section" style="display:none;">
-      <div class="te-section-label">Saved Themes</div>
-      <div class="te-saved-list" id="te-saved-list"></div>
-    </div>
-
-    <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeThemeEditor()">Close</button>
     </div>
   </div>
 </div>
