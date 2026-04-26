@@ -6410,9 +6410,11 @@ document.addEventListener('touchend', _teHandleColorPickerPointerRelease, true);
 document.addEventListener('touchcancel', _teHandleColorPickerPointerRelease, true);
 
 window.openThemeEditor = function() {
+  const themeEditorModal = document.getElementById('theme-editor-modal');
+  if (!themeEditorModal) return;
   closeAppearanceModal();
-  document.getElementById('user-dropdown').classList.remove('visible');
-  document.getElementById('user-pill').classList.remove('open');
+  document.getElementById('user-dropdown')?.classList.remove('visible');
+  document.getElementById('user-pill')?.classList.remove('open');
   _tePrevThemeKey = localStorage.getItem('pressTrackerTheme') || 'midnight';
   _teEditingId = null;
   const saveBtn = document.getElementById('te-save-btn');
@@ -6445,11 +6447,13 @@ window.openThemeEditor = function() {
   _renderTEPickers();
   _renderTESavedList();
   document.getElementById('te-theme-name').value = '';
-  document.getElementById('theme-editor-modal').classList.add('visible');
+  themeEditorModal.classList.add('visible');
 };
 
 window.closeThemeEditor = function() {
-  document.getElementById('theme-editor-modal').classList.remove('visible');
+  const themeEditorModal = document.getElementById('theme-editor-modal');
+  if (!themeEditorModal) return;
+  themeEditorModal.classList.remove('visible');
   // Revert to what was active before editor opened
   const saved = localStorage.getItem('pressTrackerTheme') || 'midnight';
   if (saved.startsWith('custom_')) {
@@ -6721,8 +6725,9 @@ document.querySelectorAll('.modal').forEach(modal => {
 
 document.addEventListener('keydown', e=>{ if(e.key==='Escape'){closeModal();closeEditModal();closeResolveModal();closeReopenModal();closeLightbox();closeSortDropdown();closeExportModal();closeSerialModal();closeEditStatusModal();closeNotesModal();closeSmsComposer(true);window.closeMessagingModal?.();window.closeConversation?.();closeAppearanceModal();closeThemeEditor();} });
 
-document.getElementById('theme-editor-modal').addEventListener('click', e => {
-  if (e.target !== document.getElementById('theme-editor-modal')) return;
+document.getElementById('theme-editor-modal')?.addEventListener('click', e => {
+  const modal = document.getElementById('theme-editor-modal');
+  if (!modal || e.target !== modal) return;
   if (_teColorPickerInteracting) return;
   if (Date.now() < _teIgnoreBackdropClickUntil) return;
   closeThemeEditor();
