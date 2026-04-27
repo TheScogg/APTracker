@@ -6043,21 +6043,12 @@ function getThemeCatalogEntry(key) {
 // ── THEME EDITOR ──
 const CUSTOM_THEMES_KEY = 'apTracker_customThemes';
 
-const THEME_EDITOR_VARS = [
-  ['--bg',      'Background',   'surfaces'],
-  ['--bg2',     'Surface',      'surfaces'],
-  ['--bg3',     'Inset',        'surfaces'],
-  ['--border',  'Border',       'surfaces'],
-  ['--text',    'Text Primary', 'text'],
-  ['--text2',   'Text Muted',   'text'],
-  ['--text3',   'Text Faint',   'text'],
-  ['--accent',  'Accent',       'accent'],
-  ['--accent2', 'Accent Light', 'accent'],
-  ['--green',   'Green',        'status'],
-  ['--red',     'Red',          'status'],
-  ['--blue',    'Blue',         'status'],
-  ['--yellow',  'Yellow',       'status'],
-  ['--orange',  'Orange',       'status'],
+const THEME_EDITOR_CORE_VARS = [
+  '--bg', '--bg2', '--bg3', '--border',
+  '--text', '--text2', '--text3',
+  '--accent', '--accent2',
+  '--green', '--red', '--blue', '--yellow', '--orange',
+  '--purple', '--teal', '--babyblue'
 ];
 
 const CUSTOM_THEME_CLEAR_VARS = [
@@ -6067,6 +6058,7 @@ const CUSTOM_THEME_CLEAR_VARS = [
   '--yellow','--yellow-dim','--orange','--orange-dim',
   '--purple','--purple-dim','--teal','--teal-dim','--babyblue','--babyblue-dim'
 ];
+let _appliedCustomVarKeys = new Set();
 
 function _hexToRgba(hex, alpha) {
   const h = hex.replace('#','');
@@ -6075,7 +6067,9 @@ function _hexToRgba(hex, alpha) {
 }
 
 function clearCustomThemeVars() {
-  CUSTOM_THEME_CLEAR_VARS.forEach(v => document.documentElement.style.removeProperty(v));
+  const keys = new Set([...CUSTOM_THEME_CLEAR_VARS, ..._appliedCustomVarKeys]);
+  keys.forEach(v => document.documentElement.style.removeProperty(v));
+  _appliedCustomVarKeys = new Set();
 }
 
 function applyDerivedVars(vars) {
@@ -6088,8 +6082,64 @@ function applyDerivedVars(vars) {
 
 function applyCustomThemeVars(vars) {
   clearCustomThemeVars();
-  Object.entries(vars).forEach(([k, v]) => document.documentElement.style.setProperty(k, v));
+  Object.entries(vars).forEach(([k, v]) => {
+    if (!String(k || '').startsWith('--')) return;
+    document.documentElement.style.setProperty(k, v);
+    _appliedCustomVarKeys.add(k);
+  });
   applyDerivedVars(vars);
+}
+
+function _teGetAllVariables() {
+  const vars = new Set(THEME_EDITOR_CORE_VARS);
+
+  Object.values(THEME_VARS_MAP).forEach(themeVars => {
+    Object.keys(themeVars || {}).forEach(k => { if (k.startsWith('--')) vars.add(k); });
+  });
+
+  getThemeCatalog().forEach(theme => {
+    Object.keys(theme?.vars || {}).forEach(k => { if (k.startsWith('--')) vars.add(k); });
+  });
+
+  Array.from(document.styleSheets || []).forEach(sheet => {
+    try {
+      Array.from(sheet.cssRules || []).forEach(rule => {
+        const style = rule.style;
+        if (!style) return;
+        Array.from(style).forEach(prop => {
+          if (String(prop).startsWith('--')) vars.add(prop);
+        });
+      });
+    } catch (e) { /* ignore inaccessible stylesheet */ }
+  });
+
+  const rootStyle = getComputedStyle(document.documentElement);
+  for (let i = 0; i < rootStyle.length; i++) {
+    const prop = rootStyle[i];
+    if (String(prop).startsWith('--')) vars.add(prop);
+  }
+
+  const core = THEME_EDITOR_CORE_VARS.filter(v => vars.has(v));
+  const other = Array.from(vars).filter(v => !THEME_EDITOR_CORE_VARS.includes(v)).sort((a, b) => a.localeCompare(b));
+  return [...core, ...other];
+}
+
+function _teToHexIfColor(value) {
+  const v = String(value || '').trim();
+  if (!v) return null;
+  if (/^#[0-9a-fA-F]{6}$/.test(v)) return v.toLowerCase();
+  if (/^#[0-9a-fA-F]{3}$/.test(v)) return '#' + v.slice(1).split('').map(ch => ch + ch).join('').toLowerCase();
+  const probe = document.createElement('span');
+  probe.style.color = '';
+  probe.style.color = v;
+  if (!probe.style.color) return null;
+  document.body.appendChild(probe);
+  const computed = getComputedStyle(probe).color;
+  probe.remove();
+  const m = computed.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+  if (!m) return null;
+  const toHex = (n) => Number(n).toString(16).padStart(2, '0');
+  return `#${toHex(m[1])}${toHex(m[2])}${toHex(m[3])}`;
 }
 
 function _loadCustomThemes() {
@@ -6419,21 +6469,21 @@ window.openThemeEditor = function() {
 
   // Populate base select
   const sel = document.getElementById('te-base-select');
-  sel.innerHTML = THEME_OPTIONS.map(t => `<option value="${t.key}">${t.label}</option>`).join('');
+  if (sel) sel.innerHTML = THEME_OPTIONS.map(t => `<option value="${t.key}">${t.label}</option>`).join('');
 
   // Seed vars from current theme (custom or built-in)
   if (_tePrevThemeKey.startsWith('custom_')) {
     const data = _loadCustomThemes();
     const found = data.customThemes.find(t => 'custom_' + t.id === _tePrevThemeKey);
     _teCurrentVars = found ? { ...found.vars } : { ...THEME_VARS_MAP.midnight };
-    sel.value = 'midnight';
+    if (sel) sel.value = 'midnight';
   } else if (_tePrevThemeKey.startsWith('storetheme_')) {
     const storeTheme = getThemeCatalogEntry(_tePrevThemeKey);
     _teCurrentVars = storeTheme?.vars ? { ...storeTheme.vars } : { ...THEME_VARS_MAP.midnight };
-    sel.value = 'midnight';
+    if (sel) sel.value = 'midnight';
   } else {
     const baseKey = THEME_KEYS.includes(_tePrevThemeKey) ? _tePrevThemeKey : 'midnight';
-    sel.value = baseKey;
+    if (sel) sel.value = baseKey;
     _teCurrentVars = { ...(THEME_VARS_MAP[baseKey] || THEME_VARS_MAP.midnight) };
   }
 
@@ -6441,9 +6491,11 @@ window.openThemeEditor = function() {
   document.body.classList.remove(...THEME_KEYS.map(key => `theme-${key}`));
   applyCustomThemeVars(_teCurrentVars);
 
-  _renderTEPickers();
+  _renderTEVarsList();
   _renderTESavedList();
-  document.getElementById('te-theme-name').value = '';
+  const searchEl = document.getElementById('te-theme-search');
+  if (searchEl) searchEl.value = '';
+  if (document.getElementById('te-theme-name')) document.getElementById('te-theme-name').value = '';
   themeEditorModal.classList.add('visible');
 };
 
@@ -6469,39 +6521,65 @@ document.getElementById('te-base-select')?.addEventListener('change', e => {
     const saveBtn = document.getElementById('te-save-btn');
     if (saveBtn) saveBtn.textContent = '💾 Save';
     document.getElementById('te-theme-name').value = '';
-    _renderTEPickers();
+    _renderTEVarsList();
     applyCustomThemeVars(_teCurrentVars);
   }
 });
 
-function _renderTEPickers() {
-  const groups = { surfaces: 'te-colors-surfaces', text: 'te-colors-text', accent: 'te-colors-accent', status: 'te-colors-status' };
-  Object.values(groups).forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = ''; });
-  THEME_EDITOR_VARS.forEach(([cssVar, label, group]) => {
-    const container = document.getElementById(groups[group]);
-    if (!container) return;
-    const val = _teCurrentVars[cssVar] || '#000000';
+document.getElementById('te-theme-search')?.addEventListener('input', () => _renderTEVarsList());
+
+function _renderTEVarsList() {
+  const container = document.getElementById('te-vars-list');
+  if (!container) return;
+  const baseKey = document.getElementById('te-base-select')?.value || 'midnight';
+  const baseVars = THEME_VARS_MAP[baseKey] || THEME_VARS_MAP.midnight || {};
+  const search = String(document.getElementById('te-theme-search')?.value || '').trim().toLowerCase();
+  const vars = _teGetAllVariables().filter(cssVar => !search || cssVar.toLowerCase().includes(search));
+  const countEl = document.getElementById('te-var-count');
+  if (countEl) countEl.textContent = `${vars.length} var${vars.length === 1 ? '' : 's'}`;
+
+  container.innerHTML = '';
+  if (!vars.length) {
+    container.innerHTML = `<div class="te-empty-vars">No CSS variables match your search.</div>`;
+    return;
+  }
+
+  vars.forEach(cssVar => {
+    const currentVal = _teCurrentVars?.[cssVar] || baseVars[cssVar] || getComputedStyle(document.documentElement).getPropertyValue(cssVar).trim() || '';
+    const baseVal = baseVars[cssVar] || '';
     const row = document.createElement('div');
-    row.className = 'te-color-row';
+    row.className = 'te-var-item';
+    row.setAttribute('role', 'listitem');
+    const safeCurrent = esc(currentVal);
     row.innerHTML = `
-      <label class="te-color-label">${label}</label>
-      <input type="color" class="te-color-input" value="${val}" data-var="${cssVar}">
-      <span class="te-color-hex" data-hex-for="${cssVar}">${val}</span>`;
-    const colorInput = row.querySelector('input');
-    const extendBackdropGuard = (ms = 400) => {
-      _teIgnoreBackdropClickUntil = Date.now() + ms;
-    };
+      <div class="te-var-item-header">
+        <label class="te-var-name" for="te-var-${cssVar.slice(2)}">${cssVar}</label>
+        <span class="te-var-hint">${baseVal ? 'base: ' + esc(baseVal) : 'custom variable'}</span>
+      </div>
+      <div class="te-var-controls">
+        <input id="te-var-${cssVar.slice(2)}" class="te-var-text" type="text" value="${safeCurrent}" aria-label="${cssVar} value">
+        <input class="te-var-color" type="color" aria-label="${cssVar} color picker">
+        <button class="te-var-reset" type="button">Reset</button>
+      </div>`;
+
+    const textInput = row.querySelector('.te-var-text');
+    const colorInput = row.querySelector('.te-var-color');
+    const resetBtn = row.querySelector('.te-var-reset');
+    const colorHex = _teToHexIfColor(currentVal);
+    colorInput.value = colorHex || '#000000';
+    colorInput.style.visibility = colorHex ? 'visible' : 'hidden';
+
+    textInput.addEventListener('input', e => {
+      _teCurrentVars[cssVar] = e.target.value.trim();
+      const nextHex = _teToHexIfColor(_teCurrentVars[cssVar]);
+      colorInput.style.visibility = nextHex ? 'visible' : 'hidden';
+      if (nextHex) colorInput.value = nextHex;
+      applyCustomThemeVars(_teCurrentVars);
+    });
+
+    const extendBackdropGuard = (ms = 400) => { _teIgnoreBackdropClickUntil = Date.now() + ms; };
     colorInput.addEventListener('pointerdown', () => {
       _teColorPickerPointerActive = true;
-      _teColorPickerInteracting = true;
-      extendBackdropGuard(5000);
-    });
-    colorInput.addEventListener('touchstart', () => {
-      _teColorPickerPointerActive = true;
-      _teColorPickerInteracting = true;
-      extendBackdropGuard(5000);
-    }, { passive: true });
-    colorInput.addEventListener('focus', () => {
       _teColorPickerInteracting = true;
       extendBackdropGuard(5000);
     });
@@ -6509,7 +6587,7 @@ function _renderTEPickers() {
       _teColorPickerInteracting = true;
       extendBackdropGuard(5000);
       _teCurrentVars[cssVar] = e.target.value;
-      row.querySelector('.te-color-hex').textContent = e.target.value;
+      textInput.value = e.target.value;
       applyCustomThemeVars(_teCurrentVars);
     });
     colorInput.addEventListener('change', () => {
@@ -6520,6 +6598,21 @@ function _renderTEPickers() {
       extendBackdropGuard(1500);
       _teQueueColorPickerInteractionRelease(350);
     });
+
+    resetBtn.addEventListener('click', () => {
+      if (baseVal) {
+        _teCurrentVars[cssVar] = baseVal;
+        textInput.value = baseVal;
+      } else {
+        delete _teCurrentVars[cssVar];
+        textInput.value = '';
+      }
+      const nextHex = _teToHexIfColor(textInput.value);
+      colorInput.style.visibility = nextHex ? 'visible' : 'hidden';
+      if (nextHex) colorInput.value = nextHex;
+      applyCustomThemeVars(_teCurrentVars);
+    });
+
     container.appendChild(row);
   });
 }
@@ -6578,7 +6671,7 @@ function _renderTESavedList() {
       document.getElementById('te-theme-name').value = theme.name;
       const saveBtn = document.getElementById('te-save-btn');
       if (saveBtn) saveBtn.textContent = '💾 Update';
-      _renderTEPickers();
+      _renderTEVarsList();
       const d = _loadCustomThemes(); d.activeCustomId = theme.id; _saveCustomThemesStorage(d);
       applyTheme('custom_' + theme.id);
       updateActiveThemeChoice(null);

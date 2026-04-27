@@ -507,6 +507,12 @@
               </button>
             </div>
             <div class="theme-select-grid" id="theme-select-grid"></div>
+            <div class="theme-select-store">
+              <button class="user-dropdown-item" type="button" onclick="openThemeEditor()">
+                <span class="ud-item-icon">🎛️</span>
+                Theme Editor
+              </button>
+            </div>
           </div>
         </div>
         <!-- XP badge -->
@@ -1090,6 +1096,46 @@
 </div>
 
 <!-- THEME EDITOR MODAL -->
+<div class="modal-overlay" id="theme-editor-modal" onclick="if(event.target===this)closeThemeEditor()">
+  <div class="modal theme-editor-modal">
+    <div class="modal-title" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <span>🎛️ Theme Editor</span>
+      <button style="background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer;line-height:1;" aria-label="Close theme editor" onclick="closeThemeEditor()">✕</button>
+    </div>
+
+    <div class="te-section">
+      <div class="te-section-label">Base Theme</div>
+      <select id="te-base-select" class="te-base-select" aria-label="Select a base theme"></select>
+    </div>
+
+    <div class="te-section">
+      <div class="te-section-label">Variables</div>
+      <div class="te-search-row">
+        <input id="te-theme-search" class="te-theme-search" type="search" placeholder="Search CSS variable (example: --accent, border, text)" aria-label="Search CSS variables">
+        <span class="te-var-count" id="te-var-count">0 vars</span>
+      </div>
+      <div id="te-vars-list" class="te-vars-list" role="list"></div>
+    </div>
+
+    <div class="te-section">
+      <div class="te-section-label">Save Theme</div>
+      <div class="te-save-row">
+        <input id="te-theme-name" class="te-theme-search" type="text" maxlength="40" placeholder="Theme name" aria-label="Theme name">
+        <button class="btn btn-primary" id="te-save-btn" onclick="saveCustomTheme()">💾 Save</button>
+      </div>
+    </div>
+
+    <div class="te-section" id="te-saved-section" style="display:none;">
+      <div class="te-section-label">Saved Custom Themes</div>
+      <div class="te-saved-list" id="te-saved-list"></div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeThemeEditor()">Close</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="appearance-modal">
   <div class="modal theme-editor-modal">
     <div class="modal-title" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
