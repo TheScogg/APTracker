@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, collection, updateDoc, deleteDoc, doc, getDoc, getDocs, setDoc, addDoc, onSnapshot, serverTimestamp, query, orderBy, where, writeBatch, arrayUnion, arrayRemove, increment, limit, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, collection, updateDoc, deleteDoc, doc, getDoc, getDocs, setDoc, addDoc, onSnapshot, serverTimestamp, query, orderBy, where, writeBatch, arrayUnion, arrayRemove, increment, limit, runTransaction, startAfter } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut as fbSignOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getStorage, ref as storageRef, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
@@ -13,7 +13,9 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+});
 const storage = getStorage(app);
 const storageFallback = firebaseConfig.storageBucket && firebaseConfig.storageBucket.includes('.appspot.com')
   ? null
@@ -27,8 +29,12 @@ let currentPlantId = null;
 let currentPlantName = '';
 let userPlants = []; // [{ id, name, location }]
 const scheduleLookupCache = new Map();
-// Caches the set of scheduled machine codes for the current date.
-// { date: string, scheduled: Set<string> | null }
+const USER_LOOKUP_HEARTBEAT_MS = 12 * 60 * 60 * 1000;
+const MAX_LIVE_ISSUES = 250;
+const HISTORY_ISSUES_PAGE_SIZE = 200;
+let dailyScheduleIndexState = null; // { plantId, date, scheduled: Set<string>|null, lookupByPress: Map<string, { main: any[], changes: any[] }> }
+// Caches the set of scheduled machine codes for the current plant/date.
+// { plantId: string, date: string, scheduled: Set<string> | null }
 // scheduled === null means no dailySchedules doc exists for that date → don't highlight.
 let scheduledPressesState = null;
 
@@ -39,6 +45,12 @@ const DEFAULT_PERMISSIONS = {
 };
 let currentUserRole = 'admin'; // default until member doc loads
 let currentUserPermissions = { ...DEFAULT_PERMISSIONS };
+
+function normalizeMemberRole(roleValue) {
+  const normalized = String(roleValue || '').trim().toLowerCase();
+  if (normalized === 'admin' || normalized === 'editor' || normalized === 'viewer') return normalized;
+  return '';
+}
 
 // Default press layout — used when creating a new plant or if Firestore has none
 const DEFAULT_PRESSES = {
@@ -78,6 +90,19 @@ function currentActor() {
   return { uid: currentUser?.uid || '', name: currentUser?.displayName || currentUser?.email || 'Unknown' };
 }
 
+function shouldSyncUserLookup(email) {
+  try {
+    const key = `userLookupLastSeen:${String(email || '').toLowerCase()}`;
+    const now = Date.now();
+    const last = Number(localStorage.getItem(key) || 0);
+    if (Number.isFinite(last) && now - last < USER_LOOKUP_HEARTBEAT_MS) return false;
+    localStorage.setItem(key, String(now));
+    return true;
+  } catch(e) {
+    return true;
+  }
+}
+
 function toPressId(machineCode) {
   return 'press_' + String(machineCode || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 }
@@ -97,27 +122,72 @@ function scheduleDateForLookup() {
 // press buttons immediately reflect their scheduled/unscheduled state.
 async function loadDailyScheduledPresses(date) {
   if (!currentPlantId || !date) { scheduledPressesState = null; return; }
-  if (scheduledPressesState && scheduledPressesState.date === date) return; // already cached
-  let scheduled = null;
+  if (scheduledPressesState && scheduledPressesState.plantId === currentPlantId && scheduledPressesState.date === date) return; // already cached
   try {
-    const dailyRef = doc(db, 'plants', currentPlantId, 'dailySchedules', date);
-    const dailySnap = await getDoc(dailyRef);
-    if (dailySnap.exists()) {
-      const sections = ['page1', 'page2', 'northBayChanges', 'southBayChanges'];
-      const snaps = await Promise.all(
-        sections.map(s => getDocs(collection(db, 'plants', currentPlantId, 'dailySchedules', date, s)))
-      );
-      scheduled = new Set();
-      snaps.forEach(snap => snap.docs.forEach(d => {
-        const press = d.data().press;
-        if (press) scheduled.add(String(press).trim());
-      }));
-    }
+    const index = await loadDailyScheduleIndex(date);
+    scheduledPressesState = { plantId: currentPlantId, date, scheduled: index?.scheduled ?? null };
   } catch(e) {
     console.warn('loadDailyScheduledPresses failed:', e);
+    scheduledPressesState = { plantId: currentPlantId, date, scheduled: null };
   }
-  scheduledPressesState = { date, scheduled };
   updatePressStates();
+}
+
+function normalizeSchedulePress(machineCode) {
+  return String(machineCode || '').trim();
+}
+
+function buildScheduleIndexFromSnaps(snapsBySection) {
+  const scheduled = new Set();
+  const lookupByPress = new Map();
+  const sortByOrder = (a, b) => Number(a.displayOrder || 0) - Number(b.displayOrder || 0);
+  const pushRow = (machine, row) => {
+    if (!machine) return;
+    scheduled.add(machine);
+    const existing = lookupByPress.get(machine) || { main: [], changes: [] };
+    if (row.section === 'page1' || row.section === 'page2') existing.main.push(row);
+    else existing.changes.push({
+      ...row,
+      section: row.section === 'northBayChanges' ? 'North Bay Change' : 'South Bay Change'
+    });
+    lookupByPress.set(machine, existing);
+  };
+
+  Object.entries(snapsBySection).forEach(([section, snap]) => {
+    snap.docs.forEach(d => {
+      const data = d.data() || {};
+      const machine = normalizeSchedulePress(data.press);
+      pushRow(machine, { id: d.id, ...data, section });
+    });
+  });
+
+  lookupByPress.forEach(v => {
+    v.main.sort(sortByOrder);
+    v.changes.sort(sortByOrder);
+  });
+
+  return { scheduled, lookupByPress };
+}
+
+async function loadDailyScheduleIndex(date) {
+  if (!currentPlantId || !date) return null;
+  if (dailyScheduleIndexState && dailyScheduleIndexState.plantId === currentPlantId && dailyScheduleIndexState.date === date) {
+    return dailyScheduleIndexState;
+  }
+  const dailyRef = doc(db, 'plants', currentPlantId, 'dailySchedules', date);
+  const dailySnap = await getDoc(dailyRef);
+  if (!dailySnap.exists()) {
+    dailyScheduleIndexState = { plantId: currentPlantId, date, scheduled: null, lookupByPress: new Map() };
+    return dailyScheduleIndexState;
+  }
+  const sections = ['page1', 'page2', 'northBayChanges', 'southBayChanges'];
+  const sectionSnaps = await Promise.all(
+    sections.map(s => getDocs(collection(db, 'plants', currentPlantId, 'dailySchedules', date, s)))
+  );
+  const snapsBySection = Object.fromEntries(sections.map((s, idx) => [s, sectionSnaps[idx]]));
+  const { scheduled, lookupByPress } = buildScheduleIndexFromSnaps(snapsBySection);
+  dailyScheduleIndexState = { plantId: currentPlantId, date, scheduled, lookupByPress };
+  return dailyScheduleIndexState;
 }
 
 async function getPressScheduleLookup(machineCode, scheduleDate) {
@@ -129,38 +199,18 @@ async function getPressScheduleLookup(machineCode, scheduleDate) {
     return null;
   }
 
-  const machine = String(machineCode || '').trim();
-  const dailyRef = doc(db, 'plants', currentPlantId, 'dailySchedules', scheduleDate);
-  const dailySnap = await getDoc(dailyRef);
-  if (!dailySnap.exists()) {
+  const machine = normalizeSchedulePress(machineCode);
+  const index = await loadDailyScheduleIndex(scheduleDate);
+  if (!index?.scheduled) {
     scheduleLookupCache.set(cacheKey, null);
     return null;
   }
-
-  const sectionRows = async (section) => {
-    const sectionRef = collection(db, 'plants', currentPlantId, 'dailySchedules', scheduleDate, section);
-    const q = query(sectionRef, where('press', '==', machine));
-    const snap = await getDocs(q);
-    return snap.docs.map(d => ({ id: d.id, ...d.data(), section }));
-  };
-
-  const [page1Rows, page2Rows, northChanges, southChanges] = await Promise.all([
-    sectionRows('page1'),
-    sectionRows('page2'),
-    sectionRows('northBayChanges'),
-    sectionRows('southBayChanges')
-  ]);
-
-  const sortByOrder = (a, b) => Number(a.displayOrder || 0) - Number(b.displayOrder || 0);
-  const mainCandidates = [...page1Rows, ...page2Rows].sort(sortByOrder);
-  const changeRows = [...northChanges, ...southChanges]
-    .sort(sortByOrder)
-    .map(row => ({ ...row, section: row.section === 'northBayChanges' ? 'North Bay Change' : 'South Bay Change' }));
+  const rows = index.lookupByPress.get(machine) || { main: [], changes: [] };
 
   const data = {
-    mainRow: mainCandidates[0] || null,
-    hasChanges: changeRows.length > 0,
-    changes: changeRows
+    mainRow: rows.main[0] || null,
+    hasChanges: rows.changes.length > 0,
+    changes: rows.changes
   };
   scheduleLookupCache.set(cacheKey, data);
   return data;
@@ -419,6 +469,7 @@ const attachmentPhotoCache = new Map(); // issueId -> [{name,dataUrl,...}]
 let attachmentsHydrationToken = 0;
 const issueEventHistoryCache = new Map(); // issueId -> [{status,subStatus,note,dateTime,by}]
 let eventsHydrationToken = 0;
+const issueDetailsHydrationInFlight = new Map(); // issueId -> Promise<void>
 
 async function fetchAttachmentPhotos(issueId) {
   if (attachmentPhotoCache.has(issueId)) return attachmentPhotoCache.get(issueId);
@@ -510,6 +561,35 @@ async function hydrateIssueHistoryFromEvents(issueList) {
   renderIssues();
 }
 
+async function ensureIssueDetailsHydrated(issueId) {
+  if (!issueId) return;
+  if (issueDetailsHydrationInFlight.has(issueId)) return issueDetailsHydrationInFlight.get(issueId);
+  const issue = issues.find(i => i.id === issueId);
+  if (!issue) return;
+
+  const p = (async () => {
+    let changed = false;
+    if (Number(issue.photoCount || 0) > 0 && (!Array.isArray(issue.photos) || issue.photos.length === 0)) {
+      issue.photos = await fetchAttachmentPhotos(issue.id);
+      changed = true;
+    }
+    const hasStatusHistory = Array.isArray(issue.statusHistory) && issue.statusHistory.length > 0;
+    if (issue.schemaVersion === 2 && !hasStatusHistory) {
+      const h = await fetchIssueEventHistory(issue);
+      if (h.length > 0) {
+        issue.eventHistory = h;
+        changed = true;
+      }
+    }
+    if (changed) renderIssues();
+  })().finally(() => {
+    issueDetailsHydrationInFlight.delete(issueId);
+  });
+
+  issueDetailsHydrationInFlight.set(issueId, p);
+  return p;
+}
+
 // ── APP LIFECYCLE HELPERS (Phase 1: structure-only refactor) ──
 function refreshVisibleData() {
   renderIssues();
@@ -570,13 +650,31 @@ async function loadUserPlants() {
     currentPlantName = (userPlants.find(p => p.id === currentPlantId) || {}).name || currentPlantId;
     document.getElementById('plant-name-display').textContent = currentPlantName;
     buildPlantDropdown();
+    _syncCurrentUserMembershipProfile(userPlants.map(p => p.id)).catch(e => {
+      console.warn('Could not sync membership profile fields', e);
+    });
   } catch(e) {
-    console.warn('Error loading plants, using default', e);
-    currentPlantId = 'default';
-    currentPlantName = 'Main Plant';
-    userPlants = [{ id: 'default', name: 'Main Plant', location: '' }];
-    document.getElementById('plant-name-display').textContent = currentPlantName;
+    console.warn('Error loading plants', e);
+    currentPlantId = null;
+    currentPlantName = '';
+    userPlants = [];
+    document.getElementById('plant-name-display').textContent = 'Unable to load plants';
+    throw e;
   }
+}
+
+async function _syncCurrentUserMembershipProfile(plantIds = []) {
+  if (!currentUser?.uid || !Array.isArray(plantIds) || !plantIds.length) return;
+  const batch = writeBatch(db);
+  plantIds.filter(Boolean).forEach(plantId => {
+    batch.set(plantMemberDocRef(plantId, currentUser.uid), {
+      userId: currentUser.uid,
+      displayName: currentUser.displayName || currentUser.email || '',
+      email: currentUser.email || '',
+      photoURL: currentUser.photoURL || ''
+    }, { merge: true });
+  });
+  await batch.commit();
 }
 
 // Write a plant doc + member doc for a brand new plant (no presses config yet)
@@ -587,6 +685,7 @@ async function _initNewPlant(plantId, name, location) {
     userId: currentUser.uid,
     displayName: currentUser.displayName || currentUser.email || '',
     email: currentUser.email || '',
+    photoURL: currentUser.photoURL || '',
     role: 'admin',
     isActive: true,
     addedAt: serverTimestamp(),
@@ -608,6 +707,7 @@ async function _migratePlantsToNewStructure(plants) {
         userId: currentUser.uid,
         displayName: currentUser.displayName || currentUser.email || '',
         email: currentUser.email || '',
+        photoURL: currentUser.photoURL || '',
         role: 'admin',
         isActive: true,
         addedAt: serverTimestamp(),
@@ -628,8 +728,13 @@ async function loadCurrentMember(plantId) {
     const snap = await getDoc(plantMemberDocRef(plantId, currentUser.uid));
     if (snap.exists()) {
       const d = snap.data();
-      currentUserRole = d.role || 'editor';
       currentUserPermissions = { ...DEFAULT_PERMISSIONS, ...(d.permissions || {}) };
+      const normalizedRole = normalizeMemberRole(d.role);
+      const inferAdminFromLegacyPerms = !normalizedRole
+        && currentUserPermissions.canManageStatuses
+        && currentUserPermissions.canManagePresses
+        && currentUserPermissions.canExport;
+      currentUserRole = normalizedRole || (inferAdminFromLegacyPerms ? 'admin' : 'editor');
     } else {
       // No member doc yet — treat as admin (during migration window)
       currentUserRole = 'admin';
@@ -701,6 +806,7 @@ async function switchPlant(plantId) {
   await backfillGlobalXpIfNeeded();
   startGamificationListeners();
   startListener();
+  _startMessagingInboxWatcher();
   refreshVisibleData();
 }
 
@@ -1293,6 +1399,7 @@ function stopGamificationListeners() {
   if (gameLeaderboardUnsubscribe) { gameLeaderboardUnsubscribe(); gameLeaderboardUnsubscribe = null; }
   if (gameConfigUnsubscribe) { gameConfigUnsubscribe(); gameConfigUnsubscribe = null; }
   if (gameBadgesUnsubscribe) { gameBadgesUnsubscribe(); gameBadgesUnsubscribe = null; }
+  gameMissionProgressCache.clear();
 }
 
 function startGamificationListeners() {
@@ -1321,12 +1428,21 @@ function startGamificationListeners() {
   });
   gameMissionsUnsubscribe = onSnapshot(query(gameMissionsCol(), where('isActive', '==', true), orderBy('startsAt', 'desc'), limit(6)), async snap => {
     const missionRows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    const progressRows = await Promise.all(missionRows.map(async mission => {
-      const progressSnap = await getDoc(missionProgressDoc(mission.id, currentUser.uid));
-      return { missionId: mission.id, progress: progressSnap.exists() ? progressSnap.data() : null };
-    }));
-    const progressMap = new Map(progressRows.map(row => [row.missionId, row.progress]));
-    gameMissions = missionRows.map(m => ({ ...m, progress: progressMap.get(m.id) || null }));
+    const activeMissionIds = new Set(missionRows.map(m => m.id));
+    Array.from(gameMissionProgressCache.keys()).forEach(missionId => {
+      if (!activeMissionIds.has(missionId)) gameMissionProgressCache.delete(missionId);
+    });
+    const missingMissionIds = missionRows
+      .map(m => m.id)
+      .filter(missionId => !gameMissionProgressCache.has(missionId));
+    if (missingMissionIds.length) {
+      const progressRows = await Promise.all(missingMissionIds.map(async missionId => {
+        const progressSnap = await getDoc(missionProgressDoc(missionId, currentUser.uid));
+        return { missionId, progress: progressSnap.exists() ? progressSnap.data() : null };
+      }));
+      progressRows.forEach(row => gameMissionProgressCache.set(row.missionId, row.progress));
+    }
+    gameMissions = missionRows.map(m => ({ ...m, progress: gameMissionProgressCache.get(m.id) || null }));
     renderGamePanel();
   });
   gameLeaderboardUnsubscribe = onSnapshot(gameLeaderboardDoc('weekly'), snap => {
@@ -1360,21 +1476,29 @@ async function updateMissionProgress(reason) {
     if (!missionReasonMatches(mission, reason)) continue;
     const threshold = Math.max(1, Number(mission?.objective?.threshold || 1));
     const progressRef = missionProgressDoc(mission.id, currentUser.uid);
-    const progressSnap = await getDoc(progressRef);
-    const current = Number(progressSnap.exists() ? (progressSnap.data().current || 0) : 0);
+    let prevProgress = gameMissionProgressCache.get(mission.id) || null;
+    if (!prevProgress) {
+      const progressSnap = await getDoc(progressRef);
+      prevProgress = progressSnap.exists() ? progressSnap.data() : null;
+    }
+    const current = Number(prevProgress?.current || 0);
     const next = Math.min(threshold, current + 1);
     const completed = next >= threshold;
     const pct = Math.round((next / threshold) * 100);
-    await setDoc(progressRef, {
+    const nextProgress = {
       subjectId: currentUser.uid,
       subjectType: 'user',
       current: next,
       target: threshold,
       percent: pct,
-      completed,
+      completed
+    };
+    await setDoc(progressRef, {
+      ...nextProgress,
       updatedAt: serverTimestamp()
     }, { merge: true });
-    if (completed && !progressSnap.data()?.completed) {
+    gameMissionProgressCache.set(mission.id, nextProgress);
+    if (completed && !prevProgress?.completed) {
       await setDoc(gameUserStatsDoc(currentUser.uid), {
         totals: { missionsCompleted: increment(1) },
         updatedAt: serverTimestamp()
@@ -1744,6 +1868,36 @@ function switchStoreTab(tab) {
 }
 window.switchStoreTab = switchStoreTab;
 window.renderStoreModal = renderStoreModal;
+window.syncBuiltInThemesToFirestore = syncBuiltInThemesToFirestore;
+
+async function syncBuiltInThemesToFirestore() {
+  if (currentUserRole !== 'admin') {
+    showGameToast('Admins only');
+    return;
+  }
+  const syncBtn = document.getElementById('store-sync-themes-btn');
+  if (syncBtn) { syncBtn.disabled = true; syncBtn.textContent = 'Syncing…'; }
+  try {
+    const storeRef = globalStoreConfigDoc();
+    const snap = await getDoc(storeRef);
+    const incomingItems = Array.isArray(snap.data()?.items) ? snap.data().items : [];
+    const builtInIds = new Set(BUILT_IN_THEME_STORE_ITEMS.map(item => item.id));
+    const nonBuiltIns = incomingItems.filter(item => !builtInIds.has(String(item?.id || '').trim()));
+    const mergedItems = [...nonBuiltIns, ...BUILT_IN_THEME_STORE_ITEMS];
+    mergedItems.sort((a, b) => Number(a?.order || 0) - Number(b?.order || 0));
+    await setDoc(storeRef, {
+      items: mergedItems,
+      updatedAt: serverTimestamp(),
+      updatedBy: currentUser?.uid || null
+    }, { merge: true });
+    showGameToast('✅ Built-in themes synced to Firestore');
+  } catch (e) {
+    console.error('Theme sync failed:', e);
+    showGameToast('Could not sync themes');
+  } finally {
+    if (syncBtn) { syncBtn.disabled = false; syncBtn.textContent = 'Sync Built-ins'; }
+  }
+}
 
 function renderStoreModal() {
   updateStoreXpDisplay();
@@ -1765,6 +1919,9 @@ function renderStoreModal() {
           <div class="store-cs-sub">Add theme items from the admin store editor to publish them here.</div>
         </div>`;
   }
+
+  const adminTools = document.getElementById('store-admin-tools');
+  if (adminTools) adminTools.style.display = currentUserRole === 'admin' ? 'flex' : 'none';
 }
 
 function _buildStoreThemeCard(theme, activeKey, spendable) {
@@ -1942,6 +2099,9 @@ function getShiftForTime(date, schedule) {
 }
 
 let issues = [];
+const issuesById = new Map();
+let issueHistoryCursor = null;
+let issueHistoryFetchInFlight = null;
 let issueDisplayLimit = 50;
 const PAGE_SIZE = 50;
 let pendingPhotos = [];   // for add modal
@@ -1970,23 +2130,39 @@ let userLifetimeXp = 0;
 let userXpSpent = 0;
 function userSpendableXp() { return Math.max(0, userLifetimeXp - userXpSpent); }
 
+const BUILT_IN_THEME_DEFS = [
+  { key:'midnight',   name:'Midnight',   label:'🌙 Midnight',   mode:'dark',  colors:['#0d1117','#f97316','#e6edf3'], vars:{ '--bg':'#0d1117','--bg2':'#161b22','--bg3':'#1c2333','--border':'#30363d','--text':'#e6edf3','--text2':'#8b949e','--text3':'#484f58','--accent':'#f97316','--accent2':'#fb923c','--green':'#22c55e','--red':'#ef4444','--blue':'#3b82f6','--yellow':'#eab308','--orange':'#f97316' }, price:0, order:0 },
+  { key:'arctic',     name:'Arctic',     label:'❄️ Arctic',     mode:'light', colors:['#f8fafc','#0ea5e9','#0f172a'], vars:{ '--bg':'#f8fafc','--bg2':'#ffffff','--bg3':'#f1f5f9','--border':'#cbd5e1','--text':'#0f172a','--text2':'#475569','--text3':'#94a3b8','--accent':'#0ea5e9','--accent2':'#38bdf8','--green':'#16a34a','--red':'#dc2626','--blue':'#0284c7','--yellow':'#ca8a04','--orange':'#f97316' }, price:0, order:1 },
+  { key:'forest',     name:'Forest',     label:'🌲 Forest',     mode:'dark',  colors:['#0a120e','#10b981','#d1fae5'], vars:{ '--bg':'#0a120e','--bg2':'#0f1a14','--bg3':'#14241a','--border':'#1e3a28','--text':'#d1fae5','--text2':'#6ee7b7','--text3':'#34d399','--accent':'#10b981','--accent2':'#34d399','--green':'#34d399','--red':'#f87171','--blue':'#22d3ee','--yellow':'#facc15','--orange':'#fb923c' }, price:0, order:2 },
+  { key:'sunset',     name:'Sunset',     label:'🌅 Sunset',     mode:'dark',  colors:['#1a0f0a','#fb923c','#fef3c7'], vars:{ '--bg':'#1a0f0a','--bg2':'#2d1810','--bg3':'#3d2218','--border':'#54321f','--text':'#fef3c7','--text2':'#fcd34d','--text3':'#f59e0b','--accent':'#fb923c','--accent2':'#fdba74','--green':'#34d399','--red':'#f87171','--blue':'#60a5fa','--yellow':'#facc15','--orange':'#fb923c' }, price:75, order:3 },
+  { key:'ocean',      name:'Ocean',      label:'🌊 Ocean',      mode:'dark',  colors:['#0a1628','#38bdf8','#e0f2fe'], vars:{ '--bg':'#0a1628','--bg2':'#0f1e36','--bg3':'#152945','--border':'#1e3a5f','--text':'#e0f2fe','--text2':'#7dd3fc','--text3':'#0ea5e9','--accent':'#38bdf8','--accent2':'#7dd3fc','--green':'#22c55e','--red':'#f87171','--blue':'#38bdf8','--yellow':'#facc15','--orange':'#fb923c' }, price:75, order:4 },
+  { key:'royal',      name:'Royal',      label:'👑 Royal',      mode:'dark',  colors:['#18102a','#c084fc','#f3e8ff'], vars:{ '--bg':'#18102a','--bg2':'#251638','--bg3':'#331f4d','--border':'#4a2d6b','--text':'#f3e8ff','--text2':'#d8b4fe','--text3':'#a78bfa','--accent':'#c084fc','--accent2':'#d8b4fe','--green':'#34d399','--red':'#f87171','--blue':'#60a5fa','--yellow':'#facc15','--orange':'#fb923c' }, price:120, order:5 },
+  { key:'slate',      name:'Slate',      label:'⚡ Slate',      mode:'dark',  colors:['#0f1419','#64748b','#e2e8f0'], vars:{ '--bg':'#0f1419','--bg2':'#1a1f25','--bg3':'#242a31','--border':'#30363d','--text':'#e2e8f0','--text2':'#94a3b8','--text3':'#64748b','--accent':'#64748b','--accent2':'#94a3b8','--green':'#22c55e','--red':'#ef4444','--blue':'#60a5fa','--yellow':'#eab308','--orange':'#f97316' }, price:0, order:6 },
+  { key:'mint',       name:'Mint',       label:'🍃 Mint',       mode:'light', colors:['#f0fdf9','#14b8a6','#064e3b'], vars:{ '--bg':'#f0fdf9','--bg2':'#ffffff','--bg3':'#e6fff8','--border':'#a7f3d0','--text':'#064e3b','--text2':'#065f46','--text3':'#10b981','--accent':'#14b8a6','--accent2':'#10b981','--green':'#059669','--red':'#dc2626','--blue':'#0284c7','--yellow':'#ca8a04','--orange':'#ea580c' }, price:0, order:7 },
+  { key:'cyberpunk',  name:'Cyberpunk',  label:'🎮 Cyberpunk',  mode:'dark',  colors:['#0a0014','#ff00ff','#00ffff'], vars:{ '--bg':'#0a0014','--bg2':'#150028','--bg3':'#1f003d','--border':'#3d0066','--text':'#00ffff','--text2':'#ff00ff','--text3':'#9d00ff','--accent':'#ff00ff','--accent2':'#00ffff','--green':'#00ff88','--red':'#ff4d6d','--blue':'#00ffff','--yellow':'#ffee00','--orange':'#ff7a00' }, price:220, order:8 },
+  { key:'industrial', name:'Industrial', label:'🏭 Industrial', mode:'dark',  colors:['#1a1a1a','#ff6b00','#e5e5e5'], vars:{ '--bg':'#1a1a1a','--bg2':'#252525','--bg3':'#2f2f2f','--border':'#404040','--text':'#e5e5e5','--text2':'#a0a0a0','--text3':'#707070','--accent':'#ff6b00','--accent2':'#ff8a33','--green':'#4ade80','--red':'#f87171','--blue':'#60a5fa','--yellow':'#facc15','--orange':'#ff6b00' }, price:220, order:9 },
+  { key:'starship',   name:'Starship',   label:'🛸 Starship',   mode:'dark',  colors:['#030914','#26d9ff','#ddf6ff'], vars:{ '--bg':'#030914','--bg2':'#071327','--bg3':'#0d1d36','--border':'#16466b','--text':'#ddf6ff','--text2':'#8fc4dd','--text3':'#4a7fa6','--accent':'#26d9ff','--accent2':'#8bf5ff','--green':'#2cff9c','--red':'#ff5a87','--blue':'#26d9ff','--yellow':'#ffd447','--orange':'#ff9f43' }, price:180, order:10 },
+  { key:'starforge',  name:'Starforge',  label:'🧱 Starforge',  mode:'dark',  colors:['#100d0a','#ff9f1c','#f2e6d9'], vars:{ '--bg':'#100d0a','--bg2':'#1a1714','--bg3':'#27211b','--border':'#5f4a35','--text':'#f2e6d9','--text2':'#c8b8a5','--text3':'#8c7762','--accent':'#ff9f1c','--accent2':'#ffd166','--green':'#49d987','--red':'#ff6b5e','--blue':'#9aa6b2','--yellow':'#ffd166','--orange':'#ff9f1c' }, price:200, order:11 },
+  { key:'starmono',   name:'Star Mono',  label:'📟 Star Mono',  mode:'dark',  colors:['#0f1012','#c6ccd3','#eceff3'], vars:{ '--bg':'#0f1012','--bg2':'#17191c','--bg3':'#24282d','--border':'#424951','--text':'#eceff3','--text2':'#b5bcc5','--text3':'#747e89','--accent':'#c6ccd3','--accent2':'#e2e6ea','--green':'#a3a3a3','--red':'#9a9a9a','--blue':'#b8b8b8','--yellow':'#b0b0b0','--orange':'#c0c0c0' }, price:170, order:12 },
+  { key:'engel',      name:'Engel',      label:'🟢 Engel',      mode:'dark',  colors:['#0c1209','#78be20','#e8f5d8'], vars:{ '--bg':'#0c1209','--bg2':'#141e0f','--bg3':'#1b2a14','--border':'#2d4820','--text':'#e8f5d8','--text2':'#8ab870','--text3':'#4d6e38','--accent':'#78be20','--accent2':'#96d63a','--green':'#78be20','--red':'#f87171','--blue':'#00a3b5','--yellow':'#ffc72c','--orange':'#fb923c' }, price:0, order:13 },
+  { key:'cardinals',  name:'Cardinals',  label:'🔴 Cardinals',  mode:'dark',  colors:['#0e0303','#c8102e','#f5e8e8'], vars:{ '--bg':'#0e0303','--bg2':'#1c0808','--bg3':'#260c0c','--border':'#3d1515','--text':'#f5e8e8','--text2':'#c48a8a','--text3':'#7a4444','--accent':'#c8102e','--accent2':'#e81f42','--green':'#22c55e','--red':'#ff4444','--blue':'#60a5fa','--yellow':'#eab308','--orange':'#f97316' }, price:25, order:14 },
+  { key:'wildcats',   name:'Wildcats',   label:'🔵 Wildcats',   mode:'dark',  colors:['#020814','#0033a0','#e8f0ff'], vars:{ '--bg':'#020814','--bg2':'#051228','--bg3':'#071a38','--border':'#0d2d5e','--text':'#e8f0ff','--text2':'#7da8e8','--text3':'#3d6ab0','--accent':'#0033a0','--accent2':'#1a52cc','--green':'#22c55e','--red':'#ef4444','--blue':'#3b82f6','--yellow':'#eab308','--orange':'#f97316' }, price:25, order:15 }
+];
+const BUILT_IN_THEME_STORE_ITEMS = BUILT_IN_THEME_DEFS.map(theme => ({
+  id: `theme_${theme.key}`,
+  type: 'theme',
+  themeKey: theme.key,
+  customVars: null,
+  name: theme.name,
+  price: Number(theme.price || 0),
+  isActive: true,
+  order: Number(theme.order || 0)
+}));
+
 const DEFAULT_STORE_ITEMS = [
   // Canonical store catalog lives here. normalizeStoreItems() seeds these defaults
-  // before applying any Firestore config, so adding a new theme here does not
-  // require running scripts/add-store-themes.mjs.
-  { id: 'theme_midnight',   type: 'theme', themeKey: 'midnight',   customVars: null, name: 'Midnight',   price: 0,   isActive: true, order: 0 },
-  { id: 'theme_arctic',     type: 'theme', themeKey: 'arctic',     customVars: null, name: 'Arctic',     price: 0,   isActive: true, order: 1 },
-  { id: 'theme_forest',     type: 'theme', themeKey: 'forest',     customVars: null, name: 'Forest',     price: 0,   isActive: true, order: 2 },
-  { id: 'theme_sunset',     type: 'theme', themeKey: 'sunset',     customVars: null, name: 'Sunset',     price: 75,  isActive: true, order: 3 },
-  { id: 'theme_ocean',      type: 'theme', themeKey: 'ocean',      customVars: null, name: 'Ocean',      price: 75,  isActive: true, order: 4 },
-  { id: 'theme_royal',      type: 'theme', themeKey: 'royal',      customVars: null, name: 'Royal',      price: 120, isActive: true, order: 5 },
-  { id: 'theme_slate',      type: 'theme', themeKey: 'slate',      customVars: null, name: 'Slate',      price: 0,   isActive: true, order: 6 },
-  { id: 'theme_mint',       type: 'theme', themeKey: 'mint',       customVars: null, name: 'Mint',       price: 0,   isActive: true, order: 7 },
-  { id: 'theme_cyberpunk',  type: 'theme', themeKey: 'cyberpunk',  customVars: null, name: 'Cyberpunk',  price: 220, isActive: true, order: 8 },
-  { id: 'theme_industrial', type: 'theme', themeKey: 'industrial', customVars: null, name: 'Industrial', price: 220, isActive: true, order: 9 },
-  { id: 'theme_engel',      type: 'theme', themeKey: 'engel',      customVars: null, name: 'Engel',      price: 0,   isActive: true, order: 10 },
-  { id: 'theme_cardinals',  type: 'theme', themeKey: 'cardinals',  customVars: null, name: 'Cardinals',  price: 25,  isActive: true, order: 11 },
-  { id: 'theme_wildcats',   type: 'theme', themeKey: 'wildcats',   customVars: null, name: 'Wildcats',   price: 25,  isActive: true, order: 12 },
+  // before applying any Firestore config, so new code-defined items still appear.
+  ...BUILT_IN_THEME_STORE_ITEMS,
   {
     id: 'theme_nocturne_slate',
     type: 'theme',
@@ -2010,7 +2186,7 @@ const DEFAULT_STORE_ITEMS = [
     name: 'Nocturne Slate',
     price: 3,
     isActive: true,
-    order: 13
+    order: 16
   },
 ];
 
@@ -2026,6 +2202,7 @@ let gameBadgesUnsubscribe = null;
 let gamePrevLevel = 0;
 const gameCapTracker = new Map();
 const gameMissionPrevPct = new Map();
+const gameMissionProgressCache = new Map();
 let gameBadgeDefs = [];
 let gameUserBadges = {};
 
@@ -2103,7 +2280,7 @@ async function bootstrapSignedInSession(user) {
 
   // Write user lookup record so admins can find this user by email when adding to plants.
   // Fire-and-forget — failure is non-fatal.
-  if (user.email) {
+  if (user.email && shouldSyncUserLookup(user.email)) {
     setDoc(doc(db, 'userLookup', user.email.toLowerCase()), {
       uid: user.uid,
       displayName: user.displayName || '',
@@ -2122,18 +2299,36 @@ async function bootstrapSignedInSession(user) {
   await backfillGlobalXpIfNeeded();
   startGamificationListeners();
   startListener();
+  _startMessagingInboxWatcher();
+  _bindMessagingKeyboardShortcut();
   setTodayDate();
   if (!localStorage.getItem(TUTORIAL_KEY)) setTimeout(() => window.openTutorial(), 900);
 }
 
 onAuthStateChanged(auth, async user => {
   if (user) {
-    await bootstrapSignedInSession(user);
+    try {
+      await bootstrapSignedInSession(user);
+    } catch (e) {
+      console.error('Session bootstrap failed:', e);
+      setSyncStatus('err', 'Could not load your plant data. Check connection and retry.');
+      document.getElementById('issues-list').innerHTML = `
+        <div class="empty-state">
+          <div class="empty-state-icon">⚠️</div>
+          <div class="empty-state-text" style="margin-bottom:12px;">Unable to load your data right now.</div>
+          <button onclick="window.location.reload()" style="font-size:13px;padding:8px 18px;border-radius:8px;border:1px solid var(--accent);background:transparent;color:var(--accent);cursor:pointer;font-family:'Nunito',sans-serif;">Reload</button>
+        </div>`;
+    }
   } else {
+    if (_messagingInboxUnsubscribe) { _messagingInboxUnsubscribe(); _messagingInboxUnsubscribe = null; }
+    _updateMessagingEntryBadges(0);
     currentUser = null;
     document.getElementById('login-screen').classList.add('visible');
     document.getElementById('app').classList.remove('visible');
     issues = [];
+    issuesById.clear();
+    issueHistoryCursor = null;
+    issueHistoryFetchInFlight = null;
     attachmentPhotoCache.clear();
     issueEventHistoryCache.clear();
     attachmentsHydrationToken++;
@@ -2145,27 +2340,79 @@ onAuthStateChanged(auth, async user => {
 
 let retryTimeout = null;
 let retryCount = 0;
+let issueBootstrapTimeout = null;
+
+function buildIssueFromSnapshot(docSnap) {
+  const data = docSnap.data() || {};
+  const cachedPhotos = attachmentPhotoCache.get(docSnap.id);
+  const cachedHistory = issueEventHistoryCache.get(docSnap.id);
+  return {
+    id: docSnap.id,
+    ...data,
+    machine: data.machine || data.machineCode || '',
+    resolved: typeof data.resolved === 'boolean' ? data.resolved : !!data.lifecycle?.isResolved,
+    photos: Array.isArray(data.photos) && data.photos.length ? data.photos : (cachedPhotos || data.photos || []),
+    eventHistory: cachedHistory || data.eventHistory || []
+  };
+}
+
+function rebuildIssuesArrayFromMap() {
+  issues = Array.from(issuesById.values());
+}
+
+async function loadIssueHistoryPage() {
+  if (!currentPlantId || !issueHistoryCursor || issueHistoryFetchInFlight) return;
+  const cursor = issueHistoryCursor;
+  issueHistoryFetchInFlight = (async () => {
+    const q = query(plantCol('issues'), orderBy('createdAt', 'desc'), startAfter(cursor), limit(HISTORY_ISSUES_PAGE_SIZE));
+    const snap = await getDocs(q);
+    if (snap.empty) {
+      issueHistoryCursor = null;
+      return;
+    }
+    snap.docs.forEach(d => {
+      if (!issuesById.has(d.id)) issuesById.set(d.id, buildIssueFromSnapshot(d));
+    });
+    issueHistoryCursor = snap.docs[snap.docs.length - 1] || null;
+    rebuildIssuesArrayFromMap();
+    refreshVisibleData();
+  })().finally(() => {
+    issueHistoryFetchInFlight = null;
+  });
+  return issueHistoryFetchInFlight;
+}
 
 function startListener() {
   if (unsubscribe) unsubscribe();
   if (retryTimeout) { clearTimeout(retryTimeout); retryTimeout = null; }
+  if (issueBootstrapTimeout) { clearTimeout(issueBootstrapTimeout); issueBootstrapTimeout = null; }
   if (!currentPlantId) return;
+  issuesById.clear();
+  issueHistoryCursor = null;
+  issueHistoryFetchInFlight = null;
 
-  const q = query(plantCol('issues'), orderBy('createdAt', 'desc'), limit(500));
+  const q = query(plantCol('issues'), orderBy('createdAt', 'desc'), limit(MAX_LIVE_ISSUES));
+  let firstSnapshotReceived = false;
   unsubscribe = onSnapshot(q, snap => {
+    firstSnapshotReceived = true;
+    if (issueBootstrapTimeout) { clearTimeout(issueBootstrapTimeout); issueBootstrapTimeout = null; }
     retryCount = 0; // reset on success
-    issues = snap.docs.map(d => {
-      const data = d.data();
-      return {
-        id: d.id,
-        ...data,
-        machine: data.machine || data.machineCode || '',
-        resolved: typeof data.resolved === 'boolean' ? data.resolved : !!data.lifecycle?.isResolved
-      };
+    snap.docChanges().forEach(change => {
+      if (change.type === 'removed') {
+        const removedIssueId = change.doc.id;
+        issuesById.delete(removedIssueId);
+        issueEventHistoryCache.delete(removedIssueId);
+        issueDetailsHydrationInFlight.delete(removedIssueId);
+        return;
+      }
+      issuesById.set(change.doc.id, buildIssueFromSnapshot(change.doc));
     });
+    rebuildIssuesArrayFromMap();
     refreshVisibleData();
-    hydrateIssuePhotosFromAttachments(issues);
-    hydrateIssueHistoryFromEvents(issues);
+    if (!issueHistoryCursor && snap.docs.length) {
+      issueHistoryCursor = snap.docs[snap.docs.length - 1];
+      loadIssueHistoryPage().catch(() => {});
+    }
     setSyncStatus('ok', 'Live — synced across all devices');
   }, err => {
     console.error('Snapshot error:', err);
@@ -2181,6 +2428,24 @@ function startListener() {
       </div>`;
     retryTimeout = setTimeout(() => startListener(), delay);
   });
+  issueBootstrapTimeout = setTimeout(async () => {
+    if (firstSnapshotReceived || !currentPlantId) return;
+    try {
+      const snap = await getDocs(q);
+      if (firstSnapshotReceived || !currentPlantId) return;
+      issuesById.clear();
+      snap.docs.forEach(d => issuesById.set(d.id, buildIssueFromSnapshot(d)));
+      rebuildIssuesArrayFromMap();
+      refreshVisibleData();
+      if (snap.docs.length) {
+        issueHistoryCursor = snap.docs[snap.docs.length - 1];
+        loadIssueHistoryPage().catch(() => {});
+      }
+      setSyncStatus('ok', 'Live connection delayed — loaded cached/latest data');
+    } catch (e) {
+      console.warn('Bootstrap issues fallback read failed:', e);
+    }
+  }, 6000);
 }
 
 // ── SYNC ──
@@ -3307,41 +3572,84 @@ function getMutableStatusHistory(issue) {
   if (Array.isArray(issue.eventHistory) && issue.eventHistory.length > 0) {
     return issue.eventHistory.map(entry => ({ ...entry }));
   }
+  if (issue?.currentStatus?.statusKey || issue?.status || issue?.dateTime) {
+    return [{
+      status: currentStatusKey(issue),
+      subStatus: issue.currentStatus?.subStatusKey || issue.subStatus || '',
+      note: issue.currentStatus?.notePreview || '',
+      dateTime: issue.currentStatus?.enteredDateTime || issue.dateTime || fmtDate(new Date()),
+      by: issue.currentStatus?.enteredBy?.name || issue.userName || ''
+    }];
+  }
   return [];
+}
+
+async function getLatestIssueForStatusMutation(issueId, fallbackIssue) {
+  try {
+    const snap = await getDoc(plantDoc('issues', issueId));
+    if (!snap.exists()) return fallbackIssue || null;
+    return { ...(fallbackIssue || {}), ...snap.data() };
+  } catch (_) {
+    return fallbackIssue || null;
+  }
 }
 
 // Add a new status entry to history
 window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
   if (!currentUserPermissions.canEditIssue) return;
-  const issue = issues.find(i=>i.id===id);
+  const issue = issues.find(i => i.id === id);
   if (!issue) return;
-  const prev = currentStatus(issue);
-  const history = getMutableStatusHistory(issue);
-  const entry = { status, subStatus: subStatus||'', note: note||'', dateTime: dateTime || fmtDate(new Date()), by: currentUser.displayName||currentUser.email };
-  history.push(entry);
+  const entry = {
+    status,
+    subStatus: subStatus || '',
+    note: note || '',
+    dateTime: dateTime || fmtDate(new Date()),
+    by: currentUser.displayName || currentUser.email
+  };
+  let prev = currentStatus(issue);
   try {
-    const issuePatch = {
-      statusHistory: history,
-      ...(status === 'resolved' ? { workflowState: 'finished', 'workflowStateHistory.finished': { by: currentActor(), at: serverTimestamp() } } : {}),
-      ...buildIssueV2Compat({
-        machineCode: issue.machine || issue.machineCode || '',
-        statusKey: status,
-        subStatus: subStatus || '',
-        statusDateTime: entry.dateTime,
-        note: note || '',
-        baseIssue: issue
-      })
-    };
-    const batch = writeBatch(db);
-    batch.update(plantDoc('issues',id), issuePatch);
-    queueIssueEvent(batch, id, 'status_changed', {
-      fromStatusKey: prev?.status || currentStatusKey(issue),
-      fromSubStatusKey: prev?.subStatus || '',
-      toStatusKey: status,
-      toSubStatusKey: subStatus || '',
-      note: note || ''
+    await runTransaction(db, async tx => {
+      const ref = plantDoc('issues', id);
+      const snap = await tx.get(ref);
+      const base = snap.exists() ? { id, ...snap.data() } : issue;
+      prev = currentStatus(base || issue);
+      const history = getMutableStatusHistory(base || issue);
+      history.push(entry);
+      const prevWorkflowState = (base?.workflowState || null);
+      const issuePatch = {
+        statusHistory: history,
+        ...(status === 'resolved'
+          ? { workflowState: 'finished', 'workflowStateHistory.finished': { by: currentActor(), at: serverTimestamp() } }
+          : { workflowState: null }),
+        ...(status !== 'resolved' && prev?.status && prevWorkflowState
+          ? { [`workflowStateByStatus.${prev.status}`]: prevWorkflowState }
+          : {}),
+        ...(status !== 'resolved' ? { [`workflowStateByStatus.${status}`]: null } : {}),
+        ...buildIssueV2Compat({
+          machineCode: base?.machine || base?.machineCode || issue.machine || '',
+          statusKey: status,
+          subStatus: subStatus || '',
+          statusDateTime: entry.dateTime,
+          note: note || '',
+          baseIssue: base || issue
+        })
+      };
+      tx.update(ref, issuePatch);
     });
-    await batch.commit();
+
+    await addDoc(issueEventsCol(id), {
+      type: 'status_changed',
+      eventAt: serverTimestamp(),
+      actor: currentActor(),
+      payload: {
+        fromStatusKey: prev?.status || currentStatusKey(issue),
+        fromSubStatusKey: prev?.subStatus || '',
+        toStatusKey: status,
+        toSubStatusKey: subStatus || '',
+        note: note || ''
+      },
+      schemaVersion: 2
+    });
     issueEventHistoryCache.delete(id);
     await awardGamification('status_changed_valid', { issueId: id, dedupeSuffix: entry.dateTime || String(Date.now()), tags: ['status:changed', `status:${status}`] });
     if (status === 'resolved') await awardGamification('issue_resolved', { issueId: id, dedupeSuffix: 'status-resolved', tags: ['issue:resolved', 'status:resolved'] });
@@ -3352,20 +3660,21 @@ window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
 window.updateStatusEntry = async (id, idx, status, subStatus, note, dateTime) => {
   const issue = issues.find(i=>i.id===id);
   if (!issue) return;
-  const history = getMutableStatusHistory(issue);
+  const latestIssue = await getLatestIssueForStatusMutation(id, issue);
+  const history = getMutableStatusHistory(latestIssue || issue);
   // idx beyond real history means editing a synthetic current-status entry — materialize it first
   if (idx >= history.length) {
     history.push({
-      status: currentStatusKey(issue),
-      subStatus: issue.currentStatus?.subStatusKey || '',
-      note: issue.currentStatus?.notePreview || '',
-      dateTime: issue.currentStatus?.enteredDateTime || '',
-      by: issue.currentStatus?.enteredBy?.name || ''
+      status: currentStatusKey(latestIssue || issue),
+      subStatus: (latestIssue || issue).currentStatus?.subStatusKey || '',
+      note: (latestIssue || issue).currentStatus?.notePreview || '',
+      dateTime: (latestIssue || issue).currentStatus?.enteredDateTime || '',
+      by: (latestIssue || issue).currentStatus?.enteredBy?.name || ''
     });
     idx = history.length - 1;
   }
   if (!history[idx]) return;
-  const prev = currentStatus(issue);
+  const prev = currentStatus(latestIssue || issue);
   history[idx] = { ...history[idx], status, subStatus: subStatus||'', note: note||'' };
   if (dateTime) history[idx].dateTime = dateTime;
   // Recalculate current status from last entry
@@ -3379,14 +3688,14 @@ window.updateStatusEntry = async (id, idx, status, subStatus, note, dateTime) =>
         subStatus: last.subStatus || '',
         statusDateTime: last.dateTime || fmtDate(new Date()),
         note: last.note || '',
-        baseIssue: issue
+        baseIssue: latestIssue || issue
       })
     };
     const batch = writeBatch(db);
     batch.update(plantDoc('issues',id), issuePatch);
     if ((prev?.status || 'open') !== (last.status || 'open') || (prev?.subStatus || '') !== (last.subStatus || '')) {
       queueIssueEvent(batch, id, 'status_changed', {
-        fromStatusKey: prev?.status || currentStatusKey(issue),
+        fromStatusKey: prev?.status || currentStatusKey(latestIssue || issue),
         fromSubStatusKey: prev?.subStatus || '',
         toStatusKey: last.status || 'open',
         toSubStatusKey: last.subStatus || '',
@@ -3402,8 +3711,9 @@ window.updateStatusEntry = async (id, idx, status, subStatus, note, dateTime) =>
 window.removeStatusEntry = async (id, idx) => {
   const issue = issues.find(i=>i.id===id);
   if (!issue) return;
-  const history = getMutableStatusHistory(issue);
-  const prev = currentStatus(issue);
+  const latestIssue = await getLatestIssueForStatusMutation(id, issue);
+  const history = getMutableStatusHistory(latestIssue || issue);
+  const prev = currentStatus(latestIssue || issue);
   if (history.length <= 1) return;
   history.splice(idx, 1);
   const last = history[history.length - 1];
@@ -3416,14 +3726,14 @@ window.removeStatusEntry = async (id, idx) => {
         subStatus: last.subStatus || '',
         statusDateTime: last.dateTime || fmtDate(new Date()),
         note: last.note || '',
-        baseIssue: issue
+        baseIssue: latestIssue || issue
       })
     };
     const batch = writeBatch(db);
     batch.update(plantDoc('issues',id), issuePatch);
     if ((prev?.status || 'open') !== (last.status || 'open') || (prev?.subStatus || '') !== (last.subStatus || '')) {
       queueIssueEvent(batch, id, 'status_changed', {
-        fromStatusKey: prev?.status || currentStatusKey(issue),
+        fromStatusKey: prev?.status || currentStatusKey(latestIssue || issue),
         fromSubStatusKey: prev?.subStatus || '',
         toStatusKey: last.status || 'open',
         toSubStatusKey: last.subStatus || '',
@@ -3684,6 +3994,8 @@ window.setWorkflowState = async (id, state) => {
   const validStates = ['called', 'accepted', 'in-progress', 'finished'];
   if (!validStates.includes(state)) return;
   const actor = currentActor();
+  const issue = issues.find(i => i.id === id);
+  if (issue && (issue.workflowState || 'called') === state) return;
   try {
     await updateDoc(plantDoc('issues', id), {
       workflowState: state,
@@ -3702,6 +4014,10 @@ window.setWorkflowStateForStatus = async (issueId, statusKey, state) => {
   const actor = currentActor();
   const issue = issues.find(i => i.id === issueId);
   const primaryKey = issue ? currentStatusKey(issue) : null;
+  const current = (statusKey === primaryKey)
+    ? (issue?.workflowState || null)
+    : (issue?.workflowStateByStatus?.[statusKey] || null);
+  if (current === state) return;
   try {
     const patch = {
       [`workflowStateByStatus.${statusKey}`]: state,
@@ -3725,9 +4041,10 @@ window.cycleWorkflowStateForStatus = async (issueId, statusKey) => {
   if (!issue) return;
   const primaryKey = currentStatusKey(issue);
   const current = statusKey === primaryKey
-    ? (issue.workflowState || 'called')
-    : (issue.workflowStateByStatus?.[statusKey] || 'called');
-  const next = states[(Math.max(0, states.indexOf(current)) + 1) % states.length];
+    ? (issue.workflowState || null)
+    : (issue.workflowStateByStatus?.[statusKey] || null);
+  const currentIdx = states.indexOf(current);
+  const next = currentIdx < 0 ? 'called' : states[(currentIdx + 1) % states.length];
   await setWorkflowStateForStatus(issueId, statusKey, next);
 };
 
@@ -3770,11 +4087,393 @@ window.togglePriority = async (id) => {
   }
 };
 
+async function _issueShareFiles(issue, maxFiles = 3) {
+  const photos = Array.isArray(issue?.photos) ? issue.photos.filter(Boolean).slice(0, maxFiles) : [];
+  const files = [];
+  for (let idx = 0; idx < photos.length; idx++) {
+    const photo = photos[idx];
+    const source = photo?.dataUrl || photo?.url || '';
+    if (!source) continue;
+    try {
+      const res = await fetch(source);
+      const blob = await res.blob();
+      const extFromType = blob.type === 'image/png' ? 'png' : 'jpg';
+      const fileName = photo?.name || `issue-photo-${idx + 1}.${extFromType}`;
+      files.push(new File([blob], fileName, { type: blob.type || 'image/jpeg' }));
+    } catch (_) {
+      // Ignore individual photo conversion failures and continue with remaining images.
+    }
+  }
+  return files;
+}
+
+async function _tryNativeIssueShare(issue, messageWithLink) {
+  if (!navigator?.share) return false;
+  const files = await _issueShareFiles(issue);
+  const title = `Issue ${issue?.machine || issue?.id || ''}`.trim();
+  const payload = { title, text: messageWithLink };
+  if (files.length && navigator?.canShare?.({ files })) payload.files = files;
+  try {
+    await navigator.share(payload);
+    return true;
+  } catch (err) {
+    // User cancellation isn't an app error; just continue into text-app fallback.
+    const aborted = err?.name === 'AbortError';
+    if (!aborted) console.warn('Native share failed, falling back to sms: URI.', err);
+    return false;
+  }
+}
+
+async function _issueMmsAttachments(issue, maxFiles = 3) {
+  let photoList = Array.isArray(issue?.photos) ? issue.photos.filter(Boolean) : [];
+  if (!photoList.length && Number(issue?.photoCount || 0) > 0 && issue?.id) {
+    try {
+      const hydrated = await fetchAttachmentPhotos(issue.id);
+      if (Array.isArray(hydrated) && hydrated.length) {
+        photoList = hydrated.filter(Boolean);
+        issue.photos = photoList;
+      }
+    } catch (_) {
+      // Keep going; we'll send text-only if attachments cannot be hydrated.
+    }
+  }
+  const photos = photoList.slice(0, maxFiles);
+  const attachments = [];
+  for (let idx = 0; idx < photos.length; idx++) {
+    const photo = photos[idx];
+    const source = photo?.dataUrl || photo?.url || '';
+    if (!source) continue;
+    try {
+      if (String(source).startsWith('data:')) {
+      attachments.push({
+        name: photo?.name || `issue-photo-${idx + 1}.jpg`,
+        type: String(source).slice(5, String(source).indexOf(';')) || 'image/jpeg',
+          dataUrl: source,
+          url: photo?.url || ''
+        });
+        continue;
+      }
+      const res = await fetch(source);
+      const blob = await res.blob();
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+      if (!dataUrl) continue;
+      attachments.push({
+        name: photo?.name || `issue-photo-${idx + 1}.${blob.type === 'image/png' ? 'png' : 'jpg'}`,
+        type: blob.type || 'image/jpeg',
+        dataUrl,
+        url: source
+      });
+    } catch (_) {
+      // Skip photos that fail to fetch/convert so send can still proceed.
+    }
+  }
+  return attachments;
+}
+
+const SMS_COMPOSER_STATE = {
+  issueId: null,
+  issue: null,
+  messageWithLink: '',
+  recipientOptions: [],
+  selectedRecipientPhones: new Set()
+};
+
+function _smsSanitizePhone(value) {
+  return String(value || '').replace(/[^\d+]/g, '');
+}
+
+function _smsNormalizeE164(value) {
+  const cleaned = _smsSanitizePhone(value);
+  if (!cleaned) return '';
+  if (cleaned.startsWith('+')) return cleaned;
+  const digitsOnly = cleaned.replace(/\D/g, '');
+  if (!digitsOnly) return '';
+  if (digitsOnly.length === 10) return `+1${digitsOnly}`;
+  if (digitsOnly.length === 11 && digitsOnly.startsWith('1')) return `+${digitsOnly}`;
+  return `+${digitsOnly}`;
+}
+
+function _smsRecipientKey(value) {
+  return _smsNormalizeE164(value) || _smsSanitizePhone(value);
+}
+
+function _smsExtractPhones(member) {
+  const candidates = [
+    member?.phone,
+    member?.phoneNumber,
+    member?.mobile,
+    member?.mobilePhone,
+    member?.smsPhone,
+    member?.profile?.phone,
+    member?.profile?.phoneNumber
+  ];
+  return candidates
+    .map(_smsSanitizePhone)
+    .filter(Boolean);
+}
+
+async function _smsRecipientOptions() {
+  if (!currentPlantId) return [];
+  try {
+    const membersSnap = await getDocs(collection(db, 'plants', currentPlantId, 'members'));
+    return membersSnap.docs
+      .map(d => ({ uid: d.id, ...d.data() }))
+      .filter(m => m.isActive !== false)
+      .map(m => {
+        const phones = _smsExtractPhones(m);
+        return {
+          uid: m.uid || '',
+          name: m.displayName || m.name || m.email || 'Unknown',
+          phone: phones[0] || ''
+        };
+      })
+      .filter(m => m.phone)
+      .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  } catch (err) {
+    console.warn('Unable to load text recipients from members.', err);
+    return [];
+  }
+}
+
+function _renderSmsRecipientPicker() {
+  const wrap = document.getElementById('sms-recipient-picker');
+  if (!wrap) return;
+  if (!SMS_COMPOSER_STATE.recipientOptions.length) {
+    wrap.innerHTML = '<div class="sms-recipient-empty">No saved member phone numbers found. Enter numbers manually below.</div>';
+    return;
+  }
+  wrap.innerHTML = SMS_COMPOSER_STATE.recipientOptions.map((r, idx) => `
+    <label class="sms-recipient-row">
+      <input type="checkbox" data-sms-recipient="${idx}" ${SMS_COMPOSER_STATE.selectedRecipientPhones.has(_smsRecipientKey(r.phone)) ? 'checked' : ''}>
+      <span>${esc(r.name)}</span>
+      <span class="sms-recipient-phone">${esc(r.phone)}</span>
+    </label>
+  `).join('');
+  wrap.querySelectorAll('[data-sms-recipient]').forEach(el => {
+    el.addEventListener('change', () => {
+      const idx = Number(el.getAttribute('data-sms-recipient'));
+      const phone = SMS_COMPOSER_STATE.recipientOptions[idx]?.phone || '';
+      const key = _smsRecipientKey(phone);
+      if (!key) return;
+      if (el.checked) SMS_COMPOSER_STATE.selectedRecipientPhones.add(key);
+      else SMS_COMPOSER_STATE.selectedRecipientPhones.delete(key);
+    });
+  });
+}
+
+window.addManualSmsRecipients = () => {
+  const manualInput = document.getElementById('sms-manual-phone');
+  const raw = String(manualInput?.value || '');
+  const numbers = raw
+    .split(/[,\n;]/)
+    .map(_smsNormalizeE164)
+    .filter(Boolean);
+
+  if (!numbers.length) {
+    alert('Enter at least one valid phone number to add.');
+    return;
+  }
+
+  const existingByKey = new Set(SMS_COMPOSER_STATE.recipientOptions.map(r => _smsRecipientKey(r.phone)).filter(Boolean));
+  let addedCount = 0;
+  numbers.forEach((phone, idx) => {
+    const key = _smsRecipientKey(phone);
+    if (!key) return;
+    SMS_COMPOSER_STATE.selectedRecipientPhones.add(key);
+    if (existingByKey.has(key)) return;
+    SMS_COMPOSER_STATE.recipientOptions.push({
+      uid: `manual-${Date.now()}-${idx}`,
+      name: 'Manual Number',
+      phone
+    });
+    existingByKey.add(key);
+    addedCount++;
+  });
+
+  _renderSmsRecipientPicker();
+  if (manualInput) manualInput.value = '';
+  if (addedCount === 0) alert('Those number(s) are already in the recipient picker and were selected.');
+};
+
+async function _performSmsFallback(messageWithLink, recipientPhones = []) {
+  const to = Array.isArray(recipientPhones) ? recipientPhones.filter(Boolean).join(',') : '';
+  // `sms:` intentionally opens the platform texting app; on many devices/carriers this can route over RCS automatically.
+  const smsUri = to
+    ? `sms:${encodeURIComponent(to)}?&body=${encodeURIComponent(messageWithLink)}`
+    : `sms:?&body=${encodeURIComponent(messageWithLink)}`;
+  const isMobile = /android|iphone|ipad|ipod|windows phone|mobile/i.test(navigator.userAgent || '');
+  if (!isMobile) {
+    try {
+      await navigator.clipboard?.writeText(messageWithLink);
+      alert('Texting apps are usually unavailable on desktop. Message copied to clipboard.');
+    } catch (_) {
+      prompt('Copy this message for texting:', messageWithLink);
+    }
+    return;
+  }
+
+  try {
+    window.location.href = smsUri;
+  } catch (_) {
+    try {
+      await navigator.clipboard?.writeText(messageWithLink);
+      alert('Could not open your texting app. Message copied to clipboard.');
+    } catch (__){
+      prompt('Could not open texting app. Copy this message:', messageWithLink);
+    }
+  }
+}
+
+async function _submitViaBackendOrFallback() {
+  const includePhotos = Boolean(document.getElementById('sms-include-photos')?.checked);
+  const manualNumbers = String(document.getElementById('sms-manual-phone')?.value || '')
+    .split(/[,\n;]/)
+    .map(_smsNormalizeE164)
+    .filter(Boolean);
+  const selectedNumbers = Array.from(document.querySelectorAll('[data-sms-recipient]:checked'))
+    .map(el => SMS_COMPOSER_STATE.recipientOptions[Number(el.getAttribute('data-sms-recipient'))]?.phone || '')
+    .map(_smsNormalizeE164)
+    .filter(Boolean);
+  const recipientPhones = Array.from(new Set([...selectedNumbers, ...manualNumbers]));
+  const tryNativeShare = async () => {
+    if (!includePhotos) return false;
+    return _tryNativeIssueShare(SMS_COMPOSER_STATE.issue, SMS_COMPOSER_STATE.messageWithLink);
+  };
+
+  if (!recipientPhones.length) {
+    const shared = await tryNativeShare();
+    if (shared) return;
+    await _performSmsFallback(SMS_COMPOSER_STATE.messageWithLink);
+    return;
+  }
+
+  const backendSend = typeof window.sendIssueMms === 'function' ? window.sendIssueMms : null;
+  if (!backendSend) {
+    const shared = await tryNativeShare();
+    if (shared) return;
+    if (includePhotos) {
+      alert('Photo attachments require native share support or an MMS backend. Falling back to text-only compose.');
+    }
+    await _performSmsFallback(SMS_COMPOSER_STATE.messageWithLink, recipientPhones);
+    return;
+  }
+
+  try {
+    const attachments = includePhotos ? await _issueMmsAttachments(SMS_COMPOSER_STATE.issue) : [];
+    if (includePhotos && !attachments.length) {
+      console.warn('Include photos was selected, but no issue photos were available to attach.');
+    }
+    const attachmentUrls = attachments.map(a => a.url || a.dataUrl).filter(Boolean);
+    const payload = {
+      issueId: SMS_COMPOSER_STATE.issueId,
+      recipients: recipientPhones,
+      recipientPhones,
+      phoneNumbers: recipientPhones,
+      phones: recipientPhones,
+      to: recipientPhones,
+      toNumbers: recipientPhones,
+      includePhotos,
+      body: SMS_COMPOSER_STATE.messageWithLink,
+      message: SMS_COMPOSER_STATE.messageWithLink,
+      text: SMS_COMPOSER_STATE.messageWithLink,
+      issue: SMS_COMPOSER_STATE.issue,
+      attachments,
+      images: attachments,
+      photos: attachments,
+      media: attachmentUrls,
+      mediaUrls: attachmentUrls,
+      imageUrls: attachments.map(a => a.url).filter(Boolean)
+    };
+    const result = await backendSend(payload);
+    const sentCount = Number(result?.sentCount || recipientPhones.length || 0);
+    alert(`Sent via ${includePhotos ? 'MMS' : 'text (SMS/RCS based on device + carrier)'} to ${sentCount} recipient${sentCount === 1 ? '' : 's'}.`);
+  } catch (err) {
+    console.warn('sendIssueMms failed; falling back to sms: URI.', err);
+    const shared = await tryNativeShare();
+    if (shared) return;
+    if (includePhotos) {
+      alert('Could not send MMS attachments from backend. Falling back to text-only compose.');
+    }
+    await _performSmsFallback(SMS_COMPOSER_STATE.messageWithLink, recipientPhones);
+  }
+}
+
+window.closeSmsComposer = async (fallback = false) => {
+  document.getElementById('sms-compose-modal')?.classList.remove('visible');
+  if (fallback && SMS_COMPOSER_STATE.messageWithLink) {
+    await _performSmsFallback(SMS_COMPOSER_STATE.messageWithLink);
+  }
+};
+
+window.submitSmsComposer = async () => {
+  const sendBtn = document.getElementById('sms-send-btn');
+  if (sendBtn) {
+    sendBtn.disabled = true;
+    sendBtn.textContent = 'Sending…';
+  }
+  try {
+    await _submitViaBackendOrFallback();
+    await closeSmsComposer(false);
+  } finally {
+    if (sendBtn) {
+      sendBtn.disabled = false;
+      sendBtn.textContent = 'Send';
+    }
+  }
+};
+
+window.sendIssueViaSms = async (id, evt) => {
+  evt?.stopPropagation?.();
+  evt?.preventDefault?.();
+
+  const issue = issues.find(i => i.id === id);
+  if (!issue) {
+    setSyncStatus('err', 'Unable to send text: issue not found.');
+    return;
+  }
+
+  const issueLink = (() => {
+    try {
+      return window.location?.href ? `${window.location.origin}${window.location.pathname}?issue=${encodeURIComponent(issue.id)}` : '';
+    } catch (_) {
+      return '';
+    }
+  })();
+  const messageWithLink = formatIssueSmsBody(issue, issueLink);
+  SMS_COMPOSER_STATE.issueId = issue.id;
+  SMS_COMPOSER_STATE.issue = issue;
+  SMS_COMPOSER_STATE.messageWithLink = messageWithLink;
+  SMS_COMPOSER_STATE.recipientOptions = await _smsRecipientOptions();
+  SMS_COMPOSER_STATE.selectedRecipientPhones = new Set();
+  const subtitle = document.getElementById('sms-compose-subtitle');
+  if (subtitle) subtitle.textContent = `${issue.machine || issue.id} • Choose recipients and review before sending.`;
+  const manual = document.getElementById('sms-manual-phone');
+  if (manual) manual.value = '';
+  const includePhotos = document.getElementById('sms-include-photos');
+  if (includePhotos) includePhotos.checked = true;
+  const preview = document.getElementById('sms-preview-text');
+  if (preview) preview.value = messageWithLink;
+  _renderSmsRecipientPicker();
+  document.getElementById('sms-compose-modal')?.classList.add('visible');
+};
+
 // ── DELETE ──
 window.deleteIssue = async id => {
   if (!currentUserPermissions.canEditIssue) return;
   if (!confirm('Delete this issue permanently?')) return;
-  try { await deleteDoc(plantDoc('issues',id)); }
+  try {
+    await deleteDoc(plantDoc('issues',id));
+    issuesById.delete(id);
+    issueEventHistoryCache.delete(id);
+    issueDetailsHydrationInFlight.delete(id);
+    rebuildIssuesArrayFromMap();
+    refreshVisibleData();
+  }
   catch(e) { setSyncStatus('err','Error deleting: '+e.message); }
 };
 
@@ -4109,10 +4808,13 @@ function renderIssues() {
       </div>
       ${addRowHtml}
     </div>
-    ${canEdit ? `<div class="action-row" style="justify-content:flex-end;margin-top:10px;">
+    <div class="action-row issue-footer-actions" style="margin-top:10px;">
+      <button class="issue-text-btn" onclick="event.stopPropagation(); sendIssueViaSms('${issue.id}', event)" title="Send issue by SMS">📲 Text</button>
+      ${canEdit ? `<div class="issue-footer-actions-right">
       <button class="btn btn-edit" onclick="openEditModal('${issue.id}')">✏️ Edit</button>
       <button class="btn btn-danger" onclick="deleteIssue('${issue.id}')">🗑 Delete</button>
-    </div>` : ''}`;
+      </div>` : ''}
+    </div>`;
 
     const datePart = issue.dateTime ? issue.dateTime.replace(/,\s*\d{4}/, '') : '';
     const submitterHtml=issue.userName?`<span class="issue-submitter">${esc(issue.userName.split(' ')[0])}${isMyIssue?' (you)':''}</span>`:'';
@@ -4621,8 +5323,12 @@ window.toggleCard = id => {
   // Don't toggle if a swipe gesture just completed or card is swiped open
   if (_swipeJustHappened) { _swipeJustHappened = false; return; }
   if (openSwipeRow) return;
-  document.getElementById('body-'+id)?.classList.toggle('visible');
-  document.getElementById('chevron-'+id)?.classList.toggle('open');
+  const bodyEl = document.getElementById('body-'+id);
+  const chevronEl = document.getElementById('chevron-'+id);
+  const willOpen = bodyEl ? !bodyEl.classList.contains('visible') : false;
+  bodyEl?.classList.toggle('visible');
+  chevronEl?.classList.toggle('open');
+  if (willOpen) ensureIssueDetailsHydrated(id).catch(() => {});
   scheduleIssueLogRelayout();
 };
 
@@ -4761,6 +5467,28 @@ window.addEventListener('resize', () => {
 function currentStatusKey(issue) {
   if (issue?.currentStatus?.statusKey) return issue.currentStatus.statusKey;
   return issue?.lifecycle?.isResolved ? 'resolved' : 'open';
+}
+
+function formatIssueSmsBody(issue, issueLink = '') {
+  if (!issue) return '';
+
+  const statusKey = currentStatusKey(issue);
+  const statusDef = getStatusDef(statusKey);
+  const statusText = statusDef?.label || statusKey || 'Unknown';
+  const subStatus = issue.currentStatus?.subLabel || issue.currentStatus?.subStatusKey || '';
+  const noteText = issue.currentStatus?.notePreview || issue.note || 'N/A';
+  const loggedAt = issue.dateTime || (issue.timestamp ? formatDate(issue.timestamp) : 'Unknown time');
+  const machineIdentifier = issue.machine || issue.machineCode || 'Unknown';
+
+  const lines = [
+    `Issue update (${currentPlantName || 'Plant'})`,
+    `Machine: ${machineIdentifier}`,
+    `Status: ${statusText}${subStatus ? ` / ${subStatus}` : ''}`,
+    `Note: ${noteText}`,
+    `Logged: ${loggedAt}`
+  ];
+  if (issueLink) lines.push(`Link: ${issueLink}`);
+  return lines.join('\n');
 }
 
 function issueIsResolvedV2(issue) {
@@ -5176,39 +5904,19 @@ const signoutBtn=document.getElementById('signout-btn');
 if (signoutBtn) signoutBtn.addEventListener('click', doSignOut);
 
 // ── THEME SELECTION ──
-const THEME_OPTIONS = [
-  { key:'midnight', label:'🌙 Midnight', mode:'dark', colors:['#0d1117','#f97316','#e6edf3'] },
-  { key:'arctic', label:'❄️ Arctic', mode:'light', colors:['#f8fafc','#0ea5e9','#0f172a'] },
-  { key:'forest', label:'🌲 Forest', mode:'dark', colors:['#0a120e','#10b981','#d1fae5'] },
-  { key:'sunset', label:'🌅 Sunset', mode:'dark', colors:['#1a0f0a','#fb923c','#fef3c7'] },
-  { key:'ocean', label:'🌊 Ocean', mode:'dark', colors:['#0a1628','#38bdf8','#e0f2fe'] },
-  { key:'royal', label:'👑 Royal', mode:'dark', colors:['#18102a','#c084fc','#f3e8ff'] },
-  { key:'slate', label:'⚡ Slate', mode:'dark', colors:['#0f1419','#64748b','#e2e8f0'] },
-  { key:'cyberpunk', label:'🎮 Cyberpunk', mode:'dark', colors:['#0a0014','#ff00ff','#00ffff'] },
-  { key:'industrial', label:'🏭 Industrial', mode:'dark', colors:['#1a1a1a','#ff6b00','#e5e5e5'] },
-  { key:'mint', label:'🍃 Mint', mode:'light', colors:['#f0fdf9','#14b8a6','#064e3b'] },
-  { key:'engel', label:'🟢 Engel', mode:'dark', colors:['#0c1209','#78be20','#e8f5d8'] },
-  { key:'cardinals', label:'🔴 Cardinals', mode:'dark', colors:['#0e0303','#c8102e','#f5e8e8'] },
-  { key:'wildcats', label:'🔵 Wildcats', mode:'dark', colors:['#020814','#0033a0','#e8f0ff'] }
-];
+const THEME_OPTIONS = BUILT_IN_THEME_DEFS.map(theme => ({
+  key: theme.key,
+  label: theme.label,
+  mode: theme.mode,
+  colors: theme.colors
+}));
 const THEME_KEYS = THEME_OPTIONS.map(theme => theme.key);
 
 // Mirror of CSS vars for each built-in theme (used by the theme editor to seed pickers)
-const THEME_VARS_MAP = {
-  midnight:   { '--bg':'#0d1117','--bg2':'#161b22','--bg3':'#1c2333','--border':'#30363d','--text':'#e6edf3','--text2':'#8b949e','--text3':'#484f58','--accent':'#f97316','--accent2':'#fb923c','--green':'#22c55e','--red':'#ef4444','--blue':'#3b82f6','--yellow':'#eab308','--orange':'#f97316' },
-  arctic:     { '--bg':'#f8fafc','--bg2':'#ffffff','--bg3':'#f1f5f9','--border':'#cbd5e1','--text':'#0f172a','--text2':'#475569','--text3':'#94a3b8','--accent':'#0ea5e9','--accent2':'#38bdf8','--green':'#16a34a','--red':'#dc2626','--blue':'#0284c7','--yellow':'#ca8a04','--orange':'#f97316' },
-  forest:     { '--bg':'#0a120e','--bg2':'#0f1a14','--bg3':'#14241a','--border':'#1e3a28','--text':'#d1fae5','--text2':'#6ee7b7','--text3':'#34d399','--accent':'#10b981','--accent2':'#34d399','--green':'#34d399','--red':'#f87171','--blue':'#22d3ee','--yellow':'#facc15','--orange':'#fb923c' },
-  sunset:     { '--bg':'#1a0f0a','--bg2':'#2d1810','--bg3':'#3d2218','--border':'#54321f','--text':'#fef3c7','--text2':'#fcd34d','--text3':'#f59e0b','--accent':'#fb923c','--accent2':'#fdba74','--green':'#34d399','--red':'#f87171','--blue':'#60a5fa','--yellow':'#facc15','--orange':'#fb923c' },
-  ocean:      { '--bg':'#0a1628','--bg2':'#0f1e36','--bg3':'#152945','--border':'#1e3a5f','--text':'#e0f2fe','--text2':'#7dd3fc','--text3':'#0ea5e9','--accent':'#38bdf8','--accent2':'#7dd3fc','--green':'#22c55e','--red':'#f87171','--blue':'#38bdf8','--yellow':'#facc15','--orange':'#fb923c' },
-  royal:      { '--bg':'#18102a','--bg2':'#251638','--bg3':'#331f4d','--border':'#4a2d6b','--text':'#f3e8ff','--text2':'#d8b4fe','--text3':'#a78bfa','--accent':'#c084fc','--accent2':'#d8b4fe','--green':'#34d399','--red':'#f87171','--blue':'#60a5fa','--yellow':'#facc15','--orange':'#fb923c' },
-  slate:      { '--bg':'#0f1419','--bg2':'#1a1f25','--bg3':'#242a31','--border':'#30363d','--text':'#e2e8f0','--text2':'#94a3b8','--text3':'#64748b','--accent':'#64748b','--accent2':'#94a3b8','--green':'#22c55e','--red':'#ef4444','--blue':'#60a5fa','--yellow':'#eab308','--orange':'#f97316' },
-  cyberpunk:  { '--bg':'#0a0014','--bg2':'#150028','--bg3':'#1f003d','--border':'#3d0066','--text':'#00ffff','--text2':'#ff00ff','--text3':'#9d00ff','--accent':'#ff00ff','--accent2':'#00ffff','--green':'#00ff88','--red':'#ff4d6d','--blue':'#00ffff','--yellow':'#ffee00','--orange':'#ff7a00' },
-  industrial: { '--bg':'#1a1a1a','--bg2':'#252525','--bg3':'#2f2f2f','--border':'#404040','--text':'#e5e5e5','--text2':'#a0a0a0','--text3':'#707070','--accent':'#ff6b00','--accent2':'#ff8a33','--green':'#4ade80','--red':'#f87171','--blue':'#60a5fa','--yellow':'#facc15','--orange':'#ff6b00' },
-  mint:       { '--bg':'#f0fdf9','--bg2':'#ffffff','--bg3':'#e6fff8','--border':'#a7f3d0','--text':'#064e3b','--text2':'#065f46','--text3':'#10b981','--accent':'#14b8a6','--accent2':'#10b981','--green':'#059669','--red':'#dc2626','--blue':'#0284c7','--yellow':'#ca8a04','--orange':'#ea580c' },
-  engel:      { '--bg':'#0c1209','--bg2':'#141e0f','--bg3':'#1b2a14','--border':'#2d4820','--text':'#e8f5d8','--text2':'#8ab870','--text3':'#4d6e38','--accent':'#78be20','--accent2':'#96d63a','--green':'#78be20','--red':'#f87171','--blue':'#00a3b5','--yellow':'#ffc72c','--orange':'#fb923c' },
-  cardinals:  { '--bg':'#0e0303','--bg2':'#1c0808','--bg3':'#260c0c','--border':'#3d1515','--text':'#f5e8e8','--text2':'#c48a8a','--text3':'#7a4444','--accent':'#c8102e','--accent2':'#e81f42','--green':'#22c55e','--red':'#ff4444','--blue':'#60a5fa','--yellow':'#eab308','--orange':'#f97316' },
-  wildcats:   { '--bg':'#020814','--bg2':'#051228','--bg3':'#071a38','--border':'#0d2d5e','--text':'#e8f0ff','--text2':'#7da8e8','--text3':'#3d6ab0','--accent':'#0033a0','--accent2':'#1a52cc','--green':'#22c55e','--red':'#ef4444','--blue':'#3b82f6','--yellow':'#eab308','--orange':'#f97316' }
-};
+const THEME_VARS_MAP = BUILT_IN_THEME_DEFS.reduce((acc, theme) => {
+  acc[theme.key] = { ...theme.vars };
+  return acc;
+}, {});
 
 function themeLabelSansIcon(label) {
   return String(label || '').replace(/^[^\s]+\s/, '');
@@ -5641,7 +6349,21 @@ document.getElementById('appearance-custom-list')?.addEventListener('click', e =
 
 document.getElementById('theme-quick-toggle')?.addEventListener('click', () => {
   const mode = document.body.dataset.themeMode || 'dark';
-  applyTheme(mode === 'light' ? 'midnight' : 'arctic');
+  const targetMode = mode === 'light' ? 'dark' : 'light';
+  const ownedThemes = getThemeCatalog().filter(theme => theme?.isOwned);
+  const preferredThemeKey = targetMode === 'light' ? 'arctic' : 'midnight';
+  const targetTheme = ownedThemes.find(theme => theme.key === preferredThemeKey)
+    || ownedThemes.find(theme => theme.mode === targetMode);
+
+  if (targetTheme?.key) {
+    applyTheme(targetTheme.key);
+    return;
+  }
+
+  // Fallback: still flip mode even if no owned theme exists in the target mode.
+  document.body.dataset.themeMode = targetMode;
+  updateThemeModeUI();
+  _syncThemePrefsToFirestore();
 });
 
 window.openAppearanceModal = function() {
@@ -5685,9 +6407,11 @@ document.addEventListener('touchend', _teHandleColorPickerPointerRelease, true);
 document.addEventListener('touchcancel', _teHandleColorPickerPointerRelease, true);
 
 window.openThemeEditor = function() {
+  const themeEditorModal = document.getElementById('theme-editor-modal');
+  if (!themeEditorModal) return;
   closeAppearanceModal();
-  document.getElementById('user-dropdown').classList.remove('visible');
-  document.getElementById('user-pill').classList.remove('open');
+  document.getElementById('user-dropdown')?.classList.remove('visible');
+  document.getElementById('user-pill')?.classList.remove('open');
   _tePrevThemeKey = localStorage.getItem('pressTrackerTheme') || 'midnight';
   _teEditingId = null;
   const saveBtn = document.getElementById('te-save-btn');
@@ -5720,11 +6444,13 @@ window.openThemeEditor = function() {
   _renderTEPickers();
   _renderTESavedList();
   document.getElementById('te-theme-name').value = '';
-  document.getElementById('theme-editor-modal').classList.add('visible');
+  themeEditorModal.classList.add('visible');
 };
 
 window.closeThemeEditor = function() {
-  document.getElementById('theme-editor-modal').classList.remove('visible');
+  const themeEditorModal = document.getElementById('theme-editor-modal');
+  if (!themeEditorModal) return;
+  themeEditorModal.classList.remove('visible');
   // Revert to what was active before editor opened
   const saved = localStorage.getItem('pressTrackerTheme') || 'midnight';
   if (saved.startsWith('custom_')) {
@@ -5987,16 +6713,18 @@ document.getElementById('edit-modal').addEventListener('click',   e=>{if(e.targe
 document.getElementById('resolve-modal').addEventListener('click',e=>{if(e.target===document.getElementById('resolve-modal'))closeResolveModal();});
 document.getElementById('reopen-modal').addEventListener('click', e=>{if(e.target===document.getElementById('reopen-modal')) closeReopenModal();});
 document.getElementById('edit-status-modal').addEventListener('click', e=>{if(e.target===document.getElementById('edit-status-modal')) closeEditStatusModal();});
+document.getElementById('sms-compose-modal')?.addEventListener('click', e=>{ if(e.target===document.getElementById('sms-compose-modal')) closeSmsComposer(true); });
 
 // Prevent modal content clicks from bubbling to overlay
 document.querySelectorAll('.modal').forEach(modal => {
   modal.addEventListener('click', e => e.stopPropagation());
 });
 
-document.addEventListener('keydown', e=>{ if(e.key==='Escape'){closeModal();closeEditModal();closeResolveModal();closeReopenModal();closeLightbox();closeSortDropdown();closeExportModal();closeSerialModal();closeEditStatusModal();closeNotesModal();window.closeMessagingModal?.();window.closeConversation?.();closeAppearanceModal();closeThemeEditor();} });
+document.addEventListener('keydown', e=>{ if(e.key==='Escape'){closeModal();closeEditModal();closeResolveModal();closeReopenModal();closeLightbox();closeSortDropdown();closeExportModal();closeSerialModal();closeEditStatusModal();closeNotesModal();closeSmsComposer(true);window.closeMessagingModal?.();window.closeConversation?.();closeAppearanceModal();closeThemeEditor();} });
 
-document.getElementById('theme-editor-modal').addEventListener('click', e => {
-  if (e.target !== document.getElementById('theme-editor-modal')) return;
+document.getElementById('theme-editor-modal')?.addEventListener('click', e => {
+  const modal = document.getElementById('theme-editor-modal');
+  if (!modal || e.target !== modal) return;
   if (_teColorPickerInteracting) return;
   if (Date.now() < _teIgnoreBackdropClickUntil) return;
   closeThemeEditor();
@@ -6050,6 +6778,7 @@ document.getElementById('serial-modal')?.addEventListener('click', e => { if(e.t
 // ── CONVERSATIONS (DM + GROUP + PRESS CHANNELS) ──
 let _conversationListUnsubscribe = null;
 let _conversationThreadUnsubscribe = null;
+let _messagingInboxUnsubscribe = null;
 
 function _conversationType(inputType) {
   const normalized = String(inputType || 'group').trim().toLowerCase();
@@ -6167,7 +6896,9 @@ window.sendConversationMessage = async (conversationId, text, { mentions = [], a
   if (!conversationId || (!trimmedText && !normalizedAttachments.length)) return null;
   const actor = currentActor();
 
-  const messageRef = await addDoc(conversationMessagesCol(conversationId), {
+  const messageRef = doc(conversationMessagesCol(conversationId));
+  const batch = writeBatch(db);
+  batch.set(messageRef, {
     conversationId,
     plantId: currentPlantId,
     sender: actor,
@@ -6179,8 +6910,7 @@ window.sendConversationMessage = async (conversationId, text, { mentions = [], a
     editedAt: null,
     deletedAt: null
   });
-
-  await updateDoc(conversationDoc(conversationId), {
+  batch.update(conversationDoc(conversationId), {
     lastMessage: {
       textPreview: trimmedText ? trimmedText.slice(0, 280) : (normalizedAttachments.length ? '📷 Photo' : ''),
       senderUid: actor.uid,
@@ -6189,12 +6919,12 @@ window.sendConversationMessage = async (conversationId, text, { mentions = [], a
     },
     lastMessageAt: serverTimestamp()
   });
-
-  await setDoc(conversationMemberDoc(conversationId, actor.uid), {
+  batch.set(conversationMemberDoc(conversationId, actor.uid), {
     userId: actor.uid,
     lastReadAt: serverTimestamp(),
     lastReadMessageId: messageRef.id
   }, { merge: true });
+  await batch.commit();
 
   return messageRef.id;
 };
@@ -6218,18 +6948,121 @@ window.closeConversationList = () => {
   if (_conversationListUnsubscribe) { _conversationListUnsubscribe(); _conversationListUnsubscribe = null; }
 };
 
-// ── MESSAGING MODAL (PHASE 1.1 UI) ──
+// ── MESSAGING MODAL (UI refresh) ──
 const _messagingState = {
   conversations: [],
   activeConversationId: null,
-  sortBy: 'recent',
   selectedPhoto: null,
-  lastSeenByConversation: {}
+  lastSeenByConversation: {},
+  tab: 'all',
+  search: '',
+  selectableMembers: [],
+  selectedDmUid: null,
+  selectedGroupMembers: new Set()
 };
+
+function _updateMessagingEntryBadges(unreadCount = 0) {
+  const safeCount = Math.max(0, Number(unreadCount) || 0);
+  document.querySelectorAll('[data-messages-trigger]').forEach(el => {
+    el.classList.toggle('messages-has-unread', safeCount > 0);
+  });
+  document.querySelectorAll('[data-messages-badge]').forEach(el => {
+    if (!safeCount) {
+      el.style.display = 'none';
+      el.textContent = '0';
+      return;
+    }
+    el.style.display = 'inline-flex';
+    el.textContent = safeCount > 99 ? '99+' : String(safeCount);
+  });
+}
+
+function _messagingUnreadTotal(conversations = []) {
+  return (conversations || []).reduce((sum, conv) => sum + (_messagingUnreadCount(conv) ? 1 : 0), 0);
+}
+
+function _startMessagingInboxWatcher() {
+  if (_messagingInboxUnsubscribe) {
+    _messagingInboxUnsubscribe();
+    _messagingInboxUnsubscribe = null;
+  }
+  if (!currentPlantId || !currentUser?.uid) {
+    _updateMessagingEntryBadges(0);
+    return;
+  }
+  const q = query(
+    conversationsCol(),
+    where('memberIds', 'array-contains', currentUser.uid),
+    orderBy('lastMessageAt', 'desc')
+  );
+  _messagingInboxUnsubscribe = onSnapshot(q, snap => {
+    const conversations = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const unreadCount = _messagingUnreadTotal(conversations);
+    _updateMessagingEntryBadges(unreadCount);
+    const tabBadge = document.getElementById('messaging-tab-all-badge');
+    if (tabBadge) {
+      tabBadge.textContent = unreadCount > 99 ? '99+' : String(unreadCount);
+      tabBadge.style.display = unreadCount ? 'inline-flex' : 'none';
+    }
+  }, err => {
+    console.warn('messaging inbox watcher error', err);
+    _updateMessagingEntryBadges(0);
+  });
+}
+
+function _bindMessagingKeyboardShortcut() {
+  if (window.__messagingShortcutBound) return;
+  window.__messagingShortcutBound = true;
+  document.addEventListener('keydown', e => {
+    const target = e.target;
+    const typing = !!(target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable));
+    if (typing) return;
+    const openShortcut = (e.key.toLowerCase() === 'k' && (e.metaKey || e.ctrlKey));
+    if (!openShortcut) return;
+    e.preventDefault();
+    window.openMessagingModal();
+    setTimeout(() => document.getElementById('messaging-search')?.focus(), 30);
+  });
+}
 
 function _messagingSetError(message = '') {
   const el = document.getElementById('messaging-error');
   if (el) el.textContent = message;
+}
+
+function _messagingUserLabel(member = {}) {
+  return member.displayName || member.name || member.email || member.uid || 'User';
+}
+
+function _messagingUserPhoto(member = {}) {
+  return member.photoURL || member.photoUrl || member.avatarUrl || member.avatarURL || member.picture || '';
+}
+
+function _messagingInitials(name = '') {
+  return String(name || 'U').split(' ').filter(Boolean).map(x => x[0]).join('').slice(0, 2).toUpperCase();
+}
+
+function _messagingColor(seed = '') {
+  const palette = ['#007AFF','#34C759','#FF9500','#FF3B30','#AF52DE','#5AC8FA','#FF2D55','#00C7BE'];
+  const idx = String(seed).split('').reduce((a, c) => a + c.charCodeAt(0), 0) % palette.length;
+  return palette[idx];
+}
+
+function _fmtMsgTime(ts) {
+  if (!ts) return '';
+  const d = ts.toDate ? ts.toDate() : new Date(ts?.seconds ? ts.seconds * 1000 : ts);
+  if (Number.isNaN(+d)) return '';
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function _fmtMsgDateSep(ts) {
+  if (!ts) return '';
+  const d = ts.toDate ? ts.toDate() : new Date(ts?.seconds ? ts.seconds * 1000 : ts);
+  const now = new Date();
+  const diffDays = Math.floor((new Date(now.toDateString()) - new Date(d.toDateString())) / 86400000);
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+  return d.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
 }
 
 function _messagingSetPhotoPreview(file = null) {
@@ -6241,13 +7074,12 @@ function _messagingSetPhotoPreview(file = null) {
     return;
   }
   const objectUrl = URL.createObjectURL(file);
-  wrap.innerHTML = `<div>Photo selected: ${esc(file.name || 'image')}</div><img src="${objectUrl}" alt="selected photo preview">`;
+  wrap.innerHTML = `<div class="msg-reaction" style="display:inline-flex;margin:8px 0;">📷 ${esc(file.name || 'image')}</div><img src="${objectUrl}" alt="selected photo preview" style="max-width:180px;border-radius:10px;border:1px solid var(--border);margin-top:6px;">`;
 }
 
 function _messagingNotifyIncoming(message, conversationName) {
-  showGameToast(`💬 ${conversationName}: ${message.sender?.name || 'Someone'} sent a message`);
-  if (!('Notification' in window)) return;
-  if (Notification.permission !== 'granted') return;
+  showGameToast(`💬 ${conversationName}: ${(message?.sender?.name || 'Someone')} sent a message`);
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
   try {
     new Notification(conversationName, {
       body: message.text || (message.attachments?.length ? 'Sent a photo' : 'New message')
@@ -6257,84 +7089,187 @@ function _messagingNotifyIncoming(message, conversationName) {
   }
 }
 
+function _messagingMemberByUid(uid) {
+  if (!uid) return null;
+  if (uid === currentUser?.uid) {
+    return {
+      uid,
+      displayName: currentUser?.displayName || currentUser?.email || 'You',
+      email: currentUser?.email || '',
+      photoURL: currentUser?.photoURL || ''
+    };
+  }
+  return _messagingState.selectableMembers.find(m => m.uid === uid) || null;
+}
+
+function _messagingPersonAvatar(member = {}, size = 40) {
+  const label = _messagingUserLabel(member);
+  const photo = _messagingUserPhoto(member);
+  if (photo) {
+    return `<div class="msg-avatar" style="position:relative;"><img class="msg-avatar-img" src="${esc(photo)}" alt="${esc(label)}" style="width:${size}px;height:${size}px;border-radius:50%;"></div>`;
+  }
+  return `<div class="msg-avatar" style="position:relative;"><div class="msg-avatar-initials" style="background:${_messagingColor(member.uid || label)};width:${size}px;height:${size}px;">${esc(_messagingInitials(label))}</div></div>`;
+}
+
 function _messagingConversationName(conv) {
   if (!conv) return 'Conversation';
-  if (conv.type === 'dm') return conv.title || 'Direct Message';
-  if (conv.type === 'press') return conv.title || `Press ${conv.pressId || ''}`.trim();
+  if (conv.type === 'dm') {
+    const otherUid = (conv.memberIds || []).find(uid => uid !== currentUser?.uid);
+    const other = _messagingMemberByUid(otherUid);
+    return _messagingUserLabel(other || { uid: otherUid, name: conv.title || 'Direct Message' });
+  }
+  if (conv.type === 'press') return conv.title || `Press ${conv.pressId || ''}`.trim() || 'Press Chat';
   return conv.title || 'Group Chat';
+}
+
+function _messagingFilteredConversations() {
+  const tab = _messagingState.tab;
+  const q = String(_messagingState.search || '').trim().toLowerCase();
+  const sorted = [..._messagingState.conversations].sort((a, b) => {
+    const at = a.lastMessageAt?.toMillis?.() ?? a.lastMessageAt?.seconds * 1000 ?? 0;
+    const bt = b.lastMessageAt?.toMillis?.() ?? b.lastMessageAt?.seconds * 1000 ?? 0;
+    return bt - at;
+  });
+  return sorted.filter(conv => {
+    if (tab === 'dms' && conv.type !== 'dm') return false;
+    if (tab === 'groups' && conv.type === 'dm') return false;
+    if (!q) return true;
+    const name = _messagingConversationName(conv).toLowerCase();
+    const preview = String(conv.lastMessage?.textPreview || '').toLowerCase();
+    return name.includes(q) || preview.includes(q);
+  });
+}
+
+function _messagingUnreadCount(conv) {
+  const lastId = conv?.lastMessage?.id;
+  const lastSenderUid = conv?.lastMessage?.sender?.uid;
+  if (!lastId || !lastSenderUid || lastSenderUid === currentUser?.uid) return 0;
+  return _messagingState.lastSeenByConversation[conv.id] === lastId ? 0 : 1;
+}
+
+function _messagingAvatarHtml(conv, size = 40) {
+  if (!conv) return '';
+  if (conv.type !== 'dm') {
+    const others = (conv.memberIds || []).filter(uid => uid !== currentUser?.uid).slice(0, 4);
+    const cells = others.map(uid => {
+      const m = _messagingMemberByUid(uid);
+      const label = _messagingUserLabel(m || { uid });
+      const photo = _messagingUserPhoto(m || {});
+      if (photo) {
+        return `<div class="msg-group-avatar-cell" style="padding:0;overflow:hidden;background:var(--bg4);"><img src="${esc(photo)}" alt="${esc(label)}" style="width:100%;height:100%;object-fit:cover;"></div>`;
+      }
+      return `<div class="msg-group-avatar-cell" style="background:${_messagingColor(uid)}">${esc(_messagingInitials(label))}</div>`;
+    }).join('');
+    return `<div class="msg-group-avatar" style="width:${size}px;height:${size}px;">${cells || '<div class="msg-group-avatar-cell" style="grid-column:1/3;background:var(--bg4)">GR</div>'}</div>`;
+  }
+  const otherUid = (conv.memberIds || []).find(uid => uid !== currentUser?.uid);
+  const other = _messagingMemberByUid(otherUid) || { uid: otherUid, name: 'User' };
+  return _messagingPersonAvatar(other, size);
 }
 
 function _renderMessagingConversations() {
   const list = document.getElementById('messaging-conversations-list');
   if (!list) return;
-  list.innerHTML = '';
-  const conversations = [..._messagingState.conversations];
-  if (_messagingState.sortBy === 'name') {
-    conversations.sort((a, b) => _messagingConversationName(a).localeCompare(_messagingConversationName(b)));
-  } else {
-    conversations.sort((a, b) => {
-      const at = a.lastMessageAt?.toMillis?.() ?? a.lastMessageAt?.seconds * 1000 ?? 0;
-      const bt = b.lastMessageAt?.toMillis?.() ?? b.lastMessageAt?.seconds * 1000 ?? 0;
-      return bt - at;
-    });
-  }
+  const conversations = _messagingFilteredConversations();
   if (!conversations.length) {
-    list.innerHTML = '<div class="messaging-empty">No conversations yet.</div>';
+    list.innerHTML = '<div class="msg-empty"><div class="msg-empty-icon">💬</div><div class="msg-empty-text">No conversations yet.</div></div>';
     return;
   }
-  conversations.forEach(conv => {
-    const row = document.createElement('button');
-    row.type = 'button';
-    row.className = 'messaging-conv-item' + (_messagingState.activeConversationId === conv.id ? ' active' : '');
-    row.onclick = () => _selectMessagingConversation(conv.id);
-    const lastText = conv.lastMessage?.textPreview || 'No messages yet';
-    row.innerHTML = `<div class="messaging-conv-name">${esc(_messagingConversationName(conv))}</div><div class="messaging-conv-preview">${esc(lastText)}</div>`;
-    list.appendChild(row);
+  list.innerHTML = conversations.map(conv => {
+    const unread = _messagingUnreadCount(conv);
+    const isActive = conv.id === _messagingState.activeConversationId;
+    const name = _messagingConversationName(conv);
+    const preview = conv.lastMessage?.textPreview || 'No messages yet';
+    const time = conv.lastMessageAt ? _relativeTime(conv.lastMessageAt) : '';
+    return `<div class="msg-convo-row ${isActive ? 'active' : ''}" data-convo-id="${esc(conv.id)}">
+      ${_messagingAvatarHtml(conv)}
+      <div class="msg-convo-info">
+        <div class="msg-convo-name-row">
+          <span class="msg-convo-name">${esc(name)}</span>
+          <span class="msg-convo-time">${esc(time)}</span>
+        </div>
+        <div class="msg-convo-preview ${unread ? 'unread' : ''}">${esc(preview)}</div>
+      </div>
+      ${unread ? '<div class="msg-unread-dot"></div>' : ''}
+    </div>`;
+  }).join('');
+
+  list.querySelectorAll('.msg-convo-row').forEach(row => {
+    row.addEventListener('click', () => {
+      const convoId = row.getAttribute('data-convo-id');
+      if (convoId) _selectMessagingConversation(convoId);
+      if (window.innerWidth <= 600) document.getElementById('msg-list-panel')?.classList.add('hidden');
+    });
   });
+}
+
+function _renderMessagingThreadHeader(conv) {
+  const title = document.getElementById('messaging-thread-title');
+  const sub = document.getElementById('messaging-thread-sub');
+  const avatar = document.getElementById('messaging-thread-avatar');
+  const header = document.getElementById('messaging-thread-header');
+  if (!title || !sub || !avatar || !header) return;
+  if (!conv) {
+    header.style.display = 'none';
+    title.textContent = 'Select a conversation';
+    sub.textContent = '';
+    avatar.innerHTML = '';
+    return;
+  }
+  header.style.display = 'flex';
+  title.textContent = _messagingConversationName(conv);
+  const memberCount = Array.isArray(conv.memberIds) ? conv.memberIds.length : 0;
+  sub.textContent = conv.type === 'dm' ? 'Direct message' : `${memberCount} members`;
+  avatar.innerHTML = _messagingAvatarHtml(conv, 36);
 }
 
 function _renderMessagingMessages(messages) {
   const panel = document.getElementById('messaging-thread-messages');
   if (!panel) return;
-  panel.innerHTML = '';
   if (!messages.length) {
-    panel.innerHTML = '<div class="messaging-empty">No messages yet. Start the conversation.</div>';
+    panel.innerHTML = '<div class="msg-empty"><div class="msg-empty-icon">💬</div><div class="msg-empty-text">No messages yet. Start the conversation.</div></div>';
     return;
   }
+  const convo = _messagingState.conversations.find(c => c.id === _messagingState.activeConversationId);
+  let prevDate = '';
+  const html = [];
   messages.forEach(msg => {
+    const dt = msg.createdAt?.toDate ? msg.createdAt.toDate() : new Date(msg.createdAt?.seconds ? msg.createdAt.seconds * 1000 : msg.createdAt);
+    const dateKey = dt.toDateString();
+    if (dateKey !== prevDate) {
+      html.push(`<div class="msg-date-sep">${esc(_fmtMsgDateSep(msg.createdAt))}</div>`);
+      prevDate = dateKey;
+    }
     const mine = msg.sender?.uid === currentUser?.uid;
-    const item = document.createElement('div');
-    item.className = 'messaging-msg' + (mine ? ' mine' : '');
-    const meta = document.createElement('div');
-    meta.className = 'messaging-msg-meta';
-    meta.textContent = `${mine ? 'You' : (msg.sender?.name || 'Unknown')} · ${_relativeTime(msg.createdAt)}`;
-    const text = document.createElement('div');
-    text.className = 'messaging-msg-text';
-    text.textContent = msg.text || '';
-    item.appendChild(meta);
-    if (msg.text) item.appendChild(text);
-    (msg.attachments || []).forEach(att => {
-      if (att.kind !== 'image' || !att.url) return;
-      const img = document.createElement('img');
-      img.className = 'messaging-msg-image';
-      img.src = att.url;
-      img.alt = att.fileName || 'message image';
-      item.appendChild(img);
-    });
-    panel.appendChild(item);
+    const senderName = mine ? 'You' : (msg.sender?.name || _messagingUserLabel(_messagingMemberByUid(msg.sender?.uid) || {}));
+    const avatar = mine ? '' : `<div class="msg-row-avatar">${_messagingAvatarHtml({ type: 'dm', memberIds: [currentUser?.uid, msg.sender?.uid] }, 28)}</div>`;
+    const attachments = (msg.attachments || []).filter(att => att.kind === 'image' && att.url)
+      .map(att => `<img class="messaging-msg-image" src="${esc(att.url)}" alt="${esc(att.fileName || 'image')}" style="max-width:200px;border-radius:10px;border:1px solid var(--border);margin-top:4px;">`).join('');
+    html.push(`<div class="msg-row ${mine ? 'sent' : 'recv'}">
+      ${avatar}
+      <div class="msg-bubble-group">
+        ${(!mine && convo?.type !== 'dm') ? `<div class="msg-sender-name">${esc(senderName)}</div>` : ''}
+        <div class="msg-bubble-wrap">
+          <div class="msg-bubble ${mine ? 'sent' : 'recv'}">${esc(msg.text || '')}</div>
+          ${attachments}
+        </div>
+        <div class="msg-bubble-time">${esc(_fmtMsgTime(msg.createdAt))}</div>
+      </div>
+    </div>`);
   });
+  panel.innerHTML = html.join('');
   panel.scrollTop = panel.scrollHeight;
 }
 
 function _selectMessagingConversation(conversationId) {
   _messagingState.activeConversationId = conversationId;
-  _renderMessagingConversations();
   const selected = _messagingState.conversations.find(c => c.id === conversationId);
-  document.getElementById('messaging-thread-title').textContent = _messagingConversationName(selected);
+  _renderMessagingConversations();
+  _renderMessagingThreadHeader(selected);
   openConversation(conversationId, messages => {
     _renderMessagingMessages(messages);
-    const lastId = messages[messages.length - 1]?.id || null;
     const lastMessage = messages[messages.length - 1] || null;
+    const lastId = lastMessage?.id || null;
     const seenId = _messagingState.lastSeenByConversation[conversationId] || null;
     if (lastMessage && seenId && lastMessage.id !== seenId && lastMessage.sender?.uid !== currentUser?.uid) {
       _messagingNotifyIncoming(lastMessage, _messagingConversationName(selected));
@@ -6344,37 +7279,101 @@ function _selectMessagingConversation(conversationId) {
   });
 }
 
+function _renderMessagingMemberPicks() {
+  const dmWrap = document.getElementById('messaging-dm-list');
+  const groupWrap = document.getElementById('messaging-group-members');
+  if (dmWrap) {
+    dmWrap.innerHTML = _messagingState.selectableMembers.map(m => {
+      const label = _messagingUserLabel(m);
+      const checked = _messagingState.selectedDmUid === m.uid;
+      return `<div class="msg-member-row ${checked ? 'selected' : ''}" data-dm-uid="${esc(m.uid)}">
+        ${_messagingPersonAvatar(m, 36)}
+        <div style="font-size:14px;font-weight:600;">${esc(label)}</div>
+        <div class="msg-member-check">${checked ? '✓' : ''}</div>
+      </div>`;
+    }).join('');
+    dmWrap.querySelectorAll('[data-dm-uid]').forEach(row => {
+      row.addEventListener('click', () => {
+        _messagingState.selectedDmUid = row.getAttribute('data-dm-uid');
+        _renderMessagingMemberPicks();
+      });
+    });
+  }
+
+  if (groupWrap) {
+    groupWrap.innerHTML = _messagingState.selectableMembers.map(m => {
+      const label = _messagingUserLabel(m);
+      const checked = _messagingState.selectedGroupMembers.has(m.uid);
+      return `<div class="msg-member-row ${checked ? 'selected' : ''}" data-group-uid="${esc(m.uid)}">
+        ${_messagingPersonAvatar(m, 36)}
+        <div style="font-size:14px;font-weight:600;">${esc(label)}</div>
+        <div class="msg-member-check">${checked ? '✓' : ''}</div>
+      </div>`;
+    }).join('');
+    groupWrap.querySelectorAll('[data-group-uid]').forEach(row => {
+      row.addEventListener('click', () => {
+        const uid = row.getAttribute('data-group-uid');
+        if (_messagingState.selectedGroupMembers.has(uid)) _messagingState.selectedGroupMembers.delete(uid);
+        else _messagingState.selectedGroupMembers.add(uid);
+        _renderMessagingMemberPicks();
+      });
+    });
+  }
+
+  document.getElementById('messaging-create-dm-btn').disabled = !_messagingState.selectedDmUid;
+  const groupName = String(document.getElementById('messaging-group-name')?.value || '').trim();
+  document.getElementById('messaging-create-group-btn').disabled = !groupName || _messagingState.selectedGroupMembers.size < 1;
+}
+
+async function _messagingSelectableMembers() {
+  const membersSnap = await getDocs(collection(db, 'plants', currentPlantId, 'members'));
+  return membersSnap.docs
+    .map(d => ({ uid: d.id, ...d.data() }))
+    .filter(m => m.uid !== currentUser.uid && m.isActive !== false)
+    .sort((a, b) => String(_messagingUserLabel(a)).localeCompare(String(_messagingUserLabel(b))));
+}
+
+async function _messagingLoadMemberSelectors() {
+  _messagingState.selectableMembers = await _messagingSelectableMembers();
+  _messagingState.selectedDmUid = null;
+  _messagingState.selectedGroupMembers = new Set();
+  _renderMessagingMemberPicks();
+}
+
 window.openMessagingModal = () => {
   document.getElementById('messaging-modal')?.classList.add('visible');
   _messagingSetError('');
   _messagingSetPhotoPreview(null);
+  document.getElementById('msg-list-panel')?.classList.remove('hidden');
   _messagingLoadMemberSelectors().catch(err => {
     console.warn('messaging member load failed', err);
     _messagingSetError(`Could not load members: ${err?.message || 'permission denied'}`);
   });
-  document.getElementById('messaging-thread-title').textContent = 'Loading conversations…';
-  document.getElementById('messaging-thread-messages').innerHTML = '<div class="messaging-empty">Loading…</div>';
+
+  const panel = document.getElementById('messaging-thread-messages');
+  if (panel) panel.innerHTML = '<div class="msg-empty"><div class="msg-empty-text">Loading…</div></div>';
+
   watchConversations(conversations => {
     _messagingState.conversations = conversations;
-    if (!_messagingState.activeConversationId && conversations.length) {
-      _messagingState.activeConversationId = conversations[0].id;
-    }
+    const stillExists = conversations.some(c => c.id === _messagingState.activeConversationId);
+    if (!stillExists) _messagingState.activeConversationId = conversations[0]?.id || null;
     _renderMessagingConversations();
     if (_messagingState.activeConversationId) {
       _selectMessagingConversation(_messagingState.activeConversationId);
     } else {
-      document.getElementById('messaging-thread-title').textContent = 'No conversations';
-      document.getElementById('messaging-thread-messages').innerHTML = '<div class="messaging-empty">Create a conversation to begin messaging.</div>';
+      _renderMessagingThreadHeader(null);
+      if (panel) panel.innerHTML = '<div class="msg-empty"><div class="msg-empty-icon">💬</div><div class="msg-empty-text">Create a conversation to begin messaging.</div></div>';
     }
   }, {}, err => {
     _messagingSetError(`Could not load conversations: ${err?.message || 'permission denied'}`);
-    document.getElementById('messaging-thread-title').textContent = 'Messaging unavailable';
-    document.getElementById('messaging-thread-messages').innerHTML = '<div class="messaging-empty">Conversation access is currently denied. Verify Firestore rules deployment.</div>';
+    _renderMessagingThreadHeader(null);
+    if (panel) panel.innerHTML = '<div class="msg-empty"><div class="msg-empty-text">Conversation access is currently denied.</div></div>';
   });
 };
 
 window.closeMessagingModal = () => {
   document.getElementById('messaging-modal')?.classList.remove('visible');
+  hideMessagingSheets();
   _messagingSetPhotoPreview(null);
   closeConversation();
   closeConversationList();
@@ -6396,7 +7395,10 @@ window.sendMessagingModalMessage = async () => {
       attachments = [photo];
     }
     await sendConversationMessage(_messagingState.activeConversationId, text || '', { attachments });
-    ta.value = '';
+    if (ta) {
+      ta.value = '';
+      ta.style.height = 'auto';
+    }
     _messagingSetPhotoPreview(null);
   } catch (err) {
     console.warn('sendMessagingModalMessage failed', err);
@@ -6410,20 +7412,14 @@ window.createMessagingDm = async () => {
     _messagingSetError('Sign in and select a plant before creating a DM.');
     return;
   }
+  if (!_messagingState.selectedDmUid) {
+    _messagingSetError('Select someone to message.');
+    return;
+  }
   try {
-    const targetUid = document.getElementById('messaging-dm-select')?.value || '';
-    if (!targetUid) {
-      _messagingSetError('Select a member from the DM dropdown.');
-      return;
-    }
-    const target = (await _messagingSelectableMembers()).find(m => m.uid === targetUid);
-    if (!target) {
-      _messagingSetError('Selected user is no longer available.');
-      return;
-    }
-    const conversationId = await createConversation({ type: 'dm', memberIds: [target.uid] });
+    const conversationId = await createConversation({ type: 'dm', memberIds: [_messagingState.selectedDmUid] });
+    hideMessagingSheets();
     _messagingState.activeConversationId = conversationId;
-    _renderMessagingConversations();
     _selectMessagingConversation(conversationId);
   } catch (err) {
     console.warn('createMessagingDm failed', err);
@@ -6431,60 +7427,53 @@ window.createMessagingDm = async () => {
   }
 };
 
-async function _messagingSelectableMembers() {
-  const membersSnap = await getDocs(collection(db, 'plants', currentPlantId, 'members'));
-  return membersSnap.docs
-    .map(d => ({ uid: d.id, ...d.data() }))
-    .filter(m => m.uid !== currentUser.uid && m.isActive !== false)
-    .sort((a, b) => String(a.displayName || a.name || a.email || a.uid).localeCompare(String(b.displayName || b.name || b.email || b.uid)));
-}
-
 window.createMessagingGroup = async () => {
   _messagingSetError('');
   if (!currentPlantId || !currentUser?.uid) {
     _messagingSetError('Sign in and select a plant before creating a group.');
     return;
   }
+  const groupTitle = String(document.getElementById('messaging-group-name')?.value || '').trim();
+  const memberIds = Array.from(_messagingState.selectedGroupMembers);
+  if (!groupTitle) {
+    _messagingSetError('Enter a group name.');
+    return;
+  }
+  if (!memberIds.length) {
+    _messagingSetError('Select at least one member for the group.');
+    return;
+  }
   try {
-    const groupTitle = String(document.getElementById('messaging-group-name')?.value || '').trim();
-    if (!groupTitle) return;
-    const checks = Array.from(document.querySelectorAll('#messaging-group-members input[type=\"checkbox\"]:checked'));
-    const memberIds = checks.map(c => c.value).filter(Boolean);
-    if (!memberIds.length) {
-      _messagingSetError('Select at least one member for the group.');
-      return;
-    }
     const conversationId = await createConversation({ type: 'group', title: groupTitle, memberIds });
-    _messagingState.activeConversationId = conversationId;
-    _renderMessagingConversations();
-    _selectMessagingConversation(conversationId);
     document.getElementById('messaging-group-name').value = '';
-    checks.forEach(c => { c.checked = false; });
+    hideMessagingSheets();
+    _messagingState.activeConversationId = conversationId;
+    _selectMessagingConversation(conversationId);
   } catch (err) {
     console.warn('createMessagingGroup failed', err);
     _messagingSetError(`Could not create group: ${err?.message || 'permission denied'}`);
   }
 };
 
-async function _messagingLoadMemberSelectors() {
-  const members = await _messagingSelectableMembers();
-  const dmSelect = document.getElementById('messaging-dm-select');
-  const groupWrap = document.getElementById('messaging-group-members');
-  if (dmSelect) {
-    dmSelect.innerHTML = '<option value=\"\">Select user…</option>' + members
-      .map(m => `<option value=\"${esc(m.uid)}\">${esc(m.displayName || m.name || m.email || m.uid)}</option>`)
-      .join('');
-  }
-  if (groupWrap) {
-    groupWrap.innerHTML = members
-      .map(m => `<label><input type=\"checkbox\" value=\"${esc(m.uid)}\"><span>${esc(m.displayName || m.name || m.email || m.uid)}</span></label>`)
-      .join('');
-  }
-}
+window.showMessagingNewDm = () => {
+  const sheet = document.getElementById('messaging-new-dm');
+  if (sheet) sheet.style.display = 'flex';
+  document.getElementById('messaging-new-group').style.display = 'none';
+  _renderMessagingMemberPicks();
+};
 
-window.setMessagingSort = (value) => {
-  _messagingState.sortBy = value === 'name' ? 'name' : 'recent';
-  _renderMessagingConversations();
+window.showMessagingNewGroup = () => {
+  const sheet = document.getElementById('messaging-new-group');
+  if (sheet) sheet.style.display = 'flex';
+  document.getElementById('messaging-new-dm').style.display = 'none';
+  _renderMessagingMemberPicks();
+};
+
+window.hideMessagingSheets = () => {
+  const dm = document.getElementById('messaging-new-dm');
+  const group = document.getElementById('messaging-new-group');
+  if (dm) dm.style.display = 'none';
+  if (group) group.style.display = 'none';
 };
 
 window.enableMessagingNotifications = async () => {
@@ -6526,11 +7515,46 @@ document.getElementById('messaging-modal')?.addEventListener('click', e => {
   if (e.target === document.getElementById('messaging-modal')) closeMessagingModal();
 });
 
+document.getElementById('messaging-new-dm')?.addEventListener('click', e => {
+  if (e.target === e.currentTarget) hideMessagingSheets();
+});
+
+document.getElementById('messaging-new-group')?.addEventListener('click', e => {
+  if (e.target === e.currentTarget) hideMessagingSheets();
+});
+
+document.getElementById('messaging-create-dm-btn')?.addEventListener('click', () => createMessagingDm());
+document.getElementById('messaging-create-group-btn')?.addEventListener('click', () => createMessagingGroup());
+
+document.getElementById('messaging-tabs')?.addEventListener('click', e => {
+  const btn = e.target.closest('[data-tab]');
+  if (!btn) return;
+  _messagingState.tab = btn.getAttribute('data-tab') || 'all';
+  document.querySelectorAll('#messaging-tabs .msg-tab').forEach(tabBtn => tabBtn.classList.toggle('active', tabBtn === btn));
+  _renderMessagingConversations();
+});
+
+document.getElementById('messaging-search')?.addEventListener('input', e => {
+  _messagingState.search = e.target.value || '';
+  _renderMessagingConversations();
+});
+
+document.getElementById('messaging-back-btn')?.addEventListener('click', () => {
+  document.getElementById('msg-list-panel')?.classList.remove('hidden');
+});
+
+document.getElementById('messaging-group-name')?.addEventListener('input', () => _renderMessagingMemberPicks());
+
 document.getElementById('messaging-input')?.addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
     sendMessagingModalMessage();
   }
+});
+
+document.getElementById('messaging-input')?.addEventListener('input', e => {
+  e.target.style.height = 'auto';
+  e.target.style.height = Math.min(e.target.scrollHeight, 100) + 'px';
 });
 
 document.getElementById('messaging-photo-input')?.addEventListener('change', e => {
@@ -7495,5 +8519,42 @@ document.getElementById('members-btn')?.addEventListener('touchend', e => { e.pr
 document.getElementById('members-btn')?.addEventListener('click', e => { e.stopPropagation(); openMembersPanel(); });
 document.getElementById('admin-page-btn')?.addEventListener('click', e => {
   e.stopPropagation();
-  window.location.href = 'admin.html';
+  document.getElementById('user-dropdown')?.classList.remove('visible');
+  document.getElementById('user-pill')?.classList.remove('open');
+  openEmbeddedAdminPortal();
+});
+
+function openEmbeddedAdminPortal() {
+  // iOS Safari has inconsistent tap/focus behavior inside iframe overlays.
+  // Route those sessions to the standalone admin page instead of embedded mode.
+  const ua = navigator.userAgent || '';
+  const isiOS = /iP(ad|hone|od)/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  const isSafari = /^((?!chrome|android|crios|fxios).)*safari/i.test(ua);
+  const shouldUseStandaloneAdmin = isiOS && isSafari;
+  if (shouldUseStandaloneAdmin) {
+    window.location.href = 'admin.html';
+    return;
+  }
+
+  const overlay = document.getElementById('embedded-admin-overlay');
+  const frame = document.getElementById('embedded-admin-iframe');
+  if (!overlay || !frame) {
+    window.location.href = 'admin.html';
+    return;
+  }
+  if (!frame.getAttribute('src')) frame.setAttribute('src', 'admin.html');
+  overlay.classList.add('visible');
+  document.body.classList.add('admin-portal-open');
+}
+
+function closeEmbeddedAdminPortal() {
+  const overlay = document.getElementById('embedded-admin-overlay');
+  if (!overlay) return;
+  overlay.classList.remove('visible');
+  document.body.classList.remove('admin-portal-open');
+}
+
+window.closeEmbeddedAdminPortal = closeEmbeddedAdminPortal;
+document.getElementById('embedded-admin-overlay')?.addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeEmbeddedAdminPortal();
 });

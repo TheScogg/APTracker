@@ -1,0 +1,1284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>AP-Tracker — Messaging</title>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<style>
+  :root {
+    --bg: #0f1117;
+    --bg2: #161b24;
+    --bg3: #1e2535;
+    --bg4: #252d3d;
+    --border: rgba(255,255,255,0.08);
+    --text: #e8eaf0;
+    --text2: #8b95a8;
+    --text3: #4e5769;
+    --accent: #5b8af5;
+    --accent-dim: rgba(91,138,245,0.15);
+    --blue: #3b82f6;
+    --green: #34d399;
+    --red: #f87171;
+    --yellow: #fbbf24;
+    --ios-blue: #007AFF;
+    --ios-blue-dim: rgba(0,122,255,0.15);
+    --bubble-sent: #007AFF;
+    --bubble-recv: #1e2535;
+    --radius-bubble: 18px;
+    font-family: 'Nunito', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Nunito', sans-serif;
+  }
+
+  /* ── DEMO BACKDROP ── */
+  .demo-bg {
+    position: fixed; inset: 0;
+    background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .demo-trigger {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'Nunito', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 10px 18px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex; align-items: center; gap: 8px;
+    transition: background 0.15s;
+  }
+  .demo-trigger:hover { background: var(--bg4); }
+
+  /* ── MSG BUTTON BADGE ── */
+  .msg-btn-wrap { position: relative; }
+  .msg-badge {
+    position: absolute; top: -6px; right: -6px;
+    background: var(--red); color: #fff;
+    font-size: 10px; font-weight: 700;
+    min-width: 18px; height: 18px;
+    border-radius: 9px; padding: 0 4px;
+    display: flex; align-items: center; justify-content: center;
+    border: 2px solid var(--bg);
+    animation: badgePop 0.3s cubic-bezier(0.175,0.885,0.32,1.275);
+  }
+  @keyframes badgePop { from{transform:scale(0)} to{transform:scale(1)} }
+
+  /* ── MODAL OVERLAY ── */
+  .msg-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    z-index: 1000;
+    display: flex; align-items: center; justify-content: center;
+    padding: 16px;
+    animation: fadeIn 0.2s ease;
+  }
+  @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+
+  /* ── MODAL SHELL ── */
+  .msg-modal {
+    width: 100%; max-width: 820px;
+    height: min(85vh, 680px);
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 32px 80px rgba(0,0,0,0.6);
+    animation: slideUp 0.25s cubic-bezier(0.4,0,0.2,1);
+  }
+  @keyframes slideUp { from{transform:translateY(24px);opacity:0} to{transform:translateY(0);opacity:1} }
+
+  /* ── MODAL HEADER ── */
+  .msg-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 18px 0;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    gap: 12px;
+  }
+  .msg-header-left { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+  .msg-header-title {
+    font-size: 15px; font-weight: 700; color: var(--text);
+    letter-spacing: 0.3px;
+  }
+  .msg-header-tabs { display: flex; gap: 0; }
+  .msg-tab {
+    font-family: 'Nunito', sans-serif;
+    font-size: 12px; font-weight: 600;
+    padding: 8px 14px 10px;
+    color: var(--text3);
+    background: none; border: none; cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: color 0.15s, border-color 0.15s;
+    position: relative;
+  }
+  .msg-tab.active { color: var(--ios-blue); border-bottom-color: var(--ios-blue); }
+  .msg-tab-badge {
+    background: var(--red); color: #fff;
+    font-size: 9px; font-weight: 700;
+    min-width: 15px; height: 15px;
+    border-radius: 8px; padding: 0 3px;
+    display: inline-flex; align-items: center; justify-content: center;
+    margin-left: 4px; vertical-align: middle;
+  }
+  .msg-header-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .msg-icon-btn {
+    width: 32px; height: 32px; border-radius: 8px;
+    background: var(--bg3); border: 1px solid var(--border);
+    color: var(--text2); cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s, color 0.15s;
+    font-size: 15px;
+  }
+  .msg-icon-btn:hover { background: var(--bg4); color: var(--text); }
+  .msg-close-btn {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: var(--bg3); border: 1px solid var(--border);
+    color: var(--text2); cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; line-height: 1;
+    transition: background 0.15s, color 0.15s;
+  }
+  .msg-close-btn:hover { background: rgba(248,113,113,0.2); color: var(--red); }
+
+  /* ── BODY (list + thread) ── */
+  .msg-body { display: flex; flex: 1; overflow: hidden; }
+
+  /* ── LEFT PANEL ── */
+  .msg-list-panel {
+    width: 260px; flex-shrink: 0;
+    display: flex; flex-direction: column;
+    border-right: 1px solid var(--border);
+    background: var(--bg);
+  }
+  .msg-search-wrap {
+    padding: 10px 12px 8px;
+    flex-shrink: 0;
+  }
+  .msg-search-input {
+    width: 100%;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 7px 12px 7px 32px;
+    color: var(--text);
+    font-family: 'Nunito', sans-serif;
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .msg-search-input:focus { border-color: var(--ios-blue); }
+  .msg-search-wrap { position: relative; }
+  .msg-search-icon {
+    position: absolute; left: 22px; top: 50%;
+    transform: translateY(-50%);
+    color: var(--text3); pointer-events: none;
+    font-size: 13px;
+  }
+  .msg-convos-list { flex: 1; overflow-y: auto; padding: 4px 0; }
+  .msg-convos-list::-webkit-scrollbar { width: 4px; }
+  .msg-convos-list::-webkit-scrollbar-track { background: transparent; }
+  .msg-convos-list::-webkit-scrollbar-thumb { background: var(--bg4); border-radius: 2px; }
+
+  /* Convo row */
+  .msg-convo-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 12px;
+    cursor: pointer;
+    transition: background 0.12s;
+    border-radius: 10px;
+    margin: 1px 6px;
+    position: relative;
+  }
+  .msg-convo-row:hover { background: var(--bg3); }
+  .msg-convo-row.active { background: var(--ios-blue-dim); }
+  .msg-convo-row.active .msg-convo-name { color: var(--ios-blue); }
+
+  .msg-avatar { flex-shrink: 0; position: relative; }
+  .msg-avatar-img {
+    width: 40px; height: 40px; border-radius: 50%;
+    object-fit: cover;
+  }
+  .msg-avatar-initials {
+    width: 40px; height: 40px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: 700; color: #fff;
+    flex-shrink: 0;
+  }
+  .msg-avatar-online {
+    position: absolute; bottom: 1px; right: 1px;
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--green); border: 2px solid var(--bg);
+  }
+  .msg-group-avatar {
+    width: 40px; height: 40px; border-radius: 12px;
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 1px; overflow: hidden;
+  }
+  .msg-group-avatar-cell {
+    display: flex; align-items: center; justify-content: center;
+    font-size: 9px; font-weight: 700; color: #fff;
+  }
+  .msg-convo-info { flex: 1; min-width: 0; }
+  .msg-convo-name-row { display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-bottom: 2px; }
+  .msg-convo-name { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .msg-convo-time { font-size: 10px; color: var(--text3); flex-shrink: 0; }
+  .msg-convo-preview { font-size: 12px; color: var(--text3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .msg-convo-preview.unread { color: var(--text2); font-weight: 600; }
+  .msg-unread-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--ios-blue); flex-shrink: 0;
+  }
+  .msg-pin-icon { font-size: 10px; color: var(--text3); flex-shrink: 0; }
+  .msg-new-btn {
+    margin: 8px 10px;
+    padding: 9px 12px;
+    background: var(--ios-blue);
+    border: none; border-radius: 10px;
+    color: #fff; font-family: 'Nunito', sans-serif;
+    font-size: 13px; font-weight: 700;
+    cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;
+    transition: opacity 0.15s;
+    flex-shrink: 0;
+  }
+  .msg-new-btn:hover { opacity: 0.88; }
+
+  /* ── RIGHT PANEL (thread) ── */
+  .msg-thread-panel {
+    flex: 1; display: flex; flex-direction: column;
+    overflow: hidden; background: var(--bg2);
+    min-width: 0;
+  }
+  .msg-thread-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px;
+    flex-shrink: 0;
+    background: var(--bg2);
+  }
+  .msg-thread-name { font-size: 14px; font-weight: 700; color: var(--text); }
+  .msg-thread-sub { font-size: 11px; color: var(--text3); margin-top: 1px; }
+  .msg-thread-header-actions { margin-left: auto; display: flex; gap: 6px; }
+
+  /* Messages area */
+  .msg-messages {
+    flex: 1; overflow-y: auto;
+    padding: 12px 16px;
+    display: flex; flex-direction: column; gap: 4px;
+    scroll-behavior: smooth;
+  }
+  .msg-messages::-webkit-scrollbar { width: 4px; }
+  .msg-messages::-webkit-scrollbar-track { background: transparent; }
+  .msg-messages::-webkit-scrollbar-thumb { background: var(--bg4); border-radius: 2px; }
+
+  /* Date separator */
+  .msg-date-sep {
+    display: flex; align-items: center; gap: 8px;
+    color: var(--text3); font-size: 10px; font-weight: 600;
+    letter-spacing: 0.5px; text-transform: uppercase;
+    margin: 8px 0;
+  }
+  .msg-date-sep::before, .msg-date-sep::after {
+    content: ''; flex: 1; height: 1px; background: var(--border);
+  }
+
+  /* Message row */
+  .msg-row { display: flex; align-items: flex-end; gap: 8px; margin-bottom: 2px; }
+  .msg-row.sent { flex-direction: row-reverse; }
+  .msg-row-avatar { flex-shrink: 0; }
+  .msg-row-avatar .msg-avatar-initials { width: 28px; height: 28px; font-size: 10px; border-radius: 50%; }
+  .msg-row-avatar .msg-avatar-img { width: 28px; height: 28px; }
+  .msg-row.sent .msg-row-avatar { display: none; }
+
+  .msg-bubble-group { display: flex; flex-direction: column; gap: 2px; max-width: 72%; }
+  .msg-row.sent .msg-bubble-group { align-items: flex-end; }
+  .msg-sender-name { font-size: 10px; color: var(--text3); font-weight: 600; margin-bottom: 2px; padding-left: 4px; }
+
+  .msg-bubble-wrap { position: relative; display: inline-flex; flex-direction: column; }
+  .msg-bubble {
+    padding: 9px 13px;
+    border-radius: var(--radius-bubble);
+    font-size: 14px; line-height: 1.45;
+    word-break: break-word;
+    position: relative;
+    cursor: pointer;
+    transition: opacity 0.12s;
+  }
+  .msg-bubble:hover { opacity: 0.92; }
+  .msg-bubble.recv {
+    background: var(--bubble-recv);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-bottom-left-radius: 5px;
+  }
+  .msg-bubble.sent {
+    background: var(--bubble-sent);
+    color: #fff;
+    border-bottom-right-radius: 5px;
+  }
+  .msg-bubble-time {
+    font-size: 10px; color: var(--text3);
+    margin-top: 3px;
+    display: flex; align-items: center; gap: 4px;
+  }
+  .msg-row.sent .msg-bubble-time { justify-content: flex-end; }
+  .msg-read-tick { color: var(--ios-blue); font-size: 11px; }
+  .msg-read-tick.read { color: var(--ios-blue); }
+  .msg-read-tick.sent-only { color: var(--text3); }
+
+  /* Reactions */
+  .msg-reactions {
+    display: flex; gap: 4px; flex-wrap: wrap;
+    margin-top: 4px;
+  }
+  .msg-reaction {
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 12px; padding: 2px 7px;
+    font-size: 12px; cursor: pointer;
+    transition: background 0.12s, border-color 0.12s;
+    display: flex; align-items: center; gap: 3px;
+  }
+  .msg-reaction:hover { background: var(--bg4); border-color: var(--ios-blue); }
+  .msg-reaction.mine { background: var(--ios-blue-dim); border-color: var(--ios-blue); }
+  .msg-reaction-count { font-size: 10px; font-weight: 600; color: var(--text2); }
+
+  /* Reaction picker */
+  .msg-reaction-picker {
+    position: absolute;
+    bottom: calc(100% + 6px);
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 6px 8px;
+    display: flex; gap: 4px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    z-index: 10;
+    animation: pickerPop 0.15s cubic-bezier(0.175,0.885,0.32,1.275);
+    white-space: nowrap;
+  }
+  .msg-row.sent .msg-reaction-picker { right: 0; }
+  .msg-row.recv .msg-reaction-picker { left: 0; }
+  @keyframes pickerPop { from{transform:scale(0.8);opacity:0} to{transform:scale(1);opacity:1} }
+  .msg-reaction-emoji {
+    font-size: 20px; cursor: pointer; padding: 2px;
+    border-radius: 6px; transition: background 0.1s, transform 0.1s;
+  }
+  .msg-reaction-emoji:hover { background: var(--bg4); transform: scale(1.2); }
+
+  /* Typing indicator */
+  .msg-typing-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 4px 0 2px;
+    opacity: 0;
+    transition: opacity 0.2s;
+    height: 0; overflow: hidden;
+  }
+  .msg-typing-row.visible { opacity: 1; height: auto; }
+  .msg-typing-bubble {
+    background: var(--bubble-recv); border: 1px solid var(--border);
+    border-radius: 18px; border-bottom-left-radius: 5px;
+    padding: 10px 14px;
+    display: flex; gap: 4px; align-items: center;
+  }
+  .typing-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--text3);
+    animation: typingBounce 1.2s infinite;
+  }
+  .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+  .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes typingBounce {
+    0%,60%,100% { transform: translateY(0); opacity: 0.4; }
+    30% { transform: translateY(-5px); opacity: 1; }
+  }
+  .msg-typing-text { font-size: 11px; color: var(--text3); }
+
+  /* Composer */
+  .msg-composer {
+    border-top: 1px solid var(--border);
+    padding: 10px 12px;
+    display: flex; align-items: flex-end; gap: 8px;
+    background: var(--bg2);
+    flex-shrink: 0;
+  }
+  .msg-composer-input {
+    flex: 1;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 9px 14px;
+    color: var(--text);
+    font-family: 'Nunito', sans-serif;
+    font-size: 14px;
+    outline: none;
+    resize: none;
+    max-height: 100px;
+    overflow-y: auto;
+    line-height: 1.4;
+    transition: border-color 0.15s;
+  }
+  .msg-composer-input:focus { border-color: var(--ios-blue); }
+  .msg-composer-input::placeholder { color: var(--text3); }
+  .msg-send-btn {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: var(--ios-blue);
+    border: none; color: #fff; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: opacity 0.15s, transform 0.1s;
+    flex-shrink: 0;
+  }
+  .msg-send-btn:hover { opacity: 0.9; }
+  .msg-send-btn:active { transform: scale(0.93); }
+  .msg-send-btn:disabled { background: var(--bg4); cursor: default; }
+  .msg-emoji-btn {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: var(--bg3); border: 1px solid var(--border);
+    color: var(--text2); cursor: pointer; font-size: 18px;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s;
+    flex-shrink: 0;
+  }
+  .msg-emoji-btn:hover { background: var(--bg4); }
+
+  /* Empty state */
+  .msg-empty {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    color: var(--text3); gap: 10px;
+  }
+  .msg-empty-icon { font-size: 40px; opacity: 0.4; }
+  .msg-empty-text { font-size: 13px; font-weight: 500; }
+
+  /* ── NEW DM / GROUP SHEET ── */
+  .msg-sheet-overlay {
+    position: fixed; inset: 0; z-index: 1100;
+    background: rgba(0,0,0,0.5);
+    display: flex; align-items: flex-end; justify-content: center;
+    padding: 0;
+    animation: fadeIn 0.15s ease;
+  }
+  .msg-sheet {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 20px 20px 0 0;
+    width: 100%; max-width: 480px;
+    padding: 20px 20px 32px;
+    animation: sheetUp 0.25s cubic-bezier(0.4,0,0.2,1);
+    max-height: 80vh; overflow-y: auto;
+  }
+  @keyframes sheetUp { from{transform:translateY(100%)} to{transform:translateY(0)} }
+  .msg-sheet-handle {
+    width: 36px; height: 4px; border-radius: 2px;
+    background: var(--border); margin: 0 auto 16px;
+  }
+  .msg-sheet-title { font-size: 16px; font-weight: 700; margin-bottom: 16px; }
+  .msg-sheet-label { font-size: 11px; color: var(--text3); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+  .msg-sheet-input {
+    width: 100%; background: var(--bg3);
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 13px; color: var(--text);
+    font-family: 'Nunito', sans-serif; font-size: 14px;
+    outline: none; margin-bottom: 14px;
+    transition: border-color 0.15s;
+  }
+  .msg-sheet-input:focus { border-color: var(--ios-blue); }
+  .msg-member-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 16px; max-height: 200px; overflow-y: auto; }
+  .msg-member-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 7px 10px; border-radius: 10px;
+    cursor: pointer; transition: background 0.12s;
+  }
+  .msg-member-row:hover { background: var(--bg3); }
+  .msg-member-row.selected { background: var(--ios-blue-dim); }
+  .msg-member-check {
+    margin-left: auto; width: 20px; height: 20px;
+    border-radius: 50%; border: 2px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; color: #fff; transition: background 0.15s, border-color 0.15s;
+  }
+  .msg-member-row.selected .msg-member-check { background: var(--ios-blue); border-color: var(--ios-blue); }
+  .msg-sheet-btn {
+    width: 100%; padding: 13px;
+    background: var(--ios-blue); color: #fff;
+    border: none; border-radius: 12px;
+    font-family: 'Nunito', sans-serif; font-size: 15px; font-weight: 700;
+    cursor: pointer; transition: opacity 0.15s;
+  }
+  .msg-sheet-btn:hover { opacity: 0.9; }
+  .msg-sheet-btn:disabled { background: var(--bg4); color: var(--text3); cursor: default; }
+  .msg-sheet-cancel {
+    width: 100%; padding: 13px;
+    background: var(--bg3); color: var(--text2);
+    border: 1px solid var(--border); border-radius: 12px;
+    font-family: 'Nunito', sans-serif; font-size: 15px; font-weight: 600;
+    cursor: pointer; margin-top: 8px; transition: background 0.15s;
+  }
+  .msg-sheet-cancel:hover { background: var(--bg4); }
+
+  /* ── TOAST ── */
+  .msg-toast-container {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    z-index: 2000; display: flex; flex-direction: column; gap: 8px;
+    pointer-events: none;
+  }
+  .msg-toast {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 10px 16px;
+    display: flex; align-items: center; gap: 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    animation: toastIn 0.3s cubic-bezier(0.175,0.885,0.32,1.275);
+    pointer-events: auto;
+    min-width: 220px; max-width: 320px;
+    cursor: pointer;
+  }
+  @keyframes toastIn {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+  .msg-toast.out { animation: toastOut 0.2s ease forwards; }
+  @keyframes toastOut { to { transform: translateY(10px); opacity: 0; } }
+  .msg-toast-avatar { flex-shrink: 0; }
+  .msg-toast-info { flex: 1; min-width: 0; }
+  .msg-toast-name { font-size: 12px; font-weight: 700; color: var(--text); }
+  .msg-toast-msg { font-size: 12px; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* ── CONTEXT MENU ── */
+  .msg-ctx-menu {
+    position: fixed; z-index: 1500;
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 12px; padding: 4px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    min-width: 150px;
+    animation: pickerPop 0.15s cubic-bezier(0.175,0.885,0.32,1.275);
+  }
+  .msg-ctx-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px; border-radius: 8px;
+    font-size: 13px; color: var(--text); cursor: pointer;
+    transition: background 0.1s;
+  }
+  .msg-ctx-item:hover { background: var(--bg4); }
+  .msg-ctx-item.danger { color: var(--red); }
+
+  /* ── MOBILE RESPONSIVE ── */
+  @media (max-width: 600px) {
+    .msg-modal { border-radius: 16px 16px 0 0; height: 92vh; max-height: none; }
+    .msg-overlay { align-items: flex-end; padding: 0; }
+    .msg-list-panel { width: 100%; position: absolute; inset: 0; z-index: 2; transition: transform 0.25s; }
+    .msg-list-panel.hidden { transform: translateX(-100%); }
+    .msg-thread-panel { width: 100%; }
+    .msg-back-btn { display: flex !important; }
+    .msg-body { position: relative; }
+  }
+  .msg-back-btn { display: none; }
+
+  /* search highlight */
+  .msg-search-highlight { background: rgba(0,122,255,0.3); border-radius: 2px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback, useMemo } = React;
+
+// ── Helpers ──────────────────────────────────────────────
+const COLORS = ['#007AFF','#34C759','#FF9500','#FF3B30','#AF52DE','#5AC8FA','#FF2D55','#00C7BE'];
+const colorFor = str => COLORS[str.split('').reduce((a,c)=>a+c.charCodeAt(0),0) % COLORS.length];
+const initials = name => name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+const fmtTime = ts => {
+  const d = new Date(ts), now = new Date();
+  const diffDays = Math.floor((now - d) / 86400000);
+  if(diffDays === 0) return d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  if(diffDays === 1) return 'Yesterday';
+  if(diffDays < 7) return d.toLocaleDateString([],{weekday:'short'});
+  return d.toLocaleDateString([],{month:'short',day:'numeric'});
+};
+const fmtFull = ts => new Date(ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+const fmtDateSep = ts => {
+  const d = new Date(ts), now = new Date();
+  const diffDays = Math.floor((now - d) / 86400000);
+  if(diffDays === 0) return 'Today';
+  if(diffDays === 1) return 'Yesterday';
+  return d.toLocaleDateString([],{weekday:'long',month:'long',day:'numeric'});
+};
+
+// ── Mock users ────────────────────────────────────────────
+const USERS = [
+  {id:'u1', name:'Alex Morgan', photo: null},
+  {id:'u2', name:'Jordan Lee', photo: null},
+  {id:'u3', name:'Sam Rivera', photo: null},
+  {id:'u4', name:'Casey Kim', photo: null},
+  {id:'u5', name:'Taylor Pham', photo: null},
+];
+const ME = {id:'me', name:'You', photo: null};
+
+// ── Mock seed data ────────────────────────────────────────
+const now = Date.now();
+const seed = [
+  {
+    id:'c1', type:'dm', members:['me','u1'],
+    name:'Alex Morgan', pinned:true, muted:false,
+    messages:[
+      {id:'m1', senderId:'u1', text:'Hey, the press on Row 3 is throwing alerts again', ts: now-3600000*3, reactions:{}, readBy:['me','u1']},
+      {id:'m2', senderId:'me', text:'On it — going to check the sensor now', ts: now-3600000*3+60000, reactions:{'👍':['u1']}, readBy:['me','u1']},
+      {id:'m3', senderId:'u1', text:'Thanks! Also the shift report is ready whenever you get a chance', ts: now-1800000, reactions:{}, readBy:['u1']},
+    ]
+  },
+  {
+    id:'c2', type:'group', members:['me','u1','u2','u3'],
+    name:'Maintenance Crew', pinned:false, muted:false,
+    messages:[
+      {id:'m4', senderId:'u2', text:'Morning everyone 👋 All machines nominal on 1st shift so far', ts: now-7200000, reactions:{'👋':['u1','me']}, readBy:['me','u1','u2','u3']},
+      {id:'m5', senderId:'u3', text:'Nice! Row 2 had a brief jam but it cleared. Logged it.', ts: now-7000000, reactions:{}, readBy:['me','u1','u2','u3']},
+      {id:'m6', senderId:'me', text:'Good work team. Keep the logs updated please', ts: now-6800000, reactions:{'✅':['u1','u2','u3']}, readBy:['me','u1','u2','u3']},
+      {id:'m7', senderId:'u1', text:'Will do 👍', ts: now-6700000, reactions:{}, readBy:['me','u1']},
+    ]
+  },
+  {
+    id:'c3', type:'dm', members:['me','u4'],
+    name:'Casey Kim', pinned:false, muted:false,
+    messages:[
+      {id:'m8', senderId:'u4', text:'Do you have the part number for the feeder belt on Press 7?', ts: now - 86400000, reactions:{}, readBy:['me','u4']},
+      {id:'m9', senderId:'me', text:'PB-4472-C, it\'s in the parts cabinet drawer 3', ts: now - 86400000 + 120000, reactions:{'🙏':['u4']}, readBy:['me','u4']},
+    ]
+  },
+  {
+    id:'c4', type:'group', members:['me','u2','u5'],
+    name:'Supervisors', pinned:false, muted:false,
+    messages:[
+      {id:'m10', senderId:'u5', text:'Reminder: safety walk at 2pm today', ts: now - 172800000, reactions:{}, readBy:['me','u2','u5']},
+    ]
+  }
+];
+
+// ── Avatar component ──────────────────────────────────────
+function Avatar({user, size=40, online=false, square=false}) {
+  const s = {width:size,height:size,borderRadius: square ? size*0.3 : '50%',objectFit:'cover'};
+  const ini = initials(user.name);
+  const bg = colorFor(user.id);
+  return (
+    <div style={{position:'relative',flexShrink:0}}>
+      {user.photo
+        ? <img src={user.photo} style={s} alt={user.name}/>
+        : <div style={{...s,background:bg,display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:size*0.33,fontWeight:700}}>{ini}</div>
+      }
+      {online && <div className="msg-avatar-online"/>}
+    </div>
+  );
+}
+
+function GroupAvatar({members, size=40}) {
+  const shown = members.filter(u=>u.id!=='me').slice(0,4);
+  return (
+    <div style={{
+      width:size,height:size,borderRadius:size*0.3,
+      display:'grid',gridTemplateColumns:'1fr 1fr',gap:1,overflow:'hidden',flexShrink:0
+    }}>
+      {shown.map(u=>(
+        <div key={u.id} style={{background:colorFor(u.id),display:'flex',alignItems:'center',justifyContent:'center',fontSize:size*0.18,fontWeight:700,color:'#fff'}}>
+          {initials(u.name)}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Toast system ──────────────────────────────────────────
+const TOAST_EMITTER = {listeners:[]};
+function emitToast(data){ TOAST_EMITTER.listeners.forEach(fn=>fn(data)); }
+
+function ToastContainer() {
+  const [toasts,setToasts] = useState([]);
+  useEffect(()=>{
+    const fn = data => {
+      const id = Math.random().toString(36).slice(2);
+      setToasts(p=>[...p,{...data,id}]);
+      // Sound ping
+      try {
+        const ctx = new (window.AudioContext||window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.connect(g); g.connect(ctx.destination);
+        osc.frequency.setValueAtTime(880, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime+0.05);
+        g.gain.setValueAtTime(0.12, ctx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime+0.3);
+        osc.start(); osc.stop(ctx.currentTime+0.35);
+      } catch(e){}
+      setTimeout(()=>setToasts(p=>p.filter(t=>t.id!==id)),4000);
+    };
+    TOAST_EMITTER.listeners.push(fn);
+    return ()=>{ TOAST_EMITTER.listeners = TOAST_EMITTER.listeners.filter(x=>x!==fn); };
+  },[]);
+  return (
+    <div className="msg-toast-container">
+      {toasts.map(t=>(
+        <div key={t.id} className="msg-toast" onClick={()=>{ t.onOpen && t.onOpen(); setToasts(p=>p.filter(x=>x.id!==t.id)); }}>
+          <div className="msg-toast-avatar">
+            <Avatar user={t.sender} size={32}/>
+          </div>
+          <div className="msg-toast-info">
+            <div className="msg-toast-name">{t.sender.name} {t.groupName ? <span style={{color:'var(--text3)',fontWeight:400}}>in {t.groupName}</span> : ''}</div>
+            <div className="msg-toast-msg">{t.text}</div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Reaction picker ───────────────────────────────────────
+const EMOJIS = ['❤️','👍','😂','😮','😢','🔥','✅','👀'];
+function ReactionPicker({onPick, onClose}) {
+  const ref = useRef();
+  useEffect(()=>{
+    const fn = e => { if(ref.current && !ref.current.contains(e.target)) onClose(); };
+    document.addEventListener('mousedown',fn);
+    return ()=>document.removeEventListener('mousedown',fn);
+  },[onClose]);
+  return (
+    <div className="msg-reaction-picker" ref={ref}>
+      {EMOJIS.map(e=>(
+        <span key={e} className="msg-reaction-emoji" onClick={()=>onPick(e)}>{e}</span>
+      ))}
+    </div>
+  );
+}
+
+// ── Context menu ──────────────────────────────────────────
+function ContextMenu({x,y,items,onClose}) {
+  const ref = useRef();
+  useEffect(()=>{
+    const fn = e=>{ if(ref.current&&!ref.current.contains(e.target)) onClose(); };
+    document.addEventListener('mousedown',fn);
+    return ()=>document.removeEventListener('mousedown',fn);
+  },[onClose]);
+  return (
+    <div className="msg-ctx-menu" ref={ref} style={{top:y,left:x}}>
+      {items.map((item,i)=>(
+        <div key={i} className={`msg-ctx-item ${item.danger?'danger':''}`} onClick={()=>{item.action();onClose();}}>
+          <span>{item.icon}</span> {item.label}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Message bubble ────────────────────────────────────────
+function Bubble({msg, isSent, convo, onReact, onCopy, onDelete, allUsers}) {
+  const [showPicker, setShowPicker] = useState(false);
+  const [ctxMenu, setCtxMenu] = useState(null);
+  const sender = allUsers.find(u=>u.id===msg.senderId) || ME;
+  const isGroup = convo.type==='group';
+  const isRead = msg.readBy && msg.readBy.some(id=>id!=='me');
+
+  const handleContextMenu = e => {
+    e.preventDefault();
+    setCtxMenu({x:e.clientX,y:e.clientY});
+  };
+
+  const reactions = Object.entries(msg.reactions||{}).filter(([,users])=>users.length>0);
+
+  return (
+    <div className={`msg-row ${isSent?'sent':'recv'}`}>
+      {!isSent && (
+        <div className="msg-row-avatar">
+          <Avatar user={sender} size={28}/>
+        </div>
+      )}
+      <div className="msg-bubble-group">
+        {!isSent && isGroup && <div className="msg-sender-name">{sender.name}</div>}
+        <div className="msg-bubble-wrap">
+          <div
+            className={`msg-bubble ${isSent?'sent':'recv'}`}
+            onContextMenu={handleContextMenu}
+            onDoubleClick={()=>setShowPicker(p=>!p)}
+          >
+            {msg.text}
+          </div>
+          {showPicker && <ReactionPicker onPick={e=>{onReact(msg.id,e);setShowPicker(false);}} onClose={()=>setShowPicker(false)}/>}
+        </div>
+        {reactions.length>0 && (
+          <div className="msg-reactions">
+            {reactions.map(([emoji,users])=>(
+              <div key={emoji} className={`msg-reaction ${users.includes('me')?'mine':''}`} onClick={()=>onReact(msg.id,emoji)}>
+                {emoji}<span className="msg-reaction-count">{users.length>1?users.length:''}</span>
+              </div>
+            ))}
+            <div className="msg-reaction" style={{fontSize:'13px',color:'var(--text3)'}} onClick={()=>setShowPicker(p=>!p)}>+</div>
+          </div>
+        )}
+        <div className="msg-bubble-time">
+          {fmtFull(msg.ts)}
+          {isSent && (
+            <span className={`msg-read-tick ${isRead?'read':'sent-only'}`}>
+              {isRead ? '✓✓' : '✓'}
+            </span>
+          )}
+        </div>
+      </div>
+      {ctxMenu && (
+        <ContextMenu
+          x={ctxMenu.x} y={ctxMenu.y}
+          onClose={()=>setCtxMenu(null)}
+          items={[
+            {icon:'😊', label:'React', action:()=>setShowPicker(true)},
+            {icon:'📋', label:'Copy', action:()=>{ navigator.clipboard?.writeText(msg.text); onCopy && onCopy(); }},
+            ...(isSent ? [{icon:'🗑️', label:'Delete', danger:true, action:()=>onDelete(msg.id)}] : []),
+          ]}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Thread panel ──────────────────────────────────────────
+function ThreadPanel({convo, allUsers, onSend, onReact, onDeleteMsg, onBack, searchQuery}) {
+  const [input, setInput] = useState('');
+  const [typing, setTyping] = useState(false);
+  const messagesEndRef = useRef();
+  const inputRef = useRef();
+  const typingTimerRef = useRef();
+
+  const members = convo.members.map(id=> id==='me' ? ME : allUsers.find(u=>u.id===id)).filter(Boolean);
+  const others = members.filter(u=>u.id!=='me');
+
+  useEffect(()=>{ messagesEndRef.current?.scrollIntoView({block:'nearest'}); }, [convo.messages.length]);
+
+  // Simulate incoming typing
+  useEffect(()=>{
+    const t = setTimeout(()=>setTyping(true), 3000);
+    const t2 = setTimeout(()=>setTyping(false), 5500);
+    return ()=>{ clearTimeout(t); clearTimeout(t2); };
+  },[convo.id]);
+
+  const handleSend = () => {
+    if(!input.trim()) return;
+    onSend(convo.id, input.trim());
+    setInput('');
+    inputRef.current?.focus();
+  };
+
+  const handleKey = e => {
+    if(e.key==='Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
+  };
+
+  // Group messages by date
+  const grouped = useMemo(()=>{
+    const groups = [];
+    let curDate = null;
+    convo.messages.forEach(msg=>{
+      const d = new Date(msg.ts).toDateString();
+      if(d!==curDate){ groups.push({type:'sep',ts:msg.ts}); curDate=d; }
+      groups.push({type:'msg',msg});
+    });
+    return groups;
+  },[convo.messages]);
+
+  const headerSub = convo.type==='group'
+    ? `${others.length+1} members`
+    : others[0]?.name || '';
+
+  return (
+    <div className="msg-thread-panel">
+      <div className="msg-thread-header">
+        <button className="msg-back-btn msg-icon-btn" onClick={onBack} style={{marginRight:4}}>
+          ‹
+        </button>
+        {convo.type==='group'
+          ? <GroupAvatar members={members} size={36}/>
+          : <Avatar user={others[0]||ME} size={36} online={true}/>
+        }
+        <div style={{flex:1,minWidth:0}}>
+          <div className="msg-thread-name">{convo.name}</div>
+          <div className="msg-thread-sub">{headerSub}</div>
+        </div>
+        <div className="msg-thread-header-actions">
+          <button className="msg-icon-btn" title="Search" onClick={()=>{}}>
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" strokeWidth="1.4"/><path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div className="msg-messages">
+        {grouped.map((item,i)=>{
+          if(item.type==='sep') return <div key={'sep'+i} className="msg-date-sep">{fmtDateSep(item.ts)}</div>;
+          const {msg} = item;
+          const isSent = msg.senderId==='me';
+          return (
+            <Bubble
+              key={msg.id}
+              msg={msg}
+              isSent={isSent}
+              convo={convo}
+              allUsers={allUsers}
+              onReact={onReact}
+              onDelete={onDeleteMsg}
+              onCopy={()=>{}}
+            />
+          );
+        })}
+        <div className={`msg-typing-row ${typing?'visible':''}`}>
+          <Avatar user={others[0]||ME} size={24}/>
+          <div className="msg-typing-bubble">
+            <div className="typing-dot"/><div className="typing-dot"/><div className="typing-dot"/>
+          </div>
+          <span className="msg-typing-text">{others[0]?.name?.split(' ')[0]} is typing…</span>
+        </div>
+        <div ref={messagesEndRef}/>
+      </div>
+
+      <div className="msg-composer">
+        <button className="msg-emoji-btn" onClick={()=>{}}>😊</button>
+        <textarea
+          ref={inputRef}
+          className="msg-composer-input"
+          placeholder="iMessage"
+          value={input}
+          onChange={e=>setInput(e.target.value)}
+          onKeyDown={handleKey}
+          rows={1}
+          style={{height:'auto'}}
+          onInput={e=>{ e.target.style.height='auto'; e.target.style.height=Math.min(e.target.scrollHeight,100)+'px'; }}
+        />
+        <button className="msg-send-btn" onClick={handleSend} disabled={!input.trim()}>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M13.5 2.5L7 9M13.5 2.5L9 13.5 7 9l-4.5-2 9-4.5z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── New DM Sheet ──────────────────────────────────────────
+function NewDMSheet({users, onCreate, onClose}) {
+  const [selected, setSelected] = useState(null);
+  return (
+    <div className="msg-sheet-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="msg-sheet">
+        <div className="msg-sheet-handle"/>
+        <div className="msg-sheet-title">New Message</div>
+        <div className="msg-sheet-label">Send to</div>
+        <div className="msg-member-list">
+          {users.map(u=>(
+            <div key={u.id} className={`msg-member-row ${selected===u.id?'selected':''}`} onClick={()=>setSelected(u.id)}>
+              <Avatar user={u} size={36}/>
+              <div>
+                <div style={{fontSize:14,fontWeight:600}}>{u.name}</div>
+              </div>
+              <div className="msg-member-check">{selected===u.id?'✓':''}</div>
+            </div>
+          ))}
+        </div>
+        <button className="msg-sheet-btn" disabled={!selected} onClick={()=>selected&&onCreate(selected)}>
+          Start Conversation
+        </button>
+        <button className="msg-sheet-cancel" onClick={onClose}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+// ── New Group Sheet ───────────────────────────────────────
+function NewGroupSheet({users, onCreate, onClose}) {
+  const [name, setName] = useState('');
+  const [selected, setSelected] = useState([]);
+  const toggle = id => setSelected(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id]);
+  return (
+    <div className="msg-sheet-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="msg-sheet">
+        <div className="msg-sheet-handle"/>
+        <div className="msg-sheet-title">New Group</div>
+        <div className="msg-sheet-label">Group Name</div>
+        <input className="msg-sheet-input" placeholder="e.g. Maintenance Crew" value={name} onChange={e=>setName(e.target.value)}/>
+        <div className="msg-sheet-label">Add Members</div>
+        <div className="msg-member-list">
+          {users.map(u=>(
+            <div key={u.id} className={`msg-member-row ${selected.includes(u.id)?'selected':''}`} onClick={()=>toggle(u.id)}>
+              <Avatar user={u} size={36}/>
+              <div>
+                <div style={{fontSize:14,fontWeight:600}}>{u.name}</div>
+              </div>
+              <div className="msg-member-check">{selected.includes(u.id)?'✓':''}</div>
+            </div>
+          ))}
+        </div>
+        <button className="msg-sheet-btn" disabled={!name.trim()||selected.length<1} onClick={()=>onCreate(name.trim(),selected)}>
+          Create Group
+        </button>
+        <button className="msg-sheet-cancel" onClick={onClose}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Main Messaging App ────────────────────────────────────
+function MessagingApp() {
+  const [open, setOpen] = useState(true);
+  const [convos, setConvos] = useState(seed);
+  const [activeId, setActiveId] = useState('c1');
+  const [tab, setTab] = useState('all');
+  const [search, setSearch] = useState('');
+  const [showNewDM, setShowNewDM] = useState(false);
+  const [showNewGroup, setShowNewGroup] = useState(false);
+  const [unreadTotal, setUnreadTotal] = useState(1);
+  const [mobileShowThread, setMobileShowThread] = useState(false);
+
+  // Request browser notification
+  useEffect(()=>{
+    if('Notification' in window && Notification.permission==='default') {
+      Notification.requestPermission();
+    }
+  },[]);
+
+  // Simulate incoming message
+  useEffect(()=>{
+    const t = setTimeout(()=>{
+      const sender = USERS[1]; // Jordan Lee
+      const newMsg = {
+        id:'incoming_'+Date.now(), senderId:'u2',
+        text:'Quick heads up — the hydraulics on P4 need checking before 3rd shift',
+        ts:Date.now(), reactions:{}, readBy:['u2']
+      };
+      setConvos(p=>p.map(c=>c.id==='c2' ? {...c, messages:[...c.messages, newMsg]} : c));
+      setUnreadTotal(p=>p+1);
+      emitToast({sender, groupName:'Maintenance Crew', text:newMsg.text, onOpen:()=>{ setOpen(true); setActiveId('c2'); }});
+      // Browser notification
+      if(Notification.permission==='granted') {
+        new Notification('Jordan Lee', {body:newMsg.text, icon:'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><circle cx="16" cy="16" r="16" fill="%23007AFF"/><text y=".9em" x="50%" text-anchor="middle" font-size="18" fill="white">💬</text></svg>'});
+      }
+    }, 6000);
+    return ()=>clearTimeout(t);
+  },[]);
+
+  const activeConvo = convos.find(c=>c.id===activeId);
+
+  const filteredConvos = useMemo(()=>{
+    let list = convos;
+    if(tab==='dms') list = list.filter(c=>c.type==='dm');
+    else if(tab==='groups') list = list.filter(c=>c.type==='group');
+    else if(tab==='pinned') list = list.filter(c=>c.pinned);
+    if(search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter(c=>
+        c.name.toLowerCase().includes(q) ||
+        c.messages.some(m=>m.text.toLowerCase().includes(q))
+      );
+    }
+    return [...list].sort((a,b)=>{
+      if(a.pinned && !b.pinned) return -1;
+      if(!a.pinned && b.pinned) return 1;
+      const la = a.messages[a.messages.length-1];
+      const lb = b.messages[b.messages.length-1];
+      return (lb?.ts||0)-(la?.ts||0);
+    });
+  },[convos,tab,search]);
+
+  const handleSend = (convoId, text) => {
+    const msg = {id:'msg_'+Date.now(), senderId:'me', text, ts:Date.now(), reactions:{}, readBy:['me']};
+    setConvos(p=>p.map(c=>c.id===convoId ? {...c, messages:[...c.messages, msg]} : c));
+  };
+
+  const handleReact = (msgId, emoji) => {
+    setConvos(p=>p.map(c=>({
+      ...c,
+      messages: c.messages.map(m=>{
+        if(m.id!==msgId) return m;
+        const reactions = {...m.reactions};
+        const cur = reactions[emoji]||[];
+        reactions[emoji] = cur.includes('me') ? cur.filter(x=>x!=='me') : [...cur,'me'];
+        return {...m, reactions};
+      })
+    })));
+  };
+
+  const handleDeleteMsg = (msgId) => {
+    setConvos(p=>p.map(c=>({...c, messages:c.messages.filter(m=>m.id!==msgId)})));
+  };
+
+  const handleTogglePin = (convoId) => {
+    setConvos(p=>p.map(c=>c.id===convoId?{...c,pinned:!c.pinned}:c));
+  };
+
+  const handleCreateDM = (userId) => {
+    const user = USERS.find(u=>u.id===userId);
+    const exists = convos.find(c=>c.type==='dm'&&c.members.includes(userId));
+    if(exists) { setActiveId(exists.id); setShowNewDM(false); return; }
+    const newConvo = {id:'c_'+Date.now(), type:'dm', members:['me',userId], name:user.name, pinned:false, muted:false, messages:[]};
+    setConvos(p=>[newConvo,...p]);
+    setActiveId(newConvo.id);
+    setShowNewDM(false);
+    setMobileShowThread(true);
+  };
+
+  const handleCreateGroup = (name, memberIds) => {
+    const newConvo = {id:'c_'+Date.now(), type:'group', members:['me',...memberIds], name, pinned:false, muted:false, messages:[]};
+    setConvos(p=>[newConvo,...p]);
+    setActiveId(newConvo.id);
+    setShowNewGroup(false);
+    setMobileShowThread(true);
+  };
+
+  const handleSelectConvo = (id) => {
+    setActiveId(id);
+    setMobileShowThread(true);
+    // Mark as read
+    setConvos(p=>p.map(c=>c.id===id?{...c,messages:c.messages.map(m=>({...m,readBy:[...(m.readBy||[]),'me']}))}:c));
+  };
+
+  const unreadCounts = useMemo(()=>{
+    const counts = {};
+    convos.forEach(c=>{
+      counts[c.id] = c.messages.filter(m=>m.senderId!=='me'&&!(m.readBy||[]).includes('me')).length;
+    });
+    return counts;
+  },[convos]);
+
+  const tabCounts = {
+    all: Object.values(unreadCounts).reduce((a,b)=>a+b,0),
+    dms: convos.filter(c=>c.type==='dm').reduce((sum,c)=>sum+unreadCounts[c.id],0),
+    groups: convos.filter(c=>c.type==='group').reduce((sum,c)=>sum+unreadCounts[c.id],0),
+    pinned: 0,
+  };
+
+  const lastMsg = c => c.messages[c.messages.length-1];
+
+  return (
+    <>
+      {/* Demo trigger button */}
+      <div className="demo-bg">
+        <div className="msg-btn-wrap">
+          <button className="demo-trigger" onClick={()=>setOpen(true)}>
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 2h10a1 1 0 011 1v8a1 1 0 01-1 1H5l-3 2V3a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
+            MSG
+          </button>
+          {unreadTotal > 0 && <div className="msg-badge">{unreadTotal}</div>}
+        </div>
+      </div>
+
+      {/* Modal */}
+      {open && (
+        <div className="msg-overlay" onClick={e=>e.target===e.currentTarget&&setOpen(false)}>
+          <div className="msg-modal" onClick={e=>e.stopPropagation()}>
+            {/* Header with tabs */}
+            <div className="msg-header">
+              <div className="msg-header-left">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 2h10a1 1 0 011 1v8a1 1 0 01-1 1H5l-3 2V3a1 1 0 011-1z" fill="var(--ios-blue)" opacity="0.9"/></svg>
+                <span className="msg-header-title">Messages</span>
+              </div>
+              <div className="msg-header-tabs">
+                {[['all','All'],['dms','DMs'],['groups','Groups'],['pinned','📌']].map(([key,label])=>(
+                  <button key={key} className={`msg-tab ${tab===key?'active':''}`} onClick={()=>setTab(key)}>
+                    {label}
+                    {tabCounts[key]>0 && <span className="msg-tab-badge">{tabCounts[key]}</span>}
+                  </button>
+                ))}
+              </div>
+              <div className="msg-header-actions">
+                <button className="msg-icon-btn" title="New DM" onClick={()=>setShowNewDM(true)}>
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+                </button>
+                <button className="msg-close-btn" onClick={()=>setOpen(false)}>×</button>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="msg-body">
+              {/* Left: convo list */}
+              <div className={`msg-list-panel ${mobileShowThread?'hidden':''}`}>
+                <div className="msg-search-wrap">
+                  <span className="msg-search-icon">
+                    <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" strokeWidth="1.4"/><path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+                  </span>
+                  <input className="msg-search-input" placeholder="Search…" value={search} onChange={e=>setSearch(e.target.value)}/>
+                </div>
+
+                <div className="msg-convos-list">
+                  {filteredConvos.map(c=>{
+                    const last = lastMsg(c);
+                    const lSender = last ? (last.senderId==='me'?'You':USERS.find(u=>u.id===last.senderId)?.name?.split(' ')[0]||'') : '';
+                    const preview = last ? `${lSender}: ${last.text}` : 'No messages yet';
+                    const members = c.members.map(id=>id==='me'?ME:USERS.find(u=>u.id===id)).filter(Boolean);
+                    const other = members.find(u=>u.id!=='me')||ME;
+                    const unread = unreadCounts[c.id]||0;
+                    return (
+                      <div key={c.id} className={`msg-convo-row ${activeId===c.id?'active':''}`} onClick={()=>handleSelectConvo(c.id)}
+                        onContextMenu={e=>{ e.preventDefault(); handleTogglePin(c.id); }}>
+                        {c.type==='group'
+                          ? <GroupAvatar members={members} size={40}/>
+                          : <Avatar user={other} size={40} online={c.id==='c1'}/>
+                        }
+                        <div className="msg-convo-info">
+                          <div className="msg-convo-name-row">
+                            <span className="msg-convo-name">{c.name}</span>
+                            <div style={{display:'flex',alignItems:'center',gap:4}}>
+                              {c.pinned && <span className="msg-pin-icon">📌</span>}
+                              {last && <span className="msg-convo-time">{fmtTime(last.ts)}</span>}
+                            </div>
+                          </div>
+                          <div className={`msg-convo-preview ${unread>0?'unread':''}`}>{preview}</div>
+                        </div>
+                        {unread>0 && <div className="msg-unread-dot"/>}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <button className="msg-new-btn" onClick={()=>setShowNewGroup(true)}>
+                  <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 8a5 5 0 109.998 0A5 5 0 003 8zM8 5v6M5 8h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                  New Group
+                </button>
+              </div>
+
+              {/* Right: thread */}
+              {activeConvo
+                ? <ThreadPanel
+                    convo={activeConvo}
+                    allUsers={USERS}
+                    onSend={handleSend}
+                    onReact={handleReact}
+                    onDeleteMsg={handleDeleteMsg}
+                    onBack={()=>setMobileShowThread(false)}
+                    searchQuery={search}
+                  />
+                : <div className="msg-empty">
+                    <div className="msg-empty-icon">💬</div>
+                    <div className="msg-empty-text">Select a conversation</div>
+                  </div>
+              }
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showNewDM && <NewDMSheet users={USERS} onCreate={handleCreateDM} onClose={()=>setShowNewDM(false)}/>}
+      {showNewGroup && <NewGroupSheet users={USERS} onCreate={handleCreateGroup} onClose={()=>setShowNewGroup(false)}/>}
+      <ToastContainer/>
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<MessagingApp/>);
+</script>
+</body>
+</html>

@@ -36,10 +36,11 @@
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     z-index: 1000;
-    display: flex; align-items: center; justify-content: center;
+    display: none; align-items: center; justify-content: center;
     padding: 16px;
     animation: msgFadeIn 0.2s ease;
   }
+  .msg-overlay.visible { display: flex; }
   @keyframes msgFadeIn { from{opacity:0} to{opacity:1} }
   .msg-modal {
     width: 100%; max-width: 820px;
@@ -302,6 +303,7 @@
     display: flex; align-items: flex-end; justify-content: center;
     animation: msgFadeIn 0.15s ease;
   }
+  .msg-sheet-overlay.visible { display: flex !important; }
   .msg-sheet {
     background: var(--bg2); border: 1px solid var(--border);
     border-radius: 20px 20px 0 0; width: 100%; max-width: 480px;
@@ -388,7 +390,7 @@
     .msg-back-btn { display: flex !important; }
     .msg-body { position: relative; }
   }
-  #messages-btn { position: relative; }
+  [data-messages-trigger] { position: relative; }
   .msg-btn-badge {
     position: absolute; top: -5px; right: -5px;
     background: var(--red); color: #fff;
@@ -427,14 +429,10 @@
       <div class="logo-text">AP <span>TRACKER</span></div>
     </div>
 
-    <div class="plant-switcher-wrap" id="plant-switcher-wrap">
-      <button class="plant-switcher-btn" id="plant-switcher-btn" onclick="togglePlantDropdown()">
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;opacity:0.7;"><path d="M2 3h12v10H2z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M6 3V1h4v2" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M2 7h12" stroke="currentColor" stroke-width="1.3"/></svg>
-        <span id="plant-name-display">Loading…</span>
-        <svg class="plant-chevron" width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </button>
-      <div class="plant-dropdown" id="plant-dropdown"></div>
-    </div>
+    <button class="sort-dropdown-btn" id="messages-btn-header" data-messages-trigger="true" onclick="openMessagingModal()" style="gap:4px;" aria-label="Messages" title="Messages">
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;opacity:0.7;"><path d="M3 2h10a1 1 0 011 1v8a1 1 0 01-1 1H5l-3 2V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
+      <span class="msg-btn-badge" data-messages-badge style="display:none;">0</span>
+    </button>
 
     <div class="user-pill-wrap" id="user-pill-wrap">
       <div class="user-pill" id="user-pill">
@@ -456,7 +454,7 @@
           <div class="user-dropdown-section-label">Account</div>
           <button class="user-dropdown-item" id="admin-page-btn" style="display:none">
             <span class="ud-item-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 1L10 5H14L11 8L12.5 12L8 9.5L3.5 12L5 8L2 5H6L8 1Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" fill="none"/></svg></span>
-            Admin Portal
+            Admin Panel
           </button>
           <button class="user-dropdown-item" id="tutorial-btn" onclick="document.getElementById('user-dropdown').classList.remove('visible');document.getElementById('user-pill').classList.remove('open');openTutorial();">
             <span class="ud-item-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.3"/><path d="M8 7v4M8 5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>
@@ -467,6 +465,19 @@
         <!-- Workspace -->
         <div class="user-dropdown-section">
           <div class="user-dropdown-section-label">Workspace</div>
+          <div class="plant-switcher-wrap" id="plant-switcher-wrap">
+            <button class="plant-switcher-btn" id="plant-switcher-btn" onclick="togglePlantDropdown()">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;opacity:0.7;"><path d="M2 3h12v10H2z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M6 3V1h4v2" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M2 7h12" stroke="currentColor" stroke-width="1.3"/></svg>
+              <span id="plant-name-display">Loading…</span>
+              <svg class="plant-chevron" width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <div class="plant-dropdown" id="plant-dropdown"></div>
+          </div>
+          <button class="user-dropdown-item" id="messages-btn-menu" data-messages-trigger="true" type="button" onclick="document.getElementById('user-dropdown').classList.remove('visible');document.getElementById('user-pill').classList.remove('open');openMessagingModal();">
+            <span class="ud-item-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 2h10a1 1 0 011 1v8a1 1 0 01-1 1H5l-3 2V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg></span>
+            Messages
+            <span class="msg-btn-badge" data-messages-badge style="display:none;">0</span>
+          </button>
           <!-- Dark/Light toggle -->
           <div class="ud-toggle-row">
             <span class="ud-item-icon" id="ud-mode-icon">
@@ -477,31 +488,26 @@
             <button class="ud-toggle-switch on" id="theme-quick-toggle" type="button" aria-label="Toggle dark/light mode"><span class="ud-toggle-knob"></span></button>
           </div>
           <div class="theme-select-row">
-            <button class="theme-select-toggle" id="theme-select-toggle" type="button" aria-expanded="false" aria-controls="theme-select-grid">
-              <span class="ud-item-icon">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2.2a4.8 4.8 0 1 0 0 9.6h.7a1.7 1.7 0 1 0 0-3.4h-.3a1.2 1.2 0 1 1 0-2.4h1.7A2.9 2.9 0 0 0 13 3.1 5 5 0 0 0 8 2.2Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><circle cx="5.2" cy="6.1" r=".7" fill="currentColor"/><circle cx="7.3" cy="4.9" r=".7" fill="currentColor"/><circle cx="9.8" cy="5.1" r=".7" fill="currentColor"/></svg>
-              </span>
-              <span class="theme-select-copy">
-                <span class="theme-select-label">Theme</span>
-                <span class="theme-select-current" id="theme-select-current">Midnight</span>
-              </span>
-              <span class="theme-select-chevron" aria-hidden="true">
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 5.5 7 9l4-3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              </span>
-            </button>
+            <div class="theme-select-header">
+              <button class="theme-select-toggle" id="theme-select-toggle" type="button" aria-expanded="false" aria-controls="theme-select-grid">
+                <span class="ud-item-icon">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2.2a4.8 4.8 0 1 0 0 9.6h.7a1.7 1.7 0 1 0 0-3.4h-.3a1.2 1.2 0 1 1 0-2.4h1.7A2.9 2.9 0 0 0 13 3.1 5 5 0 0 0 8 2.2Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><circle cx="5.2" cy="6.1" r=".7" fill="currentColor"/><circle cx="7.3" cy="4.9" r=".7" fill="currentColor"/><circle cx="9.8" cy="5.1" r=".7" fill="currentColor"/></svg>
+                </span>
+                <span class="theme-select-copy">
+                  <span class="theme-select-label">Theme</span>
+                  <span class="theme-select-current" id="theme-select-current">Midnight</span>
+                </span>
+                <span class="theme-select-chevron" aria-hidden="true">
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 5.5 7 9l4-3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </span>
+              </button>
+              <button class="theme-store-btn" type="button" id="open-store-btn" onclick="document.getElementById('user-dropdown').classList.remove('visible');document.getElementById('user-pill').classList.remove('open');openStoreModal();">
+                <span class="ud-item-icon"><svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M2 2h1.5l1.5 7h7l1.5-5H5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="7" cy="13" r="1" fill="currentColor"/><circle cx="12" cy="13" r="1" fill="currentColor"/></svg></span>
+                <span class="ud-store-xp" id="ud-store-xp">0 XP</span>
+              </button>
+            </div>
             <div class="theme-select-grid" id="theme-select-grid"></div>
           </div>
-          <!-- Store (themes + more) -->
-          <button class="user-dropdown-item" type="button" id="open-store-btn" onclick="document.getElementById('user-dropdown').classList.remove('visible');document.getElementById('user-pill').classList.remove('open');openStoreModal();">
-            <span class="ud-item-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 2h1.5l1.5 7h7l1.5-5H5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="7" cy="13" r="1" fill="currentColor"/><circle cx="12" cy="13" r="1" fill="currentColor"/></svg></span>
-            <span style="flex:1">Themes &amp; Store</span>
-            <span class="ud-store-xp" id="ud-store-xp">0 XP</span>
-          </button>
-          <!-- Theme Color Editor -->
-          <button class="user-dropdown-item" type="button" onclick="openThemeEditor()">
-            <span class="ud-item-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.3"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span>
-            Theme Color Editor
-          </button>
         </div>
         <!-- XP badge -->
         <div class="ud-divider"></div>
@@ -643,10 +649,6 @@
           <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;opacity:0.7;"><rect x="1" y="1" width="14" height="14" rx="1.5" stroke="currentColor" stroke-width="1.3"/><path d="M1 5h14M5.5 5v10M5 8.5h6M5 11h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
           XLS
         </button>
-        <button class="sort-dropdown-btn" id="messages-btn" onclick="openMessagingModal()" style="gap:4px;">
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;opacity:0.7;"><path d="M3 2h10a1 1 0 011 1v8a1 1 0 01-1 1H5l-3 2V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
-          MSG
-        </button>
       </div>
     </div>
     <div class="machine-breadcrumb" id="machine-breadcrumb">
@@ -767,6 +769,31 @@
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeReopenModal()">Cancel</button>
       <button class="btn btn-blue" id="reopen-confirm-btn" onclick="confirmReopen()">Re-open Issue</button>
+    </div>
+  </div>
+</div>
+
+<!-- TEXT (SMS/RCS) / MMS COMPOSER -->
+<div class="modal-overlay" id="sms-compose-modal">
+  <div class="modal sms-compose-modal" onclick="event.stopPropagation()">
+    <div class="modal-title">📲 Send Issue Update</div>
+    <div class="modal-subtitle" id="sms-compose-subtitle">Choose recipients and review before sending.</div>
+    <label>Recipient Picker</label>
+    <div id="sms-recipient-picker" class="sms-recipient-picker"></div>
+    <label for="sms-manual-phone">Manual Phone Number(s)</label>
+    <input id="sms-manual-phone" type="text" placeholder="e.g. +15551234567, 555-123-4567">
+    <div style="display:flex;justify-content:flex-end;margin-top:6px;">
+      <button class="btn btn-ghost" type="button" onclick="addManualSmsRecipients()">Add Number(s) to Recipient Picker</button>
+    </div>
+    <label class="sms-toggle-row" for="sms-include-photos">
+      <input id="sms-include-photos" type="checkbox" checked>
+      <span>Include photos (MMS)</span>
+    </label>
+    <label>Outbound Preview</label>
+    <textarea id="sms-preview-text" readonly style="min-height:120px;"></textarea>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" type="button" onclick="closeSmsComposer(true)">Cancel</button>
+      <button class="btn btn-primary" id="sms-send-btn" type="button" onclick="submitSmsComposer()">Send</button>
     </div>
   </div>
 </div>
@@ -907,50 +934,91 @@
 </div>
 
 <!-- MESSAGING MODAL -->
-<div class="modal-overlay" id="messaging-modal">
-  <div class="modal messaging-modal-shell" onclick="event.stopPropagation()">
-    <div class="messaging-modal-header">
-      <div class="modal-title">Messages</div>
-      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-        <select class="sort-dropdown-btn" onchange="setMessagingSort(this.value)">
-          <option value="recent">Most Recent</option>
-          <option value="name">Name</option>
-        </select>
-        <button class="sort-dropdown-btn" onclick="enableMessagingNotifications()">Enable Alerts</button>
-        <button class="notes-modal-b-close" onclick="closeMessagingModal()">✕ close</button>
+<div class="msg-overlay" id="messaging-modal">
+  <div class="msg-modal" onclick="event.stopPropagation()">
+    <div class="msg-header">
+      <div class="msg-header-left">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 2h10a1 1 0 011 1v8a1 1 0 01-1 1H5l-3 2V3a1 1 0 011-1z" fill="var(--ios-blue)" opacity="0.9"/></svg>
+        <span class="msg-header-title">Messages</span>
+      </div>
+      <div class="msg-header-tabs" id="messaging-tabs">
+        <button class="msg-tab active" data-tab="all" type="button">All <span class="msg-tab-badge" id="messaging-tab-all-badge" style="display:none;">0</span></button>
+        <button class="msg-tab" data-tab="dms" type="button">DMs</button>
+        <button class="msg-tab" data-tab="groups" type="button">Groups</button>
+      </div>
+      <div class="msg-header-actions">
+        <button class="msg-icon-btn" title="Enable Alerts" onclick="enableMessagingNotifications()">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 14a2 2 0 0 0 2-2H6a2 2 0 0 0 2 2Zm5-4H3l1.2-1.7V6a3.8 3.8 0 0 1 7.6 0v2.3L13 10Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="msg-icon-btn" title="New DM" onclick="showMessagingNewDm()">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
+        <button class="msg-close-btn" onclick="closeMessagingModal()">×</button>
       </div>
     </div>
-    <div class="messaging-modal-body">
-      <aside class="messaging-list-panel">
-        <div class="messaging-list-title">Conversations</div>
-        <div class="messaging-controls">
-          <div class="messaging-row">
-            <select id="messaging-dm-select"></select>
-            <button class="sort-dropdown-btn" onclick="createMessagingDm()">+ New DM</button>
-          </div>
-          <div class="messaging-row">
-            <input id="messaging-group-name" type="text" placeholder="Group name">
-            <button class="sort-dropdown-btn" onclick="createMessagingGroup()">+ Group</button>
-          </div>
-          <details class="messaging-members-dropdown">
-            <summary>Group members</summary>
-            <div id="messaging-group-members" class="messaging-members-list"></div>
-          </details>
+
+    <div class="msg-body">
+      <div class="msg-list-panel" id="msg-list-panel">
+        <div class="msg-search-wrap">
+          <span class="msg-search-icon">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+          </span>
+          <input class="msg-search-input" id="messaging-search" placeholder="Search conversations…">
         </div>
-        <div id="messaging-conversations-list" class="messaging-conversations-list"></div>
-      </aside>
-      <section class="messaging-thread-panel">
-        <div id="messaging-thread-title" class="messaging-thread-title">Select a conversation</div>
-        <div id="messaging-thread-messages" class="messaging-thread-messages"></div>
+        <div class="msg-convos-list" id="messaging-conversations-list"></div>
+        <button class="msg-new-btn" type="button" onclick="showMessagingNewGroup()">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 8a5 5 0 109.998 0A5 5 0 003 8zM8 5v6M5 8h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          New Group
+        </button>
+      </div>
+
+      <div class="msg-thread-panel" id="messaging-thread-panel">
+        <div class="msg-thread-header" id="messaging-thread-header" style="display:none;">
+          <button class="msg-back-btn msg-icon-btn" id="messaging-back-btn" type="button">‹</button>
+          <div id="messaging-thread-avatar"></div>
+          <div style="flex:1;min-width:0;">
+            <div class="msg-thread-name" id="messaging-thread-title">Select a conversation</div>
+            <div class="msg-thread-sub" id="messaging-thread-sub"></div>
+          </div>
+        </div>
+        <div id="messaging-thread-messages" class="msg-messages"></div>
         <div id="messaging-photo-preview" class="messaging-photo-preview"></div>
-        <div class="messaging-composer">
-          <textarea id="messaging-input" placeholder="Write a message…"></textarea>
-          <input id="messaging-photo-input" type="file" accept="image/*">
-          <button class="sort-dropdown-btn" onclick="sendMessagingModalMessage()">Send</button>
+        <div class="msg-composer">
+          <button class="msg-emoji-btn" type="button">😊</button>
+          <textarea id="messaging-input" class="msg-composer-input" placeholder="iMessage" rows="1"></textarea>
+          <input id="messaging-photo-input" type="file" accept="image/*" style="display:none;">
+          <button class="msg-icon-btn" type="button" onclick="document.getElementById('messaging-photo-input').click()" title="Attach image">📎</button>
+          <button class="msg-send-btn" type="button" onclick="sendMessagingModalMessage()">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13.5 2.5L7 9M13.5 2.5L9 13.5 7 9l-4.5-2 9-4.5z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
         </div>
         <div id="messaging-error" class="messaging-error"></div>
-      </section>
+      </div>
     </div>
+  </div>
+</div>
+
+<div class="msg-sheet-overlay" id="messaging-new-dm" style="display:none;">
+  <div class="msg-sheet" onclick="event.stopPropagation()">
+    <div class="msg-sheet-handle"></div>
+    <div class="msg-sheet-title">New Message</div>
+    <div class="msg-sheet-label">Send to</div>
+    <div class="msg-member-list" id="messaging-dm-list"></div>
+    <button class="msg-sheet-btn" id="messaging-create-dm-btn" type="button" disabled>Start Conversation</button>
+    <button class="msg-sheet-cancel" type="button" onclick="hideMessagingSheets()">Cancel</button>
+  </div>
+</div>
+
+<div class="msg-sheet-overlay" id="messaging-new-group" style="display:none;">
+  <div class="msg-sheet" onclick="event.stopPropagation()">
+    <div class="msg-sheet-handle"></div>
+    <div class="msg-sheet-title">New Group</div>
+    <div class="msg-sheet-label">Group Name</div>
+    <input class="msg-sheet-input" id="messaging-group-name" placeholder="e.g. Maintenance Crew">
+    <div class="msg-sheet-label">Add Members</div>
+    <div class="msg-member-list" id="messaging-group-members"></div>
+    <button class="msg-sheet-btn" id="messaging-create-group-btn" type="button" disabled>Create Group</button>
+    <button class="msg-sheet-cancel" type="button" onclick="hideMessagingSheets()">Cancel</button>
   </div>
 </div>
 
@@ -981,6 +1049,13 @@
         <div class="store-theme-grid" id="store-free-themes"></div>
         <div class="store-section-label" style="margin-top:20px">Premium Themes</div>
         <div class="store-theme-grid" id="store-paid-themes"></div>
+        <div class="store-admin-tools" id="store-admin-tools" style="display:none;">
+          <div class="store-admin-tools-copy">
+            <div class="store-admin-tools-title">Admin Theme Sync</div>
+            <div class="store-admin-tools-sub">Push canonical built-in themes to Firestore store config.</div>
+          </div>
+          <button class="btn btn-ghost" type="button" id="store-sync-themes-btn" onclick="syncBuiltInThemesToFirestore()">Sync Built-ins</button>
+        </div>
       </div>
       <div class="store-tab-panel" id="store-panel-badges">
         <div class="store-coming-soon">
@@ -1034,61 +1109,7 @@
     </div>
 
     <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="openThemeEditor()">Open Color Editor…</button>
       <button class="btn btn-ghost" onclick="closeAppearanceModal()">Close</button>
-    </div>
-  </div>
-</div>
-
-<div class="modal-overlay" id="theme-editor-modal">
-  <div class="modal theme-editor-modal">
-    <div class="modal-title" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
-      <span>🎨 Theme Editor</span>
-      <button style="background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer;line-height:1;" onclick="closeThemeEditor()">✕</button>
-    </div>
-
-    <!-- Base preset selector -->
-    <div class="te-section">
-      <div class="te-section-label">Start from a preset</div>
-      <select class="te-base-select" id="te-base-select"></select>
-    </div>
-
-    <!-- Color picker groups -->
-    <div class="te-section">
-      <div class="te-section-label">Surfaces</div>
-      <div class="te-color-grid" id="te-colors-surfaces"></div>
-    </div>
-    <div class="te-section">
-      <div class="te-section-label">Text</div>
-      <div class="te-color-grid" id="te-colors-text"></div>
-    </div>
-    <div class="te-section">
-      <div class="te-section-label">Accent</div>
-      <div class="te-color-grid" id="te-colors-accent"></div>
-    </div>
-    <div class="te-section">
-      <div class="te-section-label">Status Colors</div>
-      <div class="te-color-grid" id="te-colors-status"></div>
-    </div>
-
-    <!-- Save section -->
-    <div class="te-section" style="border-top:1px solid var(--border);padding-top:16px;">
-      <div class="te-section-label">Save this theme</div>
-      <div style="display:flex;gap:8px;align-items:center;">
-        <input type="text" id="te-theme-name" placeholder="Name this theme…" maxlength="32"
-          style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;outline:none;">
-        <button id="te-save-btn" class="btn btn-primary" onclick="saveCustomTheme()" style="white-space:nowrap;flex-shrink:0;">💾 Save</button>
-      </div>
-    </div>
-
-    <!-- Saved themes list -->
-    <div class="te-section" id="te-saved-section" style="display:none;">
-      <div class="te-section-label">Saved Themes</div>
-      <div class="te-saved-list" id="te-saved-list"></div>
-    </div>
-
-    <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeThemeEditor()">Close</button>
     </div>
   </div>
 </div>
@@ -1153,6 +1174,16 @@
   </div>
 </aside>
 <div class="game-toast" id="game-toast"></div>
+
+<div id="embedded-admin-overlay" class="modal-overlay embedded-admin-overlay">
+  <div class="embedded-admin-shell">
+    <div class="embedded-admin-head">
+      <div class="embedded-admin-title">ADMIN PORTAL</div>
+      <button class="btn" type="button" onclick="window.closeEmbeddedAdminPortal()">Close</button>
+    </div>
+    <iframe id="embedded-admin-iframe" title="Admin Portal" class="embedded-admin-iframe" loading="lazy"></iframe>
+  </div>
+</div>
 
 <script type="module" src="./app.js"></script>
 
