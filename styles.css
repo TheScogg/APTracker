@@ -968,10 +968,6 @@
   .swipe-tile-icon { font-size: 24px; line-height: 1; display: flex; align-items: center; justify-content: center; height: 32px; width: 32px; }
   .swipe-tile-label { font-size: 10px; font-weight: 500; text-align: center; font-family: 'Nunito', sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; width: 100%; }
 
-  /* Cancel button row - React design */
-  .swipe-category-cancel { grid-column: 1 / -1; margin-top: 4px; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 14px; font-weight: 500; color: var(--text3); background: transparent; border: 1px dashed var(--border); border-radius: 12px; cursor: pointer; padding: 12px; transition: all 0.15s; opacity: 0; animation: swipeTileIn 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards; animation-delay: 0.15s; font-family: 'Nunito', sans-serif; }
-  .swipe-category-cancel:hover { color: var(--text); background: var(--bg3); }
-
   /* Sub-status panel underneath categories - React design */
   .swipe-sub-panel { overflow: hidden; max-height: 0; background: var(--bg); border: 1px solid var(--border); border-top: none; border-radius: 0 0 18px 18px; transition: max-height 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94); }
   .swipe-sub-panel.visible { max-height: 500px; }
@@ -1381,8 +1377,13 @@
   .swipe-mascot-header { float: left; display:flex; align-items:center; gap:8px; margin: 0 12px 8px 0; padding:8px 10px; border:1px solid var(--border); border-radius:12px; background:var(--bg2); max-width:min(100%, 280px); }
   .swipe-mascot-svg { flex-shrink:0; line-height:0; }
   .swipe-mascot-svg svg { width:56px; height:56px; }
+  .swipe-mascot-info { min-width: 0; }
   .swipe-mascot-name { font-family:'Rajdhani',sans-serif; font-size:16px; font-weight:700; letter-spacing:2px; text-transform:uppercase; line-height:1.1; }
   .swipe-mascot-tagline { font-family:'Share Tech Mono',monospace; font-size:10px; opacity:0.55; font-style:italic; line-height:1.4; margin-top:2px; }
+  .swipe-mascot-cancel { margin-left:auto; width:30px; height:30px; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; border-radius:9px; border:1px solid color-mix(in srgb, var(--border) 72%, #fff 28%); background:linear-gradient(180deg, color-mix(in srgb, var(--bg3) 82%, #fff 18%) 0%, var(--bg3) 100%); box-shadow: inset 0 1px 0 rgba(255,255,255,0.2), 0 2px 5px rgba(0,0,0,0.24); color:var(--text2); cursor:pointer; transition:transform 0.12s, box-shadow 0.12s, color 0.12s, border-color 0.12s; }
+  .swipe-mascot-cancel:hover { color:var(--text); border-color:color-mix(in srgb, var(--border) 45%, #fff 55%); box-shadow: inset 0 1px 0 rgba(255,255,255,0.24), 0 3px 8px rgba(0,0,0,0.3); }
+  .swipe-mascot-cancel:active { transform: translateY(1px) scale(0.96); box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 1px 2px rgba(0,0,0,0.3); }
+  .swipe-mascot-cancel span { font-size: 14px; font-weight: 800; line-height: 1; }
   @media (max-width: 560px) {
     .swipe-mascot-header { float:none; margin:0 0 10px; max-width:none; }
   }

@@ -4960,11 +4960,6 @@ function renderIssues() {
       catInner.appendChild(tile);
     });
 
-    // Cancel button
-    const cancelBtn = document.createElement('button');
-    cancelBtn.className = 'swipe-category-cancel';
-    cancelBtn.textContent = '✕ cancel';
-    catInner.appendChild(cancelBtn);
     catPanel.appendChild(catInner);
 
     // Sub-status panel
@@ -5015,11 +5010,6 @@ function renderIssues() {
       scheduleIssueLogRelayout();
     };
 
-    // Cancel button click
-    const handleCancel = () => closeSwipeCard(card);
-    addTapListener(cancelBtn, handleCancel);
-    cancelBtn.addEventListener('click', handleCancel); // Mouse support
-
     // Tile clicks
     let lastTileTap = null; // { key, stamp } — tracks last tap for double-click/double-tap detection
     catInner.querySelectorAll('.swipe-status-tile').forEach(tile => {
@@ -5068,6 +5058,15 @@ function renderIssues() {
             const mh = document.createElement('div');
             mh.className = 'swipe-mascot-header';
             mh.innerHTML = `<div class="swipe-mascot-svg">${mascotDef.svg(68, 68)}</div><div class="swipe-mascot-info"><div class="swipe-mascot-name" style="color:${mascotDef.color}">${mascotDef.name}</div><div class="swipe-mascot-tagline">${mascotDef.tagline}</div></div>`;
+            const mascotCancelBtn = document.createElement('button');
+            mascotCancelBtn.className = 'swipe-mascot-cancel';
+            mascotCancelBtn.type = 'button';
+            mascotCancelBtn.setAttribute('aria-label', 'Close status picker');
+            mascotCancelBtn.innerHTML = '<span aria-hidden="true">✕</span>';
+            const handleCancel = () => closeSwipeCard(card);
+            addTapListener(mascotCancelBtn, handleCancel);
+            mascotCancelBtn.addEventListener('click', handleCancel);
+            mh.appendChild(mascotCancelBtn);
             subInner.appendChild(mh);
           }
 
