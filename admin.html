@@ -1436,7 +1436,9 @@ function renderPlantsUsers() {
           <div class="muted">${esc(plant.location || 'No location')} · ${esc(plant.id)}</div>
         </div>
         <div class="plant-head-actions">
-          <button class="compact-btn" onclick="window.togglePlantPanel('${plant.id}')">${plantOpen ? 'Minimize' : 'Expand'}</button>
+          <button class="compact-btn"
+                  ontouchend="window.togglePlantPanelTap(event,'${plant.id}')"
+                  onclick="window.togglePlantPanelClick(event,'${plant.id}')">${plantOpen ? 'Minimize' : 'Expand'}</button>
           <span class="pill">admin</span>
         </div>
       </div>
@@ -2271,6 +2273,22 @@ window.toggleGamePanel = function(plantId) {
 window.togglePlantPanel = function(plantId) {
   plantPanelOpen[plantId] = !(plantPanelOpen[plantId] ?? false);
   renderPlantsUsers();
+};
+
+let lastPlantPanelTouchAt = 0;
+window.togglePlantPanelTap = function(event, plantId) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  lastPlantPanelTouchAt = Date.now();
+  window.togglePlantPanel(plantId);
+};
+
+window.togglePlantPanelClick = function(event, plantId) {
+  if (event) event.stopPropagation();
+  if (Date.now() - lastPlantPanelTouchAt < 700) return;
+  window.togglePlantPanel(plantId);
 };
 
 window.switchPageTab = function(tabName, btnEl) {
