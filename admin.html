@@ -146,8 +146,8 @@
     .page-tab-btn { background:none; border:none; border-bottom:3px solid transparent; color:var(--text2); font-family:'Nunito',sans-serif; font-weight:700; font-size:14px; padding:10px 20px; cursor:pointer; margin-bottom:-2px; transition:color 0.15s,border-color 0.15s; white-space:nowrap; }
     .page-tab-btn.active { color:var(--accent); border-bottom-color:var(--accent); }
     .page-tab-btn:hover:not(.active) { color:var(--text); }
-    .page-tab-pane { display:none; }
-    .page-tab-pane.active { display:block; }
+    .page-tab-pane { display:none; pointer-events:none; }
+    .page-tab-pane.active { display:block; pointer-events:auto; }
 
     /* ── Per-plant tabs ──────────────────────────────────────── */
     .plant-tabs { display:flex; gap:0; border-bottom:1px solid var(--border); margin-bottom:12px; }
@@ -2274,12 +2274,25 @@ window.togglePlantPanel = function(plantId) {
 };
 
 window.switchPageTab = function(tabName, btnEl) {
+  const targetId = `page-tab-${tabName}`;
   document.querySelectorAll('.page-tab-btn').forEach(b => b.classList.remove('active'));
-  document.querySelectorAll('.page-tab-pane').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.page-tab-pane').forEach(p => {
+    const isActive = p.id === targetId;
+    p.classList.toggle('active', isActive);
+    p.setAttribute('aria-hidden', isActive ? 'false' : 'true');
+    if ('inert' in p) p.inert = !isActive;
+  });
   btnEl.classList.add('active');
-  const pane = document.getElementById(`page-tab-${tabName}`);
-  if (pane) pane.classList.add('active');
 };
+
+function syncPageTabInteractivity() {
+  const activePane = document.querySelector('.page-tab-pane.active');
+  document.querySelectorAll('.page-tab-pane').forEach(p => {
+    const isActive = p === activePane;
+    p.setAttribute('aria-hidden', isActive ? 'false' : 'true');
+    if ('inert' in p) p.inert = !isActive;
+  });
+}
 
 window.switchPlantTab = function(plantId, tabName, btnEl) {
   plantTab[plantId] = tabName;
@@ -2350,6 +2363,7 @@ onAuthStateChanged(auth, async user => {
   document.getElementById('login-screen').classList.remove('visible');
   document.getElementById('app-screen').classList.add('visible');
   document.getElementById('whoami').textContent = `${user.displayName || user.email} (${user.email || user.uid})`;
+  syncPageTabInteractivity();
 
   await refreshAdminData();
 });
@@ -2617,6 +2631,7 @@ document.getElementById('signout-btn').addEventListener('click', doSignOut);
 document.getElementById('create-plant-btn').addEventListener('click', createPlant);
 document.getElementById('load-schedule-file-btn').addEventListener('click', loadScheduleJsonFromFile);
 document.getElementById('import-schedule-btn').addEventListener('click', importDailySchedule);
+syncPageTabInteractivity();
 </script>
 </body>
 </html>

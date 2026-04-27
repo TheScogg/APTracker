@@ -8532,13 +8532,18 @@ function openEmbeddedAdminPortal() {
     return;
   }
   if (!frame.getAttribute('src')) frame.setAttribute('src', 'admin.html');
-  overlay.style.display = 'flex';
+  overlay.classList.add('visible');
+  document.body.classList.add('admin-portal-open');
 }
 
 function closeEmbeddedAdminPortal() {
   const overlay = document.getElementById('embedded-admin-overlay');
   if (!overlay) return;
-  overlay.style.display = 'none';
+  overlay.classList.remove('visible');
+  document.body.classList.remove('admin-portal-open');
 }
 
 window.closeEmbeddedAdminPortal = closeEmbeddedAdminPortal;
+document.getElementById('embedded-admin-overlay')?.addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeEmbeddedAdminPortal();
+});
