@@ -1438,6 +1438,41 @@
 
   /* STORE MODAL */
   .store-modal-overlay { padding: 16px; }
+  .embedded-admin-overlay { z-index: 12000; align-items: center; justify-content: center; padding: 12px; }
+  .embedded-admin-shell {
+    width: min(1220px, 100%);
+    height: min(94vh, 980px);
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.6);
+  }
+  .embedded-admin-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg2);
+    flex-shrink: 0;
+  }
+  .embedded-admin-title { font-weight: 700; font-family: 'Rajdhani', sans-serif; letter-spacing: 0.06em; }
+  .embedded-admin-iframe { flex: 1; width: 100%; border: 0; background: #0d1117; min-height: 0; }
+  body.admin-portal-open { overflow: hidden; overscroll-behavior: none; }
+  @media (max-width: 900px) {
+    .embedded-admin-overlay { padding: 0; }
+    .embedded-admin-shell {
+      width: 100vw;
+      height: 100dvh;
+      max-height: none;
+      border-radius: 0;
+      border-left: 0;
+      border-right: 0;
+    }
+  }
   .store-modal {
     background: var(--bg2); border: 1px solid var(--border);
     border-radius: 18px; width: 100%; max-width: 680px; max-height: 90vh;
