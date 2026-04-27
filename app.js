@@ -8521,5 +8521,24 @@ document.getElementById('admin-page-btn')?.addEventListener('click', e => {
   e.stopPropagation();
   document.getElementById('user-dropdown')?.classList.remove('visible');
   document.getElementById('user-pill')?.classList.remove('open');
-  openAdminPanel();
+  openEmbeddedAdminPortal();
 });
+
+function openEmbeddedAdminPortal() {
+  const overlay = document.getElementById('embedded-admin-overlay');
+  const frame = document.getElementById('embedded-admin-iframe');
+  if (!overlay || !frame) {
+    window.location.href = 'admin.html';
+    return;
+  }
+  if (!frame.getAttribute('src')) frame.setAttribute('src', 'admin.html');
+  overlay.style.display = 'flex';
+}
+
+function closeEmbeddedAdminPortal() {
+  const overlay = document.getElementById('embedded-admin-overlay');
+  if (!overlay) return;
+  overlay.style.display = 'none';
+}
+
+window.closeEmbeddedAdminPortal = closeEmbeddedAdminPortal;
