@@ -8525,6 +8525,17 @@ document.getElementById('admin-page-btn')?.addEventListener('click', e => {
 });
 
 function openEmbeddedAdminPortal() {
+  // iOS Safari has inconsistent tap/focus behavior inside iframe overlays.
+  // Route those sessions to the standalone admin page instead of embedded mode.
+  const ua = navigator.userAgent || '';
+  const isiOS = /iP(ad|hone|od)/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  const isSafari = /^((?!chrome|android|crios|fxios).)*safari/i.test(ua);
+  const shouldUseStandaloneAdmin = isiOS && isSafari;
+  if (shouldUseStandaloneAdmin) {
+    window.location.href = 'admin.html';
+    return;
+  }
+
   const overlay = document.getElementById('embedded-admin-overlay');
   const frame = document.getElementById('embedded-admin-iframe');
   if (!overlay || !frame) {
