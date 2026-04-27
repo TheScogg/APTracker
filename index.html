@@ -1175,6 +1175,24 @@
 </aside>
 <div class="game-toast" id="game-toast"></div>
 
+<!-- INLINE ADMIN PANEL -->
+<div class="admin-overlay" id="admin-overlay" aria-hidden="true">
+  <div class="admin-panel-inner" id="admin-panel-inner" role="dialog" aria-modal="true" aria-label="Admin panel">
+    <div class="admin-panel-head">
+      <div>
+        <div class="admin-panel-title">Admin Panel</div>
+        <div class="admin-panel-sub">Manage status categories without leaving the tracker.</div>
+      </div>
+      <button class="admin-btn admin-btn-ghost" id="admin-close-btn" type="button">Close</button>
+    </div>
+    <div class="admin-status-list" id="admin-status-list"></div>
+    <div class="admin-panel-foot">
+      <button class="admin-btn admin-btn-ghost" type="button" onclick="window.resetToDefaults()">Reset Defaults</button>
+      <button class="admin-btn admin-btn-primary" id="admin-save-btn" type="button">💾 Save &amp; Apply</button>
+    </div>
+  </div>
+</div>
+
 <script type="module" src="./app.js"></script>
 
 <!-- MASCOT CHARACTER CARD POPOVER -->

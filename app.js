@@ -8521,14 +8521,5 @@ document.getElementById('admin-page-btn')?.addEventListener('click', e => {
   e.stopPropagation();
   document.getElementById('user-dropdown')?.classList.remove('visible');
   document.getElementById('user-pill')?.classList.remove('open');
-  const hasInlineAdminPanel = !!(
-    document.getElementById('admin-overlay') &&
-    document.getElementById('admin-panel-inner') &&
-    document.getElementById('admin-status-list')
-  );
-  if (hasInlineAdminPanel) {
-    openAdminPanel();
-    return;
-  }
-  window.location.href = 'admin.html';
+  openAdminPanel();
 });
