@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AP-Tracker — Admin</title>
   <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&family=Share+Tech+Mono&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
   <style>
     :root {
       --bg:#0d1117; --bg2:#161b22; --bg3:#1c2333; --border:#30363d;
@@ -18,7 +17,7 @@
     .title { font-family:'Rajdhani',sans-serif; font-size:28px; letter-spacing:1px; }
     .title span { color:var(--accent); }
     .actions { display:flex; gap:8px; flex-wrap:wrap; }
-    .btn { border:1px solid var(--border); background:var(--bg3); color:var(--text2); border-radius:8px; padding:8px 12px; cursor:pointer; font-weight:700; font-family:'Nunito',sans-serif; touch-action:manipulation; -webkit-tap-highlight-color: transparent; }
+    .btn { border:1px solid var(--border); background:var(--bg3); color:var(--text2); border-radius:8px; padding:8px 12px; cursor:pointer; font-weight:700; font-family:'Nunito',sans-serif; }
     .btn:hover { border-color:var(--accent); color:var(--accent); }
     .btn-primary { background:var(--accent); border-color:var(--accent); color:white; }
     .card { background:var(--bg2); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:12px; }
@@ -43,7 +42,7 @@
     table { width:100%; border-collapse:collapse; }
     th, td { text-align:left; padding:8px 6px; border-top:1px solid var(--border); font-size:12px; vertical-align:top; }
     th { color:var(--text2); font-family:'Share Tech Mono',monospace; font-size:11px; }
-    .small-btn { border:1px solid var(--border); background:transparent; color:var(--text2); border-radius:6px; padding:5px 8px; cursor:pointer; font-size:12px; touch-action:manipulation; -webkit-tap-highlight-color: transparent; }
+    .small-btn { border:1px solid var(--border); background:transparent; color:var(--text2); border-radius:6px; padding:5px 8px; cursor:pointer; font-size:12px; }
     .small-btn:hover { color:var(--accent); border-color:var(--accent); }
     .small-btn.danger { color:var(--red); border-color:rgba(239,68,68,0.3); }
     .screen { display:none; }
@@ -62,7 +61,7 @@
     .status-panel.visible { display:block; }
     .status-header-row { display:flex; align-items:center; justify-content:space-between; gap:8px; }
     .status-header-actions { display:flex; gap:6px; flex-wrap:wrap; }
-    .compact-btn { border:1px solid var(--border); background:transparent; color:var(--text2); border-radius:6px; padding:4px 8px; font-size:11px; cursor:pointer; touch-action:manipulation; -webkit-tap-highlight-color: transparent; }
+    .compact-btn { border:1px solid var(--border); background:transparent; color:var(--text2); border-radius:6px; padding:4px 8px; font-size:11px; cursor:pointer; }
     .compact-btn:hover { border-color:var(--accent); color:var(--accent); }
     .status-row-top { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; }
     .status-row-actions { display:flex; gap:6px; align-items:center; }
@@ -146,8 +145,8 @@
     .page-tab-btn { background:none; border:none; border-bottom:3px solid transparent; color:var(--text2); font-family:'Nunito',sans-serif; font-weight:700; font-size:14px; padding:10px 20px; cursor:pointer; margin-bottom:-2px; transition:color 0.15s,border-color 0.15s; white-space:nowrap; }
     .page-tab-btn.active { color:var(--accent); border-bottom-color:var(--accent); }
     .page-tab-btn:hover:not(.active) { color:var(--text); }
-    .page-tab-pane { display:none; pointer-events:none; }
-    .page-tab-pane.active { display:block; pointer-events:auto; }
+    .page-tab-pane { display:none; }
+    .page-tab-pane.active { display:block; }
 
     /* ── Per-plant tabs ──────────────────────────────────────── */
     .plant-tabs { display:flex; gap:0; border-bottom:1px solid var(--border); margin-bottom:12px; }
@@ -194,6 +193,56 @@
     .store-item-price input[type=number] { width:74px; text-align:right; }
     .store-item-price-label { font-size:11px; color:var(--text2); }
     .store-item-actions { display:flex; gap:6px; align-items:center; flex-shrink:0; }
+    /* Theme Studio – compact redesign */
+    .store-theme-builder { border-top:1px solid var(--border); margin-top:12px; padding-top:12px; display:flex; flex-direction:column; gap:10px; }
+    .stb-header { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .stb-title { font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:0.06em; color:var(--text3); white-space:nowrap; }
+    .stb-meta-row { display:flex; align-items:center; gap:6px; flex:1; min-width:200px; flex-wrap:wrap; background:color-mix(in srgb, var(--bg3) 80%, var(--accent) 4%); border:1px solid var(--border); border-radius:8px; padding:5px 8px; }
+    .stb-meta-row input[type=text] { flex:1; min-width:100px; }
+    .stb-meta-row input[type=number] { width:62px; }
+    .stb-meta-row select { width:90px; }
+    /* Horizontal chip scroller */
+    .stb-chip-scroll { display:flex; gap:6px; overflow-x:auto; padding-bottom:3px; scrollbar-width:thin; scrollbar-color:var(--border) transparent; }
+    .stb-chip-scroll::-webkit-scrollbar { height:3px; }
+    .stb-chip-scroll::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+    .stb-chip { flex:0 0 auto; border:1.5px solid var(--border); border-radius:8px; background:var(--bg2); color:var(--text2); padding:5px 9px; cursor:pointer; text-align:center; transition:all 0.15s; min-width:60px; font-family:inherit; }
+    .stb-chip:hover { border-color:var(--text3); color:var(--text); transform:translateY(-1px); }
+    .stb-chip.active { border-color:var(--accent); color:var(--text); box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 40%,transparent); }
+    .stb-chip-icon { font-size:15px; display:block; line-height:1; }
+    .stb-chip-name { display:block; font-size:9px; font-weight:700; margin-top:2px; letter-spacing:0.01em; }
+    .stb-chip-swatches { display:flex; gap:2px; margin-top:4px; justify-content:center; }
+    .stb-chip-swatches i { flex:1; max-width:14px; height:3px; border-radius:99px; }
+    /* Main two-column: colors + preview */
+    .stb-main { display:grid; grid-template-columns:1fr 172px; gap:12px; align-items:start; }
+    .stb-colors { background:color-mix(in srgb,var(--bg3) 80%,var(--accent) 4%); border:1px solid var(--border); border-radius:10px; padding:10px 12px; display:flex; flex-direction:column; gap:9px; }
+    .stb-color-group { display:flex; align-items:center; gap:10px; }
+    .stb-group-label { font-size:9px; font-weight:800; color:var(--text3); text-transform:uppercase; letter-spacing:0.05em; min-width:66px; }
+    .stb-swatches { display:flex; gap:5px; flex-wrap:wrap; }
+    .stb-swatch-btn { display:flex; flex-direction:column; align-items:center; gap:2px; cursor:pointer; position:relative; border:none; background:none; padding:0; font-family:inherit; }
+    .stb-swatch-color { width:30px; height:24px; border-radius:5px; border:1.5px solid rgba(255,255,255,0.1); transition:transform 0.1s,border-color 0.1s; display:block; pointer-events:none; }
+    .stb-swatch-btn:hover .stb-swatch-color { transform:scale(1.12); border-color:rgba(255,255,255,0.28); }
+    .stb-swatch-label { font-size:7.5px; color:var(--text3); font-weight:700; text-transform:uppercase; letter-spacing:0.02em; font-family:'Share Tech Mono',monospace; pointer-events:none; }
+    .stb-swatch-btn input[type=color] { position:absolute; top:0; left:0; width:100%; height:100%; opacity:0; cursor:pointer; border:none; padding:0; }
+    /* Preview panel */
+    .stb-preview { display:flex; flex-direction:column; gap:6px; }
+    .stb-preview-card { border-radius:10px; border:1.5px solid var(--stc-border,var(--border)); overflow:hidden; user-select:none; }
+    .stb-preview-hero { height:76px; position:relative; overflow:hidden; background:var(--stc-bg,#111); }
+    .stb-preview-stripe { position:absolute; top:0; left:0; right:0; height:2px; background:var(--stc-accent,#f97316); }
+    .stb-preview-ui { position:absolute; inset:10px; display:flex; flex-direction:column; gap:5px; }
+    .stb-preview-bar { height:7px; border-radius:3px; }
+    .stb-preview-row { display:flex; align-items:center; gap:4px; }
+    .stb-preview-dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+    .stb-preview-line { height:4px; border-radius:2px; flex:1; }
+    .stb-preview-footer { padding:5px 8px; display:flex; align-items:center; justify-content:space-between; background:var(--stc-footer-bg,var(--bg3)); border-top:1px solid var(--stc-border,var(--border)); }
+    .stb-preview-name { font-size:9.5px; font-weight:700; color:var(--stc-text-main,var(--text)); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
+    .stb-preview-badge { font-size:8px; font-weight:800; text-transform:uppercase; letter-spacing:0.04em; padding:1px 5px; border-radius:3px; background:color-mix(in srgb,var(--stc-accent,#f97316) 16%,transparent); color:var(--stc-accent,#f97316); flex-shrink:0; }
+    .stb-palette { display:flex; gap:3px; }
+    .stb-palette-swatch { flex:1; height:18px; border-radius:3px; border:1px solid rgba(255,255,255,0.08); position:relative; }
+    .stb-palette-swatch span { position:absolute; bottom:2px; left:3px; font-size:6.5px; font-weight:800; text-shadow:0 1px 2px rgba(0,0,0,0.5); }
+    .stb-preview-pills { display:flex; gap:3px; flex-wrap:wrap; }
+    .stb-preview-pill { font-size:8.5px; font-weight:700; border-radius:999px; padding:2px 6px; border:1px solid; }
+    .stb-preview-meta { font-size:10px; color:var(--text3); }
+    @media (max-width:900px) { .stb-main { grid-template-columns:1fr; } }
   </style>
 </head>
 <body>
@@ -480,40 +529,24 @@ const DEFAULT_BADGE_DEFS = [
   { id: 'badge_resolver_10',    name: 'Problem Solver',  icon: '🏆', description: 'Resolve 10 issues',         triggerType: 'issues_resolved',  threshold: 10,  xpReward: 100, isEnabled: true },
 ];
 
-const BUILT_IN_THEME_DEFS = [
-  { key:'midnight',   name:'Midnight',   icon:'🌙', vars:{ '--bg':'#0d1117','--bg2':'#161b22','--bg3':'#1c2333','--border':'#30363d','--text':'#e6edf3','--text2':'#8b949e','--text3':'#484f58','--accent':'#f97316','--accent2':'#fb923c','--green':'#22c55e','--red':'#ef4444','--blue':'#3b82f6','--yellow':'#eab308','--orange':'#f97316' }, price:0, order:0 },
-  { key:'arctic',     name:'Arctic',     icon:'❄️', vars:{ '--bg':'#f8fafc','--bg2':'#ffffff','--bg3':'#f1f5f9','--border':'#cbd5e1','--text':'#0f172a','--text2':'#475569','--text3':'#94a3b8','--accent':'#0ea5e9','--accent2':'#38bdf8','--green':'#16a34a','--red':'#dc2626','--blue':'#0284c7','--yellow':'#ca8a04','--orange':'#f97316' }, price:0, order:1 },
-  { key:'forest',     name:'Forest',     icon:'🌲', vars:{ '--bg':'#0a120e','--bg2':'#0f1a14','--bg3':'#14241a','--border':'#1e3a28','--text':'#d1fae5','--text2':'#6ee7b7','--text3':'#34d399','--accent':'#10b981','--accent2':'#34d399','--green':'#34d399','--red':'#f87171','--blue':'#22d3ee','--yellow':'#facc15','--orange':'#fb923c' }, price:0, order:2 },
-  { key:'sunset',     name:'Sunset',     icon:'🌅', vars:{ '--bg':'#1a0f0a','--bg2':'#2d1810','--bg3':'#3d2218','--border':'#54321f','--text':'#fef3c7','--text2':'#fcd34d','--text3':'#f59e0b','--accent':'#fb923c','--accent2':'#fdba74','--green':'#34d399','--red':'#f87171','--blue':'#60a5fa','--yellow':'#facc15','--orange':'#fb923c' }, price:75, order:3 },
-  { key:'ocean',      name:'Ocean',      icon:'🌊', vars:{ '--bg':'#0a1628','--bg2':'#0f1e36','--bg3':'#152945','--border':'#1e3a5f','--text':'#e0f2fe','--text2':'#7dd3fc','--text3':'#0ea5e9','--accent':'#38bdf8','--accent2':'#7dd3fc','--green':'#22c55e','--red':'#f87171','--blue':'#38bdf8','--yellow':'#facc15','--orange':'#fb923c' }, price:75, order:4 },
-  { key:'royal',      name:'Royal',      icon:'👑', vars:{ '--bg':'#18102a','--bg2':'#251638','--bg3':'#331f4d','--border':'#4a2d6b','--text':'#f3e8ff','--text2':'#d8b4fe','--text3':'#a78bfa','--accent':'#c084fc','--accent2':'#d8b4fe','--green':'#34d399','--red':'#f87171','--blue':'#60a5fa','--yellow':'#facc15','--orange':'#fb923c' }, price:120, order:5 },
-  { key:'slate',      name:'Slate',      icon:'⚡', vars:{ '--bg':'#0f1419','--bg2':'#1a1f25','--bg3':'#242a31','--border':'#30363d','--text':'#e2e8f0','--text2':'#94a3b8','--text3':'#64748b','--accent':'#64748b','--accent2':'#94a3b8','--green':'#22c55e','--red':'#ef4444','--blue':'#60a5fa','--yellow':'#eab308','--orange':'#f97316' }, price:0, order:6 },
-  { key:'mint',       name:'Mint',       icon:'🍃', vars:{ '--bg':'#f0fdf9','--bg2':'#ffffff','--bg3':'#e6fff8','--border':'#a7f3d0','--text':'#064e3b','--text2':'#065f46','--text3':'#10b981','--accent':'#14b8a6','--accent2':'#10b981','--green':'#059669','--red':'#dc2626','--blue':'#0284c7','--yellow':'#ca8a04','--orange':'#ea580c' }, price:0, order:7 },
-  { key:'cyberpunk',  name:'Cyberpunk',  icon:'🎮', vars:{ '--bg':'#0a0014','--bg2':'#150028','--bg3':'#1f003d','--border':'#3d0066','--text':'#00ffff','--text2':'#ff00ff','--text3':'#9d00ff','--accent':'#ff00ff','--accent2':'#00ffff','--green':'#00ff88','--red':'#ff4d6d','--blue':'#00ffff','--yellow':'#ffee00','--orange':'#ff7a00' }, price:220, order:8 },
-  { key:'industrial', name:'Industrial', icon:'🏭', vars:{ '--bg':'#1a1a1a','--bg2':'#252525','--bg3':'#2f2f2f','--border':'#404040','--text':'#e5e5e5','--text2':'#a0a0a0','--text3':'#707070','--accent':'#ff6b00','--accent2':'#ff8a33','--green':'#4ade80','--red':'#f87171','--blue':'#60a5fa','--yellow':'#facc15','--orange':'#ff6b00' }, price:220, order:9 },
-  { key:'starship',   name:'Starship',   icon:'🛸', vars:{ '--bg':'#030914','--bg2':'#071327','--bg3':'#0d1d36','--border':'#16466b','--text':'#ddf6ff','--text2':'#8fc4dd','--text3':'#4a7fa6','--accent':'#26d9ff','--accent2':'#8bf5ff','--green':'#2cff9c','--red':'#ff5a87','--blue':'#26d9ff','--yellow':'#ffd447','--orange':'#ff9f43' }, price:180, order:10 },
-  { key:'starforge',  name:'Starforge',  icon:'🧱', vars:{ '--bg':'#100d0a','--bg2':'#1a1714','--bg3':'#27211b','--border':'#5f4a35','--text':'#f2e6d9','--text2':'#c8b8a5','--text3':'#8c7762','--accent':'#ff9f1c','--accent2':'#ffd166','--green':'#49d987','--red':'#ff6b5e','--blue':'#9aa6b2','--yellow':'#ffd166','--orange':'#ff9f1c' }, price:200, order:11 },
-  { key:'starmono',   name:'Star Mono',  icon:'📟', vars:{ '--bg':'#0f1012','--bg2':'#17191c','--bg3':'#24282d','--border':'#424951','--text':'#eceff3','--text2':'#b5bcc5','--text3':'#747e89','--accent':'#c6ccd3','--accent2':'#e2e6ea','--green':'#a3a3a3','--red':'#9a9a9a','--blue':'#b8b8b8','--yellow':'#b0b0b0','--orange':'#c0c0c0' }, price:170, order:12 },
-  { key:'engel',      name:'Engel',      icon:'🟢', vars:{ '--bg':'#0c1209','--bg2':'#141e0f','--bg3':'#1b2a14','--border':'#2d4820','--text':'#e8f5d8','--text2':'#8ab870','--text3':'#4d6e38','--accent':'#78be20','--accent2':'#96d63a','--green':'#78be20','--red':'#f87171','--blue':'#00a3b5','--yellow':'#ffc72c','--orange':'#fb923c' }, price:0, order:13 },
-  { key:'cardinals',  name:'Cardinals',  icon:'🔴', vars:{ '--bg':'#0e0303','--bg2':'#1c0808','--bg3':'#260c0c','--border':'#3d1515','--text':'#f5e8e8','--text2':'#c48a8a','--text3':'#7a4444','--accent':'#c8102e','--accent2':'#e81f42','--green':'#22c55e','--red':'#ff4444','--blue':'#60a5fa','--yellow':'#eab308','--orange':'#f97316' }, price:25, order:14 },
-  { key:'wildcats',   name:'Wildcats',   icon:'🔵', vars:{ '--bg':'#020814','--bg2':'#051228','--bg3':'#071a38','--border':'#0d2d5e','--text':'#e8f0ff','--text2':'#7da8e8','--text3':'#3d6ab0','--accent':'#0033a0','--accent2':'#1a52cc','--green':'#22c55e','--red':'#ef4444','--blue':'#3b82f6','--yellow':'#eab308','--orange':'#f97316' }, price:25, order:15 }
+const DEFAULT_STORE_ITEMS = [
+  { id: 'theme_midnight',   type: 'theme', themeKey: 'midnight',   customVars: null, name: 'Midnight',   price: 0,   isActive: true, order: 0 },
+  { id: 'theme_arctic',     type: 'theme', themeKey: 'arctic',     customVars: null, name: 'Arctic',     price: 0,   isActive: true, order: 1 },
+  { id: 'theme_forest',     type: 'theme', themeKey: 'forest',     customVars: null, name: 'Forest',     price: 0,   isActive: true, order: 2 },
+  { id: 'theme_sunset',     type: 'theme', themeKey: 'sunset',     customVars: null, name: 'Sunset',     price: 75,  isActive: true, order: 3 },
+  { id: 'theme_ocean',      type: 'theme', themeKey: 'ocean',      customVars: null, name: 'Ocean',      price: 75,  isActive: true, order: 4 },
+  { id: 'theme_royal',      type: 'theme', themeKey: 'royal',      customVars: null, name: 'Royal',      price: 120, isActive: true, order: 5 },
+  { id: 'theme_slate',      type: 'theme', themeKey: 'slate',      customVars: null, name: 'Slate',      price: 0,   isActive: true, order: 6 },
+  { id: 'theme_mint',       type: 'theme', themeKey: 'mint',       customVars: null, name: 'Mint',       price: 0,   isActive: true, order: 7 },
+  { id: 'theme_cyberpunk',  type: 'theme', themeKey: 'cyberpunk',  customVars: null, name: 'Cyberpunk',  price: 220, isActive: true, order: 8 },
+  { id: 'theme_industrial', type: 'theme', themeKey: 'industrial', customVars: null, name: 'Industrial', price: 220, isActive: true, order: 9 },
+  { id: 'theme_engel',      type: 'theme', themeKey: 'engel',      customVars: null, name: 'Engel',      price: 0,   isActive: true, order: 10 },
 ];
 
-const DEFAULT_STORE_ITEMS = BUILT_IN_THEME_DEFS.map(theme => ({
-  id: `theme_${theme.key}`,
-  type: 'theme',
-  themeKey: theme.key,
-  customVars: null,
-  name: theme.name,
-  price: Number(theme.price || 0),
-  isActive: true,
-  order: Number(theme.order || 0)
-}));
-
-const THEME_ICONS = BUILT_IN_THEME_DEFS.reduce((acc, theme) => {
-  acc[theme.key] = theme.icon || '🎨';
-  return acc;
-}, {});
+const THEME_ICONS = {
+  midnight: '🌙', arctic: '❄️', forest: '🌲', sunset: '🌅', ocean: '🌊',
+  royal: '👑', slate: '🪨', mint: '🌿', cyberpunk: '🤖', industrial: '🏭', engel: '⚙️',
+};
 
 const ADMIN_THEME_OPTIONS = DEFAULT_STORE_ITEMS
   .filter(i => i.type === 'theme' && i.themeKey)
@@ -526,10 +559,19 @@ const THEME_VARS_TEMPLATE = {
   '--green':'#22c55e','--red':'#ef4444','--blue':'#3b82f6','--yellow':'#eab308','--orange':'#f97316',
 };
 
-const BUILTIN_THEME_VARS = BUILT_IN_THEME_DEFS.reduce((acc, theme) => {
-  acc[theme.key] = { ...(theme.vars || {}) };
-  return acc;
-}, {});
+const BUILTIN_THEME_VARS = {
+  midnight:   { '--bg':'#0d1117','--bg2':'#161b22','--bg3':'#1c2333','--border':'#30363d','--text':'#e6edf3','--text2':'#8b949e','--text3':'#484f58','--accent':'#f97316','--accent2':'#fb923c','--green':'#22c55e','--red':'#ef4444','--blue':'#3b82f6','--yellow':'#eab308','--orange':'#f97316' },
+  arctic:     { '--bg':'#f8fafc','--bg2':'#ffffff','--bg3':'#f1f5f9','--border':'#cbd5e1','--text':'#0f172a','--text2':'#475569','--text3':'#94a3b8','--accent':'#0ea5e9','--accent2':'#38bdf8','--green':'#16a34a','--red':'#dc2626','--blue':'#0284c7','--yellow':'#ca8a04','--orange':'#f97316' },
+  forest:     { '--bg':'#0a120e','--bg2':'#0f1a14','--bg3':'#14241a','--border':'#1e3a28','--text':'#d1fae5','--text2':'#6ee7b7','--text3':'#34d399','--accent':'#10b981','--accent2':'#34d399','--green':'#34d399','--red':'#f87171','--blue':'#22d3ee','--yellow':'#facc15','--orange':'#fb923c' },
+  sunset:     { '--bg':'#1a0f0a','--bg2':'#2d1810','--bg3':'#3d2218','--border':'#54321f','--text':'#fef3c7','--text2':'#fcd34d','--text3':'#f59e0b','--accent':'#fb923c','--accent2':'#fdba74','--green':'#34d399','--red':'#f87171','--blue':'#60a5fa','--yellow':'#facc15','--orange':'#fb923c' },
+  ocean:      { '--bg':'#0a1628','--bg2':'#0f1e36','--bg3':'#152945','--border':'#1e3a5f','--text':'#e0f2fe','--text2':'#7dd3fc','--text3':'#0ea5e9','--accent':'#38bdf8','--accent2':'#7dd3fc','--green':'#22c55e','--red':'#f87171','--blue':'#38bdf8','--yellow':'#facc15','--orange':'#fb923c' },
+  royal:      { '--bg':'#18102a','--bg2':'#251638','--bg3':'#331f4d','--border':'#4a2d6b','--text':'#f3e8ff','--text2':'#d8b4fe','--text3':'#a78bfa','--accent':'#c084fc','--accent2':'#d8b4fe','--green':'#34d399','--red':'#f87171','--blue':'#60a5fa','--yellow':'#facc15','--orange':'#fb923c' },
+  slate:      { '--bg':'#0f1419','--bg2':'#1a1f25','--bg3':'#242a31','--border':'#30363d','--text':'#e2e8f0','--text2':'#94a3b8','--text3':'#64748b','--accent':'#64748b','--accent2':'#94a3b8','--green':'#22c55e','--red':'#ef4444','--blue':'#60a5fa','--yellow':'#eab308','--orange':'#f97316' },
+  mint:       { '--bg':'#f0fdf9','--bg2':'#ffffff','--bg3':'#e6fff8','--border':'#a7f3d0','--text':'#064e3b','--text2':'#065f46','--text3':'#10b981','--accent':'#14b8a6','--accent2':'#10b981','--green':'#059669','--red':'#dc2626','--blue':'#0284c7','--yellow':'#ca8a04','--orange':'#ea580c' },
+  cyberpunk:  { '--bg':'#0a0014','--bg2':'#150028','--bg3':'#1f003d','--border':'#3d0066','--text':'#00ffff','--text2':'#ff00ff','--text3':'#9d00ff','--accent':'#ff00ff','--accent2':'#00ffff','--green':'#00ff88','--red':'#ff4d6d','--blue':'#00ffff','--yellow':'#ffee00','--orange':'#ff7a00' },
+  industrial: { '--bg':'#1a1a1a','--bg2':'#252525','--bg3':'#2f2f2f','--border':'#404040','--text':'#e5e5e5','--text2':'#a0a0a0','--text3':'#707070','--accent':'#ff6b00','--accent2':'#ff8a33','--green':'#4ade80','--red':'#f87171','--blue':'#60a5fa','--yellow':'#facc15','--orange':'#ff6b00' },
+  engel:      { '--bg':'#0c1209','--bg2':'#141e0f','--bg3':'#1b2a14','--border':'#2d4820','--text':'#e8f5d8','--text2':'#8ab870','--text3':'#4d6e38','--accent':'#78be20','--accent2':'#96d63a','--green':'#78be20','--red':'#f87171','--blue':'#00a3b5','--yellow':'#ffc72c','--orange':'#fb923c' }
+};
 
 const THEME_EDITOR_FIELDS = [
   ['--bg', 'Background'], ['--bg2', 'Surface'], ['--bg3', 'Inset'], ['--border', 'Border'],
@@ -678,38 +720,6 @@ function feedback(elId, type, message) {
   if (!el) return;
   el.className = `feedback ${type}`;
   el.textContent = message || '';
-}
-
-// iOS/Safari can fire a delayed synthetic click after touchend.
-// If the UI re-renders between those events, the click can land on an
-// element now underneath (often an input), which opens the keyboard.
-const ACTION_TAP_SELECTOR = 'button, .mission-type-tile, .badge-type-tile';
-const isAppleTouchDevice = (() => {
-  const ua = navigator.userAgent || '';
-  const appleUA = /iP(ad|hone|od)/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
-  return appleUA && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
-})();
-let lastActionTouchAt = 0;
-
-if (isAppleTouchDevice) {
-  document.addEventListener('touchend', (event) => {
-    const actionEl = event.target.closest(ACTION_TAP_SELECTOR);
-    if (!actionEl || actionEl.disabled) return;
-    if (event.target.closest('input, select, textarea, [contenteditable="true"]')) return;
-    event.preventDefault();
-    event.stopPropagation();
-    lastActionTouchAt = Date.now();
-    actionEl.click();
-  }, { capture: true, passive: false });
-
-  document.addEventListener('click', (event) => {
-    if (!event.isTrusted) return;
-    if (Date.now() - lastActionTouchAt > 700) return;
-    const actionEl = event.target.closest(ACTION_TAP_SELECTOR);
-    if (!actionEl) return;
-    event.preventDefault();
-    event.stopPropagation();
-  }, { capture: true });
 }
 
 function defaultPermsForRole(role) {
@@ -1379,6 +1389,8 @@ function renderGamificationEditor(plantId, plantName) {
 function renderStoreEditor() {
   const items = (globalStoreDraft || []).slice().sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
   globalStoreDraft = items;
+  const activeThemeKey = storeThemeEditorDraft?.themeKey || '';
+  const themeOpts = [`<option value="" ${activeThemeKey ? '' : 'selected'}>Custom Theme</option>`, ...ADMIN_THEME_OPTIONS.map(t => `<option value="${esc(t.key)}" ${t.key === activeThemeKey ? 'selected' : ''}>${esc(t.label)}</option>`)] .join('');
   const rows = items.map((item, idx) => `
     <tr>
       <td style="font-weight:700;font-size:12px;">${idx + 1}. ${esc(item.name)}<div style="font-size:10px;color:var(--text2);">${item.themeKey ? 'Built-in: ' + esc(item.themeKey) : 'Custom'}</div></td>
@@ -1392,9 +1404,56 @@ function renderStoreEditor() {
       <td style="display:flex;gap:6px;">
         <button class="small-btn" ${idx === 0 ? 'disabled' : ''} onclick="window.moveStoreItem(${idx},-1)">↑</button>
         <button class="small-btn" ${idx === items.length - 1 ? 'disabled' : ''} onclick="window.moveStoreItem(${idx},1)">↓</button>
+        <button class="small-btn" onclick="window.openStoreThemeEditor(${idx})">Edit</button>
         <button class="small-btn danger" onclick="window.deleteStoreItem(${idx})">Remove</button>
       </td>
     </tr>`).join('');
+
+  const draft = storeThemeEditorDraft || {
+    id: `storeitem_${Date.now()}`,
+    type: 'theme',
+    themeKey: null,
+    customVars: { ...THEME_VARS_TEMPLATE },
+    name: '',
+    price: 50,
+    isActive: true
+  };
+
+  const vars = { ...THEME_VARS_TEMPLATE, ...(draft.themeKey ? (BUILTIN_THEME_VARS[draft.themeKey] || {}) : {}), ...(draft.customVars || {}) };
+  const COLOR_GROUPS = [
+    { label: 'Backgrounds', vars: [['--bg','BG'],['--bg2','Surf'],['--bg3','Inset']] },
+    { label: 'Text', vars: [['--text','Text'],['--text2','Muted'],['--text3','Faint']] },
+    { label: 'Border', vars: [['--border','Line']] },
+    { label: 'Accent', vars: [['--accent','Main'],['--accent2','Alt']] },
+    { label: 'Status', vars: [['--green','OK'],['--red','Err'],['--blue','Info'],['--yellow','Warn'],['--orange','Org']] },
+  ];
+  const varGroups = COLOR_GROUPS.map(group => {
+    const swatches = group.vars.map(([key, label]) => {
+      const id = `stb-color-${key.replace('--','')}`;
+      return `<label class="stb-swatch-btn" title="${label}: ${esc(vars[key])}">
+        <div class="stb-swatch-color" style="background:${esc(vars[key])}"></div>
+        <div class="stb-swatch-label">${label}</div>
+        <input type="color" id="${id}" value="${esc(vars[key])}"
+          oninput="window.setStoreThemeEditorColorLive('${key}',this.value)"
+          onchange="window.setStoreThemeEditorColor('${key}',this.value)">
+      </label>`;
+    }).join('');
+    return `<div class="stb-color-group"><span class="stb-group-label">${group.label}</span><div class="stb-swatches">${swatches}</div></div>`;
+  }).join('');
+  const builtinChips = ADMIN_THEME_OPTIONS.map(opt => {
+    const base = BUILTIN_THEME_VARS[opt.key] || THEME_VARS_TEMPLATE;
+    const isActive = opt.key === (draft.themeKey || activeThemeKey);
+    const icon = THEME_ICONS[opt.key] || '🎨';
+    return `<button class="stb-chip ${isActive ? 'active' : ''}" onclick="window.pickStoreBuiltinTheme('${opt.key}')">
+      <span class="stb-chip-icon">${icon}</span>
+      <span class="stb-chip-name">${esc(opt.key)}</span>
+      <span class="stb-chip-swatches">
+        <i style="background:${esc(base['--bg'])}"></i>
+        <i style="background:${esc(base['--accent'])}"></i>
+        <i style="background:${esc(base['--text'])}"></i>
+      </span>
+    </button>`;
+  }).join('');
 
   return `
     ${items.length ? `
@@ -1408,11 +1467,74 @@ function renderStoreEditor() {
       <tbody>${rows}</tbody>
     </table>` : `<div class="muted" style="margin-bottom:10px;font-size:12px;">No store items yet.</div>`}
 
-    <div class="status-toolbar" style="margin-top:2px;">
-      <button class="small-btn" style="border-color:var(--accent);color:var(--accent);" onclick="window.saveStoreDraft()">💾 Save Store</button>
+    <div class="store-theme-builder">
+      <!-- Header: label + action buttons + meta fields -->
+      <div class="stb-header">
+        <span class="stb-title">Theme Studio</span>
+        <button class="small-btn" onclick="window.startNewStoreTheme('builtin')">+ Built-in</button>
+        <button class="small-btn" onclick="window.startNewStoreTheme('custom')">+ Custom</button>
+        <div class="stb-meta-row">
+          <input data-store-theme-field="name" type="text" placeholder="Theme name…" value="${esc(draft.name || '')}" oninput="window.setStoreThemeEditorField('name',this.value)">
+          <input data-store-theme-field="price" type="number" min="0" value="${Number(draft.price || 0)}" oninput="window.setStoreThemeEditorField('price',this.value)" placeholder="XP" title="Price in XP">
+          <select data-store-theme-field="isActive" onchange="window.setStoreThemeEditorField('isActive',this.value)">
+            <option value="true" ${draft.isActive !== false ? 'selected' : ''}>Active</option>
+            <option value="false" ${draft.isActive === false ? 'selected' : ''}>Hidden</option>
+          </select>
+          <button class="small-btn" onclick="window.loadStoreEditorFromBuiltin()" title="Reset colors to built-in defaults" ${draft.themeKey ? '' : 'disabled'}>↺</button>
+          <button class="small-btn" style="border-color:var(--accent);color:var(--accent);" onclick="window.commitStoreThemeEditor()">Save</button>
+          ${storeThemeEditorIndex >= 0 ? `<button class="small-btn" onclick="window.startNewStoreTheme('${draft.themeKey ? 'builtin' : 'custom'}')">Clear</button>` : ''}
+        </div>
+      </div>
+
+      <!-- Built-in theme picker: horizontal scrollable chip strip -->
+      <div class="stb-chip-scroll">${builtinChips}</div>
+
+      <!-- Main: color groups (left) + live preview (right) -->
+      <div class="stb-main">
+        <div class="stb-colors">${varGroups}</div>
+        <div class="stb-preview">
+          <div class="stb-preview-card" id="stb-preview-card" style="--stc-bg:${esc(vars['--bg'])};--stc-accent:${esc(vars['--accent'])};--stc-text-main:${esc(vars['--text'])};--stc-footer-bg:${esc(vars['--bg3'])};--stc-border:${esc(vars['--border'])};">
+            <div class="stb-preview-hero">
+              <div class="stb-preview-stripe"></div>
+              <div class="stb-preview-ui">
+                <div class="stb-preview-bar" style="background:color-mix(in srgb,${esc(vars['--accent'])} 22%,transparent)"></div>
+                <div class="stb-preview-row">
+                  <div class="stb-preview-dot" style="background:${esc(vars['--accent'])}"></div>
+                  <div class="stb-preview-line" style="background:color-mix(in srgb,${esc(vars['--text'])} 22%,transparent)"></div>
+                </div>
+                <div class="stb-preview-row">
+                  <div class="stb-preview-dot" style="background:color-mix(in srgb,${esc(vars['--text'])} 40%,transparent)"></div>
+                  <div class="stb-preview-line" style="background:color-mix(in srgb,${esc(vars['--text'])} 14%,transparent)"></div>
+                </div>
+              </div>
+            </div>
+            <div class="stb-preview-footer">
+              <span class="stb-preview-name">${esc(draft.name || 'Preview')}</span>
+              <span class="stb-preview-badge">${Number(draft.price||0)} XP</span>
+            </div>
+          </div>
+          <div class="stb-palette">
+            <div class="stb-palette-swatch" style="background:${esc(vars['--bg'])};"><span style="color:${esc(vars['--text'])}">BG</span></div>
+            <div class="stb-palette-swatch" style="background:${esc(vars['--bg2'])};"><span style="color:${esc(vars['--text'])}">S</span></div>
+            <div class="stb-palette-swatch" style="background:${esc(vars['--bg3'])};"><span style="color:${esc(vars['--text'])}">I</span></div>
+            <div class="stb-palette-swatch" style="background:${esc(vars['--accent'])};"><span style="color:${esc(vars['--bg'])}">Ac</span></div>
+            <div class="stb-palette-swatch" style="background:${esc(vars['--text'])};"><span style="color:${esc(vars['--bg'])}">Tx</span></div>
+          </div>
+          <div class="stb-preview-pills">
+            <span class="stb-preview-pill" style="background:color-mix(in srgb,${esc(vars['--green'])} 18%,transparent);color:${esc(vars['--green'])};border-color:color-mix(in srgb,${esc(vars['--green'])} 50%,transparent);">OK</span>
+            <span class="stb-preview-pill" style="background:color-mix(in srgb,${esc(vars['--red'])} 18%,transparent);color:${esc(vars['--red'])};border-color:color-mix(in srgb,${esc(vars['--red'])} 50%,transparent);">Err</span>
+            <span class="stb-preview-pill" style="background:color-mix(in srgb,${esc(vars['--blue'])} 18%,transparent);color:${esc(vars['--blue'])};border-color:color-mix(in srgb,${esc(vars['--blue'])} 50%,transparent);">Info</span>
+            <span class="stb-preview-pill" style="background:color-mix(in srgb,${esc(vars['--yellow'])} 18%,transparent);color:${esc(vars['--yellow'])};border-color:color-mix(in srgb,${esc(vars['--yellow'])} 50%,transparent);">Warn</span>
+          </div>
+          <div class="stb-preview-meta">${storeThemeEditorIndex >= 0 ? `#${storeThemeEditorIndex+1}` : 'New'} · ${draft.themeKey ? esc(draft.themeKey) : 'custom'}</div>
+        </div>
+      </div>
+
+      <div class="status-toolbar" style="margin-top:2px;">
+        <button class="small-btn" style="border-color:var(--accent);color:var(--accent);" onclick="window.saveStoreDraft()">💾 Save Store</button>
+      </div>
+      <div id="store-fb-global" class="feedback"></div>
     </div>
-    <div class="muted" style="margin-top:8px;font-size:12px;">Theme Studio removed. Theme editor rebuild will use the shared index theme editor system.</div>
-    <div id="store-fb-global" class="feedback"></div>
   `;
 }
 
@@ -1468,9 +1590,7 @@ function renderPlantsUsers() {
           <div class="muted">${esc(plant.location || 'No location')} · ${esc(plant.id)}</div>
         </div>
         <div class="plant-head-actions">
-          <button class="compact-btn"
-                  ontouchend="window.togglePlantPanelTap(event,'${plant.id}')"
-                  onclick="window.togglePlantPanelClick(event,'${plant.id}')">${plantOpen ? 'Minimize' : 'Expand'}</button>
+          <button class="compact-btn" onclick="window.togglePlantPanel('${plant.id}')">${plantOpen ? 'Minimize' : 'Expand'}</button>
           <span class="pill">admin</span>
         </div>
       </div>
@@ -1548,6 +1668,20 @@ function renderSchedulePlantOptions() {
 function renderGlobalStoreEditor() {
   const container = document.getElementById('store-editor-container');
   if (!container) return;
+  if (!storeThemeEditorDraft) {
+    const themeKey = getNextAvailableBuiltinThemeKey();
+    storeThemeEditorIndex = -1;
+    storeThemeEditorDraft = {
+      id: themeKey ? `theme_${themeKey}` : `storeitem_${Date.now()}`,
+      type: 'theme',
+      themeKey,
+      customVars: { ...THEME_VARS_TEMPLATE, ...(themeKey ? (BUILTIN_THEME_VARS[themeKey] || {}) : {}) },
+      name: themeKey ? (DEFAULT_STORE_ITEMS.find(i => i.themeKey === themeKey)?.name || 'Theme') : '',
+      price: 50,
+      isActive: true,
+      order: globalStoreDraft.length
+    };
+  }
   container.innerHTML = renderStoreEditor();
 }
 
@@ -2307,42 +2441,13 @@ window.togglePlantPanel = function(plantId) {
   renderPlantsUsers();
 };
 
-let lastPlantPanelTouchAt = 0;
-window.togglePlantPanelTap = function(event, plantId) {
-  if (event) {
-    event.preventDefault();
-    event.stopPropagation();
-  }
-  lastPlantPanelTouchAt = Date.now();
-  window.togglePlantPanel(plantId);
-};
-
-window.togglePlantPanelClick = function(event, plantId) {
-  if (event) event.stopPropagation();
-  if (Date.now() - lastPlantPanelTouchAt < 700) return;
-  window.togglePlantPanel(plantId);
-};
-
 window.switchPageTab = function(tabName, btnEl) {
-  const targetId = `page-tab-${tabName}`;
   document.querySelectorAll('.page-tab-btn').forEach(b => b.classList.remove('active'));
-  document.querySelectorAll('.page-tab-pane').forEach(p => {
-    const isActive = p.id === targetId;
-    p.classList.toggle('active', isActive);
-    p.setAttribute('aria-hidden', isActive ? 'false' : 'true');
-    if ('inert' in p) p.inert = !isActive;
-  });
+  document.querySelectorAll('.page-tab-pane').forEach(p => p.classList.remove('active'));
   btnEl.classList.add('active');
+  const pane = document.getElementById(`page-tab-${tabName}`);
+  if (pane) pane.classList.add('active');
 };
-
-function syncPageTabInteractivity() {
-  const activePane = document.querySelector('.page-tab-pane.active');
-  document.querySelectorAll('.page-tab-pane').forEach(p => {
-    const isActive = p === activePane;
-    p.setAttribute('aria-hidden', isActive ? 'false' : 'true');
-    if ('inert' in p) p.inert = !isActive;
-  });
-}
 
 window.switchPlantTab = function(plantId, tabName, btnEl) {
   plantTab[plantId] = tabName;
@@ -2413,7 +2518,6 @@ onAuthStateChanged(auth, async user => {
   document.getElementById('login-screen').classList.remove('visible');
   document.getElementById('app-screen').classList.add('visible');
   document.getElementById('whoami').textContent = `${user.displayName || user.email} (${user.email || user.uid})`;
-  syncPageTabInteractivity();
 
   await refreshAdminData();
 });
@@ -2681,7 +2785,6 @@ document.getElementById('signout-btn').addEventListener('click', doSignOut);
 document.getElementById('create-plant-btn').addEventListener('click', createPlant);
 document.getElementById('load-schedule-file-btn').addEventListener('click', loadScheduleJsonFromFile);
 document.getElementById('import-schedule-btn').addEventListener('click', importDailySchedule);
-syncPageTabInteractivity();
 </script>
 </body>
 </html>
