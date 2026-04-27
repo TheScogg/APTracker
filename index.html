@@ -1175,6 +1175,16 @@
 </aside>
 <div class="game-toast" id="game-toast"></div>
 
+<div id="embedded-admin-overlay" style="display:none;position:fixed;inset:0;z-index:12000;background:rgba(0,0,0,0.72);align-items:stretch;justify-content:stretch;">
+  <div style="display:flex;flex-direction:column;flex:1;min-height:0;">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--bg2);border-bottom:1px solid var(--border);">
+      <div style="font-weight:700;font-family:'Rajdhani',sans-serif;letter-spacing:0.06em;">ADMIN PORTAL</div>
+      <button class="btn" onclick="window.closeEmbeddedAdminPortal()">Close</button>
+    </div>
+    <iframe id="embedded-admin-iframe" title="Admin Portal" style="flex:1;border:0;width:100%;background:#0d1117;" loading="lazy"></iframe>
+  </div>
+</div>
+
 <script type="module" src="./app.js"></script>
 
 <!-- MASCOT CHARACTER CARD POPOVER -->
