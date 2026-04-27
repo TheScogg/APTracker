@@ -18,7 +18,7 @@
     .title { font-family:'Rajdhani',sans-serif; font-size:28px; letter-spacing:1px; }
     .title span { color:var(--accent); }
     .actions { display:flex; gap:8px; flex-wrap:wrap; }
-    .btn { border:1px solid var(--border); background:var(--bg3); color:var(--text2); border-radius:8px; padding:8px 12px; cursor:pointer; font-weight:700; font-family:'Nunito',sans-serif; }
+    .btn { border:1px solid var(--border); background:var(--bg3); color:var(--text2); border-radius:8px; padding:8px 12px; cursor:pointer; font-weight:700; font-family:'Nunito',sans-serif; touch-action:manipulation; -webkit-tap-highlight-color: transparent; }
     .btn:hover { border-color:var(--accent); color:var(--accent); }
     .btn-primary { background:var(--accent); border-color:var(--accent); color:white; }
     .card { background:var(--bg2); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:12px; }
@@ -43,7 +43,7 @@
     table { width:100%; border-collapse:collapse; }
     th, td { text-align:left; padding:8px 6px; border-top:1px solid var(--border); font-size:12px; vertical-align:top; }
     th { color:var(--text2); font-family:'Share Tech Mono',monospace; font-size:11px; }
-    .small-btn { border:1px solid var(--border); background:transparent; color:var(--text2); border-radius:6px; padding:5px 8px; cursor:pointer; font-size:12px; }
+    .small-btn { border:1px solid var(--border); background:transparent; color:var(--text2); border-radius:6px; padding:5px 8px; cursor:pointer; font-size:12px; touch-action:manipulation; -webkit-tap-highlight-color: transparent; }
     .small-btn:hover { color:var(--accent); border-color:var(--accent); }
     .small-btn.danger { color:var(--red); border-color:rgba(239,68,68,0.3); }
     .screen { display:none; }
@@ -62,7 +62,7 @@
     .status-panel.visible { display:block; }
     .status-header-row { display:flex; align-items:center; justify-content:space-between; gap:8px; }
     .status-header-actions { display:flex; gap:6px; flex-wrap:wrap; }
-    .compact-btn { border:1px solid var(--border); background:transparent; color:var(--text2); border-radius:6px; padding:4px 8px; font-size:11px; cursor:pointer; }
+    .compact-btn { border:1px solid var(--border); background:transparent; color:var(--text2); border-radius:6px; padding:4px 8px; font-size:11px; cursor:pointer; touch-action:manipulation; -webkit-tap-highlight-color: transparent; }
     .compact-btn:hover { border-color:var(--accent); color:var(--accent); }
     .status-row-top { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; }
     .status-row-actions { display:flex; gap:6px; align-items:center; }
@@ -678,6 +678,38 @@ function feedback(elId, type, message) {
   if (!el) return;
   el.className = `feedback ${type}`;
   el.textContent = message || '';
+}
+
+// iOS/Safari can fire a delayed synthetic click after touchend.
+// If the UI re-renders between those events, the click can land on an
+// element now underneath (often an input), which opens the keyboard.
+const ACTION_TAP_SELECTOR = 'button, .mission-type-tile, .badge-type-tile';
+const isAppleTouchDevice = (() => {
+  const ua = navigator.userAgent || '';
+  const appleUA = /iP(ad|hone|od)/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  return appleUA && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
+})();
+let lastActionTouchAt = 0;
+
+if (isAppleTouchDevice) {
+  document.addEventListener('touchend', (event) => {
+    const actionEl = event.target.closest(ACTION_TAP_SELECTOR);
+    if (!actionEl || actionEl.disabled) return;
+    if (event.target.closest('input, select, textarea, [contenteditable="true"]')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    lastActionTouchAt = Date.now();
+    actionEl.click();
+  }, { capture: true, passive: false });
+
+  document.addEventListener('click', (event) => {
+    if (!event.isTrusted) return;
+    if (Date.now() - lastActionTouchAt > 700) return;
+    const actionEl = event.target.closest(ACTION_TAP_SELECTOR);
+    if (!actionEl) return;
+    event.preventDefault();
+    event.stopPropagation();
+  }, { capture: true });
 }
 
 function defaultPermsForRole(role) {
