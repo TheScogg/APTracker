@@ -4960,11 +4960,6 @@ function renderIssues() {
       catInner.appendChild(tile);
     });
 
-    // Cancel button
-    const cancelBtn = document.createElement('button');
-    cancelBtn.className = 'swipe-category-cancel';
-    cancelBtn.textContent = '✕ cancel';
-    catInner.appendChild(cancelBtn);
     catPanel.appendChild(catInner);
 
     // Sub-status panel
@@ -5015,11 +5010,6 @@ function renderIssues() {
       scheduleIssueLogRelayout();
     };
 
-    // Cancel button click
-    const handleCancel = () => closeSwipeCard(card);
-    addTapListener(cancelBtn, handleCancel);
-    cancelBtn.addEventListener('click', handleCancel); // Mouse support
-
     // Tile clicks
     let lastTileTap = null; // { key, stamp } — tracks last tap for double-click/double-tap detection
     catInner.querySelectorAll('.swipe-status-tile').forEach(tile => {
@@ -5061,15 +5051,6 @@ function renderIssues() {
 
           const subInner = subPanel.querySelector('.swipe-sub-inner');
           subInner.innerHTML = '';
-
-          // Mascot header — rendered inside the chip flow so sub-status chips wrap around it
-          const mascotDef = MASCOTS[statusKey];
-          if (mascotDef) {
-            const mh = document.createElement('div');
-            mh.className = 'swipe-mascot-header';
-            mh.innerHTML = `<div class="swipe-mascot-svg">${mascotDef.svg(68, 68)}</div><div class="swipe-mascot-info"><div class="swipe-mascot-name" style="color:${mascotDef.color}">${mascotDef.name}</div><div class="swipe-mascot-tagline">${mascotDef.tagline}</div></div>`;
-            subInner.appendChild(mh);
-          }
 
           // Skip chip
           const skipChip = document.createElement('div');
