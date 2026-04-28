@@ -235,9 +235,13 @@
     background:
       radial-gradient(circle at 16% 14%, rgba(255,159,28,0.11), transparent 32%),
       radial-gradient(circle at 82% 12%, rgba(255,209,102,0.10), transparent 36%),
-      linear-gradient(transparent 95%, rgba(255,159,28,0.09) 100%),
-      linear-gradient(90deg, transparent 95%, rgba(154,166,178,0.08) 100%);
-    background-size: auto, auto, 28px 28px, 28px 28px;
+      linear-gradient(30deg, rgba(255,209,102,0.22) 12%, transparent 12.5%, transparent 87%, rgba(255,209,102,0.22) 87.5%, rgba(255,209,102,0.22)),
+      linear-gradient(150deg, rgba(255,209,102,0.22) 12%, transparent 12.5%, transparent 87%, rgba(255,209,102,0.22) 87.5%, rgba(255,209,102,0.22)),
+      linear-gradient(30deg, rgba(255,209,102,0.22) 12%, transparent 12.5%, transparent 87%, rgba(255,209,102,0.22) 87.5%, rgba(255,209,102,0.22)),
+      linear-gradient(150deg, rgba(255,209,102,0.22) 12%, transparent 12.5%, transparent 87%, rgba(255,209,102,0.22) 87.5%, rgba(255,209,102,0.22)),
+      linear-gradient(90deg, rgba(255,209,102,0.22) 2%, transparent 2.5%, transparent 97%, rgba(255,209,102,0.22) 97.5%, rgba(255,209,102,0.22));
+    background-size: auto, auto, 52px 90px, 52px 90px, 52px 90px, 52px 90px, 52px 90px;
+    background-position: center top, center top, 0 0, 0 0, 26px 45px, 26px 45px, 0 0;
   }
   body.theme-starforge .row-panel,
   body.theme-starforge .issue-card,
@@ -912,7 +916,7 @@
   }
 
   .issue-row { display: flex; flex-direction: column; min-width: 0; width: 100%; margin: 0; }
-  .issue-card { display: block; width: 100%; background: var(--bg2); border: 1px solid var(--border); border-radius: 18px; overflow: visible; animation: slideIn 0.25s ease; user-select: none; position: relative; z-index: 1; touch-action: manipulation; transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94); box-shadow: 0 4px 24px rgba(0,0,0,0.3); }
+  .issue-card { display: block; width: 100%; background: color-mix(in srgb, var(--bg2) 82%, transparent); border: 1px solid var(--border); border-radius: 18px; overflow: visible; animation: slideIn 0.25s ease; user-select: none; position: relative; z-index: 1; touch-action: manipulation; transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94); box-shadow: 0 4px 24px rgba(0,0,0,0.3); }
   .issue-card input, .issue-card select, .issue-card textarea { user-select: text !important; touch-action: auto !important; -webkit-user-select: text !important; }
   .issue-card.dragging { transition: none; }
   .issue-card.swiped { border-radius: 18px 18px 0 0; border-bottom-color: transparent; }
@@ -973,6 +977,10 @@
   .swipe-sub-panel.visible { max-height: 500px; }
   .swipe-sub-inner { padding: 12px 16px; display: block; }
   .swipe-sub-inner::after { content: ''; display: table; clear: both; }
+  .swipe-sub-cancel { display:inline-flex; align-items:center; justify-content:center; width:30px; height:30px; margin:0 8px 8px 0; vertical-align:top; border-radius:9px; border:1px solid color-mix(in srgb, var(--border) 72%, #fff 28%); background:linear-gradient(180deg, color-mix(in srgb, var(--bg3) 82%, #fff 18%) 0%, var(--bg3) 100%); box-shadow: inset 0 1px 0 rgba(255,255,255,0.2), 0 2px 5px rgba(0,0,0,0.24); color:var(--text2); cursor:pointer; transition:transform 0.12s, box-shadow 0.12s, color 0.12s, border-color 0.12s; opacity:0; animation:swipeSubIn 0.25s ease forwards; }
+  .swipe-sub-cancel:hover { color:var(--text); border-color:color-mix(in srgb, var(--border) 45%, #fff 55%); box-shadow: inset 0 1px 0 rgba(255,255,255,0.24), 0 3px 8px rgba(0,0,0,0.3); }
+  .swipe-sub-cancel:active { transform: translateY(1px) scale(0.96); box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 1px 2px rgba(0,0,0,0.3); }
+  .swipe-sub-cancel span { font-size:14px; font-weight:800; line-height:1; }
   .swipe-sub-chip { display: inline-flex; align-items: center; font-size: 10px; font-weight: 500; padding: 4px 10px; border-radius: 9999px; border: 2px solid; cursor: pointer; transition: all 0.15s; white-space: nowrap; font-family: 'Nunito', sans-serif; opacity: 0; animation: swipeSubIn 0.25s ease forwards; line-height: 1.3; margin: 0 8px 8px 0; vertical-align: top; }
   .swipe-sub-chip:nth-child(1) { animation-delay: 0.02s; }
   .swipe-sub-chip:nth-child(2) { animation-delay: 0.06s; }
