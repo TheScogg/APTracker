@@ -5052,16 +5052,6 @@ function renderIssues() {
           const subInner = subPanel.querySelector('.swipe-sub-inner');
           subInner.innerHTML = '';
 
-          const subCancelBtn = document.createElement('button');
-          subCancelBtn.className = 'swipe-sub-cancel';
-          subCancelBtn.type = 'button';
-          subCancelBtn.setAttribute('aria-label', 'Close status picker');
-          subCancelBtn.innerHTML = '<span aria-hidden="true">✕</span>';
-          const handleCancel = () => closeSwipeCard(card);
-          addTapListener(subCancelBtn, handleCancel);
-          subCancelBtn.addEventListener('click', handleCancel);
-          subInner.appendChild(subCancelBtn);
-
           // Skip chip
           const skipChip = document.createElement('div');
           skipChip.className = 'swipe-sub-chip skip';
