@@ -3194,6 +3194,7 @@ window.openAddModal = m => {
   document.getElementById('photo-previews').innerHTML='';
   document.getElementById('modal-machine-name').textContent=m;
   document.getElementById('issue-shift').value='auto';
+  document.getElementById('issue-timer-minutes').value='';
   resetIssueDateTime(); setSubmitting(false);
   renderLogCatButtons();
   document.getElementById('log-cat-selected').classList.remove('visible');
@@ -3289,6 +3290,81 @@ function getIssueDateFromInputs(dateId, timeId) {
   return dateStr ? new Date(dateStr+'T'+timeStr+':00') : new Date();
 }
 
+function parseTimerMinutes(rawValue) {
+  const val = Number(rawValue || 0);
+  if (!Number.isFinite(val) || val <= 0) return 0;
+  return Math.round(val);
+}
+
+function buildIssueTimer(minutes, startedAtDate = new Date(), baseTimer = null) {
+  const m = parseTimerMinutes(minutes);
+  if (!m) return null;
+  const startedAtMs = startedAtDate instanceof Date ? startedAtDate.getTime() : Number(startedAtDate || Date.now());
+  const prior = baseTimer && typeof baseTimer === 'object' ? baseTimer : {};
+  return {
+    enabled: true,
+    durationMinutes: m,
+    startedAt: new Date(startedAtMs),
+    dueAt: new Date(startedAtMs + m * 60 * 1000),
+    alertedAt: prior.alertedAt || null,
+    lastAlertLevel: prior.lastAlertLevel || 'none'
+  };
+}
+
+function getIssueTimerState(issue, nowMs = Date.now()) {
+  const timer = issue?.timer || null;
+  if (!timer?.enabled || !timer?.dueAt) return null;
+  let dueMs = 0;
+  try {
+    dueMs = timer.dueAt?.toMillis ? timer.dueAt.toMillis() : new Date(timer.dueAt).getTime();
+  } catch (e) { dueMs = 0; }
+  if (!Number.isFinite(dueMs) || dueMs <= 0) return null;
+  const remainingMs = dueMs - nowMs;
+  const absMin = Math.max(1, Math.ceil(Math.abs(remainingMs) / 60000));
+  return {
+    isOverdue: remainingMs <= 0,
+    dueMs,
+    label: remainingMs > 0 ? `⏱ ${absMin}m left` : `⏰ Overdue ${absMin}m`
+  };
+}
+
+const _issueTimerAlertKeys = new Set();
+const _issueTimerAlertWritesInFlight = new Set();
+
+function maybeNotifyIssueTimerAlerts(issueList = issues) {
+  if (!Array.isArray(issueList) || issueList.length === 0) return;
+  const openIssues = issueList.filter(i => !issueIsResolvedV2(i));
+  openIssues.forEach(issue => {
+    const timerState = getIssueTimerState(issue);
+    if (!timerState?.isOverdue) return;
+    const dedupeKey = `${issue.id}:${timerState.dueMs}`;
+    if (_issueTimerAlertKeys.has(dedupeKey)) return;
+    _issueTimerAlertKeys.add(dedupeKey);
+    showGameToast(`⏰ ${issue.machine || 'Issue'} timer overdue`);
+    if ('Notification' in window && Notification.permission === 'granted') {
+      try {
+        new Notification(`Issue overdue — ${issue.machine || 'Unknown press'}`, {
+          body: (issue.note || 'Issue timer expired').slice(0, 120)
+        });
+      } catch (e) {
+        console.warn('Issue timer notification failed', e);
+      }
+    }
+    if (_issueTimerAlertWritesInFlight.has(issue.id)) return;
+    _issueTimerAlertWritesInFlight.add(issue.id);
+    updateDoc(plantDoc('issues', issue.id), {
+      'timer.alertedAt': serverTimestamp(),
+      'timer.lastAlertLevel': 'overdue',
+      updatedAt: serverTimestamp(),
+      updatedBy: currentActor()
+    }).catch(err => {
+      console.warn('Failed to persist issue timer alert state', err);
+    }).finally(() => {
+      _issueTimerAlertWritesInFlight.delete(issue.id);
+    });
+  });
+}
+
 // photos - add modal
 document.getElementById('log-camera-btn').addEventListener('touchend', e=>{e.preventDefault();document.getElementById('log-camera-input').click();},{passive:false});
 document.getElementById('log-camera-btn').addEventListener('click', ()=>document.getElementById('log-camera-input').click());
@@ -3341,12 +3417,14 @@ window.submitIssue = async () => {
     const initialSubStatus = logCatSub || '';
     const shiftSel = document.getElementById('issue-shift').value;
     const shift = shiftSel === 'auto' ? getShiftForTime(d, getShiftSchedule(currentPlantId)) : shiftSel;
+    const timerMinutes = parseTimerMinutes(document.getElementById('issue-timer-minutes')?.value);
     const issueRef = doc(plantCol('issues'));
     const uploadedPhotos = await uploadIssuePhotosToStorage(issueRef.id, pendingPhotos);
     const issuePayload = {
       machine: currentMachine, note,
       dateTime: fmtDate(d), dateKey: localDateStr(d), timestamp: d.getTime(),
       shift,
+      timer: buildIssueTimer(timerMinutes, d),
       userId: currentUser.uid, userName: currentUser.displayName||currentUser.email,
       photoCount: uploadedPhotos.length,
       createdAt: serverTimestamp(),
@@ -3407,6 +3485,7 @@ window.openEditModal = async id => {
   renderPreviews(editPhotos,'edit-photo-previews');
   document.getElementById('edit-photo-input').value='';
   document.getElementById('edit-shift').value = issue.shift || 'auto';
+  document.getElementById('edit-timer-minutes').value = String(parseTimerMinutes(issue?.timer?.durationMinutes) || '');
   const btn = document.getElementById('edit-submit-btn');
   btn.disabled=false; btn.innerHTML='💾 Save Changes';
   document.getElementById('edit-modal').classList.add('visible');
@@ -3424,11 +3503,13 @@ window.saveEdit = async () => {
     const last = currentStatus(issue || {});
     const shiftSel = document.getElementById('edit-shift').value;
     const shift = shiftSel === 'auto' ? getShiftForTime(d, getShiftSchedule(currentPlantId)) : shiftSel;
+    const timerMinutes = parseTimerMinutes(document.getElementById('edit-timer-minutes')?.value);
     const uploadedPhotos = await uploadIssuePhotosToStorage(editTargetId, editPhotos);
     const issuePatch = {
       note,
       dateTime: fmtDate(d), dateKey: localDateStr(d), timestamp: d.getTime(),
       shift,
+      timer: buildIssueTimer(timerMinutes, d, issue?.timer || null),
       photoCount: uploadedPhotos.length,
       editedAt: fmtDate(new Date()), editedBy: currentUser.displayName||currentUser.email,
       ...buildIssueV2Compat({
@@ -4915,6 +4996,10 @@ function renderIssues() {
     const shiftBadgeHtml = _shiftDef
       ? `<span class="shift-badge" style="background:${_shiftDef.color}20;color:${_shiftDef.color};border-color:${_shiftDef.color}50">${_shiftDef.shortLabel}</span>`
       : '';
+    const timerState = getIssueTimerState(issue);
+    const timerBadgeHtml = timerState
+      ? `<span class="shift-badge" style="background:${timerState.isOverdue ? 'rgba(220,38,38,0.14)' : 'rgba(59,130,246,0.14)'};color:${timerState.isOverdue ? '#ef4444' : '#60a5fa'};border-color:${timerState.isOverdue ? 'rgba(239,68,68,0.35)' : 'rgba(96,165,250,0.35)'}">${timerState.label}</span>`
+      : '';
 
     card.innerHTML=`
       <div class="issue-card-header" onclick="toggleCard('${issue.id}')">
@@ -4922,7 +5007,7 @@ function renderIssues() {
           <div class="issue-machine-tag">${esc(issue.machine)}</div>
           <div class="issue-meta">
             <div class="issue-note-preview">${esc(issue.note)}</div>
-            <div class="issue-time">${datePart} ${submitterHtml}${shiftBadgeHtml}${(issue.photos||[]).length?`<span class="photo-count-badge">📷 ${issue.photos.length}</span>`:''}${issue.editedAt?'<span style="color:var(--text3)">(edited)</span>':''}</div>
+            <div class="issue-time">${datePart} ${submitterHtml}${shiftBadgeHtml}${timerBadgeHtml}${(issue.photos||[]).length?`<span class="photo-count-badge">📷 ${issue.photos.length}</span>`:''}${issue.editedAt?'<span style="color:var(--text3)">(edited)</span>':''}</div>
           </div>
           <button class="priority-btn${issue.highPriority?' active':''}" onclick="event.stopPropagation(); togglePriority('${issue.id}')" title="${issue.highPriority?'Remove high priority':'Mark as high priority'}">!</button>
           <div class="issue-expand-icon ${wasOpen?'open':''}" id="chevron-${issue.id}">▼</div>
@@ -5278,6 +5363,7 @@ function renderIssues() {
     list.appendChild(loadMoreRow);
   }
 
+  maybeNotifyIssueTimerAlerts(filtered);
   scheduleIssueLogRelayout();
   scheduleIssueLogRelayout(40);
 }
@@ -8646,3 +8732,9 @@ window.closeEmbeddedAdminPortal = closeEmbeddedAdminPortal;
 document.getElementById('embedded-admin-overlay')?.addEventListener('click', e => {
   if (e.target === e.currentTarget) closeEmbeddedAdminPortal();
 });
+
+setInterval(() => {
+  if (document.hidden) return;
+  maybeNotifyIssueTimerAlerts(issues);
+  if (issues.length > 0) renderIssues();
+}, 60000);
