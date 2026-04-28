@@ -1113,6 +1113,20 @@ function gameLevelProgress(xp) {
   return Math.max(0, Math.min(100, Math.round(((xp - prevLevelFloor) / span) * 100)));
 }
 
+function shouldShowLevelUpCelebration() {
+  const userKey = currentUser?.uid || 'anonymous';
+  const today = localDateStr(new Date());
+  const storageKey = `gameLevelUpCelebrationLastSeen:${userKey}`;
+  try {
+    const lastShown = localStorage.getItem(storageKey) || '';
+    if (lastShown === today) return false;
+    localStorage.setItem(storageKey, today);
+  } catch (e) {
+    // If storage is unavailable, fall back to allowing the celebration.
+  }
+  return true;
+}
+
 function renderGamePanel() {
   const xp = Number(gameUserStats?.totals?.xp || 0);
   const level = gameLevelFromXp(xp);
@@ -1128,7 +1142,7 @@ function renderGamePanel() {
 
   // Detect level-up
   if (typeof gamePrevLevel !== 'undefined' && level > gamePrevLevel && gamePrevLevel > 0) {
-    showLevelUpCelebration(level);
+    if (shouldShowLevelUpCelebration()) showLevelUpCelebration(level);
   }
   gamePrevLevel = level;
 
