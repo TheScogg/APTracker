@@ -6344,14 +6344,6 @@ function _themeSvgToDataUrl(svgMarkup) {
 }
 
 
-function _themeSvgToDataUrl(svgMarkup) {
-  const source = String(svgMarkup || '').trim();
-  if (!source) return '';
-  const normalized = source.replace(/\r\n?/g, '\n').replace(/\t/g, '  ');
-  return `url("data:image/svg+xml,${encodeURIComponent(normalized)}")`;
-}
-
-
 function __apThemeSvgToDataUrl(svgMarkup) {
   const source = String(svgMarkup || '').trim();
   if (!source) return '';
