@@ -3518,6 +3518,13 @@ async function maybeNotifyIssueReminders(issueList = issues) {
     if (!_issueReminderNotified.has(dedupeKey)) {
       _issueReminderNotified.add(dedupeKey);
       showGameToast(`⏰ Reminder: check Press ${issue.machine || 'Unknown'}`);
+      if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+        try {
+          navigator.vibrate([200, 120, 200, 120, 300]);
+        } catch (e) {
+          console.warn('Issue reminder vibration failed', e);
+        }
+      }
       if ('Notification' in window && Notification.permission === 'granted') {
         try {
           new Notification(`Reminder — Press ${issue.machine || 'Unknown'}`, {
