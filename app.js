@@ -3359,16 +3359,49 @@ function formatReminderClock(state) {
 }
 
 let issueReminderModalIssueId = null;
+let issueReminderWheelValue = { hours: 0, mins: 0, secs: 0 };
+
+function _buildReminderWheel(elId, max, key) {
+  const wheel = document.getElementById(elId);
+  if (!wheel) return;
+  wheel.innerHTML = '';
+  for (let i = 0; i <= max; i++) {
+    const item = document.createElement('div');
+    item.className = 'timer-wheel-item';
+    item.textContent = String(i);
+    item.dataset.value = String(i);
+    wheel.appendChild(item);
+  }
+  const updateValue = () => {
+    const itemHeight = 42;
+    const idx = Math.max(0, Math.min(max, Math.round(wheel.scrollTop / itemHeight)));
+    issueReminderWheelValue[key] = idx;
+    wheel.querySelectorAll('.timer-wheel-item').forEach((el, i) => el.classList.toggle('active', i === idx));
+  };
+  wheel.onscroll = updateValue;
+  setTimeout(() => updateValue(), 0);
+}
+
+function _setReminderWheelValue(elId, val) {
+  const wheel = document.getElementById(elId);
+  if (!wheel) return;
+  wheel.scrollTop = Math.max(0, Number(val || 0)) * 42;
+}
 window.openIssueReminderModal = function(issueId) {
   const issue = issues.find(i => i.id === issueId);
   if (!issue) return;
   issueReminderModalIssueId = issueId;
   const cur = getIssueReminderState(issueId);
   const mins = Math.max(0, Number(cur?.minutes || 0));
-  const hSel = document.getElementById('issue-reminder-hours');
-  const mSel = document.getElementById('issue-reminder-mins');
-  if (hSel) hSel.value = String(Math.floor(mins / 60));
-  if (mSel) mSel.value = String(mins % 60);
+  _buildReminderWheel('issue-reminder-hours-wheel', 23, 'hours');
+  _buildReminderWheel('issue-reminder-mins-wheel', 59, 'mins');
+  _buildReminderWheel('issue-reminder-secs-wheel', 59, 'secs');
+  _setReminderWheelValue('issue-reminder-hours-wheel', Math.floor(mins / 60));
+  _setReminderWheelValue('issue-reminder-mins-wheel', mins % 60);
+  _setReminderWheelValue('issue-reminder-secs-wheel', 0);
+  issueReminderWheelValue.hours = Math.floor(mins / 60);
+  issueReminderWheelValue.mins = mins % 60;
+  issueReminderWheelValue.secs = 0;
   const sub = document.getElementById('issue-reminder-modal-subtitle');
   if (sub) sub.textContent = `Press ${issue.machine || 'Unknown'} • pick a timer`;
   document.getElementById('issue-reminder-modal')?.classList.add('visible');
@@ -3385,9 +3418,10 @@ window.setIssueReminderFromModal = function(minutes) {
   renderIssues();
 };
 window.setIssueReminderFromModalCustom = function() {
-  const h = Number(document.getElementById('issue-reminder-hours')?.value || 0);
-  const m = Number(document.getElementById('issue-reminder-mins')?.value || 0);
-  const total = (h * 60) + m;
+  const h = Number(issueReminderWheelValue.hours || 0);
+  const m = Number(issueReminderWheelValue.mins || 0);
+  const s = Number(issueReminderWheelValue.secs || 0);
+  const total = Math.floor((h * 60) + m + (s / 60));
   if (total <= 0) { showGameToast('Pick a time greater than 0 minutes.'); return; }
   window.setIssueReminderFromModal(total);
 };

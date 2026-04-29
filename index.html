@@ -801,31 +801,25 @@
 
 <!-- ISSUE REMINDER MODAL -->
 <div class="modal-overlay" id="issue-reminder-modal">
-  <div class="modal" style="max-width:360px;">
+  <div class="modal" style="max-width:420px;">
     <div class="modal-title">⏱ Check-back Timer</div>
     <div class="modal-subtitle" id="issue-reminder-modal-subtitle">Set a reminder</div>
-    <div style="display:flex;gap:8px;align-items:center;margin:14px 0 8px;">
-      <select id="issue-reminder-hours" class="tl-mini-select" style="flex:1;">
-        <option value="0">0 hr</option>
-        <option value="1">1 hr</option>
-        <option value="2">2 hr</option>
-        <option value="3">3 hr</option>
-        <option value="4">4 hr</option>
-      </select>
-      <select id="issue-reminder-mins" class="tl-mini-select" style="flex:1;">
-        <option value="0">00 min</option>
-        <option value="5">05 min</option>
-        <option value="10">10 min</option>
-        <option value="15">15 min</option>
-        <option value="20">20 min</option>
-        <option value="25">25 min</option>
-        <option value="30">30 min</option>
-        <option value="35">35 min</option>
-        <option value="40">40 min</option>
-        <option value="45">45 min</option>
-        <option value="50">50 min</option>
-        <option value="55">55 min</option>
-      </select>
+    <div class="timer-wheel-wrap">
+      <div class="timer-wheel-highlight"></div>
+      <div class="timer-wheel-grid">
+        <div class="timer-wheel-col">
+          <div class="timer-wheel-label">hr</div>
+          <div class="timer-wheel" id="issue-reminder-hours-wheel"></div>
+        </div>
+        <div class="timer-wheel-col">
+          <div class="timer-wheel-label">min</div>
+          <div class="timer-wheel" id="issue-reminder-mins-wheel"></div>
+        </div>
+        <div class="timer-wheel-col">
+          <div class="timer-wheel-label">sec</div>
+          <div class="timer-wheel" id="issue-reminder-secs-wheel"></div>
+        </div>
+      </div>
     </div>
     <div class="timer-iphone-stack">
       <button class="timer-chip" onclick="setIssueReminderFromModal(15)">15m</button>
