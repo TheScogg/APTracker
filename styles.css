@@ -1007,6 +1007,16 @@
   .issue-card-header { padding: 16px 16px 0; cursor: pointer; user-select: none; }
   .issue-card-top { display: flex; align-items: flex-start; gap: 12px; }
   .issue-card-bottom { display: flex; align-items: flex-start; gap: 8px; padding: 8px 0 12px; }
+  .issue-card-footer { display:flex; justify-content:flex-start; padding: 8px 16px 12px; }
+  .issue-reminder-pill {
+    width: 54px; height: 54px; border-radius: 999px; border: 1px solid rgba(96,165,250,0.45);
+    background: radial-gradient(circle at 30% 30%, rgba(96,165,250,0.2), rgba(15,23,42,0.85));
+    color: #bfdbfe; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    line-height:1; font-family:'Share Tech Mono', monospace; font-size: 12px; cursor:pointer;
+  }
+  .issue-reminder-pill.overdue { border-color: rgba(239,68,68,0.5); color:#fecaca; background: radial-gradient(circle at 30% 30%, rgba(239,68,68,0.2), rgba(15,23,42,0.85)); }
+  .issue-reminder-pill .big { font-size: 15px; font-weight: 700; }
+  .issue-reminder-pill .small { font-size: 10px; opacity: 0.9; margin-top: 2px; }
   .issue-status-wrap { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; flex: 1; min-width: 0; }
   
   /* Compact workflow step buttons (card header) */
@@ -1227,6 +1237,9 @@
   /* MODALS */
   .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 1000; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
   .modal-overlay.visible { display: flex; }
+  .timer-iphone-stack { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:10px; margin: 14px 0 8px; }
+  .timer-chip { border:1px solid var(--border); border-radius: 16px; padding: 14px 10px; font-family:'Share Tech Mono', monospace; font-size:18px; background: var(--bg3); color: var(--text); }
+  .timer-chip:hover { border-color: #60a5fa; color:#93c5fd; background: rgba(59,130,246,0.08); }
   .modal { background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; padding: 24px; width: 520px; max-width: 95vw; max-height: 90vh; overflow-y: auto; box-shadow: 0 24px 80px rgba(0,0,0,0.6); animation: modalIn 0.2s ease; }
   @keyframes modalIn { from{opacity:0;transform:scale(0.95) translateY(10px)}to{opacity:1;transform:scale(1) translateY(0)} }
   .modal-title { font-family: 'Rajdhani', sans-serif; font-size: 20px; font-weight: 700; letter-spacing: 1px; margin-bottom: 5px; }
