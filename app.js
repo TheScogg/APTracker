@@ -3296,6 +3296,20 @@ function parseTimerMinutes(rawValue) {
   return Math.round(val);
 }
 
+function buildIssueTimer(minutes, baseDate = new Date(), existingTimer = null) {
+  const m = parseTimerMinutes(minutes);
+  if (!m) return null;
+  const startedAtMs = Number(existingTimer?.startedAtMs || 0);
+  const startMs = Number.isFinite(startedAtMs) && startedAtMs > 0
+    ? startedAtMs
+    : (baseDate instanceof Date ? baseDate.getTime() : Date.now());
+  return {
+    minutes: m,
+    startedAtMs: startMs,
+    dueAtMs: startMs + m * 60 * 1000
+  };
+}
+
 const ISSUE_REMINDER_STORAGE_KEY = 'aptracker_issue_reminders_v1';
 let issueReminderMap = {};
 const _issueReminderNotified = new Set();
