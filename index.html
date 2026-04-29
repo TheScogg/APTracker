@@ -689,6 +689,16 @@
         <option value="third">3rd Shift (9:54 PM – 5:54 AM)</option>
       </select>
     </div>
+    <div style="margin-bottom:14px">
+      <label style="margin-bottom:5px">Initial Reminder</label>
+      <select id="issue-timer-minutes" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:100%;">
+        <option value="">No timer</option>
+        <option value="15">15 minutes</option>
+        <option value="30">30 minutes</option>
+        <option value="60">1 hour</option>
+        <option value="120">2 hours</option>
+      </select>
+    </div>
     <label>Issue Description</label>
     <textarea id="issue-note" placeholder="Describe the issue in detail…"></textarea>
     <div style="margin-bottom:4px">
@@ -735,6 +745,16 @@
         <option value="third">3rd Shift (9:54 PM – 5:54 AM)</option>
       </select>
     </div>
+    <div style="margin-bottom:14px">
+      <label style="margin-bottom:5px">Initial Reminder</label>
+      <select id="edit-timer-minutes" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:100%;">
+        <option value="">No timer</option>
+        <option value="15">15 minutes</option>
+        <option value="30">30 minutes</option>
+        <option value="60">1 hour</option>
+        <option value="120">2 hours</option>
+      </select>
+    </div>
     <label>Issue Description</label>
     <textarea id="edit-note" placeholder="Describe the issue…"></textarea>
     <label>Photos</label>
@@ -775,6 +795,48 @@
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeReopenModal()">Cancel</button>
       <button class="btn btn-blue" id="reopen-confirm-btn" onclick="confirmReopen()">Re-open Issue</button>
+    </div>
+  </div>
+</div>
+
+<!-- ISSUE REMINDER MODAL -->
+<div class="modal-overlay" id="issue-reminder-modal">
+  <div class="modal" style="max-width:360px;">
+    <div class="modal-title">⏱ Check-back Timer</div>
+    <div class="modal-subtitle" id="issue-reminder-modal-subtitle">Set a reminder</div>
+    <div style="display:flex;gap:8px;align-items:center;margin:14px 0 8px;">
+      <select id="issue-reminder-hours" class="tl-mini-select" style="flex:1;">
+        <option value="0">0 hr</option>
+        <option value="1">1 hr</option>
+        <option value="2">2 hr</option>
+        <option value="3">3 hr</option>
+        <option value="4">4 hr</option>
+      </select>
+      <select id="issue-reminder-mins" class="tl-mini-select" style="flex:1;">
+        <option value="0">00 min</option>
+        <option value="5">05 min</option>
+        <option value="10">10 min</option>
+        <option value="15">15 min</option>
+        <option value="20">20 min</option>
+        <option value="25">25 min</option>
+        <option value="30">30 min</option>
+        <option value="35">35 min</option>
+        <option value="40">40 min</option>
+        <option value="45">45 min</option>
+        <option value="50">50 min</option>
+        <option value="55">55 min</option>
+      </select>
+    </div>
+    <div class="timer-iphone-stack">
+      <button class="timer-chip" onclick="setIssueReminderFromModal(15)">15m</button>
+      <button class="timer-chip" onclick="setIssueReminderFromModal(30)">30m</button>
+      <button class="timer-chip" onclick="setIssueReminderFromModal(60)">1h</button>
+      <button class="timer-chip" onclick="setIssueReminderFromModal(120)">2h</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" onclick="setIssueReminderFromModalCustom()">Start</button>
+      <button class="btn btn-ghost" onclick="closeIssueReminderModal()">Cancel</button>
+      <button class="btn btn-danger" onclick="clearIssueReminderFromModal()">Clear</button>
     </div>
   </div>
 </div>
