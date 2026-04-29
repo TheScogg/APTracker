@@ -1157,7 +1157,7 @@
   <div class="modal theme-editor-modal" id="theme-editor-modal">
     <div class="modal-title" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
       <span>🎨 Appearance</span>
-      <button style="background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer;line-height:1;" onclick="closeAppearanceModal()">✕</button>
+      <button style="background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer;line-height:1;" onclick="closeThemeEditor()">✕</button>
     </div>
 
     <div class="te-section">
@@ -1172,12 +1172,39 @@
     </div>
 
     <div class="te-section">
-      <div class="te-section-label">SVG Background (Custom Theme)</div>
+      <div class="te-section-label">Theme Editor Base</div>
+      <select id="te-base-select" class="te-base-select"></select>
+    </div>
+
+    <div class="te-section">
+      <div class="te-section-label" style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+        <span>Theme Variables</span>
+        <span id="te-var-count" class="te-var-count">0 vars</span>
+      </div>
+      <input id="te-theme-search" class="te-theme-search" type="search" placeholder="Search CSS variable (e.g. --accent)">
+      <div id="te-vars-list" class="te-vars-list"></div>
+    </div>
+
+    <div class="te-section">
+      <div class="te-section-label">SVG Background (Any Theme)</div>
       <textarea id="te-bg-svg-input" style="width:100%;min-height:90px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text2);font-family:'Share Tech Mono',monospace;font-size:11px;" placeholder="Paste raw SVG markup (optional)."></textarea>
     </div>
 
+    <div class="te-section">
+      <div class="te-section-label">Save / Update Theme</div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input id="te-theme-name" class="te-theme-search" type="text" placeholder="Theme name" style="flex:1;">
+        <button id="te-save-btn" class="btn btn-primary" type="button" onclick="saveCustomTheme()">💾 Save</button>
+      </div>
+    </div>
+
+    <div class="te-section" id="te-saved-section" style="display:none;">
+      <div class="te-section-label">Editor Saved Themes</div>
+      <div id="te-saved-list" class="te-saved-list"></div>
+    </div>
+
     <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeAppearanceModal()">Close</button>
+      <button class="btn btn-ghost" onclick="closeThemeEditor()">Close</button>
     </div>
   </div>
 </div>
