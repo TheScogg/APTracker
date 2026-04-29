@@ -6756,8 +6756,8 @@ document.addEventListener('touchcancel', _teHandleColorPickerPointerRelease, tru
 
 window.openThemeEditor = function() {
   const themeEditorModal = document.getElementById('theme-editor-modal');
-  if (!themeEditorModal) return;
-  closeAppearanceModal();
+  const appearanceModal = document.getElementById('appearance-modal');
+  if (!themeEditorModal || !appearanceModal) return;
   document.getElementById('user-dropdown')?.classList.remove('visible');
   document.getElementById('user-pill')?.classList.remove('open');
   _tePrevThemeKey = localStorage.getItem('pressTrackerTheme') || 'midnight';
@@ -6791,16 +6791,20 @@ window.openThemeEditor = function() {
 
   _renderTEVarsList();
   _renderTESavedList();
-  document.getElementById('te-theme-name').value = '';
+  const themeNameInput = document.getElementById('te-theme-name');
+  if (themeNameInput) themeNameInput.value = '';
   const svgField = document.getElementById('te-bg-svg-input');
   if (svgField) svgField.value = _teCurrentVars['--bg-svg'] || '';
+  appearanceModal.classList.add('visible');
   themeEditorModal.classList.add('visible');
 };
 
 window.closeThemeEditor = function() {
   const themeEditorModal = document.getElementById('theme-editor-modal');
-  if (!themeEditorModal) return;
+  const appearanceModal = document.getElementById('appearance-modal');
+  if (!themeEditorModal || !appearanceModal) return;
   themeEditorModal.classList.remove('visible');
+  appearanceModal.classList.remove('visible');
   // Revert to what was active before editor opened
   const saved = localStorage.getItem('pressTrackerTheme') || 'midnight';
   if (saved.startsWith('custom_')) {
@@ -6818,7 +6822,8 @@ document.getElementById('te-base-select')?.addEventListener('change', e => {
     _teEditingId = null;
     const saveBtn = document.getElementById('te-save-btn');
     if (saveBtn) saveBtn.textContent = '💾 Save';
-    document.getElementById('te-theme-name').value = '';
+    const themeNameInput = document.getElementById('te-theme-name');
+    if (themeNameInput) themeNameInput.value = '';
     _renderTEVarsList();
     applyCustomThemeVars(_teCurrentVars);
   }
@@ -6925,6 +6930,7 @@ document.getElementById('te-bg-svg-input')?.addEventListener('input', e => {
 
 window.saveCustomTheme = function() {
   const nameEl = document.getElementById('te-theme-name');
+  if (!nameEl) return;
   const name = nameEl.value.trim();
   if (!name) { nameEl.focus(); return; }
   const data = _loadCustomThemes();
@@ -6974,7 +6980,8 @@ function _renderTESavedList() {
     item.querySelector('.te-saved-apply').addEventListener('click', () => {
       _teEditingId = theme.id;
       _teCurrentVars = { ...theme.vars };
-      document.getElementById('te-theme-name').value = theme.name;
+      const themeNameInput = document.getElementById('te-theme-name');
+      if (themeNameInput) themeNameInput.value = theme.name;
       const saveBtn = document.getElementById('te-save-btn');
       if (saveBtn) saveBtn.textContent = '💾 Update';
       _renderTEVarsList();
