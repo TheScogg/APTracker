@@ -3194,6 +3194,7 @@ window.openAddModal = m => {
   document.getElementById('photo-previews').innerHTML='';
   document.getElementById('modal-machine-name').textContent=m;
   document.getElementById('issue-shift').value='auto';
+  document.getElementById('issue-timer-minutes').value='';
   resetIssueDateTime(); setSubmitting(false);
   renderLogCatButtons();
   document.getElementById('log-cat-selected').classList.remove('visible');
@@ -3289,6 +3290,271 @@ function getIssueDateFromInputs(dateId, timeId) {
   return dateStr ? new Date(dateStr+'T'+timeStr+':00') : new Date();
 }
 
+function parseTimerMinutes(rawValue) {
+  const val = Number(rawValue || 0);
+  if (!Number.isFinite(val) || val <= 0) return 0;
+  return Math.round(val);
+}
+
+function buildIssueTimer(minutes, baseDate = new Date(), existingTimer = null) {
+  const m = parseTimerMinutes(minutes);
+  if (!m) return null;
+  const startedAtMs = Number(existingTimer?.startedAtMs || 0);
+  const startMs = Number.isFinite(startedAtMs) && startedAtMs > 0
+    ? startedAtMs
+    : (baseDate instanceof Date ? baseDate.getTime() : Date.now());
+  return {
+    minutes: m,
+    startedAtMs: startMs,
+    dueAtMs: startMs + m * 60 * 1000
+  };
+}
+
+const ISSUE_REMINDER_STORAGE_KEY = 'aptracker_issue_reminders_v1';
+let issueReminderMap = {};
+const _issueReminderNotified = new Set();
+const _issueReminderEscalated = new Set();
+const AUTO_CRITICAL_GRACE_MS = 30 * 1000;
+
+function loadIssueReminders() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(ISSUE_REMINDER_STORAGE_KEY) || '{}');
+    issueReminderMap = (parsed && typeof parsed === 'object') ? parsed : {};
+  } catch (e) {
+    issueReminderMap = {};
+  }
+}
+
+function saveIssueReminders() {
+  try {
+    localStorage.setItem(ISSUE_REMINDER_STORAGE_KEY, JSON.stringify(issueReminderMap));
+  } catch (e) {}
+}
+
+function clearIssueReminder(issueId) {
+  if (!issueId) return;
+  delete issueReminderMap[issueId];
+  saveIssueReminders();
+}
+
+function setIssueReminder(issueId, minutes) {
+  const m = parseTimerMinutes(minutes);
+  if (!issueId || !m) return false;
+  const now = Date.now();
+  issueReminderMap[issueId] = {
+    minutes: m,
+    setAt: now,
+    dueAt: now + m * 60 * 1000
+  };
+  saveIssueReminders();
+  return true;
+}
+
+function getIssueReminderState(issueId, nowMs = Date.now()) {
+  const reminder = issueReminderMap?.[issueId];
+  if (!reminder?.dueAt) return null;
+  const dueAt = Number(reminder.dueAt || 0);
+  if (!Number.isFinite(dueAt) || dueAt <= 0) return null;
+  const remainingMs = dueAt - nowMs;
+  const absMin = Math.max(1, Math.ceil(Math.abs(remainingMs) / 60000));
+  return {
+    dueAt,
+    minutes: Number(reminder.minutes || 0),
+    isOverdue: remainingMs <= 0,
+    remainingMs,
+    label: remainingMs > 0 ? `⏱ Remind in ${absMin}m` : `⏰ Reminder due ${absMin}m`
+  };
+}
+
+function formatReminderClock(state) {
+  if (!state) return '00:00';
+  const seconds = Math.max(0, Math.floor(Math.abs(Number(state.remainingMs || 0)) / 1000));
+  const mm = String(Math.floor(seconds / 60)).padStart(2, '0');
+  const ss = String(seconds % 60).padStart(2, '0');
+  return `${mm}:${ss}`;
+}
+
+let issueReminderModalIssueId = null;
+let issueReminderWheelValue = { hours: 0, mins: 0, secs: 0 };
+
+function _buildReminderWheel(elId, max, key) {
+  const wheel = document.getElementById(elId);
+  if (!wheel) return;
+  wheel.innerHTML = '';
+  for (let i = 0; i <= max; i++) {
+    const item = document.createElement('div');
+    item.className = 'timer-wheel-item';
+    item.textContent = String(i);
+    item.dataset.value = String(i);
+    wheel.appendChild(item);
+  }
+  const updateValue = () => {
+    const itemHeight = 42;
+    const idx = Math.max(0, Math.min(max, Math.round(wheel.scrollTop / itemHeight)));
+    issueReminderWheelValue[key] = idx;
+    wheel.querySelectorAll('.timer-wheel-item').forEach((el, i) => el.classList.toggle('active', i === idx));
+  };
+  wheel.onscroll = updateValue;
+  setTimeout(() => updateValue(), 0);
+}
+
+function _setReminderWheelValue(elId, val) {
+  const wheel = document.getElementById(elId);
+  if (!wheel) return;
+  wheel.scrollTop = Math.max(0, Number(val || 0)) * 42;
+}
+window.openIssueReminderModal = function(issueId) {
+  const issue = issues.find(i => i.id === issueId);
+  if (!issue) return;
+  issueReminderModalIssueId = issueId;
+  const cur = getIssueReminderState(issueId);
+  const mins = Math.max(0, Number(cur?.minutes || 0));
+  _buildReminderWheel('issue-reminder-hours-wheel', 23, 'hours');
+  _buildReminderWheel('issue-reminder-mins-wheel', 59, 'mins');
+  _buildReminderWheel('issue-reminder-secs-wheel', 59, 'secs');
+  _setReminderWheelValue('issue-reminder-hours-wheel', Math.floor(mins / 60));
+  _setReminderWheelValue('issue-reminder-mins-wheel', mins % 60);
+  _setReminderWheelValue('issue-reminder-secs-wheel', 0);
+  issueReminderWheelValue.hours = Math.floor(mins / 60);
+  issueReminderWheelValue.mins = mins % 60;
+  issueReminderWheelValue.secs = 0;
+  const sub = document.getElementById('issue-reminder-modal-subtitle');
+  if (sub) sub.textContent = `Press ${issue.machine || 'Unknown'} • pick a timer`;
+  document.getElementById('issue-reminder-modal')?.classList.add('visible');
+};
+window.closeIssueReminderModal = function() {
+  document.getElementById('issue-reminder-modal')?.classList.remove('visible');
+  issueReminderModalIssueId = null;
+};
+window.setIssueReminderFromModal = function(minutes) {
+  if (!issueReminderModalIssueId) return;
+  setIssueReminder(issueReminderModalIssueId, minutes);
+  showGameToast(`⏱ Reminder set for ${minutes}m.`);
+  closeIssueReminderModal();
+  renderIssues();
+};
+window.setIssueReminderFromModalCustom = function() {
+  const h = Number(issueReminderWheelValue.hours || 0);
+  const m = Number(issueReminderWheelValue.mins || 0);
+  const s = Number(issueReminderWheelValue.secs || 0);
+  const total = Math.floor((h * 60) + m + (s / 60));
+  if (total <= 0) { showGameToast('Pick a time greater than 0 minutes.'); return; }
+  window.setIssueReminderFromModal(total);
+};
+window.clearIssueReminderFromModal = function() {
+  if (!issueReminderModalIssueId) return;
+  clearIssueReminder(issueReminderModalIssueId);
+  showGameToast('Reminder cleared.');
+  closeIssueReminderModal();
+  renderIssues();
+};
+
+window.setIssueReminderFromCard = function(issueId) {
+  const minutes = parseTimerMinutes(document.getElementById(`issue-reminder-minutes-${issueId}`)?.value);
+  if (!minutes) { showGameToast('Select a reminder time first.'); return; }
+  if (!setIssueReminder(issueId, minutes)) return;
+  showGameToast(`⏱ Reminder set for ${minutes} minute${minutes === 1 ? '' : 's'}.`);
+  renderIssues();
+};
+
+window.setIssueReminderQuick = function(issueId, minutes) {
+  const m = parseTimerMinutes(minutes);
+  if (!m) return;
+  const sel = document.getElementById(`issue-reminder-minutes-${issueId}`);
+  if (sel) sel.value = String(m);
+  setIssueReminder(issueId, m);
+  showGameToast(`⏱ Reminder set for ${m} minute${m === 1 ? '' : 's'}.`);
+  renderIssues();
+};
+
+window.clearIssueReminderFromCard = function(issueId) {
+  clearIssueReminder(issueId);
+  showGameToast('Reminder cleared.');
+  renderIssues();
+};
+
+async function autoEscalateReminderToCritical(issue, state) {
+  if (!issue?.id || !state?.dueAt) return;
+  if (issue.highPriority === true && issue.priority === 'critical') return;
+  const graceThreshold = Number(state.dueAt) + AUTO_CRITICAL_GRACE_MS;
+  if (!Number.isFinite(graceThreshold) || Date.now() < graceThreshold) return;
+  const dedupeKey = `${issue.id}:${state.dueAt}`;
+  if (_issueReminderEscalated.has(dedupeKey)) return;
+  _issueReminderEscalated.add(dedupeKey);
+  try {
+    await updateDoc(plantDoc('issues', issue.id), {
+      highPriority: true,
+      priority: 'critical',
+      priorityChangedAt: serverTimestamp(),
+      priorityChangedBy: currentActor()
+    });
+    await addDoc(issueEventsCol(issue.id), {
+      eventType: 'issue_priority_changed',
+      actor: currentActor(),
+      note: 'Auto-escalated to critical after timer expiry.',
+      metadata: {
+        fromHighPriority: !!issue.highPriority,
+        fromPriority: issue.priority || null,
+        toHighPriority: true,
+        toPriority: 'critical',
+        escalationReason: 'timer_expired_unacknowledged',
+        reminderDueAt: Number(state.dueAt)
+      },
+      eventAt: serverTimestamp()
+    });
+    showGameToast(`🚨 Auto-critical: Press ${issue.machine || 'Unknown'}`);
+  } catch (e) {
+    _issueReminderEscalated.delete(dedupeKey);
+    console.warn('Issue reminder escalation failed', e);
+  }
+}
+
+async function maybeNotifyIssueReminders(issueList = issues) {
+  if (!Array.isArray(issueList) || issueList.length === 0) return;
+  for (const issue of issueList) {
+    const state = getIssueReminderState(issue.id);
+    if (!state?.isOverdue) continue;
+    const dedupeKey = `${issue.id}:${state.dueAt}`;
+    if (!_issueReminderNotified.has(dedupeKey)) {
+      _issueReminderNotified.add(dedupeKey);
+      showGameToast(`⏰ Reminder: check Press ${issue.machine || 'Unknown'}`);
+      if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+        try {
+          navigator.vibrate([200, 120, 200, 120, 300]);
+        } catch (e) {
+          console.warn('Issue reminder vibration failed', e);
+        }
+      }
+      if ('Notification' in window && Notification.permission === 'granted') {
+        try {
+          new Notification(`Reminder — Press ${issue.machine || 'Unknown'}`, {
+            body: issue.note || 'Go back and check the issue.'
+          });
+        } catch (e) {
+          console.warn('Issue reminder notification failed', e);
+        }
+      }
+    }
+    try {
+      await autoEscalateReminderToCritical(issue, state);
+    } catch (e) {
+      console.warn('Issue reminder auto-critical check failed', e);
+    }
+  }
+}
+
+function refreshReminderClocksInDom() {
+  document.querySelectorAll('[data-reminder-id]').forEach(el => {
+    const issueId = el.getAttribute('data-reminder-id');
+    if (!issueId) return;
+    const s = getIssueReminderState(issueId);
+    if (!s) return;
+    el.textContent = formatReminderClock(s);
+  });
+}
+
+loadIssueReminders();
+
 // photos - add modal
 document.getElementById('log-camera-btn').addEventListener('touchend', e=>{e.preventDefault();document.getElementById('log-camera-input').click();},{passive:false});
 document.getElementById('log-camera-btn').addEventListener('click', ()=>document.getElementById('log-camera-input').click());
@@ -3341,12 +3607,14 @@ window.submitIssue = async () => {
     const initialSubStatus = logCatSub || '';
     const shiftSel = document.getElementById('issue-shift').value;
     const shift = shiftSel === 'auto' ? getShiftForTime(d, getShiftSchedule(currentPlantId)) : shiftSel;
+    const timerMinutes = parseTimerMinutes(document.getElementById('issue-timer-minutes')?.value);
     const issueRef = doc(plantCol('issues'));
     const uploadedPhotos = await uploadIssuePhotosToStorage(issueRef.id, pendingPhotos);
     const issuePayload = {
       machine: currentMachine, note,
       dateTime: fmtDate(d), dateKey: localDateStr(d), timestamp: d.getTime(),
       shift,
+      timer: buildIssueTimer(timerMinutes, d),
       userId: currentUser.uid, userName: currentUser.displayName||currentUser.email,
       photoCount: uploadedPhotos.length,
       createdAt: serverTimestamp(),
@@ -3376,6 +3644,7 @@ window.submitIssue = async () => {
       note: ''
     });
     await batch.commit();
+    if (timerMinutes > 0) setIssueReminder(issueRef.id, timerMinutes);
     attachmentPhotoCache.set(issueRef.id, uploadedPhotos);
     await awardGamification('issue_created_complete', { issueId: issueRef.id, dedupeSuffix: 'issue-created', tags: ['issue:create', `status:${initialStatus}`] });
     if (uploadedPhotos.length > 0) await awardGamification('photo_attached', { issueId: issueRef.id, dedupeSuffix: 'photo', tags: ['photo:attached'] });
@@ -3407,6 +3676,7 @@ window.openEditModal = async id => {
   renderPreviews(editPhotos,'edit-photo-previews');
   document.getElementById('edit-photo-input').value='';
   document.getElementById('edit-shift').value = issue.shift || 'auto';
+  document.getElementById('edit-timer-minutes').value = String(parseTimerMinutes(issueReminderMap?.[id]?.minutes) || '');
   const btn = document.getElementById('edit-submit-btn');
   btn.disabled=false; btn.innerHTML='💾 Save Changes';
   document.getElementById('edit-modal').classList.add('visible');
@@ -3424,11 +3694,13 @@ window.saveEdit = async () => {
     const last = currentStatus(issue || {});
     const shiftSel = document.getElementById('edit-shift').value;
     const shift = shiftSel === 'auto' ? getShiftForTime(d, getShiftSchedule(currentPlantId)) : shiftSel;
+    const timerMinutes = parseTimerMinutes(document.getElementById('edit-timer-minutes')?.value);
     const uploadedPhotos = await uploadIssuePhotosToStorage(editTargetId, editPhotos);
     const issuePatch = {
       note,
       dateTime: fmtDate(d), dateKey: localDateStr(d), timestamp: d.getTime(),
       shift,
+      timer: buildIssueTimer(timerMinutes, d, issue?.timer || null),
       photoCount: uploadedPhotos.length,
       editedAt: fmtDate(new Date()), editedBy: currentUser.displayName||currentUser.email,
       ...buildIssueV2Compat({
@@ -3447,6 +3719,8 @@ window.saveEdit = async () => {
       fieldsChanged: ['note', 'photos', 'dateTime', 'dateKey', 'timestamp']
     });
     await batch.commit();
+    if (timerMinutes > 0) setIssueReminder(editTargetId, timerMinutes);
+    else clearIssueReminder(editTargetId);
     attachmentPhotoCache.set(editTargetId, uploadedPhotos);
     if (uploadedPhotos.length > 0) await awardGamification('photo_attached', { issueId: editTargetId, dedupeSuffix: 'photo', tags: ['photo:attached'] });
     closeEditModal();
@@ -4482,6 +4756,7 @@ window.deleteIssue = async id => {
   if (!confirm('Delete this issue permanently?')) return;
   try {
     await deleteDoc(plantDoc('issues',id));
+    clearIssueReminder(id);
     issuesById.delete(id);
     issueEventHistoryCache.delete(id);
     issueDetailsHydrationInFlight.delete(id);
@@ -4815,6 +5090,7 @@ function renderIssues() {
           <button class="tl-mini-btn" style="background:var(--bg3);border:1px solid var(--border);color:var(--text2);padding:4px 11px;" onclick="setPendingStatus('${issue.id}','status','')">+ Add status entry</button>
         </div>`;
 
+    const reminderState = getIssueReminderState(issue.id);
     const resolveHtml = `<div class="status-timeline">
       <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text2);margin-bottom:8px;">Status History</div>
       <div class="tl-list">
@@ -4824,6 +5100,7 @@ function renderIssues() {
     </div>
     <div class="action-row issue-footer-actions" style="margin-top:10px;">
       <button class="issue-text-btn" onclick="event.stopPropagation(); sendIssueViaSms('${issue.id}', event)" title="Send issue by SMS">📲 Text</button>
+      <button class="issue-reminder-btn${reminderState?.isOverdue ? ' overdue' : ''}" onclick="event.stopPropagation(); openIssueReminderModal('${issue.id}')" title="Set check-back timer">⏱ <span data-reminder-id="${issue.id}">${formatReminderClock(reminderState)}</span></button>
       ${canEdit ? `<div class="issue-footer-actions-right">
       <button class="btn btn-edit" onclick="openEditModal('${issue.id}')">✏️ Edit</button>
       <button class="btn btn-danger" onclick="deleteIssue('${issue.id}')">🗑 Delete</button>
@@ -4915,6 +5192,7 @@ function renderIssues() {
     const shiftBadgeHtml = _shiftDef
       ? `<span class="shift-badge" style="background:${_shiftDef.color}20;color:${_shiftDef.color};border-color:${_shiftDef.color}50">${_shiftDef.shortLabel}</span>`
       : '';
+    const timerBadgeHtml = reminderState ? `<span class="shift-badge ${reminderState.isOverdue ? 'status-open' : ''}" data-reminder-id="${issue.id}">${formatReminderClock(reminderState)}</span>` : '';
 
     card.innerHTML=`
       <div class="issue-card-header" onclick="toggleCard('${issue.id}')">
@@ -4922,7 +5200,7 @@ function renderIssues() {
           <div class="issue-machine-tag">${esc(issue.machine)}</div>
           <div class="issue-meta">
             <div class="issue-note-preview">${esc(issue.note)}</div>
-            <div class="issue-time">${datePart} ${submitterHtml}${shiftBadgeHtml}${(issue.photos||[]).length?`<span class="photo-count-badge">📷 ${issue.photos.length}</span>`:''}${issue.editedAt?'<span style="color:var(--text3)">(edited)</span>':''}</div>
+            <div class="issue-time">${datePart} ${submitterHtml}${shiftBadgeHtml}${timerBadgeHtml}${(issue.photos||[]).length?`<span class="photo-count-badge">📷 ${issue.photos.length}</span>`:''}${issue.editedAt?'<span style="color:var(--text3)">(edited)</span>':''}</div>
           </div>
           <button class="priority-btn${issue.highPriority?' active':''}" onclick="event.stopPropagation(); togglePriority('${issue.id}')" title="${issue.highPriority?'Remove high priority':'Mark as high priority'}">!</button>
           <div class="issue-expand-icon ${wasOpen?'open':''}" id="chevron-${issue.id}">▼</div>
@@ -4974,11 +5252,6 @@ function renderIssues() {
       catInner.appendChild(tile);
     });
 
-    // Cancel button
-    const cancelBtn = document.createElement('button');
-    cancelBtn.className = 'swipe-category-cancel';
-    cancelBtn.textContent = '✕ cancel';
-    catInner.appendChild(cancelBtn);
     catPanel.appendChild(catInner);
 
     // Sub-status panel
@@ -5029,11 +5302,6 @@ function renderIssues() {
       scheduleIssueLogRelayout();
     };
 
-    // Cancel button click
-    const handleCancel = () => closeSwipeCard(card);
-    addTapListener(cancelBtn, handleCancel);
-    cancelBtn.addEventListener('click', handleCancel); // Mouse support
-
     // Tile clicks
     let lastTileTap = null; // { key, stamp } — tracks last tap for double-click/double-tap detection
     catInner.querySelectorAll('.swipe-status-tile').forEach(tile => {
@@ -5075,15 +5343,6 @@ function renderIssues() {
 
           const subInner = subPanel.querySelector('.swipe-sub-inner');
           subInner.innerHTML = '';
-
-          // Mascot header — rendered inside the chip flow so sub-status chips wrap around it
-          const mascotDef = MASCOTS[statusKey];
-          if (mascotDef) {
-            const mh = document.createElement('div');
-            mh.className = 'swipe-mascot-header';
-            mh.innerHTML = `<div class="swipe-mascot-svg">${mascotDef.svg(68, 68)}</div><div class="swipe-mascot-info"><div class="swipe-mascot-name" style="color:${mascotDef.color}">${mascotDef.name}</div><div class="swipe-mascot-tagline">${mascotDef.tagline}</div></div>`;
-            subInner.appendChild(mh);
-          }
 
           // Skip chip
           const skipChip = document.createElement('div');
@@ -5297,6 +5556,7 @@ function renderIssues() {
     list.appendChild(loadMoreRow);
   }
 
+  maybeNotifyIssueReminders(filtered);
   scheduleIssueLogRelayout();
   scheduleIssueLogRelayout(40);
 }
@@ -6057,21 +6317,12 @@ function getThemeCatalogEntry(key) {
 // ── THEME EDITOR ──
 const CUSTOM_THEMES_KEY = 'apTracker_customThemes';
 
-const THEME_EDITOR_VARS = [
-  ['--bg',      'Background',   'surfaces'],
-  ['--bg2',     'Surface',      'surfaces'],
-  ['--bg3',     'Inset',        'surfaces'],
-  ['--border',  'Border',       'surfaces'],
-  ['--text',    'Text Primary', 'text'],
-  ['--text2',   'Text Muted',   'text'],
-  ['--text3',   'Text Faint',   'text'],
-  ['--accent',  'Accent',       'accent'],
-  ['--accent2', 'Accent Light', 'accent'],
-  ['--green',   'Green',        'status'],
-  ['--red',     'Red',          'status'],
-  ['--blue',    'Blue',         'status'],
-  ['--yellow',  'Yellow',       'status'],
-  ['--orange',  'Orange',       'status'],
+const THEME_EDITOR_CORE_VARS = [
+  '--bg', '--bg2', '--bg3', '--border',
+  '--text', '--text2', '--text3',
+  '--accent', '--accent2',
+  '--green', '--red', '--blue', '--yellow', '--orange',
+  '--purple', '--teal', '--babyblue'
 ];
 
 const CUSTOM_THEME_CLEAR_VARS = [
@@ -6082,6 +6333,23 @@ const CUSTOM_THEME_CLEAR_VARS = [
   '--purple','--purple-dim','--teal','--teal-dim','--babyblue','--babyblue-dim',
   '--bg-svg','--bg-svg-image'
 ];
+let _appliedCustomVarKeys = new Set();
+
+
+function _themeSvgToDataUrl(svgMarkup) {
+  const source = String(svgMarkup || '').trim();
+  if (!source) return '';
+  const normalized = source.replace(/\r\n?/g, '\n').replace(/\t/g, '  ');
+  return `url("data:image/svg+xml,${encodeURIComponent(normalized)}")`;
+}
+
+
+function _themeSvgToDataUrl(svgMarkup) {
+  const source = String(svgMarkup || '').trim();
+  if (!source) return '';
+  const normalized = source.replace(/\r\n?/g, '\n').replace(/\t/g, '  ');
+  return `url("data:image/svg+xml,${encodeURIComponent(normalized)}")`;
+}
 
 
 function __apThemeSvgToDataUrl(svgMarkup) {
@@ -6098,7 +6366,9 @@ function _hexToRgba(hex, alpha) {
 }
 
 function clearCustomThemeVars() {
-  CUSTOM_THEME_CLEAR_VARS.forEach(v => document.documentElement.style.removeProperty(v));
+  const keys = new Set([...CUSTOM_THEME_CLEAR_VARS, ..._appliedCustomVarKeys]);
+  keys.forEach(v => document.documentElement.style.removeProperty(v));
+  _appliedCustomVarKeys = new Set();
 }
 
 function applyDerivedVars(vars) {
@@ -6115,8 +6385,64 @@ function applyDerivedVars(vars) {
 
 function applyCustomThemeVars(vars) {
   clearCustomThemeVars();
-  Object.entries(vars).forEach(([k, v]) => document.documentElement.style.setProperty(k, v));
+  Object.entries(vars).forEach(([k, v]) => {
+    if (!String(k || '').startsWith('--')) return;
+    document.documentElement.style.setProperty(k, v);
+    _appliedCustomVarKeys.add(k);
+  });
   applyDerivedVars(vars);
+}
+
+function _teGetAllVariables() {
+  const vars = new Set(THEME_EDITOR_CORE_VARS);
+
+  Object.values(THEME_VARS_MAP).forEach(themeVars => {
+    Object.keys(themeVars || {}).forEach(k => { if (k.startsWith('--')) vars.add(k); });
+  });
+
+  getThemeCatalog().forEach(theme => {
+    Object.keys(theme?.vars || {}).forEach(k => { if (k.startsWith('--')) vars.add(k); });
+  });
+
+  Array.from(document.styleSheets || []).forEach(sheet => {
+    try {
+      Array.from(sheet.cssRules || []).forEach(rule => {
+        const style = rule.style;
+        if (!style) return;
+        Array.from(style).forEach(prop => {
+          if (String(prop).startsWith('--')) vars.add(prop);
+        });
+      });
+    } catch (e) { /* ignore inaccessible stylesheet */ }
+  });
+
+  const rootStyle = getComputedStyle(document.documentElement);
+  for (let i = 0; i < rootStyle.length; i++) {
+    const prop = rootStyle[i];
+    if (String(prop).startsWith('--')) vars.add(prop);
+  }
+
+  const core = THEME_EDITOR_CORE_VARS.filter(v => vars.has(v));
+  const other = Array.from(vars).filter(v => !THEME_EDITOR_CORE_VARS.includes(v)).sort((a, b) => a.localeCompare(b));
+  return [...core, ...other];
+}
+
+function _teToHexIfColor(value) {
+  const v = String(value || '').trim();
+  if (!v) return null;
+  if (/^#[0-9a-fA-F]{6}$/.test(v)) return v.toLowerCase();
+  if (/^#[0-9a-fA-F]{3}$/.test(v)) return '#' + v.slice(1).split('').map(ch => ch + ch).join('').toLowerCase();
+  const probe = document.createElement('span');
+  probe.style.color = '';
+  probe.style.color = v;
+  if (!probe.style.color) return null;
+  document.body.appendChild(probe);
+  const computed = getComputedStyle(probe).color;
+  probe.remove();
+  const m = computed.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+  if (!m) return null;
+  const toHex = (n) => Number(n).toString(16).padStart(2, '0');
+  return `#${toHex(m[1])}${toHex(m[2])}${toHex(m[3])}`;
 }
 
 function _loadCustomThemes() {
@@ -6446,21 +6772,21 @@ window.openThemeEditor = function() {
 
   // Populate base select
   const sel = document.getElementById('te-base-select');
-  sel.innerHTML = THEME_OPTIONS.map(t => `<option value="${t.key}">${t.label}</option>`).join('');
+  if (sel) sel.innerHTML = THEME_OPTIONS.map(t => `<option value="${t.key}">${t.label}</option>`).join('');
 
   // Seed vars from current theme (custom or built-in)
   if (_tePrevThemeKey.startsWith('custom_')) {
     const data = _loadCustomThemes();
     const found = data.customThemes.find(t => 'custom_' + t.id === _tePrevThemeKey);
     _teCurrentVars = found ? { ...found.vars } : { ...THEME_VARS_MAP.midnight };
-    sel.value = 'midnight';
+    if (sel) sel.value = 'midnight';
   } else if (_tePrevThemeKey.startsWith('storetheme_')) {
     const storeTheme = getThemeCatalogEntry(_tePrevThemeKey);
     _teCurrentVars = storeTheme?.vars ? { ...storeTheme.vars } : { ...THEME_VARS_MAP.midnight };
-    sel.value = 'midnight';
+    if (sel) sel.value = 'midnight';
   } else {
     const baseKey = THEME_KEYS.includes(_tePrevThemeKey) ? _tePrevThemeKey : 'midnight';
-    sel.value = baseKey;
+    if (sel) sel.value = baseKey;
     _teCurrentVars = { ...(THEME_VARS_MAP[baseKey] || THEME_VARS_MAP.midnight) };
   }
 
@@ -6468,7 +6794,7 @@ window.openThemeEditor = function() {
   document.body.classList.remove(...THEME_KEYS.map(key => `theme-${key}`));
   applyCustomThemeVars(_teCurrentVars);
 
-  _renderTEPickers();
+  _renderTEVarsList();
   _renderTESavedList();
   document.getElementById('te-theme-name').value = '';
   const svgField = document.getElementById('te-bg-svg-input');
@@ -6498,39 +6824,65 @@ document.getElementById('te-base-select')?.addEventListener('change', e => {
     const saveBtn = document.getElementById('te-save-btn');
     if (saveBtn) saveBtn.textContent = '💾 Save';
     document.getElementById('te-theme-name').value = '';
-    _renderTEPickers();
+    _renderTEVarsList();
     applyCustomThemeVars(_teCurrentVars);
   }
 });
 
-function _renderTEPickers() {
-  const groups = { surfaces: 'te-colors-surfaces', text: 'te-colors-text', accent: 'te-colors-accent', status: 'te-colors-status' };
-  Object.values(groups).forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = ''; });
-  THEME_EDITOR_VARS.forEach(([cssVar, label, group]) => {
-    const container = document.getElementById(groups[group]);
-    if (!container) return;
-    const val = _teCurrentVars[cssVar] || '#000000';
+document.getElementById('te-theme-search')?.addEventListener('input', () => _renderTEVarsList());
+
+function _renderTEVarsList() {
+  const container = document.getElementById('te-vars-list');
+  if (!container) return;
+  const baseKey = document.getElementById('te-base-select')?.value || 'midnight';
+  const baseVars = THEME_VARS_MAP[baseKey] || THEME_VARS_MAP.midnight || {};
+  const search = String(document.getElementById('te-theme-search')?.value || '').trim().toLowerCase();
+  const vars = _teGetAllVariables().filter(cssVar => !search || cssVar.toLowerCase().includes(search));
+  const countEl = document.getElementById('te-var-count');
+  if (countEl) countEl.textContent = `${vars.length} var${vars.length === 1 ? '' : 's'}`;
+
+  container.innerHTML = '';
+  if (!vars.length) {
+    container.innerHTML = `<div class="te-empty-vars">No CSS variables match your search.</div>`;
+    return;
+  }
+
+  vars.forEach(cssVar => {
+    const currentVal = _teCurrentVars?.[cssVar] || baseVars[cssVar] || getComputedStyle(document.documentElement).getPropertyValue(cssVar).trim() || '';
+    const baseVal = baseVars[cssVar] || '';
     const row = document.createElement('div');
-    row.className = 'te-color-row';
+    row.className = 'te-var-item';
+    row.setAttribute('role', 'listitem');
+    const safeCurrent = esc(currentVal);
     row.innerHTML = `
-      <label class="te-color-label">${label}</label>
-      <input type="color" class="te-color-input" value="${val}" data-var="${cssVar}">
-      <span class="te-color-hex" data-hex-for="${cssVar}">${val}</span>`;
-    const colorInput = row.querySelector('input');
-    const extendBackdropGuard = (ms = 400) => {
-      _teIgnoreBackdropClickUntil = Date.now() + ms;
-    };
+      <div class="te-var-item-header">
+        <label class="te-var-name" for="te-var-${cssVar.slice(2)}">${cssVar}</label>
+        <span class="te-var-hint">${baseVal ? 'base: ' + esc(baseVal) : 'custom variable'}</span>
+      </div>
+      <div class="te-var-controls">
+        <input id="te-var-${cssVar.slice(2)}" class="te-var-text" type="text" value="${safeCurrent}" aria-label="${cssVar} value">
+        <input class="te-var-color" type="color" aria-label="${cssVar} color picker">
+        <button class="te-var-reset" type="button">Reset</button>
+      </div>`;
+
+    const textInput = row.querySelector('.te-var-text');
+    const colorInput = row.querySelector('.te-var-color');
+    const resetBtn = row.querySelector('.te-var-reset');
+    const colorHex = _teToHexIfColor(currentVal);
+    colorInput.value = colorHex || '#000000';
+    colorInput.style.visibility = colorHex ? 'visible' : 'hidden';
+
+    textInput.addEventListener('input', e => {
+      _teCurrentVars[cssVar] = e.target.value.trim();
+      const nextHex = _teToHexIfColor(_teCurrentVars[cssVar]);
+      colorInput.style.visibility = nextHex ? 'visible' : 'hidden';
+      if (nextHex) colorInput.value = nextHex;
+      applyCustomThemeVars(_teCurrentVars);
+    });
+
+    const extendBackdropGuard = (ms = 400) => { _teIgnoreBackdropClickUntil = Date.now() + ms; };
     colorInput.addEventListener('pointerdown', () => {
       _teColorPickerPointerActive = true;
-      _teColorPickerInteracting = true;
-      extendBackdropGuard(5000);
-    });
-    colorInput.addEventListener('touchstart', () => {
-      _teColorPickerPointerActive = true;
-      _teColorPickerInteracting = true;
-      extendBackdropGuard(5000);
-    }, { passive: true });
-    colorInput.addEventListener('focus', () => {
       _teColorPickerInteracting = true;
       extendBackdropGuard(5000);
     });
@@ -6538,7 +6890,7 @@ function _renderTEPickers() {
       _teColorPickerInteracting = true;
       extendBackdropGuard(5000);
       _teCurrentVars[cssVar] = e.target.value;
-      row.querySelector('.te-color-hex').textContent = e.target.value;
+      textInput.value = e.target.value;
       applyCustomThemeVars(_teCurrentVars);
     });
     colorInput.addEventListener('change', () => {
@@ -6549,6 +6901,21 @@ function _renderTEPickers() {
       extendBackdropGuard(1500);
       _teQueueColorPickerInteractionRelease(350);
     });
+
+    resetBtn.addEventListener('click', () => {
+      if (baseVal) {
+        _teCurrentVars[cssVar] = baseVal;
+        textInput.value = baseVal;
+      } else {
+        delete _teCurrentVars[cssVar];
+        textInput.value = '';
+      }
+      const nextHex = _teToHexIfColor(textInput.value);
+      colorInput.style.visibility = nextHex ? 'visible' : 'hidden';
+      if (nextHex) colorInput.value = nextHex;
+      applyCustomThemeVars(_teCurrentVars);
+    });
+
     container.appendChild(row);
   });
 }
@@ -6615,7 +6982,7 @@ function _renderTESavedList() {
       document.getElementById('te-theme-name').value = theme.name;
       const saveBtn = document.getElementById('te-save-btn');
       if (saveBtn) saveBtn.textContent = '💾 Update';
-      _renderTEPickers();
+      _renderTEVarsList();
       const d = _loadCustomThemes(); d.activeCustomId = theme.id; _saveCustomThemesStorage(d);
       applyTheme('custom_' + theme.id);
       updateActiveThemeChoice(null);
@@ -8595,3 +8962,17 @@ window.closeEmbeddedAdminPortal = closeEmbeddedAdminPortal;
 document.getElementById('embedded-admin-overlay')?.addEventListener('click', e => {
   if (e.target === e.currentTarget) closeEmbeddedAdminPortal();
 });
+document.getElementById('issue-reminder-modal')?.addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeIssueReminderModal();
+});
+
+setInterval(() => {
+  if (document.hidden) return;
+  maybeNotifyIssueReminders(issues);
+  if (issues.length > 0) renderIssues();
+}, 60000);
+
+setInterval(() => {
+  if (document.hidden) return;
+  refreshReminderClocksInDom();
+}, 1000);

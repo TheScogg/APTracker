@@ -507,6 +507,12 @@
               </button>
             </div>
             <div class="theme-select-grid" id="theme-select-grid"></div>
+            <div class="theme-select-store">
+              <button class="user-dropdown-item" type="button" onclick="openThemeEditor()">
+                <span class="ud-item-icon">🎛️</span>
+                Theme Editor
+              </button>
+            </div>
           </div>
         </div>
         <!-- XP badge -->
@@ -683,6 +689,16 @@
         <option value="third">3rd Shift (9:54 PM – 5:54 AM)</option>
       </select>
     </div>
+    <div style="margin-bottom:14px">
+      <label style="margin-bottom:5px">Initial Reminder</label>
+      <select id="issue-timer-minutes" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:100%;">
+        <option value="">No timer</option>
+        <option value="15">15 minutes</option>
+        <option value="30">30 minutes</option>
+        <option value="60">1 hour</option>
+        <option value="120">2 hours</option>
+      </select>
+    </div>
     <label>Issue Description</label>
     <textarea id="issue-note" placeholder="Describe the issue in detail…"></textarea>
     <div style="margin-bottom:4px">
@@ -729,6 +745,16 @@
         <option value="third">3rd Shift (9:54 PM – 5:54 AM)</option>
       </select>
     </div>
+    <div style="margin-bottom:14px">
+      <label style="margin-bottom:5px">Initial Reminder</label>
+      <select id="edit-timer-minutes" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:100%;">
+        <option value="">No timer</option>
+        <option value="15">15 minutes</option>
+        <option value="30">30 minutes</option>
+        <option value="60">1 hour</option>
+        <option value="120">2 hours</option>
+      </select>
+    </div>
     <label>Issue Description</label>
     <textarea id="edit-note" placeholder="Describe the issue…"></textarea>
     <label>Photos</label>
@@ -769,6 +795,42 @@
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeReopenModal()">Cancel</button>
       <button class="btn btn-blue" id="reopen-confirm-btn" onclick="confirmReopen()">Re-open Issue</button>
+    </div>
+  </div>
+</div>
+
+<!-- ISSUE REMINDER MODAL -->
+<div class="modal-overlay" id="issue-reminder-modal">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-title">⏱ Check-back Timer</div>
+    <div class="modal-subtitle" id="issue-reminder-modal-subtitle">Set a reminder</div>
+    <div class="timer-wheel-wrap">
+      <div class="timer-wheel-highlight"></div>
+      <div class="timer-wheel-grid">
+        <div class="timer-wheel-col">
+          <div class="timer-wheel-label">hr</div>
+          <div class="timer-wheel" id="issue-reminder-hours-wheel"></div>
+        </div>
+        <div class="timer-wheel-col">
+          <div class="timer-wheel-label">min</div>
+          <div class="timer-wheel" id="issue-reminder-mins-wheel"></div>
+        </div>
+        <div class="timer-wheel-col">
+          <div class="timer-wheel-label">sec</div>
+          <div class="timer-wheel" id="issue-reminder-secs-wheel"></div>
+        </div>
+      </div>
+    </div>
+    <div class="timer-iphone-stack">
+      <button class="timer-chip" onclick="setIssueReminderFromModal(15)">15m</button>
+      <button class="timer-chip" onclick="setIssueReminderFromModal(30)">30m</button>
+      <button class="timer-chip" onclick="setIssueReminderFromModal(60)">1h</button>
+      <button class="timer-chip" onclick="setIssueReminderFromModal(120)">2h</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" onclick="setIssueReminderFromModalCustom()">Start</button>
+      <button class="btn btn-ghost" onclick="closeIssueReminderModal()">Cancel</button>
+      <button class="btn btn-danger" onclick="clearIssueReminderFromModal()">Clear</button>
     </div>
   </div>
 </div>
