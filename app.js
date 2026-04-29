@@ -6756,8 +6756,8 @@ document.addEventListener('touchcancel', _teHandleColorPickerPointerRelease, tru
 
 window.openThemeEditor = function() {
   const themeEditorModal = document.getElementById('theme-editor-modal');
-  if (!themeEditorModal) return;
-  closeAppearanceModal();
+  const appearanceModal = document.getElementById('appearance-modal');
+  if (!themeEditorModal || !appearanceModal) return;
   document.getElementById('user-dropdown')?.classList.remove('visible');
   document.getElementById('user-pill')?.classList.remove('open');
   _tePrevThemeKey = localStorage.getItem('pressTrackerTheme') || 'midnight';
@@ -6795,13 +6795,16 @@ window.openThemeEditor = function() {
   if (themeNameInput) themeNameInput.value = '';
   const svgField = document.getElementById('te-bg-svg-input');
   if (svgField) svgField.value = _teCurrentVars['--bg-svg'] || '';
+  appearanceModal.classList.add('visible');
   themeEditorModal.classList.add('visible');
 };
 
 window.closeThemeEditor = function() {
   const themeEditorModal = document.getElementById('theme-editor-modal');
-  if (!themeEditorModal) return;
+  const appearanceModal = document.getElementById('appearance-modal');
+  if (!themeEditorModal || !appearanceModal) return;
   themeEditorModal.classList.remove('visible');
+  appearanceModal.classList.remove('visible');
   // Revert to what was active before editor opened
   const saved = localStorage.getItem('pressTrackerTheme') || 'midnight';
   if (saved.startsWith('custom_')) {
