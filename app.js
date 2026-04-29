@@ -3363,6 +3363,12 @@ window.openIssueReminderModal = function(issueId) {
   const issue = issues.find(i => i.id === issueId);
   if (!issue) return;
   issueReminderModalIssueId = issueId;
+  const cur = getIssueReminderState(issueId);
+  const mins = Math.max(0, Number(cur?.minutes || 0));
+  const hSel = document.getElementById('issue-reminder-hours');
+  const mSel = document.getElementById('issue-reminder-mins');
+  if (hSel) hSel.value = String(Math.floor(mins / 60));
+  if (mSel) mSel.value = String(mins % 60);
   const sub = document.getElementById('issue-reminder-modal-subtitle');
   if (sub) sub.textContent = `Press ${issue.machine || 'Unknown'} • pick a timer`;
   document.getElementById('issue-reminder-modal')?.classList.add('visible');
@@ -3377,6 +3383,13 @@ window.setIssueReminderFromModal = function(minutes) {
   showGameToast(`⏱ Reminder set for ${minutes}m.`);
   closeIssueReminderModal();
   renderIssues();
+};
+window.setIssueReminderFromModalCustom = function() {
+  const h = Number(document.getElementById('issue-reminder-hours')?.value || 0);
+  const m = Number(document.getElementById('issue-reminder-mins')?.value || 0);
+  const total = (h * 60) + m;
+  if (total <= 0) { showGameToast('Pick a time greater than 0 minutes.'); return; }
+  window.setIssueReminderFromModal(total);
 };
 window.clearIssueReminderFromModal = function() {
   if (!issueReminderModalIssueId) return;
@@ -3428,6 +3441,16 @@ function maybeNotifyIssueReminders(issueList = issues) {
         console.warn('Issue reminder notification failed', e);
       }
     }
+  });
+}
+
+function refreshReminderClocksInDom() {
+  document.querySelectorAll('[data-reminder-id]').forEach(el => {
+    const issueId = el.getAttribute('data-reminder-id');
+    if (!issueId) return;
+    const s = getIssueReminderState(issueId);
+    if (!s) return;
+    el.textContent = formatReminderClock(s);
   });
 }
 
@@ -4976,6 +4999,7 @@ function renderIssues() {
     </div>
     <div class="action-row issue-footer-actions" style="margin-top:10px;">
       <button class="issue-text-btn" onclick="event.stopPropagation(); sendIssueViaSms('${issue.id}', event)" title="Send issue by SMS">📲 Text</button>
+      <button class="issue-reminder-btn${reminderState?.isOverdue ? ' overdue' : ''}" onclick="event.stopPropagation(); openIssueReminderModal('${issue.id}')" title="Set check-back timer">⏱ <span data-reminder-id="${issue.id}">${formatReminderClock(reminderState)}</span></button>
       ${canEdit ? `<div class="issue-footer-actions-right">
       <button class="btn btn-edit" onclick="openEditModal('${issue.id}')">✏️ Edit</button>
       <button class="btn btn-danger" onclick="deleteIssue('${issue.id}')">🗑 Delete</button>
@@ -5067,8 +5091,7 @@ function renderIssues() {
     const shiftBadgeHtml = _shiftDef
       ? `<span class="shift-badge" style="background:${_shiftDef.color}20;color:${_shiftDef.color};border-color:${_shiftDef.color}50">${_shiftDef.shortLabel}</span>`
       : '';
-    const timerBadgeHtml = '';
-    const timerClock = formatReminderClock(reminderState);
+    const timerBadgeHtml = reminderState ? `<span class="shift-badge ${reminderState.isOverdue ? 'status-open' : ''}" data-reminder-id="${issue.id}">${formatReminderClock(reminderState)}</span>` : '';
 
     card.innerHTML=`
       <div class="issue-card-header" onclick="toggleCard('${issue.id}')">
@@ -5091,12 +5114,6 @@ function renderIssues() {
         <div class="divider"></div>
         ${resolveHtml}
       </div>`;
-    card.innerHTML += `<div class="issue-card-footer">
-      <button class="issue-reminder-pill${reminderState?.isOverdue ? ' overdue' : ''}" onclick="event.stopPropagation(); openIssueReminderModal('${issue.id}')" title="Set check-back reminder">
-        <span class="big">${timerClock}</span>
-        <span class="small">${reminderState?.isOverdue ? 'DUE' : 'TIMER'}</span>
-      </button>
-    </div>`;
     // Safety cleanup: remove any legacy "Workflow: ..." pill buttons from status history rows.
     card.querySelectorAll('.status-timeline button').forEach(btn => {
       if (/^workflow\s*:/i.test((btn.textContent || '').trim())) btn.remove();
@@ -8816,3 +8833,8 @@ setInterval(() => {
   maybeNotifyIssueReminders(issues);
   if (issues.length > 0) renderIssues();
 }, 60000);
+
+setInterval(() => {
+  if (document.hidden) return;
+  refreshReminderClocksInDom();
+}, 1000);

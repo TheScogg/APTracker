@@ -804,15 +804,37 @@
   <div class="modal" style="max-width:360px;">
     <div class="modal-title">⏱ Check-back Timer</div>
     <div class="modal-subtitle" id="issue-reminder-modal-subtitle">Set a reminder</div>
+    <div style="display:flex;gap:8px;align-items:center;margin:14px 0 8px;">
+      <select id="issue-reminder-hours" class="tl-mini-select" style="flex:1;">
+        <option value="0">0 hr</option>
+        <option value="1">1 hr</option>
+        <option value="2">2 hr</option>
+        <option value="3">3 hr</option>
+        <option value="4">4 hr</option>
+      </select>
+      <select id="issue-reminder-mins" class="tl-mini-select" style="flex:1;">
+        <option value="0">00 min</option>
+        <option value="5">05 min</option>
+        <option value="10">10 min</option>
+        <option value="15">15 min</option>
+        <option value="20">20 min</option>
+        <option value="25">25 min</option>
+        <option value="30">30 min</option>
+        <option value="35">35 min</option>
+        <option value="40">40 min</option>
+        <option value="45">45 min</option>
+        <option value="50">50 min</option>
+        <option value="55">55 min</option>
+      </select>
+    </div>
     <div class="timer-iphone-stack">
-      <button class="timer-chip" onclick="setIssueReminderFromModal(5)">5:00</button>
-      <button class="timer-chip" onclick="setIssueReminderFromModal(10)">10:00</button>
-      <button class="timer-chip" onclick="setIssueReminderFromModal(15)">15:00</button>
-      <button class="timer-chip" onclick="setIssueReminderFromModal(30)">30:00</button>
-      <button class="timer-chip" onclick="setIssueReminderFromModal(45)">45:00</button>
-      <button class="timer-chip" onclick="setIssueReminderFromModal(60)">60:00</button>
+      <button class="timer-chip" onclick="setIssueReminderFromModal(15)">15m</button>
+      <button class="timer-chip" onclick="setIssueReminderFromModal(30)">30m</button>
+      <button class="timer-chip" onclick="setIssueReminderFromModal(60)">1h</button>
+      <button class="timer-chip" onclick="setIssueReminderFromModal(120)">2h</button>
     </div>
     <div class="modal-actions">
+      <button class="btn btn-primary" onclick="setIssueReminderFromModalCustom()">Start</button>
       <button class="btn btn-ghost" onclick="closeIssueReminderModal()">Cancel</button>
       <button class="btn btn-danger" onclick="clearIssueReminderFromModal()">Clear</button>
     </div>
