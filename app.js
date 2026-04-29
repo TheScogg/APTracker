@@ -6343,6 +6343,15 @@ function _themeSvgToDataUrl(svgMarkup) {
   return `url("data:image/svg+xml,${encodeURIComponent(normalized)}")`;
 }
 
+
+function __apThemeSvgToDataUrl(svgMarkup) {
+  const source = String(svgMarkup || '').trim();
+  if (!source) return '';
+  const normalized = source.replace(/\r\n?/g, '\n').replace(/\t/g, '  ');
+  return `url("data:image/svg+xml,${encodeURIComponent(normalized)}")`;
+}
+
+
 function _hexToRgba(hex, alpha) {
   const h = hex.replace('#','');
   const r = parseInt(h.slice(0,2),16), g = parseInt(h.slice(2,4),16), b = parseInt(h.slice(4,6),16);
@@ -6362,7 +6371,9 @@ function applyDerivedVars(vars) {
     if (vars[k]) root.setProperty(k + '-dim', _hexToRgba(vars[k], 0.12));
   });
   if (typeof vars['--bg-svg'] === 'string' && vars['--bg-svg'].trim()) {
-    root.setProperty('--bg-svg-image', _themeSvgToDataUrl(vars['--bg-svg']));
+    const svgSource = String(vars['--bg-svg']).trim();
+    const svgNormalized = svgSource.replace(/\r\n?/g, '\n').replace(/\t/g, '  ');
+    root.setProperty('--bg-svg-image', `url(\"data:image/svg+xml,${encodeURIComponent(svgNormalized)}\")`);
   }
 }
 
@@ -6780,9 +6791,9 @@ window.openThemeEditor = function() {
 
   _renderTEVarsList();
   _renderTESavedList();
-  const searchEl = document.getElementById('te-theme-search');
-  if (searchEl) searchEl.value = '';
-  if (document.getElementById('te-theme-name')) document.getElementById('te-theme-name').value = '';
+  document.getElementById('te-theme-name').value = '';
+  const svgField = document.getElementById('te-bg-svg-input');
+  if (svgField) svgField.value = _teCurrentVars['--bg-svg'] || '';
   themeEditorModal.classList.add('visible');
 };
 
