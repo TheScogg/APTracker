@@ -3194,6 +3194,7 @@ window.openAddModal = m => {
   document.getElementById('photo-previews').innerHTML='';
   document.getElementById('modal-machine-name').textContent=m;
   document.getElementById('issue-shift').value='auto';
+  document.getElementById('issue-timer-minutes').value='';
   resetIssueDateTime(); setSubmitting(false);
   renderLogCatButtons();
   document.getElementById('log-cat-selected').classList.remove('visible');
@@ -3289,6 +3290,112 @@ function getIssueDateFromInputs(dateId, timeId) {
   return dateStr ? new Date(dateStr+'T'+timeStr+':00') : new Date();
 }
 
+function parseTimerMinutes(rawValue) {
+  const val = Number(rawValue || 0);
+  if (!Number.isFinite(val) || val <= 0) return 0;
+  return Math.round(val);
+}
+
+const ISSUE_REMINDER_STORAGE_KEY = 'aptracker_issue_reminders_v1';
+let issueReminderMap = {};
+const _issueReminderNotified = new Set();
+
+function loadIssueReminders() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(ISSUE_REMINDER_STORAGE_KEY) || '{}');
+    issueReminderMap = (parsed && typeof parsed === 'object') ? parsed : {};
+  } catch (e) {
+    issueReminderMap = {};
+  }
+}
+
+function saveIssueReminders() {
+  try {
+    localStorage.setItem(ISSUE_REMINDER_STORAGE_KEY, JSON.stringify(issueReminderMap));
+  } catch (e) {}
+}
+
+function clearIssueReminder(issueId) {
+  if (!issueId) return;
+  delete issueReminderMap[issueId];
+  saveIssueReminders();
+}
+
+function setIssueReminder(issueId, minutes) {
+  const m = parseTimerMinutes(minutes);
+  if (!issueId || !m) return false;
+  const now = Date.now();
+  issueReminderMap[issueId] = {
+    minutes: m,
+    setAt: now,
+    dueAt: now + m * 60 * 1000
+  };
+  saveIssueReminders();
+  return true;
+}
+
+function getIssueReminderState(issueId, nowMs = Date.now()) {
+  const reminder = issueReminderMap?.[issueId];
+  if (!reminder?.dueAt) return null;
+  const dueAt = Number(reminder.dueAt || 0);
+  if (!Number.isFinite(dueAt) || dueAt <= 0) return null;
+  const remainingMs = dueAt - nowMs;
+  const absMin = Math.max(1, Math.ceil(Math.abs(remainingMs) / 60000));
+  return {
+    dueAt,
+    minutes: Number(reminder.minutes || 0),
+    isOverdue: remainingMs <= 0,
+    label: remainingMs > 0 ? `⏱ Remind in ${absMin}m` : `⏰ Reminder due ${absMin}m`
+  };
+}
+
+window.setIssueReminderFromCard = function(issueId) {
+  const minutes = parseTimerMinutes(document.getElementById(`issue-reminder-minutes-${issueId}`)?.value);
+  if (!minutes) { showGameToast('Select a reminder time first.'); return; }
+  if (!setIssueReminder(issueId, minutes)) return;
+  showGameToast(`⏱ Reminder set for ${minutes} minute${minutes === 1 ? '' : 's'}.`);
+  renderIssues();
+};
+
+window.setIssueReminderQuick = function(issueId, minutes) {
+  const m = parseTimerMinutes(minutes);
+  if (!m) return;
+  const sel = document.getElementById(`issue-reminder-minutes-${issueId}`);
+  if (sel) sel.value = String(m);
+  setIssueReminder(issueId, m);
+  showGameToast(`⏱ Reminder set for ${m} minute${m === 1 ? '' : 's'}.`);
+  renderIssues();
+};
+
+window.clearIssueReminderFromCard = function(issueId) {
+  clearIssueReminder(issueId);
+  showGameToast('Reminder cleared.');
+  renderIssues();
+};
+
+function maybeNotifyIssueReminders(issueList = issues) {
+  if (!Array.isArray(issueList) || issueList.length === 0) return;
+  issueList.forEach(issue => {
+    const state = getIssueReminderState(issue.id);
+    if (!state?.isOverdue) return;
+    const dedupeKey = `${issue.id}:${state.dueAt}`;
+    if (_issueReminderNotified.has(dedupeKey)) return;
+    _issueReminderNotified.add(dedupeKey);
+    showGameToast(`⏰ Reminder: check Press ${issue.machine || 'Unknown'}`);
+    if ('Notification' in window && Notification.permission === 'granted') {
+      try {
+        new Notification(`Reminder — Press ${issue.machine || 'Unknown'}`, {
+          body: issue.note || 'Go back and check the issue.'
+        });
+      } catch (e) {
+        console.warn('Issue reminder notification failed', e);
+      }
+    }
+  });
+}
+
+loadIssueReminders();
+
 // photos - add modal
 document.getElementById('log-camera-btn').addEventListener('touchend', e=>{e.preventDefault();document.getElementById('log-camera-input').click();},{passive:false});
 document.getElementById('log-camera-btn').addEventListener('click', ()=>document.getElementById('log-camera-input').click());
@@ -3341,6 +3448,7 @@ window.submitIssue = async () => {
     const initialSubStatus = logCatSub || '';
     const shiftSel = document.getElementById('issue-shift').value;
     const shift = shiftSel === 'auto' ? getShiftForTime(d, getShiftSchedule(currentPlantId)) : shiftSel;
+    const timerMinutes = parseTimerMinutes(document.getElementById('issue-timer-minutes')?.value);
     const issueRef = doc(plantCol('issues'));
     const uploadedPhotos = await uploadIssuePhotosToStorage(issueRef.id, pendingPhotos);
     const issuePayload = {
@@ -3376,6 +3484,7 @@ window.submitIssue = async () => {
       note: ''
     });
     await batch.commit();
+    if (timerMinutes > 0) setIssueReminder(issueRef.id, timerMinutes);
     attachmentPhotoCache.set(issueRef.id, uploadedPhotos);
     await awardGamification('issue_created_complete', { issueId: issueRef.id, dedupeSuffix: 'issue-created', tags: ['issue:create', `status:${initialStatus}`] });
     if (uploadedPhotos.length > 0) await awardGamification('photo_attached', { issueId: issueRef.id, dedupeSuffix: 'photo', tags: ['photo:attached'] });
@@ -3407,6 +3516,7 @@ window.openEditModal = async id => {
   renderPreviews(editPhotos,'edit-photo-previews');
   document.getElementById('edit-photo-input').value='';
   document.getElementById('edit-shift').value = issue.shift || 'auto';
+  document.getElementById('edit-timer-minutes').value = String(parseTimerMinutes(issueReminderMap?.[id]?.minutes) || '');
   const btn = document.getElementById('edit-submit-btn');
   btn.disabled=false; btn.innerHTML='💾 Save Changes';
   document.getElementById('edit-modal').classList.add('visible');
@@ -3424,6 +3534,7 @@ window.saveEdit = async () => {
     const last = currentStatus(issue || {});
     const shiftSel = document.getElementById('edit-shift').value;
     const shift = shiftSel === 'auto' ? getShiftForTime(d, getShiftSchedule(currentPlantId)) : shiftSel;
+    const timerMinutes = parseTimerMinutes(document.getElementById('edit-timer-minutes')?.value);
     const uploadedPhotos = await uploadIssuePhotosToStorage(editTargetId, editPhotos);
     const issuePatch = {
       note,
@@ -3447,6 +3558,8 @@ window.saveEdit = async () => {
       fieldsChanged: ['note', 'photos', 'dateTime', 'dateKey', 'timestamp']
     });
     await batch.commit();
+    if (timerMinutes > 0) setIssueReminder(editTargetId, timerMinutes);
+    else clearIssueReminder(editTargetId);
     attachmentPhotoCache.set(editTargetId, uploadedPhotos);
     if (uploadedPhotos.length > 0) await awardGamification('photo_attached', { issueId: editTargetId, dedupeSuffix: 'photo', tags: ['photo:attached'] });
     closeEditModal();
@@ -4482,6 +4595,7 @@ window.deleteIssue = async id => {
   if (!confirm('Delete this issue permanently?')) return;
   try {
     await deleteDoc(plantDoc('issues',id));
+    clearIssueReminder(id);
     issuesById.delete(id);
     issueEventHistoryCache.delete(id);
     issueDetailsHydrationInFlight.delete(id);
@@ -4815,7 +4929,32 @@ function renderIssues() {
           <button class="tl-mini-btn" style="background:var(--bg3);border:1px solid var(--border);color:var(--text2);padding:4px 11px;" onclick="setPendingStatus('${issue.id}','status','')">+ Add status entry</button>
         </div>`;
 
-    const resolveHtml = `<div class="status-timeline">
+    const reminderState = getIssueReminderState(issue.id);
+    const reminderSelectId = `issue-reminder-minutes-${issue.id}`;
+    const reminderPanelHtml = `<div class="status-timeline" style="margin-bottom:10px;">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text2);margin-bottom:8px;">Check-back Reminder</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <select id="${reminderSelectId}" class="tl-mini-select" style="min-width:140px;">
+          <option value="">Set reminder…</option>
+          <option value="5"${reminderState?.minutes===5?' selected':''}>5 minutes</option>
+          <option value="10"${reminderState?.minutes===10?' selected':''}>10 minutes</option>
+          <option value="15"${reminderState?.minutes===15?' selected':''}>15 minutes</option>
+          <option value="30"${reminderState?.minutes===30?' selected':''}>30 minutes</option>
+          <option value="45"${reminderState?.minutes===45?' selected':''}>45 minutes</option>
+          <option value="60"${reminderState?.minutes===60?' selected':''}>1 hour</option>
+        </select>
+        <button class="tl-mini-btn tl-save-btn" onclick="setIssueReminderFromCard('${issue.id}')">Set</button>
+        <button class="tl-mini-btn tl-cancel-btn" onclick="clearIssueReminderFromCard('${issue.id}')">Clear</button>
+      </div>
+      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
+        <button class="tl-mini-btn" onclick="setIssueReminderQuick('${issue.id}', 15)">+15m</button>
+        <button class="tl-mini-btn" onclick="setIssueReminderQuick('${issue.id}', 30)">+30m</button>
+        <button class="tl-mini-btn" onclick="setIssueReminderQuick('${issue.id}', 60)">+1h</button>
+      </div>
+      ${reminderState ? `<div class="tl-time" style="margin-top:8px;color:${reminderState.isOverdue ? '#ef4444' : 'var(--text2)'};">${reminderState.label}</div>` : ''}
+    </div>`;
+
+    const resolveHtml = `${reminderPanelHtml}<div class="status-timeline">
       <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text2);margin-bottom:8px;">Status History</div>
       <div class="tl-list">
         ${timelineEntries}
@@ -4915,6 +5054,9 @@ function renderIssues() {
     const shiftBadgeHtml = _shiftDef
       ? `<span class="shift-badge" style="background:${_shiftDef.color}20;color:${_shiftDef.color};border-color:${_shiftDef.color}50">${_shiftDef.shortLabel}</span>`
       : '';
+    const timerBadgeHtml = reminderState
+      ? `<span class="shift-badge" style="background:${reminderState.isOverdue ? 'rgba(220,38,38,0.14)' : 'rgba(59,130,246,0.14)'};color:${reminderState.isOverdue ? '#ef4444' : '#60a5fa'};border-color:${reminderState.isOverdue ? 'rgba(239,68,68,0.35)' : 'rgba(96,165,250,0.35)'}">${reminderState.label}</span>`
+      : '';
 
     card.innerHTML=`
       <div class="issue-card-header" onclick="toggleCard('${issue.id}')">
@@ -4922,7 +5064,7 @@ function renderIssues() {
           <div class="issue-machine-tag">${esc(issue.machine)}</div>
           <div class="issue-meta">
             <div class="issue-note-preview">${esc(issue.note)}</div>
-            <div class="issue-time">${datePart} ${submitterHtml}${shiftBadgeHtml}${(issue.photos||[]).length?`<span class="photo-count-badge">📷 ${issue.photos.length}</span>`:''}${issue.editedAt?'<span style="color:var(--text3)">(edited)</span>':''}</div>
+            <div class="issue-time">${datePart} ${submitterHtml}${shiftBadgeHtml}${timerBadgeHtml}${(issue.photos||[]).length?`<span class="photo-count-badge">📷 ${issue.photos.length}</span>`:''}${issue.editedAt?'<span style="color:var(--text3)">(edited)</span>':''}</div>
           </div>
           <button class="priority-btn${issue.highPriority?' active':''}" onclick="event.stopPropagation(); togglePriority('${issue.id}')" title="${issue.highPriority?'Remove high priority':'Mark as high priority'}">!</button>
           <div class="issue-expand-icon ${wasOpen?'open':''}" id="chevron-${issue.id}">▼</div>
@@ -5278,6 +5420,7 @@ function renderIssues() {
     list.appendChild(loadMoreRow);
   }
 
+  maybeNotifyIssueReminders(filtered);
   scheduleIssueLogRelayout();
   scheduleIssueLogRelayout(40);
 }
@@ -8646,3 +8789,9 @@ window.closeEmbeddedAdminPortal = closeEmbeddedAdminPortal;
 document.getElementById('embedded-admin-overlay')?.addEventListener('click', e => {
   if (e.target === e.currentTarget) closeEmbeddedAdminPortal();
 });
+
+setInterval(() => {
+  if (document.hidden) return;
+  maybeNotifyIssueReminders(issues);
+  if (issues.length > 0) renderIssues();
+}, 60000);
