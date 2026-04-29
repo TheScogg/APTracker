@@ -3313,6 +3313,8 @@ function buildIssueTimer(minutes, baseDate = new Date(), existingTimer = null) {
 const ISSUE_REMINDER_STORAGE_KEY = 'aptracker_issue_reminders_v1';
 let issueReminderMap = {};
 const _issueReminderNotified = new Set();
+const _issueReminderEscalated = new Set();
+const AUTO_CRITICAL_GRACE_MS = 30 * 1000;
 
 function loadIssueReminders() {
   try {
@@ -3471,25 +3473,74 @@ window.clearIssueReminderFromCard = function(issueId) {
   renderIssues();
 };
 
-function maybeNotifyIssueReminders(issueList = issues) {
+async function autoEscalateReminderToCritical(issue, state) {
+  if (!issue?.id || !state?.dueAt) return;
+  if (issue.highPriority === true && issue.priority === 'critical') return;
+  const graceThreshold = Number(state.dueAt) + AUTO_CRITICAL_GRACE_MS;
+  if (!Number.isFinite(graceThreshold) || Date.now() < graceThreshold) return;
+  const dedupeKey = `${issue.id}:${state.dueAt}`;
+  if (_issueReminderEscalated.has(dedupeKey)) return;
+  _issueReminderEscalated.add(dedupeKey);
+  try {
+    await updateDoc(plantDoc('issues', issue.id), {
+      highPriority: true,
+      priority: 'critical',
+      priorityChangedAt: serverTimestamp(),
+      priorityChangedBy: currentActor()
+    });
+    await addDoc(issueEventsCol(issue.id), {
+      eventType: 'issue_priority_changed',
+      actor: currentActor(),
+      note: 'Auto-escalated to critical after timer expiry.',
+      metadata: {
+        fromHighPriority: !!issue.highPriority,
+        fromPriority: issue.priority || null,
+        toHighPriority: true,
+        toPriority: 'critical',
+        escalationReason: 'timer_expired_unacknowledged',
+        reminderDueAt: Number(state.dueAt)
+      },
+      eventAt: serverTimestamp()
+    });
+    showGameToast(`🚨 Auto-critical: Press ${issue.machine || 'Unknown'}`);
+  } catch (e) {
+    _issueReminderEscalated.delete(dedupeKey);
+    console.warn('Issue reminder escalation failed', e);
+  }
+}
+
+async function maybeNotifyIssueReminders(issueList = issues) {
   if (!Array.isArray(issueList) || issueList.length === 0) return;
-  issueList.forEach(issue => {
+  for (const issue of issueList) {
     const state = getIssueReminderState(issue.id);
-    if (!state?.isOverdue) return;
+    if (!state?.isOverdue) continue;
     const dedupeKey = `${issue.id}:${state.dueAt}`;
-    if (_issueReminderNotified.has(dedupeKey)) return;
-    _issueReminderNotified.add(dedupeKey);
-    showGameToast(`⏰ Reminder: check Press ${issue.machine || 'Unknown'}`);
-    if ('Notification' in window && Notification.permission === 'granted') {
-      try {
-        new Notification(`Reminder — Press ${issue.machine || 'Unknown'}`, {
-          body: issue.note || 'Go back and check the issue.'
-        });
-      } catch (e) {
-        console.warn('Issue reminder notification failed', e);
+    if (!_issueReminderNotified.has(dedupeKey)) {
+      _issueReminderNotified.add(dedupeKey);
+      showGameToast(`⏰ Reminder: check Press ${issue.machine || 'Unknown'}`);
+      if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+        try {
+          navigator.vibrate([200, 120, 200, 120, 300]);
+        } catch (e) {
+          console.warn('Issue reminder vibration failed', e);
+        }
+      }
+      if ('Notification' in window && Notification.permission === 'granted') {
+        try {
+          new Notification(`Reminder — Press ${issue.machine || 'Unknown'}`, {
+            body: issue.note || 'Go back and check the issue.'
+          });
+        } catch (e) {
+          console.warn('Issue reminder notification failed', e);
+        }
       }
     }
-  });
+    try {
+      await autoEscalateReminderToCritical(issue, state);
+    } catch (e) {
+      console.warn('Issue reminder auto-critical check failed', e);
+    }
+  }
 }
 
 function refreshReminderClocksInDom() {
