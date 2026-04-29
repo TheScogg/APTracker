@@ -3296,74 +3296,199 @@ function parseTimerMinutes(rawValue) {
   return Math.round(val);
 }
 
-function buildIssueTimer(minutes, startedAtDate = new Date(), baseTimer = null) {
-  const m = parseTimerMinutes(minutes);
-  if (!m) return null;
-  const startedAtMs = startedAtDate instanceof Date ? startedAtDate.getTime() : Number(startedAtDate || Date.now());
-  const prior = baseTimer && typeof baseTimer === 'object' ? baseTimer : {};
-  return {
-    enabled: true,
-    durationMinutes: m,
-    startedAt: new Date(startedAtMs),
-    dueAt: new Date(startedAtMs + m * 60 * 1000),
-    alertedAt: prior.alertedAt || null,
-    lastAlertLevel: prior.lastAlertLevel || 'none'
-  };
+const ISSUE_REMINDER_STORAGE_KEY = 'aptracker_issue_reminders_v1';
+let issueReminderMap = {};
+const _issueReminderNotified = new Set();
+
+function loadIssueReminders() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(ISSUE_REMINDER_STORAGE_KEY) || '{}');
+    issueReminderMap = (parsed && typeof parsed === 'object') ? parsed : {};
+  } catch (e) {
+    issueReminderMap = {};
+  }
 }
 
-function getIssueTimerState(issue, nowMs = Date.now()) {
-  const timer = issue?.timer || null;
-  if (!timer?.enabled || !timer?.dueAt) return null;
-  let dueMs = 0;
+function saveIssueReminders() {
   try {
-    dueMs = timer.dueAt?.toMillis ? timer.dueAt.toMillis() : new Date(timer.dueAt).getTime();
-  } catch (e) { dueMs = 0; }
-  if (!Number.isFinite(dueMs) || dueMs <= 0) return null;
-  const remainingMs = dueMs - nowMs;
+    localStorage.setItem(ISSUE_REMINDER_STORAGE_KEY, JSON.stringify(issueReminderMap));
+  } catch (e) {}
+}
+
+function clearIssueReminder(issueId) {
+  if (!issueId) return;
+  delete issueReminderMap[issueId];
+  saveIssueReminders();
+}
+
+function setIssueReminder(issueId, minutes) {
+  const m = parseTimerMinutes(minutes);
+  if (!issueId || !m) return false;
+  const now = Date.now();
+  issueReminderMap[issueId] = {
+    minutes: m,
+    setAt: now,
+    dueAt: now + m * 60 * 1000
+  };
+  saveIssueReminders();
+  return true;
+}
+
+function getIssueReminderState(issueId, nowMs = Date.now()) {
+  const reminder = issueReminderMap?.[issueId];
+  if (!reminder?.dueAt) return null;
+  const dueAt = Number(reminder.dueAt || 0);
+  if (!Number.isFinite(dueAt) || dueAt <= 0) return null;
+  const remainingMs = dueAt - nowMs;
   const absMin = Math.max(1, Math.ceil(Math.abs(remainingMs) / 60000));
   return {
+    dueAt,
+    minutes: Number(reminder.minutes || 0),
     isOverdue: remainingMs <= 0,
-    dueMs,
-    label: remainingMs > 0 ? `⏱ ${absMin}m left` : `⏰ Overdue ${absMin}m`
+    remainingMs,
+    label: remainingMs > 0 ? `⏱ Remind in ${absMin}m` : `⏰ Reminder due ${absMin}m`
   };
 }
 
-const _issueTimerAlertKeys = new Set();
-const _issueTimerAlertWritesInFlight = new Set();
+function formatReminderClock(state) {
+  if (!state) return '00:00';
+  const seconds = Math.max(0, Math.floor(Math.abs(Number(state.remainingMs || 0)) / 1000));
+  const mm = String(Math.floor(seconds / 60)).padStart(2, '0');
+  const ss = String(seconds % 60).padStart(2, '0');
+  return `${mm}:${ss}`;
+}
 
-function maybeNotifyIssueTimerAlerts(issueList = issues) {
+let issueReminderModalIssueId = null;
+let issueReminderWheelValue = { hours: 0, mins: 0, secs: 0 };
+
+function _buildReminderWheel(elId, max, key) {
+  const wheel = document.getElementById(elId);
+  if (!wheel) return;
+  wheel.innerHTML = '';
+  for (let i = 0; i <= max; i++) {
+    const item = document.createElement('div');
+    item.className = 'timer-wheel-item';
+    item.textContent = String(i);
+    item.dataset.value = String(i);
+    wheel.appendChild(item);
+  }
+  const updateValue = () => {
+    const itemHeight = 42;
+    const idx = Math.max(0, Math.min(max, Math.round(wheel.scrollTop / itemHeight)));
+    issueReminderWheelValue[key] = idx;
+    wheel.querySelectorAll('.timer-wheel-item').forEach((el, i) => el.classList.toggle('active', i === idx));
+  };
+  wheel.onscroll = updateValue;
+  setTimeout(() => updateValue(), 0);
+}
+
+function _setReminderWheelValue(elId, val) {
+  const wheel = document.getElementById(elId);
+  if (!wheel) return;
+  wheel.scrollTop = Math.max(0, Number(val || 0)) * 42;
+}
+window.openIssueReminderModal = function(issueId) {
+  const issue = issues.find(i => i.id === issueId);
+  if (!issue) return;
+  issueReminderModalIssueId = issueId;
+  const cur = getIssueReminderState(issueId);
+  const mins = Math.max(0, Number(cur?.minutes || 0));
+  _buildReminderWheel('issue-reminder-hours-wheel', 23, 'hours');
+  _buildReminderWheel('issue-reminder-mins-wheel', 59, 'mins');
+  _buildReminderWheel('issue-reminder-secs-wheel', 59, 'secs');
+  _setReminderWheelValue('issue-reminder-hours-wheel', Math.floor(mins / 60));
+  _setReminderWheelValue('issue-reminder-mins-wheel', mins % 60);
+  _setReminderWheelValue('issue-reminder-secs-wheel', 0);
+  issueReminderWheelValue.hours = Math.floor(mins / 60);
+  issueReminderWheelValue.mins = mins % 60;
+  issueReminderWheelValue.secs = 0;
+  const sub = document.getElementById('issue-reminder-modal-subtitle');
+  if (sub) sub.textContent = `Press ${issue.machine || 'Unknown'} • pick a timer`;
+  document.getElementById('issue-reminder-modal')?.classList.add('visible');
+};
+window.closeIssueReminderModal = function() {
+  document.getElementById('issue-reminder-modal')?.classList.remove('visible');
+  issueReminderModalIssueId = null;
+};
+window.setIssueReminderFromModal = function(minutes) {
+  if (!issueReminderModalIssueId) return;
+  setIssueReminder(issueReminderModalIssueId, minutes);
+  showGameToast(`⏱ Reminder set for ${minutes}m.`);
+  closeIssueReminderModal();
+  renderIssues();
+};
+window.setIssueReminderFromModalCustom = function() {
+  const h = Number(issueReminderWheelValue.hours || 0);
+  const m = Number(issueReminderWheelValue.mins || 0);
+  const s = Number(issueReminderWheelValue.secs || 0);
+  const total = Math.floor((h * 60) + m + (s / 60));
+  if (total <= 0) { showGameToast('Pick a time greater than 0 minutes.'); return; }
+  window.setIssueReminderFromModal(total);
+};
+window.clearIssueReminderFromModal = function() {
+  if (!issueReminderModalIssueId) return;
+  clearIssueReminder(issueReminderModalIssueId);
+  showGameToast('Reminder cleared.');
+  closeIssueReminderModal();
+  renderIssues();
+};
+
+window.setIssueReminderFromCard = function(issueId) {
+  const minutes = parseTimerMinutes(document.getElementById(`issue-reminder-minutes-${issueId}`)?.value);
+  if (!minutes) { showGameToast('Select a reminder time first.'); return; }
+  if (!setIssueReminder(issueId, minutes)) return;
+  showGameToast(`⏱ Reminder set for ${minutes} minute${minutes === 1 ? '' : 's'}.`);
+  renderIssues();
+};
+
+window.setIssueReminderQuick = function(issueId, minutes) {
+  const m = parseTimerMinutes(minutes);
+  if (!m) return;
+  const sel = document.getElementById(`issue-reminder-minutes-${issueId}`);
+  if (sel) sel.value = String(m);
+  setIssueReminder(issueId, m);
+  showGameToast(`⏱ Reminder set for ${m} minute${m === 1 ? '' : 's'}.`);
+  renderIssues();
+};
+
+window.clearIssueReminderFromCard = function(issueId) {
+  clearIssueReminder(issueId);
+  showGameToast('Reminder cleared.');
+  renderIssues();
+};
+
+function maybeNotifyIssueReminders(issueList = issues) {
   if (!Array.isArray(issueList) || issueList.length === 0) return;
-  const openIssues = issueList.filter(i => !issueIsResolvedV2(i));
-  openIssues.forEach(issue => {
-    const timerState = getIssueTimerState(issue);
-    if (!timerState?.isOverdue) return;
-    const dedupeKey = `${issue.id}:${timerState.dueMs}`;
-    if (_issueTimerAlertKeys.has(dedupeKey)) return;
-    _issueTimerAlertKeys.add(dedupeKey);
-    showGameToast(`⏰ ${issue.machine || 'Issue'} timer overdue`);
+  issueList.forEach(issue => {
+    const state = getIssueReminderState(issue.id);
+    if (!state?.isOverdue) return;
+    const dedupeKey = `${issue.id}:${state.dueAt}`;
+    if (_issueReminderNotified.has(dedupeKey)) return;
+    _issueReminderNotified.add(dedupeKey);
+    showGameToast(`⏰ Reminder: check Press ${issue.machine || 'Unknown'}`);
     if ('Notification' in window && Notification.permission === 'granted') {
       try {
-        new Notification(`Issue overdue — ${issue.machine || 'Unknown press'}`, {
-          body: (issue.note || 'Issue timer expired').slice(0, 120)
+        new Notification(`Reminder — Press ${issue.machine || 'Unknown'}`, {
+          body: issue.note || 'Go back and check the issue.'
         });
       } catch (e) {
-        console.warn('Issue timer notification failed', e);
+        console.warn('Issue reminder notification failed', e);
       }
     }
-    if (_issueTimerAlertWritesInFlight.has(issue.id)) return;
-    _issueTimerAlertWritesInFlight.add(issue.id);
-    updateDoc(plantDoc('issues', issue.id), {
-      'timer.alertedAt': serverTimestamp(),
-      'timer.lastAlertLevel': 'overdue',
-      updatedAt: serverTimestamp(),
-      updatedBy: currentActor()
-    }).catch(err => {
-      console.warn('Failed to persist issue timer alert state', err);
-    }).finally(() => {
-      _issueTimerAlertWritesInFlight.delete(issue.id);
-    });
   });
 }
+
+function refreshReminderClocksInDom() {
+  document.querySelectorAll('[data-reminder-id]').forEach(el => {
+    const issueId = el.getAttribute('data-reminder-id');
+    if (!issueId) return;
+    const s = getIssueReminderState(issueId);
+    if (!s) return;
+    el.textContent = formatReminderClock(s);
+  });
+}
+
+loadIssueReminders();
 
 // photos - add modal
 document.getElementById('log-camera-btn').addEventListener('touchend', e=>{e.preventDefault();document.getElementById('log-camera-input').click();},{passive:false});
@@ -3454,6 +3579,7 @@ window.submitIssue = async () => {
       note: ''
     });
     await batch.commit();
+    if (timerMinutes > 0) setIssueReminder(issueRef.id, timerMinutes);
     attachmentPhotoCache.set(issueRef.id, uploadedPhotos);
     await awardGamification('issue_created_complete', { issueId: issueRef.id, dedupeSuffix: 'issue-created', tags: ['issue:create', `status:${initialStatus}`] });
     if (uploadedPhotos.length > 0) await awardGamification('photo_attached', { issueId: issueRef.id, dedupeSuffix: 'photo', tags: ['photo:attached'] });
@@ -3485,7 +3611,7 @@ window.openEditModal = async id => {
   renderPreviews(editPhotos,'edit-photo-previews');
   document.getElementById('edit-photo-input').value='';
   document.getElementById('edit-shift').value = issue.shift || 'auto';
-  document.getElementById('edit-timer-minutes').value = String(parseTimerMinutes(issue?.timer?.durationMinutes) || '');
+  document.getElementById('edit-timer-minutes').value = String(parseTimerMinutes(issueReminderMap?.[id]?.minutes) || '');
   const btn = document.getElementById('edit-submit-btn');
   btn.disabled=false; btn.innerHTML='💾 Save Changes';
   document.getElementById('edit-modal').classList.add('visible');
@@ -3528,6 +3654,8 @@ window.saveEdit = async () => {
       fieldsChanged: ['note', 'photos', 'dateTime', 'dateKey', 'timestamp']
     });
     await batch.commit();
+    if (timerMinutes > 0) setIssueReminder(editTargetId, timerMinutes);
+    else clearIssueReminder(editTargetId);
     attachmentPhotoCache.set(editTargetId, uploadedPhotos);
     if (uploadedPhotos.length > 0) await awardGamification('photo_attached', { issueId: editTargetId, dedupeSuffix: 'photo', tags: ['photo:attached'] });
     closeEditModal();
@@ -4563,6 +4691,7 @@ window.deleteIssue = async id => {
   if (!confirm('Delete this issue permanently?')) return;
   try {
     await deleteDoc(plantDoc('issues',id));
+    clearIssueReminder(id);
     issuesById.delete(id);
     issueEventHistoryCache.delete(id);
     issueDetailsHydrationInFlight.delete(id);
@@ -4896,6 +5025,7 @@ function renderIssues() {
           <button class="tl-mini-btn" style="background:var(--bg3);border:1px solid var(--border);color:var(--text2);padding:4px 11px;" onclick="setPendingStatus('${issue.id}','status','')">+ Add status entry</button>
         </div>`;
 
+    const reminderState = getIssueReminderState(issue.id);
     const resolveHtml = `<div class="status-timeline">
       <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text2);margin-bottom:8px;">Status History</div>
       <div class="tl-list">
@@ -4905,6 +5035,7 @@ function renderIssues() {
     </div>
     <div class="action-row issue-footer-actions" style="margin-top:10px;">
       <button class="issue-text-btn" onclick="event.stopPropagation(); sendIssueViaSms('${issue.id}', event)" title="Send issue by SMS">📲 Text</button>
+      <button class="issue-reminder-btn${reminderState?.isOverdue ? ' overdue' : ''}" onclick="event.stopPropagation(); openIssueReminderModal('${issue.id}')" title="Set check-back timer">⏱ <span data-reminder-id="${issue.id}">${formatReminderClock(reminderState)}</span></button>
       ${canEdit ? `<div class="issue-footer-actions-right">
       <button class="btn btn-edit" onclick="openEditModal('${issue.id}')">✏️ Edit</button>
       <button class="btn btn-danger" onclick="deleteIssue('${issue.id}')">🗑 Delete</button>
@@ -4996,10 +5127,7 @@ function renderIssues() {
     const shiftBadgeHtml = _shiftDef
       ? `<span class="shift-badge" style="background:${_shiftDef.color}20;color:${_shiftDef.color};border-color:${_shiftDef.color}50">${_shiftDef.shortLabel}</span>`
       : '';
-    const timerState = getIssueTimerState(issue);
-    const timerBadgeHtml = timerState
-      ? `<span class="shift-badge" style="background:${timerState.isOverdue ? 'rgba(220,38,38,0.14)' : 'rgba(59,130,246,0.14)'};color:${timerState.isOverdue ? '#ef4444' : '#60a5fa'};border-color:${timerState.isOverdue ? 'rgba(239,68,68,0.35)' : 'rgba(96,165,250,0.35)'}">${timerState.label}</span>`
-      : '';
+    const timerBadgeHtml = reminderState ? `<span class="shift-badge ${reminderState.isOverdue ? 'status-open' : ''}" data-reminder-id="${issue.id}">${formatReminderClock(reminderState)}</span>` : '';
 
     card.innerHTML=`
       <div class="issue-card-header" onclick="toggleCard('${issue.id}')">
@@ -5363,7 +5491,7 @@ function renderIssues() {
     list.appendChild(loadMoreRow);
   }
 
-  maybeNotifyIssueTimerAlerts(filtered);
+  maybeNotifyIssueReminders(filtered);
   scheduleIssueLogRelayout();
   scheduleIssueLogRelayout(40);
 }
@@ -8732,9 +8860,17 @@ window.closeEmbeddedAdminPortal = closeEmbeddedAdminPortal;
 document.getElementById('embedded-admin-overlay')?.addEventListener('click', e => {
   if (e.target === e.currentTarget) closeEmbeddedAdminPortal();
 });
+document.getElementById('issue-reminder-modal')?.addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeIssueReminderModal();
+});
 
 setInterval(() => {
   if (document.hidden) return;
-  maybeNotifyIssueTimerAlerts(issues);
+  maybeNotifyIssueReminders(issues);
   if (issues.length > 0) renderIssues();
 }, 60000);
+
+setInterval(() => {
+  if (document.hidden) return;
+  refreshReminderClocksInDom();
+}, 1000);
