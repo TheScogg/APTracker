@@ -1007,6 +1007,9 @@
   .issue-card-header { padding: 16px 16px 0; cursor: pointer; user-select: none; }
   .issue-card-top { display: flex; align-items: flex-start; gap: 12px; }
   .issue-card-bottom { display: flex; align-items: flex-start; gap: 8px; padding: 8px 0 12px; }
+  .issue-card-footer { display:flex; justify-content:flex-start; padding: 8px 16px 12px; }
+  .issue-reminder-btn { border:1px solid rgba(96,165,250,0.45); border-radius:10px; background:rgba(59,130,246,0.1); color:#bfdbfe; padding:7px 12px; font-family:'Share Tech Mono', monospace; font-size:12px; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:6px; }
+  .issue-reminder-btn.overdue { border-color: rgba(239,68,68,0.5); color:#fecaca; background: rgba(239,68,68,0.1); }
   .issue-status-wrap { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; flex: 1; min-width: 0; }
   
   /* Compact workflow step buttons (card header) */
@@ -1074,34 +1077,9 @@
   .issue-body { display: none; padding: 12px 16px 16px; border-top: 1px solid var(--border); }
   .issue-body.visible { display: block; }
   .issue-body input, .issue-body select, .issue-body textarea, .issue-body button { pointer-events: auto !important; user-select: auto !important; }
-  .issue-text-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    height: 34px;
-    padding: 0 14px;
-    border: 1px solid rgba(96,165,250,0.45);
-    border-radius: 999px;
-    background: linear-gradient(135deg, #2563eb, #3b82f6);
-    color: #ffffff;
-    font-family: 'Rajdhani', sans-serif;
-    font-size: 13px;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-    cursor: pointer;
-    box-shadow: 0 6px 14px rgba(37,99,235,0.28);
-    transition: transform 0.15s ease, filter 0.15s ease, box-shadow 0.15s ease;
-  }
-  .issue-text-btn:hover {
-    filter: brightness(1.08);
-    transform: translateY(-1px);
-    box-shadow: 0 8px 18px rgba(37,99,235,0.34);
-  }
-  .issue-text-btn:active {
-    transform: translateY(0);
-    filter: brightness(0.98);
-  }
+  .issue-text-btn { border:1px solid rgba(96,165,250,0.45); border-radius:10px; background:rgba(59,130,246,0.1); color:#bfdbfe; padding:7px 12px; font-family:'Share Tech Mono', monospace; font-size:12px; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:6px; }
+  .issue-text-btn:hover { background: rgba(59,130,246,0.16); }
+  .issue-text-btn:active { transform: translateY(1px); }
   
   /* Force all form elements to be interactive */
   input, select, textarea {
@@ -1227,6 +1205,9 @@
   /* MODALS */
   .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 1000; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
   .modal-overlay.visible { display: flex; }
+  .timer-iphone-stack { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:10px; margin: 14px 0 8px; }
+  .timer-chip { border:1px solid var(--border); border-radius: 16px; padding: 14px 10px; font-family:'Share Tech Mono', monospace; font-size:18px; background: var(--bg3); color: var(--text); }
+  .timer-chip:hover { border-color: #60a5fa; color:#93c5fd; background: rgba(59,130,246,0.08); }
   .modal { background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; padding: 24px; width: 520px; max-width: 95vw; max-height: 90vh; overflow-y: auto; box-shadow: 0 24px 80px rgba(0,0,0,0.6); animation: modalIn 0.2s ease; }
   @keyframes modalIn { from{opacity:0;transform:scale(0.95) translateY(10px)}to{opacity:1;transform:scale(1) translateY(0)} }
   .modal-title { font-family: 'Rajdhani', sans-serif; font-size: 20px; font-weight: 700; letter-spacing: 1px; margin-bottom: 5px; }
