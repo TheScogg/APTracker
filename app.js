@@ -3549,6 +3549,7 @@ window.submitIssue = async () => {
       machine: currentMachine, note,
       dateTime: fmtDate(d), dateKey: localDateStr(d), timestamp: d.getTime(),
       shift,
+      timer: buildIssueTimer(timerMinutes, d),
       userId: currentUser.uid, userName: currentUser.displayName||currentUser.email,
       photoCount: uploadedPhotos.length,
       createdAt: serverTimestamp(),
@@ -3634,6 +3635,7 @@ window.saveEdit = async () => {
       note,
       dateTime: fmtDate(d), dateKey: localDateStr(d), timestamp: d.getTime(),
       shift,
+      timer: buildIssueTimer(timerMinutes, d, issue?.timer || null),
       photoCount: uploadedPhotos.length,
       editedAt: fmtDate(new Date()), editedBy: currentUser.displayName||currentUser.email,
       ...buildIssueV2Compat({
