@@ -64,3 +64,7 @@ Fields:
 
 - Rule configuration can be managed per-plant in `plants/{plantId}/config/roleAlertRouting.rules`.
 - Unknown or missing role keys means user receives no role-based feed alerts.
+- Security rules enforce `roleFeedAlerts` as append-only records:
+  - read: any active plant member
+  - create: editor/admin only
+  - update/delete: denied
