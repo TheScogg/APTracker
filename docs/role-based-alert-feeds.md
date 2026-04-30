@@ -4,10 +4,11 @@ This document defines how users select job feeds and how issue status updates au
 
 ## User job selection
 
-Users are assigned to job feeds on their plant member document:
+Users are assigned to role keys on their plant member document:
 
 - Path: `plants/{plantId}/members/{uid}`
-- Field: `jobFeeds: string[]`
+- Preferred field: `jobRoleKeys: string[]`
+- Legacy-compatible field: `jobFeeds: string[]` (still read as fallback)
 
 Example:
 
@@ -15,7 +16,7 @@ Example:
 {
   "role": "editor",
   "isActive": true,
-  "jobFeeds": ["forklift_driver", "maintenance_employee"]
+  "jobRoleKeys": ["forklift_driver", "maintenance_employee"]
 }
 ```
 
@@ -27,7 +28,7 @@ Recommended UX timing:
 
 ## Routing rules implemented
 
-Current built-in routing in `app.js`:
+Current built-in default routing in `app.js`:
 
 1. Needs + Material-like sub-status -> `material_alerts` feed -> `forklift_driver` job feed.
 2. Maintenance status/category -> `maintenance_alerts` feed -> `maintenance_employee` job feed.
@@ -37,7 +38,7 @@ Current built-in routing in `app.js`:
 When status changes are saved via `addStatusEntry`:
 
 1. App resolves matching routing rule.
-2. App reads plant members and filters active users whose `jobFeeds` include required keys.
+2. App reads plant members and filters active users whose `jobRoleKeys` (or legacy `jobFeeds`) include required keys.
 3. App writes an alert record to `plants/{plantId}/roleFeedAlerts` including recipients.
 4. If the current user is targeted, an in-app toast is shown.
 
@@ -54,12 +55,12 @@ Fields:
 - `note`
 - `feedKey`
 - `feedLabel`
-- `requiredJobFeedKeys`
+- `requiredJobRoleKeys`
 - `recipientUserIds`
 - `createdAt`
 - `createdBy`
 
 ## Notes
 
-- This is app-side routing (v1). Server-side enforcement/notification fanout can be added later.
-- Unknown or missing `jobFeeds` means user receives no role-based feed alerts.
+- Rule configuration can be managed per-plant in `plants/{plantId}/config/roleAlertRouting.rules`.
+- Unknown or missing role keys means user receives no role-based feed alerts.
