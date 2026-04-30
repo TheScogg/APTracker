@@ -336,6 +336,21 @@ service cloud.firestore {
         }
       }
 
+      // ── Role feed alerts (append-only routing records) ──
+      match /roleFeedAlerts/{alertId} {
+        allow read: if isPlantMember(plantId);
+        // Created by status routing flow; require authenticated editor/admin access.
+        allow create: if isEditorOrAbove(plantId)
+                      && request.resource.data.issueId is string
+                      && request.resource.data.feedKey is string
+                      && request.resource.data.feedLabel is string
+                      && request.resource.data.requiredJobRoleKeys is list
+                      && request.resource.data.recipientUserIds is list
+                      && request.resource.data.createdBy.uid == currentUid();
+        // Keep alert records immutable; use issue events for follow-up changes.
+        allow update, delete: if false;
+      }
+
       // ── Plant-scoped daily schedules ──
       match /dailySchedules/{scheduleDate} {
         allow read: if isPlantMember(plantId);
