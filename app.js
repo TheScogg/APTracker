@@ -52,6 +52,71 @@ function normalizeMemberRole(roleValue) {
   return '';
 }
 
+// ── ROLE-BASED ALERT FEEDS ──
+// Users can opt into job-based alerts by setting members/{uid}.jobFeeds = ['forklift_driver', ...]
+// Admins can also assign these fields directly in Firestore.
+const ROLE_ALERT_ROUTING_RULES = [
+  {
+    match: ({ statusDef, subStatus }) => {
+      const label = String(statusDef?.label || '').toLowerCase();
+      const sub = String(subStatus || '').toLowerCase();
+      return label.includes('need') && sub.includes('material');
+    },
+    feedKey: 'material_alerts',
+    feedLabel: 'Material Alerts',
+    jobFeedKeys: ['forklift_driver']
+  },
+  {
+    match: ({ statusKey, statusDef }) => {
+      const key = String(statusKey || '').toLowerCase();
+      const label = String(statusDef?.label || '').toLowerCase();
+      return key === 'maintenance' || label.includes('maintenance');
+    },
+    feedKey: 'maintenance_alerts',
+    feedLabel: 'Maintenance Alerts',
+    jobFeedKeys: ['maintenance_employee']
+  }
+];
+
+function resolveRoleAlertRoute(statusKey, subStatus) {
+  const statusDef = getStatusDef(statusKey);
+  return ROLE_ALERT_ROUTING_RULES.find(rule => {
+    try { return !!rule.match({ statusKey, statusDef, subStatus }); } catch (_) { return false; }
+  }) || null;
+}
+
+async function queueRoleFeedAlert(issue, { statusKey, subStatus, note = '' } = {}) {
+  if (!currentPlantId || !issue?.id || !statusKey) return;
+  const route = resolveRoleAlertRoute(statusKey, subStatus);
+  if (!route) return;
+  try {
+    const membersSnap = await getDocs(collection(db, 'plants', currentPlantId, 'members'));
+    const recipientUserIds = membersSnap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(m => m?.isActive !== false)
+      .filter(m => Array.isArray(m.jobFeeds) && m.jobFeeds.some(key => route.jobFeedKeys.includes(String(key || '').trim().toLowerCase())))
+      .map(m => m.id);
+    await addDoc(collection(db, 'plants', currentPlantId, 'roleFeedAlerts'), {
+      issueId: issue.id,
+      machine: issue.machine || issue.machineCode || '',
+      statusKey,
+      subStatus: subStatus || '',
+      note: note || '',
+      feedKey: route.feedKey,
+      feedLabel: route.feedLabel,
+      requiredJobFeedKeys: route.jobFeedKeys,
+      recipientUserIds,
+      createdAt: serverTimestamp(),
+      createdBy: currentActor()
+    });
+    if (currentUser?.uid && recipientUserIds.includes(currentUser.uid)) {
+      showGameToast(`🔔 ${route.feedLabel}: Press ${issue.machine || 'Unknown'}`);
+    }
+  } catch (e) {
+    console.warn('Role feed alert enqueue failed', e);
+  }
+}
+
 // Default press layout — used when creating a new plant or if Firestore has none
 const DEFAULT_PRESSES = {
   "Row 1": ["1.01","1.02","1.03","1.04","1.05","1.06","1.07","1.08","1.09","1.10","1.11","1.12","1.13","1.14","1.15","1.16","1.17"],
@@ -3937,6 +4002,11 @@ window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
         note: note || ''
       },
       schemaVersion: 2
+    });
+    await queueRoleFeedAlert(issue, {
+      statusKey: status,
+      subStatus: subStatus || '',
+      note: note || ''
     });
     issueEventHistoryCache.delete(id);
     await awardGamification('status_changed_valid', { issueId: id, dedupeSuffix: entry.dateTime || String(Date.now()), tags: ['status:changed', `status:${status}`] });
