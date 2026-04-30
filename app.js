@@ -7141,14 +7141,17 @@ document.getElementById('appearance-modal')?.addEventListener('click', e => { if
 // Define which status+sub combos require a serial number
 function requiresSerialNumber(statusKey, sub) {
   const statusDef = getStatusDef(statusKey);
-  const statusLabel = String(statusDef?.label || '').trim().toLowerCase();
-  const subLabel = String(sub || '').trim().toLowerCase();
+  const statusKeyNorm = String(statusKey || '').trim().toLowerCase();
+  const statusLabelNorm = String(statusDef?.label || '').trim().toLowerCase();
+  const subNorm = String(sub || '').trim().toLowerCase();
 
   // Legacy/default flow: Materials → Needed
-  if (statusKey === 'materials' && subLabel === 'needed') return true;
+  if (statusKeyNorm === 'materials' && subNorm === 'needed') return true;
 
-  // Requested flow: Needs → Material
-  return statusLabel === 'needs' && subLabel === 'material';
+  // Requested + resilient flow: Need(s) → Material* (handles custom naming variants)
+  const isNeedsFamily = statusKeyNorm.includes('need') || statusLabelNorm.includes('need');
+  const isMaterialFamily = subNorm.includes('material');
+  return isNeedsFamily && isMaterialFamily;
 }
 
 
