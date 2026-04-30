@@ -430,8 +430,8 @@
   .game-pill .game-pill-xp { color: var(--purple); font-weight: 800; }
   .game-pill .game-pill-mission { color: var(--babyblue); }
   .user-dropdown .game-pill { width: calc(100% - 20px); margin: 10px; justify-content: center; }
-  .game-drawer { position: fixed; top: 0; right: -400px; width: 380px; max-width: 96vw; height: 100vh; background: var(--bg2); border-left: 1px solid var(--border); z-index: 450; box-shadow: -20px 0 60px rgba(0,0,0,0.5); transition: right 0.26s cubic-bezier(0.4,0,0.2,1); display: flex; flex-direction: column; }
-  .game-drawer.open { right: 0; }
+  .game-drawer { position: fixed; top: 0; right: 0; width: 380px; max-width: 96vw; height: 100vh; background: var(--bg2); border-left: 1px solid var(--border); z-index: 450; box-shadow: -20px 0 60px rgba(0,0,0,0.5); transform: translateX(100%); transition: transform 0.26s cubic-bezier(0.4,0,0.2,1); display: flex; flex-direction: column; }
+  .game-drawer.open { transform: translateX(0); }
   .game-drawer-header { padding: 16px 16px 12px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: linear-gradient(135deg, rgba(168,85,247,0.1), rgba(56,189,248,0.06)); flex-shrink: 0; }
   .game-drawer-title { font-family: 'Rajdhani', sans-serif; font-size: 20px; letter-spacing: 0.8px; font-weight: 700; }
   .game-drawer-close { border: 1px solid var(--border); background: var(--bg3); color: var(--text2); border-radius: 8px; padding: 4px 10px; cursor: pointer; font-size: 13px; transition: border-color 0.15s, color 0.15s; }
