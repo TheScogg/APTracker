@@ -7133,7 +7133,66 @@ document.getElementById('appearance-modal')?.addEventListener('click', e => { if
 // ── SERIAL NUMBER PROMPT ──
 // Define which status+sub combos require a serial number
 function requiresSerialNumber(statusKey, sub) {
-  return statusKey === 'materials' && sub === 'Needed';
+  const statusDef = getStatusDef(statusKey);
+  const statusKeyNorm = String(statusKey || '').trim().toLowerCase();
+  const statusLabelNorm = String(statusDef?.label || '').trim().toLowerCase();
+  const subNorm = String(sub || '').trim().toLowerCase();
+
+  // Legacy/default flow: Materials → Needed
+  if (statusKeyNorm === 'materials' && subNorm === 'needed') return true;
+
+  // Requested + resilient flow: Need(s) → Material* (handles custom naming variants)
+  const isNeedsFamily = statusKeyNorm.includes('need') || statusLabelNorm.includes('need');
+  const isMaterialFamily = subNorm.includes('material');
+  return isNeedsFamily && isMaterialFamily;
+}
+
+
+const SERIAL_MATERIAL_OPTIONS = {
+  STK44875: { location:[1], rack:'1', quantity:0 },
+  STK44880: { location:[1], rack:'1', quantity:0 },
+  STK4140959PG: { location:[2], rack:'1', quantity:0 },
+  STK44144: { location:[2,3,4], rack:'1', quantity:0 },
+  STK44190: { location:[4,5], rack:'1', quantity:0 },
+  STK44224: { location:[6,7], rack:'2', quantity:0 },
+  STK44836: { location:[8,9], rack:'2', quantity:0 },
+  STK4500STP: { location:[10], rack:'2', quantity:0 },
+  STK44866: { location:[11], rack:'2', quantity:0 },
+  STK44136: { location:[11], rack:'2', quantity:0 },
+  STK44216: { location:[12,13], rack:'2', quantity:0 },
+  STK44196: { location:[13], rack:'2', quantity:0 },
+  STK44820: { location:[13], rack:'2', quantity:0 },
+  STK44300: { location:[14], rack:'2', quantity:0 },
+  STK44219: { location:[15], rack:'3', quantity:0 },
+  STK47503: { location:[16], rack:'3', quantity:0 },
+  STK3X5030: { location:[16], rack:'3', quantity:0 },
+  STK3X758: { location:[16], rack:'3', quantity:0 },
+  STK44138: { location:[17], rack:'3', quantity:0 },
+  STK44193: { location:[17], rack:'3', quantity:0 },
+  STK44864: { location:[17], rack:'3', quantity:0 },
+  STK44222: { location:[18], rack:'3', quantity:0 },
+  STK44851: { location:[18], rack:'3', quantity:0 },
+  STK44182: { location:[19], rack:'3', quantity:0 },
+  STK4140958: { location:[19], rack:'3', quantity:0 },
+  STK44251: { location:[20], rack:'3', quantity:0 },
+  STK44221: { location:[20], rack:'3', quantity:0 },
+  STK44838: { location:[20], rack:'3', quantity:0 }
+};
+
+function populateSerialMaterialOptions() {
+  const select = document.getElementById('serial-select');
+  if (!select) return;
+  const entries = Object.entries(SERIAL_MATERIAL_OPTIONS).sort((a,b)=>a[0].localeCompare(b[0]));
+  select.innerHTML = '<option value="">Select a material...</option>' + entries.map(([code, meta]) => {
+    const locationText = Array.isArray(meta.location) ? meta.location.join(', ') : '';
+    return `<option value="${esc(code)}">${esc(code)} — Rack ${esc(meta.rack)} / Loc ${esc(locationText)}</option>`;
+  }).join('');
+}
+
+function resolveSerialInputValue() {
+  const selectVal = (document.getElementById('serial-select')?.value || '').trim();
+  const customVal = (document.getElementById('serial-input')?.value || '').trim();
+  return customVal || selectVal;
 }
 
 let _serialPending = null; // { issueId, status, sub, dateTime }
@@ -7144,9 +7203,12 @@ window.openSerialModal = (issueId, status, sub, dt) => {
   document.getElementById('serial-modal-machine').textContent = issue ? issue.machine : '';
   const st = getStatusDef(status);
   document.getElementById('serial-modal-status').textContent = st.icon + ' ' + getStatusLabel(status) + (sub ? ' › ' + sub : '');
+  populateSerialMaterialOptions();
+  document.getElementById('serial-select').value = '';
   document.getElementById('serial-input').value = '';
   document.getElementById('serial-error').style.display = 'none';
   document.getElementById('serial-input').style.borderColor = '';
+  document.getElementById('serial-select').style.borderColor = '';
   document.getElementById('serial-modal').classList.add('visible');
   setTimeout(() => document.getElementById('serial-input').focus(), 100);
 };
@@ -7158,11 +7220,24 @@ window.closeSerialModal = () => {
 
 window.confirmSerialModal = async () => {
   if (!_serialPending) return;
-  const sn = document.getElementById('serial-input').value.trim();
+  const sn = resolveSerialInputValue();
+  const serialError = document.getElementById('serial-error');
+  const serialInput = document.getElementById('serial-input');
+  const serialPattern = /^STK[0-9A-Z]+$/i;
   if (!sn) {
-    document.getElementById('serial-error').style.display = 'block';
-    document.getElementById('serial-input').style.borderColor = 'var(--red)';
-    document.getElementById('serial-input').focus();
+    serialError.textContent = 'Please enter a serial number';
+    serialError.style.display = 'block';
+    serialInput.style.borderColor = 'var(--red)';
+    document.getElementById('serial-select').style.borderColor = 'var(--red)';
+    serialInput.focus();
+    return;
+  }
+  if (!serialPattern.test(sn)) {
+    serialError.textContent = 'Serial should usually look like STK##### (example: STK12345)';
+    serialError.style.display = 'block';
+    serialInput.style.borderColor = 'var(--red)';
+    document.getElementById('serial-select').style.borderColor = 'var(--red)';
+    serialInput.focus();
     return;
   }
   const note = 'S/N: ' + sn;
