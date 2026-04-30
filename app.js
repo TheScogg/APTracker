@@ -52,6 +52,111 @@ function normalizeMemberRole(roleValue) {
   return '';
 }
 
+// ── ROLE-BASED ALERT FEEDS ──
+// Configurable routing rules can be stored at:
+// plants/{plantId}/config/roleAlertRouting
+// {
+//   rules: [{ statusKey, statusLabelIncludes, subStatusIncludes, feedKey, feedLabel, jobRoleKeys: [] }],
+//   updatedAt
+// }
+const ROLE_ALERT_ROUTING_RULES_DEFAULT = [
+  { statusLabelIncludes: 'need', subStatusIncludes: 'material', feedKey: 'material_alerts', feedLabel: 'Material Alerts', jobRoleKeys: ['forklift_driver'] },
+  { statusKey: 'maintenance', feedKey: 'maintenance_alerts', feedLabel: 'Maintenance Alerts', jobRoleKeys: ['maintenance_employee'] }
+];
+
+const _roleAlertRulesCache = { plantId: null, fetchedAt: 0, rules: null };
+const ROLE_ALERT_RULES_CACHE_MS = 60 * 1000;
+
+function _normalizeRoleAlertRules(inputRules) {
+  if (!Array.isArray(inputRules)) return [];
+  return inputRules
+    .map(rule => ({
+      statusKey: String(rule?.statusKey || '').trim().toLowerCase(),
+      statusLabelIncludes: String(rule?.statusLabelIncludes || '').trim().toLowerCase(),
+      subStatusIncludes: String(rule?.subStatusIncludes || '').trim().toLowerCase(),
+      feedKey: String(rule?.feedKey || '').trim().toLowerCase(),
+      feedLabel: String(rule?.feedLabel || '').trim(),
+      jobRoleKeys: Array.isArray(rule?.jobRoleKeys)
+        ? Array.from(new Set(rule.jobRoleKeys.map(v => String(v || '').trim().toLowerCase()).filter(Boolean)))
+        : []
+    }))
+    .filter(rule => rule.feedKey && rule.feedLabel && rule.jobRoleKeys.length > 0);
+}
+
+async function getRoleAlertRoutingRules() {
+  if (!currentPlantId) return ROLE_ALERT_ROUTING_RULES_DEFAULT;
+  const now = Date.now();
+  if (_roleAlertRulesCache.plantId === currentPlantId
+    && _roleAlertRulesCache.rules
+    && (now - _roleAlertRulesCache.fetchedAt) < ROLE_ALERT_RULES_CACHE_MS) {
+    return _roleAlertRulesCache.rules;
+  }
+  try {
+    const snap = await getDoc(doc(db, 'plants', currentPlantId, 'config', 'roleAlertRouting'));
+    const dbRules = _normalizeRoleAlertRules(snap.exists() ? snap.data()?.rules : null);
+    const rules = dbRules.length > 0 ? dbRules : _normalizeRoleAlertRules(ROLE_ALERT_ROUTING_RULES_DEFAULT);
+    _roleAlertRulesCache.plantId = currentPlantId;
+    _roleAlertRulesCache.fetchedAt = now;
+    _roleAlertRulesCache.rules = rules;
+    return rules;
+  } catch (_) {
+    return _normalizeRoleAlertRules(ROLE_ALERT_ROUTING_RULES_DEFAULT);
+  }
+}
+
+async function resolveRoleAlertRoute(statusKey, subStatus) {
+  const statusDef = getStatusDef(statusKey);
+  const key = String(statusKey || '').trim().toLowerCase();
+  const label = String(statusDef?.label || '').trim().toLowerCase();
+  const sub = String(subStatus || '').trim().toLowerCase();
+  const rules = await getRoleAlertRoutingRules();
+  return rules.find(rule => {
+    const keyMatch = !rule.statusKey || rule.statusKey === key;
+    const labelMatch = !rule.statusLabelIncludes || label.includes(rule.statusLabelIncludes);
+    const subMatch = !rule.subStatusIncludes || sub.includes(rule.subStatusIncludes);
+    return keyMatch && labelMatch && subMatch;
+  }) || null;
+}
+
+async function queueRoleFeedAlert(issue, { statusKey, subStatus, note = '' } = {}) {
+  if (!currentPlantId || !issue?.id || !statusKey) return;
+  const route = await resolveRoleAlertRoute(statusKey, subStatus);
+  if (!route) return;
+  try {
+    const membersSnap = await getDocs(collection(db, 'plants', currentPlantId, 'members'));
+    const roleKeys = Array.isArray(route.jobRoleKeys) ? route.jobRoleKeys : [];
+    const recipientUserIds = membersSnap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(m => m?.isActive !== false)
+      .filter(m => {
+        const normalizedRoleKeys = [
+          ...(Array.isArray(m.jobRoleKeys) ? m.jobRoleKeys : []),
+          ...(Array.isArray(m.jobFeeds) ? m.jobFeeds : [])
+        ].map(key => String(key || '').trim().toLowerCase()).filter(Boolean);
+        return normalizedRoleKeys.some(key => roleKeys.includes(key));
+      })
+      .map(m => m.id);
+    await addDoc(collection(db, 'plants', currentPlantId, 'roleFeedAlerts'), {
+      issueId: issue.id,
+      machine: issue.machine || issue.machineCode || '',
+      statusKey,
+      subStatus: subStatus || '',
+      note: note || '',
+      feedKey: route.feedKey,
+      feedLabel: route.feedLabel,
+      requiredJobRoleKeys: roleKeys,
+      recipientUserIds,
+      createdAt: serverTimestamp(),
+      createdBy: currentActor()
+    });
+    if (currentUser?.uid && recipientUserIds.includes(currentUser.uid)) {
+      showGameToast(`🔔 ${route.feedLabel}: Press ${issue.machine || 'Unknown'}`);
+    }
+  } catch (e) {
+    console.warn('Role feed alert enqueue failed', e);
+  }
+}
+
 // Default press layout — used when creating a new plant or if Firestore has none
 const DEFAULT_PRESSES = {
   "Row 1": ["1.01","1.02","1.03","1.04","1.05","1.06","1.07","1.08","1.09","1.10","1.11","1.12","1.13","1.14","1.15","1.16","1.17"],
@@ -3938,6 +4043,11 @@ window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
       },
       schemaVersion: 2
     });
+    await queueRoleFeedAlert(issue, {
+      statusKey: status,
+      subStatus: subStatus || '',
+      note: note || ''
+    });
     issueEventHistoryCache.delete(id);
     await awardGamification('status_changed_valid', { issueId: id, dedupeSuffix: entry.dateTime || String(Date.now()), tags: ['status:changed', `status:${status}`] });
     if (status === 'resolved') await awardGamification('issue_resolved', { issueId: id, dedupeSuffix: 'status-resolved', tags: ['issue:resolved', 'status:resolved'] });
@@ -6756,8 +6866,8 @@ document.addEventListener('touchcancel', _teHandleColorPickerPointerRelease, tru
 
 window.openThemeEditor = function() {
   const themeEditorModal = document.getElementById('theme-editor-modal');
-  if (!themeEditorModal) return;
-  closeAppearanceModal();
+  const appearanceModal = document.getElementById('appearance-modal');
+  if (!themeEditorModal || !appearanceModal) return;
   document.getElementById('user-dropdown')?.classList.remove('visible');
   document.getElementById('user-pill')?.classList.remove('open');
   _tePrevThemeKey = localStorage.getItem('pressTrackerTheme') || 'midnight';
@@ -6791,16 +6901,20 @@ window.openThemeEditor = function() {
 
   _renderTEVarsList();
   _renderTESavedList();
-  document.getElementById('te-theme-name').value = '';
+  const themeNameInput = document.getElementById('te-theme-name');
+  if (themeNameInput) themeNameInput.value = '';
   const svgField = document.getElementById('te-bg-svg-input');
   if (svgField) svgField.value = _teCurrentVars['--bg-svg'] || '';
+  appearanceModal.classList.add('visible');
   themeEditorModal.classList.add('visible');
 };
 
 window.closeThemeEditor = function() {
   const themeEditorModal = document.getElementById('theme-editor-modal');
-  if (!themeEditorModal) return;
+  const appearanceModal = document.getElementById('appearance-modal');
+  if (!themeEditorModal || !appearanceModal) return;
   themeEditorModal.classList.remove('visible');
+  appearanceModal.classList.remove('visible');
   // Revert to what was active before editor opened
   const saved = localStorage.getItem('pressTrackerTheme') || 'midnight';
   if (saved.startsWith('custom_')) {
@@ -6818,7 +6932,8 @@ document.getElementById('te-base-select')?.addEventListener('change', e => {
     _teEditingId = null;
     const saveBtn = document.getElementById('te-save-btn');
     if (saveBtn) saveBtn.textContent = '💾 Save';
-    document.getElementById('te-theme-name').value = '';
+    const themeNameInput = document.getElementById('te-theme-name');
+    if (themeNameInput) themeNameInput.value = '';
     _renderTEVarsList();
     applyCustomThemeVars(_teCurrentVars);
   }
@@ -6925,6 +7040,7 @@ document.getElementById('te-bg-svg-input')?.addEventListener('input', e => {
 
 window.saveCustomTheme = function() {
   const nameEl = document.getElementById('te-theme-name');
+  if (!nameEl) return;
   const name = nameEl.value.trim();
   if (!name) { nameEl.focus(); return; }
   const data = _loadCustomThemes();
@@ -6974,7 +7090,8 @@ function _renderTESavedList() {
     item.querySelector('.te-saved-apply').addEventListener('click', () => {
       _teEditingId = theme.id;
       _teCurrentVars = { ...theme.vars };
-      document.getElementById('te-theme-name').value = theme.name;
+      const themeNameInput = document.getElementById('te-theme-name');
+      if (themeNameInput) themeNameInput.value = theme.name;
       const saveBtn = document.getElementById('te-save-btn');
       if (saveBtn) saveBtn.textContent = '💾 Update';
       _renderTEVarsList();
