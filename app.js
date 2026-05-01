@@ -66,6 +66,7 @@ const ROLE_ALERT_ROUTING_RULES_DEFAULT = [
 
 const _roleAlertRulesCache = { plantId: null, fetchedAt: 0, rules: null };
 const ROLE_ALERT_RULES_CACHE_MS = 60 * 1000;
+let _rolePrefsDraft = [];
 
 function _normalizeRoleAlertRules(inputRules) {
   if (!Array.isArray(inputRules)) return [];
@@ -156,6 +157,75 @@ async function queueRoleFeedAlert(issue, { statusKey, subStatus, note = '' } = {
     console.warn('Role feed alert enqueue failed', e);
   }
 }
+
+function _humanizeRoleKey(roleKey) {
+  return String(roleKey || '').trim().split('_').filter(Boolean).map(s => s[0]?.toUpperCase() + s.slice(1)).join(' ');
+}
+
+async function getAvailableRoleKeysForPreferences() {
+  const rules = await getRoleAlertRoutingRules();
+  const keys = new Set();
+  rules.forEach(rule => (Array.isArray(rule.jobRoleKeys) ? rule.jobRoleKeys : []).forEach(k => keys.add(k)));
+  return Array.from(keys).sort((a, b) => a.localeCompare(b));
+}
+
+window.openRolePreferencesModal = async function() {
+  const modal = document.getElementById('role-prefs-modal');
+  const list = document.getElementById('role-prefs-list');
+  const msg = document.getElementById('role-prefs-msg');
+  if (!modal || !list || !msg || !currentPlantId || !currentUser?.uid) return;
+  msg.textContent = 'Loading roles…';
+  list.innerHTML = '';
+  try {
+    const [roleKeys, memberSnap] = await Promise.all([
+      getAvailableRoleKeysForPreferences(),
+      getDoc(plantMemberDocRef(currentPlantId, currentUser.uid))
+    ]);
+    const member = memberSnap.exists() ? (memberSnap.data() || {}) : {};
+    _rolePrefsDraft = Array.isArray(member.jobRoleKeys)
+      ? member.jobRoleKeys.map(v => String(v || '').trim().toLowerCase()).filter(Boolean)
+      : (Array.isArray(member.jobFeeds) ? member.jobFeeds.map(v => String(v || '').trim().toLowerCase()).filter(Boolean) : []);
+    const finalKeys = roleKeys.length ? roleKeys : ['forklift_driver', 'maintenance_employee'];
+    list.innerHTML = finalKeys.map(roleKey => `
+      <label style="display:flex;align-items:center;gap:8px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:8px 10px;">
+        <input type="checkbox" data-role-key="${esc(roleKey)}" ${_rolePrefsDraft.includes(roleKey) ? 'checked' : ''}>
+        <span>${esc(_humanizeRoleKey(roleKey))}</span>
+      </label>
+    `).join('');
+    msg.textContent = '';
+    modal.classList.add('visible');
+  } catch (e) {
+    msg.textContent = e?.message || 'Unable to load role options.';
+    modal.classList.add('visible');
+  }
+};
+
+window.closeRolePreferencesModal = function() {
+  document.getElementById('role-prefs-modal')?.classList.remove('visible');
+};
+
+window.saveRolePreferences = async function() {
+  const msg = document.getElementById('role-prefs-msg');
+  if (!currentPlantId || !currentUser?.uid || !msg) return;
+  const selected = Array.from(document.querySelectorAll('#role-prefs-list input[type=\"checkbox\"]:checked'))
+    .map(el => String(el.getAttribute('data-role-key') || '').trim().toLowerCase())
+    .filter(Boolean);
+  try {
+    msg.textContent = 'Saving…';
+    await updateDoc(plantMemberDocRef(currentPlantId, currentUser.uid), {
+      jobRoleKeys: selected,
+      updatedAt: serverTimestamp(),
+      updatedBy: currentActor()
+    });
+    msg.textContent = 'Saved.';
+    setTimeout(() => {
+      closeRolePreferencesModal();
+      showGameToast('✅ Alert roles updated');
+    }, 250);
+  } catch (e) {
+    msg.textContent = e?.message || 'Could not save roles.';
+  }
+};
 
 // Default press layout — used when creating a new plant or if Firestore has none
 const DEFAULT_PRESSES = {
@@ -7236,7 +7306,7 @@ document.querySelectorAll('.modal').forEach(modal => {
   modal.addEventListener('click', e => e.stopPropagation());
 });
 
-document.addEventListener('keydown', e=>{ if(e.key==='Escape'){closeModal();closeEditModal();closeResolveModal();closeReopenModal();closeLightbox();closeSortDropdown();closeExportModal();closeSerialModal();closeEditStatusModal();closeNotesModal();closeSmsComposer(true);window.closeMessagingModal?.();window.closeConversation?.();closeAppearanceModal();closeThemeEditor();} });
+document.addEventListener('keydown', e=>{ if(e.key==='Escape'){closeModal();closeEditModal();closeResolveModal();closeReopenModal();closeLightbox();closeSortDropdown();closeExportModal();closeSerialModal();closeEditStatusModal();closeNotesModal();closeSmsComposer(true);window.closeMessagingModal?.();window.closeConversation?.();closeAppearanceModal();closeThemeEditor();closeRolePreferencesModal();} });
 
 document.getElementById('theme-editor-modal')?.addEventListener('click', e => {
   const modal = document.getElementById('theme-editor-modal');
@@ -7246,6 +7316,7 @@ document.getElementById('theme-editor-modal')?.addEventListener('click', e => {
   closeThemeEditor();
 });
 document.getElementById('appearance-modal')?.addEventListener('click', e => { if (e.target === document.getElementById('appearance-modal')) closeAppearanceModal(); });
+document.getElementById('role-prefs-modal')?.addEventListener('click', e => { if (e.target === document.getElementById('role-prefs-modal')) closeRolePreferencesModal(); });
 
 // ── SERIAL NUMBER PROMPT ──
 // Define which status+sub combos require a serial number

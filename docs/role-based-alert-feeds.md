@@ -26,6 +26,8 @@ Recommended UX timing:
 2. In profile/settings so users can update job responsibilities.
 3. Admin override in admin tooling when self-selection is not appropriate.
 
+Current app UI includes a **My Alert Roles** entry in the account dropdown that lets a user update their own `jobRoleKeys`.
+
 ## Routing rules implemented
 
 Current built-in default routing in `app.js`:

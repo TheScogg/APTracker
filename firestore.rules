@@ -99,6 +99,11 @@ service cloud.firestore {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['plantIds']);
     }
 
+    function onlyUpdatesOwnRolePrefs() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['jobRoleKeys', 'jobFeeds', 'updatedAt', 'updatedBy']);
+    }
+
     function isValidScheduleDate(dateStr) {
       return dateStr is string
         && dateStr.matches('^\\d{4}-\\d{2}-\\d{2}$');
@@ -205,6 +210,11 @@ service cloud.firestore {
         allow create: if isSelf(userId)
           && request.resource.data.role == "admin"
           && request.resource.data.isActive == true;
+
+        // Users can update only their own alert-role preferences.
+        allow update: if isSelf(userId)
+          && isPlantMember(plantId)
+          && onlyUpdatesOwnRolePrefs();
       }
 
       // ── Config (statuses, presses) ──
