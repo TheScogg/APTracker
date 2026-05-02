@@ -434,6 +434,11 @@
       <span class="msg-btn-badge" data-messages-badge style="display:none;">0</span>
     </button>
 
+    <button class="sort-dropdown-btn" id="alerts-btn-header" type="button" style="gap:4px;" aria-label="Category alerts" title="Category alerts from delegated tasks">
+      <span style="font-size:13px;line-height:1;">❗</span>
+      <span class="msg-btn-badge" id="role-alert-badge" style="display:none;">0</span>
+    </button>
+
     <div class="user-pill-wrap" id="user-pill-wrap">
       <div class="user-pill" id="user-pill">
         <div class="user-avatar-fallback" id="user-avatar-fallback">?</div>
@@ -452,6 +457,10 @@
         <!-- Account -->
         <div class="user-dropdown-section">
           <div class="user-dropdown-section-label">Account</div>
+          <button class="user-dropdown-item" id="role-prefs-btn" type="button" onclick="document.getElementById('user-dropdown').classList.remove('visible');document.getElementById('user-pill').classList.remove('open');openRolePreferencesModal();">
+            <span class="ud-item-icon">🧭</span>
+            My Alert Categories
+          </button>
           <button class="user-dropdown-item" id="admin-page-btn" style="display:none">
             <span class="ud-item-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 1L10 5H14L11 8L12.5 12L8 9.5L3.5 12L5 8L2 5H6L8 1Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" fill="none"/></svg></span>
             Admin Panel
@@ -1205,6 +1214,20 @@
 
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeThemeEditor()">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="role-prefs-modal">
+  <div class="modal" style="max-width:520px">
+    <button class="close-btn" onclick="closeRolePreferencesModal()">×</button>
+    <h3 style="margin:0 0 8px">My Alert Categories</h3>
+    <p style="margin:0 0 12px;color:var(--text2);font-size:13px">Subscribe to the categories you cover today. Alerts will notify everyone subscribed to that category.</p>
+    <div id="role-prefs-list" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:10px"></div>
+    <div id="role-prefs-msg" style="font-size:12px;color:var(--text3);min-height:16px;margin-bottom:8px"></div>
+    <div class="modal-actions" style="justify-content:flex-end;">
+      <button class="btn btn-ghost" type="button" onclick="closeRolePreferencesModal()">Cancel</button>
+      <button class="btn btn-primary" type="button" onclick="saveRolePreferences()">Save Categories</button>
     </div>
   </div>
 </div>
