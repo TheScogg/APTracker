@@ -38,6 +38,7 @@ The app now starts a realtime watcher for each signed-in user/plant:
 - Query: `plants/{plantId}/roleFeedAlerts` where `recipientUserIds` contains current uid.
 - On new alerts, show in-app toast and browser notification (if permission is granted).
 - Watcher is restarted on plant switch and stopped on sign-out.
+- Header includes an `❗` alert indicator badge that increments on new delegated category alerts.
 
 ## Alert payload
 

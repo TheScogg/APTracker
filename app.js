@@ -69,6 +69,7 @@ const ROLE_ALERT_RULES_CACHE_MS = 60 * 1000;
 let _rolePrefsDraft = [];
 let _roleFeedAlertsUnsubscribe = null;
 const _seenRoleFeedAlerts = new Set();
+let _unreadRoleAlertCount = 0;
 const ROLE_KEY_ALIASES = {
   maintenance_employee: ['maintenance_employee', 'main_maintenance_role', 'maintenance'],
   main_maintenance_role: ['maintenance_employee', 'main_maintenance_role', 'maintenance'],
@@ -197,6 +198,18 @@ function stopRoleFeedAlertsWatcher() {
   }
 }
 
+function _updateRoleAlertBadge() {
+  const badge = document.getElementById('role-alert-badge');
+  if (!badge) return;
+  badge.textContent = String(_unreadRoleAlertCount);
+  badge.style.display = _unreadRoleAlertCount > 0 ? '' : 'none';
+}
+
+window.clearRoleAlertBadge = function() {
+  _unreadRoleAlertCount = 0;
+  _updateRoleAlertBadge();
+};
+
 function startRoleFeedAlertsWatcher() {
   stopRoleFeedAlertsWatcher();
   if (!currentPlantId || !currentUser?.uid) return;
@@ -214,6 +227,8 @@ function startRoleFeedAlertsWatcher() {
       const data = change.doc.data() || {};
       const createdMs = data.createdAt?.toMillis ? data.createdAt.toMillis() : 0;
       if (createdMs && (Date.now() - createdMs) > (10 * 60 * 1000)) return; // skip stale alerts
+      _unreadRoleAlertCount += 1;
+      _updateRoleAlertBadge();
       showGameToast(`🔔 ${data.feedLabel || 'Alert'} · Press ${data.machine || 'Unknown'}`);
       if ('Notification' in window && Notification.permission === 'granted') {
         try {
@@ -272,6 +287,11 @@ window.openRolePreferencesModal = async function() {
 window.closeRolePreferencesModal = function() {
   document.getElementById('role-prefs-modal')?.classList.remove('visible');
 };
+
+document.getElementById('alerts-btn-header')?.addEventListener('click', () => {
+  clearRoleAlertBadge();
+  openRolePreferencesModal();
+});
 
 window.saveRolePreferences = async function() {
   const msg = document.getElementById('role-prefs-msg');
@@ -1027,6 +1047,7 @@ async function switchPlant(plantId) {
   if (plantId === currentPlantId) return;
   if (unsubscribe) { unsubscribe(); unsubscribe = null; }
   stopRoleFeedAlertsWatcher();
+  clearRoleAlertBadge();
   if (typeof closeNotesModal === 'function') closeNotesModal();
   currentPlantId = plantId;
   currentPlantName = (userPlants.find(p => p.id === plantId) || {}).name || plantId;
@@ -2582,6 +2603,7 @@ onAuthStateChanged(auth, async user => {
     }
   } else {
     stopRoleFeedAlertsWatcher();
+    clearRoleAlertBadge();
     if (_messagingInboxUnsubscribe) { _messagingInboxUnsubscribe(); _messagingInboxUnsubscribe = null; }
     _updateMessagingEntryBadges(0);
     currentUser = null;
