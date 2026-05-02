@@ -142,10 +142,15 @@ async function queueRoleFeedAlert(issue, { statusKey, subStatus, note = '' } = {
   try {
     const membersSnap = await getDocs(collection(db, 'plants', currentPlantId, 'members'));
     const roleKeys = _expandRoleAliases(Array.isArray(route.jobRoleKeys) ? route.jobRoleKeys : []);
+    const categoryKey = String(statusKey || '').trim().toLowerCase();
     const recipientUserIds = membersSnap.docs
       .map(d => ({ id: d.id, ...d.data() }))
       .filter(m => m?.isActive !== false)
       .filter(m => {
+        const categorySubs = Array.isArray(m.alertCategorySubscriptions)
+          ? m.alertCategorySubscriptions.map(v => String(v || '').trim().toLowerCase()).filter(Boolean)
+          : [];
+        if (categorySubs.includes(categoryKey)) return true;
         const normalizedRoleKeys = [
           ...(Array.isArray(m.jobRoleKeys) ? m.jobRoleKeys : []),
           ...(Array.isArray(m.jobFeeds) ? m.jobFeeds : [])
@@ -162,6 +167,7 @@ async function queueRoleFeedAlert(issue, { statusKey, subStatus, note = '' } = {
       note: note || '',
       feedKey: route.feedKey,
       feedLabel: route.feedLabel,
+      categoryKey,
       requiredJobRoleKeys: roleKeys,
       recipientUserIds,
       createdAt: serverTimestamp(),
@@ -180,11 +186,11 @@ function _humanizeRoleKey(roleKey) {
   return String(roleKey || '').trim().split('_').filter(Boolean).map(s => s[0]?.toUpperCase() + s.slice(1)).join(' ');
 }
 
-async function getAvailableRoleKeysForPreferences() {
-  const rules = await getRoleAlertRoutingRules();
-  const keys = new Set();
-  rules.forEach(rule => _expandRoleAliases(Array.isArray(rule.jobRoleKeys) ? rule.jobRoleKeys : []).forEach(k => keys.add(k)));
-  return Array.from(keys).sort((a, b) => a.localeCompare(b));
+function getAvailableCategoryOptionsForPreferences() {
+  return Object.entries(STATUSES || {})
+    .map(([key, def]) => ({ key: String(key || '').trim().toLowerCase(), label: String(def?.label || key).trim() }))
+    .filter(v => v.key && v.key !== 'open' && v.key !== 'resolved')
+    .sort((a, b) => a.label.localeCompare(b.label));
 }
 
 window.openRolePreferencesModal = async function() {
@@ -192,28 +198,28 @@ window.openRolePreferencesModal = async function() {
   const list = document.getElementById('role-prefs-list');
   const msg = document.getElementById('role-prefs-msg');
   if (!modal || !list || !msg || !currentPlantId || !currentUser?.uid) return;
-  msg.textContent = 'Loading roles…';
+  msg.textContent = 'Loading categories…';
   list.innerHTML = '';
   try {
-    const [roleKeys, memberSnap] = await Promise.all([
-      getAvailableRoleKeysForPreferences(),
+    const [categoryOptions, memberSnap] = await Promise.all([
+      Promise.resolve(getAvailableCategoryOptionsForPreferences()),
       getDoc(plantMemberDocRef(currentPlantId, currentUser.uid))
     ]);
     const member = memberSnap.exists() ? (memberSnap.data() || {}) : {};
-    _rolePrefsDraft = Array.isArray(member.jobRoleKeys)
-      ? member.jobRoleKeys.map(v => String(v || '').trim().toLowerCase()).filter(Boolean)
-      : (Array.isArray(member.jobFeeds) ? member.jobFeeds.map(v => String(v || '').trim().toLowerCase()).filter(Boolean) : []);
-    const finalKeys = roleKeys.length ? roleKeys : ['forklift_driver', 'maintenance_employee'];
-    list.innerHTML = finalKeys.map(roleKey => `
+    _rolePrefsDraft = Array.isArray(member.alertCategorySubscriptions)
+      ? member.alertCategorySubscriptions.map(v => String(v || '').trim().toLowerCase()).filter(Boolean)
+      : [];
+    const finalOptions = categoryOptions.length ? categoryOptions : [{ key:'maintenance', label:'Maintenance' }];
+    list.innerHTML = finalOptions.map(opt => `
       <label style="display:flex;align-items:center;gap:8px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:8px 10px;">
-        <input type="checkbox" data-role-key="${esc(roleKey)}" ${_rolePrefsDraft.includes(roleKey) ? 'checked' : ''}>
-        <span>${esc(_humanizeRoleKey(roleKey))}</span>
+        <input type="checkbox" data-role-key="${esc(opt.key)}" ${_rolePrefsDraft.includes(opt.key) ? 'checked' : ''}>
+        <span>${esc(opt.label)}</span>
       </label>
     `).join('');
     msg.textContent = '';
     modal.classList.add('visible');
   } catch (e) {
-    msg.textContent = e?.message || 'Unable to load role options.';
+    msg.textContent = e?.message || 'Unable to load category options.';
     modal.classList.add('visible');
   }
 };
@@ -231,17 +237,17 @@ window.saveRolePreferences = async function() {
   try {
     msg.textContent = 'Saving…';
     await updateDoc(plantMemberDocRef(currentPlantId, currentUser.uid), {
-      jobRoleKeys: selected,
+      alertCategorySubscriptions: selected,
       updatedAt: serverTimestamp(),
       updatedBy: currentActor()
     });
     msg.textContent = 'Saved.';
     setTimeout(() => {
       closeRolePreferencesModal();
-      showGameToast('✅ Alert roles updated');
+      showGameToast('✅ Alert categories updated');
     }, 250);
   } catch (e) {
-    msg.textContent = e?.message || 'Could not save roles.';
+    msg.textContent = e?.message || 'Could not save categories.';
   }
 };
 

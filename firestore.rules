@@ -101,7 +101,7 @@ service cloud.firestore {
 
     function onlyUpdatesOwnRolePrefs() {
       return request.resource.data.diff(resource.data).affectedKeys()
-        .hasOnly(['jobRoleKeys', 'jobFeeds', 'updatedAt', 'updatedBy']);
+        .hasOnly(['jobRoleKeys', 'jobFeeds', 'alertCategorySubscriptions', 'updatedAt', 'updatedBy']);
     }
 
     function isValidScheduleDate(dateStr) {
