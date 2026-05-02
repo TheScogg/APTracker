@@ -137,11 +137,18 @@ async function resolveRoleAlertRoute(statusKey, subStatus) {
 
 async function queueRoleFeedAlert(issue, { statusKey, subStatus, note = '' } = {}) {
   if (!currentPlantId || !issue?.id || !statusKey) return;
+  const normalizedStatus = String(statusKey || '').trim().toLowerCase();
+  if (!normalizedStatus || normalizedStatus === 'open' || normalizedStatus === 'resolved') return;
   const route = await resolveRoleAlertRoute(statusKey, subStatus);
-  if (!route) return;
+  const statusDef = getStatusDef(statusKey);
+  const effectiveRoute = route || {
+    feedKey: `${String(statusKey || '').trim().toLowerCase()}_alerts`,
+    feedLabel: `${String(statusDef?.label || statusKey || 'General').trim()} Alerts`,
+    jobRoleKeys: []
+  };
   try {
     const membersSnap = await getDocs(collection(db, 'plants', currentPlantId, 'members'));
-    const roleKeys = _expandRoleAliases(Array.isArray(route.jobRoleKeys) ? route.jobRoleKeys : []);
+    const roleKeys = _expandRoleAliases(Array.isArray(effectiveRoute.jobRoleKeys) ? effectiveRoute.jobRoleKeys : []);
     const categoryKey = String(statusKey || '').trim().toLowerCase();
     const recipientUserIds = membersSnap.docs
       .map(d => ({ id: d.id, ...d.data() }))
@@ -165,8 +172,8 @@ async function queueRoleFeedAlert(issue, { statusKey, subStatus, note = '' } = {
       statusKey,
       subStatus: subStatus || '',
       note: note || '',
-      feedKey: route.feedKey,
-      feedLabel: route.feedLabel,
+      feedKey: effectiveRoute.feedKey,
+      feedLabel: effectiveRoute.feedLabel,
       categoryKey,
       requiredJobRoleKeys: roleKeys,
       recipientUserIds,
@@ -174,7 +181,7 @@ async function queueRoleFeedAlert(issue, { statusKey, subStatus, note = '' } = {
       createdBy: currentActor()
     });
     if (currentUser?.uid && recipientUserIds.includes(currentUser.uid)) {
-      showGameToast(`🔔 ${route.feedLabel}: Press ${issue.machine || 'Unknown'}`);
+      showGameToast(`🔔 ${effectiveRoute.feedLabel}: Press ${issue.machine || 'Unknown'}`);
     }
   } catch (e) {
     console.warn('Role feed alert enqueue failed', e);
@@ -3843,6 +3850,11 @@ window.submitIssue = async () => {
       note: ''
     });
     await batch.commit();
+    await queueRoleFeedAlert({ id: issueRef.id, machine: currentMachine }, {
+      statusKey: initialStatus,
+      subStatus: initialSubStatus,
+      note
+    });
     if (timerMinutes > 0) setIssueReminder(issueRef.id, timerMinutes);
     attachmentPhotoCache.set(issueRef.id, uploadedPhotos);
     await awardGamification('issue_created_complete', { issueId: issueRef.id, dedupeSuffix: 'issue-created', tags: ['issue:create', `status:${initialStatus}`] });

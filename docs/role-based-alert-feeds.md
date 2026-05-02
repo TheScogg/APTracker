@@ -26,6 +26,12 @@ When a status/category is selected on an issue:
 3. Legacy role-based matching is still considered as a fallback.
 4. App writes an append-only alert doc to `plants/{plantId}/roleFeedAlerts`.
 
+Alerts are created both:
+- when logging a new issue with an initial category, and
+- when changing a category later.
+
+If no explicit route config exists for a category, the app creates a generic feed key like `<category>_alerts`.
+
 ## Alert payload
 
 `plants/{plantId}/roleFeedAlerts/{alertId}` includes:
