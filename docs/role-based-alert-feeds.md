@@ -32,6 +32,13 @@ Alerts are created both:
 
 If no explicit route config exists for a category, the app creates a generic feed key like `<category>_alerts`.
 
+## User delivery path
+
+The app now starts a realtime watcher for each signed-in user/plant:
+- Query: `plants/{plantId}/roleFeedAlerts` where `recipientUserIds` contains current uid.
+- On new alerts, show in-app toast and browser notification (if permission is granted).
+- Watcher is restarted on plant switch and stopped on sign-out.
+
 ## Alert payload
 
 `plants/{plantId}/roleFeedAlerts/{alertId}` includes:

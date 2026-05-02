@@ -67,6 +67,8 @@ const ROLE_ALERT_ROUTING_RULES_DEFAULT = [
 const _roleAlertRulesCache = { plantId: null, fetchedAt: 0, rules: null };
 const ROLE_ALERT_RULES_CACHE_MS = 60 * 1000;
 let _rolePrefsDraft = [];
+let _roleFeedAlertsUnsubscribe = null;
+const _seenRoleFeedAlerts = new Set();
 const ROLE_KEY_ALIASES = {
   maintenance_employee: ['maintenance_employee', 'main_maintenance_role', 'maintenance'],
   main_maintenance_role: ['maintenance_employee', 'main_maintenance_role', 'maintenance'],
@@ -186,6 +188,42 @@ async function queueRoleFeedAlert(issue, { statusKey, subStatus, note = '' } = {
   } catch (e) {
     console.warn('Role feed alert enqueue failed', e);
   }
+}
+
+function stopRoleFeedAlertsWatcher() {
+  if (_roleFeedAlertsUnsubscribe) {
+    _roleFeedAlertsUnsubscribe();
+    _roleFeedAlertsUnsubscribe = null;
+  }
+}
+
+function startRoleFeedAlertsWatcher() {
+  stopRoleFeedAlertsWatcher();
+  if (!currentPlantId || !currentUser?.uid) return;
+  const q = query(
+    collection(db, 'plants', currentPlantId, 'roleFeedAlerts'),
+    where('recipientUserIds', 'array-contains', currentUser.uid),
+    limit(40)
+  );
+  _roleFeedAlertsUnsubscribe = onSnapshot(q, snap => {
+    snap.docChanges().forEach(change => {
+      if (change.type !== 'added') return;
+      const id = change.doc.id;
+      if (_seenRoleFeedAlerts.has(id)) return;
+      _seenRoleFeedAlerts.add(id);
+      const data = change.doc.data() || {};
+      const createdMs = data.createdAt?.toMillis ? data.createdAt.toMillis() : 0;
+      if (createdMs && (Date.now() - createdMs) > (10 * 60 * 1000)) return; // skip stale alerts
+      showGameToast(`🔔 ${data.feedLabel || 'Alert'} · Press ${data.machine || 'Unknown'}`);
+      if ('Notification' in window && Notification.permission === 'granted') {
+        try {
+          new Notification(data.feedLabel || 'New Alert', { body: `${data.machine || 'Press'} · ${data.note || data.statusKey || ''}`.trim() });
+        } catch (_) {}
+      }
+    });
+  }, err => {
+    console.warn('roleFeedAlerts watcher error', err);
+  });
 }
 
 function _humanizeRoleKey(roleKey) {
@@ -988,6 +1026,7 @@ async function loadPlantPresses() {
 async function switchPlant(plantId) {
   if (plantId === currentPlantId) return;
   if (unsubscribe) { unsubscribe(); unsubscribe = null; }
+  stopRoleFeedAlertsWatcher();
   if (typeof closeNotesModal === 'function') closeNotesModal();
   currentPlantId = plantId;
   currentPlantName = (userPlants.find(p => p.id === plantId) || {}).name || plantId;
@@ -1013,6 +1052,7 @@ async function switchPlant(plantId) {
   startGamificationListeners();
   startListener();
   _startMessagingInboxWatcher();
+  startRoleFeedAlertsWatcher();
   refreshVisibleData();
 }
 
@@ -2520,6 +2560,7 @@ async function bootstrapSignedInSession(user) {
   startGamificationListeners();
   startListener();
   _startMessagingInboxWatcher();
+  startRoleFeedAlertsWatcher();
   _bindMessagingKeyboardShortcut();
   setTodayDate();
   if (!localStorage.getItem(TUTORIAL_KEY)) setTimeout(() => window.openTutorial(), 900);
@@ -2540,6 +2581,7 @@ onAuthStateChanged(auth, async user => {
         </div>`;
     }
   } else {
+    stopRoleFeedAlertsWatcher();
     if (_messagingInboxUnsubscribe) { _messagingInboxUnsubscribe(); _messagingInboxUnsubscribe = null; }
     _updateMessagingEntryBadges(0);
     currentUser = null;
