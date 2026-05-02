@@ -61,12 +61,28 @@ function normalizeMemberRole(roleValue) {
 // }
 const ROLE_ALERT_ROUTING_RULES_DEFAULT = [
   { statusLabelIncludes: 'need', subStatusIncludes: 'material', feedKey: 'material_alerts', feedLabel: 'Material Alerts', jobRoleKeys: ['forklift_driver'] },
-  { statusKey: 'maintenance', feedKey: 'maintenance_alerts', feedLabel: 'Maintenance Alerts', jobRoleKeys: ['maintenance_employee'] }
+  { statusKey: 'maintenance', feedKey: 'maintenance_alerts', feedLabel: 'Maintenance Alerts', jobRoleKeys: ['maintenance_employee', 'main_maintenance_role', 'maintenance'] }
 ];
 
 const _roleAlertRulesCache = { plantId: null, fetchedAt: 0, rules: null };
 const ROLE_ALERT_RULES_CACHE_MS = 60 * 1000;
 let _rolePrefsDraft = [];
+const ROLE_KEY_ALIASES = {
+  maintenance_employee: ['maintenance_employee', 'main_maintenance_role', 'maintenance'],
+  main_maintenance_role: ['maintenance_employee', 'main_maintenance_role', 'maintenance'],
+  maintenance: ['maintenance_employee', 'main_maintenance_role', 'maintenance'],
+  forklift_driver: ['forklift_driver', 'forklift', 'materials_handler']
+};
+
+function _expandRoleAliases(roleKeys) {
+  const out = new Set();
+  (Array.isArray(roleKeys) ? roleKeys : []).forEach(raw => {
+    const key = String(raw || '').trim().toLowerCase();
+    if (!key) return;
+    (ROLE_KEY_ALIASES[key] || [key]).forEach(v => out.add(v));
+  });
+  return Array.from(out);
+}
 
 function _normalizeRoleAlertRules(inputRules) {
   if (!Array.isArray(inputRules)) return [];
@@ -125,7 +141,7 @@ async function queueRoleFeedAlert(issue, { statusKey, subStatus, note = '' } = {
   if (!route) return;
   try {
     const membersSnap = await getDocs(collection(db, 'plants', currentPlantId, 'members'));
-    const roleKeys = Array.isArray(route.jobRoleKeys) ? route.jobRoleKeys : [];
+    const roleKeys = _expandRoleAliases(Array.isArray(route.jobRoleKeys) ? route.jobRoleKeys : []);
     const recipientUserIds = membersSnap.docs
       .map(d => ({ id: d.id, ...d.data() }))
       .filter(m => m?.isActive !== false)
@@ -134,7 +150,8 @@ async function queueRoleFeedAlert(issue, { statusKey, subStatus, note = '' } = {
           ...(Array.isArray(m.jobRoleKeys) ? m.jobRoleKeys : []),
           ...(Array.isArray(m.jobFeeds) ? m.jobFeeds : [])
         ].map(key => String(key || '').trim().toLowerCase()).filter(Boolean);
-        return normalizedRoleKeys.some(key => roleKeys.includes(key));
+        const memberKeys = _expandRoleAliases(normalizedRoleKeys);
+        return memberKeys.some(key => roleKeys.includes(key));
       })
       .map(m => m.id);
     await addDoc(collection(db, 'plants', currentPlantId, 'roleFeedAlerts'), {
@@ -159,13 +176,14 @@ async function queueRoleFeedAlert(issue, { statusKey, subStatus, note = '' } = {
 }
 
 function _humanizeRoleKey(roleKey) {
+  if (String(roleKey || '').trim().toLowerCase() === 'main_maintenance_role') return 'Main Maintenance Role';
   return String(roleKey || '').trim().split('_').filter(Boolean).map(s => s[0]?.toUpperCase() + s.slice(1)).join(' ');
 }
 
 async function getAvailableRoleKeysForPreferences() {
   const rules = await getRoleAlertRoutingRules();
   const keys = new Set();
-  rules.forEach(rule => (Array.isArray(rule.jobRoleKeys) ? rule.jobRoleKeys : []).forEach(k => keys.add(k)));
+  rules.forEach(rule => _expandRoleAliases(Array.isArray(rule.jobRoleKeys) ? rule.jobRoleKeys : []).forEach(k => keys.add(k)));
   return Array.from(keys).sort((a, b) => a.localeCompare(b));
 }
 
