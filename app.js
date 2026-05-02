@@ -52,6 +52,205 @@ function normalizeMemberRole(roleValue) {
   return '';
 }
 
+// ── ROLE-BASED ALERT FEEDS ──
+// Configurable routing rules can be stored at:
+// plants/{plantId}/config/roleAlertRouting
+// {
+//   rules: [{ statusKey, statusLabelIncludes, subStatusIncludes, feedKey, feedLabel, jobRoleKeys: [] }],
+//   updatedAt
+// }
+const ROLE_ALERT_ROUTING_RULES_DEFAULT = [
+  { statusLabelIncludes: 'need', subStatusIncludes: 'material', feedKey: 'material_alerts', feedLabel: 'Material Alerts', jobRoleKeys: ['forklift_driver'] },
+  { statusKey: 'maintenance', feedKey: 'maintenance_alerts', feedLabel: 'Maintenance Alerts', jobRoleKeys: ['maintenance_employee', 'main_maintenance_role', 'maintenance'] }
+];
+
+const _roleAlertRulesCache = { plantId: null, fetchedAt: 0, rules: null };
+const ROLE_ALERT_RULES_CACHE_MS = 60 * 1000;
+let _rolePrefsDraft = [];
+const ROLE_KEY_ALIASES = {
+  maintenance_employee: ['maintenance_employee', 'main_maintenance_role', 'maintenance'],
+  main_maintenance_role: ['maintenance_employee', 'main_maintenance_role', 'maintenance'],
+  maintenance: ['maintenance_employee', 'main_maintenance_role', 'maintenance'],
+  forklift_driver: ['forklift_driver', 'forklift', 'materials_handler']
+};
+
+function _expandRoleAliases(roleKeys) {
+  const out = new Set();
+  (Array.isArray(roleKeys) ? roleKeys : []).forEach(raw => {
+    const key = String(raw || '').trim().toLowerCase();
+    if (!key) return;
+    (ROLE_KEY_ALIASES[key] || [key]).forEach(v => out.add(v));
+  });
+  return Array.from(out);
+}
+
+function _normalizeRoleAlertRules(inputRules) {
+  if (!Array.isArray(inputRules)) return [];
+  return inputRules
+    .map(rule => ({
+      statusKey: String(rule?.statusKey || '').trim().toLowerCase(),
+      statusLabelIncludes: String(rule?.statusLabelIncludes || '').trim().toLowerCase(),
+      subStatusIncludes: String(rule?.subStatusIncludes || '').trim().toLowerCase(),
+      feedKey: String(rule?.feedKey || '').trim().toLowerCase(),
+      feedLabel: String(rule?.feedLabel || '').trim(),
+      jobRoleKeys: Array.isArray(rule?.jobRoleKeys)
+        ? Array.from(new Set(rule.jobRoleKeys.map(v => String(v || '').trim().toLowerCase()).filter(Boolean)))
+        : []
+    }))
+    .filter(rule => rule.feedKey && rule.feedLabel && rule.jobRoleKeys.length > 0);
+}
+
+async function getRoleAlertRoutingRules() {
+  if (!currentPlantId) return ROLE_ALERT_ROUTING_RULES_DEFAULT;
+  const now = Date.now();
+  if (_roleAlertRulesCache.plantId === currentPlantId
+    && _roleAlertRulesCache.rules
+    && (now - _roleAlertRulesCache.fetchedAt) < ROLE_ALERT_RULES_CACHE_MS) {
+    return _roleAlertRulesCache.rules;
+  }
+  try {
+    const snap = await getDoc(doc(db, 'plants', currentPlantId, 'config', 'roleAlertRouting'));
+    const dbRules = _normalizeRoleAlertRules(snap.exists() ? snap.data()?.rules : null);
+    const rules = dbRules.length > 0 ? dbRules : _normalizeRoleAlertRules(ROLE_ALERT_ROUTING_RULES_DEFAULT);
+    _roleAlertRulesCache.plantId = currentPlantId;
+    _roleAlertRulesCache.fetchedAt = now;
+    _roleAlertRulesCache.rules = rules;
+    return rules;
+  } catch (_) {
+    return _normalizeRoleAlertRules(ROLE_ALERT_ROUTING_RULES_DEFAULT);
+  }
+}
+
+async function resolveRoleAlertRoute(statusKey, subStatus) {
+  const statusDef = getStatusDef(statusKey);
+  const key = String(statusKey || '').trim().toLowerCase();
+  const label = String(statusDef?.label || '').trim().toLowerCase();
+  const sub = String(subStatus || '').trim().toLowerCase();
+  const rules = await getRoleAlertRoutingRules();
+  return rules.find(rule => {
+    const keyMatch = !rule.statusKey || rule.statusKey === key;
+    const labelMatch = !rule.statusLabelIncludes || label.includes(rule.statusLabelIncludes);
+    const subMatch = !rule.subStatusIncludes || sub.includes(rule.subStatusIncludes);
+    return keyMatch && labelMatch && subMatch;
+  }) || null;
+}
+
+async function queueRoleFeedAlert(issue, { statusKey, subStatus, note = '' } = {}) {
+  if (!currentPlantId || !issue?.id || !statusKey) return;
+  const route = await resolveRoleAlertRoute(statusKey, subStatus);
+  if (!route) return;
+  try {
+    const membersSnap = await getDocs(collection(db, 'plants', currentPlantId, 'members'));
+    const roleKeys = _expandRoleAliases(Array.isArray(route.jobRoleKeys) ? route.jobRoleKeys : []);
+    const categoryKey = String(statusKey || '').trim().toLowerCase();
+    const recipientUserIds = membersSnap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(m => m?.isActive !== false)
+      .filter(m => {
+        const categorySubs = Array.isArray(m.alertCategorySubscriptions)
+          ? m.alertCategorySubscriptions.map(v => String(v || '').trim().toLowerCase()).filter(Boolean)
+          : [];
+        if (categorySubs.includes(categoryKey)) return true;
+        const normalizedRoleKeys = [
+          ...(Array.isArray(m.jobRoleKeys) ? m.jobRoleKeys : []),
+          ...(Array.isArray(m.jobFeeds) ? m.jobFeeds : [])
+        ].map(key => String(key || '').trim().toLowerCase()).filter(Boolean);
+        const memberKeys = _expandRoleAliases(normalizedRoleKeys);
+        return memberKeys.some(key => roleKeys.includes(key));
+      })
+      .map(m => m.id);
+    await addDoc(collection(db, 'plants', currentPlantId, 'roleFeedAlerts'), {
+      issueId: issue.id,
+      machine: issue.machine || issue.machineCode || '',
+      statusKey,
+      subStatus: subStatus || '',
+      note: note || '',
+      feedKey: route.feedKey,
+      feedLabel: route.feedLabel,
+      categoryKey,
+      requiredJobRoleKeys: roleKeys,
+      recipientUserIds,
+      createdAt: serverTimestamp(),
+      createdBy: currentActor()
+    });
+    if (currentUser?.uid && recipientUserIds.includes(currentUser.uid)) {
+      showGameToast(`🔔 ${route.feedLabel}: Press ${issue.machine || 'Unknown'}`);
+    }
+  } catch (e) {
+    console.warn('Role feed alert enqueue failed', e);
+  }
+}
+
+function _humanizeRoleKey(roleKey) {
+  if (String(roleKey || '').trim().toLowerCase() === 'main_maintenance_role') return 'Main Maintenance Role';
+  return String(roleKey || '').trim().split('_').filter(Boolean).map(s => s[0]?.toUpperCase() + s.slice(1)).join(' ');
+}
+
+function getAvailableCategoryOptionsForPreferences() {
+  return Object.entries(STATUSES || {})
+    .map(([key, def]) => ({ key: String(key || '').trim().toLowerCase(), label: String(def?.label || key).trim() }))
+    .filter(v => v.key && v.key !== 'open' && v.key !== 'resolved')
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+window.openRolePreferencesModal = async function() {
+  const modal = document.getElementById('role-prefs-modal');
+  const list = document.getElementById('role-prefs-list');
+  const msg = document.getElementById('role-prefs-msg');
+  if (!modal || !list || !msg || !currentPlantId || !currentUser?.uid) return;
+  msg.textContent = 'Loading categories…';
+  list.innerHTML = '';
+  try {
+    const [categoryOptions, memberSnap] = await Promise.all([
+      Promise.resolve(getAvailableCategoryOptionsForPreferences()),
+      getDoc(plantMemberDocRef(currentPlantId, currentUser.uid))
+    ]);
+    const member = memberSnap.exists() ? (memberSnap.data() || {}) : {};
+    _rolePrefsDraft = Array.isArray(member.alertCategorySubscriptions)
+      ? member.alertCategorySubscriptions.map(v => String(v || '').trim().toLowerCase()).filter(Boolean)
+      : [];
+    const finalOptions = categoryOptions.length ? categoryOptions : [{ key:'maintenance', label:'Maintenance' }];
+    list.innerHTML = finalOptions.map(opt => `
+      <label style="display:flex;align-items:center;gap:8px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:8px 10px;">
+        <input type="checkbox" data-role-key="${esc(opt.key)}" ${_rolePrefsDraft.includes(opt.key) ? 'checked' : ''}>
+        <span>${esc(opt.label)}</span>
+      </label>
+    `).join('');
+    msg.textContent = '';
+    modal.classList.add('visible');
+  } catch (e) {
+    msg.textContent = e?.message || 'Unable to load category options.';
+    modal.classList.add('visible');
+  }
+};
+
+window.closeRolePreferencesModal = function() {
+  document.getElementById('role-prefs-modal')?.classList.remove('visible');
+};
+
+window.saveRolePreferences = async function() {
+  const msg = document.getElementById('role-prefs-msg');
+  if (!currentPlantId || !currentUser?.uid || !msg) return;
+  const selected = Array.from(document.querySelectorAll('#role-prefs-list input[type=\"checkbox\"]:checked'))
+    .map(el => String(el.getAttribute('data-role-key') || '').trim().toLowerCase())
+    .filter(Boolean);
+  try {
+    msg.textContent = 'Saving…';
+    await updateDoc(plantMemberDocRef(currentPlantId, currentUser.uid), {
+      alertCategorySubscriptions: selected,
+      updatedAt: serverTimestamp(),
+      updatedBy: currentActor()
+    });
+    msg.textContent = 'Saved.';
+    setTimeout(() => {
+      closeRolePreferencesModal();
+      showGameToast('✅ Alert categories updated');
+    }, 250);
+  } catch (e) {
+    msg.textContent = e?.message || 'Could not save categories.';
+  }
+};
+
 // Default press layout — used when creating a new plant or if Firestore has none
 const DEFAULT_PRESSES = {
   "Row 1": ["1.01","1.02","1.03","1.04","1.05","1.06","1.07","1.08","1.09","1.10","1.11","1.12","1.13","1.14","1.15","1.16","1.17"],
@@ -3938,6 +4137,11 @@ window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
       },
       schemaVersion: 2
     });
+    await queueRoleFeedAlert(issue, {
+      statusKey: status,
+      subStatus: subStatus || '',
+      note: note || ''
+    });
     issueEventHistoryCache.delete(id);
     await awardGamification('status_changed_valid', { issueId: id, dedupeSuffix: entry.dateTime || String(Date.now()), tags: ['status:changed', `status:${status}`] });
     if (status === 'resolved') await awardGamification('issue_resolved', { issueId: id, dedupeSuffix: 'status-resolved', tags: ['issue:resolved', 'status:resolved'] });
@@ -7126,7 +7330,7 @@ document.querySelectorAll('.modal').forEach(modal => {
   modal.addEventListener('click', e => e.stopPropagation());
 });
 
-document.addEventListener('keydown', e=>{ if(e.key==='Escape'){closeModal();closeEditModal();closeResolveModal();closeReopenModal();closeLightbox();closeSortDropdown();closeExportModal();closeSerialModal();closeEditStatusModal();closeNotesModal();closeSmsComposer(true);window.closeMessagingModal?.();window.closeConversation?.();closeAppearanceModal();closeThemeEditor();} });
+document.addEventListener('keydown', e=>{ if(e.key==='Escape'){closeModal();closeEditModal();closeResolveModal();closeReopenModal();closeLightbox();closeSortDropdown();closeExportModal();closeSerialModal();closeEditStatusModal();closeNotesModal();closeSmsComposer(true);window.closeMessagingModal?.();window.closeConversation?.();closeAppearanceModal();closeThemeEditor();closeRolePreferencesModal();} });
 
 document.getElementById('theme-editor-modal')?.addEventListener('click', e => {
   const modal = document.getElementById('theme-editor-modal');
@@ -7136,6 +7340,7 @@ document.getElementById('theme-editor-modal')?.addEventListener('click', e => {
   closeThemeEditor();
 });
 document.getElementById('appearance-modal')?.addEventListener('click', e => { if (e.target === document.getElementById('appearance-modal')) closeAppearanceModal(); });
+document.getElementById('role-prefs-modal')?.addEventListener('click', e => { if (e.target === document.getElementById('role-prefs-modal')) closeRolePreferencesModal(); });
 
 // ── SERIAL NUMBER PROMPT ──
 // Define which status+sub combos require a serial number
