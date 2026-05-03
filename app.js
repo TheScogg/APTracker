@@ -268,18 +268,21 @@ window.openRoleAlertInboxModal = async function() {
     }
     list.innerHTML = alerts.map(a => {
       const isQuality = String(a.categoryKey || a.statusKey || '').toLowerCase().includes('quality');
+      const statusColor = getStatusColor(a.statusKey || a.categoryKey || 'open');
       return `
-      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:10px 12px;">
-        <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;">
-          <div style="font-weight:700;color:var(--text);">${esc(a.feedLabel)} · ${esc(a.machine)}</div>
-          <div style="display:flex;gap:6px;align-items:center;">
+      <div style="background:${alphaColor(statusColor, 0.10)};border:1px solid ${alphaColor(statusColor, 0.45)};border-radius:10px;padding:10px 12px;">
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">
+          <div style="min-width:0;flex:1;">
+            <div style="font-weight:700;color:${statusColor};">${esc(a.feedLabel)} · ${esc(a.machine)}</div>
+            ${a.subStatus ? `<div style="font-size:12px;color:var(--text2);margin-top:4px;">${esc(a.subStatus)}</div>` : ''}
+            <div style="font-size:12px;color:var(--text2);margin-top:4px;">${esc(a.note || 'No note')}</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px;align-items:stretch;min-width:72px;">
             <button class="btn btn-ghost" style="padding:4px 8px;font-size:11px;" onclick="focusIssueFromAlert('${esc(a.issueId)}')">Open</button>
             ${isQuality ? `<button class="btn btn-edit" style="padding:4px 8px;font-size:11px;" onclick="acceptRoleAlert('${esc(a.issueId)}','${esc(a.statusKey)}')">Accept</button>` : ''}
             <button class="btn btn-danger" style="padding:4px 8px;font-size:11px;" onclick="deleteRoleAlert('${esc(a.id)}')">Delete</button>
           </div>
         </div>
-        ${a.subStatus ? `<div style="font-size:12px;color:var(--text2);margin-top:4px;">Sub-status: ${esc(a.subStatus)}</div>` : ''}
-        <div style="font-size:12px;color:var(--text2);margin-top:4px;">${esc(a.note || 'No note')}</div>
       </div>
     `;
     }).join('');
