@@ -52,6 +52,384 @@ function normalizeMemberRole(roleValue) {
   return '';
 }
 
+// ── ROLE-BASED ALERT FEEDS ──
+// Configurable routing rules can be stored at:
+// plants/{plantId}/config/roleAlertRouting
+// {
+//   rules: [{ statusKey, statusLabelIncludes, subStatusIncludes, feedKey, feedLabel, jobRoleKeys: [] }],
+//   updatedAt
+// }
+const ROLE_ALERT_ROUTING_RULES_DEFAULT = [
+  { statusLabelIncludes: 'need', subStatusIncludes: 'material', feedKey: 'material_alerts', feedLabel: 'Material Alerts', jobRoleKeys: ['forklift_driver'] },
+  { statusKey: 'maintenance', feedKey: 'maintenance_alerts', feedLabel: 'Maintenance Alerts', jobRoleKeys: ['maintenance_employee', 'main_maintenance_role', 'maintenance'] }
+];
+
+const _roleAlertRulesCache = { plantId: null, fetchedAt: 0, rules: null };
+const ROLE_ALERT_RULES_CACHE_MS = 60 * 1000;
+let _rolePrefsDraft = [];
+let _roleFeedAlertsUnsubscribe = null;
+const _seenRoleFeedAlerts = new Set();
+let _unreadRoleAlertCount = 0;
+const ROLE_KEY_ALIASES = {
+  maintenance_employee: ['maintenance_employee', 'main_maintenance_role', 'maintenance'],
+  main_maintenance_role: ['maintenance_employee', 'main_maintenance_role', 'maintenance'],
+  maintenance: ['maintenance_employee', 'main_maintenance_role', 'maintenance'],
+  forklift_driver: ['forklift_driver', 'forklift', 'materials_handler']
+};
+
+function _expandRoleAliases(roleKeys) {
+  const out = new Set();
+  (Array.isArray(roleKeys) ? roleKeys : []).forEach(raw => {
+    const key = String(raw || '').trim().toLowerCase();
+    if (!key) return;
+    (ROLE_KEY_ALIASES[key] || [key]).forEach(v => out.add(v));
+  });
+  return Array.from(out);
+}
+
+function _normalizeRoleAlertRules(inputRules) {
+  if (!Array.isArray(inputRules)) return [];
+  return inputRules
+    .map(rule => ({
+      statusKey: String(rule?.statusKey || '').trim().toLowerCase(),
+      statusLabelIncludes: String(rule?.statusLabelIncludes || '').trim().toLowerCase(),
+      subStatusIncludes: String(rule?.subStatusIncludes || '').trim().toLowerCase(),
+      feedKey: String(rule?.feedKey || '').trim().toLowerCase(),
+      feedLabel: String(rule?.feedLabel || '').trim(),
+      jobRoleKeys: Array.isArray(rule?.jobRoleKeys)
+        ? Array.from(new Set(rule.jobRoleKeys.map(v => String(v || '').trim().toLowerCase()).filter(Boolean)))
+        : []
+    }))
+    .filter(rule => rule.feedKey && rule.feedLabel && rule.jobRoleKeys.length > 0);
+}
+
+async function getRoleAlertRoutingRules() {
+  if (!currentPlantId) return ROLE_ALERT_ROUTING_RULES_DEFAULT;
+  const now = Date.now();
+  if (_roleAlertRulesCache.plantId === currentPlantId
+    && _roleAlertRulesCache.rules
+    && (now - _roleAlertRulesCache.fetchedAt) < ROLE_ALERT_RULES_CACHE_MS) {
+    return _roleAlertRulesCache.rules;
+  }
+  try {
+    const snap = await getDoc(doc(db, 'plants', currentPlantId, 'config', 'roleAlertRouting'));
+    const dbRules = _normalizeRoleAlertRules(snap.exists() ? snap.data()?.rules : null);
+    const rules = dbRules.length > 0 ? dbRules : _normalizeRoleAlertRules(ROLE_ALERT_ROUTING_RULES_DEFAULT);
+    _roleAlertRulesCache.plantId = currentPlantId;
+    _roleAlertRulesCache.fetchedAt = now;
+    _roleAlertRulesCache.rules = rules;
+    return rules;
+  } catch (_) {
+    return _normalizeRoleAlertRules(ROLE_ALERT_ROUTING_RULES_DEFAULT);
+  }
+}
+
+async function resolveRoleAlertRoute(statusKey, subStatus) {
+  const statusDef = getStatusDef(statusKey);
+  const key = String(statusKey || '').trim().toLowerCase();
+  const label = String(statusDef?.label || '').trim().toLowerCase();
+  const sub = String(subStatus || '').trim().toLowerCase();
+  const rules = await getRoleAlertRoutingRules();
+  return rules.find(rule => {
+    const keyMatch = !rule.statusKey || rule.statusKey === key;
+    const labelMatch = !rule.statusLabelIncludes || label.includes(rule.statusLabelIncludes);
+    const subMatch = !rule.subStatusIncludes || sub.includes(rule.subStatusIncludes);
+    return keyMatch && labelMatch && subMatch;
+  }) || null;
+}
+
+async function queueRoleFeedAlert(issue, { statusKey, subStatus, note = '' } = {}) {
+  if (!currentPlantId || !issue?.id || !statusKey) return;
+  const normalizedStatus = String(statusKey || '').trim().toLowerCase();
+  if (!normalizedStatus || normalizedStatus === 'open' || normalizedStatus === 'resolved') return;
+  const route = await resolveRoleAlertRoute(statusKey, subStatus);
+  const statusDef = getStatusDef(statusKey);
+  const effectiveRoute = route || {
+    feedKey: `${String(statusKey || '').trim().toLowerCase()}_alerts`,
+    feedLabel: `${String(statusDef?.label || statusKey || 'General').trim()} Alerts`,
+    jobRoleKeys: []
+  };
+  try {
+    const membersSnap = await getDocs(collection(db, 'plants', currentPlantId, 'members'));
+    const roleKeys = _expandRoleAliases(Array.isArray(effectiveRoute.jobRoleKeys) ? effectiveRoute.jobRoleKeys : []);
+    const categoryKey = String(statusKey || '').trim().toLowerCase();
+    const recipientUserIds = membersSnap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(m => m?.isActive !== false)
+      .filter(m => {
+        const categorySubs = Array.isArray(m.alertCategorySubscriptions)
+          ? m.alertCategorySubscriptions.map(v => String(v || '').trim().toLowerCase()).filter(Boolean)
+          : [];
+        if (categorySubs.includes(categoryKey)) return true;
+        const normalizedRoleKeys = [
+          ...(Array.isArray(m.jobRoleKeys) ? m.jobRoleKeys : []),
+          ...(Array.isArray(m.jobFeeds) ? m.jobFeeds : [])
+        ].map(key => String(key || '').trim().toLowerCase()).filter(Boolean);
+        const memberKeys = _expandRoleAliases(normalizedRoleKeys);
+        return memberKeys.some(key => roleKeys.includes(key));
+      })
+      .map(m => m.id);
+    await addDoc(collection(db, 'plants', currentPlantId, 'roleFeedAlerts'), {
+      issueId: issue.id,
+      machine: issue.machine || issue.machineCode || '',
+      statusKey,
+      subStatus: subStatus || '',
+      note: note || '',
+      feedKey: effectiveRoute.feedKey,
+      feedLabel: effectiveRoute.feedLabel,
+      categoryKey,
+      requiredJobRoleKeys: roleKeys,
+      recipientUserIds,
+      createdAt: serverTimestamp(),
+      createdBy: currentActor()
+    });
+    if (currentUser?.uid && recipientUserIds.includes(currentUser.uid)) {
+      showGameToast(`🔔 ${effectiveRoute.feedLabel}: Press ${issue.machine || 'Unknown'}`);
+    }
+  } catch (e) {
+    console.warn('Role feed alert enqueue failed', e);
+  }
+}
+
+function stopRoleFeedAlertsWatcher() {
+  if (_roleFeedAlertsUnsubscribe) {
+    _roleFeedAlertsUnsubscribe();
+    _roleFeedAlertsUnsubscribe = null;
+  }
+}
+
+function _updateRoleAlertBadge() {
+  const badge = document.getElementById('role-alert-badge');
+  if (!badge) return;
+  badge.textContent = String(_unreadRoleAlertCount);
+  badge.style.display = _unreadRoleAlertCount > 0 ? '' : 'none';
+}
+
+window.clearRoleAlertBadge = function() {
+  _unreadRoleAlertCount = 0;
+  _updateRoleAlertBadge();
+};
+
+async function _loadActiveRoleAlertsForCurrentUser() {
+  if (!currentPlantId || !currentUser?.uid) return [];
+  const q = query(
+    collection(db, 'plants', currentPlantId, 'roleFeedAlerts'),
+    where('recipientUserIds', 'array-contains', currentUser.uid),
+    limit(80)
+  );
+  const snap = await getDocs(q);
+  const alerts = [];
+  for (const d of snap.docs) {
+    const data = d.data() || {};
+    const issueId = String(data.issueId || '').trim();
+    if (!issueId) continue;
+    const cachedIssue = issues.find(i => i.id === issueId) || null;
+    let issue = cachedIssue;
+    if (!issue) {
+      try {
+        const issueSnap = await getDoc(plantDoc('issues', issueId));
+        issue = issueSnap.exists() ? { id: issueId, ...issueSnap.data() } : null;
+      } catch (_) {}
+    }
+    const isResolved = !!(issue?.resolved || issue?.lifecycle?.isResolved);
+    if (isResolved) continue;
+    alerts.push({
+      id: d.id,
+      issueId,
+      machine: data.machine || issue?.machine || issue?.machineCode || 'Unknown',
+      feedLabel: data.feedLabel || data.categoryKey || data.statusKey || 'Alert',
+      statusKey: data.statusKey || currentStatusKey(issue || {}) || '',
+      subStatus: data.subStatus || issue?.currentStatus?.subStatusKey || '',
+      categoryKey: data.categoryKey || data.statusKey || '',
+      note: data.note || issue?.note || '',
+      createdAt: data.createdAt || null
+    });
+  }
+  alerts.sort((a, b) => {
+    const aMs = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+    const bMs = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+    return bMs - aMs;
+  });
+  return alerts;
+}
+
+window.openRoleAlertInboxModal = async function() {
+  const modal = document.getElementById('role-alerts-modal');
+  const list = document.getElementById('role-alerts-list');
+  if (!modal || !list) return;
+  list.innerHTML = `<div style="color:var(--text3);font-size:13px;">Loading active alerts…</div>`;
+  modal.classList.add('visible');
+  clearRoleAlertBadge();
+  try {
+    const alerts = await _loadActiveRoleAlertsForCurrentUser();
+    if (!alerts.length) {
+      list.innerHTML = `<div style="color:var(--text3);font-size:13px;">No active alerts right now.</div>`;
+      return;
+    }
+    list.innerHTML = alerts.map(a => {
+      const isQuality = String(a.categoryKey || a.statusKey || '').toLowerCase().includes('quality');
+      return `
+      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:10px 12px;">
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;">
+          <div style="font-weight:700;color:var(--text);">${esc(a.feedLabel)} · ${esc(a.machine)}</div>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <button class="btn btn-ghost" style="padding:4px 8px;font-size:11px;" onclick="focusIssueFromAlert('${esc(a.issueId)}')">Open</button>
+            ${isQuality ? `<button class="btn btn-edit" style="padding:4px 8px;font-size:11px;" onclick="acceptRoleAlert('${esc(a.issueId)}','${esc(a.statusKey)}')">Accept</button>` : ''}
+            <button class="btn btn-danger" style="padding:4px 8px;font-size:11px;" onclick="deleteRoleAlert('${esc(a.id)}')">Delete</button>
+          </div>
+        </div>
+        ${a.subStatus ? `<div style="font-size:12px;color:var(--text2);margin-top:4px;">Sub-status: ${esc(a.subStatus)}</div>` : ''}
+        <div style="font-size:12px;color:var(--text2);margin-top:4px;">${esc(a.note || 'No note')}</div>
+      </div>
+    `;
+    }).join('');
+  } catch (e) {
+    list.innerHTML = `<div style="color:var(--red);font-size:13px;">${esc(e?.message || 'Unable to load alerts.')}</div>`;
+  }
+};
+
+window.closeRoleAlertInboxModal = function() {
+  document.getElementById('role-alerts-modal')?.classList.remove('visible');
+};
+
+window.focusIssueFromAlert = function(issueId) {
+  closeRoleAlertInboxModal();
+  const issueRow = document.querySelector(`.issue-row[data-id="${CSS.escape(String(issueId || ''))}"]`);
+  if (issueRow) {
+    const body = document.getElementById('body-' + issueId);
+    if (body && !body.classList.contains('visible') && typeof toggleCard === 'function') toggleCard(issueId);
+    issueRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    issueRow.classList.add('highlight');
+    setTimeout(() => issueRow.classList.remove('highlight'), 1200);
+  }
+};
+
+window.deleteRoleAlert = async function(alertId) {
+  if (!currentPlantId || !alertId) return;
+  try {
+    await deleteDoc(doc(db, 'plants', currentPlantId, 'roleFeedAlerts', alertId));
+    await openRoleAlertInboxModal();
+  } catch (e) {
+    showGameToast(`⚠️ Could not delete alert: ${e?.message || e}`);
+  }
+};
+
+window.acceptRoleAlert = async function(issueId, statusKey) {
+  if (!issueId || !statusKey) return;
+  try {
+    await setWorkflowStateForStatus(issueId, statusKey, 'accepted');
+    showGameToast('✅ Workflow accepted');
+    await openRoleAlertInboxModal();
+  } catch (e) {
+    showGameToast(`⚠️ Could not accept: ${e?.message || e}`);
+  }
+};
+
+function startRoleFeedAlertsWatcher() {
+  stopRoleFeedAlertsWatcher();
+  if (!currentPlantId || !currentUser?.uid) return;
+  const q = query(
+    collection(db, 'plants', currentPlantId, 'roleFeedAlerts'),
+    where('recipientUserIds', 'array-contains', currentUser.uid),
+    limit(40)
+  );
+  _roleFeedAlertsUnsubscribe = onSnapshot(q, snap => {
+    snap.docChanges().forEach(change => {
+      if (change.type !== 'added') return;
+      const id = change.doc.id;
+      if (_seenRoleFeedAlerts.has(id)) return;
+      _seenRoleFeedAlerts.add(id);
+      const data = change.doc.data() || {};
+      const createdMs = data.createdAt?.toMillis ? data.createdAt.toMillis() : 0;
+      if (createdMs && (Date.now() - createdMs) > (10 * 60 * 1000)) return; // skip stale alerts
+      _unreadRoleAlertCount += 1;
+      _updateRoleAlertBadge();
+      showGameToast(`🔔 ${data.feedLabel || 'Alert'} · Press ${data.machine || 'Unknown'}`);
+      if ('Notification' in window && Notification.permission === 'granted') {
+        try {
+          new Notification(data.feedLabel || 'New Alert', { body: `${data.machine || 'Press'} · ${data.note || data.statusKey || ''}`.trim() });
+        } catch (_) {}
+      }
+    });
+  }, err => {
+    console.warn('roleFeedAlerts watcher error', err);
+  });
+}
+
+function _humanizeRoleKey(roleKey) {
+  if (String(roleKey || '').trim().toLowerCase() === 'main_maintenance_role') return 'Main Maintenance Role';
+  return String(roleKey || '').trim().split('_').filter(Boolean).map(s => s[0]?.toUpperCase() + s.slice(1)).join(' ');
+}
+
+function getAvailableCategoryOptionsForPreferences() {
+  return Object.entries(STATUSES || {})
+    .map(([key, def]) => ({ key: String(key || '').trim().toLowerCase(), label: String(def?.label || key).trim() }))
+    .filter(v => v.key && v.key !== 'open' && v.key !== 'resolved')
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+window.openRolePreferencesModal = async function() {
+  const modal = document.getElementById('role-prefs-modal');
+  const list = document.getElementById('role-prefs-list');
+  const msg = document.getElementById('role-prefs-msg');
+  if (!modal || !list || !msg || !currentPlantId || !currentUser?.uid) return;
+  msg.textContent = 'Loading categories…';
+  list.innerHTML = '';
+  try {
+    const [categoryOptions, memberSnap] = await Promise.all([
+      Promise.resolve(getAvailableCategoryOptionsForPreferences()),
+      getDoc(plantMemberDocRef(currentPlantId, currentUser.uid))
+    ]);
+    const member = memberSnap.exists() ? (memberSnap.data() || {}) : {};
+    _rolePrefsDraft = Array.isArray(member.alertCategorySubscriptions)
+      ? member.alertCategorySubscriptions.map(v => String(v || '').trim().toLowerCase()).filter(Boolean)
+      : [];
+    const finalOptions = categoryOptions.length ? categoryOptions : [{ key:'maintenance', label:'Maintenance' }];
+    list.innerHTML = finalOptions.map(opt => `
+      <label style="display:flex;align-items:center;gap:8px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:8px 10px;">
+        <input type="checkbox" data-role-key="${esc(opt.key)}" ${_rolePrefsDraft.includes(opt.key) ? 'checked' : ''}>
+        <span>${esc(opt.label)}</span>
+      </label>
+    `).join('');
+    msg.textContent = '';
+    modal.classList.add('visible');
+  } catch (e) {
+    msg.textContent = e?.message || 'Unable to load category options.';
+    modal.classList.add('visible');
+  }
+};
+
+window.closeRolePreferencesModal = function() {
+  document.getElementById('role-prefs-modal')?.classList.remove('visible');
+};
+
+document.getElementById('alerts-btn-header')?.addEventListener('click', () => {
+  openRoleAlertInboxModal();
+});
+
+window.saveRolePreferences = async function() {
+  const msg = document.getElementById('role-prefs-msg');
+  if (!currentPlantId || !currentUser?.uid || !msg) return;
+  const selected = Array.from(document.querySelectorAll('#role-prefs-list input[type=\"checkbox\"]:checked'))
+    .map(el => String(el.getAttribute('data-role-key') || '').trim().toLowerCase())
+    .filter(Boolean);
+  try {
+    msg.textContent = 'Saving…';
+    await updateDoc(plantMemberDocRef(currentPlantId, currentUser.uid), {
+      alertCategorySubscriptions: selected,
+      updatedAt: serverTimestamp(),
+      updatedBy: currentActor()
+    });
+    msg.textContent = 'Saved.';
+    setTimeout(() => {
+      closeRolePreferencesModal();
+      showGameToast('✅ Alert categories updated');
+    }, 250);
+  } catch (e) {
+    msg.textContent = e?.message || 'Could not save categories.';
+  }
+};
+
 // Default press layout — used when creating a new plant or if Firestore has none
 const DEFAULT_PRESSES = {
   "Row 1": ["1.01","1.02","1.03","1.04","1.05","1.06","1.07","1.08","1.09","1.10","1.11","1.12","1.13","1.14","1.15","1.16","1.17"],
@@ -782,6 +1160,8 @@ async function loadPlantPresses() {
 async function switchPlant(plantId) {
   if (plantId === currentPlantId) return;
   if (unsubscribe) { unsubscribe(); unsubscribe = null; }
+  stopRoleFeedAlertsWatcher();
+  clearRoleAlertBadge();
   if (typeof closeNotesModal === 'function') closeNotesModal();
   currentPlantId = plantId;
   currentPlantName = (userPlants.find(p => p.id === plantId) || {}).name || plantId;
@@ -807,6 +1187,7 @@ async function switchPlant(plantId) {
   startGamificationListeners();
   startListener();
   _startMessagingInboxWatcher();
+  startRoleFeedAlertsWatcher();
   refreshVisibleData();
 }
 
@@ -2314,6 +2695,7 @@ async function bootstrapSignedInSession(user) {
   startGamificationListeners();
   startListener();
   _startMessagingInboxWatcher();
+  startRoleFeedAlertsWatcher();
   _bindMessagingKeyboardShortcut();
   setTodayDate();
   if (!localStorage.getItem(TUTORIAL_KEY)) setTimeout(() => window.openTutorial(), 900);
@@ -2334,6 +2716,8 @@ onAuthStateChanged(auth, async user => {
         </div>`;
     }
   } else {
+    stopRoleFeedAlertsWatcher();
+    clearRoleAlertBadge();
     if (_messagingInboxUnsubscribe) { _messagingInboxUnsubscribe(); _messagingInboxUnsubscribe = null; }
     _updateMessagingEntryBadges(0);
     currentUser = null;
@@ -3644,6 +4028,11 @@ window.submitIssue = async () => {
       note: ''
     });
     await batch.commit();
+    await queueRoleFeedAlert({ id: issueRef.id, machine: currentMachine }, {
+      statusKey: initialStatus,
+      subStatus: initialSubStatus,
+      note
+    });
     if (timerMinutes > 0) setIssueReminder(issueRef.id, timerMinutes);
     attachmentPhotoCache.set(issueRef.id, uploadedPhotos);
     await awardGamification('issue_created_complete', { issueId: issueRef.id, dedupeSuffix: 'issue-created', tags: ['issue:create', `status:${initialStatus}`] });
@@ -3937,6 +4326,11 @@ window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
         note: note || ''
       },
       schemaVersion: 2
+    });
+    await queueRoleFeedAlert(issue, {
+      statusKey: status,
+      subStatus: subStatus || '',
+      note: note || ''
     });
     issueEventHistoryCache.delete(id);
     await awardGamification('status_changed_valid', { issueId: id, dedupeSuffix: entry.dateTime || String(Date.now()), tags: ['status:changed', `status:${status}`] });
@@ -4322,6 +4716,16 @@ window.setWorkflowStateForStatus = async (issueId, statusKey, state) => {
     setSyncStatus('err', 'Error updating workflow: ' + e.message);
   }
 };
+
+function formatWorkflowActor(actor) {
+  const full = String(actor?.name || '').trim();
+  if (!full) return '';
+  const parts = full.split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) return `by ${full}`;
+  const first = parts[0];
+  const lastInitial = parts[parts.length - 1][0]?.toUpperCase() || '';
+  return `by ${first} ${lastInitial}.`;
+}
 
 window.cycleWorkflowStateForStatus = async (issueId, statusKey) => {
   const states = ['called', 'accepted', 'in-progress', 'finished'];
@@ -4755,7 +5159,11 @@ window.deleteIssue = async id => {
   if (!currentUserPermissions.canEditIssue) return;
   if (!confirm('Delete this issue permanently?')) return;
   try {
-    await deleteDoc(plantDoc('issues',id));
+    const batch = writeBatch(db);
+    batch.delete(plantDoc('issues', id));
+    const alertsSnap = await getDocs(query(collection(db, 'plants', currentPlantId, 'roleFeedAlerts'), where('issueId', '==', id)));
+    alertsSnap.docs.forEach(d => batch.delete(doc(db, 'plants', currentPlantId, 'roleFeedAlerts', d.id)));
+    await batch.commit();
     clearIssueReminder(id);
     issuesById.delete(id);
     issueEventHistoryCache.delete(id);
@@ -5124,6 +5532,7 @@ function renderIssues() {
         }).join('')}</div>
       </div>
       <div class="wf-state-label ${workflowState ? workflowConfig[workflowState].cssState : ''}">${workflowState ? workflowConfig[workflowState].label : ''}</div>
+      <div class="wf-state-meta">${formatWorkflowActor(wfStateHistory[workflowState]?.by)}</div>
     </div>`;
 
     // Per-status workflow rows for expanded card body — derived from status history
@@ -5155,6 +5564,7 @@ function renderIssues() {
             <div class="wf-steps-wrap" onclick="event.stopPropagation()">
               <div class="wf-steps">${btnHtml}</div>
               <div class="wf-state-label ${workflowConfig[sState].cssState}">${workflowConfig[sState].label}</div>
+              <div class="wf-state-meta">${formatWorkflowActor(wfStateHistory[sState]?.by)}</div>
             </div>
           </div>`;
         }).join('');
@@ -7126,7 +7536,7 @@ document.querySelectorAll('.modal').forEach(modal => {
   modal.addEventListener('click', e => e.stopPropagation());
 });
 
-document.addEventListener('keydown', e=>{ if(e.key==='Escape'){closeModal();closeEditModal();closeResolveModal();closeReopenModal();closeLightbox();closeSortDropdown();closeExportModal();closeSerialModal();closeEditStatusModal();closeNotesModal();closeSmsComposer(true);window.closeMessagingModal?.();window.closeConversation?.();closeAppearanceModal();closeThemeEditor();} });
+document.addEventListener('keydown', e=>{ if(e.key==='Escape'){closeModal();closeEditModal();closeResolveModal();closeReopenModal();closeLightbox();closeSortDropdown();closeExportModal();closeSerialModal();closeEditStatusModal();closeNotesModal();closeSmsComposer(true);window.closeMessagingModal?.();window.closeConversation?.();closeAppearanceModal();closeThemeEditor();closeRolePreferencesModal();closeRoleAlertInboxModal();} });
 
 document.getElementById('theme-editor-modal')?.addEventListener('click', e => {
   const modal = document.getElementById('theme-editor-modal');
@@ -7136,6 +7546,8 @@ document.getElementById('theme-editor-modal')?.addEventListener('click', e => {
   closeThemeEditor();
 });
 document.getElementById('appearance-modal')?.addEventListener('click', e => { if (e.target === document.getElementById('appearance-modal')) closeAppearanceModal(); });
+document.getElementById('role-prefs-modal')?.addEventListener('click', e => { if (e.target === document.getElementById('role-prefs-modal')) closeRolePreferencesModal(); });
+document.getElementById('role-alerts-modal')?.addEventListener('click', e => { if (e.target === document.getElementById('role-alerts-modal')) closeRoleAlertInboxModal(); });
 
 // ── SERIAL NUMBER PROMPT ──
 // Define which status+sub combos require a serial number
