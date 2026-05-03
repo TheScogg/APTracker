@@ -99,6 +99,11 @@ service cloud.firestore {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['plantIds']);
     }
 
+    function onlyUpdatesOwnRolePrefs() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['jobRoleKeys', 'jobFeeds', 'alertCategorySubscriptions', 'updatedAt', 'updatedBy']);
+    }
+
     function isValidScheduleDate(dateStr) {
       return dateStr is string
         && dateStr.matches('^\\d{4}-\\d{2}-\\d{2}$');
@@ -205,6 +210,11 @@ service cloud.firestore {
         allow create: if isSelf(userId)
           && request.resource.data.role == "admin"
           && request.resource.data.isActive == true;
+
+        // Users can update only their own alert-role preferences.
+        allow update: if isSelf(userId)
+          && isPlantMember(plantId)
+          && onlyUpdatesOwnRolePrefs();
       }
 
       // ── Config (statuses, presses) ──
@@ -334,6 +344,21 @@ service cloud.firestore {
           allow delete: if isAdmin(plantId)
                         || (signedIn() && resource.data.uploadedBy.uid == currentUid());
         }
+      }
+
+      // ── Role feed alerts (append-only routing records) ──
+      match /roleFeedAlerts/{alertId} {
+        allow read: if isPlantMember(plantId);
+        // Created by status routing flow; require authenticated editor/admin access.
+        allow create: if isEditorOrAbove(plantId)
+                      && request.resource.data.issueId is string
+                      && request.resource.data.feedKey is string
+                      && request.resource.data.feedLabel is string
+                      && request.resource.data.requiredJobRoleKeys is list
+                      && request.resource.data.recipientUserIds is list
+                      && request.resource.data.createdBy.uid == currentUid();
+        // Keep alert records immutable; use issue events for follow-up changes.
+        allow update, delete: if false;
       }
 
       // ── Plant-scoped daily schedules ──
