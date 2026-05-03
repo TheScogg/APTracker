@@ -7611,6 +7611,16 @@ function populateSerialMaterialOptions() {
   }).join('');
 }
 
+function getMaterialLocationText(serialCode) {
+  const code = String(serialCode || '').trim().toUpperCase();
+  const meta = SERIAL_MATERIAL_OPTIONS[code];
+  if (!meta) return '';
+  const loc = Array.isArray(meta.location) ? meta.location.join(', ') : '';
+  const rack = meta.rack ? `Rack ${meta.rack}` : '';
+  const locText = loc ? `Loc ${loc}` : '';
+  return [rack, locText].filter(Boolean).join(' / ');
+}
+
 function resolveSerialInputValue() {
   const selectVal = (document.getElementById('serial-select')?.value || '').trim();
   const customVal = (document.getElementById('serial-input')?.value || '').trim();
@@ -7662,7 +7672,8 @@ window.confirmSerialModal = async () => {
     serialInput.focus();
     return;
   }
-  const note = 'S/N: ' + sn;
+  const locationText = getMaterialLocationText(sn);
+  const note = locationText ? `S/N: ${sn} (${locationText})` : ('S/N: ' + sn);
   await addStatusEntry(_serialPending.issueId, _serialPending.status, _serialPending.sub, note, _serialPending.dateTime);
   await awardGamification('serial_captured_when_required', { issueId: _serialPending.issueId, dedupeSuffix: sn, tags: ['serial:captured'] });
   closeSerialModal();
