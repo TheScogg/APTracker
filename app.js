@@ -210,6 +210,87 @@ window.clearRoleAlertBadge = function() {
   _updateRoleAlertBadge();
 };
 
+async function _loadActiveRoleAlertsForCurrentUser() {
+  if (!currentPlantId || !currentUser?.uid) return [];
+  const q = query(
+    collection(db, 'plants', currentPlantId, 'roleFeedAlerts'),
+    where('recipientUserIds', 'array-contains', currentUser.uid),
+    limit(80)
+  );
+  const snap = await getDocs(q);
+  const alerts = [];
+  for (const d of snap.docs) {
+    const data = d.data() || {};
+    const issueId = String(data.issueId || '').trim();
+    if (!issueId) continue;
+    const cachedIssue = issues.find(i => i.id === issueId) || null;
+    let issue = cachedIssue;
+    if (!issue) {
+      try {
+        const issueSnap = await getDoc(plantDoc('issues', issueId));
+        issue = issueSnap.exists() ? { id: issueId, ...issueSnap.data() } : null;
+      } catch (_) {}
+    }
+    const isResolved = !!(issue?.resolved || issue?.lifecycle?.isResolved);
+    if (isResolved) continue;
+    alerts.push({
+      id: d.id,
+      issueId,
+      machine: data.machine || issue?.machine || issue?.machineCode || 'Unknown',
+      feedLabel: data.feedLabel || data.categoryKey || data.statusKey || 'Alert',
+      note: data.note || issue?.note || '',
+      createdAt: data.createdAt || null
+    });
+  }
+  alerts.sort((a, b) => {
+    const aMs = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+    const bMs = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+    return bMs - aMs;
+  });
+  return alerts;
+}
+
+window.openRoleAlertInboxModal = async function() {
+  const modal = document.getElementById('role-alerts-modal');
+  const list = document.getElementById('role-alerts-list');
+  if (!modal || !list) return;
+  list.innerHTML = `<div style="color:var(--text3);font-size:13px;">Loading active alerts…</div>`;
+  modal.classList.add('visible');
+  clearRoleAlertBadge();
+  try {
+    const alerts = await _loadActiveRoleAlertsForCurrentUser();
+    if (!alerts.length) {
+      list.innerHTML = `<div style="color:var(--text3);font-size:13px;">No active alerts right now.</div>`;
+      return;
+    }
+    list.innerHTML = alerts.map(a => `
+      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:10px 12px;">
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;">
+          <div style="font-weight:700;color:var(--text);">${esc(a.feedLabel)} · ${esc(a.machine)}</div>
+          <button class="btn btn-ghost" style="padding:4px 8px;font-size:11px;" onclick="focusIssueFromAlert('${esc(a.issueId)}')">Open</button>
+        </div>
+        <div style="font-size:12px;color:var(--text2);margin-top:4px;">${esc(a.note || 'No note')}</div>
+      </div>
+    `).join('');
+  } catch (e) {
+    list.innerHTML = `<div style="color:var(--red);font-size:13px;">${esc(e?.message || 'Unable to load alerts.')}</div>`;
+  }
+};
+
+window.closeRoleAlertInboxModal = function() {
+  document.getElementById('role-alerts-modal')?.classList.remove('visible');
+};
+
+window.focusIssueFromAlert = function(issueId) {
+  closeRoleAlertInboxModal();
+  const issueRow = document.getElementById(`issue-${issueId}`);
+  if (issueRow) {
+    issueRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    issueRow.classList.add('highlight');
+    setTimeout(() => issueRow.classList.remove('highlight'), 1200);
+  }
+};
+
 function startRoleFeedAlertsWatcher() {
   stopRoleFeedAlertsWatcher();
   if (!currentPlantId || !currentUser?.uid) return;
@@ -289,8 +370,7 @@ window.closeRolePreferencesModal = function() {
 };
 
 document.getElementById('alerts-btn-header')?.addEventListener('click', () => {
-  clearRoleAlertBadge();
-  openRolePreferencesModal();
+  openRoleAlertInboxModal();
 });
 
 window.saveRolePreferences = async function() {
@@ -7406,7 +7486,7 @@ document.querySelectorAll('.modal').forEach(modal => {
   modal.addEventListener('click', e => e.stopPropagation());
 });
 
-document.addEventListener('keydown', e=>{ if(e.key==='Escape'){closeModal();closeEditModal();closeResolveModal();closeReopenModal();closeLightbox();closeSortDropdown();closeExportModal();closeSerialModal();closeEditStatusModal();closeNotesModal();closeSmsComposer(true);window.closeMessagingModal?.();window.closeConversation?.();closeAppearanceModal();closeThemeEditor();closeRolePreferencesModal();} });
+document.addEventListener('keydown', e=>{ if(e.key==='Escape'){closeModal();closeEditModal();closeResolveModal();closeReopenModal();closeLightbox();closeSortDropdown();closeExportModal();closeSerialModal();closeEditStatusModal();closeNotesModal();closeSmsComposer(true);window.closeMessagingModal?.();window.closeConversation?.();closeAppearanceModal();closeThemeEditor();closeRolePreferencesModal();closeRoleAlertInboxModal();} });
 
 document.getElementById('theme-editor-modal')?.addEventListener('click', e => {
   const modal = document.getElementById('theme-editor-modal');
@@ -7417,6 +7497,7 @@ document.getElementById('theme-editor-modal')?.addEventListener('click', e => {
 });
 document.getElementById('appearance-modal')?.addEventListener('click', e => { if (e.target === document.getElementById('appearance-modal')) closeAppearanceModal(); });
 document.getElementById('role-prefs-modal')?.addEventListener('click', e => { if (e.target === document.getElementById('role-prefs-modal')) closeRolePreferencesModal(); });
+document.getElementById('role-alerts-modal')?.addEventListener('click', e => { if (e.target === document.getElementById('role-alerts-modal')) closeRoleAlertInboxModal(); });
 
 // ── SERIAL NUMBER PROMPT ──
 // Define which status+sub combos require a serial number
