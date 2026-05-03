@@ -40,6 +40,7 @@ The app now starts a realtime watcher for each signed-in user/plant:
 - Watcher is restarted on plant switch and stopped on sign-out.
 - Header includes an `❗` alert indicator badge that increments on new delegated category alerts.
 - Clicking the `❗` icon opens **Active Category Alerts** modal listing unresolved issues routed to the user.
+- Users can delete individual alerts directly from the Active Category Alerts modal.
 
 ## Alert payload
 
@@ -55,4 +56,5 @@ The app now starts a realtime watcher for each signed-in user/plant:
 ## Security
 
 Members may update only their own subscription preference fields.
-`roleFeedAlerts` stays append-only (create/read allowed per rules, update/delete denied).
+`roleFeedAlerts` are create/read for routing and delivery, remain update-immutable, and can be deleted by admins or recipient users (dismissal/cleanup).
+When an issue is deleted, associated `roleFeedAlerts` rows are deleted in the same operation.

@@ -267,7 +267,10 @@ window.openRoleAlertInboxModal = async function() {
       <div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:10px 12px;">
         <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;">
           <div style="font-weight:700;color:var(--text);">${esc(a.feedLabel)} · ${esc(a.machine)}</div>
-          <button class="btn btn-ghost" style="padding:4px 8px;font-size:11px;" onclick="focusIssueFromAlert('${esc(a.issueId)}')">Open</button>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <button class="btn btn-ghost" style="padding:4px 8px;font-size:11px;" onclick="focusIssueFromAlert('${esc(a.issueId)}')">Open</button>
+            <button class="btn btn-danger" style="padding:4px 8px;font-size:11px;" onclick="deleteRoleAlert('${esc(a.id)}')">Delete</button>
+          </div>
         </div>
         <div style="font-size:12px;color:var(--text2);margin-top:4px;">${esc(a.note || 'No note')}</div>
       </div>
@@ -283,11 +286,23 @@ window.closeRoleAlertInboxModal = function() {
 
 window.focusIssueFromAlert = function(issueId) {
   closeRoleAlertInboxModal();
-  const issueRow = document.getElementById(`issue-${issueId}`);
+  const issueRow = document.querySelector(`.issue-row[data-id="${CSS.escape(String(issueId || ''))}"]`);
   if (issueRow) {
+    const body = document.getElementById('body-' + issueId);
+    if (body && !body.classList.contains('visible') && typeof toggleCard === 'function') toggleCard(issueId);
     issueRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
     issueRow.classList.add('highlight');
     setTimeout(() => issueRow.classList.remove('highlight'), 1200);
+  }
+};
+
+window.deleteRoleAlert = async function(alertId) {
+  if (!currentPlantId || !alertId) return;
+  try {
+    await deleteDoc(doc(db, 'plants', currentPlantId, 'roleFeedAlerts', alertId));
+    await openRoleAlertInboxModal();
+  } catch (e) {
+    showGameToast(`⚠️ Could not delete alert: ${e?.message || e}`);
   }
 };
 
@@ -5115,7 +5130,11 @@ window.deleteIssue = async id => {
   if (!currentUserPermissions.canEditIssue) return;
   if (!confirm('Delete this issue permanently?')) return;
   try {
-    await deleteDoc(plantDoc('issues',id));
+    const batch = writeBatch(db);
+    batch.delete(plantDoc('issues', id));
+    const alertsSnap = await getDocs(query(collection(db, 'plants', currentPlantId, 'roleFeedAlerts'), where('issueId', '==', id)));
+    alertsSnap.docs.forEach(d => batch.delete(doc(db, 'plants', currentPlantId, 'roleFeedAlerts', d.id)));
+    await batch.commit();
     clearIssueReminder(id);
     issuesById.delete(id);
     issueEventHistoryCache.delete(id);

@@ -357,8 +357,10 @@ service cloud.firestore {
                       && request.resource.data.requiredJobRoleKeys is list
                       && request.resource.data.recipientUserIds is list
                       && request.resource.data.createdBy.uid == currentUid();
-        // Keep alert records immutable; use issue events for follow-up changes.
-        allow update, delete: if false;
+        // Keep updates immutable; allow delete for admins or recipients to dismiss alerts.
+        allow update: if false;
+        allow delete: if isAdmin(plantId)
+                      || (signedIn() && resource.data.recipientUserIds.hasAny([currentUid()]));
       }
 
       // ── Plant-scoped daily schedules ──
