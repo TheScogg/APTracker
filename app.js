@@ -238,6 +238,9 @@ async function _loadActiveRoleAlertsForCurrentUser() {
       issueId,
       machine: data.machine || issue?.machine || issue?.machineCode || 'Unknown',
       feedLabel: data.feedLabel || data.categoryKey || data.statusKey || 'Alert',
+      statusKey: data.statusKey || currentStatusKey(issue || {}) || '',
+      subStatus: data.subStatus || issue?.currentStatus?.subStatusKey || '',
+      categoryKey: data.categoryKey || data.statusKey || '',
       note: data.note || issue?.note || '',
       createdAt: data.createdAt || null
     });
@@ -263,18 +266,23 @@ window.openRoleAlertInboxModal = async function() {
       list.innerHTML = `<div style="color:var(--text3);font-size:13px;">No active alerts right now.</div>`;
       return;
     }
-    list.innerHTML = alerts.map(a => `
+    list.innerHTML = alerts.map(a => {
+      const isQuality = String(a.categoryKey || a.statusKey || '').toLowerCase().includes('quality');
+      return `
       <div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:10px 12px;">
         <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;">
           <div style="font-weight:700;color:var(--text);">${esc(a.feedLabel)} · ${esc(a.machine)}</div>
           <div style="display:flex;gap:6px;align-items:center;">
             <button class="btn btn-ghost" style="padding:4px 8px;font-size:11px;" onclick="focusIssueFromAlert('${esc(a.issueId)}')">Open</button>
+            ${isQuality ? `<button class="btn btn-edit" style="padding:4px 8px;font-size:11px;" onclick="acceptRoleAlert('${esc(a.issueId)}','${esc(a.statusKey)}')">Accept</button>` : ''}
             <button class="btn btn-danger" style="padding:4px 8px;font-size:11px;" onclick="deleteRoleAlert('${esc(a.id)}')">Delete</button>
           </div>
         </div>
+        ${a.subStatus ? `<div style="font-size:12px;color:var(--text2);margin-top:4px;">Sub-status: ${esc(a.subStatus)}</div>` : ''}
         <div style="font-size:12px;color:var(--text2);margin-top:4px;">${esc(a.note || 'No note')}</div>
       </div>
-    `).join('');
+    `;
+    }).join('');
   } catch (e) {
     list.innerHTML = `<div style="color:var(--red);font-size:13px;">${esc(e?.message || 'Unable to load alerts.')}</div>`;
   }
@@ -303,6 +311,17 @@ window.deleteRoleAlert = async function(alertId) {
     await openRoleAlertInboxModal();
   } catch (e) {
     showGameToast(`⚠️ Could not delete alert: ${e?.message || e}`);
+  }
+};
+
+window.acceptRoleAlert = async function(issueId, statusKey) {
+  if (!issueId || !statusKey) return;
+  try {
+    await setWorkflowStateForStatus(issueId, statusKey, 'accepted');
+    showGameToast('✅ Workflow accepted');
+    await openRoleAlertInboxModal();
+  } catch (e) {
+    showGameToast(`⚠️ Could not accept: ${e?.message || e}`);
   }
 };
 
@@ -4698,6 +4717,16 @@ window.setWorkflowStateForStatus = async (issueId, statusKey, state) => {
   }
 };
 
+function formatWorkflowActor(actor) {
+  const full = String(actor?.name || '').trim();
+  if (!full) return '';
+  const parts = full.split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) return `by ${full}`;
+  const first = parts[0];
+  const lastInitial = parts[parts.length - 1][0]?.toUpperCase() || '';
+  return `by ${first} ${lastInitial}.`;
+}
+
 window.cycleWorkflowStateForStatus = async (issueId, statusKey) => {
   const states = ['called', 'accepted', 'in-progress', 'finished'];
   const issue = issues.find(i => i.id === issueId);
@@ -5503,6 +5532,7 @@ function renderIssues() {
         }).join('')}</div>
       </div>
       <div class="wf-state-label ${workflowState ? workflowConfig[workflowState].cssState : ''}">${workflowState ? workflowConfig[workflowState].label : ''}</div>
+      <div class="wf-state-meta">${formatWorkflowActor(wfStateHistory[workflowState]?.by)}</div>
     </div>`;
 
     // Per-status workflow rows for expanded card body — derived from status history
@@ -5534,6 +5564,7 @@ function renderIssues() {
             <div class="wf-steps-wrap" onclick="event.stopPropagation()">
               <div class="wf-steps">${btnHtml}</div>
               <div class="wf-state-label ${workflowConfig[sState].cssState}">${workflowConfig[sState].label}</div>
+              <div class="wf-state-meta">${formatWorkflowActor(wfStateHistory[sState]?.by)}</div>
             </div>
           </div>`;
         }).join('');
