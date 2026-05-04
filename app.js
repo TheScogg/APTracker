@@ -218,6 +218,7 @@ async function _loadActiveRoleAlertsForCurrentUser() {
     limit(80)
   );
   const snap = await getDocs(q);
+  const staleAlertDeletes = [];
   const alerts = [];
   for (const d of snap.docs) {
     const data = d.data() || {};
@@ -232,7 +233,10 @@ async function _loadActiveRoleAlertsForCurrentUser() {
       } catch (_) {}
     }
     const isResolved = !!(issue?.resolved || issue?.lifecycle?.isResolved);
-    if (isResolved) continue;
+    if (isResolved) {
+      staleAlertDeletes.push(deleteDoc(doc(db, 'plants', currentPlantId, 'roleFeedAlerts', d.id)).catch(() => null));
+      continue;
+    }
     alerts.push({
       id: d.id,
       issueId,
@@ -245,6 +249,7 @@ async function _loadActiveRoleAlertsForCurrentUser() {
       createdAt: data.createdAt || null
     });
   }
+  if (staleAlertDeletes.length) await Promise.all(staleAlertDeletes);
   alerts.sort((a, b) => {
     const aMs = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
     const bMs = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
@@ -310,9 +315,20 @@ window.deleteRoleAlert = async function(alertId, categoryKey, statusKey) {
   if (!currentPlantId || !alertId || !currentUser?.uid) return;
   try {
     const alertRef = doc(db, 'plants', currentPlantId, 'roleFeedAlerts', alertId);
-    await updateDoc(alertRef, {
-      recipientUserIds: arrayRemove(currentUser.uid)
-    });
+    const snap = await getDoc(alertRef);
+    if (!snap.exists()) {
+      await openRoleAlertInboxModal();
+      return;
+    }
+    const data = snap.data() || {};
+    const recipients = Array.isArray(data.recipientUserIds) ? data.recipientUserIds.filter(Boolean) : [];
+    if (recipients.length <= 1 || recipients.every(uid => uid === currentUser.uid)) {
+      await deleteDoc(alertRef);
+    } else {
+      await updateDoc(alertRef, {
+        recipientUserIds: arrayRemove(currentUser.uid)
+      });
+    }
     await openRoleAlertInboxModal();
   } catch (e) {
     showGameToast(`⚠️ Could not delete alert: ${e?.message || e}`);
