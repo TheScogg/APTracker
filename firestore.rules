@@ -104,6 +104,15 @@ service cloud.firestore {
         .hasOnly(['jobRoleKeys', 'jobFeeds', 'alertCategorySubscriptions', 'updatedAt', 'updatedBy']);
     }
 
+    function onlyRemovesSelfFromRecipients() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['recipientUserIds'])
+        && resource.data.recipientUserIds is list
+        && request.resource.data.recipientUserIds is list
+        && resource.data.recipientUserIds.hasAny([currentUid()])
+        && !request.resource.data.recipientUserIds.hasAny([currentUid()])
+        && request.resource.data.recipientUserIds.size() + 1 == resource.data.recipientUserIds.size();
+    }
+
     function isValidScheduleDate(dateStr) {
       return dateStr is string
         && dateStr.matches('^\\d{4}-\\d{2}-\\d{2}$');
@@ -357,8 +366,11 @@ service cloud.firestore {
                       && request.resource.data.requiredJobRoleKeys is list
                       && request.resource.data.recipientUserIds is list
                       && request.resource.data.createdBy.uid == currentUid();
-        // Keep updates immutable; allow delete for admins or recipients to dismiss alerts.
-        allow update: if false;
+        // Keep updates immutable except recipients can remove themselves from recipientUserIds.
+        allow update: if isAdmin(plantId)
+                      || (signedIn()
+                          && isPlantMember(plantId)
+                          && onlyRemovesSelfFromRecipients());
         allow delete: if isAdmin(plantId)
                       || (signedIn() && resource.data.recipientUserIds.hasAny([currentUid()]));
       }

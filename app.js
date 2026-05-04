@@ -279,7 +279,7 @@ window.openRoleAlertInboxModal = async function() {
           <div style="display:flex;flex-direction:column;gap:6px;align-items:stretch;min-width:72px;">
             <button class="btn btn-ghost" style="padding:4px 8px;font-size:11px;" onclick="focusIssueFromAlert('${esc(a.issueId)}')">Open</button>
             <button class="btn btn-edit" style="padding:4px 8px;font-size:11px;" onclick="acceptRoleAlert('${esc(a.issueId)}','${esc(a.statusKey)}')">Accept</button>
-            <button class="btn btn-danger" style="padding:4px 8px;font-size:11px;" onclick="deleteRoleAlert('${esc(a.id)}')">Delete</button>
+            <button class="btn btn-danger" style="padding:4px 8px;font-size:11px;" onclick="deleteRoleAlert('${esc(a.id)}','${esc(a.categoryKey || '')}','${esc(a.statusKey || '')}')">Delete</button>
           </div>
         </div>
       </div>
@@ -306,10 +306,18 @@ window.focusIssueFromAlert = function(issueId) {
   }
 };
 
-window.deleteRoleAlert = async function(alertId) {
-  if (!currentPlantId || !alertId) return;
+window.deleteRoleAlert = async function(alertId, categoryKey, statusKey) {
+  if (!currentPlantId || !alertId || !currentUser?.uid) return;
   try {
-    await deleteDoc(doc(db, 'plants', currentPlantId, 'roleFeedAlerts', alertId));
+    const alertRef = doc(db, 'plants', currentPlantId, 'roleFeedAlerts', alertId);
+    const normKey = String(categoryKey || statusKey || '').trim().toLowerCase();
+    if (normKey.includes('quality')) {
+      await updateDoc(alertRef, {
+        recipientUserIds: arrayRemove(currentUser.uid)
+      });
+    } else {
+      await deleteDoc(alertRef);
+    }
     await openRoleAlertInboxModal();
   } catch (e) {
     showGameToast(`⚠️ Could not delete alert: ${e?.message || e}`);
