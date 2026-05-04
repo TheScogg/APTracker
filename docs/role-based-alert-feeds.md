@@ -1,66 +1,64 @@
-# Role-Based Alert Feeds (v1)
+# Category Subscription Alerts (v2)
 
-This document defines how users select job feeds and how issue status updates auto-route alerts.
+Users subscribe to alert categories, and issues notify everyone subscribed to the selected category.
 
-## User job selection
+## Member subscription field
 
-Users are assigned to role keys on their plant member document:
+Path: `plants/{plantId}/members/{uid}`
 
-- Path: `plants/{plantId}/members/{uid}`
-- Preferred field: `jobRoleKeys: string[]`
-- Legacy-compatible field: `jobFeeds: string[]` (still read as fallback)
+Primary field:
+- `alertCategorySubscriptions: string[]`
 
-Example:
+Backward compatibility still supported:
+- `jobRoleKeys: string[]`
+- `jobFeeds: string[]`
 
-```json
-{
-  "role": "editor",
-  "isActive": true,
-  "jobRoleKeys": ["forklift_driver", "maintenance_employee"]
-}
-```
+## User experience
 
-Recommended UX timing:
+Users can update subscriptions anytime from **Account -> My Alert Categories**.
+This is intended for day-to-day flexibility (for replacement operators and rotating assignments).
 
-1. During onboarding after plant selection.
-2. In profile/settings so users can update job responsibilities.
-3. Admin override in admin tooling when self-selection is not appropriate.
+## Routing behavior
 
-## Routing rules implemented
+When a status/category is selected on an issue:
+1. App resolves the category route.
+2. App notifies active members subscribed to that category via `alertCategorySubscriptions`.
+3. Legacy role-based matching is still considered as a fallback.
+4. App writes an append-only alert doc to `plants/{plantId}/roleFeedAlerts`.
 
-Current built-in default routing in `app.js`:
+Alerts are created both:
+- when logging a new issue with an initial category, and
+- when changing a category later.
 
-1. Needs + Material-like sub-status -> `material_alerts` feed -> `forklift_driver` job feed.
-2. Maintenance status/category -> `maintenance_alerts` feed -> `maintenance_employee` job feed.
+If no explicit route config exists for a category, the app creates a generic feed key like `<category>_alerts`.
 
-## Runtime behavior
+## User delivery path
 
-When status changes are saved via `addStatusEntry`:
+The app now starts a realtime watcher for each signed-in user/plant:
+- Query: `plants/{plantId}/roleFeedAlerts` where `recipientUserIds` contains current uid.
+- On new alerts, show in-app toast and browser notification (if permission is granted).
+- Watcher is restarted on plant switch and stopped on sign-out.
+- Header includes an `❗` alert indicator badge that increments on new delegated category alerts.
+- Clicking the `❗` icon opens **Active Category Alerts** modal listing unresolved issues routed to the user.
+- Users can dismiss individual alerts from the Active Category Alerts modal.
+- Dismiss removes only the current user from `recipientUserIds` (shared alert doc is retained for other recipients).
+- Active Category Alerts rows show sub-status when present.
+- All category alerts include an **Accept** action that sets the issue workflow state to `accepted`.
+- Workflow state labels on issue cards show who last clicked that state (last name abbreviated).
 
-1. App resolves matching routing rule.
-2. App reads plant members and filters active users whose `jobRoleKeys` (or legacy `jobFeeds`) include required keys.
-3. App writes an alert record to `plants/{plantId}/roleFeedAlerts` including recipients.
-4. If the current user is targeted, an in-app toast is shown.
+## Alert payload
 
-## Data written for each routed alert
-
-Collection: `plants/{plantId}/roleFeedAlerts`
-
-Fields:
-
-- `issueId`
-- `machine`
+`plants/{plantId}/roleFeedAlerts/{alertId}` includes:
 - `statusKey`
-- `subStatus`
-- `note`
+- `categoryKey`
 - `feedKey`
 - `feedLabel`
-- `requiredJobRoleKeys`
 - `recipientUserIds`
-- `createdAt`
-- `createdBy`
+- `requiredJobRoleKeys` (legacy compatibility)
+- `createdAt`, `createdBy`
 
-## Notes
+## Security
 
-- Rule configuration can be managed per-plant in `plants/{plantId}/config/roleAlertRouting.rules`.
-- Unknown or missing role keys means user receives no role-based feed alerts.
+Members may update only their own subscription preference fields.
+`roleFeedAlerts` are create/read for routing and delivery. Recipients may update only `recipientUserIds` to remove themselves, and admins may delete rows when needed.
+When an issue is deleted, associated `roleFeedAlerts` rows are deleted in the same operation.
