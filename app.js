@@ -5575,21 +5575,8 @@ function renderIssues() {
             </div>
             <div class="wf-steps-wrap" onclick="event.stopPropagation()">
               <div class="wf-steps">${btnHtml}</div>
-<<<<<<< ours
-<<<<<<< ours
               <div class="wf-state-label ${sStateClass}">${sStateLabel}</div>
               <div class="wf-state-meta">${sState ? formatWorkflowActor(wfStateHistory[sState]?.by) : ''}</div>
-=======
-              <div class="wf-state-label ${workflowConfig[sState].cssState}">${workflowConfig[sState].label}</div>
-              <div class="wf-state-meta">${formatWorkflowActor(wfStateHistory[sState]?.by)}</div>
-<<<<<<< ours
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
-              <div class="wf-state-label ${sStateClass}">${sStateLabel}</div>
-              <div class="wf-state-meta">${sState ? formatWorkflowActor(wfStateHistory[sState]?.by) : ''}</div>
->>>>>>> theirs
             </div>
           </div>`;
         }).join('');
