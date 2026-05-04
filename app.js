@@ -310,14 +310,9 @@ window.deleteRoleAlert = async function(alertId, categoryKey, statusKey) {
   if (!currentPlantId || !alertId || !currentUser?.uid) return;
   try {
     const alertRef = doc(db, 'plants', currentPlantId, 'roleFeedAlerts', alertId);
-    const normKey = String(categoryKey || statusKey || '').trim().toLowerCase();
-    if (normKey.includes('quality')) {
-      await updateDoc(alertRef, {
-        recipientUserIds: arrayRemove(currentUser.uid)
-      });
-    } else {
-      await deleteDoc(alertRef);
-    }
+    await updateDoc(alertRef, {
+      recipientUserIds: arrayRemove(currentUser.uid)
+    });
     await openRoleAlertInboxModal();
   } catch (e) {
     showGameToast(`⚠️ Could not delete alert: ${e?.message || e}`);
@@ -5575,8 +5570,8 @@ function renderIssues() {
             </div>
             <div class="wf-steps-wrap" onclick="event.stopPropagation()">
               <div class="wf-steps">${btnHtml}</div>
-              <div class="wf-state-label ${sStateClass}">${sStateLabel}</div>
-              <div class="wf-state-meta">${sState ? formatWorkflowActor(wfStateHistory[sState]?.by) : ''}</div>
+              <div class="wf-state-label ${workflowConfig[sState].cssState}">${workflowConfig[sState].label}</div>
+              <div class="wf-state-meta">${formatWorkflowActor(wfStateHistory[sState]?.by)}</div>
             </div>
           </div>`;
         }).join('');

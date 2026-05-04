@@ -41,7 +41,7 @@ The app now starts a realtime watcher for each signed-in user/plant:
 - Header includes an `❗` alert indicator badge that increments on new delegated category alerts.
 - Clicking the `❗` icon opens **Active Category Alerts** modal listing unresolved issues routed to the user.
 - Users can dismiss individual alerts from the Active Category Alerts modal.
-- For Quality alerts, dismiss removes the current user from `recipientUserIds` (shared alert doc is retained).
+- Dismiss removes only the current user from `recipientUserIds` (shared alert doc is retained for other recipients).
 - Active Category Alerts rows show sub-status when present.
 - All category alerts include an **Accept** action that sets the issue workflow state to `accepted`.
 - Workflow state labels on issue cards show who last clicked that state (last name abbreviated).
