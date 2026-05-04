@@ -690,14 +690,14 @@
   .row-spill.controlman  { color: var(--babyblue); border-color: rgba(56,189,248,0.5); background: var(--babyblue-dim); }
   .row-spill.startup     { color: var(--teal);     border-color: rgba(20,184,166,0.5); background: var(--teal-dim); }
   .row-spill.resolved    { color: var(--green);    border-color: rgba(34,197,94,0.5);  background: var(--green-dim); }
-  .row-presses { display: grid; grid-template-columns: repeat(auto-fill, minmax(54px, 1fr)); gap: 6px; padding: 8px 10px 10px; }
+  .row-presses { display: grid; grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); gap: 5px; padding: 7px 10px 8px; }
   .press-btn {
     --press-state-color: var(--border);
     --press-state-bg: rgba(255,255,255,0.025);
     appearance: none;
     min-width: 0;
-    min-height: 46px;
-    padding: 8px 6px 7px;
+    min-height: 42px;
+    padding: 6px 5px 5px;
     border: 1px solid var(--press-state-color);
     border-radius: 8px;
     background:
@@ -711,7 +711,7 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 5px;
+    gap: 4px;
     font-family: 'Rajdhani', 'Nunito', sans-serif;
     font-variant-numeric: tabular-nums;
     line-height: 1;
@@ -727,9 +727,9 @@
     transform: translateY(-1px);
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 5px 14px rgba(0,0,0,0.26), 0 0 0 1px var(--press-state-color);
   }
-  .press-btn-num { color: inherit; font-size: 17px; font-weight: 800; letter-spacing: 0; line-height: 0.95; text-shadow: 0 1px 1px rgba(0,0,0,0.22); }
-  .press-btn-bars { display: flex; gap: 2px; width: min(38px, 82%); justify-content: center; min-height: 5px; }
-  .press-btn-bar { height: 5px; border-radius: 999px; flex: 1; min-width: 4px; background: var(--border); box-shadow: 0 0 0 1px rgba(0,0,0,0.08); }
+  .press-btn-num { color: inherit; font-size: 16px; font-weight: 800; letter-spacing: 0; line-height: 0.95; text-shadow: 0 1px 1px rgba(0,0,0,0.22); }
+  .press-btn-bars { display: flex; gap: 2px; width: min(34px, 80%); justify-content: center; min-height: 4px; }
+  .press-btn-bar { height: 4px; border-radius: 999px; flex: 1; min-width: 3px; background: var(--border); box-shadow: 0 0 0 1px rgba(0,0,0,0.08); }
   .press-btn.has-open        { --press-state-color: var(--red);      --press-state-bg: var(--red-dim); }
   .press-btn.has-maintenance { --press-state-color: var(--yellow);   --press-state-bg: var(--yellow-dim); }
   .press-btn.has-tooldie     { --press-state-color: var(--orange);   --press-state-bg: var(--orange-dim); }
@@ -741,8 +741,15 @@
   .press-btn.has-multi       { --press-state-color: var(--accent);   --press-state-bg: var(--accent-glow); }
   .press-btn.not-scheduled   { --press-state-color: rgba(253,230,138,0.42); --press-state-bg: rgba(253,243,176,0.08); color: var(--yellow); }
   .press-btn.not-scheduled .press-btn-num { color: inherit; }
-  .press-btn .badge { position: absolute; top: -6px; right: -6px; background: var(--red); color: white; font-size: 10px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; display: flex; align-items: center; justify-content: center; font-family: 'Nunito', sans-serif; font-weight: 800; line-height: 1; border: 2px solid var(--bg2); box-shadow: 0 2px 6px rgba(0,0,0,0.25); }
+  .press-btn .badge { position: absolute; top: -5px; right: -5px; background: var(--red); color: white; font-size: 9px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; display: flex; align-items: center; justify-content: center; font-family: 'Nunito', sans-serif; font-weight: 800; line-height: 1; border: 2px solid var(--bg2); box-shadow: 0 2px 6px rgba(0,0,0,0.25); }
   .press-btn.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--bg2), 0 0 0 4px var(--accent), 0 6px 16px var(--accent-glow); transform: translateY(-2px); }
+  @media (max-width: 640px) {
+    .row-presses { grid-template-columns: repeat(auto-fill, minmax(48px, 1fr)); gap: 4px; padding: 6px 8px 7px; }
+    .press-btn { min-height: 38px; padding: 5px 4px 4px; gap: 3px; border-radius: 7px; }
+    .press-btn-num { font-size: 15px; }
+    .press-btn-bars { width: min(30px, 78%); min-height: 3px; }
+    .press-btn-bar { height: 3px; min-width: 3px; }
+  }
 
   /* PRESS MINI-CARD */
   .press-minicard-area { overflow: hidden; max-height: 0; transition: max-height 0.25s cubic-bezier(0.4,0,0.2,1); }
