@@ -1112,10 +1112,15 @@
   .wf-steps-wrap { display: flex; flex-direction: column; align-items: center; gap: 3px; flex-shrink: 0; }
   .wf-steps-row { display: flex; align-items: center; gap: 5px; }
   .wf-state-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+  .wf-state-actor { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.9; }
   .wf-state-label.called      { color: #eab308; animation: wfLabelPulseCalled 1.8s ease-in-out infinite; }
   .wf-state-label.accepted    { color: #22c55e; animation: wfLabelPulseAccepted 1.8s ease-in-out infinite; }
   .wf-state-label.in-progress { color: #3b82f6; animation: wfLabelPulseInProgress 1.8s ease-in-out infinite; }
   .wf-state-label.finished    { color: #a855f7; animation: wfLabelPulseFinished 1.8s ease-in-out infinite; }
+  .wf-state-actor.called      { color: #eab308; }
+  .wf-state-actor.accepted    { color: #22c55e; }
+  .wf-state-actor.in-progress { color: #3b82f6; }
+  .wf-state-actor.finished    { color: #a855f7; }
   @keyframes wfLabelPulseCalled     { 0%,100% { opacity: 0.6; text-shadow: none; } 50% { opacity: 1; text-shadow: 0 0 8px rgba(234,179,8,0.9), 0 0 16px rgba(234,179,8,0.5); } }
   @keyframes wfLabelPulseAccepted   { 0%,100% { opacity: 0.6; text-shadow: none; } 50% { opacity: 1; text-shadow: 0 0 8px rgba(34,197,94,0.9),  0 0 16px rgba(34,197,94,0.5);  } }
   @keyframes wfLabelPulseInProgress { 0%,100% { opacity: 0.6; text-shadow: none; } 50% { opacity: 1; text-shadow: 0 0 8px rgba(59,130,246,0.9), 0 0 16px rgba(59,130,246,0.5); } }

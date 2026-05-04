@@ -473,6 +473,17 @@ function currentActor() {
   return { uid: currentUser?.uid || '', name: currentUser?.displayName || currentUser?.email || 'Unknown' };
 }
 
+function formatWorkflowActorName(actorName) {
+  const raw = String(actorName || '').trim();
+  if (!raw) return '';
+  const normalized = raw.includes('@') ? raw.split('@')[0].replace(/[._-]+/g, ' ').trim() : raw;
+  const parts = normalized.split(/\s+/).filter(Boolean);
+  if (!parts.length) return '';
+  const first = parts[0];
+  const lastInitial = parts.length > 1 ? `${parts[parts.length - 1].charAt(0).toUpperCase()}.` : '';
+  return [first, lastInitial].filter(Boolean).join(' ');
+}
+
 function shouldSyncUserLookup(email) {
   try {
     const key = `userLookupLastSeen:${String(email || '').toLowerCase()}`;
@@ -4708,6 +4719,7 @@ window.setWorkflowStateForStatus = async (issueId, statusKey, state) => {
   try {
     const patch = {
       [`workflowStateByStatus.${statusKey}`]: state,
+      [`workflowStateByStatusHistory.${statusKey}.${state}`]: { by: actor, at: serverTimestamp() },
       updatedAt: serverTimestamp(),
       updatedBy: actor
     };
@@ -5429,6 +5441,7 @@ function renderIssues() {
     const wfCurrentIdx = workflowState ? wfOrder.indexOf(workflowState) : -1;
     const isCompleted = (state) => workflowState && wfOrder.indexOf(state) < wfCurrentIdx;
     const wfStateHistory = issue.workflowStateHistory || {};
+    const wfByStatusHistory = issue.workflowStateByStatusHistory || {};
     const wfByStatus = issue.workflowStateByStatus || {};
 
     // Build timeline entries HTML — reversed so newest is on top
@@ -5527,6 +5540,7 @@ function renderIssues() {
     const secKeys = getSecondaryStatuses(issue).filter(k => k !== 'resolved');
 
     // Build compact 4-step header buttons with state label below
+    const wfActorName = workflowState ? formatWorkflowActorName(wfStateHistory?.[workflowState]?.by?.name || wfStateHistory?.[workflowState]?.by) : '';
     const wfHeaderHtml = `<div class="wf-steps-wrap" onclick="event.stopPropagation()">
       <div class="wf-steps-row">
         ${hasNoWorkflowState ? `<div class="wf-prompt-arrow" id="wf-arrow-${issue.id}"></div>` : ''}
