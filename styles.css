@@ -690,29 +690,59 @@
   .row-spill.controlman  { color: var(--babyblue); border-color: rgba(56,189,248,0.5); background: var(--babyblue-dim); }
   .row-spill.startup     { color: var(--teal);     border-color: rgba(20,184,166,0.5); background: var(--teal-dim); }
   .row-spill.resolved    { color: var(--green);    border-color: rgba(34,197,94,0.5);  background: var(--green-dim); }
-  .row-presses { display: flex; flex-wrap: wrap; gap: 4px; padding: 7px 10px 8px; }
-<<<<<<< ours
-  .press-btn { font-family: 'Rajdhani', sans-serif; font-size: 12px; padding: 8px 5px 6px; border-radius: 8px; border: 1px solid var(--border); cursor: pointer; transition: all 0.15s; position: relative; min-width: 48px; flex: 1 1 48px; max-width: 76px; text-align: center; background: var(--bg3); color: var(--text); display: flex; flex-direction: column; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
-=======
-  .press-btn { font-family: 'Nunito', 'Inter', 'Segoe UI', sans-serif; font-size: 11px; padding: 7px 4px 5px; border-radius: 7px; border: 1px solid var(--border); cursor: pointer; transition: all 0.15s; position: relative; min-width: 44px; flex: 1 1 44px; max-width: 72px; text-align: center; background: var(--bg3); color: var(--text2); display: flex; flex-direction: column; align-items: center; gap: 3px; }
->>>>>>> theirs
-  .press-btn:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-1px); box-shadow: 0 3px 10px var(--accent-glow); }
-  .press-btn-num { font-size: 13px; font-weight: 700; line-height: 1; letter-spacing: 0.03em; }
-  .press-btn-bars { display: flex; gap: 2px; width: 86%; justify-content: center; }
-  .press-btn-bar { height: 4px; border-radius: 2px; flex: 1; background: var(--border); }
-  .press-btn.has-open        { border-color: var(--red);      color: var(--red); }
-  .press-btn.has-maintenance { border-color: var(--yellow);   color: var(--yellow); }
-  .press-btn.has-tooldie     { border-color: var(--orange);   color: var(--orange); }
-  .press-btn.has-moldchange  { border-color: var(--babyblue); color: var(--babyblue); }
-  .press-btn.has-startup          { border-color: var(--teal);     color: var(--teal); }
-  .press-btn.has-processengineer { border-color: var(--purple);   color: var(--purple); }
-  .press-btn.has-controlman      { border-color: var(--babyblue); color: var(--babyblue); }
-  .press-btn.all-resolved    { border-color: var(--green);    color: var(--green); }
-  .press-btn.has-multi       { border-color: var(--accent);   color: var(--text); }
-  .press-btn.not-scheduled   { background: rgba(255,253,220,0.07); border-color: rgba(253,243,176,0.22); }
-  .press-btn.not-scheduled .press-btn-num { color: rgba(253,240,150,0.68); }
-  .press-btn .badge { position: absolute; top: -5px; right: -5px; background: var(--red); color: white; font-size: 9px; width: 15px; height: 15px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: 'Nunito', sans-serif; font-weight: 700; }
-  .press-btn.selected { box-shadow: 0 0 0 2px var(--accent); transform: translateY(-2px); }
+  .row-presses { display: grid; grid-template-columns: repeat(auto-fill, minmax(54px, 1fr)); gap: 6px; padding: 8px 10px 10px; }
+  .press-btn {
+    --press-state-color: var(--border);
+    --press-state-bg: rgba(255,255,255,0.025);
+    appearance: none;
+    min-width: 0;
+    min-height: 46px;
+    padding: 8px 6px 7px;
+    border: 1px solid var(--press-state-color);
+    border-radius: 8px;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.055), rgba(255,255,255,0)),
+      var(--press-state-bg),
+      var(--bg3);
+    color: var(--text);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 1px 2px rgba(0,0,0,0.18);
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    font-family: 'Rajdhani', 'Nunito', sans-serif;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    position: relative;
+    text-align: center;
+    transition: border-color 0.15s, box-shadow 0.15s, color 0.15s, transform 0.15s, background-color 0.15s;
+  }
+  .press-btn:hover,
+  .press-btn:focus-visible {
+    border-color: var(--press-state-color);
+    color: var(--text);
+    outline: none;
+    transform: translateY(-1px);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 5px 14px rgba(0,0,0,0.26), 0 0 0 1px var(--press-state-color);
+  }
+  .press-btn-num { color: inherit; font-size: 17px; font-weight: 800; letter-spacing: 0; line-height: 0.95; text-shadow: 0 1px 1px rgba(0,0,0,0.22); }
+  .press-btn-bars { display: flex; gap: 2px; width: min(38px, 82%); justify-content: center; min-height: 5px; }
+  .press-btn-bar { height: 5px; border-radius: 999px; flex: 1; min-width: 4px; background: var(--border); box-shadow: 0 0 0 1px rgba(0,0,0,0.08); }
+  .press-btn.has-open        { --press-state-color: var(--red);      --press-state-bg: var(--red-dim); }
+  .press-btn.has-maintenance { --press-state-color: var(--yellow);   --press-state-bg: var(--yellow-dim); }
+  .press-btn.has-tooldie     { --press-state-color: var(--orange);   --press-state-bg: var(--orange-dim); }
+  .press-btn.has-moldchange  { --press-state-color: var(--babyblue); --press-state-bg: var(--babyblue-dim); }
+  .press-btn.has-startup          { --press-state-color: var(--teal);     --press-state-bg: var(--teal-dim); }
+  .press-btn.has-processengineer { --press-state-color: var(--purple);   --press-state-bg: var(--purple-dim); }
+  .press-btn.has-controlman      { --press-state-color: var(--babyblue); --press-state-bg: var(--babyblue-dim); }
+  .press-btn.all-resolved    { --press-state-color: var(--green);    --press-state-bg: var(--green-dim); }
+  .press-btn.has-multi       { --press-state-color: var(--accent);   --press-state-bg: var(--accent-glow); }
+  .press-btn.not-scheduled   { --press-state-color: rgba(253,230,138,0.42); --press-state-bg: rgba(253,243,176,0.08); color: var(--yellow); }
+  .press-btn.not-scheduled .press-btn-num { color: inherit; }
+  .press-btn .badge { position: absolute; top: -6px; right: -6px; background: var(--red); color: white; font-size: 10px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; display: flex; align-items: center; justify-content: center; font-family: 'Nunito', sans-serif; font-weight: 800; line-height: 1; border: 2px solid var(--bg2); box-shadow: 0 2px 6px rgba(0,0,0,0.25); }
+  .press-btn.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--bg2), 0 0 0 4px var(--accent), 0 6px 16px var(--accent-glow); transform: translateY(-2px); }
 
   /* PRESS MINI-CARD */
   .press-minicard-area { overflow: hidden; max-height: 0; transition: max-height 0.25s cubic-bezier(0.4,0,0.2,1); }
