@@ -5550,15 +5550,17 @@ function renderIssues() {
     const wfHistoryRowsHtml = histStatKeys.map(sKey => {
           const sCfg = STATUS_CONFIG_SAFE[sKey];
           const sColor = getStatusColor(sKey);
-          const sState = wfByStatus[sKey] || 'called';
-          const sCurrentIdx = wfOrder.indexOf(sState);
+          const sState = wfByStatus[sKey] || null;
+          const sCurrentIdx = sState ? wfOrder.indexOf(sState) : -1;
           const lastEntry = [...displayHistory].reverse().find(e => e.status === sKey);
           const sSubLabel = lastEntry?.subStatus || '';
           const btnHtml = wfOrder.map(st => {
             const cfg = workflowConfig[st];
-            const cls = st === sState ? `active ${cfg.cssState}` : wfOrder.indexOf(st) < sCurrentIdx ? 'completed' : 'pending';
+            const cls = st === sState ? `active ${cfg.cssState}` : (sState && wfOrder.indexOf(st) < sCurrentIdx) ? 'completed' : 'pending';
             return `<button class="wf-step-btn ${cls}" onclick="event.stopPropagation(); setWorkflowStateForStatus('${issue.id}','${sKey}','${st}')" title="${cfg.label}">${cfg.icon}</button>`;
           }).join('');
+          const sStateLabel = sState ? workflowConfig[sState].label : 'Not Started';
+          const sStateClass = sState ? workflowConfig[sState].cssState : '';
           return `<div class="wf-status-row">
             <div class="wf-status-row-info">
               <div class="issue-status" style="color:${sColor};border-color:${sColor};background:${alphaColor(sColor,0.12)}">
@@ -7613,6 +7615,16 @@ function populateSerialMaterialOptions() {
   }).join('');
 }
 
+function getMaterialLocationText(serialCode) {
+  const code = String(serialCode || '').trim().toUpperCase();
+  const meta = SERIAL_MATERIAL_OPTIONS[code];
+  if (!meta) return '';
+  const loc = Array.isArray(meta.location) ? meta.location.join(', ') : '';
+  const rack = meta.rack ? `Rack ${meta.rack}` : '';
+  const locText = loc ? `Loc ${loc}` : '';
+  return [rack, locText].filter(Boolean).join(' / ');
+}
+
 function resolveSerialInputValue() {
   const selectVal = (document.getElementById('serial-select')?.value || '').trim();
   const customVal = (document.getElementById('serial-input')?.value || '').trim();
@@ -7664,7 +7676,8 @@ window.confirmSerialModal = async () => {
     serialInput.focus();
     return;
   }
-  const note = 'S/N: ' + sn;
+  const locationText = getMaterialLocationText(sn);
+  const note = locationText ? `S/N: ${sn} (${locationText})` : ('S/N: ' + sn);
   await addStatusEntry(_serialPending.issueId, _serialPending.status, _serialPending.sub, note, _serialPending.dateTime);
   await awardGamification('serial_captured_when_required', { issueId: _serialPending.issueId, dedupeSuffix: sn, tags: ['serial:captured'] });
   closeSerialModal();
