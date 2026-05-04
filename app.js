@@ -5551,7 +5551,7 @@ function renderIssues() {
         }).join('')}</div>
       </div>
       <div class="wf-state-label ${workflowState ? workflowConfig[workflowState].cssState : ''}">${workflowState ? workflowConfig[workflowState].label : ''}</div>
-      <div class="wf-state-meta">${formatWorkflowActor(wfStateHistory[workflowState]?.by)}</div>
+      <div class="wf-state-meta ${workflowState ? workflowConfig[workflowState].cssState : ""}">${formatWorkflowActor(wfStateHistory[workflowState]?.by)}</div>
     </div>`;
 
     // Per-status workflow rows for expanded card body — derived from status history
@@ -5585,7 +5585,7 @@ function renderIssues() {
             <div class="wf-steps-wrap" onclick="event.stopPropagation()">
               <div class="wf-steps">${btnHtml}</div>
               <div class="wf-state-label ${sStateClass}">${sStateLabel}</div>
-              <div class="wf-state-meta">${sState ? formatWorkflowActor(wfStateHistory[sState]?.by) : ''}</div>
+              <div class="wf-state-meta ${sStateClass}">${sState ? formatWorkflowActor(wfStateHistory[sState]?.by) : ''}</div>
             </div>
           </div>`;
         }).join('');
