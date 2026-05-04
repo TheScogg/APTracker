@@ -42,7 +42,7 @@ The app now starts a realtime watcher for each signed-in user/plant:
 - Clicking the `❗` icon opens **Active Category Alerts** modal listing unresolved issues routed to the user.
 - Users can delete individual alerts directly from the Active Category Alerts modal.
 - Active Category Alerts rows show sub-status when present.
-- Quality, Maintenance, and Controlman alerts include an **Accept** action that sets the issue workflow state to `accepted`.
+- All category alerts include an **Accept** action that sets the issue workflow state to `accepted`.
 - Workflow state labels on issue cards show who last clicked that state (last name abbreviated).
 
 ## Alert payload

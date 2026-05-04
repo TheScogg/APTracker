@@ -267,8 +267,6 @@ window.openRoleAlertInboxModal = async function() {
       return;
     }
     list.innerHTML = alerts.map(a => {
-      const categoryNorm = String(a.categoryKey || a.statusKey || '').toLowerCase();
-      const showAccept = ['quality', 'maintenance', 'controlman'].some(k => categoryNorm.includes(k));
       const statusColor = getStatusColor(a.statusKey || a.categoryKey || 'open');
       return `
       <div style="background:${alphaColor(statusColor, 0.10)};border:1px solid ${alphaColor(statusColor, 0.45)};border-radius:10px;padding:10px 12px;">
@@ -280,7 +278,7 @@ window.openRoleAlertInboxModal = async function() {
           </div>
           <div style="display:flex;flex-direction:column;gap:6px;align-items:stretch;min-width:72px;">
             <button class="btn btn-ghost" style="padding:4px 8px;font-size:11px;" onclick="focusIssueFromAlert('${esc(a.issueId)}')">Open</button>
-            ${showAccept ? `<button class="btn btn-edit" style="padding:4px 8px;font-size:11px;" onclick="acceptRoleAlert('${esc(a.issueId)}','${esc(a.statusKey)}')">Accept</button>` : ''}
+            <button class="btn btn-edit" style="padding:4px 8px;font-size:11px;" onclick="acceptRoleAlert('${esc(a.issueId)}','${esc(a.statusKey)}')">Accept</button>
             <button class="btn btn-danger" style="padding:4px 8px;font-size:11px;" onclick="deleteRoleAlert('${esc(a.id)}')">Delete</button>
           </div>
         </div>
