@@ -4192,6 +4192,8 @@ window.confirmResolve = async () => {
     };
     const batch = writeBatch(db);
     batch.update(plantDoc('issues',resolveTargetId), issuePatch);
+    const alertsSnap = await getDocs(query(collection(db, 'plants', currentPlantId, 'roleFeedAlerts'), where('issueId', '==', resolveTargetId)));
+    alertsSnap.docs.forEach(d => batch.delete(doc(db, 'plants', currentPlantId, 'roleFeedAlerts', d.id)));
     queueIssueEvent(batch, resolveTargetId, 'issue_resolved', { resolutionNote: note || 'Resolved (no details provided)' });
     queueIssueEvent(batch, resolveTargetId, 'status_changed', {
       fromStatusKey: last?.status || currentStatusKey(issue || {}),
