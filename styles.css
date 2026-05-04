@@ -691,11 +691,11 @@
   .row-spill.startup     { color: var(--teal);     border-color: rgba(20,184,166,0.5); background: var(--teal-dim); }
   .row-spill.resolved    { color: var(--green);    border-color: rgba(34,197,94,0.5);  background: var(--green-dim); }
   .row-presses { display: flex; flex-wrap: wrap; gap: 4px; padding: 7px 10px 8px; }
-  .press-btn { font-family: 'Share Tech Mono', monospace; font-size: 11px; padding: 7px 4px 5px; border-radius: 7px; border: 1px solid var(--border); cursor: pointer; transition: all 0.15s; position: relative; min-width: 44px; flex: 1 1 44px; max-width: 72px; text-align: center; background: var(--bg3); color: var(--text2); display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  .press-btn { font-family: 'Share Tech Mono', monospace; font-size: 12px; padding: 8px 5px 6px; border-radius: 8px; border: 1px solid var(--border); cursor: pointer; transition: all 0.15s; position: relative; min-width: 48px; flex: 1 1 48px; max-width: 76px; text-align: center; background: var(--bg3); color: var(--text); display: flex; flex-direction: column; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
   .press-btn:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-1px); box-shadow: 0 3px 10px var(--accent-glow); }
-  .press-btn-num { font-size: 12px; font-weight: 700; }
-  .press-btn-bars { display: flex; gap: 2px; width: 80%; justify-content: center; }
-  .press-btn-bar { height: 3px; border-radius: 2px; flex: 1; background: var(--border); }
+  .press-btn-num { font-size: 13px; font-weight: 700; line-height: 1; }
+  .press-btn-bars { display: flex; gap: 2px; width: 86%; justify-content: center; }
+  .press-btn-bar { height: 4px; border-radius: 2px; flex: 1; background: var(--border); }
   .press-btn.has-open        { border-color: var(--red);      color: var(--red); }
   .press-btn.has-maintenance { border-color: var(--yellow);   color: var(--yellow); }
   .press-btn.has-tooldie     { border-color: var(--orange);   color: var(--orange); }
@@ -706,7 +706,7 @@
   .press-btn.all-resolved    { border-color: var(--green);    color: var(--green); }
   .press-btn.has-multi       { border-color: var(--accent);   color: var(--text); }
   .press-btn.not-scheduled   { background: rgba(255,253,220,0.07); border-color: rgba(253,243,176,0.22); }
-  .press-btn.not-scheduled .press-btn-num { color: rgba(253,240,150,0.42); }
+  .press-btn.not-scheduled .press-btn-num { color: rgba(253,240,150,0.68); }
   .press-btn .badge { position: absolute; top: -5px; right: -5px; background: var(--red); color: white; font-size: 9px; width: 15px; height: 15px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: 'Nunito', sans-serif; font-weight: 700; }
   .press-btn.selected { box-shadow: 0 0 0 2px var(--accent); transform: translateY(-2px); }
 
