@@ -895,14 +895,6 @@
     line-height: 1;
     transform-origin: center;
   }
-  .role-alert-icon.is-blinking {
-    animation: roleAlertBlink 7s ease-in-out infinite;
-  }
-  @keyframes roleAlertBlink {
-    0%, 46% { opacity: 1; }
-    50% { opacity: 0.5; }
-    54%, 100% { opacity: 1; }
-  }
   #alerts-btn-header {
     background: var(--orange);
     border-color: var(--orange);
@@ -915,7 +907,18 @@
     color: #fff;
   }
   #alerts-btn-header.alerts-has-active {
+    animation: roleAlertPulse 2.8s ease-in-out infinite;
     box-shadow: 0 0 0 2px color-mix(in srgb, var(--orange) 24%, transparent), 0 0 10px color-mix(in srgb, var(--orange) 12%, transparent);
+  }
+  @keyframes roleAlertPulse {
+    0%, 100% {
+      transform: scale(1);
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--orange) 22%, transparent), 0 0 10px color-mix(in srgb, var(--orange) 10%, transparent);
+    }
+    50% {
+      transform: scale(1.03);
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--orange) 34%, transparent), 0 0 16px color-mix(in srgb, var(--orange) 18%, transparent);
+    }
   }
   #messages-btn-header {
     background: #22c55e;

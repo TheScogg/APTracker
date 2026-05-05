@@ -209,10 +209,8 @@ function _updateRoleAlertBadge() {
 
 function _updateRoleAlertIndicator() {
   const button = document.getElementById('alerts-btn-header');
-  const icon = document.getElementById('role-alert-icon');
   const hasActiveAlerts = _activeRoleAlertCount > 0;
   button?.classList.toggle('alerts-has-active', hasActiveAlerts);
-  icon?.classList.toggle('is-blinking', hasActiveAlerts);
 }
 
 function _setActiveRoleAlertCount(count) {
