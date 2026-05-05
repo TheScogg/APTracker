@@ -3464,6 +3464,107 @@ function rowHasOpenIssues(rowName) {
 // ── PILL EXPAND STATE ──
 // Track which pill is expanded: { rowName: statusKey } — only one at a time globally
 let expandedPill = { row: null, status: null };
+let rowStatusOverflowState = { row: null, anchorEl: null };
+
+function closeRowStatusOverflow() {
+  rowStatusOverflowState = { row: null, anchorEl: null };
+  document.getElementById('row-status-overflow-popover')?.remove();
+}
+
+function getRowStatusVisibleLimit() {
+  return window.matchMedia?.('(max-width: 560px)')?.matches ? 2 : 3;
+}
+
+function positionRowStatusOverflowPopover(popover, anchorEl) {
+  if (!popover || !anchorEl) return;
+  const viewportPadding = 8;
+  const anchorRect = anchorEl.getBoundingClientRect();
+  const popRect = popover.getBoundingClientRect();
+  const vw = window.innerWidth || document.documentElement.clientWidth || 0;
+  const vh = window.innerHeight || document.documentElement.clientHeight || 0;
+
+  const maxLeft = Math.max(viewportPadding, vw - popRect.width - viewportPadding);
+  const left = Math.min(Math.max(anchorRect.right - popRect.width, viewportPadding), maxLeft);
+  let top = anchorRect.bottom + 8;
+  if (top + popRect.height + viewportPadding > vh) {
+    const aboveTop = anchorRect.top - popRect.height - 8;
+    top = aboveTop >= viewportPadding ? aboveTop : Math.max(viewportPadding, vh - popRect.height - viewportPadding);
+  }
+
+  popover.style.left = `${Math.round(left)}px`;
+  popover.style.top = `${Math.round(top)}px`;
+}
+
+function openRowStatusOverflowPopover(rowName, anchorEl, entries) {
+  closeRowStatusOverflow();
+  if (!anchorEl || !Array.isArray(entries) || !entries.length) return;
+
+  const popover = document.createElement('div');
+  popover.id = 'row-status-overflow-popover';
+  popover.className = 'row-status-overflow-popover';
+  popover.addEventListener('click', e => e.stopPropagation());
+
+  const header = document.createElement('div');
+  header.className = 'row-status-overflow-header';
+  header.textContent = `${rowName} categories`;
+  popover.appendChild(header);
+
+  entries.forEach(entry => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'row-spill row-status-overflow-item';
+    btn.style.color = entry.color;
+    btn.style.borderColor = alphaColor(entry.color, 0.5);
+    btn.style.background = alphaColor(entry.color, 0.12);
+
+    const left = document.createElement('span');
+    left.className = 'row-status-overflow-label';
+    left.textContent = `${entry.count} ${entry.label}`;
+    btn.appendChild(left);
+
+    const right = document.createElement('span');
+    right.className = 'row-status-overflow-count';
+    right.textContent = '';
+    btn.appendChild(right);
+
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      expandedPill = { row: rowName, status: entry.statusKey };
+      closeRowStatusOverflow();
+      renderRowPanels();
+    };
+
+    popover.appendChild(btn);
+  });
+
+  document.body.appendChild(popover);
+  rowStatusOverflowState = { row: rowName, anchorEl };
+  requestAnimationFrame(() => positionRowStatusOverflowPopover(popover, anchorEl));
+}
+
+window.toggleRowStatusOverflow = (rowName, anchorEl, entriesJson) => {
+  const entries = Array.isArray(entriesJson) ? entriesJson : [];
+  const isOpenForSameRow = rowStatusOverflowState.row === rowName && document.getElementById('row-status-overflow-popover');
+  if (isOpenForSameRow) {
+    closeRowStatusOverflow();
+    return;
+  }
+  openRowStatusOverflowPopover(rowName, anchorEl, entries);
+};
+
+document.addEventListener('click', e => {
+  const popover = document.getElementById('row-status-overflow-popover');
+  if (!popover) return;
+  if (e.target.closest('.row-status-overflow-popover')) return;
+  if (e.target.closest('.row-status-overflow-trigger')) return;
+  closeRowStatusOverflow();
+});
+window.addEventListener('scroll', () => {
+  if (document.getElementById('row-status-overflow-popover')) closeRowStatusOverflow();
+}, true);
+window.addEventListener('resize', () => {
+  if (document.getElementById('row-status-overflow-popover')) closeRowStatusOverflow();
+});
 
 window.scrollToIssue = id => {
   const body = document.getElementById('body-' + id);
@@ -3487,6 +3588,7 @@ function renderRowPanels() {
   const container = document.getElementById('row-panels');
   if (!container) return;
   container.innerHTML = '';
+  closeRowStatusOverflow();
   activeMiniCard = null;
 
   let scoped = issueScope==='mine' ? issues.filter(i=>i.userId===currentUser?.uid) : issues;
@@ -3494,6 +3596,8 @@ function renderRowPanels() {
 
   const STATUS_PILL_LABELS = Object.fromEntries(Object.keys(STATUSES).map(k => [k, getStatusDef(k).icon + ' ' + getStatusLabel(k, 'short')]));
   const ORDER = window._STATUS_ORDER.filter(k=>k!=='resolved');
+  const orderIndex = new Map(ORDER.map((sk, idx) => [sk, idx]));
+  const visibleLimit = getRowStatusVisibleLimit();
 
   const sortedPanelRowNames = Object.keys(PRESSES).sort((a, b) => {
     const numA = parseInt(a.replace(/\D/g, '')) || 999;
@@ -3530,16 +3634,32 @@ function renderRowPanels() {
     pillsWrap.className = 'row-status-pills';
     pillsWrap.id = 'rowpills-' + rowName.replace(/\s/g,'_');
     const expandAreas = {};
-    ORDER.forEach(sk => {
-      if (!counts[sk]) return;
+    const statusEntries = ORDER
+      .map(sk => {
+        const count = counts[sk] || 0;
+        if (!count) return null;
+        const st = getStatusDef(sk);
+        return {
+          statusKey: sk,
+          count,
+          label: `${st.icon} ${getStatusLabel(sk, 'short')}`,
+          color: getStatusColor(sk),
+          order: orderIndex.get(sk) ?? 999
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => (b.count - a.count) || (a.order - b.order));
+    const visibleEntries = statusEntries.slice(0, visibleLimit);
+    const hiddenEntries = statusEntries.slice(visibleLimit);
+
+    visibleEntries.forEach(entry => {
+      const sk = entry.statusKey;
       const pill = document.createElement('span');
       pill.className = 'row-spill' + (expandedPill.row === rowName && expandedPill.status === sk ? ' active' : '');
-      const st = getStatusDef(sk);
-      const col = getStatusColor(sk);
-      pill.style.color = col;
-      pill.style.borderColor = alphaColor(col, 0.5);
-      pill.style.background = alphaColor(col, 0.12);
-      pill.textContent = counts[sk] + ' ' + STATUS_PILL_LABELS[sk];
+      pill.style.color = entry.color;
+      pill.style.borderColor = alphaColor(entry.color, 0.5);
+      pill.style.background = alphaColor(entry.color, 0.12);
+      pill.textContent = `${entry.count} ${STATUS_PILL_LABELS[sk]}`;
       pill.onclick = (e) => {
         e.stopPropagation();
         if (expandedPill.row === rowName && expandedPill.status === sk) {
@@ -3564,8 +3684,8 @@ function renderRowPanels() {
       hdr.className = 'row-pill-expand-hdr';
       const title = document.createElement('span');
       title.className = 'row-pill-expand-title';
-      title.style.color = col;
-      title.textContent = st.icon + ' ' + st.label + ' issues';
+      title.style.color = entry.color;
+      title.textContent = getStatusDef(sk).icon + ' ' + getStatusLabel(sk, 'short') + ' issues';
       hdr.appendChild(title);
       const closeBtn = document.createElement('button');
       closeBtn.className = 'row-pill-expand-close';
@@ -3612,6 +3732,18 @@ function renderRowPanels() {
       area.appendChild(inner);
       expandAreas[sk] = area;
     });
+
+    if (hiddenEntries.length > 0) {
+    const moreBtn = document.createElement('button');
+    moreBtn.type = 'button';
+    moreBtn.className = 'row-spill row-spill-more';
+    moreBtn.textContent = `+${hiddenEntries.length} more`;
+      moreBtn.onclick = (e) => {
+        e.stopPropagation();
+        openRowStatusOverflowPopover(rowName, moreBtn, hiddenEntries);
+      };
+      pillsWrap.appendChild(moreBtn);
+    }
     header.appendChild(pillsWrap);
 
     // Top-right action buttons
