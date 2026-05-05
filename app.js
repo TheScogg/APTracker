@@ -275,10 +275,10 @@ function _renderRoleAlertCard(alert) {
         <div class="role-alert-card-note">${esc(alert.note || 'No note')}</div>
       </div>
       <div class="role-alert-card-actions">
-        <button class="btn btn-ghost role-alert-action-btn" type="button" onclick="focusIssueFromAlert('${esc(alert.issueId)}')">View</button>
+        <button class="btn btn-view role-alert-action-btn" type="button" onclick="focusIssueFromAlert('${esc(alert.issueId)}')">View</button>
         ${isAccepted
           ? `<button class="btn btn-reopen role-alert-action-btn" type="button" onclick="unacceptRoleAlert('${esc(alert.issueId)}','${esc(alert.statusKey)}')">Unaccept</button>`
-          : `<button class="btn btn-edit role-alert-action-btn" type="button" onclick="acceptRoleAlert('${esc(alert.issueId)}','${esc(alert.statusKey)}')">Accept</button>`}
+          : `<button class="btn btn-success role-alert-action-btn" type="button" onclick="acceptRoleAlert('${esc(alert.issueId)}','${esc(alert.statusKey)}')">Accept</button>`}
         <button class="btn btn-danger role-alert-action-btn" type="button" onclick="deleteRoleAlert('${esc(alert.id)}','${esc(alert.categoryKey || '')}','${esc(alert.statusKey || '')}')">Delete</button>
       </div>
     </div>
@@ -3073,6 +3073,7 @@ window.setPeriod = s => {
   } else {
     document.getElementById('date-filter').value = '';
   }
+  updatePeriodTriggerLabel(s);
   updateCalLabel(document.getElementById('date-filter').value || localDateStr(new Date()), false);
   renderIssues(); updatePressStates(); updateStats();
   loadDailyScheduledPresses(scheduleDateForLookup());
@@ -3083,20 +3084,24 @@ window.onCalendarPick = val => {
   ['today','24h','week','month','all'].forEach(x => document.getElementById('period-'+x).classList.remove('active'));
   document.getElementById('period-date').classList.add('active');
   issuePeriod = 'date';
+  updatePeriodTriggerLabel(val);
   updateCalLabel(val, true);
   renderIssues(); updatePressStates(); updateStats(); updateFilterBadge();
   loadDailyScheduledPresses(val);
+  closeMobilePeriodMenu();
 };
 
 // ── DATE FILTER ──
 function setTodayDate() {
   const today = localDateStr(new Date());
   document.getElementById('date-filter').value = today;
+  updatePeriodTriggerLabel('today');
   updateCalLabel(today, false);
 }
 
 window.clearDate = () => {
   document.getElementById('date-filter').value = '';
+  updatePeriodTriggerLabel('all');
   issuePeriod = 'all';
   ['today','24h','week','month','all'].forEach(x => document.getElementById('period-'+x).classList.toggle('active', x==='all'));
   renderIssues(); updatePressStates(); updateStats();
@@ -6752,6 +6757,25 @@ function updateCalLabel(val, isActive) {
   lbl.style.opacity = isActive ? '1' : '0.45';
 }
 
+function updatePeriodTriggerLabel(modeOrValue) {
+  const lbl = document.getElementById('period-trigger-label');
+  if (!lbl) return;
+  const presetLabels = {
+    today: 'Today',
+    '24h': '24h',
+    week: 'Week',
+    month: 'Month',
+    all: 'All',
+  };
+  lbl.textContent = presetLabels[modeOrValue] || (modeOrValue ? fmtShortDate(modeOrValue) : 'Date');
+}
+
+function closeMobilePeriodMenu() {
+  const menu = document.querySelector('.mobile-period-menu');
+  if (!menu) return;
+  menu.open = false;
+}
+
 function localDateStr(d) {
   const pad=n=>String(n).padStart(2,'0');
   return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
@@ -6837,10 +6861,15 @@ function handleShellAction(action, value, trigger, event) {
     case 'toggle-sort-dropdown':
       window.toggleSortDropdown?.();
       break;
+    case 'toggle-export-dropdown':
+      window.toggleExportDropdown?.();
+      break;
     case 'open-export-modal':
+      window.closeExportDropdown?.();
       window.openExportModal?.();
       break;
     case 'download-excel':
+      window.closeExportDropdown?.();
       window.downloadExcel?.();
       break;
     case 'clear-machine-breadcrumb':
@@ -7796,6 +7825,24 @@ document.addEventListener('click', e => {
 });
 
 buildSortDropdown();
+
+window.toggleExportDropdown = () => {
+  const dd = document.getElementById('export-dropdown');
+  const btn = document.getElementById('export-menu-btn');
+  const isOpen = dd?.classList.contains('visible');
+  dd?.classList.toggle('visible', !isOpen);
+  btn?.classList.toggle('open', !isOpen);
+};
+
+window.closeExportDropdown = () => {
+  document.getElementById('export-dropdown')?.classList.remove('visible');
+  document.getElementById('export-menu-btn')?.classList.remove('open');
+};
+
+document.addEventListener('click', e => {
+  const wrap = document.getElementById('export-dropdown-wrap');
+  if (wrap && !wrap.contains(e.target)) window.closeExportDropdown?.();
+});
 
 // ── ACTIVE ROWS TOGGLE ──
 let issueRowScope = 'all';
@@ -9246,7 +9293,7 @@ window.downloadExcel = async () => {
     alert('Excel library not loaded. Please refresh and try again.');
     return;
   }
-  const btn = document.getElementById('export-excel-btn');
+  const btn = document.getElementById('export-excel-menu-item');
   const origInner = btn.innerHTML;
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Building…';

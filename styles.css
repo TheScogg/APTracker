@@ -592,6 +592,13 @@
   .mobile-period-menu { position: relative; }
   .mobile-period-trigger { display: none; }
   .period-toggle-group { display: flex; }
+  .controls > .scope-toggle {
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .controls > .filter-toggle-btn {
+    margin-left: auto;
+  }
   .filter-toggle-btn { display: flex; align-items: center; gap: 6px; background: var(--bg3); border: 1px solid var(--border); border-radius: 20px; padding: 4px 12px; cursor: pointer; font-size: 11px; color: var(--text2); font-family: 'Nunito', sans-serif; font-weight: 600; transition: border-color 0.15s, color 0.15s; user-select: none; }
   .filter-toggle-btn:hover { border-color: var(--text2); color: var(--text); }
   .filter-toggle-btn.active { border-color: var(--accent); color: var(--accent); }
@@ -700,7 +707,7 @@
     appearance: none;
     min-width: 0;
     min-height: 34px;
-    padding: 4px 5px 3px;
+    padding: 3px 4px 2px;
     border: 1px solid var(--press-state-color);
     border-radius: 8px;
     background:
@@ -714,7 +721,7 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 3px;
+    gap: 2px;
     font-family: 'Share Tech Mono', monospace;
     font-variant-numeric: tabular-nums;
     line-height: 1;
@@ -730,7 +737,7 @@
     transform: translateY(-1px);
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 5px 14px rgba(0,0,0,0.26), 0 0 0 1px var(--press-state-color);
   }
-  .press-btn-num { color: inherit; font-size: 15px; font-weight: 800; letter-spacing: 0; line-height: 0.9; text-shadow: 0 1px 1px rgba(0,0,0,0.22); }
+  .press-btn-num { color: inherit; font-size: 14px; font-weight: 700; letter-spacing: 0; line-height: 0.9; text-shadow: 0 1px 1px rgba(0,0,0,0.22); }
   .press-btn-bars { display: flex; gap: 2px; width: min(31px, 80%); justify-content: center; min-height: 3px; }
   .press-btn-bar { height: 3px; border-radius: 999px; flex: 1; min-width: 3px; background: var(--border); box-shadow: 0 0 0 1px rgba(0,0,0,0.08); }
   .press-btn.has-open        { --press-state-color: var(--red);      --press-state-bg: var(--red-dim); }
@@ -901,7 +908,8 @@
   /* ISSUES */
   .issues-section { padding: 0 16px 40px; }
   .issues-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; gap: 10px; flex-wrap: wrap; }
-  .issues-header-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .issues-header-controls { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; }
+  .issues-title-wrap { display: flex; align-items: center; gap: 10px; min-width: 0; }
   .issues-title { font-family: 'Rajdhani', sans-serif; font-size: 18px; font-weight: 700; letter-spacing: 1px; flex-shrink: 0; }
   .issue-count { font-family: 'Share Tech Mono', monospace; font-size: 11px; color: var(--text2); background: var(--bg3); border: 1px solid var(--border); border-radius: 20px; padding: 3px 10px; white-space: nowrap; }
 
@@ -986,6 +994,7 @@
   .sort-chevron { transition: transform 0.2s; }
   .sort-dropdown { display: none; position: absolute; top: calc(100% + 5px); right: 0; background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; min-width: 180px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); z-index: 200; overflow: hidden; animation: dropIn 0.15s ease; }
   .sort-dropdown.visible { display: block; }
+  .export-dropdown { min-width: 120px; }
   .sort-opt { display: flex; align-items: center; gap: 8px; padding: 9px 14px; font-size: 12px; color: var(--text2); cursor: pointer; transition: background 0.1s; font-family: 'Nunito', sans-serif; font-weight: 600; white-space: nowrap; border: none; background: none; width: 100%; text-align: left; }
   .sort-opt:hover { background: var(--bg3); color: var(--text); }
   .sort-opt.active { color: var(--accent); }
@@ -1030,8 +1039,23 @@
   }
 
   @media (max-width: 560px) {
-    .controls { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
-    .controls::-webkit-scrollbar { display: none; }
+    .controls {
+      display: grid;
+      grid-template-columns: max-content minmax(0, 1fr) max-content;
+      column-gap: 8px;
+      row-gap: 8px;
+      overflow: visible;
+      align-items: center;
+    }
+    .controls > .scope-toggle {
+      margin: 0;
+      justify-self: center;
+      min-width: 0;
+    }
+    .controls > .filter-toggle-btn {
+      margin-left: 0;
+      justify-self: end;
+    }
     .mobile-period-trigger {
       display: flex;
       align-items: center;
@@ -1049,6 +1073,14 @@
       user-select: none;
       white-space: nowrap;
     }
+    .mobile-period-menu {
+      position: relative;
+      justify-self: start;
+      min-width: 0;
+    }
+    .mobile-period-menu[open] {
+      min-width: 0;
+    }
     .mobile-period-trigger::-webkit-details-marker { display: none; }
     .period-toggle-group {
       display: none;
@@ -1061,8 +1093,18 @@
       border-radius: 10px;
       box-shadow: 0 8px 22px rgba(0,0,0,0.35);
       overflow: hidden;
+      margin-top: 0;
+      width: max-content;
+      min-width: 100%;
+      max-width: calc(100vw - 32px);
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 1px;
     }
-    .mobile-period-menu[open] .period-toggle-group { display: flex; }
+    .mobile-period-menu[open] .period-toggle-group { display: grid; }
+    .period-toggle-group .scope-btn {
+      width: 100%;
+    }
     .logo {
       gap: 6px;
       min-width: 0;
@@ -1364,6 +1406,8 @@
   .btn-blue:hover:not(:disabled) { opacity: 0.85; }
   .btn-ghost      { background: transparent; border: 1px solid var(--border); color: var(--text2); }
   .btn-ghost:hover:not(:disabled) { border-color: var(--text2); color: var(--text); }
+  .btn-view       { background: transparent; border: 1px solid var(--blue); color: var(--blue); }
+  .btn-view:hover:not(:disabled) { background: var(--blue-dim); }
   .btn-danger     { background: transparent; border: 1px solid var(--red);      color: var(--red);      font-size: 11px; padding: 5px 11px; }
   .btn-danger:hover     { background: var(--red-dim); }
   .btn-reopen     { background: transparent; border: 1px solid var(--blue);     color: var(--blue);     font-size: 11px; padding: 5px 11px; }
