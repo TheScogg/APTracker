@@ -5,3 +5,4 @@
 .env*
 !.env.example
 serviceAccountKey.json
+node_modules/
