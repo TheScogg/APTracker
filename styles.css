@@ -1337,12 +1337,14 @@
   .modal-machine { color: var(--accent); }
   .modal-subtitle { font-size: 11px; color: var(--text2); margin-bottom: 16px; font-family: 'Share Tech Mono', monospace; }
   .role-alerts-header { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:12px; flex-wrap:wrap; }
+  .role-alerts-header-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-left:auto; justify-content:flex-end; }
   .role-alerts-toggle { flex-shrink:0; }
   .role-alerts-toggle .scope-btn { min-width: 0; }
   .role-alerts-toggle .scope-btn.active { background: var(--green); color: white; }
   .role-alerts-toggle .scope-btn:hover:not(.active) { color: var(--text); }
   .role-alerts-toggle .scope-btn:first-child { border-top-left-radius: 8px; border-bottom-left-radius: 8px; }
   .role-alerts-toggle .scope-btn:last-child { border-top-right-radius: 8px; border-bottom-right-radius: 8px; }
+  .role-alerts-close { white-space: nowrap; }
   .role-alerts-footer { margin-top: 8px; font-family: 'Share Tech Mono', monospace; font-size: 10px; color: var(--text2); }
   .role-alert-section { display:flex; flex-direction:column; gap:8px; }
   .role-alert-section-header { display:flex; align-items:center; justify-content:space-between; gap:8px; font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700; letter-spacing: 0.7px; text-transform: uppercase; color: var(--text2); }

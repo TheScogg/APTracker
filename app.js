@@ -290,7 +290,7 @@ function _renderRoleAlertsModal(alerts) {
   if (!list) return;
   const activeAlerts = alerts.filter(a => !a.isAccepted);
   const acceptedAlerts = alerts.filter(a => a.isAccepted);
-  _setActiveRoleAlertCount(alerts.length);
+  _setActiveRoleAlertCount(activeAlerts.length);
   _updateRoleAlertModalToggleUI();
   _updateRoleAlertModalFooter(activeAlerts.length, acceptedAlerts.length);
 
@@ -334,7 +334,7 @@ async function _refreshRoleAlertBadgeCount() {
   }
   try {
     const alerts = await _loadActiveRoleAlertsForCurrentUser();
-    _setActiveRoleAlertCount(alerts.length);
+    _setActiveRoleAlertCount(alerts.filter(a => !a.isAccepted).length);
   } catch (e) {
     console.warn('roleFeedAlerts badge refresh failed', e);
   }
@@ -459,11 +459,11 @@ window.focusIssueFromAlert = function(issueId) {
 window.deleteRoleAlert = async function(alertId, categoryKey, statusKey) {
   if (!currentPlantId || !alertId || !currentUser?.uid) return;
   try {
-    const alertRef = doc(db, 'plants', currentPlantId, 'roleFeedAlerts', alertId);
-    const snap = await getDoc(alertRef);
-    if (!snap.exists()) {
-      await openRoleAlertInboxModal();
-      return;
+  const alertRef = doc(db, 'plants', currentPlantId, 'roleFeedAlerts', alertId);
+  const snap = await getDoc(alertRef);
+  if (!snap.exists()) {
+    await openRoleAlertInboxModal();
+    return;
     }
     await updateDoc(alertRef, {
       recipientUserIds: arrayRemove(currentUser.uid)
@@ -515,7 +515,6 @@ function startRoleFeedAlertsWatcher() {
     limit(40)
   );
   _roleFeedAlertsUnsubscribe = onSnapshot(q, snap => {
-    _setActiveRoleAlertCount(snap.size);
     void _refreshRoleAlertBadgeCount();
     snap.docChanges().forEach(change => {
       if (change.type !== 'added') return;
