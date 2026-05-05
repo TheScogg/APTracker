@@ -589,6 +589,9 @@
 
   /* CONTROLS */
   .controls { padding: 10px 16px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; background: var(--bg2); border-bottom: 1px solid var(--border); }
+  .mobile-period-menu { position: relative; }
+  .mobile-period-trigger { display: none; }
+  .period-toggle-group { display: flex; }
   .filter-toggle-btn { display: flex; align-items: center; gap: 6px; background: var(--bg3); border: 1px solid var(--border); border-radius: 20px; padding: 4px 12px; cursor: pointer; font-size: 11px; color: var(--text2); font-family: 'Nunito', sans-serif; font-weight: 600; transition: border-color 0.15s, color 0.15s; user-select: none; }
   .filter-toggle-btn:hover { border-color: var(--text2); color: var(--text); }
   .filter-toggle-btn.active { border-color: var(--accent); color: var(--accent); }
@@ -1027,6 +1030,39 @@
   }
 
   @media (max-width: 560px) {
+    .controls { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+    .controls::-webkit-scrollbar { display: none; }
+    .mobile-period-trigger {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      list-style: none;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 4px 11px;
+      cursor: pointer;
+      font-size: 11px;
+      color: var(--text2);
+      font-family: 'Nunito', sans-serif;
+      font-weight: 600;
+      user-select: none;
+      white-space: nowrap;
+    }
+    .mobile-period-trigger::-webkit-details-marker { display: none; }
+    .period-toggle-group {
+      display: none;
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 0;
+      z-index: 20;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      box-shadow: 0 8px 22px rgba(0,0,0,0.35);
+      overflow: hidden;
+    }
+    .mobile-period-menu[open] .period-toggle-group { display: flex; }
     .logo {
       gap: 6px;
       min-width: 0;
@@ -1043,6 +1079,11 @@
       letter-spacing: 0.5px;
       white-space: nowrap;
     }
+  }
+
+  @media (min-width: 561px) {
+    .mobile-period-menu { display: contents; }
+    .period-toggle-group { position: static; display: flex !important; box-shadow: none; border: none; border-radius: 0; background: transparent; }
   }
 
   .issue-row { display: flex; flex-direction: column; min-width: 0; width: 100%; margin: 0; }
