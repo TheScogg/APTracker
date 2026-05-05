@@ -2025,7 +2025,7 @@
     font-size: 12px; font-weight: 800; color: var(--text);
     line-height: 1.2; min-width: 0; letter-spacing: 0.01em;
     text-shadow: 0 1px 0 rgba(0,0,0,0.2);
-    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical;
     overflow: hidden;
   }
   .stc-action { flex-shrink: 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
