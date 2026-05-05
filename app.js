@@ -6861,10 +6861,15 @@ function handleShellAction(action, value, trigger, event) {
     case 'toggle-sort-dropdown':
       window.toggleSortDropdown?.();
       break;
+    case 'toggle-export-dropdown':
+      window.toggleExportDropdown?.();
+      break;
     case 'open-export-modal':
+      window.closeExportDropdown?.();
       window.openExportModal?.();
       break;
     case 'download-excel':
+      window.closeExportDropdown?.();
       window.downloadExcel?.();
       break;
     case 'clear-machine-breadcrumb':
@@ -7820,6 +7825,24 @@ document.addEventListener('click', e => {
 });
 
 buildSortDropdown();
+
+window.toggleExportDropdown = () => {
+  const dd = document.getElementById('export-dropdown');
+  const btn = document.getElementById('export-menu-btn');
+  const isOpen = dd?.classList.contains('visible');
+  dd?.classList.toggle('visible', !isOpen);
+  btn?.classList.toggle('open', !isOpen);
+};
+
+window.closeExportDropdown = () => {
+  document.getElementById('export-dropdown')?.classList.remove('visible');
+  document.getElementById('export-menu-btn')?.classList.remove('open');
+};
+
+document.addEventListener('click', e => {
+  const wrap = document.getElementById('export-dropdown-wrap');
+  if (wrap && !wrap.contains(e.target)) window.closeExportDropdown?.();
+});
 
 // ── ACTIVE ROWS TOGGLE ──
 let issueRowScope = 'all';
@@ -9270,7 +9293,7 @@ window.downloadExcel = async () => {
     alert('Excel library not loaded. Please refresh and try again.');
     return;
   }
-  const btn = document.getElementById('export-excel-btn');
+  const btn = document.getElementById('export-excel-menu-item');
   const origInner = btn.innerHTML;
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Building…';

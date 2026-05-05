@@ -908,7 +908,8 @@
   /* ISSUES */
   .issues-section { padding: 0 16px 40px; }
   .issues-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; gap: 10px; flex-wrap: wrap; }
-  .issues-header-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .issues-header-controls { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; }
+  .issues-title-wrap { display: flex; align-items: center; gap: 10px; min-width: 0; }
   .issues-title { font-family: 'Rajdhani', sans-serif; font-size: 18px; font-weight: 700; letter-spacing: 1px; flex-shrink: 0; }
   .issue-count { font-family: 'Share Tech Mono', monospace; font-size: 11px; color: var(--text2); background: var(--bg3); border: 1px solid var(--border); border-radius: 20px; padding: 3px 10px; white-space: nowrap; }
 
@@ -993,6 +994,7 @@
   .sort-chevron { transition: transform 0.2s; }
   .sort-dropdown { display: none; position: absolute; top: calc(100% + 5px); right: 0; background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; min-width: 180px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); z-index: 200; overflow: hidden; animation: dropIn 0.15s ease; }
   .sort-dropdown.visible { display: block; }
+  .export-dropdown { min-width: 120px; }
   .sort-opt { display: flex; align-items: center; gap: 8px; padding: 9px 14px; font-size: 12px; color: var(--text2); cursor: pointer; transition: background 0.1s; font-family: 'Nunito', sans-serif; font-weight: 600; white-space: nowrap; border: none; background: none; width: 100%; text-align: left; }
   .sort-opt:hover { background: var(--bg3); color: var(--text); }
   .sort-opt.active { color: var(--accent); }
