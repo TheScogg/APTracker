@@ -885,16 +885,26 @@
   .sort-dropdown-btn.open { border-color: var(--accent); color: var(--accent); }
   .sort-dropdown-btn.open .sort-chevron { transform: rotate(180deg); }
   .role-alert-icon {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 13px;
+    line-height: 1;
     transform-origin: center;
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent), 0 0 10px color-mix(in srgb, var(--accent) 24%, transparent);
   }
   .role-alert-icon.is-blinking {
-    animation: roleAlertBlink 0.9s steps(1, end) infinite;
+    animation: roleAlertBlink 3.5s steps(1, end) infinite;
   }
   @keyframes roleAlertBlink {
-    0%, 49% { opacity: 1; transform: scale(1); }
-    50%, 99% { opacity: 0.2; transform: scale(0.96); }
-    100% { opacity: 1; transform: scale(1); }
+    0%, 44% { opacity: 1; transform: scale(1); }
+    45%, 55% { opacity: 0.2; transform: scale(0.96); }
+    56%, 100% { opacity: 1; transform: scale(1); }
   }
   #messages-btn-header {
     background: #22c55e;
