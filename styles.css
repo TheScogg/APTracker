@@ -888,23 +888,39 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 18px;
-    height: 18px;
+    width: 16px;
+    height: 16px;
     border-radius: 999px;
-    background: var(--orange);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--orange) 92%, #fff 8%), color-mix(in srgb, var(--orange) 78%, #000 22%));
+    border: 1px solid color-mix(in srgb, #fff 18%, var(--orange));
     color: #fff;
-    font-size: 13px;
+    font-size: 11px;
     line-height: 1;
     transform-origin: center;
-    box-shadow: 0 0 0 1px color-mix(in srgb, var(--orange) 45%, transparent), 0 0 10px color-mix(in srgb, var(--orange) 24%, transparent);
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--orange) 28%, transparent),
+      0 0 8px color-mix(in srgb, var(--orange) 18%, transparent);
   }
   .role-alert-icon.is-blinking {
-    animation: roleAlertBlink 4.8s ease-in-out infinite;
+    animation: roleAlertBlink 6s ease-in-out infinite;
   }
   @keyframes roleAlertBlink {
-    0%, 42% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.35; transform: scale(0.97); }
-    58%, 100% { opacity: 1; transform: scale(1); }
+    0%, 45% { opacity: 1; transform: translateY(0) scale(1); }
+    50% { opacity: 0.65; transform: translateY(0) scale(0.98); }
+    55%, 100% { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  #alerts-btn-header {
+    background: color-mix(in srgb, var(--orange) 14%, var(--bg3));
+    border-color: color-mix(in srgb, var(--orange) 42%, var(--border));
+    color: #fff;
+  }
+  #alerts-btn-header:hover {
+    background: color-mix(in srgb, var(--orange) 18%, var(--bg3));
+    border-color: color-mix(in srgb, var(--orange) 56%, var(--border));
+    color: #fff;
+  }
+  #alerts-btn-header.alerts-has-active {
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--orange) 28%, transparent), 0 0 14px color-mix(in srgb, var(--orange) 10%, transparent);
   }
   #messages-btn-header {
     background: #22c55e;
