@@ -6881,7 +6881,7 @@ function fmtShortDate(val) {
 function updateCalLabel(val, isActive) {
   const lbl = document.getElementById('cal-date-lbl');
   if (!lbl) return;
-  lbl.textContent = val ? fmtShortDate(val) : fmtShortDate(localDateStr(new Date()));
+  lbl.textContent = (isActive && val) ? fmtShortDate(val) : 'Date';
   lbl.style.opacity = isActive ? '1' : '0.45';
 }
 
@@ -6901,7 +6901,7 @@ function updatePeriodTriggerLabel(modeOrValue) {
 function closeMobilePeriodMenu() {
   const menu = document.querySelector('.mobile-period-menu');
   if (!menu) return;
-  menu.open = false;
+  menu.classList.remove('open');
 }
 
 function localDateStr(d) {
