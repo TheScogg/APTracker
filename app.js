@@ -3077,6 +3077,7 @@ window.setPeriod = s => {
   updateCalLabel(document.getElementById('date-filter').value || localDateStr(new Date()), false);
   renderIssues(); updatePressStates(); updateStats();
   loadDailyScheduledPresses(scheduleDateForLookup());
+  closeMobilePeriodMenu();
 };
 
 window.onCalendarPick = val => {

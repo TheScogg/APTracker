@@ -1180,7 +1180,6 @@
       width: max-content;
       min-width: 100%;
       max-width: calc(100vw - 32px);
-      display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 1px;
     }
