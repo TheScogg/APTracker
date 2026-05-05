@@ -1072,11 +1072,16 @@
       overflow: hidden;
       margin-top: 6px;
       width: 100%;
-      flex-wrap: wrap;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1px;
     }
-    .mobile-period-menu[open] .period-toggle-group { display: flex; }
+    .mobile-period-menu[open] .period-toggle-group { display: grid; }
     .period-toggle-group .scope-btn {
-      flex: 1 1 calc(50% - 3px);
+      width: 100%;
+    }
+    .period-toggle-group .cal-btn {
+      grid-column: 1 / -1;
     }
     .logo {
       gap: 6px;
