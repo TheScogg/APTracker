@@ -690,14 +690,14 @@
   .row-spill.controlman  { color: var(--babyblue); border-color: rgba(56,189,248,0.5); background: var(--babyblue-dim); }
   .row-spill.startup     { color: var(--teal);     border-color: rgba(20,184,166,0.5); background: var(--teal-dim); }
   .row-spill.resolved    { color: var(--green);    border-color: rgba(34,197,94,0.5);  background: var(--green-dim); }
-  .row-presses { display: grid; grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); gap: 5px; padding: 7px 10px 8px; }
+  .row-presses { display: grid; grid-template-columns: repeat(auto-fill, minmax(49px, 1fr)); gap: 5px; padding: 7px 10px 8px; }
   .press-btn {
     --press-state-color: var(--border);
     --press-state-bg: rgba(255,255,255,0.025);
     appearance: none;
     min-width: 0;
-    min-height: 42px;
-    padding: 6px 5px 5px;
+    min-height: 40px;
+    padding: 5px 5px 4px;
     border: 1px solid var(--press-state-color);
     border-radius: 8px;
     background:
@@ -744,8 +744,8 @@
   .press-btn .badge { position: absolute; top: -5px; right: -5px; background: var(--red); color: white; font-size: 9px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; display: flex; align-items: center; justify-content: center; font-family: 'Nunito', sans-serif; font-weight: 800; line-height: 1; border: 2px solid var(--bg2); box-shadow: 0 2px 6px rgba(0,0,0,0.25); }
   .press-btn.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--bg2), 0 0 0 4px var(--accent), 0 6px 16px var(--accent-glow); transform: translateY(-2px); }
   @media (max-width: 640px) {
-    .row-presses { grid-template-columns: repeat(auto-fill, minmax(48px, 1fr)); gap: 4px; padding: 6px 8px 7px; }
-    .press-btn { min-height: 38px; padding: 5px 4px 4px; gap: 3px; border-radius: 7px; }
+    .row-presses { grid-template-columns: repeat(auto-fill, minmax(46px, 1fr)); gap: 4px; padding: 6px 8px 7px; }
+    .press-btn { min-height: 36px; padding: 4px 4px 3px; gap: 3px; border-radius: 7px; }
     .press-btn-num { font-size: 15px; }
     .press-btn-bars { width: min(30px, 78%); min-height: 3px; }
     .press-btn-bar { height: 3px; min-width: 3px; }
