@@ -682,6 +682,7 @@ function hasPermission(plantId, perm) {
 ### `plants/{plantId}/pressNotes/{noteId}`
 
 Press notes stay lightweight and append-only after creation. Photo attachments are resized client-side, stored in Firebase Storage, and referenced by metadata on the note document.
+Storage rules should allow authenticated plant members to read note photos and plant editors/admins to upload them under `plants/{plantId}/pressNotes/{noteId}/photos/{fileName}`.
 
 ```json
 {
