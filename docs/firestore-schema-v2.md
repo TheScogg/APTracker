@@ -33,6 +33,7 @@ plants/{plantId}/statusDefinitions/{statusKey}
 plants/{plantId}/issues/{issueId}
 plants/{plantId}/issues/{issueId}/events/{eventId}
 plants/{plantId}/issues/{issueId}/attachments/{attachmentId}
+plants/{plantId}/pressNotes/{noteId}
 plants/{plantId}/pressStats/{pressId}
 plants/{plantId}/dailyStats/{dateKey}
 ```
@@ -673,6 +674,46 @@ function hasPermission(plantId, perm) {
 - `key` should be immutable after creation
 - `subStatuses[].key` should be stable
 - retire statuses with `isActive: false`, not hard delete
+
+---
+
+## 8. Press notes
+
+### `plants/{plantId}/pressNotes/{noteId}`
+
+Press notes stay lightweight and append-only after creation. Photo attachments are uploaded to Storage and referenced by metadata on the note document.
+
+```json
+{
+  "pressId": "press_5_10",
+  "machineCode": "5.10",
+  "text": "Waiting on parts",
+  "photoCount": 2,
+  "photos": [
+    {
+      "name": "pressure-gauge.jpg",
+      "dataUrl": "https://...",
+      "storagePath": "plants/plant_jef/pressNotes/note_123/photos/1712345678_0.jpg",
+      "storageBucket": "press-tracker-9d9c9.firebasestorage.app",
+      "contentType": "image/jpeg",
+      "sizeBytes": 183442,
+      "source": "storage"
+    }
+  ],
+  "createdBy": {
+    "uid": "uid_123",
+    "name": "James Scoggins"
+  },
+  "createdAt": "serverTimestamp",
+  "schemaVersion": 2
+}
+```
+
+### Notes
+
+- Keep the note doc writable only at create time.
+- Use the stored `photos[]` metadata to render thumbnails and lightbox views.
+- Preserve the existing `pressId` and `machineCode` fields for fast per-press queries.
 
 ---
 

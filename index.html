@@ -11,400 +11,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <link rel="stylesheet" href="./styles.css">
-<style>
-  /* ── MESSAGING MODAL ── */
-  :root {
-    --ios-blue: #007AFF;
-    --ios-blue-dim: rgba(0,122,255,0.15);
-    --bubble-sent: #007AFF;
-    --bubble-recv: var(--bg3, #1e2535);
-    --radius-bubble: 18px;
-  }
-  .msg-btn-wrap { position: relative; }
-  .msg-badge {
-    position: absolute; top: -6px; right: -6px;
-    background: var(--red); color: #fff;
-    font-size: 10px; font-weight: 700;
-    min-width: 18px; height: 18px;
-    border-radius: 9px; padding: 0 4px;
-    display: flex; align-items: center; justify-content: center;
-    border: 2px solid var(--bg);
-    animation: msgBadgePop 0.3s cubic-bezier(0.175,0.885,0.32,1.275);
-  }
-  @keyframes msgBadgePop { from{transform:scale(0)} to{transform:scale(1)} }
-  .msg-overlay {
-    position: fixed; inset: 0;
-    background: rgba(0,0,0,0.7);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    z-index: 1000;
-    display: none; align-items: center; justify-content: center;
-    padding: 16px;
-    animation: msgFadeIn 0.2s ease;
-  }
-  .msg-overlay.visible { display: flex; }
-  @keyframes msgFadeIn { from{opacity:0} to{opacity:1} }
-  .msg-modal {
-    width: 100%; max-width: 820px;
-    height: min(85vh, 680px);
-    background: var(--bg2);
-    border: 1px solid var(--border);
-    border-radius: 20px;
-    display: flex; flex-direction: column;
-    overflow: hidden;
-    box-shadow: 0 32px 80px rgba(0,0,0,0.6);
-    animation: msgSlideUp 0.25s cubic-bezier(0.4,0,0.2,1);
-  }
-  @keyframes msgSlideUp { from{transform:translateY(24px);opacity:0} to{transform:translateY(0);opacity:1} }
-  .msg-header {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 14px 18px 0;
-    border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
-    gap: 12px;
-  }
-  .msg-header-left { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
-  .msg-header-title { font-size: 15px; font-weight: 700; color: var(--text); letter-spacing: 0.3px; }
-  .msg-header-tabs { display: flex; gap: 0; }
-  .msg-tab {
-    font-family: 'Nunito', sans-serif;
-    font-size: 12px; font-weight: 600;
-    padding: 8px 14px 10px;
-    color: var(--text3);
-    background: none; border: none; cursor: pointer;
-    border-bottom: 2px solid transparent;
-    transition: color 0.15s, border-color 0.15s;
-  }
-  .msg-tab.active { color: var(--ios-blue); border-bottom-color: var(--ios-blue); }
-  .msg-tab-badge {
-    background: var(--red); color: #fff;
-    font-size: 9px; font-weight: 700;
-    min-width: 15px; height: 15px;
-    border-radius: 8px; padding: 0 3px;
-    display: inline-flex; align-items: center; justify-content: center;
-    margin-left: 4px; vertical-align: middle;
-  }
-  .msg-header-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
-  .msg-icon-btn {
-    width: 32px; height: 32px; border-radius: 8px;
-    background: var(--bg3); border: 1px solid var(--border);
-    color: var(--text2); cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    transition: background 0.15s, color 0.15s;
-    font-size: 15px;
-  }
-  .msg-icon-btn:hover { background: var(--bg4); color: var(--text); }
-  .msg-close-btn {
-    width: 32px; height: 32px; border-radius: 50%;
-    background: var(--bg3); border: 1px solid var(--border);
-    color: var(--text2); cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 18px; line-height: 1;
-    transition: background 0.15s, color 0.15s;
-  }
-  .msg-close-btn:hover { background: rgba(248,113,113,0.2); color: var(--red); }
-  .msg-body { display: flex; flex: 1; overflow: hidden; }
-  .msg-list-panel {
-    width: 260px; flex-shrink: 0;
-    display: flex; flex-direction: column;
-    border-right: 1px solid var(--border);
-    background: var(--bg);
-  }
-  .msg-search-wrap { padding: 10px 12px 8px; flex-shrink: 0; position: relative; }
-  .msg-search-input {
-    width: 100%;
-    background: var(--bg3);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 7px 12px 7px 32px;
-    color: var(--text);
-    font-family: 'Nunito', sans-serif;
-    font-size: 13px;
-    outline: none;
-    transition: border-color 0.15s;
-  }
-  .msg-search-input:focus { border-color: var(--ios-blue); }
-  .msg-search-icon {
-    position: absolute; left: 22px; top: 50%;
-    transform: translateY(-50%);
-    color: var(--text3); pointer-events: none;
-  }
-  .msg-convos-list { flex: 1; overflow-y: auto; padding: 4px 0; }
-  .msg-convos-list::-webkit-scrollbar { width: 4px; }
-  .msg-convos-list::-webkit-scrollbar-track { background: transparent; }
-  .msg-convos-list::-webkit-scrollbar-thumb { background: var(--bg4); border-radius: 2px; }
-  .msg-convo-row {
-    display: flex; align-items: center; gap: 10px;
-    padding: 9px 12px; cursor: pointer;
-    transition: background 0.12s;
-    border-radius: 10px; margin: 1px 6px;
-  }
-  .msg-convo-row:hover { background: var(--bg3); }
-  .msg-convo-row.active { background: var(--ios-blue-dim); }
-  .msg-convo-row.active .msg-convo-name { color: var(--ios-blue); }
-  .msg-avatar-online {
-    position: absolute; bottom: 1px; right: 1px;
-    width: 10px; height: 10px; border-radius: 50%;
-    background: var(--green); border: 2px solid var(--bg);
-  }
-  .msg-convo-info { flex: 1; min-width: 0; }
-  .msg-convo-name-row { display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-bottom: 2px; }
-  .msg-convo-name { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .msg-convo-time { font-size: 10px; color: var(--text3); flex-shrink: 0; }
-  .msg-convo-preview { font-size: 12px; color: var(--text3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .msg-convo-preview.unread { color: var(--text2); font-weight: 600; }
-  .msg-unread-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ios-blue); flex-shrink: 0; }
-  .msg-pin-icon { font-size: 10px; color: var(--text3); flex-shrink: 0; }
-  .msg-new-btn {
-    margin: 8px 10px; padding: 9px 12px;
-    background: var(--ios-blue); border: none; border-radius: 10px;
-    color: #fff; font-family: 'Nunito', sans-serif;
-    font-size: 13px; font-weight: 700;
-    cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;
-    transition: opacity 0.15s; flex-shrink: 0;
-  }
-  .msg-new-btn:hover { opacity: 0.88; }
-  .msg-thread-panel {
-    flex: 1; display: flex; flex-direction: column;
-    overflow: hidden; background: var(--bg2); min-width: 0;
-  }
-  .msg-thread-header {
-    padding: 12px 16px; border-bottom: 1px solid var(--border);
-    display: flex; align-items: center; gap: 10px;
-    flex-shrink: 0; background: var(--bg2);
-  }
-  .msg-thread-name { font-size: 14px; font-weight: 700; color: var(--text); }
-  .msg-thread-sub { font-size: 11px; color: var(--text3); margin-top: 1px; }
-  .msg-thread-header-actions { margin-left: auto; display: flex; gap: 6px; }
-  .msg-messages {
-    flex: 1; overflow-y: auto;
-    padding: 12px 16px;
-    display: flex; flex-direction: column; gap: 4px;
-    scroll-behavior: smooth;
-  }
-  .msg-messages::-webkit-scrollbar { width: 4px; }
-  .msg-messages::-webkit-scrollbar-track { background: transparent; }
-  .msg-messages::-webkit-scrollbar-thumb { background: var(--bg4); border-radius: 2px; }
-  .msg-date-sep {
-    display: flex; align-items: center; gap: 8px;
-    color: var(--text3); font-size: 10px; font-weight: 600;
-    letter-spacing: 0.5px; text-transform: uppercase; margin: 8px 0;
-  }
-  .msg-date-sep::before, .msg-date-sep::after { content: ''; flex: 1; height: 1px; background: var(--border); }
-  .msg-row { display: flex; align-items: flex-end; gap: 8px; margin-bottom: 2px; }
-  .msg-row.sent { flex-direction: row-reverse; }
-  .msg-row.sent .msg-row-avatar { display: none; }
-  .msg-bubble-group { display: flex; flex-direction: column; gap: 2px; max-width: 72%; }
-  .msg-row.sent .msg-bubble-group { align-items: flex-end; }
-  .msg-sender-name { font-size: 10px; color: var(--text3); font-weight: 600; margin-bottom: 2px; padding-left: 4px; }
-  .msg-bubble-wrap { position: relative; display: inline-flex; flex-direction: column; }
-  .msg-bubble {
-    padding: 9px 13px; border-radius: var(--radius-bubble);
-    font-size: 14px; line-height: 1.45; word-break: break-word;
-    position: relative; cursor: pointer; transition: opacity 0.12s;
-  }
-  .msg-bubble:hover { opacity: 0.92; }
-  .msg-bubble.recv {
-    background: var(--bubble-recv); color: var(--text);
-    border: 1px solid var(--border); border-bottom-left-radius: 5px;
-  }
-  .msg-bubble.sent { background: var(--bubble-sent); color: #fff; border-bottom-right-radius: 5px; }
-  .msg-bubble-time {
-    font-size: 10px; color: var(--text3); margin-top: 3px;
-    display: flex; align-items: center; gap: 4px;
-  }
-  .msg-row.sent .msg-bubble-time { justify-content: flex-end; }
-  .msg-read-tick { font-size: 11px; }
-  .msg-read-tick.read { color: var(--ios-blue); }
-  .msg-read-tick.sent-only { color: var(--text3); }
-  .msg-reactions { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
-  .msg-reaction {
-    background: var(--bg3); border: 1px solid var(--border);
-    border-radius: 12px; padding: 2px 7px; font-size: 12px; cursor: pointer;
-    transition: background 0.12s, border-color 0.12s;
-    display: flex; align-items: center; gap: 3px;
-  }
-  .msg-reaction:hover { background: var(--bg4); border-color: var(--ios-blue); }
-  .msg-reaction.mine { background: var(--ios-blue-dim); border-color: var(--ios-blue); }
-  .msg-reaction-count { font-size: 10px; font-weight: 600; color: var(--text2); }
-  .msg-reaction-picker {
-    position: absolute; bottom: calc(100% + 6px);
-    background: var(--bg3); border: 1px solid var(--border);
-    border-radius: 14px; padding: 6px 8px;
-    display: flex; gap: 4px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
-    z-index: 10; white-space: nowrap;
-    animation: msgPickerPop 0.15s cubic-bezier(0.175,0.885,0.32,1.275);
-  }
-  .msg-row.sent .msg-reaction-picker { right: 0; }
-  .msg-row.recv .msg-reaction-picker { left: 0; }
-  @keyframes msgPickerPop { from{transform:scale(0.8);opacity:0} to{transform:scale(1);opacity:1} }
-  .msg-reaction-emoji { font-size: 20px; cursor: pointer; padding: 2px; border-radius: 6px; transition: background 0.1s, transform 0.1s; }
-  .msg-reaction-emoji:hover { background: var(--bg4); transform: scale(1.2); }
-  .msg-typing-row {
-    display: flex; align-items: center; gap: 8px;
-    padding: 4px 0 2px; opacity: 0; transition: opacity 0.2s; height: 0; overflow: hidden;
-  }
-  .msg-typing-row.visible { opacity: 1; height: auto; }
-  .msg-typing-bubble {
-    background: var(--bubble-recv); border: 1px solid var(--border);
-    border-radius: 18px; border-bottom-left-radius: 5px;
-    padding: 10px 14px; display: flex; gap: 4px; align-items: center;
-  }
-  .msg-typing-dot {
-    width: 6px; height: 6px; border-radius: 50%; background: var(--text3);
-    animation: msgTypingBounce 1.2s infinite;
-  }
-  .msg-typing-dot:nth-child(2) { animation-delay: 0.2s; }
-  .msg-typing-dot:nth-child(3) { animation-delay: 0.4s; }
-  @keyframes msgTypingBounce {
-    0%,60%,100% { transform: translateY(0); opacity: 0.4; }
-    30% { transform: translateY(-5px); opacity: 1; }
-  }
-  .msg-typing-text { font-size: 11px; color: var(--text3); }
-  .msg-composer {
-    border-top: 1px solid var(--border); padding: 10px 12px;
-    display: flex; align-items: flex-end; gap: 8px;
-    background: var(--bg2); flex-shrink: 0;
-  }
-  .msg-composer-input {
-    flex: 1; background: var(--bg3); border: 1px solid var(--border);
-    border-radius: 20px; padding: 9px 14px; color: var(--text);
-    font-family: 'Nunito', sans-serif; font-size: 14px; outline: none;
-    resize: none; max-height: 100px; overflow-y: auto; line-height: 1.4;
-    transition: border-color 0.15s;
-  }
-  .msg-composer-input:focus { border-color: var(--ios-blue); }
-  .msg-composer-input::placeholder { color: var(--text3); }
-  .msg-send-btn {
-    width: 36px; height: 36px; border-radius: 50%;
-    background: var(--ios-blue); border: none; color: #fff; cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    transition: opacity 0.15s, transform 0.1s; flex-shrink: 0;
-  }
-  .msg-send-btn:hover { opacity: 0.9; }
-  .msg-send-btn:active { transform: scale(0.93); }
-  .msg-send-btn:disabled { background: var(--bg4); cursor: default; }
-  .msg-emoji-btn {
-    width: 36px; height: 36px; border-radius: 50%;
-    background: var(--bg3); border: 1px solid var(--border);
-    color: var(--text2); cursor: pointer; font-size: 18px;
-    display: flex; align-items: center; justify-content: center;
-    transition: background 0.15s; flex-shrink: 0;
-  }
-  .msg-emoji-btn:hover { background: var(--bg4); }
-  .msg-empty {
-    flex: 1; display: flex; flex-direction: column;
-    align-items: center; justify-content: center; color: var(--text3); gap: 10px;
-  }
-  .msg-empty-icon { font-size: 40px; opacity: 0.4; }
-  .msg-empty-text { font-size: 13px; font-weight: 500; }
-  .msg-sheet-overlay {
-    position: fixed; inset: 0; z-index: 1100;
-    background: rgba(0,0,0,0.5);
-    display: flex; align-items: flex-end; justify-content: center;
-    animation: msgFadeIn 0.15s ease;
-  }
-  .msg-sheet-overlay.visible { display: flex !important; }
-  .msg-sheet {
-    background: var(--bg2); border: 1px solid var(--border);
-    border-radius: 20px 20px 0 0; width: 100%; max-width: 480px;
-    padding: 20px 20px 32px;
-    animation: msgSheetUp 0.25s cubic-bezier(0.4,0,0.2,1);
-    max-height: 80vh; overflow-y: auto;
-  }
-  @keyframes msgSheetUp { from{transform:translateY(100%)} to{transform:translateY(0)} }
-  .msg-sheet-handle { width: 36px; height: 4px; border-radius: 2px; background: var(--border); margin: 0 auto 16px; }
-  .msg-sheet-title { font-size: 16px; font-weight: 700; margin-bottom: 16px; }
-  .msg-sheet-label { font-size: 11px; color: var(--text3); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
-  .msg-sheet-input {
-    width: 100%; background: var(--bg3); border: 1px solid var(--border); border-radius: 10px;
-    padding: 10px 13px; color: var(--text); font-family: 'Nunito', sans-serif; font-size: 14px;
-    outline: none; margin-bottom: 14px; transition: border-color 0.15s;
-  }
-  .msg-sheet-input:focus { border-color: var(--ios-blue); }
-  .msg-member-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 16px; max-height: 200px; overflow-y: auto; }
-  .msg-member-row {
-    display: flex; align-items: center; gap: 10px;
-    padding: 7px 10px; border-radius: 10px;
-    cursor: pointer; transition: background 0.12s;
-  }
-  .msg-member-row:hover { background: var(--bg3); }
-  .msg-member-row.selected { background: var(--ios-blue-dim); }
-  .msg-member-check {
-    margin-left: auto; width: 20px; height: 20px;
-    border-radius: 50%; border: 2px solid var(--border);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 11px; color: #fff; transition: background 0.15s, border-color 0.15s;
-  }
-  .msg-member-row.selected .msg-member-check { background: var(--ios-blue); border-color: var(--ios-blue); }
-  .msg-sheet-btn {
-    width: 100%; padding: 13px; background: var(--ios-blue); color: #fff;
-    border: none; border-radius: 12px; font-family: 'Nunito', sans-serif;
-    font-size: 15px; font-weight: 700; cursor: pointer; transition: opacity 0.15s;
-  }
-  .msg-sheet-btn:hover { opacity: 0.9; }
-  .msg-sheet-btn:disabled { background: var(--bg4); color: var(--text3); cursor: default; }
-  .msg-sheet-cancel {
-    width: 100%; padding: 13px; background: var(--bg3); color: var(--text2);
-    border: 1px solid var(--border); border-radius: 12px;
-    font-family: 'Nunito', sans-serif; font-size: 15px; font-weight: 600;
-    cursor: pointer; margin-top: 8px; transition: background 0.15s;
-  }
-  .msg-sheet-cancel:hover { background: var(--bg4); }
-  .msg-toast-container {
-    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
-    z-index: 2000; display: flex; flex-direction: column; gap: 8px;
-    pointer-events: none;
-  }
-  .msg-toast {
-    background: var(--bg3); border: 1px solid var(--border);
-    border-radius: 14px; padding: 10px 16px;
-    display: flex; align-items: center; gap: 10px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
-    animation: msgToastIn 0.3s cubic-bezier(0.175,0.885,0.32,1.275);
-    pointer-events: auto; min-width: 220px; max-width: 320px; cursor: pointer;
-  }
-  @keyframes msgToastIn { from{transform:translateY(20px);opacity:0} to{transform:translateY(0);opacity:1} }
-  .msg-toast-name { font-size: 12px; font-weight: 700; color: var(--text); }
-  .msg-toast-msg { font-size: 12px; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .msg-ctx-menu {
-    position: fixed; z-index: 1500;
-    background: var(--bg3); border: 1px solid var(--border);
-    border-radius: 12px; padding: 4px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.4); min-width: 150px;
-    animation: msgPickerPop 0.15s cubic-bezier(0.175,0.885,0.32,1.275);
-  }
-  .msg-ctx-item {
-    display: flex; align-items: center; gap: 8px;
-    padding: 8px 12px; border-radius: 8px;
-    font-size: 13px; color: var(--text); cursor: pointer; transition: background 0.1s;
-  }
-  .msg-ctx-item:hover { background: var(--bg4); }
-  .msg-ctx-item.danger { color: var(--red); }
-  .msg-back-btn { display: none; }
-  @media (max-width: 600px) {
-    .msg-modal { border-radius: 16px 16px 0 0; height: 92vh; max-height: none; }
-    .msg-overlay { align-items: flex-end; padding: 0; }
-    .msg-list-panel { width: 100%; position: absolute; inset: 0; z-index: 2; transition: transform 0.25s; }
-    .msg-list-panel.hidden { transform: translateX(-100%); }
-    .msg-thread-panel { width: 100%; }
-    .msg-back-btn { display: flex !important; }
-    .msg-body { position: relative; }
-  }
-  [data-messages-trigger] { position: relative; }
-  .msg-btn-badge {
-    position: absolute; top: -5px; right: -5px;
-    background: var(--red); color: #fff;
-    font-size: 9px; font-weight: 700;
-    min-width: 16px; height: 16px;
-    border-radius: 8px; padding: 0 3px;
-    display: flex; align-items: center; justify-content: center;
-    border: 2px solid var(--bg);
-    animation: msgBadgePop 0.3s cubic-bezier(0.175,0.885,0.32,1.275);
-  }
-</style>
-
 </head>
 <body>
 
@@ -431,7 +37,7 @@
       <div class="logo-text">AP-<span>TRACKER</span></div>
     </div>
 
-    <button class="sort-dropdown-btn" id="messages-btn-header" data-messages-trigger="true" onclick="openMessagingModal()" style="gap:4px;" aria-label="Messages" title="Messages">
+    <button class="sort-dropdown-btn" id="messages-btn-header" data-messages-trigger="true" data-shell-action="open-messages" style="gap:4px;" aria-label="Messages" title="Messages">
       <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;opacity:0.7;"><path d="M3 2h10a1 1 0 011 1v8a1 1 0 01-1 1H5l-3 2V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
       <span class="msg-btn-badge" data-messages-badge style="display:none;">0</span>
     </button>
@@ -459,7 +65,7 @@
         <!-- Account -->
         <div class="user-dropdown-section">
           <div class="user-dropdown-section-label">Account</div>
-          <button class="user-dropdown-item" id="role-prefs-btn" type="button" onclick="document.getElementById('user-dropdown').classList.remove('visible');document.getElementById('user-pill').classList.remove('open');openRolePreferencesModal();">
+          <button class="user-dropdown-item" id="role-prefs-btn" type="button" data-shell-action="open-role-prefs">
             <span class="ud-item-icon">🧭</span>
             My Alert Categories
           </button>
@@ -467,7 +73,7 @@
             <span class="ud-item-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 1L10 5H14L11 8L12.5 12L8 9.5L3.5 12L5 8L2 5H6L8 1Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" fill="none"/></svg></span>
             Admin Panel
           </button>
-          <button class="user-dropdown-item" id="tutorial-btn" onclick="document.getElementById('user-dropdown').classList.remove('visible');document.getElementById('user-pill').classList.remove('open');openTutorial();">
+          <button class="user-dropdown-item" id="tutorial-btn" data-shell-action="open-tutorial">
             <span class="ud-item-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.3"/><path d="M8 7v4M8 5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>
             Tutorial
           </button>
@@ -477,14 +83,14 @@
         <div class="user-dropdown-section">
           <div class="user-dropdown-section-label">Workspace</div>
           <div class="plant-switcher-wrap" id="plant-switcher-wrap">
-            <button class="plant-switcher-btn" id="plant-switcher-btn" onclick="togglePlantDropdown()">
+            <button class="plant-switcher-btn" id="plant-switcher-btn" data-shell-action="toggle-plant-dropdown">
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;opacity:0.7;"><path d="M2 3h12v10H2z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M6 3V1h4v2" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M2 7h12" stroke="currentColor" stroke-width="1.3"/></svg>
               <span id="plant-name-display">Loading…</span>
               <svg class="plant-chevron" width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
             <div class="plant-dropdown" id="plant-dropdown"></div>
           </div>
-          <button class="user-dropdown-item" id="messages-btn-menu" data-messages-trigger="true" type="button" onclick="document.getElementById('user-dropdown').classList.remove('visible');document.getElementById('user-pill').classList.remove('open');openMessagingModal();">
+          <button class="user-dropdown-item" id="messages-btn-menu" data-messages-trigger="true" type="button" data-shell-action="open-messages">
             <span class="ud-item-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 2h10a1 1 0 011 1v8a1 1 0 01-1 1H5l-3 2V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg></span>
             Messages
             <span class="msg-btn-badge" data-messages-badge style="display:none;">0</span>
@@ -512,14 +118,14 @@
                   <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 5.5 7 9l4-3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 </span>
               </button>
-              <button class="theme-store-btn" type="button" id="open-store-btn" onclick="document.getElementById('user-dropdown').classList.remove('visible');document.getElementById('user-pill').classList.remove('open');openStoreModal();">
+              <button class="theme-store-btn" type="button" id="open-store-btn" data-shell-action="open-store">
                 <span class="ud-item-icon"><svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M2 2h1.5l1.5 7h7l1.5-5H5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="7" cy="13" r="1" fill="currentColor"/><circle cx="12" cy="13" r="1" fill="currentColor"/></svg></span>
                 <span class="ud-store-xp" id="ud-store-xp">0 XP</span>
               </button>
             </div>
             <div class="theme-select-grid" id="theme-select-grid"></div>
             <div class="theme-select-store">
-              <button class="user-dropdown-item" type="button" onclick="openThemeEditor()">
+              <button class="user-dropdown-item" type="button" data-shell-action="open-theme-editor">
                 <span class="ud-item-icon">🎛️</span>
                 Theme Editor
               </button>
@@ -529,7 +135,7 @@
         <!-- XP badge -->
         <div class="ud-divider"></div>
         <div class="ud-xp-section">
-          <div class="ud-xp-badge" id="game-pill" onclick="document.getElementById('user-dropdown').classList.remove('visible');document.getElementById('user-pill').classList.remove('open');toggleGameDrawer();" title="Open Progress">
+          <div class="ud-xp-badge" id="game-pill" data-shell-action="toggle-game-drawer" title="Open Progress">
             <span class="ud-xp-icon"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M4 1h6v5a3 3 0 0 1-6 0V1Z" stroke="currentColor" stroke-width="1.2"/><path d="M4 3H2a1 1 0 0 0-1 1v1a2 2 0 0 0 2 2M10 3h2a1 1 0 0 1 1 1v1a2 2 0 0 1-2 2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><path d="M7 9v3M5 12h4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg></span>
             <div class="ud-xp-info">
               <div class="ud-xp-amount"><span id="game-pill-xp">0 XP</span></div>
@@ -553,11 +159,11 @@
 
   <div class="controls">
     <div class="scope-toggle">
-      <button class="scope-btn active" id="period-today"  onclick="setPeriod('today')">Today</button>
-      <button class="scope-btn"        id="period-24h"    onclick="setPeriod('24h')">24h</button>
-      <button class="scope-btn"        id="period-week"   onclick="setPeriod('week')">Week</button>
-      <button class="scope-btn"        id="period-month"  onclick="setPeriod('month')">Month</button>
-      <button class="scope-btn"        id="period-all"    onclick="setPeriod('all')">All</button>
+      <button class="scope-btn active" id="period-today"  data-shell-action="set-period" data-shell-value="today">Today</button>
+      <button class="scope-btn"        id="period-24h"    data-shell-action="set-period" data-shell-value="24h">24h</button>
+      <button class="scope-btn"        id="period-week"   data-shell-action="set-period" data-shell-value="week">Week</button>
+      <button class="scope-btn"        id="period-month"  data-shell-action="set-period" data-shell-value="month">Month</button>
+      <button class="scope-btn"        id="period-all"    data-shell-action="set-period" data-shell-value="all">All</button>
       <button class="scope-btn cal-btn" id="period-date" title="Pick a date">
         <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="pointer-events:none;flex-shrink:0;opacity:0.7;">
           <rect x="1" y="3" width="14" height="12" rx="2" stroke="currentColor" stroke-width="1.4"/>
@@ -569,10 +175,10 @@
       </button>
     </div>
     <div class="scope-toggle">
-      <button class="scope-btn active" id="scope-all"  onclick="setScope('all')">All Issues</button>
-      <button class="scope-btn"        id="scope-mine" onclick="setScope('mine')">My Issues</button>
+      <button class="scope-btn active" id="scope-all"  data-shell-action="set-scope" data-shell-value="all">All Issues</button>
+      <button class="scope-btn"        id="scope-mine" data-shell-action="set-scope" data-shell-value="mine">My Issues</button>
     </div>
-    <button class="filter-toggle-btn" id="filter-toggle-btn" onclick="toggleFilterDrawer()">
+    <button class="filter-toggle-btn" id="filter-toggle-btn" data-shell-action="toggle-filter-drawer">
       <svg style="width:13px;height:13px;flex-shrink:0;" viewBox="0 0 16 16" fill="none">
         <path d="M2 4h12M4 8h8M6 12h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
       </svg>
@@ -589,8 +195,8 @@
   <div class="filter-drawer" id="filter-drawer">
     <div class="filter-inner">
       <div style="display:flex;flex-wrap:wrap;gap:6px;" id="stat-pills-row">
-        <div class="stat-pill" id="pill-open"            onclick="toggleStatFilter('open')">           <div class="dot" style="background:var(--red)"></div>      <span id="stat-open">0 Open</span></div>
-        <div class="stat-pill" id="pill-resolved"        onclick="toggleStatFilter('resolved')">       <div class="dot" style="background:var(--green)"></div>    <span id="stat-resolved">0 Resolved</span></div>
+        <div class="stat-pill" id="pill-open"            data-shell-action="toggle-stat-filter" data-shell-value="open">           <div class="dot" style="background:var(--red)"></div>      <span id="stat-open">0 Open</span></div>
+        <div class="stat-pill" id="pill-resolved"        data-shell-action="toggle-stat-filter" data-shell-value="resolved">       <div class="dot" style="background:var(--green)"></div>    <span id="stat-resolved">0 Resolved</span></div>
       </div>
       <div class="filter-section-divider"></div>
       <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;">
@@ -614,10 +220,10 @@
         <input class="search-box" type="text" id="search-input" placeholder="Search issues…">
       </div>
       <div class="shift-filter-row">
-        <button class="shift-filter-pill active" id="shift-pill-all"    onclick="setShiftFilter('all')">All Shifts</button>
-        <button class="shift-filter-pill"        id="shift-pill-first"  onclick="setShiftFilter('first')">1st Shift</button>
-        <button class="shift-filter-pill"        id="shift-pill-second" onclick="setShiftFilter('second')">2nd Shift</button>
-        <button class="shift-filter-pill"        id="shift-pill-third"  onclick="setShiftFilter('third')">3rd Shift</button>
+        <button class="shift-filter-pill active" id="shift-pill-all"    data-shell-action="set-shift-filter" data-shell-value="all">All Shifts</button>
+        <button class="shift-filter-pill"        id="shift-pill-first"  data-shell-action="set-shift-filter" data-shell-value="first">1st Shift</button>
+        <button class="shift-filter-pill"        id="shift-pill-second" data-shell-action="set-shift-filter" data-shell-value="second">2nd Shift</button>
+        <button class="shift-filter-pill"        id="shift-pill-third"  data-shell-action="set-shift-filter" data-shell-value="third">3rd Shift</button>
       </div>
     </div>
   </div>
@@ -626,8 +232,8 @@
     <span id="floor-map-label">FLOOR MAP</span>
     <div class="map-controls">
       <div class="map-mode-toggle">
-        <button class="map-mode-btn active-log" id="mode-log" onclick="setMapMode('log')">+ Log</button>
-        <button class="map-mode-btn" id="mode-hist" onclick="setMapMode('hist')">History</button>
+        <button class="map-mode-btn active-log" id="mode-log" data-shell-action="set-map-mode" data-shell-value="log">+ Log</button>
+        <button class="map-mode-btn" id="mode-hist" data-shell-action="set-map-mode" data-shell-value="hist">History</button>
       </div>
     </div>
   </div>
@@ -642,11 +248,11 @@
       <div class="issues-title">ISSUE LOG</div>
       <div class="issues-header-controls">
         <div class="scope-toggle" id="issue-scope-toggle">
-          <button class="scope-btn active" id="scope-view-all" onclick="setIssueRowScope('all')">View All</button>
-          <button class="scope-btn" id="scope-view-active" onclick="setIssueRowScope('active')">Active Rows</button>
+          <button class="scope-btn active" id="scope-view-all" data-shell-action="set-issue-row-scope" data-shell-value="all">View All</button>
+          <button class="scope-btn" id="scope-view-active" data-shell-action="set-issue-row-scope" data-shell-value="active">Active Rows</button>
         </div>
         <div class="sort-dropdown-wrap" id="sort-dropdown-wrap">
-          <button class="sort-dropdown-btn" id="sort-dropdown-btn" onclick="toggleSortDropdown()">
+          <button class="sort-dropdown-btn" id="sort-dropdown-btn" data-shell-action="toggle-sort-dropdown">
             <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;opacity:0.7;">
               <path d="M2 4h12M4 8h8M6 12h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
             </svg>
@@ -658,11 +264,11 @@
           <div class="sort-dropdown" id="sort-dropdown"></div>
         </div>
         <div class="issue-count" id="issue-count">—</div>
-        <button class="sort-dropdown-btn" id="export-pdf-btn" onclick="openExportModal()" style="gap:4px;">
+        <button class="sort-dropdown-btn" id="export-pdf-btn" data-shell-action="open-export-modal" style="gap:4px;">
           <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;opacity:0.7;"><path d="M4 1h6l4 4v9a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3"/><path d="M10 1v4h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
           PDF
         </button>
-        <button class="sort-dropdown-btn" id="export-excel-btn" onclick="downloadExcel()" style="gap:4px;">
+        <button class="sort-dropdown-btn" id="export-excel-btn" data-shell-action="download-excel" style="gap:4px;">
           <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;opacity:0.7;"><rect x="1" y="1" width="14" height="14" rx="1.5" stroke="currentColor" stroke-width="1.3"/><path d="M1 5h14M5.5 5v10M5 8.5h6M5 11h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
           XLS
         </button>
@@ -671,7 +277,7 @@
     <div class="machine-breadcrumb" id="machine-breadcrumb">
       <span class="breadcrumb-label">Showing:</span>
       <span class="breadcrumb-machine" id="breadcrumb-machine">Press —</span>
-      <button class="breadcrumb-clear" id="breadcrumb-clear" onclick="clearMachineBreadcrumb()">✕</button>
+      <button class="breadcrumb-clear" id="breadcrumb-clear" data-shell-action="clear-machine-breadcrumb">✕</button>
     </div>
     <div class="issues-list" id="issues-list">
       <div class="empty-state"><div class="empty-state-icon">🔄</div><div class="empty-state-text">Connecting…</div></div>
@@ -972,7 +578,16 @@
       </div>
       <div id="notes-list-a" class="log-timeline"></div>
       <div id="notes-error-a" style="display:none;font-size:11px;color:var(--red);margin-top:4px;"></div>
-      <div id="notes-quick-chips-a" class="notes-quick-chips"></div>
+      <div class="notes-attach">
+        <div class="notes-attach-label">Attach Photos</div>
+        <div class="photo-btn-row notes-photo-btn-row">
+          <button class="photo-pick-btn" id="notes-camera-btn-a" type="button">📷 Take Photo</button>
+          <button class="photo-pick-btn" id="notes-library-btn-a" type="button">🖼️ Choose File</button>
+        </div>
+        <input type="file" id="notes-camera-input-a" accept="image/*" capture="environment" style="display:none">
+        <input type="file" id="notes-library-input-a" accept="image/*" multiple style="display:none">
+        <div class="photo-previews notes-photo-previews" id="notes-photo-previews-a"></div>
+      </div>
       <div class="log-compose">
         <div class="log-compose-label">Append to Log</div>
         <div class="log-compose-row">
@@ -1000,7 +615,16 @@
     </div>
     <div id="notes-list-b" class="chat-list"></div>
     <div id="notes-error-b" style="display:none;font-size:11px;color:var(--red);margin-top:4px;"></div>
-    <div id="notes-quick-chips-b" class="notes-quick-chips"></div>
+    <div class="notes-attach">
+      <div class="notes-attach-label">Attach Photos</div>
+      <div class="photo-btn-row notes-photo-btn-row">
+        <button class="photo-pick-btn" id="notes-camera-btn-b" type="button">📷 Take Photo</button>
+        <button class="photo-pick-btn" id="notes-library-btn-b" type="button">🖼️ Choose File</button>
+      </div>
+      <input type="file" id="notes-camera-input-b" accept="image/*" capture="environment" style="display:none">
+      <input type="file" id="notes-library-input-b" accept="image/*" multiple style="display:none">
+      <div class="photo-previews notes-photo-previews" id="notes-photo-previews-b"></div>
+    </div>
     <div class="chat-compose">
       <div class="chat-compose-row">
         <textarea id="notes-textarea-b" class="chat-compose-textarea" rows="1" placeholder="Add a note…" oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"></textarea>
@@ -1015,7 +639,7 @@
 
 <!-- MESSAGING MODAL -->
 <div class="msg-overlay" id="messaging-modal">
-  <div class="msg-modal" onclick="event.stopPropagation()">
+  <div class="msg-modal">
     <div class="msg-header">
       <div class="msg-header-left">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 2h10a1 1 0 011 1v8a1 1 0 01-1 1H5l-3 2V3a1 1 0 011-1z" fill="var(--ios-blue)" opacity="0.9"/></svg>
@@ -1079,18 +703,18 @@
 </div>
 
 <div class="msg-sheet-overlay" id="messaging-new-dm" style="display:none;">
-  <div class="msg-sheet" onclick="event.stopPropagation()">
+  <div class="msg-sheet">
     <div class="msg-sheet-handle"></div>
     <div class="msg-sheet-title">New Message</div>
     <div class="msg-sheet-label">Send to</div>
     <div class="msg-member-list" id="messaging-dm-list"></div>
     <button class="msg-sheet-btn" id="messaging-create-dm-btn" type="button" disabled>Start Conversation</button>
-    <button class="msg-sheet-cancel" type="button" onclick="hideMessagingSheets()">Cancel</button>
+    <button class="msg-sheet-cancel" type="button" data-shell-action="close-messaging-sheets">Cancel</button>
   </div>
 </div>
 
 <div class="msg-sheet-overlay" id="messaging-new-group" style="display:none;">
-  <div class="msg-sheet" onclick="event.stopPropagation()">
+  <div class="msg-sheet">
     <div class="msg-sheet-handle"></div>
     <div class="msg-sheet-title">New Group</div>
     <div class="msg-sheet-label">Group Name</div>
@@ -1098,7 +722,7 @@
     <div class="msg-sheet-label">Add Members</div>
     <div class="msg-member-list" id="messaging-group-members"></div>
     <button class="msg-sheet-btn" id="messaging-create-group-btn" type="button" disabled>Create Group</button>
-    <button class="msg-sheet-cancel" type="button" onclick="hideMessagingSheets()">Cancel</button>
+    <button class="msg-sheet-cancel" type="button" data-shell-action="close-messaging-sheets">Cancel</button>
   </div>
 </div>
 
@@ -1267,7 +891,7 @@
 <aside class="game-drawer" id="game-drawer" aria-label="Gamification drawer">
   <div class="game-drawer-header">
     <div class="game-drawer-title">🏆 Your Progress</div>
-    <button class="game-drawer-close" onclick="toggleGameDrawer(false)">✕</button>
+    <button class="game-drawer-close" data-shell-action="toggle-game-drawer" data-shell-value="false">✕</button>
   </div>
   <div class="game-drawer-body">
     <!-- Stats card -->
