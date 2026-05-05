@@ -320,15 +320,9 @@ window.deleteRoleAlert = async function(alertId, categoryKey, statusKey) {
       await openRoleAlertInboxModal();
       return;
     }
-    const data = snap.data() || {};
-    const recipients = Array.isArray(data.recipientUserIds) ? data.recipientUserIds.filter(Boolean) : [];
-    if (recipients.length <= 1 || recipients.every(uid => uid === currentUser.uid)) {
-      await deleteDoc(alertRef);
-    } else {
-      await updateDoc(alertRef, {
-        recipientUserIds: arrayRemove(currentUser.uid)
-      });
-    }
+    await updateDoc(alertRef, {
+      recipientUserIds: arrayRemove(currentUser.uid)
+    });
     await openRoleAlertInboxModal();
   } catch (e) {
     showGameToast(`⚠️ Could not delete alert: ${e?.message || e}`);

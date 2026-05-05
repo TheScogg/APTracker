@@ -371,8 +371,7 @@ service cloud.firestore {
                       || (signedIn()
                           && isPlantMember(plantId)
                           && onlyRemovesSelfFromRecipients());
-        allow delete: if isAdmin(plantId)
-                      || (signedIn() && resource.data.recipientUserIds.hasAny([currentUid()]));
+        allow delete: if isAdmin(plantId);
       }
 
       // ── Plant-scoped daily schedules ──
