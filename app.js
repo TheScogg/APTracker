@@ -9650,4 +9650,17 @@ window.closeEmbeddedAdminPortal = closeEmbeddedAdminPortal;
 document.getElementById('embedded-admin-overlay')?.addEventListener('click', e => {
   if (e.target === e.currentTarget) closeEmbeddedAdminPortal();
 });
-document.getElementById('issue-reminder-modal')?.addEventListener('click', e 
+document.getElementById('issue-reminder-modal')?.addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeIssueReminderModal();
+});
+
+setInterval(() => {
+  if (document.hidden) return;
+  maybeNotifyIssueReminders(issues);
+  if (issues.length > 0) renderIssues();
+}, 60000);
+
+setInterval(() => {
+  if (document.hidden) return;
+  refreshReminderClocksInDom();
+}, 1000);
