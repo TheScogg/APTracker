@@ -8838,22 +8838,13 @@ async function uploadPressNotePhotosToStorage(noteId, photos) {
     const ext = extFromContentType(meta.contentType);
     const fileName = `${Date.now()}_${idx}.${ext}`;
     const path = `plants/${currentPlantId}/pressNotes/${noteId}/photos/${fileName}`;
-    let sRef = storageRef(storage, path);
-    let url = '';
-    try {
-      await uploadString(sRef, src, 'data_url');
-      url = await getDownloadURL(sRef);
-    } catch (err) {
-      const msg = String(err?.message || '');
-      const shouldTryFallback = storageFallback && (msg.includes('Permission denied') || msg.includes('storage/unauthorized') || msg.includes('storage/bucket-not-found'));
-      if (!shouldTryFallback) throw err;
-      sRef = storageRef(storageFallback, path);
-      await uploadString(sRef, src, 'data_url');
-      url = await getDownloadURL(sRef);
-    }
+    const sRef = storageRef(storage, path);
+    await uploadString(sRef, src, 'data_url');
+    const url = await getDownloadURL(sRef);
     out.push({
       name: p.name || fileName,
       dataUrl: url,
+      url,
       storagePath: path,
       storageBucket: sRef.bucket,
       contentType: meta.contentType,

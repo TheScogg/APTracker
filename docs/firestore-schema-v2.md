@@ -681,7 +681,7 @@ function hasPermission(plantId, perm) {
 
 ### `plants/{plantId}/pressNotes/{noteId}`
 
-Press notes stay lightweight and append-only after creation. Photo attachments are uploaded to Storage and referenced by metadata on the note document.
+Press notes stay lightweight and append-only after creation. Photo attachments are resized client-side, stored in Firebase Storage, and referenced by metadata on the note document.
 
 ```json
 {
@@ -693,6 +693,7 @@ Press notes stay lightweight and append-only after creation. Photo attachments a
     {
       "name": "pressure-gauge.jpg",
       "dataUrl": "https://...",
+      "url": "https://...",
       "storagePath": "plants/plant_jef/pressNotes/note_123/photos/1712345678_0.jpg",
       "storageBucket": "press-tracker-9d9c9.firebasestorage.app",
       "contentType": "image/jpeg",
