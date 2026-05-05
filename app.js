@@ -3522,11 +3522,6 @@ function openRowStatusOverflowPopover(rowName, anchorEl, entries) {
     left.textContent = `${entry.count} ${entry.label}`;
     btn.appendChild(left);
 
-    const right = document.createElement('span');
-    right.className = 'row-status-overflow-count';
-    right.textContent = '';
-    btn.appendChild(right);
-
     btn.onclick = (e) => {
       e.stopPropagation();
       expandedPill = { row: rowName, status: entry.statusKey };
@@ -3561,7 +3556,7 @@ document.addEventListener('click', e => {
 });
 window.addEventListener('scroll', () => {
   if (document.getElementById('row-status-overflow-popover')) closeRowStatusOverflow();
-}, true);
+}, { passive: true });
 window.addEventListener('resize', () => {
   if (document.getElementById('row-status-overflow-popover')) closeRowStatusOverflow();
 });
@@ -3654,11 +3649,12 @@ function renderRowPanels() {
 
     visibleEntries.forEach(entry => {
       const sk = entry.statusKey;
+      const col = entry.color;
       const pill = document.createElement('span');
       pill.className = 'row-spill' + (expandedPill.row === rowName && expandedPill.status === sk ? ' active' : '');
-      pill.style.color = entry.color;
-      pill.style.borderColor = alphaColor(entry.color, 0.5);
-      pill.style.background = alphaColor(entry.color, 0.12);
+      pill.style.color = col;
+      pill.style.borderColor = alphaColor(col, 0.5);
+      pill.style.background = alphaColor(col, 0.12);
       pill.textContent = `${entry.count} ${STATUS_PILL_LABELS[sk]}`;
       pill.onclick = (e) => {
         e.stopPropagation();
@@ -3700,7 +3696,7 @@ function renderRowPanels() {
         mi.onclick = () => scrollToIssue(issue.id);
         const bar = document.createElement('div');
         bar.className = 'mini-issue-bar';
-        bar.style.background = col;
+        bar.style.background = entry.color;
         mi.appendChild(bar);
         const mach = document.createElement('div');
         mach.className = 'mini-issue-machine';
@@ -3734,10 +3730,10 @@ function renderRowPanels() {
     });
 
     if (hiddenEntries.length > 0) {
-    const moreBtn = document.createElement('button');
-    moreBtn.type = 'button';
-    moreBtn.className = 'row-spill row-spill-more';
-    moreBtn.textContent = `+${hiddenEntries.length} more`;
+      const moreBtn = document.createElement('button');
+      moreBtn.type = 'button';
+      moreBtn.className = 'row-spill row-spill-more row-status-overflow-trigger';
+      moreBtn.textContent = `+${hiddenEntries.length} more`;
       moreBtn.onclick = (e) => {
         e.stopPropagation();
         openRowStatusOverflowPopover(rowName, moreBtn, hiddenEntries);
