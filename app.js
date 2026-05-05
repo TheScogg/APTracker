@@ -2696,8 +2696,6 @@ async function bootstrapSignedInSession(user) {
   document.getElementById('app').classList.add('visible');
 
   const name = user.displayName || user.email || 'User';
-  const firstName = user.displayName ? user.displayName.split(' ')[0] : user.email;
-  document.getElementById('user-name-display').textContent = firstName;
   document.getElementById('dropdown-full-name').textContent = user.displayName || user.email || 'User';
   document.getElementById('dropdown-email').textContent = user.email || '';
 

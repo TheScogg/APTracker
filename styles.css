@@ -509,11 +509,10 @@
   .theme-choice.theme-locked { opacity: 0.6; }
   .theme-lock-badge { display: block; font-size: 9px; color: var(--yellow,#eab308); font-weight: 700; margin-top: 3px; letter-spacing: 0.02em; }
   /* ── USER PILL ── */
-  .user-pill { display: flex; align-items: center; gap: 7px; background: var(--bg3); border: 1px solid var(--border); border-radius: 20px; padding: 3px 9px 3px 3px; cursor: pointer; transition: border-color 0.15s; user-select: none; }
+  .user-pill { display: flex; align-items: center; gap: 6px; background: var(--bg3); border: 1px solid var(--border); border-radius: 20px; padding: 3px 8px 3px 3px; cursor: pointer; transition: border-color 0.15s; user-select: none; }
   .user-pill:hover { border-color: var(--text2); }
   .user-pill.open { border-color: var(--accent); }
   .user-avatar-fallback { width: 22px; height: 22px; border-radius: 50%; background: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: white; flex-shrink: 0; background-size: cover; background-position: center; }
-  .user-name { font-size: 11px; color: var(--text2); max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .user-chevron { font-size: 8px; color: var(--text3); transition: transform 0.2s; }
   .user-pill.open .user-chevron { transform: rotate(180deg); }
   /* ── USER DROPDOWN (redesigned) ── */
@@ -889,14 +888,11 @@
     align-items: center;
     justify-content: center;
     min-width: 12px;
-    color: #fff;
+    color: inherit;
     font-size: 14px;
     font-weight: 800;
     line-height: 1;
     transform-origin: center;
-  }
-  #alerts-btn-header.alerts-has-active .role-alert-icon {
-    animation: roleAlertIconFlash 2.2s ease-in-out infinite;
   }
   #alerts-btn-header {
     background: var(--orange);
@@ -913,26 +909,18 @@
     animation: roleAlertPulse 2.2s ease-in-out infinite;
     box-shadow: 0 0 0 2px color-mix(in srgb, var(--orange) 28%, transparent), 0 0 12px color-mix(in srgb, var(--orange) 16%, transparent);
   }
-  @keyframes roleAlertIconFlash {
-    0%, 100% {
-      background: var(--orange);
-      color: #fff;
-      border-color: var(--orange);
-      box-shadow: 0 0 0 1px color-mix(in srgb, var(--orange) 18%, transparent);
-    }
-    50% {
-      background: #fff;
-      color: var(--orange);
-      border-color: #fff;
-      box-shadow: 0 0 0 1px rgba(255,255,255,0.35), 0 0 10px color-mix(in srgb, var(--orange) 20%, transparent);
-    }
-  }
   @keyframes roleAlertPulse {
     0%, 100% {
+      background: var(--orange);
+      border-color: var(--orange);
+      color: #fff;
       transform: scale(1);
       box-shadow: 0 0 0 2px color-mix(in srgb, var(--orange) 22%, transparent), 0 0 10px color-mix(in srgb, var(--orange) 10%, transparent);
     }
     50% {
+      background: #fff;
+      border-color: #fff;
+      color: var(--orange);
       transform: scale(1.08);
       box-shadow: 0 0 0 2px color-mix(in srgb, var(--orange) 44%, transparent), 0 0 22px color-mix(in srgb, var(--orange) 28%, transparent);
     }
@@ -996,8 +984,7 @@
     .logo { gap: 8px; }
     .plant-switcher-btn { padding: 5px 8px; font-size: 11px; }
     #messages-btn-header { padding: 5px 8px; min-width: 34px; justify-content: center; }
-    .user-pill { padding: 4px 8px; }
-    .user-name { max-width: 72px; }
+    .user-pill { padding: 4px 7px 4px 3px; }
     .game-pill {
       order: 0;
       flex: 0 0 auto;
