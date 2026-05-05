@@ -8670,6 +8670,13 @@ document.getElementById('messaging-photo-input')?.addEventListener('change', e =
 // ── PRESS NOTES ──
 // Toggle between 'a' (Logbook) and 'b' (Team Channel) to switch prototypes
 const NOTES_VARIANT = 'a';
+const PRESS_NOTE_QUICK_CHIPS = [
+  'Checked',
+  'Waiting on parts',
+  'Maintenance on site',
+  'Escalated',
+  'Running again'
+];
 
 let _notesUnsubscribe = null;
 let _notesModalPressId = null;
@@ -8677,6 +8684,7 @@ let _notesModalMachineCode = null;
 
 function _nid(base) { return base + '-' + NOTES_VARIANT; }
 function _notesModalEl() { return document.getElementById('notes-modal-' + NOTES_VARIANT); }
+function _notesEl(base) { return document.getElementById(base + '-' + NOTES_VARIANT); }
 
 function _relativeTime(ts) {
   if (!ts) return '';
@@ -8692,10 +8700,103 @@ function _relativeTime(ts) {
   return new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+function _notesPressStats(machineCode) {
+  const normalizedMachine = String(machineCode || '').trim();
+  const rowName = findRowNameForMachine(normalizedMachine);
+  const pressIssues = Array.isArray(issues)
+    ? issues.filter(issue => String(issue.machine || issue.machineCode || '').trim() === normalizedMachine)
+    : [];
+  const openIssues = pressIssues.filter(issue => currentStatusKey(issue) !== 'resolved');
+  let statusLabel = 'Clear';
+  let statusColor = 'var(--green)';
+  if (openIssues.length === 1) {
+    const statusKey = currentStatusKey(openIssues[0]);
+    const statusDef = getStatusDef(statusKey);
+    statusLabel = statusDef?.label || statusKey || 'Open';
+    statusColor = getStatusColor(statusKey);
+  } else if (openIssues.length > 1) {
+    statusLabel = `${openIssues.length} open issues`;
+    statusColor = 'var(--accent)';
+  }
+  return { rowName, normalizedMachine, openIssues, statusLabel, statusColor };
+}
+
+function _notesHeaderCopy(machineCode, notes) {
+  const stats = _notesPressStats(machineCode);
+  const noteCount = Array.isArray(notes) ? notes.length : 0;
+  const latestNote = noteCount > 0 ? notes[notes.length - 1] : null;
+  const latestNoteLabel = latestNote ? _relativeTime(latestNote.createdAt) || 'just now' : '';
+  const contextLine = stats.rowName && stats.rowName !== 'Other'
+    ? `${stats.rowName} · Press ${stats.normalizedMachine || '—'}`
+    : `Press ${stats.normalizedMachine || '—'}`;
+  const metaLine = `${stats.statusLabel} · ${noteCount} note${noteCount === 1 ? '' : 's'}${latestNote ? ` · Last note ${latestNoteLabel}` : ' · No notes yet'}`;
+  return { ...stats, noteCount, latestNote, contextLine, metaLine };
+}
+
+function _setNotesHeader(notes = []) {
+  if (!_notesModalMachineCode) return;
+  const copy = _notesHeaderCopy(_notesModalMachineCode, notes);
+  const contextEl = _notesEl('notes-modal-context');
+  const metaEl = _notesEl('notes-modal-meta');
+  if (contextEl) {
+    contextEl.textContent = copy.contextLine;
+  }
+  if (metaEl) {
+    metaEl.textContent = copy.metaLine;
+    metaEl.style.color = copy.statusColor;
+  }
+  const notesListEl = _notesEl('notes-list');
+  if (notesListEl && notesListEl.dataset) {
+    notesListEl.dataset.noteCount = String(copy.noteCount);
+  }
+}
+
+function _insertPressNoteChip(text) {
+  const ta = _notesEl('notes-textarea');
+  if (!ta) return;
+  const chipText = String(text || '').trim();
+  if (!chipText) return;
+  ta.focus();
+  const start = typeof ta.selectionStart === 'number' ? ta.selectionStart : ta.value.length;
+  const end = typeof ta.selectionEnd === 'number' ? ta.selectionEnd : ta.value.length;
+  const before = ta.value.slice(0, start);
+  const after = ta.value.slice(end);
+  const needsLeadingSpace = before.length > 0 && !/\s$/.test(before);
+  const needsTrailingSpace = after.length > 0 && !/^\s/.test(after);
+  const insert = `${needsLeadingSpace ? ' ' : ''}${chipText}${needsTrailingSpace ? ' ' : ''}`;
+  if (typeof ta.setRangeText === 'function') {
+    ta.setRangeText(insert, start, end, 'end');
+  } else {
+    ta.value = `${before}${insert}${after}`;
+  }
+  ta.dispatchEvent(new Event('input', { bubbles: true }));
+  ta.focus();
+}
+
+function _renderPressNoteChips() {
+  const chipsEl = _notesEl('notes-quick-chips');
+  if (!chipsEl) return;
+  chipsEl.innerHTML = '';
+  const label = document.createElement('div');
+  label.className = 'notes-quick-label';
+  label.textContent = 'Quick notes';
+  chipsEl.appendChild(label);
+  PRESS_NOTE_QUICK_CHIPS.forEach(chipText => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'notes-quick-chip';
+    chip.textContent = chipText;
+    chip.setAttribute('aria-label', `Insert quick note: ${chipText}`);
+    chip.onclick = () => _insertPressNoteChip(chipText);
+    chipsEl.appendChild(chip);
+  });
+}
+
 function _renderPressNotes(notes) {
   const list = document.getElementById(_nid('notes-list'));
   if (!list) return;
   list.innerHTML = '';
+  _setNotesHeader(notes);
 
   if (NOTES_VARIANT === 'a') {
     // ── Variant A: Logbook / timeline ──
@@ -8790,12 +8891,19 @@ function _renderPressNotes(notes) {
 
 window.openNotesModal = (pressId, machineCode) => {
   _notesModalPressId = pressId;
-  _notesModalMachineCode = machineCode;
-  document.getElementById(_nid('notes-modal-machine')).textContent = machineCode;
+  _notesModalMachineCode = String(machineCode || '').trim();
+  document.getElementById(_nid('notes-modal-machine')).textContent = _notesModalMachineCode || '—';
   const ta = document.getElementById(_nid('notes-textarea'));
   ta.value = '';
   ta.style.height = 'auto';
   document.getElementById(_nid('notes-list')).innerHTML = '';
+  const errEl = document.getElementById(_nid('notes-error'));
+  if (errEl) {
+    errEl.style.display = 'none';
+    errEl.textContent = '';
+  }
+  _renderPressNoteChips();
+  _setNotesHeader([]);
   _notesModalEl().classList.add('visible');
   if (_notesUnsubscribe) { _notesUnsubscribe(); _notesUnsubscribe = null; }
   const q = query(plantCol('pressNotes'), where('pressId', '==', pressId));
@@ -8820,12 +8928,12 @@ window.closeNotesModal = () => {
 };
 
 window.submitPressNote = async () => {
-  const ta = document.getElementById(_nid('notes-textarea'));
+  const ta = _notesEl('notes-textarea');
   const text = ta.value.trim();
   if (!text || !_notesModalPressId || !currentUser) return;
-  const btn = document.getElementById(_nid('notes-submit-btn'));
+  const btn = _notesEl('notes-submit-btn');
   if (btn) btn.disabled = true;
-  const errEl = document.getElementById(_nid('notes-error'));
+  const errEl = _notesEl('notes-error');
   if (errEl) errEl.style.display = 'none';
   try {
     await addDoc(plantCol('pressNotes'), {
@@ -8837,6 +8945,7 @@ window.submitPressNote = async () => {
     });
     ta.value = '';
     ta.style.height = 'auto';
+    ta.focus();
   } catch(e) {
     console.error('submitPressNote error', e);
     if (errEl) { errEl.textContent = 'Could not save note: ' + (e.message || 'permission denied'); errEl.style.display = 'block'; }

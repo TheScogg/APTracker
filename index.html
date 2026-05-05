@@ -964,12 +964,15 @@
           <div class="notes-modal-a-plate-text">
             <div class="notes-modal-a-subtitle">PRESS NOTES</div>
             <div class="notes-modal-a-machine" id="notes-modal-machine-a"></div>
+            <div class="notes-modal-a-context" id="notes-modal-context-a"></div>
+            <div class="notes-modal-a-meta" id="notes-modal-meta-a"></div>
           </div>
         </div>
         <button class="notes-modal-a-close" onclick="closeNotesModal()">✕</button>
       </div>
       <div id="notes-list-a" class="log-timeline"></div>
       <div id="notes-error-a" style="display:none;font-size:11px;color:var(--red);margin-top:4px;"></div>
+      <div id="notes-quick-chips-a" class="notes-quick-chips"></div>
       <div class="log-compose">
         <div class="log-compose-label">Append to Log</div>
         <div class="log-compose-row">
@@ -990,11 +993,14 @@
           <span class="notes-modal-b-hash">#</span><span class="notes-modal-b-machine" id="notes-modal-machine-b"></span>
         </div>
         <div class="notes-modal-b-label">Press Notes</div>
+        <div class="notes-modal-b-context" id="notes-modal-context-b"></div>
+        <div class="notes-modal-b-meta" id="notes-modal-meta-b"></div>
       </div>
       <button class="notes-modal-b-close" onclick="closeNotesModal()">✕ close</button>
     </div>
     <div id="notes-list-b" class="chat-list"></div>
     <div id="notes-error-b" style="display:none;font-size:11px;color:var(--red);margin-top:4px;"></div>
+    <div id="notes-quick-chips-b" class="notes-quick-chips"></div>
     <div class="chat-compose">
       <div class="chat-compose-row">
         <textarea id="notes-textarea-b" class="chat-compose-textarea" rows="1" placeholder="Add a note…" oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"></textarea>

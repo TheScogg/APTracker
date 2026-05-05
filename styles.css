@@ -790,6 +790,10 @@
   .notes-modal-a-plate-text { display: flex; flex-direction: column; justify-content: center; gap: 3px; }
   .notes-modal-a-subtitle { font-family: 'Share Tech Mono', monospace; font-size: 9px; letter-spacing: 2.5px; text-transform: uppercase; color: var(--teal); opacity: 0.85; }
   .notes-modal-a-machine { font-family: 'Rajdhani', sans-serif; font-size: 30px; font-weight: 700; color: var(--text); letter-spacing: 1px; line-height: 1; }
+  .notes-modal-a-context,
+  .notes-modal-b-context { font-family: 'Nunito', sans-serif; font-size: 11px; color: var(--text2); line-height: 1.35; letter-spacing: 0.1px; margin-top: 2px; }
+  .notes-modal-a-meta,
+  .notes-modal-b-meta { font-family: 'Share Tech Mono', monospace; font-size: 9px; color: var(--text3); line-height: 1.3; letter-spacing: 0.7px; text-transform: uppercase; margin-top: 2px; }
   .notes-modal-a-close { background: none; border: none; color: var(--text3); font-size: 16px; cursor: pointer; padding: 4px 6px; line-height: 1; align-self: flex-start; transition: color 0.15s; }
   .notes-modal-a-close:hover { color: var(--text); }
   .log-timeline { flex: 1; overflow-y: auto; max-height: 40vh; padding: 16px 0 8px; display: flex; flex-direction: column; }
@@ -808,18 +812,30 @@
   .log-entry:hover .log-entry-del { opacity: 1; }
   .log-entry-del:hover { color: var(--red); }
   .log-entry-text { font-family: 'Nunito', sans-serif; font-size: 13px; color: var(--text2); line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
-  .log-compose { border-top: 1px solid var(--border); padding-top: 14px; margin-top: 10px; }
+  .notes-quick-label { width: 100%; font-family: 'Share Tech Mono', monospace; font-size: 9px; letter-spacing: 2px; text-transform: uppercase; color: var(--text3); margin-bottom: 2px; }
+  .notes-quick-chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 0 0; margin-top: 6px; }
+  .notes-quick-chips:empty { display: none; }
+  .notes-quick-chip {
+    background: var(--bg3); border: 1px solid rgba(20,184,166,0.22);
+    color: var(--teal); border-radius: 999px; padding: 7px 11px;
+    font-family: 'Nunito', sans-serif; font-size: 12px; font-weight: 700;
+    cursor: pointer; transition: background 0.15s, transform 0.1s, border-color 0.15s, color 0.15s;
+  }
+  .notes-quick-chip:hover { background: rgba(20,184,166,0.12); border-color: rgba(20,184,166,0.36); color: var(--text); }
+  .notes-quick-chip:active { transform: scale(0.97); }
+  .notes-quick-chip:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+  .log-compose { border-top: 1px solid var(--border); padding-top: 14px; margin-top: 10px; position: sticky; bottom: 0; background: linear-gradient(to bottom, rgba(0,0,0,0), var(--bg2) 18px); padding-bottom: 2px; }
   .log-compose-label { font-family: 'Share Tech Mono', monospace; font-size: 9px; letter-spacing: 2px; text-transform: uppercase; color: var(--text3); margin-bottom: 8px; }
-  .log-compose-row { display: flex; gap: 8px; align-items: flex-end; }
-  .log-compose-textarea { flex: 1; background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; color: var(--text); font-family: 'Nunito', sans-serif; font-size: 13px; resize: none; outline: none; min-height: 38px; max-height: 100px; overflow-y: auto; line-height: 1.4; }
+  .log-compose-row { display: flex; gap: 10px; align-items: flex-end; }
+  .log-compose-textarea { flex: 1; background: var(--bg3); border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; color: var(--text); font-family: 'Nunito', sans-serif; font-size: 14px; resize: none; outline: none; min-height: 46px; max-height: 120px; overflow-y: auto; line-height: 1.45; }
   .log-compose-textarea:focus { border-color: var(--teal); }
-  .log-compose-btn { background: var(--bg3); border: 1px solid var(--teal); border-radius: 8px; color: var(--teal); height: 36px; padding: 0 14px; font-family: 'Share Tech Mono', monospace; font-size: 11px; letter-spacing: 1px; cursor: pointer; flex-shrink: 0; transition: background 0.15s, color 0.15s; white-space: nowrap; }
+  .log-compose-btn { background: var(--bg3); border: 1px solid var(--teal); border-radius: 10px; color: var(--teal); height: 42px; padding: 0 15px; font-family: 'Share Tech Mono', monospace; font-size: 11px; letter-spacing: 1px; cursor: pointer; flex-shrink: 0; transition: background 0.15s, color 0.15s, transform 0.1s; white-space: nowrap; }
   .log-compose-btn:hover { background: var(--teal); color: #fff; }
   .log-compose-btn:active { transform: scale(0.97); }
   .log-compose-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
   /* NOTES MODAL — VARIANT B: TEAM CHANNEL */
-  .notes-modal-b-header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+  .notes-modal-b-header { display: flex; align-items: flex-start; justify-content: space-between; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
   .notes-modal-b-channel { display: flex; flex-direction: column; gap: 2px; }
   .notes-modal-b-channel-name { display: flex; align-items: baseline; gap: 1px; }
   .notes-modal-b-hash { font-family: 'Share Tech Mono', monospace; font-size: 22px; color: var(--teal); line-height: 1; }
@@ -847,11 +863,11 @@
   .chat-del-btn svg { display: block; }
   .chat-meta { font-family: 'Share Tech Mono', monospace; font-size: 10px; color: var(--text3); padding: 0 4px; }
   .chat-msg.mine .chat-meta { text-align: right; }
-  .chat-compose { border-top: 1px solid var(--border); padding-top: 12px; margin-top: 8px; }
-  .chat-compose-row { display: flex; gap: 8px; align-items: flex-end; }
-  .chat-compose-textarea { flex: 1; background: var(--bg3); border: 1px solid var(--border); border-radius: 20px; padding: 9px 16px; color: var(--text); font-family: 'Nunito', sans-serif; font-size: 13px; resize: none; outline: none; min-height: 38px; max-height: 100px; overflow-y: auto; line-height: 1.4; }
+  .chat-compose { border-top: 1px solid var(--border); padding-top: 12px; margin-top: 8px; position: sticky; bottom: 0; background: linear-gradient(to bottom, rgba(0,0,0,0), var(--bg2) 18px); padding-bottom: 2px; }
+  .chat-compose-row { display: flex; gap: 10px; align-items: flex-end; }
+  .chat-compose-textarea { flex: 1; background: var(--bg3); border: 1px solid var(--border); border-radius: 20px; padding: 10px 16px; color: var(--text); font-family: 'Nunito', sans-serif; font-size: 14px; resize: none; outline: none; min-height: 46px; max-height: 120px; overflow-y: auto; line-height: 1.45; }
   .chat-compose-textarea:focus { border-color: var(--teal); }
-  .chat-send-btn { background: var(--teal); border: none; border-radius: 50%; color: white; width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; transition: opacity 0.15s, transform 0.1s; }
+  .chat-send-btn { background: var(--teal); border: none; border-radius: 50%; color: white; width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; transition: opacity 0.15s, transform 0.1s; }
   .chat-send-btn:hover { opacity: 0.85; }
   .chat-send-btn:active { transform: scale(0.93); }
   .chat-send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
