@@ -275,9 +275,9 @@ function _renderRoleAlertCard(alert) {
         <div class="role-alert-card-note">${esc(alert.note || 'No note')}</div>
       </div>
       <div class="role-alert-card-actions">
-        <button class="btn btn-ghost role-alert-action-btn" type="button" onclick="focusIssueFromAlert('${esc(alert.issueId)}')">Open Issue</button>
+        <button class="btn btn-ghost role-alert-action-btn" type="button" onclick="focusIssueFromAlert('${esc(alert.issueId)}')">View</button>
         ${isAccepted
-          ? `<button class="btn btn-edit role-alert-action-btn" type="button" disabled>Accepted</button>`
+          ? `<button class="btn btn-reopen role-alert-action-btn" type="button" onclick="unacceptRoleAlert('${esc(alert.issueId)}','${esc(alert.statusKey)}')">Unaccept</button>`
           : `<button class="btn btn-edit role-alert-action-btn" type="button" onclick="acceptRoleAlert('${esc(alert.issueId)}','${esc(alert.statusKey)}')">Accept</button>`}
         <button class="btn btn-danger role-alert-action-btn" type="button" onclick="deleteRoleAlert('${esc(alert.id)}','${esc(alert.categoryKey || '')}','${esc(alert.statusKey || '')}')">Delete</button>
       </div>
@@ -290,7 +290,7 @@ function _renderRoleAlertsModal(alerts) {
   if (!list) return;
   const activeAlerts = alerts.filter(a => !a.isAccepted);
   const acceptedAlerts = alerts.filter(a => a.isAccepted);
-  _setActiveRoleAlertCount(activeAlerts.length);
+  _setActiveRoleAlertCount(alerts.length);
   _updateRoleAlertModalToggleUI();
   _updateRoleAlertModalFooter(activeAlerts.length, acceptedAlerts.length);
 
@@ -334,7 +334,7 @@ async function _refreshRoleAlertBadgeCount() {
   }
   try {
     const alerts = await _loadActiveRoleAlertsForCurrentUser();
-    _setActiveRoleAlertCount(alerts.filter(a => !a.isAccepted).length);
+    _setActiveRoleAlertCount(alerts.length);
   } catch (e) {
     console.warn('roleFeedAlerts badge refresh failed', e);
   }
@@ -492,6 +492,20 @@ window.acceptRoleAlert = async function(issueId, statusKey) {
   }
 };
 
+window.unacceptRoleAlert = async function(issueId, statusKey) {
+  if (!issueId || !statusKey) return;
+  try {
+    await setWorkflowStateForStatus(issueId, statusKey, 'called');
+    showGameToast('↩️ Workflow unaccepted');
+    if (document.getElementById('role-alerts-modal')?.classList.contains('visible')) {
+      await _openRoleAlertInboxModalInternal({ resetToggle: false });
+    }
+    await _refreshRoleAlertBadgeCount();
+  } catch (e) {
+    showGameToast(`⚠️ Could not unaccept: ${e?.message || e}`);
+  }
+};
+
 function startRoleFeedAlertsWatcher() {
   stopRoleFeedAlertsWatcher();
   if (!currentPlantId || !currentUser?.uid) return;
@@ -501,6 +515,7 @@ function startRoleFeedAlertsWatcher() {
     limit(40)
   );
   _roleFeedAlertsUnsubscribe = onSnapshot(q, snap => {
+    _setActiveRoleAlertCount(snap.size);
     void _refreshRoleAlertBadgeCount();
     snap.docChanges().forEach(change => {
       if (change.type !== 'added') return;
@@ -511,7 +526,6 @@ function startRoleFeedAlertsWatcher() {
       const createdMs = data.createdAt?.toMillis ? data.createdAt.toMillis() : 0;
       if (createdMs && (Date.now() - createdMs) > (10 * 60 * 1000)) return; // skip stale alerts
       _unreadRoleAlertCount += 1;
-      _updateRoleAlertBadge();
       showGameToast(`🔔 ${data.feedLabel || 'Alert'} · Press ${data.machine || 'Unknown'}`);
       if ('Notification' in window && Notification.permission === 'granted') {
         try {
