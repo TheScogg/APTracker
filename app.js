@@ -3070,8 +3070,10 @@ window.setPeriod = s => {
   document.getElementById('period-date').classList.remove('active');
   if (s === 'today') {
     document.getElementById('date-filter').value = localDateStr(new Date());
+    updateDateTriggerLabel('');
   } else {
     document.getElementById('date-filter').value = '';
+    updateDateTriggerLabel('');
   }
   updateCalLabel(document.getElementById('date-filter').value || localDateStr(new Date()), false);
   renderIssues(); updatePressStates(); updateStats();
@@ -3083,6 +3085,7 @@ window.onCalendarPick = val => {
   ['today','24h','week','month','all'].forEach(x => document.getElementById('period-'+x).classList.remove('active'));
   document.getElementById('period-date').classList.add('active');
   issuePeriod = 'date';
+  updateDateTriggerLabel(val);
   updateCalLabel(val, true);
   renderIssues(); updatePressStates(); updateStats(); updateFilterBadge();
   loadDailyScheduledPresses(val);
@@ -3092,11 +3095,13 @@ window.onCalendarPick = val => {
 function setTodayDate() {
   const today = localDateStr(new Date());
   document.getElementById('date-filter').value = today;
+  updateDateTriggerLabel('');
   updateCalLabel(today, false);
 }
 
 window.clearDate = () => {
   document.getElementById('date-filter').value = '';
+  updateDateTriggerLabel('');
   issuePeriod = 'all';
   ['today','24h','week','month','all'].forEach(x => document.getElementById('period-'+x).classList.toggle('active', x==='all'));
   renderIssues(); updatePressStates(); updateStats();
@@ -6750,6 +6755,12 @@ function updateCalLabel(val, isActive) {
   if (!lbl) return;
   lbl.textContent = val ? fmtShortDate(val) : fmtShortDate(localDateStr(new Date()));
   lbl.style.opacity = isActive ? '1' : '0.45';
+}
+
+function updateDateTriggerLabel(val) {
+  const lbl = document.getElementById('period-trigger-label');
+  if (!lbl) return;
+  lbl.textContent = val ? fmtShortDate(val) : 'Date';
 }
 
 function localDateStr(d) {
