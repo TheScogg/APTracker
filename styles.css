@@ -888,39 +888,34 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 16px;
-    height: 16px;
-    border-radius: 999px;
-    background: linear-gradient(180deg, color-mix(in srgb, var(--orange) 92%, #fff 8%), color-mix(in srgb, var(--orange) 78%, #000 22%));
-    border: 1px solid color-mix(in srgb, #fff 18%, var(--orange));
+    min-width: 12px;
     color: #fff;
-    font-size: 11px;
+    font-size: 14px;
+    font-weight: 800;
     line-height: 1;
     transform-origin: center;
-    box-shadow:
-      0 0 0 1px color-mix(in srgb, var(--orange) 28%, transparent),
-      0 0 8px color-mix(in srgb, var(--orange) 18%, transparent);
   }
   .role-alert-icon.is-blinking {
-    animation: roleAlertBlink 6s ease-in-out infinite;
+    animation: roleAlertBlink 7s ease-in-out infinite;
   }
   @keyframes roleAlertBlink {
-    0%, 45% { opacity: 1; transform: translateY(0) scale(1); }
-    50% { opacity: 0.65; transform: translateY(0) scale(0.98); }
-    55%, 100% { opacity: 1; transform: translateY(0) scale(1); }
+    0%, 46% { opacity: 1; }
+    50% { opacity: 0.5; }
+    54%, 100% { opacity: 1; }
   }
   #alerts-btn-header {
-    background: color-mix(in srgb, var(--orange) 14%, var(--bg3));
-    border-color: color-mix(in srgb, var(--orange) 42%, var(--border));
+    background: var(--orange);
+    border-color: var(--orange);
     color: #fff;
+    margin-left: 0;
   }
   #alerts-btn-header:hover {
-    background: color-mix(in srgb, var(--orange) 18%, var(--bg3));
-    border-color: color-mix(in srgb, var(--orange) 56%, var(--border));
+    background: color-mix(in srgb, var(--orange) 88%, #000 12%);
+    border-color: color-mix(in srgb, var(--orange) 88%, #000 12%);
     color: #fff;
   }
   #alerts-btn-header.alerts-has-active {
-    box-shadow: 0 0 0 1px color-mix(in srgb, var(--orange) 28%, transparent), 0 0 14px color-mix(in srgb, var(--orange) 10%, transparent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--orange) 24%, transparent), 0 0 10px color-mix(in srgb, var(--orange) 12%, transparent);
   }
   #messages-btn-header {
     background: #22c55e;
