@@ -437,7 +437,7 @@
     </button>
 
     <button class="sort-dropdown-btn" id="alerts-btn-header" type="button" style="gap:4px;" aria-label="Category alerts" title="Category alerts from delegated tasks">
-      <span style="font-size:13px;line-height:1;">❗</span>
+      <span id="role-alert-icon" class="role-alert-icon" style="font-size:13px;line-height:1;">❗</span>
       <span class="msg-btn-badge" id="role-alert-badge" style="display:none;">0</span>
     </button>
 
@@ -1222,7 +1222,6 @@
 
 <div class="modal-overlay" id="role-prefs-modal">
   <div class="modal" style="max-width:520px">
-    <button class="close-btn" onclick="closeRolePreferencesModal()">×</button>
     <h3 style="margin:0 0 8px">My Alert Categories</h3>
     <p style="margin:0 0 12px;color:var(--text2);font-size:13px">Subscribe to the categories you cover today. Alerts will notify everyone subscribed to that category.</p>
     <div id="role-prefs-list" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:10px"></div>
@@ -1236,7 +1235,6 @@
 
 <div class="modal-overlay" id="role-alerts-modal">
   <div class="modal" style="max-width:620px">
-    <button class="close-btn" onclick="closeRoleAlertInboxModal()">×</button>
     <h3 style="margin:0 0 8px">Active Category Alerts</h3>
     <p style="margin:0 0 12px;color:var(--text2);font-size:13px">Issues currently active in categories you subscribed to.</p>
     <div id="role-alerts-list" style="display:flex;flex-direction:column;gap:8px;max-height:55vh;overflow:auto;"></div>

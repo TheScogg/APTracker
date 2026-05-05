@@ -70,6 +70,7 @@ let _rolePrefsDraft = [];
 let _roleFeedAlertsUnsubscribe = null;
 const _seenRoleFeedAlerts = new Set();
 let _unreadRoleAlertCount = 0;
+let _activeRoleAlertCount = 0;
 const ROLE_KEY_ALIASES = {
   maintenance_employee: ['maintenance_employee', 'main_maintenance_role', 'maintenance'],
   main_maintenance_role: ['maintenance_employee', 'main_maintenance_role', 'maintenance'],
@@ -196,6 +197,7 @@ function stopRoleFeedAlertsWatcher() {
     _roleFeedAlertsUnsubscribe();
     _roleFeedAlertsUnsubscribe = null;
   }
+  _setActiveRoleAlertCount(0);
 }
 
 function _updateRoleAlertBadge() {
@@ -203,6 +205,19 @@ function _updateRoleAlertBadge() {
   if (!badge) return;
   badge.textContent = String(_unreadRoleAlertCount);
   badge.style.display = _unreadRoleAlertCount > 0 ? '' : 'none';
+}
+
+function _updateRoleAlertIndicator() {
+  const button = document.getElementById('alerts-btn-header');
+  const icon = document.getElementById('role-alert-icon');
+  const hasActiveAlerts = _activeRoleAlertCount > 0;
+  button?.classList.toggle('alerts-has-active', hasActiveAlerts);
+  icon?.classList.toggle('is-blinking', hasActiveAlerts);
+}
+
+function _setActiveRoleAlertCount(count) {
+  _activeRoleAlertCount = Math.max(0, Number(count) || 0);
+  _updateRoleAlertIndicator();
 }
 
 window.clearRoleAlertBadge = function() {
@@ -267,6 +282,7 @@ window.openRoleAlertInboxModal = async function() {
   clearRoleAlertBadge();
   try {
     const alerts = await _loadActiveRoleAlertsForCurrentUser();
+    _setActiveRoleAlertCount(alerts.length);
     if (!alerts.length) {
       list.innerHTML = `<div style="color:var(--text3);font-size:13px;">No active alerts right now.</div>`;
       return;
@@ -292,6 +308,7 @@ window.openRoleAlertInboxModal = async function() {
     }).join('');
   } catch (e) {
     list.innerHTML = `<div style="color:var(--red);font-size:13px;">${esc(e?.message || 'Unable to load alerts.')}</div>`;
+    _setActiveRoleAlertCount(0);
   }
 };
 
@@ -349,6 +366,7 @@ function startRoleFeedAlertsWatcher() {
     limit(40)
   );
   _roleFeedAlertsUnsubscribe = onSnapshot(q, snap => {
+    _setActiveRoleAlertCount(snap.size);
     snap.docChanges().forEach(change => {
       if (change.type !== 'added') return;
       const id = change.doc.id;
