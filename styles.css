@@ -1030,8 +1030,11 @@
   }
 
   @media (max-width: 560px) {
-    .controls { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
-    .controls::-webkit-scrollbar { display: none; }
+    .controls {
+      flex-wrap: wrap;
+      overflow: visible;
+      align-items: flex-start;
+    }
     .mobile-period-trigger {
       display: flex;
       align-items: center;
@@ -1049,20 +1052,32 @@
       user-select: none;
       white-space: nowrap;
     }
+    .mobile-period-menu {
+      flex: 0 0 auto;
+      min-width: 0;
+    }
+    .mobile-period-menu[open] {
+      flex-basis: 100%;
+      flex-grow: 1;
+    }
     .mobile-period-trigger::-webkit-details-marker { display: none; }
     .period-toggle-group {
       display: none;
-      position: absolute;
-      top: calc(100% + 6px);
-      left: 0;
+      position: static;
       z-index: 20;
       background: var(--bg2);
       border: 1px solid var(--border);
       border-radius: 10px;
       box-shadow: 0 8px 22px rgba(0,0,0,0.35);
       overflow: hidden;
+      margin-top: 6px;
+      width: 100%;
+      flex-wrap: wrap;
     }
     .mobile-period-menu[open] .period-toggle-group { display: flex; }
+    .period-toggle-group .scope-btn {
+      flex: 1 1 calc(50% - 3px);
+    }
     .logo {
       gap: 6px;
       min-width: 0;
