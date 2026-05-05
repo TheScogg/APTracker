@@ -414,7 +414,7 @@ async function _openRoleAlertInboxModalInternal({ resetToggle = true } = {}) {
   if (!modal || !list) return;
   list.innerHTML = `<div style="color:var(--text3);font-size:13px;">Loading active alerts…</div>`;
   modal.classList.add('visible');
-  if (resetToggle) _roleAlertsShowAccepted = false;
+  if (resetToggle) _roleAlertsShowAccepted = true;
   _updateRoleAlertModalToggleUI();
   try {
     const alerts = await _loadActiveRoleAlertsForCurrentUser();
