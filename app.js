@@ -71,6 +71,9 @@ let _roleFeedAlertsUnsubscribe = null;
 const _seenRoleFeedAlerts = new Set();
 let _unreadRoleAlertCount = 0;
 let _activeRoleAlertCount = 0;
+let _roleAlertsShowAccepted = false;
+let _roleAlertsCache = [];
+let _roleAlertBadgeRefreshTimer = null;
 const ROLE_KEY_ALIASES = {
   maintenance_employee: ['maintenance_employee', 'main_maintenance_role', 'maintenance'],
   main_maintenance_role: ['maintenance_employee', 'main_maintenance_role', 'maintenance'],
@@ -203,8 +206,8 @@ function stopRoleFeedAlertsWatcher() {
 function _updateRoleAlertBadge() {
   const badge = document.getElementById('role-alert-badge');
   if (!badge) return;
-  badge.textContent = String(_unreadRoleAlertCount);
-  badge.style.display = _unreadRoleAlertCount > 0 ? '' : 'none';
+  badge.textContent = String(_activeRoleAlertCount);
+  badge.style.display = _activeRoleAlertCount > 0 ? '' : 'none';
 }
 
 function _updateRoleAlertIndicator() {
@@ -216,6 +219,133 @@ function _updateRoleAlertIndicator() {
 function _setActiveRoleAlertCount(count) {
   _activeRoleAlertCount = Math.max(0, Number(count) || 0);
   _updateRoleAlertIndicator();
+  _updateRoleAlertBadge();
+}
+
+function _getRoleAlertWorkflowState(issue, statusKey) {
+  if (!issue) return null;
+  const normalizedStatusKey = String(statusKey || '').trim().toLowerCase();
+  const primaryKey = currentStatusKey(issue);
+  if (normalizedStatusKey && normalizedStatusKey === primaryKey) {
+    return issue.workflowState || null;
+  }
+  if (normalizedStatusKey && issue.workflowStateByStatus && Object.prototype.hasOwnProperty.call(issue.workflowStateByStatus, normalizedStatusKey)) {
+    return issue.workflowStateByStatus[normalizedStatusKey] || null;
+  }
+  if (!normalizedStatusKey && primaryKey) {
+    return issue.workflowState || null;
+  }
+  return issue.workflowStateByStatus?.[normalizedStatusKey] || null;
+}
+
+function _updateRoleAlertModalToggleUI() {
+  const hideBtn = document.getElementById('role-alerts-hide-accepted-btn');
+  const showBtn = document.getElementById('role-alerts-show-accepted-btn');
+  if (hideBtn) hideBtn.classList.toggle('active', !_roleAlertsShowAccepted);
+  if (showBtn) showBtn.classList.toggle('active', !!_roleAlertsShowAccepted);
+}
+
+function _updateRoleAlertModalFooter(activeCount, acceptedCount) {
+  const footer = document.getElementById('role-alerts-footer');
+  if (!footer) return;
+  const acceptedLabel = _roleAlertsShowAccepted ? 'shown' : 'hidden';
+  footer.textContent = `${activeCount} active · ${acceptedCount} accepted ${acceptedLabel}`;
+}
+
+function _renderRoleAlertCard(alert) {
+  const isAccepted = !!alert.isAccepted;
+  const acceptedColor = '#22c55e';
+  const statusColor = isAccepted ? acceptedColor : getStatusColor(alert.statusKey || alert.categoryKey || 'open');
+  const cardBg = isAccepted ? 'rgba(34,197,94,0.10)' : alphaColor(statusColor, 0.10);
+  const cardBorder = isAccepted ? 'rgba(34,197,94,0.42)' : alphaColor(statusColor, 0.45);
+  const titleColor = isAccepted ? '#4ade80' : statusColor;
+  const acceptedByName = isAccepted ? formatWorkflowActorName(alert.acceptedBy?.name || alert.acceptedBy || '') : '';
+  const acceptedMeta = isAccepted
+    ? `<div class="role-alert-ack">${acceptedByName ? `Accepted by ${esc(acceptedByName)}` : 'Accepted'}</div>`
+    : '';
+  return `
+    <div class="role-alert-card${isAccepted ? ' accepted' : ''}" style="background:${cardBg};border-color:${cardBorder};">
+      <div class="role-alert-card-main">
+        <div class="role-alert-card-title" style="color:${titleColor};">${esc(alert.feedLabel)} · ${esc(alert.machine)}</div>
+        <div class="role-alert-card-meta">
+          ${isAccepted ? `<span class="role-alert-status-pill accepted">Accepted</span>` : `<span class="role-alert-status-pill active">Active</span>`}
+          ${alert.subStatus ? `<span class="role-alert-card-sub">${esc(alert.subStatus)}</span>` : ''}
+        </div>
+        ${acceptedMeta}
+        <div class="role-alert-card-note">${esc(alert.note || 'No note')}</div>
+      </div>
+      <div class="role-alert-card-actions">
+        <button class="btn btn-ghost role-alert-action-btn" type="button" onclick="focusIssueFromAlert('${esc(alert.issueId)}')">Open Issue</button>
+        ${isAccepted
+          ? `<button class="btn btn-edit role-alert-action-btn" type="button" disabled>Accepted</button>`
+          : `<button class="btn btn-edit role-alert-action-btn" type="button" onclick="acceptRoleAlert('${esc(alert.issueId)}','${esc(alert.statusKey)}')">Accept</button>`}
+        <button class="btn btn-danger role-alert-action-btn" type="button" onclick="deleteRoleAlert('${esc(alert.id)}','${esc(alert.categoryKey || '')}','${esc(alert.statusKey || '')}')">Delete</button>
+      </div>
+    </div>
+  `;
+}
+
+function _renderRoleAlertsModal(alerts) {
+  const list = document.getElementById('role-alerts-list');
+  if (!list) return;
+  const activeAlerts = alerts.filter(a => !a.isAccepted);
+  const acceptedAlerts = alerts.filter(a => a.isAccepted);
+  _setActiveRoleAlertCount(activeAlerts.length);
+  _updateRoleAlertModalToggleUI();
+  _updateRoleAlertModalFooter(activeAlerts.length, acceptedAlerts.length);
+
+  const renderSection = (title, rows, sectionClass) => `
+    <div class="role-alert-section ${sectionClass || ''}">
+      <div class="role-alert-section-header">
+        <span>${title}</span>
+        <span class="role-alert-section-count">${rows.length}</span>
+      </div>
+      <div class="role-alert-section-body">
+        ${rows.map(_renderRoleAlertCard).join('')}
+      </div>
+    </div>
+  `;
+
+  if (!activeAlerts.length && (!_roleAlertsShowAccepted || !acceptedAlerts.length)) {
+    const acceptedNote = acceptedAlerts.length ? `<div class="role-alert-empty-sub">Toggle on accepted alerts to review acknowledged items.</div>` : '';
+    list.innerHTML = `
+      <div class="role-alert-empty">
+        <div class="role-alert-empty-title">No active alerts right now.</div>
+        ${acceptedNote}
+      </div>
+    `;
+    return;
+  }
+
+  const sections = [];
+  if (activeAlerts.length) {
+    sections.push(renderSection('Active', activeAlerts, 'active'));
+  }
+  if (_roleAlertsShowAccepted && acceptedAlerts.length) {
+    sections.push(renderSection('Accepted', acceptedAlerts, 'accepted'));
+  }
+  list.innerHTML = sections.join('');
+}
+
+async function _refreshRoleAlertBadgeCount() {
+  if (!currentPlantId || !currentUser?.uid) {
+    _setActiveRoleAlertCount(0);
+    return;
+  }
+  try {
+    const alerts = await _loadActiveRoleAlertsForCurrentUser();
+    _setActiveRoleAlertCount(alerts.filter(a => !a.isAccepted).length);
+  } catch (e) {
+    console.warn('roleFeedAlerts badge refresh failed', e);
+  }
+}
+
+function _scheduleRoleAlertBadgeRefresh() {
+  if (_roleAlertBadgeRefreshTimer) clearTimeout(_roleAlertBadgeRefreshTimer);
+  _roleAlertBadgeRefreshTimer = setTimeout(() => {
+    _roleAlertBadgeRefreshTimer = null;
+    void _refreshRoleAlertBadgeCount();
+  }, 250);
 }
 
 window.clearRoleAlertBadge = function() {
@@ -250,16 +380,23 @@ async function _loadActiveRoleAlertsForCurrentUser() {
       staleAlertDeletes.push(deleteDoc(doc(db, 'plants', currentPlantId, 'roleFeedAlerts', d.id)).catch(() => null));
       continue;
     }
+    const alertStatusKey = data.statusKey || currentStatusKey(issue || {}) || '';
+    const workflowState = _getRoleAlertWorkflowState(issue || null, alertStatusKey);
     alerts.push({
       id: d.id,
       issueId,
       machine: data.machine || issue?.machine || issue?.machineCode || 'Unknown',
       feedLabel: data.feedLabel || data.categoryKey || data.statusKey || 'Alert',
-      statusKey: data.statusKey || currentStatusKey(issue || {}) || '',
+      statusKey: alertStatusKey,
       subStatus: data.subStatus || issue?.currentStatus?.subStatusKey || '',
       categoryKey: data.categoryKey || data.statusKey || '',
       note: data.note || issue?.note || '',
-      createdAt: data.createdAt || null
+      createdAt: data.createdAt || null,
+      workflowState,
+      isAccepted: workflowState === 'accepted',
+      acceptedBy: workflowState === 'accepted'
+        ? (issue?.workflowStateHistory?.accepted?.by || issue?.workflowStateByStatusHistory?.[alertStatusKey]?.accepted?.by || null)
+        : null
     });
   }
   if (staleAlertDeletes.length) await Promise.all(staleAlertDeletes);
@@ -271,43 +408,36 @@ async function _loadActiveRoleAlertsForCurrentUser() {
   return alerts;
 }
 
-window.openRoleAlertInboxModal = async function() {
+async function _openRoleAlertInboxModalInternal({ resetToggle = true } = {}) {
   const modal = document.getElementById('role-alerts-modal');
   const list = document.getElementById('role-alerts-list');
   if (!modal || !list) return;
   list.innerHTML = `<div style="color:var(--text3);font-size:13px;">Loading active alerts…</div>`;
   modal.classList.add('visible');
-  clearRoleAlertBadge();
+  if (resetToggle) _roleAlertsShowAccepted = false;
+  _updateRoleAlertModalToggleUI();
   try {
     const alerts = await _loadActiveRoleAlertsForCurrentUser();
-    _setActiveRoleAlertCount(alerts.length);
-    if (!alerts.length) {
-      list.innerHTML = `<div style="color:var(--text3);font-size:13px;">No active alerts right now.</div>`;
-      return;
-    }
-    list.innerHTML = alerts.map(a => {
-      const statusColor = getStatusColor(a.statusKey || a.categoryKey || 'open');
-      return `
-      <div style="background:${alphaColor(statusColor, 0.10)};border:1px solid ${alphaColor(statusColor, 0.45)};border-radius:10px;padding:10px 12px;">
-        <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">
-          <div style="min-width:0;flex:1;">
-            <div style="font-weight:700;color:${statusColor};">${esc(a.feedLabel)} · ${esc(a.machine)}</div>
-            ${a.subStatus ? `<div style="font-size:12px;color:var(--text2);margin-top:4px;">${esc(a.subStatus)}</div>` : ''}
-            <div style="font-size:12px;color:var(--text2);margin-top:4px;">${esc(a.note || 'No note')}</div>
-          </div>
-          <div style="display:flex;flex-direction:column;gap:6px;align-items:stretch;min-width:72px;">
-            <button class="btn btn-ghost" style="padding:4px 8px;font-size:11px;" onclick="focusIssueFromAlert('${esc(a.issueId)}')">Open</button>
-            <button class="btn btn-edit" style="padding:4px 8px;font-size:11px;" onclick="acceptRoleAlert('${esc(a.issueId)}','${esc(a.statusKey)}')">Accept</button>
-            <button class="btn btn-danger" style="padding:4px 8px;font-size:11px;" onclick="deleteRoleAlert('${esc(a.id)}','${esc(a.categoryKey || '')}','${esc(a.statusKey || '')}')">Delete</button>
-          </div>
-        </div>
-      </div>
-    `;
-    }).join('');
+    _roleAlertsCache = alerts;
+    _renderRoleAlertsModal(alerts);
   } catch (e) {
     list.innerHTML = `<div style="color:var(--red);font-size:13px;">${esc(e?.message || 'Unable to load alerts.')}</div>`;
     _setActiveRoleAlertCount(0);
+    _updateRoleAlertModalFooter(0, 0);
   }
+}
+
+window.openRoleAlertInboxModal = async function() {
+  await _openRoleAlertInboxModalInternal({ resetToggle: true });
+};
+
+window.setRoleAlertsShowAccepted = async function(showAccepted) {
+  _roleAlertsShowAccepted = !!showAccepted;
+  if (!_roleAlertsCache.length) {
+    _updateRoleAlertModalToggleUI();
+    return;
+  }
+  _renderRoleAlertsModal(_roleAlertsCache);
 };
 
 window.closeRoleAlertInboxModal = function() {
@@ -338,7 +468,10 @@ window.deleteRoleAlert = async function(alertId, categoryKey, statusKey) {
     await updateDoc(alertRef, {
       recipientUserIds: arrayRemove(currentUser.uid)
     });
-    await openRoleAlertInboxModal();
+    if (document.getElementById('role-alerts-modal')?.classList.contains('visible')) {
+      await _openRoleAlertInboxModalInternal({ resetToggle: false });
+    }
+    await _refreshRoleAlertBadgeCount();
   } catch (e) {
     showGameToast(`⚠️ Could not delete alert: ${e?.message || e}`);
   }
@@ -349,7 +482,11 @@ window.acceptRoleAlert = async function(issueId, statusKey) {
   try {
     await setWorkflowStateForStatus(issueId, statusKey, 'accepted');
     showGameToast('✅ Workflow accepted');
-    await openRoleAlertInboxModal();
+    _roleAlertsShowAccepted = true;
+    if (document.getElementById('role-alerts-modal')?.classList.contains('visible')) {
+      await _openRoleAlertInboxModalInternal({ resetToggle: false });
+    }
+    await _refreshRoleAlertBadgeCount();
   } catch (e) {
     showGameToast(`⚠️ Could not accept: ${e?.message || e}`);
   }
@@ -364,7 +501,7 @@ function startRoleFeedAlertsWatcher() {
     limit(40)
   );
   _roleFeedAlertsUnsubscribe = onSnapshot(q, snap => {
-    _setActiveRoleAlertCount(snap.size);
+    void _refreshRoleAlertBadgeCount();
     snap.docChanges().forEach(change => {
       if (change.type !== 'added') return;
       const id = change.doc.id;
@@ -2847,6 +2984,7 @@ function startListener() {
     });
     rebuildIssuesArrayFromMap();
     refreshVisibleData();
+    void _refreshRoleAlertBadgeCount();
     if (!issueHistoryCursor && snap.docs.length) {
       issueHistoryCursor = snap.docs[snap.docs.length - 1];
       loadIssueHistoryPage().catch(() => {});
@@ -2875,6 +3013,7 @@ function startListener() {
       snap.docs.forEach(d => issuesById.set(d.id, buildIssueFromSnapshot(d)));
       rebuildIssuesArrayFromMap();
       refreshVisibleData();
+      void _refreshRoleAlertBadgeCount();
       if (snap.docs.length) {
         issueHistoryCursor = snap.docs[snap.docs.length - 1];
         loadIssueHistoryPage().catch(() => {});
@@ -9509,17 +9648,4 @@ window.closeEmbeddedAdminPortal = closeEmbeddedAdminPortal;
 document.getElementById('embedded-admin-overlay')?.addEventListener('click', e => {
   if (e.target === e.currentTarget) closeEmbeddedAdminPortal();
 });
-document.getElementById('issue-reminder-modal')?.addEventListener('click', e => {
-  if (e.target === e.currentTarget) closeIssueReminderModal();
-});
-
-setInterval(() => {
-  if (document.hidden) return;
-  maybeNotifyIssueReminders(issues);
-  if (issues.length > 0) renderIssues();
-}, 60000);
-
-setInterval(() => {
-  if (document.hidden) return;
-  refreshReminderClocksInDom();
-}, 1000);
+document.getElementById('issue-reminder-modal')?.addEventListener('click', e 

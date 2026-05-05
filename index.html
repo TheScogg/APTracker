@@ -1234,9 +1234,21 @@
 
 <div class="modal-overlay" id="role-alerts-modal">
   <div class="modal" style="max-width:620px">
-    <h3 style="margin:0 0 8px">Active Category Alerts</h3>
-    <p style="margin:0 0 12px;color:var(--text2);font-size:13px">Issues currently active in categories you subscribed to.</p>
+    <div class="role-alerts-header">
+      <div>
+        <h3 style="margin:0 0 8px">Active Category Alerts</h3>
+        <p style="margin:0;color:var(--text2);font-size:13px">Issues currently active in categories you subscribed to.</p>
+      </div>
+      <div class="role-alerts-toggle scope-toggle" role="group" aria-label="Accepted alerts visibility">
+        <button class="scope-btn active" id="role-alerts-hide-accepted-btn" type="button" onclick="setRoleAlertsShowAccepted(false)">Hide accepted</button>
+        <button class="scope-btn" id="role-alerts-show-accepted-btn" type="button" onclick="setRoleAlertsShowAccepted(true)">Show accepted</button>
+      </div>
+    </div>
     <div id="role-alerts-list" style="display:flex;flex-direction:column;gap:8px;max-height:55vh;overflow:auto;"></div>
+    <div id="role-alerts-footer" class="role-alerts-footer"></div>
+    <div class="modal-actions" style="justify-content:flex-end;">
+      <button class="btn btn-ghost" type="button" onclick="closeRoleAlertInboxModal()">Close</button>
+    </div>
   </div>
 </div>
 
