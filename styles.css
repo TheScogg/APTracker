@@ -907,8 +907,8 @@
     color: #fff;
   }
   #alerts-btn-header.alerts-has-active {
-    animation: roleAlertPulse 2.8s ease-in-out infinite;
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--orange) 24%, transparent), 0 0 10px color-mix(in srgb, var(--orange) 12%, transparent);
+    animation: roleAlertPulse 2.2s ease-in-out infinite;
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--orange) 28%, transparent), 0 0 12px color-mix(in srgb, var(--orange) 16%, transparent);
   }
   @keyframes roleAlertPulse {
     0%, 100% {
@@ -916,8 +916,8 @@
       box-shadow: 0 0 0 2px color-mix(in srgb, var(--orange) 22%, transparent), 0 0 10px color-mix(in srgb, var(--orange) 10%, transparent);
     }
     50% {
-      transform: scale(1.03);
-      box-shadow: 0 0 0 2px color-mix(in srgb, var(--orange) 34%, transparent), 0 0 16px color-mix(in srgb, var(--orange) 18%, transparent);
+      transform: scale(1.08);
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--orange) 44%, transparent), 0 0 22px color-mix(in srgb, var(--orange) 28%, transparent);
     }
   }
   #messages-btn-header {
