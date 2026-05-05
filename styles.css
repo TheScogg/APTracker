@@ -1040,16 +1040,21 @@
 
   @media (max-width: 560px) {
     .controls {
-      flex-wrap: wrap;
+      display: grid;
+      grid-template-columns: max-content minmax(0, 1fr) max-content;
+      column-gap: 8px;
+      row-gap: 8px;
       overflow: visible;
-      align-items: flex-start;
+      align-items: center;
     }
     .controls > .scope-toggle {
-      margin-left: auto;
-      margin-right: auto;
+      margin: 0;
+      justify-self: center;
+      min-width: 0;
     }
     .controls > .filter-toggle-btn {
-      margin-left: auto;
+      margin-left: 0;
+      justify-self: end;
     }
     .mobile-period-trigger {
       display: flex;
@@ -1069,13 +1074,12 @@
       white-space: nowrap;
     }
     .mobile-period-menu {
-      flex: 0 0 auto;
-      min-width: 0;
       position: relative;
+      justify-self: start;
+      min-width: 0;
     }
     .mobile-period-menu[open] {
-      flex-basis: auto;
-      flex-grow: 0;
+      min-width: 0;
     }
     .mobile-period-trigger::-webkit-details-marker { display: none; }
     .period-toggle-group {
