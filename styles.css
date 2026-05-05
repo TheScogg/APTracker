@@ -895,6 +895,9 @@
     line-height: 1;
     transform-origin: center;
   }
+  #alerts-btn-header.alerts-has-active .role-alert-icon {
+    animation: roleAlertIconFlash 2.2s ease-in-out infinite;
+  }
   #alerts-btn-header {
     background: var(--orange);
     border-color: var(--orange);
@@ -909,6 +912,20 @@
   #alerts-btn-header.alerts-has-active {
     animation: roleAlertPulse 2.2s ease-in-out infinite;
     box-shadow: 0 0 0 2px color-mix(in srgb, var(--orange) 28%, transparent), 0 0 12px color-mix(in srgb, var(--orange) 16%, transparent);
+  }
+  @keyframes roleAlertIconFlash {
+    0%, 100% {
+      background: var(--orange);
+      color: #fff;
+      border-color: var(--orange);
+      box-shadow: 0 0 0 1px color-mix(in srgb, var(--orange) 18%, transparent);
+    }
+    50% {
+      background: #fff;
+      color: var(--orange);
+      border-color: #fff;
+      box-shadow: 0 0 0 1px rgba(255,255,255,0.35), 0 0 10px color-mix(in srgb, var(--orange) 20%, transparent);
+    }
   }
   @keyframes roleAlertPulse {
     0%, 100% {
