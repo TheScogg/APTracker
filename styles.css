@@ -712,7 +712,7 @@
     align-items: center;
     justify-content: center;
     gap: 3px;
-    font-family: 'Rajdhani', 'Nunito', sans-serif;
+    font-family: 'Share Tech Mono', monospace;
     font-variant-numeric: tabular-nums;
     line-height: 1;
     position: relative;
