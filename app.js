@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, collection, updateDoc, deleteDoc, doc, getDoc, getDocs, setDoc, addDoc, onSnapshot, serverTimestamp, query, orderBy, where, writeBatch, arrayUnion, arrayRemove, increment, limit, runTransaction, startAfter } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut as fbSignOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getStorage, ref as storageRef, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
+import { getStorage, ref as storageRef, uploadString, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyABjasNBbJnsqq4M_UxKruKrN6-O2FXCwc",
@@ -6775,14 +6775,96 @@ function toggleUserDropdown() {
   }
 }
 document.getElementById('user-pill').addEventListener('click', toggleUserDropdown);
+
+function closeUserMenus() {
+  document.getElementById('user-dropdown')?.classList.remove('visible');
+  document.getElementById('user-pill')?.classList.remove('open');
+  document.getElementById('theme-select-grid')?.classList.remove('open');
+  document.getElementById('theme-select-toggle')?.classList.remove('open');
+  document.getElementById('theme-select-toggle')?.setAttribute('aria-expanded', 'false');
+}
+
+function handleShellAction(action, value, trigger, event) {
+  switch (action) {
+    case 'open-messages':
+      closeUserMenus();
+      window.openMessagingModal?.();
+      break;
+    case 'open-role-prefs':
+      closeUserMenus();
+      window.openRolePreferencesModal?.();
+      break;
+    case 'open-tutorial':
+      closeUserMenus();
+      window.openTutorial?.();
+      break;
+    case 'toggle-plant-dropdown':
+      window.togglePlantDropdown?.();
+      break;
+    case 'open-store':
+      closeUserMenus();
+      window.openStoreModal?.();
+      break;
+    case 'open-theme-editor':
+      window.openThemeEditor?.();
+      break;
+    case 'toggle-game-drawer':
+      closeUserMenus();
+      if (String(value) === 'false') window.toggleGameDrawer?.(false);
+      else window.toggleGameDrawer?.();
+      break;
+    case 'set-period':
+      window.setPeriod?.(value);
+      break;
+    case 'set-scope':
+      window.setScope?.(value);
+      break;
+    case 'toggle-filter-drawer':
+      window.toggleFilterDrawer?.();
+      break;
+    case 'toggle-stat-filter':
+      window.toggleStatFilter?.(value);
+      break;
+    case 'set-shift-filter':
+      window.setShiftFilter?.(value);
+      break;
+    case 'set-map-mode':
+      window.setMapMode?.(value);
+      break;
+    case 'set-issue-row-scope':
+      window.setIssueRowScope?.(value);
+      break;
+    case 'toggle-sort-dropdown':
+      window.toggleSortDropdown?.();
+      break;
+    case 'open-export-modal':
+      window.openExportModal?.();
+      break;
+    case 'download-excel':
+      window.downloadExcel?.();
+      break;
+    case 'clear-machine-breadcrumb':
+      window.clearMachineBreadcrumb?.();
+      break;
+    case 'close-messaging-sheets':
+      window.hideMessagingSheets?.();
+      break;
+    default:
+      return false;
+  }
+  if (event) event.preventDefault();
+  return true;
+}
+
+document.addEventListener('click', e => {
+  const trigger = e.target.closest?.('[data-shell-action]');
+  if (!trigger) return;
+  handleShellAction(trigger.dataset.shellAction, trigger.dataset.shellValue, trigger, e);
+});
 document.addEventListener('click', e => {
   const wrap=document.getElementById('user-pill-wrap');
   if (wrap && !wrap.contains(e.target)) {
-    document.getElementById('user-dropdown')?.classList.remove('visible');
-    document.getElementById('user-pill')?.classList.remove('open');
-    document.getElementById('theme-select-grid')?.classList.remove('open');
-    document.getElementById('theme-select-toggle')?.classList.remove('open');
-    document.getElementById('theme-select-toggle')?.setAttribute('aria-expanded', 'false');
+    closeUserMenus();
   }
 });
 const signoutBtn=document.getElementById('signout-btn');
@@ -8670,17 +8752,11 @@ document.getElementById('messaging-photo-input')?.addEventListener('change', e =
 // ── PRESS NOTES ──
 // Toggle between 'a' (Logbook) and 'b' (Team Channel) to switch prototypes
 const NOTES_VARIANT = 'a';
-const PRESS_NOTE_QUICK_CHIPS = [
-  'Checked',
-  'Waiting on parts',
-  'Maintenance on site',
-  'Escalated',
-  'Running again'
-];
 
 let _notesUnsubscribe = null;
 let _notesModalPressId = null;
 let _notesModalMachineCode = null;
+let pendingPressNotePhotos = [];
 
 function _nid(base) { return base + '-' + NOTES_VARIANT; }
 function _notesModalEl() { return document.getElementById('notes-modal-' + NOTES_VARIANT); }
@@ -8751,45 +8827,59 @@ function _setNotesHeader(notes = []) {
   }
 }
 
-function _insertPressNoteChip(text) {
-  const ta = _notesEl('notes-textarea');
-  if (!ta) return;
-  const chipText = String(text || '').trim();
-  if (!chipText) return;
-  ta.focus();
-  const start = typeof ta.selectionStart === 'number' ? ta.selectionStart : ta.value.length;
-  const end = typeof ta.selectionEnd === 'number' ? ta.selectionEnd : ta.value.length;
-  const before = ta.value.slice(0, start);
-  const after = ta.value.slice(end);
-  const needsLeadingSpace = before.length > 0 && !/\s$/.test(before);
-  const needsTrailingSpace = after.length > 0 && !/^\s/.test(after);
-  const insert = `${needsLeadingSpace ? ' ' : ''}${chipText}${needsTrailingSpace ? ' ' : ''}`;
-  if (typeof ta.setRangeText === 'function') {
-    ta.setRangeText(insert, start, end, 'end');
-  } else {
-    ta.value = `${before}${insert}${after}`;
+async function uploadPressNotePhotosToStorage(noteId, photos) {
+  const out = [];
+  for (let idx = 0; idx < (photos || []).length; idx++) {
+    const p = photos[idx] || {};
+    const src = String(p.dataUrl || '');
+    if (!src.startsWith('data:')) { out.push(p); continue; }
+    const meta = parseDataUrlMeta(src);
+    if (!meta) { out.push(p); continue; }
+    const ext = extFromContentType(meta.contentType);
+    const fileName = `${Date.now()}_${idx}.${ext}`;
+    const path = `plants/${currentPlantId}/pressNotes/${noteId}/photos/${fileName}`;
+    const sRef = storageRef(storage, path);
+    await uploadString(sRef, src, 'data_url');
+    const url = await getDownloadURL(sRef);
+    out.push({
+      name: p.name || fileName,
+      dataUrl: url,
+      url,
+      storagePath: path,
+      storageBucket: sRef.bucket,
+      contentType: meta.contentType,
+      sizeBytes: meta.sizeBytes,
+      source: 'storage'
+    });
   }
-  ta.dispatchEvent(new Event('input', { bubbles: true }));
-  ta.focus();
+  return out;
 }
 
-function _renderPressNoteChips() {
-  const chipsEl = _notesEl('notes-quick-chips');
-  if (!chipsEl) return;
-  chipsEl.innerHTML = '';
-  const label = document.createElement('div');
-  label.className = 'notes-quick-label';
-  label.textContent = 'Quick notes';
-  chipsEl.appendChild(label);
-  PRESS_NOTE_QUICK_CHIPS.forEach(chipText => {
-    const chip = document.createElement('button');
-    chip.type = 'button';
-    chip.className = 'notes-quick-chip';
-    chip.textContent = chipText;
-    chip.setAttribute('aria-label', `Insert quick note: ${chipText}`);
-    chip.onclick = () => _insertPressNoteChip(chipText);
-    chipsEl.appendChild(chip);
+function _pressNotePhotoUrls(note) {
+  return Array.isArray(note?.photos)
+    ? note.photos.map(p => p?.dataUrl || p?.url || '').filter(Boolean)
+    : [];
+}
+
+function _renderPressNotePhotoThumbs(note) {
+  const urls = _pressNotePhotoUrls(note);
+  if (!urls.length) return null;
+  const wrap = document.createElement('div');
+  wrap.className = 'notes-photo-strip';
+  urls.forEach((url, idx) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'notes-photo-thumb-btn';
+    btn.title = `Open photo ${idx + 1}`;
+    btn.onclick = () => openLightbox(idx, urls);
+    const img = document.createElement('img');
+    img.className = 'notes-photo-thumb';
+    img.src = url;
+    img.alt = `Press note photo ${idx + 1}`;
+    btn.appendChild(img);
+    wrap.appendChild(btn);
   });
+  return wrap;
 }
 
 function _renderPressNotes(notes) {
@@ -8838,6 +8928,8 @@ function _renderPressNotes(notes) {
       textEl.textContent = n.text;
       body.appendChild(header);
       body.appendChild(textEl);
+      const thumbs = _renderPressNotePhotoThumbs(n);
+      if (thumbs) body.appendChild(thumbs);
       entry.appendChild(leftCol);
       entry.appendChild(body);
       list.appendChild(entry);
@@ -8869,6 +8961,8 @@ function _renderPressNotes(notes) {
       textEl.className = 'chat-bubble-text';
       textEl.textContent = n.text;
       bubble.appendChild(textEl);
+      const thumbs = _renderPressNotePhotoThumbs(n);
+      if (thumbs) bubble.appendChild(thumbs);
       if (isOwn || isAdmin) {
         const del = document.createElement('button');
         del.className = 'chat-del-btn';
@@ -8897,12 +8991,13 @@ window.openNotesModal = (pressId, machineCode) => {
   ta.value = '';
   ta.style.height = 'auto';
   document.getElementById(_nid('notes-list')).innerHTML = '';
+  pendingPressNotePhotos = [];
+  renderPreviews(pendingPressNotePhotos, _nid('notes-photo-previews'));
   const errEl = document.getElementById(_nid('notes-error'));
   if (errEl) {
     errEl.style.display = 'none';
     errEl.textContent = '';
   }
-  _renderPressNoteChips();
   _setNotesHeader([]);
   _notesModalEl().classList.add('visible');
   if (_notesUnsubscribe) { _notesUnsubscribe(); _notesUnsubscribe = null; }
@@ -8925,26 +9020,35 @@ window.closeNotesModal = () => {
   if (_notesUnsubscribe) { _notesUnsubscribe(); _notesUnsubscribe = null; }
   _notesModalPressId = null;
   _notesModalMachineCode = null;
+  pendingPressNotePhotos = [];
+  renderPreviews(pendingPressNotePhotos, _nid('notes-photo-previews'));
 };
 
 window.submitPressNote = async () => {
   const ta = _notesEl('notes-textarea');
-  const text = ta.value.trim();
+  const rawText = ta.value.trim();
+  const text = rawText || (pendingPressNotePhotos.length ? 'Photo attached' : '');
   if (!text || !_notesModalPressId || !currentUser) return;
   const btn = _notesEl('notes-submit-btn');
   if (btn) btn.disabled = true;
   const errEl = _notesEl('notes-error');
   if (errEl) errEl.style.display = 'none';
   try {
-    await addDoc(plantCol('pressNotes'), {
+    const noteRef = doc(plantCol('pressNotes'));
+    const uploadedPhotos = await uploadPressNotePhotosToStorage(noteRef.id, pendingPressNotePhotos);
+    await setDoc(noteRef, {
       pressId: _notesModalPressId,
       machineCode: _notesModalMachineCode,
       text,
+      photoCount: uploadedPhotos.length,
+      photos: uploadedPhotos,
       createdAt: serverTimestamp(),
       createdBy: { uid: currentUser.uid, name: currentUser.displayName || currentUser.email || 'Unknown' }
     });
     ta.value = '';
     ta.style.height = 'auto';
+    pendingPressNotePhotos = [];
+    renderPreviews(pendingPressNotePhotos, _nid('notes-photo-previews'));
     ta.focus();
   } catch(e) {
     console.error('submitPressNote error', e);
@@ -8956,8 +9060,18 @@ window.submitPressNote = async () => {
 
 async function _deletePressNote(noteId) {
   if (!noteId || !currentPlantId) return;
-  try { await deleteDoc(doc(db, 'plants', currentPlantId, 'pressNotes', noteId)); }
-  catch(e) { console.error('deletePressNote error', e); }
+  try {
+    const noteRef = doc(db, 'plants', currentPlantId, 'pressNotes', noteId);
+    const snap = await getDoc(noteRef);
+    const note = snap.exists() ? (snap.data() || {}) : {};
+    const photos = Array.isArray(note.photos) ? note.photos.filter(Boolean) : [];
+    await Promise.allSettled(photos.map(async p => {
+      if (!p?.storagePath) return;
+      const noteStorage = p.storageBucket ? getStorage(app, `gs://${p.storageBucket}`) : storage;
+      await deleteObject(storageRef(noteStorage, p.storagePath));
+    }));
+    await deleteDoc(noteRef);
+  } catch(e) { console.error('deletePressNote error', e); }
 }
 
 // Allow Enter to submit (Shift+Enter = newline) — wire up both variant textareas
@@ -8965,6 +9079,10 @@ async function _deletePressNote(noteId) {
   document.getElementById('notes-textarea-' + v)?.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitPressNote(); }
   });
+  document.getElementById('notes-camera-btn-' + v)?.addEventListener('click', () => document.getElementById('notes-camera-input-' + v)?.click());
+  document.getElementById('notes-library-btn-' + v)?.addEventListener('click', () => document.getElementById('notes-library-input-' + v)?.click());
+  document.getElementById('notes-camera-input-' + v)?.addEventListener('change', function(){ handleFiles(this.files, pendingPressNotePhotos, _nid('notes-photo-previews')); this.value=''; });
+  document.getElementById('notes-library-input-' + v)?.addEventListener('change', function(){ handleFiles(this.files, pendingPressNotePhotos, _nid('notes-photo-previews')); this.value=''; });
   document.getElementById('notes-modal-' + v)?.addEventListener('click', e => {
     if (e.target === document.getElementById('notes-modal-' + v)) closeNotesModal();
   });

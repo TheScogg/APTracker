@@ -1,0 +1,83 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function currentUid() {
+      return request.auth.uid;
+    }
+
+    function memberPath(plantId) {
+      return /databases/(default)/documents/plants/$(plantId)/members/$(currentUid());
+    }
+
+    function memberDoc(plantId) {
+      return firestore.get(memberPath(plantId));
+    }
+
+    function isPlantMember(plantId) {
+      return signedIn()
+        && firestore.exists(memberPath(plantId))
+        && memberDoc(plantId).data.isActive == true;
+    }
+
+    function memberRole(plantId) {
+      return memberDoc(plantId).data.role;
+    }
+
+    function isEditorOrAbove(plantId) {
+      return isPlantMember(plantId)
+        && (memberRole(plantId) == "admin" || memberRole(plantId) == "editor");
+    }
+
+    function conversationMemberPath(plantId, conversationId, userId) {
+      return /databases/(default)/documents/plants/$(plantId)/conversations/$(conversationId)/members/$(userId);
+    }
+
+    function conversationPath(plantId, conversationId) {
+      return /databases/(default)/documents/plants/$(plantId)/conversations/$(conversationId);
+    }
+
+    function isConversationParticipant(plantId, conversationId) {
+      return signedIn()
+        && (
+          firestore.exists(conversationMemberPath(plantId, conversationId, currentUid()))
+          || (
+            firestore.exists(conversationPath(plantId, conversationId))
+            && firestore.get(conversationPath(plantId, conversationId)).data.memberIds.hasAny([currentUid()])
+          )
+        );
+    }
+
+    function isValidImageUpload() {
+      return request.resource.size < 20 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    match /plants/{plantId}/issues/{issueId}/photos/{fileName} {
+      allow read: if isPlantMember(plantId);
+      allow write: if isEditorOrAbove(plantId)
+                   && (request.resource == null || isValidImageUpload());
+    }
+
+    match /plants/{plantId}/pressNotes/{noteId}/photos/{fileName} {
+      allow read: if isPlantMember(plantId);
+      allow write: if isEditorOrAbove(plantId)
+                   && (request.resource == null || isValidImageUpload());
+    }
+
+    match /plants/{plantId}/conversations/{conversationId}/photos/{fileName} {
+      allow read: if isConversationParticipant(plantId, conversationId);
+      allow write: if isConversationParticipant(plantId, conversationId)
+                   && (request.resource == null || isValidImageUpload());
+    }
+
+    // Deny everything else by default.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
