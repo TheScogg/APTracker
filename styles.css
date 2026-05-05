@@ -592,6 +592,13 @@
   .mobile-period-menu { position: relative; }
   .mobile-period-trigger { display: none; }
   .period-toggle-group { display: flex; }
+  .controls > .scope-toggle {
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .controls > .filter-toggle-btn {
+    margin-left: auto;
+  }
   .filter-toggle-btn { display: flex; align-items: center; gap: 6px; background: var(--bg3); border: 1px solid var(--border); border-radius: 20px; padding: 4px 12px; cursor: pointer; font-size: 11px; color: var(--text2); font-family: 'Nunito', sans-serif; font-weight: 600; transition: border-color 0.15s, color 0.15s; user-select: none; }
   .filter-toggle-btn:hover { border-color: var(--text2); color: var(--text); }
   .filter-toggle-btn.active { border-color: var(--accent); color: var(--accent); }
@@ -1034,6 +1041,13 @@
       flex-wrap: wrap;
       overflow: visible;
       align-items: flex-start;
+    }
+    .controls > .scope-toggle {
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .controls > .filter-toggle-btn {
+      margin-left: auto;
     }
     .mobile-period-trigger {
       display: flex;
