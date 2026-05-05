@@ -509,10 +509,11 @@
   .theme-choice.theme-locked { opacity: 0.6; }
   .theme-lock-badge { display: block; font-size: 9px; color: var(--yellow,#eab308); font-weight: 700; margin-top: 3px; letter-spacing: 0.02em; }
   /* ── USER PILL ── */
-  .user-pill { display: flex; align-items: center; gap: 6px; background: var(--bg3); border: 1px solid var(--border); border-radius: 20px; padding: 3px 8px 3px 3px; cursor: pointer; transition: border-color 0.15s; user-select: none; }
+  .user-pill { display: flex; align-items: center; gap: 7px; background: var(--bg3); border: 1px solid var(--border); border-radius: 20px; padding: 3px 9px 3px 3px; cursor: pointer; transition: border-color 0.15s; user-select: none; }
   .user-pill:hover { border-color: var(--text2); }
   .user-pill.open { border-color: var(--accent); }
   .user-avatar-fallback { width: 22px; height: 22px; border-radius: 50%; background: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: white; flex-shrink: 0; background-size: cover; background-position: center; }
+  .user-name { font-size: 11px; color: var(--text2); max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .user-chevron { font-size: 8px; color: var(--text3); transition: transform 0.2s; }
   .user-pill.open .user-chevron { transform: rotate(180deg); }
   /* ── USER DROPDOWN (redesigned) ── */
@@ -984,7 +985,8 @@
     .logo { gap: 8px; }
     .plant-switcher-btn { padding: 5px 8px; font-size: 11px; }
     #messages-btn-header { padding: 5px 8px; min-width: 34px; justify-content: center; }
-    .user-pill { padding: 4px 7px 4px 3px; }
+    .user-pill { padding: 4px 8px; }
+    .user-name { max-width: 72px; }
     .game-pill {
       order: 0;
       flex: 0 0 auto;
