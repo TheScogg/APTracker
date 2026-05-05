@@ -275,10 +275,10 @@ function _renderRoleAlertCard(alert) {
         <div class="role-alert-card-note">${esc(alert.note || 'No note')}</div>
       </div>
       <div class="role-alert-card-actions">
-        <button class="btn btn-ghost role-alert-action-btn" type="button" onclick="focusIssueFromAlert('${esc(alert.issueId)}')">View</button>
+        <button class="btn btn-view role-alert-action-btn" type="button" onclick="focusIssueFromAlert('${esc(alert.issueId)}')">View</button>
         ${isAccepted
           ? `<button class="btn btn-reopen role-alert-action-btn" type="button" onclick="unacceptRoleAlert('${esc(alert.issueId)}','${esc(alert.statusKey)}')">Unaccept</button>`
-          : `<button class="btn btn-edit role-alert-action-btn" type="button" onclick="acceptRoleAlert('${esc(alert.issueId)}','${esc(alert.statusKey)}')">Accept</button>`}
+          : `<button class="btn btn-success role-alert-action-btn" type="button" onclick="acceptRoleAlert('${esc(alert.issueId)}','${esc(alert.statusKey)}')">Accept</button>`}
         <button class="btn btn-danger role-alert-action-btn" type="button" onclick="deleteRoleAlert('${esc(alert.id)}','${esc(alert.categoryKey || '')}','${esc(alert.statusKey || '')}')">Delete</button>
       </div>
     </div>

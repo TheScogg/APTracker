@@ -1395,6 +1395,8 @@
   .btn-blue:hover:not(:disabled) { opacity: 0.85; }
   .btn-ghost      { background: transparent; border: 1px solid var(--border); color: var(--text2); }
   .btn-ghost:hover:not(:disabled) { border-color: var(--text2); color: var(--text); }
+  .btn-view       { background: transparent; border: 1px solid var(--blue); color: var(--blue); }
+  .btn-view:hover:not(:disabled) { background: var(--blue-dim); }
   .btn-danger     { background: transparent; border: 1px solid var(--red);      color: var(--red);      font-size: 11px; padding: 5px 11px; }
   .btn-danger:hover     { background: var(--red-dim); }
   .btn-reopen     { background: transparent; border: 1px solid var(--blue);     color: var(--blue);     font-size: 11px; padding: 5px 11px; }
