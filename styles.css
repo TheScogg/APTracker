@@ -1071,23 +1071,28 @@
     .mobile-period-menu {
       flex: 0 0 auto;
       min-width: 0;
+      position: relative;
     }
     .mobile-period-menu[open] {
-      flex-basis: 100%;
-      flex-grow: 1;
+      flex-basis: auto;
+      flex-grow: 0;
     }
     .mobile-period-trigger::-webkit-details-marker { display: none; }
     .period-toggle-group {
       display: none;
-      position: static;
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 0;
       z-index: 20;
       background: var(--bg2);
       border: 1px solid var(--border);
       border-radius: 10px;
       box-shadow: 0 8px 22px rgba(0,0,0,0.35);
       overflow: hidden;
-      margin-top: 6px;
-      width: 100%;
+      margin-top: 0;
+      width: max-content;
+      min-width: 100%;
+      max-width: calc(100vw - 32px);
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 1px;
