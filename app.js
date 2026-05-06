@@ -8937,7 +8937,9 @@ let _notesModalPressId = null;
 let _notesModalMachineCode = null;
 let pendingPressNotePhotos = [];
 let _pressWikiModalPressId = null;
-let _pressWikiSelectedPageId = 'shift-notes';
+let _pressWikiSelectedPageId = 'press-wiki';
+let _pressWikiCurrentPage = null;
+let _pressWikiNotesUnsubscribe = null;
 
 function _nid(base) { return base + '-' + NOTES_VARIANT; }
 function _notesModalEl() { return document.getElementById('notes-modal-' + NOTES_VARIANT); }
@@ -9063,6 +9065,346 @@ function _renderPressNotePhotoThumbs(note) {
   return wrap;
 }
 
+function _pressWikiSlugify(value, fallback = 'section') {
+  return String(value || fallback)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || fallback;
+}
+
+function _pressWikiTemplateBody(title = 'Press Wiki Page', machineCode = '') {
+  const pressLabel = title || 'this press';
+  const codeLine = machineCode ? `- Press / machine code: ${machineCode}` : '- Press / machine code:';
+  return [
+    '# Overview',
+    '',
+    `This page captures the stable operating knowledge for ${pressLabel}.`,
+    '',
+    '# Standard Setup',
+    '',
+    codeLine,
+    '- Barrel temperatures by zone:',
+    '- Mold temperature:',
+    '- Clamp tonnage:',
+    '- Screw speed:',
+    '- Back pressure:',
+    '- Hold / pack pressure:',
+    '- Cycle time:',
+    '- Drying settings:',
+    '',
+    '# Special Instructions',
+    '',
+    '- Do not overwrite verified values without confirming with the lead or process owner.',
+    '- Record any press-specific quirks here.',
+    '',
+    '# Photos',
+    '',
+    '- Add control panel, setup, good part, and bad part photos.',
+    '',
+    '# Troubleshooting',
+    '',
+    '- Symptom:',
+    '- First check:',
+    '- Likely cause:',
+    '- What worked last time:',
+    '',
+    '# History',
+    '',
+    '- Last verified by:',
+    '- Date:',
+    '- Change summary:'
+  ].join('\n');
+}
+
+function _pressWikiSplitBody(body) {
+  const lines = String(body || '').replace(/\r\n/g, '\n').split('\n');
+  const sections = [];
+  const lead = [];
+  let current = null;
+
+  const flushCurrent = () => {
+    if (!current) return;
+    current.body = current.lines.join('\n').trim();
+    sections.push(current);
+    current = null;
+  };
+
+  lines.forEach(line => {
+    const heading = line.match(/^(#{1,3})\s+(.*)$/);
+    if (heading) {
+      flushCurrent();
+      current = {
+        level: heading[1].length,
+        title: heading[2].trim(),
+        lines: [],
+        id: _pressWikiSlugify(heading[2].trim(), `section-${sections.length + 1}`)
+      };
+      return;
+    }
+    if (current) current.lines.push(line);
+    else lead.push(line);
+  });
+
+  flushCurrent();
+  return { lead: lead.join('\n').trim(), sections };
+}
+
+function _pressWikiRelativeStamp(value) {
+  return value ? _relativeTime(value) : '';
+}
+
+function _pressWikiRenderSummaryCard(page) {
+  const summaryEl = document.getElementById('press-wiki-summary');
+  if (!summaryEl) return;
+  summaryEl.innerHTML = '';
+  const summaryText = String(page?.summary || '').trim();
+  const summary = document.createElement('div');
+  summary.style.fontSize = '13px';
+  summary.style.lineHeight = '1.55';
+  summary.style.color = 'var(--text)';
+  summary.textContent = summaryText || 'No summary yet. Use Edit to describe what this press is best at and what operators need to know.';
+  summaryEl.appendChild(summary);
+
+  const chipRow = document.createElement('div');
+  chipRow.style.display = 'flex';
+  chipRow.style.flexWrap = 'wrap';
+  chipRow.style.gap = '6px';
+  chipRow.style.marginTop = '8px';
+  const chips = [
+    page?.status ? String(page.status) : null,
+    page?.lastVerifiedAt ? `Verified ${_pressWikiRelativeStamp(page.lastVerifiedAt)}` : null,
+    page?.updatedAt ? `Updated ${_pressWikiRelativeStamp(page.updatedAt)}` : null
+  ].filter(Boolean);
+  (Array.isArray(page?.tags) ? page.tags : []).slice(0, 5).forEach(tag => chips.push(`#${String(tag).trim()}`));
+  chips.forEach(text => {
+    const chip = document.createElement('span');
+    chip.className = 'shift-badge';
+    chip.style.borderColor = 'var(--border)';
+    chip.style.color = 'var(--text2)';
+    chip.textContent = text;
+    chipRow.appendChild(chip);
+  });
+  if (chipRow.childNodes.length) summaryEl.appendChild(chipRow);
+}
+
+function _pressWikiRenderArticle(page, currentRevision) {
+  const bodyEl = document.getElementById('press-wiki-body');
+  const tocEl = document.getElementById('press-wiki-toc');
+  if (!bodyEl || !tocEl) return;
+  bodyEl.innerHTML = '';
+  tocEl.innerHTML = '';
+
+  const rawBody = String(page?.body || currentRevision?.body || '').trim();
+  const structuredSections = Array.isArray(page?.sections) && page.sections.length > 0
+    ? page.sections
+        .map((section, index) => ({
+          id: _pressWikiSlugify(section?.id || section?.title || `section-${index + 1}`, `section-${index + 1}`),
+          title: String(section?.title || `Section ${index + 1}`).trim(),
+          level: Math.min(Math.max(Number(section?.level) || 2, 2), 3),
+          body: String(section?.body || '').trim(),
+          order: Number(section?.order) || index + 1
+        }))
+        .sort((a, b) => a.order - b.order)
+    : null;
+
+  const parsed = structuredSections && structuredSections.length ? null : _pressWikiSplitBody(rawBody);
+  const lead = parsed?.lead || '';
+  const sections = structuredSections && structuredSections.length
+    ? structuredSections
+    : (parsed?.sections || []);
+
+  const tocEntries = [];
+  if (lead) tocEntries.push({ id: 'press-wiki-lead', title: 'Overview', level: 2 });
+  sections.forEach(section => tocEntries.push({ id: section.id, title: section.title, level: section.level || 2 }));
+
+  if (!tocEntries.length && !rawBody) {
+    tocEl.innerHTML = '<div class="press-wiki-toc-empty">No sections yet. Use headings in the editor to structure this page.</div>';
+    const empty = document.createElement('div');
+    empty.className = 'press-wiki-empty';
+    empty.textContent = 'No wiki content yet. Use Edit to add the press overview, setup values, instructions, and troubleshooting notes.';
+    bodyEl.appendChild(empty);
+    return;
+  }
+
+  tocEntries.forEach(entry => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = `press-wiki-toc-link press-wiki-toc-level-${entry.level}`;
+    btn.textContent = entry.title;
+    btn.onclick = () => {
+      const target = document.getElementById(entry.id);
+      target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+    tocEl.appendChild(btn);
+  });
+
+  if (lead) {
+    const leadSection = document.createElement('section');
+    leadSection.id = 'press-wiki-lead';
+    leadSection.className = 'press-wiki-section press-wiki-section-level-2 press-wiki-lead';
+    const leadTitle = document.createElement('div');
+    leadTitle.className = 'press-wiki-section-title';
+    leadTitle.textContent = 'Overview';
+    const leadBody = document.createElement('div');
+    leadBody.className = 'press-wiki-section-body';
+    leadBody.textContent = lead;
+    leadSection.appendChild(leadTitle);
+    leadSection.appendChild(leadBody);
+    bodyEl.appendChild(leadSection);
+  }
+
+  sections.forEach(section => {
+    const sec = document.createElement('section');
+    sec.id = section.id;
+    sec.className = `press-wiki-section press-wiki-section-level-${section.level || 2}`;
+    const title = document.createElement('div');
+    title.className = 'press-wiki-section-title';
+    title.textContent = section.title;
+    const body = document.createElement('div');
+    body.className = 'press-wiki-section-body';
+    body.textContent = section.body || '—';
+    sec.appendChild(title);
+    sec.appendChild(body);
+    bodyEl.appendChild(sec);
+  });
+}
+
+function _pressWikiRenderAttachments(pageId, attachments) {
+  const attachmentsEl = document.getElementById('press-wiki-attachments');
+  if (!attachmentsEl) return;
+  attachmentsEl.innerHTML = '';
+  if (!Array.isArray(attachments) || !attachments.length) {
+    attachmentsEl.innerHTML = '<div class="press-wiki-empty">No photos yet. Add setup and panel shots that explain how this press should run.</div>';
+    return;
+  }
+  attachments.forEach((data, idx) => {
+    if (!data?.url) return;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'notes-photo-thumb-btn';
+    btn.title = data.caption || `Attachment ${idx + 1}`;
+    const img = document.createElement('img');
+    img.className = 'notes-photo-thumb';
+    img.src = data.url;
+    img.alt = data.caption || `Attachment ${idx + 1}`;
+    btn.appendChild(img);
+    btn.onclick = () => openLightbox(0, [data.url]);
+    attachmentsEl.appendChild(btn);
+  });
+}
+
+function _pressWikiRenderRevisions(revisions, currentRevisionId) {
+  const revisionsEl = document.getElementById('press-wiki-revisions');
+  if (!revisionsEl) return;
+  revisionsEl.innerHTML = '';
+  if (!Array.isArray(revisions) || !revisions.length) {
+    revisionsEl.innerHTML = '<div class="press-wiki-empty">No revisions yet. The first saved revision will appear here.</div>';
+    return;
+  }
+  revisions.forEach(rev => {
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'press-wiki-event-card';
+    row.style.textAlign = 'left';
+    row.style.cursor = 'pointer';
+    row.style.width = '100%';
+    if (rev.id === currentRevisionId) row.style.borderColor = 'var(--accent)';
+
+    const head = document.createElement('div');
+    head.className = 'press-wiki-event-head';
+    const left = document.createElement('div');
+    const title = document.createElement('div');
+    title.className = 'press-wiki-event-title';
+    title.textContent = rev.id === currentRevisionId ? 'Current revision' : 'Earlier revision';
+    const meta = document.createElement('div');
+    meta.className = 'press-wiki-event-meta';
+    meta.textContent = `${_pressWikiRelativeStamp(rev.editedAt) || 'just now'} · ${rev.editedBy?.name || 'Unknown'}`;
+    left.appendChild(title);
+    left.appendChild(meta);
+    head.appendChild(left);
+    row.appendChild(head);
+
+    const text = document.createElement('div');
+    text.className = 'press-wiki-event-text';
+    text.textContent = rev.changeNote || 'Update';
+    row.appendChild(text);
+
+    row.onclick = () => {
+      const bodyEl = document.getElementById('press-wiki-body');
+      if (bodyEl) {
+        const previewPage = { ...(_pressWikiCurrentPage || {}), body: rev.body || '' };
+        _pressWikiRenderArticle(previewPage, rev);
+      }
+    };
+    revisionsEl.appendChild(row);
+  });
+}
+
+function _pressWikiRenderEventNotes(notes) {
+  const feedEl = document.getElementById('press-wiki-event-feed');
+  if (!feedEl) return;
+  feedEl.innerHTML = '';
+  if (!Array.isArray(notes) || !notes.length) {
+    feedEl.innerHTML = '<div class="press-wiki-event-empty">No event notes yet. Use the floor notes flow to capture temperatures, photos, and temporary changes.</div>';
+    return;
+  }
+  notes.forEach(note => {
+    const card = document.createElement('div');
+    card.className = 'press-wiki-event-card';
+    const head = document.createElement('div');
+    head.className = 'press-wiki-event-head';
+    const left = document.createElement('div');
+    const title = document.createElement('div');
+    title.className = 'press-wiki-event-title';
+    title.textContent = note.createdBy?.name || 'Unknown';
+    const meta = document.createElement('div');
+    meta.className = 'press-wiki-event-meta';
+    meta.textContent = `${_pressWikiRelativeStamp(note.createdAt) || 'just now'} · ${note.machineCode || ''}`.trim();
+    left.appendChild(title);
+    left.appendChild(meta);
+    head.appendChild(left);
+    card.appendChild(head);
+
+    const text = document.createElement('div');
+    text.className = 'press-wiki-event-text';
+    text.textContent = note.text || '';
+    card.appendChild(text);
+
+    const thumbs = _renderPressNotePhotoThumbs(note);
+    if (thumbs) {
+      thumbs.className = 'press-wiki-event-photos';
+      card.appendChild(thumbs);
+    }
+    feedEl.appendChild(card);
+  });
+}
+
+function _stopPressWikiNotesWatcher() {
+  if (_pressWikiNotesUnsubscribe) {
+    _pressWikiNotesUnsubscribe();
+    _pressWikiNotesUnsubscribe = null;
+  }
+}
+
+function _startPressWikiNotesWatcher() {
+  _stopPressWikiNotesWatcher();
+  if (!_pressWikiModalPressId || !currentPlantId) return;
+  const q = query(plantCol('pressNotes'), where('pressId', '==', _pressWikiModalPressId));
+  _pressWikiNotesUnsubscribe = onSnapshot(q, snap => {
+    const notes = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => {
+        const at = a.createdAt?.toMillis?.() ?? a.createdAt?.seconds * 1000 ?? 0;
+        const bt = b.createdAt?.toMillis?.() ?? b.createdAt?.seconds * 1000 ?? 0;
+        return bt - at;
+      });
+    _pressWikiRenderEventNotes(notes);
+  }, err => { console.warn('pressWiki notes listener error', err); });
+}
+
+// Legacy seed helper for older pages that were auto-populated from notes.
+// New event notes are intentionally kept separate from the canonical wiki page.
 async function syncPressNoteToWikiPage(noteRefId, payload) {
   if (!currentPlantId || !payload?.pressId || !payload?.machineCode) return;
   const pressId = String(payload.pressId);
@@ -9228,7 +9570,9 @@ function _renderPressNotes(notes) {
 
 async function openPressWikiModal() {
   if (!_notesModalPressId || !currentPlantId) return;
-  _pressWikiModalPressId = String(_notesModalPressId);
+  const nextPressId = String(_notesModalPressId);
+  if (_pressWikiModalPressId !== nextPressId) _pressWikiSelectedPageId = 'press-wiki';
+  _pressWikiModalPressId = nextPressId;
   const modal = document.getElementById('press-wiki-modal');
   const titleEl = document.getElementById('press-wiki-title');
   const metaEl = document.getElementById('press-wiki-meta');
@@ -9236,15 +9580,16 @@ async function openPressWikiModal() {
   const revisionsEl = document.getElementById('press-wiki-revisions');
   const attachmentsEl = document.getElementById('press-wiki-attachments');
   if (!modal || !titleEl || !metaEl || !bodyEl || !revisionsEl || !attachmentsEl) return;
-  titleEl.textContent = 'Shift Notes';
-  metaEl.textContent = `Press ${_notesModalMachineCode || '—'}`;
-  bodyEl.textContent = 'Loading wiki...';
+  titleEl.textContent = 'Press Wiki';
+  metaEl.textContent = `Press ${_notesModalMachineCode || '—'} · wiki page + event notes`;
+  bodyEl.textContent = 'Loading press wiki...';
   revisionsEl.innerHTML = '';
   attachmentsEl.innerHTML = '';
   modal.classList.add('visible');
   try {
     await loadPressWikiPageList();
-    await loadPressWikiPage(_pressWikiSelectedPageId || 'shift-notes');
+    _startPressWikiNotesWatcher();
+    await loadPressWikiPage(_pressWikiSelectedPageId || 'press-wiki');
   } catch (e) {
     console.error('openPressWikiModal error', e);
     bodyEl.textContent = 'Could not load wiki content.';
@@ -9257,20 +9602,19 @@ async function loadPressWikiPageList() {
   const pagesSnap = await getDocs(query(pressWikiPagesCol(_pressWikiModalPressId), orderBy('updatedAt', 'desc'), limit(50)));
   const pages = pagesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
   selectEl.innerHTML = '';
-  if (!pages.length) {
+  const defaultPages = [
+    { id: 'press-wiki', label: 'Press Wiki Page' }
+  ];
+  const seen = new Set();
+  [...defaultPages, ...pages.map(page => ({ id: page.id, label: page.title || page.id }))].forEach(page => {
+    if (!page?.id || seen.has(page.id)) return;
+    seen.add(page.id);
     const opt = document.createElement('option');
-    opt.value = 'shift-notes';
-    opt.textContent = 'Shift Notes';
+    opt.value = page.id;
+    opt.textContent = page.label;
     selectEl.appendChild(opt);
-  } else {
-    pages.forEach(page => {
-      const opt = document.createElement('option');
-      opt.value = page.id;
-      opt.textContent = page.title || page.id;
-      selectEl.appendChild(opt);
-    });
-  }
-  if (![...selectEl.options].some(o => o.value === _pressWikiSelectedPageId)) _pressWikiSelectedPageId = selectEl.options[0]?.value || 'shift-notes';
+  });
+  if (![...selectEl.options].some(o => o.value === _pressWikiSelectedPageId)) _pressWikiSelectedPageId = selectEl.options[0]?.value || 'press-wiki';
   selectEl.value = _pressWikiSelectedPageId;
 }
 
@@ -9279,58 +9623,55 @@ async function loadPressWikiPage(pageId) {
   _pressWikiSelectedPageId = pageId;
   const titleEl = document.getElementById('press-wiki-title');
   const metaEl = document.getElementById('press-wiki-meta');
+  const summaryEl = document.getElementById('press-wiki-summary');
   const bodyEl = document.getElementById('press-wiki-body');
   const revisionsEl = document.getElementById('press-wiki-revisions');
   const attachmentsEl = document.getElementById('press-wiki-attachments');
-  if (!titleEl || !metaEl || !bodyEl || !revisionsEl || !attachmentsEl) return;
-  bodyEl.textContent = 'Loading wiki...';
+  const tocEl = document.getElementById('press-wiki-toc');
+  if (!titleEl || !metaEl || !summaryEl || !bodyEl || !revisionsEl || !attachmentsEl || !tocEl) return;
+  bodyEl.innerHTML = '<div class="press-wiki-empty">Loading press wiki...</div>';
   revisionsEl.innerHTML = '';
   attachmentsEl.innerHTML = '';
+  tocEl.innerHTML = '';
   try {
     const pageRef = pressWikiPageDoc(_pressWikiModalPressId, pageId);
     const pageSnap = await getDoc(pageRef);
     if (!pageSnap.exists()) {
-      bodyEl.textContent = 'No wiki content yet. Add a press note to seed Shift Notes.';
-      titleEl.textContent = pageId;
+      _pressWikiCurrentPage = {
+        id: pageId,
+        title: pageId === 'press-wiki' ? 'Press Wiki Page' : pageId,
+        summary: '',
+        body: '',
+        tags: []
+      };
+      titleEl.textContent = _pressWikiCurrentPage.title;
+      metaEl.textContent = `Press ${_notesModalMachineCode || '—'} · no page yet`;
+      _pressWikiRenderSummaryCard(_pressWikiCurrentPage);
+      bodyEl.innerHTML = '<div class="press-wiki-empty">No wiki content yet. Use Edit to create the canonical press page and add structured sections like Overview, Standard Setup, Special Instructions, and Troubleshooting.</div>';
+      tocEl.innerHTML = '<div class="press-wiki-toc-empty">No sections yet.</div>';
+      _pressWikiRenderAttachments(pageId, []);
+      _pressWikiRenderRevisions([], null);
       return;
     }
     const page = pageSnap.data() || {};
     const currentRevisionId = page.currentRevisionId || null;
     titleEl.textContent = page.title || pageId;
-    metaEl.textContent = `Press ${page.machineCode || _notesModalMachineCode || '—'} · Updated ${_relativeTime(page.updatedAt) || 'recently'}`;
+    metaEl.textContent = `Press ${page.machineCode || _notesModalMachineCode || '—'} · Updated ${_pressWikiRelativeStamp(page.updatedAt) || 'recently'}`;
     const revSnap = await getDocs(query(pressWikiRevisionsCol(_pressWikiModalPressId, pageId), orderBy('editedAt', 'desc'), limit(30)));
     const revisions = revSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     const currentRevision = revisions.find(r => r.id === currentRevisionId) || revisions[0] || null;
-    bodyEl.textContent = currentRevision?.body || 'No revision body available.';
-    revisionsEl.innerHTML = revisions.length ? '' : '<div style="color:var(--text3);">No revisions yet.</div>';
-    revisions.forEach(rev => {
-      const row = document.createElement('button');
-      row.type = 'button';
-      row.className = 'btn btn-ghost';
-      row.style.display = 'block';
-      row.style.width = '100%';
-      row.style.textAlign = 'left';
-      row.style.marginBottom = '6px';
-      row.textContent = `${_relativeTime(rev.editedAt) || 'just now'} · ${rev.editedBy?.name || 'Unknown'} · ${rev.changeNote || 'Update'}`;
-      row.onclick = () => { bodyEl.textContent = rev.body || ''; };
-      revisionsEl.appendChild(row);
-    });
+    _pressWikiCurrentPage = {
+      id: pageId,
+      ...page,
+      body: currentRevision?.body || '',
+      currentRevisionId
+    };
+    _pressWikiRenderSummaryCard(_pressWikiCurrentPage);
+    _pressWikiRenderArticle(_pressWikiCurrentPage, currentRevision);
+    _pressWikiRenderAttachments(pageId, Array.isArray(page.attachments) ? page.attachments : []);
+    _pressWikiRenderRevisions(revisions, currentRevisionId);
     const attachSnap = await getDocs(query(pressWikiAttachmentsCol(_pressWikiModalPressId, pageId), orderBy('uploadedAt', 'desc'), limit(24)));
-    attachSnap.docs.forEach((d, idx) => {
-      const data = d.data() || {};
-      if (!data.url) return;
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'notes-photo-thumb-btn';
-      btn.title = data.caption || `Attachment ${idx + 1}`;
-      const img = document.createElement('img');
-      img.className = 'notes-photo-thumb';
-      img.src = data.url;
-      img.alt = data.caption || `Attachment ${idx + 1}`;
-      btn.appendChild(img);
-      btn.onclick = () => openLightbox(0, [data.url]);
-      attachmentsEl.appendChild(btn);
-    });
+    _pressWikiRenderAttachments(pageId, attachSnap.docs.map(d => ({ id: d.id, ...d.data() })));
   } catch (e) {
     console.error('loadPressWikiPage error', e);
     bodyEl.textContent = 'Could not load wiki content.';
@@ -9340,11 +9681,14 @@ async function loadPressWikiPage(pageId) {
 window.closePressWikiModal = () => {
   document.getElementById('press-wiki-modal')?.classList.remove('visible');
   _pressWikiModalPressId = null;
+  _pressWikiCurrentPage = null;
+  _stopPressWikiNotesWatcher();
 };
 
 async function savePressWikiRevision() {
   if (!_pressWikiModalPressId || !_pressWikiSelectedPageId || !currentUser) return;
   const title = String(document.getElementById('press-wiki-edit-title')?.value || '').trim();
+  const summary = String(document.getElementById('press-wiki-edit-summary')?.value || '').trim();
   const body = String(document.getElementById('press-wiki-edit-body')?.value || '').trim();
   const changeNote = String(document.getElementById('press-wiki-edit-change-note')?.value || '').trim();
   if (!body || !changeNote) return alert('Body and change note are required.');
@@ -9353,11 +9697,16 @@ async function savePressWikiRevision() {
   await runTransaction(db, async tx => {
     const snap = await tx.get(pageRef);
     const prevRevisionId = snap.exists() ? (snap.data()?.currentRevisionId || null) : null;
+    const nextTitle = title || snap.data()?.title || _pressWikiSelectedPageId;
+    const nextSummary = summary || snap.data()?.summary || body.slice(0, 180);
+    const searchText = [nextTitle, nextSummary, body, ...(Array.isArray(snap.data()?.tags) ? snap.data().tags : [])].join(' ').toLowerCase().replace(/\s+/g, ' ').trim().slice(0, 2000);
     tx.set(revisionRef, { body, changeNote, prevRevisionId, editedBy: currentActor(), editedAt: serverTimestamp() });
     tx.set(pageRef, {
-      title: title || snap.data()?.title || _pressWikiSelectedPageId,
+      title: nextTitle,
+      summary: nextSummary,
       slug: _pressWikiSelectedPageId,
       machineCode: _notesModalMachineCode || '',
+      searchText,
       currentRevisionId: revisionRef.id,
       updatedBy: currentActor(),
       updatedAt: serverTimestamp(),
@@ -9376,8 +9725,10 @@ function togglePressWikiEditor(show) {
   if (!editor) return;
   editor.style.display = show ? 'block' : 'none';
   if (!show) return;
-  document.getElementById('press-wiki-edit-title').value = document.getElementById('press-wiki-title')?.textContent || '';
-  document.getElementById('press-wiki-edit-body').value = document.getElementById('press-wiki-body')?.textContent || '';
+  const page = _pressWikiCurrentPage || {};
+  document.getElementById('press-wiki-edit-title').value = page.title || document.getElementById('press-wiki-title')?.textContent || '';
+  document.getElementById('press-wiki-edit-summary').value = page.summary || '';
+  document.getElementById('press-wiki-edit-body').value = page.body || _pressWikiTemplateBody(page.title || 'Press Wiki Page', page.machineCode || _notesModalMachineCode || '');
   document.getElementById('press-wiki-edit-change-note').value = '';
 }
 
@@ -9443,13 +9794,6 @@ window.submitPressNote = async () => {
       createdAt: serverTimestamp(),
       createdBy: { uid: currentUser.uid, name: currentUser.displayName || currentUser.email || 'Unknown' }
     });
-    await syncPressNoteToWikiPage(noteRef.id, {
-      pressId: _notesModalPressId,
-      machineCode: _notesModalMachineCode,
-      text,
-      photoCount: uploadedPhotos.length,
-      photos: uploadedPhotos
-    });
     ta.value = '';
     ta.style.height = 'auto';
     pendingPressNotePhotos = [];
@@ -9501,6 +9845,16 @@ document.getElementById('press-wiki-page-select')?.addEventListener('change', e 
 document.getElementById('press-wiki-edit-btn')?.addEventListener('click', () => togglePressWikiEditor(true));
 document.getElementById('press-wiki-cancel-edit-btn')?.addEventListener('click', () => togglePressWikiEditor(false));
 document.getElementById('press-wiki-save-btn')?.addEventListener('click', () => savePressWikiRevision());
+document.getElementById('press-wiki-template-btn')?.addEventListener('click', () => {
+  const page = _pressWikiCurrentPage || {};
+  document.getElementById('press-wiki-edit-body').value = _pressWikiTemplateBody(page.title || 'Press Wiki Page', page.machineCode || _notesModalMachineCode || '');
+});
+document.getElementById('press-wiki-add-note-btn')?.addEventListener('click', () => {
+  if (_pressWikiModalPressId) openNotesModal(_pressWikiModalPressId, _notesModalMachineCode || '');
+});
+document.getElementById('press-wiki-open-notes-btn')?.addEventListener('click', () => {
+  if (_pressWikiModalPressId) openNotesModal(_pressWikiModalPressId, _notesModalMachineCode || '');
+});
 document.getElementById('press-wiki-new-page-btn')?.addEventListener('click', async () => {
   const raw = prompt('New wiki page id (example: setup-notes):', '');
   const pageId = String(raw || '').trim().toLowerCase().replace(/[^a-z0-9-_]/g, '-').replace(/-+/g, '-');

@@ -1540,6 +1540,47 @@
   .modal-title { font-family: 'Rajdhani', sans-serif; font-size: 20px; font-weight: 700; letter-spacing: 1px; margin-bottom: 5px; }
   .modal-machine { color: var(--accent); }
   .modal-subtitle { font-size: 11px; color: var(--text2); margin-bottom: 16px; font-family: 'Share Tech Mono', monospace; }
+  .press-wiki-modal-shell { gap: 14px; overflow-x: hidden; overflow-y: auto; }
+  .press-wiki-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .press-wiki-head-copy { min-width: 0; display:flex; flex-direction:column; gap:4px; }
+  .press-wiki-kicker { font-family:'Share Tech Mono', monospace; font-size: 9px; letter-spacing: 2.5px; text-transform: uppercase; color: var(--accent); opacity: 0.85; }
+  .press-wiki-title { font-family: 'Rajdhani', sans-serif; font-size: 22px; font-weight: 700; letter-spacing: 0.8px; line-height: 1.1; }
+  .press-wiki-meta { font-family: 'Share Tech Mono', monospace; font-size: 10px; color: var(--text2); }
+  .press-wiki-summary { font-size: 13px; line-height: 1.5; color: var(--text); max-width: 74ch; }
+  .press-wiki-toolbar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .press-wiki-toolbar-label { margin-bottom: 0; }
+  .press-wiki-layout { display:grid; grid-template-columns: minmax(0,1.6fr) minmax(280px,0.9fr); gap: 14px; min-height: 0; flex: 1; overflow: hidden; }
+  .press-wiki-main, .press-wiki-sidebar { min-height: 0; overflow: auto; display:flex; flex-direction:column; gap: 14px; }
+  .press-wiki-card { border: 1px solid var(--border); border-radius: 14px; background: var(--bg3); padding: 14px; box-shadow: 0 10px 24px rgba(0,0,0,0.16); }
+  .press-wiki-card-head { display:flex; align-items:flex-start; justify-content:space-between; gap: 12px; margin-bottom: 12px; }
+  .press-wiki-card-title { font-family:'Rajdhani', sans-serif; font-size: 16px; font-weight: 700; letter-spacing: 0.8px; }
+  .press-wiki-card-subtitle { font-size: 11px; color: var(--text2); margin-top: 2px; line-height: 1.4; }
+  .press-wiki-toc { display:flex; flex-direction:column; gap: 6px; margin-bottom: 12px; }
+  .press-wiki-toc-empty { font-size: 12px; color: var(--text2); font-style: italic; }
+  .press-wiki-toc-link { display:flex; align-items:center; gap:8px; width:100%; border:1px solid var(--border); background: transparent; color: var(--text2); border-radius: 10px; padding: 8px 10px; font-size: 12px; text-align:left; cursor:pointer; transition: border-color 0.15s, color 0.15s, background 0.15s; }
+  .press-wiki-toc-link:hover { border-color: var(--accent); color: var(--text); background: var(--accent-glow); }
+  .press-wiki-toc-level-2 { margin-left: 10px; }
+  .press-wiki-toc-level-3 { margin-left: 22px; font-size: 11px; }
+  .press-wiki-body { display:flex; flex-direction:column; gap: 12px; }
+  .press-wiki-empty { font-size: 13px; color: var(--text2); line-height: 1.5; }
+  .press-wiki-section { border: 1px solid var(--border); border-radius: 12px; background: rgba(0,0,0,0.06); padding: 12px; scroll-margin-top: 12px; }
+  .press-wiki-section-title { font-family:'Rajdhani', sans-serif; font-size: 17px; font-weight: 700; letter-spacing: 0.4px; margin-bottom: 8px; }
+  .press-wiki-section-level-2 .press-wiki-section-title { font-size: 18px; }
+  .press-wiki-section-level-3 .press-wiki-section-title { font-size: 15px; color: var(--text2); }
+  .press-wiki-section-body { white-space: pre-wrap; line-height: 1.55; font-size: 13px; color: var(--text); }
+  .press-wiki-lead { border-left: 3px solid var(--accent); padding-left: 12px; }
+  .press-wiki-attachments { display:flex; flex-wrap:wrap; gap:8px; }
+  .press-wiki-revisions { display:flex; flex-direction:column; gap: 8px; max-height: 240px; overflow:auto; }
+  .press-wiki-event-feed { display:flex; flex-direction:column; gap: 10px; min-height: 160px; }
+  .press-wiki-event-empty { color: var(--text2); font-size: 12px; line-height: 1.5; }
+  .press-wiki-event-card { display:flex; flex-direction:column; gap: 8px; border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; background: rgba(0,0,0,0.08); }
+  .press-wiki-event-head { display:flex; align-items:flex-start; justify-content:space-between; gap: 10px; }
+  .press-wiki-event-title { font-family:'Rajdhani', sans-serif; font-size: 15px; font-weight: 700; }
+  .press-wiki-event-meta { font-family:'Share Tech Mono', monospace; font-size: 10px; color: var(--text2); }
+  .press-wiki-event-text { font-size: 13px; line-height: 1.5; color: var(--text); white-space: pre-wrap; }
+  .press-wiki-event-photos { display:flex; flex-wrap:wrap; gap: 6px; }
+  .press-wiki-editor { display:none; border-top: 1px solid var(--border); padding-top: 12px; }
+  .press-wiki-editor-actions { display:flex; gap:8px; justify-content:flex-end; margin-top: 8px; }
   .role-alerts-header { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:12px; flex-wrap:wrap; }
   .role-alerts-toggle { flex-shrink:0; }
   .role-alerts-toggle .scope-btn { min-width: 0; }
@@ -1639,6 +1680,12 @@
   .shift-filter-row { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
   .shift-filter-pill { background:var(--bg3); border:1px solid var(--border); border-radius:14px; color:var(--text2); font-family:'Nunito',sans-serif; font-size:12px; padding:4px 12px; cursor:pointer; transition:border-color 0.15s,color 0.15s,background 0.15s; }
   .shift-filter-pill.active { border-color:var(--accent); color:var(--accent); background:color-mix(in srgb,var(--accent) 10%,transparent); }
+
+  @media (max-width: 980px) {
+    .press-wiki-layout { grid-template-columns: 1fr; }
+    .press-wiki-sidebar { order: 2; }
+    .press-wiki-main { order: 1; }
+  }
 
   /* ── MASCOT ANIMATIONS ── */
   @keyframes mascot-flame-flicker { 0%,100%{transform:scaleX(1) scaleY(1) rotate(0deg)} 20%{transform:scaleX(1.04) scaleY(0.97) rotate(1deg)} 40%{transform:scaleX(0.97) scaleY(1.03) rotate(-1deg)} 60%{transform:scaleX(1.03) scaleY(0.98) rotate(0.5deg)} 80%{transform:scaleX(0.98) scaleY(1.02) rotate(-0.5deg)} }
