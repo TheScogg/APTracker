@@ -9174,7 +9174,8 @@ function _pressWikiRenderSummaryCard(page) {
   const chips = [
     page?.status ? String(page.status) : null,
     page?.lastVerifiedAt ? `Verified ${_pressWikiRelativeStamp(page.lastVerifiedAt)}` : null,
-    page?.updatedAt ? `Updated ${_pressWikiRelativeStamp(page.updatedAt)}` : null
+    page?.updatedAt ? `Updated ${_pressWikiRelativeStamp(page.updatedAt)}` : null,
+    Number(page?.photoCount || 0) > 0 ? `${Number(page.photoCount || 0)} photo${Number(page.photoCount || 0) === 1 ? '' : 's'}` : null
   ].filter(Boolean);
   (Array.isArray(page?.tags) ? page.tags : []).slice(0, 5).forEach(tag => chips.push(`#${String(tag).trim()}`));
   chips.forEach(text => {
@@ -9378,6 +9379,80 @@ function _pressWikiRenderEventNotes(notes) {
     }
     feedEl.appendChild(card);
   });
+}
+
+async function _uploadPressWikiPhotoFiles(files = []) {
+  if (!_pressWikiModalPressId || !currentPlantId || !Array.isArray(files) || !files.length) return [];
+  const pageId = _pressWikiSelectedPageId || 'press-wiki';
+  const pageRef = pressWikiPageDoc(_pressWikiModalPressId, pageId);
+  const pageSnap = await getDoc(pageRef);
+  const pageData = pageSnap.exists() ? (pageSnap.data() || {}) : {};
+  const uploaded = [];
+
+  for (const file of files) {
+    if (!file || !String(file.type || '').startsWith('image/')) continue;
+    const dataUrl = await resizeImage(file);
+    const meta = parseDataUrlMeta(dataUrl);
+    if (!meta) continue;
+    const ext = extFromContentType(meta.contentType);
+    const safeStem = String(file.name || 'wiki-photo')
+      .replace(/\.[^.]+$/, '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9-_]+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'wiki-photo';
+    const fileName = `${Date.now()}_${safeStem}.${ext}`;
+    const storagePath = `plants/${currentPlantId}/presses/${_pressWikiModalPressId}/wikiPages/${pageId}/attachments/${fileName}`;
+    const sRef = storageRef(storage, storagePath);
+    await uploadString(sRef, dataUrl, 'data_url');
+    const url = await getDownloadURL(sRef);
+    uploaded.push({
+      name: file.name || fileName,
+      url,
+      storagePath,
+      storageBucket: sRef.bucket,
+      contentType: meta.contentType,
+      sizeBytes: meta.sizeBytes,
+      source: 'storage',
+      caption: String(file.name || fileName).replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ').trim() || 'Press wiki photo'
+    });
+  }
+
+  if (uploaded.length) {
+    const batch = writeBatch(db);
+    uploaded.forEach(photo => {
+      const attachmentRef = doc(pressWikiAttachmentsCol(_pressWikiModalPressId, pageId));
+      batch.set(attachmentRef, {
+        storagePath: photo.storagePath || null,
+        storageBucket: photo.storageBucket || null,
+        contentType: photo.contentType || null,
+        caption: photo.caption || photo.name || 'Press wiki photo',
+        uploadedBy: currentActor(),
+        uploadedAt: serverTimestamp(),
+        url: photo.url || null,
+        sizeBytes: photo.sizeBytes || null
+      });
+    });
+    batch.set(pageRef, {
+      title: pageData.title || (pageId === 'press-wiki' ? 'Press Wiki Page' : pageId),
+      slug: pageData.slug || pageId,
+      summary: pageData.summary || '',
+      visibility: pageData.visibility || 'plant',
+      isPinned: pageData.isPinned ?? true,
+      isLocked: pageData.isLocked ?? false,
+      machineCode: pageData.machineCode || _notesModalMachineCode || '',
+      photoCount: increment(uploaded.length),
+      updatedBy: currentActor(),
+      updatedAt: serverTimestamp(),
+      lastActivityAt: serverTimestamp(),
+      createdBy: pageData.createdBy || currentActor(),
+      createdAt: pageData.createdAt || serverTimestamp()
+    }, { merge: true });
+    await batch.commit();
+  }
+
+  return uploaded;
 }
 
 function _stopPressWikiNotesWatcher() {
@@ -9848,6 +9923,26 @@ document.getElementById('press-wiki-save-btn')?.addEventListener('click', () => 
 document.getElementById('press-wiki-template-btn')?.addEventListener('click', () => {
   const page = _pressWikiCurrentPage || {};
   document.getElementById('press-wiki-edit-body').value = _pressWikiTemplateBody(page.title || 'Press Wiki Page', page.machineCode || _notesModalMachineCode || '');
+});
+document.getElementById('press-wiki-add-photo-btn')?.addEventListener('click', () => {
+  document.getElementById('press-wiki-photo-input')?.click();
+});
+document.getElementById('press-wiki-photo-input')?.addEventListener('change', async function() {
+  const files = Array.from(this.files || []);
+  if (!files.length) return;
+  const btn = document.getElementById('press-wiki-add-photo-btn');
+  if (btn) btn.disabled = true;
+  try {
+    await _uploadPressWikiPhotoFiles(files);
+    await loadPressWikiPageList();
+    await loadPressWikiPage(_pressWikiSelectedPageId);
+  } catch (e) {
+    console.error('press wiki photo upload failed', e);
+    alert('Could not add photo: ' + (e.message || 'permission denied'));
+  } finally {
+    this.value = '';
+    if (btn) btn.disabled = false;
+  }
 });
 document.getElementById('press-wiki-add-note-btn')?.addEventListener('click', () => {
   if (_pressWikiModalPressId) openNotesModal(_pressWikiModalPressId, _notesModalMachineCode || '');
