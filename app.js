@@ -3077,7 +3077,6 @@ window.setPeriod = s => {
   updateCalLabel(document.getElementById('date-filter').value || localDateStr(new Date()), false);
   renderIssues(); updatePressStates(); updateStats();
   loadDailyScheduledPresses(scheduleDateForLookup());
-  closeMobilePeriodMenu();
 };
 
 window.onCalendarPick = val => {
@@ -3089,7 +3088,6 @@ window.onCalendarPick = val => {
   updateCalLabel(val, true);
   renderIssues(); updatePressStates(); updateStats(); updateFilterBadge();
   loadDailyScheduledPresses(val);
-  closeMobilePeriodMenu();
 };
 
 // ── DATE FILTER ──
