@@ -686,6 +686,7 @@ function hasPermission(plantId, perm) {
 
 Press notes stay lightweight and append-only after creation. Photo attachments are resized client-side, stored in Firebase Storage, and referenced by metadata on the note document.
 Storage rules should allow authenticated plant members to read note photos and plant editors/admins to upload them under `plants/{plantId}/pressNotes/{noteId}/photos/{fileName}`.
+Wiki page attachment uploads should use the same permission model under `plants/{plantId}/presses/{pressId}/wikiPages/{pageId}/attachments/{fileName}`.
 
 These docs are the event-note layer in the press wiki split. They capture the fast, time-based observations that should not overwrite the canonical wiki page.
 
@@ -769,7 +770,7 @@ This is the stable, structured wiki layer for a single press. Use it for operato
 
 ```json
 {
-  "storagePath": "plants/{plantId}/press-wiki/{pressId}/{pageId}/img_01.jpg",
+  "storagePath": "plants/{plantId}/presses/{pressId}/wikiPages/{pageId}/attachments/img_01.jpg",
   "contentType": "image/jpeg",
   "caption": "Control panel showing normal operating values",
   "linkedRevisionId": "rev_20260506_001",

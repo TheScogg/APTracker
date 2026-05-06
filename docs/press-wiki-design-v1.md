@@ -70,7 +70,7 @@ Recommended default page ids:
 ### `attachments/{attachmentId}` document
 ```json
 {
-  "storagePath": "plants/{plantId}/press-wiki/{pressId}/{pageId}/img_01.jpg",
+  "storagePath": "plants/{plantId}/presses/{pressId}/wikiPages/{pageId}/attachments/img_01.jpg",
   "contentType": "image/jpeg",
   "caption": "Control panel showing normal operating values",
   "linkedRevisionId": "rev_20260506_001",
