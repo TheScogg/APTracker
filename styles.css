@@ -1487,8 +1487,8 @@
   .btn:disabled { opacity: 0.5; cursor: not-allowed; }
   .btn-primary    { background: var(--accent); color: white; }
   .btn-primary:hover:not(:disabled) { background: var(--accent2); transform: translateY(-1px); }
-  .btn-success    { background: var(--green); color: white; }
-  .btn-success:hover:not(:disabled) { opacity: 0.85; }
+  .btn-success    { background: transparent; border: 1px solid var(--green); color: var(--green); box-shadow: 0 0 12px rgba(34,197,94,0.35), inset 0 0 8px rgba(34,197,94,0.1); }
+  .btn-success:hover:not(:disabled) { background: var(--green-dim); box-shadow: 0 0 16px rgba(34,197,94,0.5), inset 0 0 12px rgba(34,197,94,0.2); }
   .btn-blue       { background: var(--blue); color: white; }
   .btn-blue:hover:not(:disabled) { opacity: 0.85; }
   .btn-ghost      { background: transparent; border: 1px solid var(--border); color: var(--text2); }
