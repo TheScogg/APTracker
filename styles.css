@@ -399,7 +399,7 @@
   .scope-btn.cal-btn { padding: 5px 10px; position: relative; display: flex; align-items: center; gap: 5px; min-width: 80px; }
   .scope-btn.cal-btn input[type=date] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
   .scope-btn.cal-btn.active { background: var(--accent); color: white; }
-  .cal-date-lbl { font-size: 11px; font-family: 'Share Tech Mono', monospace; font-weight: 600; transition: opacity 0.15s; }
+  .cal-date-lbl { transition: opacity 0.15s; font-family: inherit; font-size: inherit; font-weight: inherit; letter-spacing: inherit; }
 
   /* USER PILL */
   .user-pill-wrap { position: relative; flex-shrink: 0; }
