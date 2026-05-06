@@ -672,6 +672,21 @@
       <button class="btn btn-ghost" type="button" onclick="closePressWikiModal()">Close</button>
     </div>
     <div id="press-wiki-body" style="margin-top:10px;white-space:pre-wrap;font-size:14px;line-height:1.45;"></div>
+    <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <label style="font-size:12px;color:var(--text3);">Page</label>
+      <select id="press-wiki-page-select" class="select" style="min-width:180px;"></select>
+      <button id="press-wiki-new-page-btn" class="btn btn-ghost" type="button">New Page</button>
+      <button id="press-wiki-edit-btn" class="btn btn-ghost" type="button">Edit</button>
+    </div>
+    <div id="press-wiki-editor" style="margin-top:10px;display:none;">
+      <input id="press-wiki-edit-title" class="input" type="text" placeholder="Page title">
+      <textarea id="press-wiki-edit-body" class="input" rows="6" placeholder="Write wiki content..." style="margin-top:8px;min-height:130px;"></textarea>
+      <input id="press-wiki-edit-change-note" class="input" type="text" placeholder="Change note (required)" style="margin-top:8px;">
+      <div style="margin-top:8px;display:flex;gap:8px;">
+        <button id="press-wiki-save-btn" class="btn btn-blue" type="button">Save Revision</button>
+        <button id="press-wiki-cancel-edit-btn" class="btn btn-ghost" type="button">Cancel</button>
+      </div>
+    </div>
     <div id="press-wiki-attachments" style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px;"></div>
     <div style="margin-top:14px;font-size:12px;font-weight:600;">Revision History</div>
     <div id="press-wiki-revisions" style="margin-top:8px;max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:8px;"></div>

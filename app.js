@@ -8937,6 +8937,7 @@ let _notesModalPressId = null;
 let _notesModalMachineCode = null;
 let pendingPressNotePhotos = [];
 let _pressWikiModalPressId = null;
+let _pressWikiSelectedPageId = 'shift-notes';
 
 function _nid(base) { return base + '-' + NOTES_VARIANT; }
 function _notesModalEl() { return document.getElementById('notes-modal-' + NOTES_VARIANT); }
@@ -9242,16 +9243,62 @@ async function openPressWikiModal() {
   attachmentsEl.innerHTML = '';
   modal.classList.add('visible');
   try {
-    const pageRef = pressWikiPageDoc(_pressWikiModalPressId, 'shift-notes');
+    await loadPressWikiPageList();
+    await loadPressWikiPage(_pressWikiSelectedPageId || 'shift-notes');
+  } catch (e) {
+    console.error('openPressWikiModal error', e);
+    bodyEl.textContent = 'Could not load wiki content.';
+  }
+}
+
+async function loadPressWikiPageList() {
+  const selectEl = document.getElementById('press-wiki-page-select');
+  if (!selectEl || !_pressWikiModalPressId) return;
+  const pagesSnap = await getDocs(query(pressWikiPagesCol(_pressWikiModalPressId), orderBy('updatedAt', 'desc'), limit(50)));
+  const pages = pagesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  selectEl.innerHTML = '';
+  if (!pages.length) {
+    const opt = document.createElement('option');
+    opt.value = 'shift-notes';
+    opt.textContent = 'Shift Notes';
+    selectEl.appendChild(opt);
+  } else {
+    pages.forEach(page => {
+      const opt = document.createElement('option');
+      opt.value = page.id;
+      opt.textContent = page.title || page.id;
+      selectEl.appendChild(opt);
+    });
+  }
+  if (![...selectEl.options].some(o => o.value === _pressWikiSelectedPageId)) _pressWikiSelectedPageId = selectEl.options[0]?.value || 'shift-notes';
+  selectEl.value = _pressWikiSelectedPageId;
+}
+
+async function loadPressWikiPage(pageId) {
+  if (!_pressWikiModalPressId || !pageId) return;
+  _pressWikiSelectedPageId = pageId;
+  const titleEl = document.getElementById('press-wiki-title');
+  const metaEl = document.getElementById('press-wiki-meta');
+  const bodyEl = document.getElementById('press-wiki-body');
+  const revisionsEl = document.getElementById('press-wiki-revisions');
+  const attachmentsEl = document.getElementById('press-wiki-attachments');
+  if (!titleEl || !metaEl || !bodyEl || !revisionsEl || !attachmentsEl) return;
+  bodyEl.textContent = 'Loading wiki...';
+  revisionsEl.innerHTML = '';
+  attachmentsEl.innerHTML = '';
+  try {
+    const pageRef = pressWikiPageDoc(_pressWikiModalPressId, pageId);
     const pageSnap = await getDoc(pageRef);
     if (!pageSnap.exists()) {
       bodyEl.textContent = 'No wiki content yet. Add a press note to seed Shift Notes.';
+      titleEl.textContent = pageId;
       return;
     }
     const page = pageSnap.data() || {};
     const currentRevisionId = page.currentRevisionId || null;
+    titleEl.textContent = page.title || pageId;
     metaEl.textContent = `Press ${page.machineCode || _notesModalMachineCode || '—'} · Updated ${_relativeTime(page.updatedAt) || 'recently'}`;
-    const revSnap = await getDocs(query(pressWikiRevisionsCol(_pressWikiModalPressId, 'shift-notes'), orderBy('editedAt', 'desc'), limit(30)));
+    const revSnap = await getDocs(query(pressWikiRevisionsCol(_pressWikiModalPressId, pageId), orderBy('editedAt', 'desc'), limit(30)));
     const revisions = revSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     const currentRevision = revisions.find(r => r.id === currentRevisionId) || revisions[0] || null;
     bodyEl.textContent = currentRevision?.body || 'No revision body available.';
@@ -9268,7 +9315,7 @@ async function openPressWikiModal() {
       row.onclick = () => { bodyEl.textContent = rev.body || ''; };
       revisionsEl.appendChild(row);
     });
-    const attachSnap = await getDocs(query(pressWikiAttachmentsCol(_pressWikiModalPressId, 'shift-notes'), orderBy('uploadedAt', 'desc'), limit(24)));
+    const attachSnap = await getDocs(query(pressWikiAttachmentsCol(_pressWikiModalPressId, pageId), orderBy('uploadedAt', 'desc'), limit(24)));
     attachSnap.docs.forEach((d, idx) => {
       const data = d.data() || {};
       if (!data.url) return;
@@ -9285,7 +9332,7 @@ async function openPressWikiModal() {
       attachmentsEl.appendChild(btn);
     });
   } catch (e) {
-    console.error('openPressWikiModal error', e);
+    console.error('loadPressWikiPage error', e);
     bodyEl.textContent = 'Could not load wiki content.';
   }
 }
@@ -9294,6 +9341,45 @@ window.closePressWikiModal = () => {
   document.getElementById('press-wiki-modal')?.classList.remove('visible');
   _pressWikiModalPressId = null;
 };
+
+async function savePressWikiRevision() {
+  if (!_pressWikiModalPressId || !_pressWikiSelectedPageId || !currentUser) return;
+  const title = String(document.getElementById('press-wiki-edit-title')?.value || '').trim();
+  const body = String(document.getElementById('press-wiki-edit-body')?.value || '').trim();
+  const changeNote = String(document.getElementById('press-wiki-edit-change-note')?.value || '').trim();
+  if (!body || !changeNote) return alert('Body and change note are required.');
+  const pageRef = pressWikiPageDoc(_pressWikiModalPressId, _pressWikiSelectedPageId);
+  const revisionRef = doc(pressWikiRevisionsCol(_pressWikiModalPressId, _pressWikiSelectedPageId));
+  await runTransaction(db, async tx => {
+    const snap = await tx.get(pageRef);
+    const prevRevisionId = snap.exists() ? (snap.data()?.currentRevisionId || null) : null;
+    tx.set(revisionRef, { body, changeNote, prevRevisionId, editedBy: currentActor(), editedAt: serverTimestamp() });
+    tx.set(pageRef, {
+      title: title || snap.data()?.title || _pressWikiSelectedPageId,
+      slug: _pressWikiSelectedPageId,
+      machineCode: _notesModalMachineCode || '',
+      currentRevisionId: revisionRef.id,
+      updatedBy: currentActor(),
+      updatedAt: serverTimestamp(),
+      lastActivityAt: serverTimestamp(),
+      createdBy: snap.exists() ? (snap.data()?.createdBy || currentActor()) : currentActor(),
+      createdAt: snap.exists() ? (snap.data()?.createdAt || serverTimestamp()) : serverTimestamp()
+    }, { merge: true });
+  });
+  togglePressWikiEditor(false);
+  await loadPressWikiPageList();
+  await loadPressWikiPage(_pressWikiSelectedPageId);
+}
+
+function togglePressWikiEditor(show) {
+  const editor = document.getElementById('press-wiki-editor');
+  if (!editor) return;
+  editor.style.display = show ? 'block' : 'none';
+  if (!show) return;
+  document.getElementById('press-wiki-edit-title').value = document.getElementById('press-wiki-title')?.textContent || '';
+  document.getElementById('press-wiki-edit-body').value = document.getElementById('press-wiki-body')?.textContent || '';
+  document.getElementById('press-wiki-edit-change-note').value = '';
+}
 
 window.openNotesModal = (pressId, machineCode) => {
   _notesModalPressId = pressId;
@@ -9410,6 +9496,19 @@ async function _deletePressNote(noteId) {
 
 document.getElementById('press-wiki-modal')?.addEventListener('click', e => {
   if (e.target === document.getElementById('press-wiki-modal')) closePressWikiModal();
+});
+document.getElementById('press-wiki-page-select')?.addEventListener('change', e => loadPressWikiPage(e.target.value));
+document.getElementById('press-wiki-edit-btn')?.addEventListener('click', () => togglePressWikiEditor(true));
+document.getElementById('press-wiki-cancel-edit-btn')?.addEventListener('click', () => togglePressWikiEditor(false));
+document.getElementById('press-wiki-save-btn')?.addEventListener('click', () => savePressWikiRevision());
+document.getElementById('press-wiki-new-page-btn')?.addEventListener('click', async () => {
+  const raw = prompt('New wiki page id (example: setup-notes):', '');
+  const pageId = String(raw || '').trim().toLowerCase().replace(/[^a-z0-9-_]/g, '-').replace(/-+/g, '-');
+  if (!pageId) return;
+  _pressWikiSelectedPageId = pageId;
+  await loadPressWikiPageList();
+  await loadPressWikiPage(pageId);
+  togglePressWikiEditor(true);
 });
 
 // ── EXPORT PDF ──
