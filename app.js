@@ -630,6 +630,10 @@ function plantCol(colName) { return collection(db, 'plants', currentPlantId, col
 function plantDoc(colName, docId) { return doc(db, 'plants', currentPlantId, colName, docId); }
 function issueEventsCol(issueId) { return collection(db, 'plants', currentPlantId, 'issues', issueId, 'events'); }
 function issueAttachmentsCol(issueId) { return collection(db, 'plants', currentPlantId, 'issues', issueId, 'attachments'); }
+function pressWikiPagesCol(pressId) { return collection(db, 'plants', currentPlantId, 'presses', String(pressId), 'wikiPages'); }
+function pressWikiPageDoc(pressId, pageId) { return doc(db, 'plants', currentPlantId, 'presses', String(pressId), 'wikiPages', pageId); }
+function pressWikiRevisionsCol(pressId, pageId) { return collection(db, 'plants', currentPlantId, 'presses', String(pressId), 'wikiPages', pageId, 'revisions'); }
+function pressWikiAttachmentsCol(pressId, pageId) { return collection(db, 'plants', currentPlantId, 'presses', String(pressId), 'wikiPages', pageId, 'attachments'); }
 function plantMemberDocRef(plantId, userId) { return doc(db, 'plants', plantId, 'members', userId); }
 function gameConfigDoc() { return doc(db, 'plants', currentPlantId, 'gamificationConfig', 'main'); }
 function gameUserStatsDoc(userId) { return doc(db, 'plants', currentPlantId, 'userGameStats', userId); }
@@ -9057,6 +9061,68 @@ function _renderPressNotePhotoThumbs(note) {
   return wrap;
 }
 
+async function syncPressNoteToWikiPage(noteRefId, payload) {
+  if (!currentPlantId || !payload?.pressId || !payload?.machineCode) return;
+  const pressId = String(payload.pressId);
+  const machineCode = String(payload.machineCode || '').trim();
+  if (!machineCode) return;
+  const pageId = 'shift-notes';
+  const pageRef = pressWikiPageDoc(pressId, pageId);
+  const revisionRef = doc(pressWikiRevisionsCol(pressId, pageId));
+  const revisionBody = `${payload.text || ''}`.trim();
+  const summary = revisionBody.slice(0, 180);
+  const searchText = [machineCode, 'shift notes', revisionBody].join(' ').toLowerCase().replace(/\s+/g, ' ').trim().slice(0, 2000);
+  await runTransaction(db, async tx => {
+    const pageSnap = await tx.get(pageRef);
+    const prevRevisionId = pageSnap.exists() ? (pageSnap.data()?.currentRevisionId || null) : null;
+    tx.set(revisionRef, {
+      body: revisionBody,
+      changeNote: `Imported from press note ${noteRefId}`,
+      prevRevisionId,
+      sourceNoteId: noteRefId,
+      editedBy: currentActor(),
+      editedAt: serverTimestamp()
+    });
+    tx.set(pageRef, {
+      title: 'Shift Notes',
+      slug: 'shift-notes',
+      summary,
+      tags: ['notes', 'shift'],
+      visibility: 'plant',
+      isPinned: true,
+      isLocked: false,
+      machineCode,
+      currentRevisionId: revisionRef.id,
+      photoCount: payload.photoCount || 0,
+      searchText,
+      createdBy: pageSnap.exists() ? (pageSnap.data()?.createdBy || currentActor()) : currentActor(),
+      createdAt: pageSnap.exists() ? (pageSnap.data()?.createdAt || serverTimestamp()) : serverTimestamp(),
+      updatedBy: currentActor(),
+      updatedAt: serverTimestamp(),
+      lastActivityAt: serverTimestamp()
+    }, { merge: true });
+  });
+  if (Array.isArray(payload.photos) && payload.photos.length) {
+    const batch = writeBatch(db);
+    payload.photos.forEach(photo => {
+      const attachmentRef = doc(pressWikiAttachmentsCol(pressId, pageId));
+      batch.set(attachmentRef, {
+        storagePath: photo.storagePath || null,
+        storageBucket: photo.storageBucket || null,
+        contentType: photo.contentType || null,
+        caption: photo.name || 'Press note photo',
+        linkedRevisionId: revisionRef.id,
+        sourceNoteId: noteRefId,
+        uploadedBy: currentActor(),
+        uploadedAt: serverTimestamp(),
+        url: photo.url || photo.dataUrl || null,
+        sizeBytes: photo.sizeBytes || null
+      });
+    });
+    await batch.commit();
+  }
+}
+
 function _renderPressNotes(notes) {
   const list = document.getElementById(_nid('notes-list'));
   if (!list) return;
@@ -9219,6 +9285,13 @@ window.submitPressNote = async () => {
       photos: uploadedPhotos,
       createdAt: serverTimestamp(),
       createdBy: { uid: currentUser.uid, name: currentUser.displayName || currentUser.email || 'Unknown' }
+    });
+    await syncPressNoteToWikiPage(noteRef.id, {
+      pressId: _notesModalPressId,
+      machineCode: _notesModalMachineCode,
+      text,
+      photoCount: uploadedPhotos.length,
+      photos: uploadedPhotos
     });
     ta.value = '';
     ta.style.height = 'auto';
