@@ -1,19 +1,9 @@
-# Press Wiki + Event Notes Design (Plant-Scoped)
+# Press Wiki v1 Design (Plant-Scoped)
 
-## Goal
-Create a press-centric knowledge surface that separates stable reference content from time-based floor observations.
-
-This design uses two layers:
-- `Press Wiki Page` for authoritative, slowly changing machine knowledge
-- `Shift Notes / Event Notes` for fast observations, photos, and shift-specific context
-
-That split keeps the reference page clean while preserving the operational history that matters on the floor.
-
-## Why this shape fits AP Tracker
-- The app already works best when the floor can scan quickly.
-- Press knowledge tends to fall into two buckets: durable facts and transient events.
-- A wiki-style page is ideal for temperatures, process variables, and special instructions.
-- Event notes are better for "what happened on this shift" and "what changed today."
+## Goals
+- Add per-press wiki-style documentation with collaborative text and photos.
+- Preserve AP Tracker's plant-scoped, role-aware, append-only history patterns.
+- Integrate with existing gamification (XP, missions, badges) for contribution incentives.
 
 ## Firestore data model
 
@@ -21,46 +11,35 @@ That split keeps the reference page clean while preserving the operational histo
 - `plants/{plantId}/presses/{pressId}/wikiPages/{pageId}`
 - `plants/{plantId}/presses/{pressId}/wikiPages/{pageId}/revisions/{revisionId}`
 - `plants/{plantId}/presses/{pressId}/wikiPages/{pageId}/attachments/{attachmentId}`
-- `plants/{plantId}/pressNotes/{noteId}`
-
-### Layer 1: Press Wiki Page
-
-The press wiki page is the stable, canonical machine reference.
-
-Recommended default page ids:
-- `press-wiki`
-- `setup-guide`
-- `troubleshooting`
 
 ### `wikiPages/{pageId}` document
 ```json
 {
-  "title": "Press 12 - Injection Molder A",
-  "slug": "press-wiki",
-  "summary": "Primary operating reference for Press 12.",
-  "tags": ["press", "setup", "process", "quality"],
+  "title": "Common Sensor Faults",
+  "slug": "common-sensor-faults",
+  "summary": "Quick fixes for top 5 recurring sensor alarms.",
+  "tags": ["sensor", "alarms", "troubleshooting"],
   "isPinned": true,
   "isLocked": false,
   "visibility": "plant",
   "currentRevisionId": "rev_20260506_001",
-  "photoCount": 4,
-  "searchText": "press 12 injection molder setup temperatures mold pressure troubleshooting",
+  "photoCount": 3,
+  "searchText": "common sensor faults alarms troubleshooting quick fixes",
   "createdBy": "uid_123",
   "createdAt": "<serverTimestamp>",
   "updatedBy": "uid_789",
   "updatedAt": "<serverTimestamp>",
   "lastActivityAt": "<serverTimestamp>",
   "lastVerifiedAt": "<timestamp|null>",
-  "lastVerifiedBy": "<uid|null>",
-  "schemaVersion": 1
+  "lastVerifiedBy": "<uid|null>"
 }
 ```
 
-### `revisions/{revisionId}` document
+### `revisions/{revisionId}` document (append-only)
 ```json
 {
-  "body": "# Overview\n\nThis press is used for...",
-  "changeNote": "Added zone temperatures and startup notes.",
+  "body": "## Alarm 12: Photoeye blocked\n1. Inspect bracket...",
+  "changeNote": "Added reset sequence and part number note.",
   "prevRevisionId": "rev_20260505_004",
   "editedBy": "uid_789",
   "editedAt": "<serverTimestamp>"
@@ -70,9 +49,9 @@ Recommended default page ids:
 ### `attachments/{attachmentId}` document
 ```json
 {
-  "storagePath": "plants/{plantId}/presses/{pressId}/wikiPages/{pageId}/attachments/img_01.jpg",
+  "storagePath": "plants/{plantId}/press-wiki/{pressId}/{pageId}/img_01.jpg",
   "contentType": "image/jpeg",
-  "caption": "Control panel showing normal operating values",
+  "caption": "Sensor mount orientation (correct)",
   "linkedRevisionId": "rev_20260506_001",
   "uploadedBy": "uid_789",
   "uploadedAt": "<serverTimestamp>",
@@ -81,177 +60,111 @@ Recommended default page ids:
 }
 ```
 
-### Layer 2: Shift Notes / Event Notes
+## Storage path convention
+- `plants/{plantId}/press-wiki/{pressId}/{pageId}/{attachmentId}-{filename}`
 
-Shift notes are quick entries tied to a press. They should stay lightweight and behave like an event log.
+This keeps tenant isolation aligned with existing issue attachment strategy.
 
-Recommended content:
-- temperatures observed during the shift
-- temporary process changes
-- photos from the panel or part quality checks
-- special instructions that were discovered or confirmed
-- "what happened" notes that should not overwrite the canonical wiki page
+## Security rules snippet (Firestore)
+Use member-role checks from existing plant membership docs.
 
-### `pressNotes/{noteId}` document
-```json
-{
-  "pressId": "press_5_10",
-  "machineCode": "5.10",
-  "noteType": "event",
-  "text": "Zone 2 drifted high during warmup, then stabilized after a reset.",
-  "photoCount": 2,
-  "photos": [
-    {
-      "name": "pressure-gauge.jpg",
-      "url": "https://...",
-      "storagePath": "plants/plant_jef/pressNotes/note_123/photos/1712345678_0.jpg",
-      "storageBucket": "press-tracker-9d9c9.firebasestorage.app",
-      "contentType": "image/jpeg",
-      "sizeBytes": 183442,
-      "source": "storage"
+```rules
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
     }
-  ],
-  "createdBy": {
-    "uid": "uid_123",
-    "name": "James Scoggins"
-  },
-  "createdAt": "serverTimestamp",
-  "schemaVersion": 2
-}
-```
 
-### Notes on the split
-- The wiki page should be edited intentionally.
-- The event note stream should stay fast and low-friction.
-- Important event notes can be promoted into the wiki page later.
-- The wiki page should not become a rolling chat log.
+    function isPlantMember(plantId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/plants/$(plantId)/members/$(request.auth.uid));
+    }
 
-## Press page template
+    function memberRole(plantId) {
+      return get(/databases/$(database)/documents/plants/$(plantId)/members/$(request.auth.uid)).data.role;
+    }
 
-### Recommended sections
-- Overview
-- Standard Setup
-- Running Parameters
-- Special Instructions
-- Photos
-- Troubleshooting
-- History
+    function canEditWiki(plantId) {
+      return isPlantMember(plantId)
+        && memberRole(plantId) in ['admin', 'lead', 'operator'];
+    }
 
-### Press page fields
-- `pressId`
-- `title`
-- `summary`
-- `pressType`
-- `productFamilies`
-- `status`
-- `standardSetup`
-- `specialInstructions`
-- `photos`
-- `relatedRefs`
-- `tags`
-- `lastVerifiedAt`
-- `verifiedBy`
-- `updatedAt`
-- `revisionCount`
+    function canModerateWiki(plantId) {
+      return isPlantMember(plantId)
+        && memberRole(plantId) in ['admin', 'lead'];
+    }
 
-### Example setup fields
-```json
-{
-  "standardSetup": {
-    "zoneTemps": {
-      "zone1": 350,
-      "zone2": 360,
-      "zone3": 365,
-      "zone4": 370,
-      "nozzle": 375
-    },
-    "moldTemp": 180,
-    "clampTonnage": 110,
-    "screwSpeed": 65,
-    "backPressure": 8,
-    "holdPressure": 900,
-    "cycleTime": 42,
-    "drying": {
-      "temp": 160,
-      "timeHours": 4
+    match /plants/{plantId}/presses/{pressId}/wikiPages/{pageId} {
+      allow read: if isPlantMember(plantId);
+      allow create: if canEditWiki(plantId);
+      allow update: if canEditWiki(plantId)
+        && (!('isLocked' in request.resource.data) || canModerateWiki(plantId))
+        && (!('isPinned' in request.resource.data) || canModerateWiki(plantId));
+      allow delete: if false; // archive instead of delete
+
+      match /revisions/{revisionId} {
+        allow read: if isPlantMember(plantId);
+        allow create: if canEditWiki(plantId);
+        allow update, delete: if false; // append-only history
+      }
+
+      match /attachments/{attachmentId} {
+        allow read: if isPlantMember(plantId);
+        allow create: if canEditWiki(plantId);
+        allow update: if canEditWiki(plantId);
+        allow delete: if canModerateWiki(plantId);
+      }
     }
   }
 }
 ```
 
-## UI wireframe
+## UI wireframe flow (index.html)
 
-### Desktop / tablet layout
-```text
--------------------------------------------------------------
-| Press 12 - Injection Molder A          [Edit] [Add Note]  |
-| Active | Line 4 | Last verified: May 6                   |
--------------------------------------------------------------
-| Summary                                                   |
-| Short reference paragraph about the press.               |
--------------------------------------------------------------
-| Contents                  | Related / Recent Events       |
-| - Overview                | - 7:42 AM Zone 2 overshot     |
-| - Standard Setup          | - Yesterday startup delay     |
-| - Special Instructions     | - Related issue: Short shots  |
-| - Photos                  |                               |
-| - Troubleshooting         |                               |
-| - History                 |                               |
--------------------------------------------------------------
-| Overview                                                  |
-| Standard Setup                                            |
-| Special Instructions                                      |
-| Photos                                                    |
-| Troubleshooting                                           |
-| History                                                   |
--------------------------------------------------------------
-```
+### Press Detail: new `Wiki` tab
+1. **List mode**
+   - Header: `Wiki`, `+ New Page`, search input
+   - Sections: `Pinned`, `Recently Updated`
+   - Card fields: title, summary, tags, updatedBy/updatedAt, photo badge
 
-### Mobile layout
-```text
-------------------------------------------------
-| Press 12 - Injection Molder A                |
-| Active | Verified | [Add Note]               |
-------------------------------------------------
-| Summary                                       |
-------------------------------------------------
-| Jump to... [Contents dropdown]                |
-------------------------------------------------
-| Overview                                      |
-| Standard Setup                                |
-| Special Instructions                          |
-| Photos                                        |
-| Troubleshooting                               |
-| History                                       |
-------------------------------------------------
-| Recent Notes                                  |
-| - Shift note from 7:42 AM                     |
-| - Photo added this morning                    |
-| - Last issue linked                            |
-------------------------------------------------
-```
+2. **Reader mode**
+   - Title row: page title, lock/pin icons, `Edit` button
+   - Metadata row: last updated, last verified
+   - Body region: rendered markdown-lite text
+   - Attachment strip/gallery with captions
+   - Activity drawer: revision history and change notes
 
-### Interaction model
-- `Edit Press Page` changes the wiki page only.
-- `Add Note` creates an event note.
-- `Add Photo` can attach to either layer depending on intent.
-- `Link Issue` ties a note to a tracked problem.
-- `Mark Verified` updates the press page trust state.
+3. **Editor mode**
+   - Inputs: title, tags, body, required `changeNote`
+   - Photo upload picker and caption field
+   - Save action:
+     - create new `revisions/{revisionId}`
+     - transactionally update `wikiPages.currentRevisionId`, `updatedAt`, `updatedBy`, `lastActivityAt`
 
-## Revision workflow
-1. Read the current wiki page.
-2. Create a new revision document.
-3. Update the page doc with the new `currentRevisionId`.
-4. Refresh `updatedAt`, `updatedBy`, and `lastActivityAt`.
-5. If there is a conflict, prompt the user to reload and merge.
+### Tablet-first interaction details
+- Keep one-hand actions in bottom sticky bar: `Save`, `Add Photo`, `Cancel`.
+- Use large touch targets for page cards and image thumbnails.
+- Preserve scroll position when returning from reader -> list.
 
-## Suggested XP hooks
+## Revision algorithm
+1. Read current `wikiPages` doc.
+2. Create new revision doc with `prevRevisionId = currentRevisionId`.
+3. Update page doc with new `currentRevisionId`, summary/searchText refresh, audit fields.
+4. On conflict (`updatedAt` changed), prompt user to reload and merge.
+
+## Gamification hooks
+Suggested XP events:
 - `wiki_create_page:{plantId}:{pressId}:{pageId}`
 - `wiki_add_revision:{plantId}:{pageId}:{revisionId}`
 - `wiki_add_photo:{plantId}:{pageId}:{attachmentId}`
-- `press_note_create:{plantId}:{pressId}:{noteId}`
+
+Suggested mission examples:
+- `Document 3 press fixes this week`
+- `Add 2 pages with at least one photo`
 
 ## Rollout plan
-- **Phase 1:** wiki page CRUD, event notes, attachments, basic role checks.
-- **Phase 2:** pin/lock moderation, revision history, templates.
-- **Phase 3:** review prompts, stale-page reminders, contribution rewards.
+- **Phase 1 (MVP):** list/read/edit pages, revisions, attachments, basic role checks.
+- **Phase 2:** pin/lock moderation, revision viewer/revert workflow, templates.
+- **Phase 3:** contribution leaderboard tie-in and stale-page prompts.
