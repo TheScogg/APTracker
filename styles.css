@@ -413,8 +413,9 @@
   .plant-chevron { transition: transform 0.2s; }
   .plant-dropdown { display: none; position: absolute; top: calc(100% + 6px); left: 0; background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; min-width: 200px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); z-index: 300; overflow: hidden; animation: dropIn 0.15s ease; }
   .plant-dropdown.visible { display: block; }
-  #user-dropdown .plant-switcher-wrap { width: 100%; padding: 4px 6px 8px; }
-  #user-dropdown .plant-switcher-btn { width: 100%; justify-content: space-between; }
+  #user-dropdown .plant-switcher-wrap { width: 100%; padding: 4px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.04); border-radius: 8px; margin: 0 4px 8px; width: calc(100% - 8px); box-sizing: border-box;}
+  #user-dropdown .plant-switcher-btn { width: 100%; justify-content: space-between; border: none; background: transparent; padding: 8px 10px;}
+  #user-dropdown .plant-switcher-btn:hover { background: rgba(255,255,255,0.05); transform: none; }
   #user-dropdown .plant-dropdown { left: 6px; right: 6px; min-width: 0; width: auto; z-index: 360; }
   .plant-opt { display: flex; align-items: center; gap: 8px; padding: 10px 14px; font-size: 13px; color: var(--text2); cursor: pointer; transition: background 0.1s; border: none; background: none; width: 100%; text-align: left; font-family: 'Nunito', sans-serif; font-weight: 600; }
   .plant-opt:hover { background: var(--bg3); color: var(--text); }
@@ -517,29 +518,33 @@
   .user-chevron { font-size: 8px; color: var(--text3); transition: transform 0.2s; }
   .user-pill.open .user-chevron { transform: rotate(180deg); }
   /* ── USER DROPDOWN (redesigned) ── */
-  .user-dropdown { display: none; position: absolute; top: calc(100% + 8px); right: 0; background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; width: 280px; box-shadow: 0 24px 60px rgba(0,0,0,0.7), 0 4px 12px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.04); z-index: 300; overflow: visible; animation: dropIn 0.15s ease; }
+  .user-dropdown { display: none; position: absolute; top: calc(100% + 12px); right: 0; background: color-mix(in srgb, var(--bg2) 65%, transparent); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; width: 300px; box-shadow: 0 24px 60px rgba(0,0,0,0.8), 0 4px 12px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05), 0 0 24px var(--accent-glow); z-index: 300; overflow: visible; animation: dropIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards; transform-origin: top right; }
   .user-dropdown.visible { display: block; }
-  @keyframes dropIn { from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)} }
+  @keyframes dropIn { from{opacity:0;transform:scale(0.95) translateY(-10px)}to{opacity:1;transform:scale(1) translateY(0)} }
   /* Header */
-  .user-dropdown-header { padding: 14px 14px 12px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--border); border-radius: 14px 14px 0 0; overflow: hidden; }
-  .ud-avatar { width: 38px; height: 38px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), var(--blue, #3b82f6)); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: white; flex-shrink: 0; box-shadow: 0 0 0 2px var(--bg2), 0 0 0 3.5px color-mix(in srgb, var(--accent) 40%, transparent); background-size: cover; background-position: center; font-family: 'Nunito', sans-serif; letter-spacing: -0.02em; }
+  .user-dropdown-header { padding: 16px; display: flex; align-items: center; gap: 12px; background: linear-gradient(180deg, rgba(255,255,255,0.03) 0%, transparent 100%); border-bottom: 1px solid rgba(255, 255, 255, 0.04); border-radius: 12px 12px 0 0; overflow: hidden; }
+  .ud-avatar { width: 44px; height: 44px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), var(--blue, #3b82f6)); display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 700; color: white; flex-shrink: 0; box-shadow: 0 0 12px var(--accent-glow), inset 0 0 0 2px var(--bg2); font-family: 'Rajdhani', sans-serif; letter-spacing: -0.02em; }
   .ud-header-info { min-width: 0; }
-  .user-dropdown-name { font-size: 14px; font-weight: 700; color: var(--text); letter-spacing: -0.02em; line-height: 1.2; }
-  .user-dropdown-email { font-size: 11.5px; color: var(--text3); margin-top: 2px; font-family: 'Share Tech Mono', monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .user-dropdown-name { font-size: 16px; font-weight: 700; color: var(--text); font-family: 'Rajdhani', sans-serif; letter-spacing: 0.5px; line-height: 1.2; }
+  .user-dropdown-email { font-size: 11px; color: var(--accent); margin-top: 2px; font-family: 'Share Tech Mono', monospace; opacity: 0.8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* Sections */
-  .user-dropdown-section { padding: 6px 6px 0; }
-  .user-dropdown-section:last-of-type { padding-bottom: 6px; border-bottom: none; }
-  .user-dropdown-section-label { font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text3); padding: 6px 10px 2px; font-family: 'Share Tech Mono', monospace; }
+  .user-dropdown-section { padding: 12px 8px 4px; }
+  .user-dropdown-section:last-of-type { padding-bottom: 8px; border-bottom: none; }
+  .user-dropdown-section-label { font-size: 10px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: var(--text3); padding: 0 10px 8px; font-family: 'Share Tech Mono', monospace; display: flex; align-items: center; gap: 8px; }
+  .user-dropdown-section-label::after { content: ""; flex: 1; height: 1px; background: rgba(255,255,255,0.05); }
   /* Menu items */
-  .user-dropdown-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; font-size: 13.5px; color: var(--text2); cursor: pointer; transition: background 0.12s, color 0.12s; border: none; background: transparent; width: 100%; text-align: left; font-family: 'Nunito', sans-serif; font-weight: 500; border-radius: 8px; letter-spacing: -0.01em; }
-  .user-dropdown-item:hover { background: var(--bg3); color: var(--text); }
-  .user-dropdown-item:hover .ud-item-icon { color: var(--accent); }
+  .user-dropdown-item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; font-size: 13.5px; color: var(--text2); cursor: pointer; transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1); border: none; background: transparent; width: 100%; text-align: left; font-family: 'Nunito', sans-serif; font-weight: 600; border-radius: 8px; letter-spacing: -0.01em; position: relative; }
+  .user-dropdown-item:hover { background: rgba(255,255,255,0.03); color: var(--text); transform: translateX(4px); }
+  .user-dropdown-item::before { content: ""; position: absolute; left: 0; top: 20%; bottom: 20%; width: 3px; background: var(--accent); border-radius: 4px; opacity: 0; transition: opacity 0.2s, top 0.2s, bottom 0.2s; }
+  .user-dropdown-item:hover::before { opacity: 1; top: 10%; bottom: 10%; }
+  .user-dropdown-item:hover .ud-item-icon { color: var(--accent); opacity: 1; text-shadow: 0 0 8px var(--accent-glow); }
   .user-dropdown-item.danger { color: var(--text2); }
-  .user-dropdown-item.danger:hover { background: var(--red-dim, rgba(239,68,68,0.1)); color: var(--red); }
+  .user-dropdown-item.danger:hover { background: var(--red-dim); color: var(--red); }
+  .user-dropdown-item.danger:hover::before { background: var(--red); }
   .user-dropdown-item.danger .ud-item-icon { color: var(--text3); }
-  .user-dropdown-item.danger:hover .ud-item-icon { color: var(--red); }
+  .user-dropdown-item.danger:hover .ud-item-icon { color: var(--red); text-shadow: 0 0 8px rgba(239,68,68,0.3); }
   /* Icon container */
-  .ud-item-icon { display: flex; align-items: center; flex-shrink: 0; color: var(--text3); transition: color 0.12s; }
+  .ud-item-icon { display: flex; align-items: center; flex-shrink: 0; color: var(--text3); transition: 0.2s; font-size: 16px; font-family: monospace; text-align: center; opacity: 0.7; }
   /* Divider */
   .ud-divider { height: 1px; background: var(--border); margin: 4px 0; }
   /* Dark/Light toggle row */
