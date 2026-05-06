@@ -6876,6 +6876,7 @@ document.addEventListener('keydown', e => {
 
 function fmtShortDate(val) {
   const d = new Date(val + 'T00:00:00');
+  if (isNaN(d.getTime())) return val || 'Date';
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
