@@ -395,6 +395,32 @@
   </div>
 </div>
 
+<div class="modal-overlay subcategory-sheet-overlay" id="subcategory-sheet-overlay">
+  <div class="subcategory-sheet" id="subcategory-sheet" role="dialog" aria-modal="true" aria-labelledby="subcategory-sheet-title">
+    <div class="subcategory-sheet-handle"></div>
+    <div class="subcategory-sheet-head">
+      <div class="subcategory-sheet-copy">
+        <div class="subcategory-sheet-kicker">Subcategory</div>
+        <div class="subcategory-sheet-title" id="subcategory-sheet-title">Choose a subcategory</div>
+        <div class="subcategory-sheet-subtitle" id="subcategory-sheet-subtitle">Pick the closest match to log faster.</div>
+      </div>
+      <button class="subcategory-sheet-close" type="button" id="subcategory-sheet-close" aria-label="Close subcategory picker">✕</button>
+    </div>
+    <div class="subcategory-sheet-section">
+      <div class="subcategory-sheet-label">Parent status</div>
+      <div class="subcategory-parent-row" id="subcategory-parent-row"></div>
+    </div>
+    <div class="subcategory-sheet-section">
+      <div class="subcategory-sheet-label">Subcategories</div>
+      <div class="subcategory-grid" id="subcategory-grid"></div>
+    </div>
+    <div class="subcategory-sheet-footer">
+      <button class="btn btn-ghost subcategory-sheet-secondary" id="subcategory-sheet-skip" type="button">Use no subcategory</button>
+      <button class="btn btn-primary subcategory-sheet-primary" id="subcategory-sheet-apply" type="button">Use Subcategory</button>
+    </div>
+  </div>
+</div>
+
 <!-- EDIT ISSUE MODAL -->
 <div class="modal-overlay" id="edit-modal">
   <div class="modal">

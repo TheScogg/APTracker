@@ -3999,6 +3999,7 @@ function resizeImage(file) {
 const ISSUE_LOG_PREFS_KEY = 'aptracker_issue_log_prefs_v1';
 const ISSUE_QUICK_PHRASES = ['Leak', 'Down', 'Needs parts', 'Waiting on maintenance', 'Quality check', 'Escalate'];
 let issueAdvancedExpanded = false;
+let subcategorySheetState = { open: false, statusKey: '', selectedSub: '' };
 
 function loadIssueLogPrefs() {
   try {
@@ -4111,6 +4112,8 @@ function applyIssueLogDefaults() {
 window.openAddModal = m => {
   if (!currentUser) return;
   if (!currentUserPermissions.canCreateIssue) return;
+  closeSubcategorySheet();
+  subcategorySheetState = { open: false, statusKey: '', selectedSub: '' };
   currentMachine=m; pendingPhotos=[];
   logCatKey = issueLogPrefs.lastStatusKey || null;
   logCatSub = issueLogPrefs.lastStatusSub || null;
@@ -4153,21 +4156,102 @@ function renderLogCatButtons() {
 function renderLogSubChips() {
   const row = document.getElementById('log-sub-row'); if (!row) return;
   row.innerHTML = '';
-  if (!logCatKey || !getStatusSubs(logCatKey).length) { row.classList.remove('visible'); return; }
-  row.classList.add('visible');
-  const st = getStatusDef(logCatKey);
-  const skip = document.createElement('div'); skip.className = 'log-sub-chip skip'; skip.textContent = 'Skip ›';
-  addTapListener(skip, ()=>{logCatSub=null;renderLogSubChips();updateLogCatPill();});
-  row.appendChild(skip);
-  getStatusSubs(logCatKey).forEach(sub => {
-    const chip = document.createElement('div'); chip.className = 'log-sub-chip'+(logCatSub===sub?' selected':'');
-    const col = getStatusColor(logCatKey);
-    chip.style.color=col; chip.style.borderColor=alphaColor(col,0.33);
-    chip.style.background = logCatSub===sub ? alphaColor(col,0.16) : alphaColor(col,0.07);
-    chip.textContent = sub;
-    addTapListener(chip, ()=>{logCatSub=logCatSub===sub?null:sub;renderLogSubChips();updateLogCatPill();});
-    row.appendChild(chip);
+  row.classList.remove('visible');
+}
+
+function renderSubcategorySheet(statusKey = subcategorySheetState.statusKey) {
+  const parentRow = document.getElementById('subcategory-parent-row');
+  const grid = document.getElementById('subcategory-grid');
+  const title = document.getElementById('subcategory-sheet-title');
+  const subtitle = document.getElementById('subcategory-sheet-subtitle');
+  const applyBtn = document.getElementById('subcategory-sheet-apply');
+  const skipBtn = document.getElementById('subcategory-sheet-skip');
+  if (!parentRow || !grid) return;
+
+  const ordered = window._STATUS_ORDER ? window._STATUS_ORDER : Object.keys(STATUSES);
+  const activeKey = statusKey || ordered.find(key => getStatusSubs(key).length) || 'open';
+  const subs = getStatusSubs(activeKey);
+  const activeColor = getStatusColor(activeKey);
+
+  if (title) title.textContent = `${getStatusLabel(activeKey, 'short')} subcategories`;
+  if (subtitle) subtitle.textContent = subs.length ? 'Pick the closest match to log faster.' : 'No subcategories are configured for this status.';
+
+  parentRow.innerHTML = '';
+  ordered.forEach(key => {
+    const pill = document.createElement('button');
+    pill.type = 'button';
+    pill.className = 'subcategory-parent-pill' + (key === activeKey ? ' selected' : '');
+    pill.textContent = getStatusLabel(key, 'short');
+    pill.style.color = key === activeKey ? activeColor : '';
+    addTapListener(pill, () => {
+      subcategorySheetState.statusKey = key;
+      subcategorySheetState.selectedSub = '';
+      logCatSub = '';
+      renderSubcategorySheet(key);
+    });
+    parentRow.appendChild(pill);
   });
+
+  grid.innerHTML = '';
+  if (!subs.length) {
+    const empty = document.createElement('div');
+    empty.className = 'subcategory-empty';
+    empty.textContent = 'This status has no subcategories. Use no subcategory to continue.';
+    grid.appendChild(empty);
+  } else {
+    subs.forEach(sub => {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'subcategory-item' + (subcategorySheetState.selectedSub === sub ? ' selected' : '');
+      item.innerHTML = `<span class="subcategory-item-label">${esc(sub)}</span><span class="subcategory-item-check">✓</span>`;
+      item.style.borderColor = alphaColor(activeColor, 0.32);
+      item.style.color = activeColor;
+      item.style.background = subcategorySheetState.selectedSub === sub ? alphaColor(activeColor, 0.12) : 'linear-gradient(180deg, rgba(255,255,255,0.03), transparent)';
+      addTapListener(item, () => {
+        subcategorySheetState.selectedSub = sub;
+        logCatSub = sub;
+        renderSubcategorySheet(activeKey);
+        updateLogCatPill();
+      });
+      grid.appendChild(item);
+    });
+  }
+
+  if (applyBtn) applyBtn.disabled = !subcategorySheetState.selectedSub;
+  if (skipBtn) {
+    skipBtn.textContent = subs.length ? 'Use no subcategory' : 'Continue';
+    skipBtn.onclick = () => confirmSubcategorySheet(true);
+  }
+  if (applyBtn) applyBtn.onclick = () => confirmSubcategorySheet(false);
+}
+
+function openSubcategorySheet(statusKey) {
+  const subs = getStatusSubs(statusKey);
+  if (!subs.length) return;
+  subcategorySheetState.open = true;
+  subcategorySheetState.statusKey = statusKey;
+  subcategorySheetState.selectedSub = subs.includes(logCatSub) ? logCatSub : '';
+  renderSubcategorySheet(statusKey);
+  document.getElementById('subcategory-sheet-overlay')?.classList.add('visible');
+}
+
+function closeSubcategorySheet() {
+  subcategorySheetState.open = false;
+  document.getElementById('subcategory-sheet-overlay')?.classList.remove('visible');
+}
+
+function confirmSubcategorySheet(useNoSub = false) {
+  const activeKey = subcategorySheetState.statusKey || logCatKey;
+  if (!activeKey) return;
+  logCatKey = activeKey;
+  logCatSub = useNoSub ? '' : subcategorySheetState.selectedSub;
+  issueLogPrefs.lastStatusKey = logCatKey || '';
+  issueLogPrefs.lastStatusSub = logCatSub || '';
+  saveIssueLogPrefs();
+  renderLogCatButtons();
+  renderLogSubChips();
+  updateLogCatPill();
+  closeSubcategorySheet();
 }
 
 function updateLogCatPill() {
@@ -4189,14 +4273,26 @@ function scrollAddModalToBottom() {
 }
 
 function logCatSelectStatus(key) {
-  logCatKey = logCatKey===key ? null : key;
-  logCatSub = null;
-  renderLogCatButtons(); renderLogSubChips(); updateLogCatPill();
-  scrollAddModalToBottom();
+  const prevKey = logCatKey;
+  const subs = getStatusSubs(key);
+  logCatKey = key;
+  logCatSub = prevKey === key && subs.includes(logCatSub) ? logCatSub : '';
+  renderLogCatButtons();
+  renderLogSubChips();
+  updateLogCatPill();
+  if (subs.length > 0) {
+    openSubcategorySheet(key);
+  } else {
+    issueLogPrefs.lastStatusKey = key;
+    issueLogPrefs.lastStatusSub = '';
+    saveIssueLogPrefs();
+    closeSubcategorySheet();
+  }
 }
 
 document.getElementById('log-cat-clear')?.addEventListener('touchend', e=>{
   e.preventDefault();
+  closeSubcategorySheet();
   logCatKey=null;logCatSub=null;
   issueLogPrefs.lastStatusKey = '';
   issueLogPrefs.lastStatusSub = '';
@@ -4204,17 +4300,25 @@ document.getElementById('log-cat-clear')?.addEventListener('touchend', e=>{
   renderLogCatButtons();renderLogSubChips();updateLogCatPill();
 },{passive:false});
 document.getElementById('log-cat-clear')?.addEventListener('click', ()=>{
+  closeSubcategorySheet();
   logCatKey=null;logCatSub=null;
   issueLogPrefs.lastStatusKey = '';
   issueLogPrefs.lastStatusSub = '';
   saveIssueLogPrefs();
   renderLogCatButtons();renderLogSubChips();updateLogCatPill();
 });
+document.getElementById('log-cat-selected')?.addEventListener('click', e => {
+  if (e.target.closest?.('#log-cat-clear')) return;
+  if (logCatKey && getStatusSubs(logCatKey).length > 0) {
+    openSubcategorySheet(logCatKey);
+  }
+});
 
 window.closeModal = () => {
   syncIssueLogPrefsFromModal();
   document.getElementById('add-modal').classList.remove('visible');
   document.getElementById('log-photo-source-row')?.classList.remove('visible');
+  closeSubcategorySheet();
   pendingPhotos=[];
   currentMachine=null;
   issueLogPrefs.lastStatusKey = logCatKey || issueLogPrefs.lastStatusKey || '';
@@ -4508,6 +4612,11 @@ function refreshReminderClocksInDom() {
 }
 
 loadIssueReminders();
+
+document.getElementById('subcategory-sheet-overlay')?.addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeSubcategorySheet();
+});
+document.getElementById('subcategory-sheet-close')?.addEventListener('click', () => closeSubcategorySheet());
 
 document.getElementById('issue-urgent')?.addEventListener('change', () => {
   issueLogPrefs.urgent = Boolean(document.getElementById('issue-urgent')?.checked);
