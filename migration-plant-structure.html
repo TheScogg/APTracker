@@ -37,7 +37,7 @@ import {
   getFirestore, collection, doc, getDoc, getDocs, setDoc, writeBatch, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
-  getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged
+  getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult, onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 const firebaseConfig = {
@@ -73,11 +73,26 @@ const DEFAULT_PERMISSIONS = {
 
 signinBtn.addEventListener('click', async () => {
   try {
-    await signInWithPopup(auth, provider);
+    sessionStorage.setItem('ap:auth:redirectPending', '1');
+    await signInWithRedirect(auth, provider);
   } catch(e) {
     log('Sign-in failed: ' + e.message, 'err');
   }
 });
+
+async function finalizeRedirectSignIn() {
+  if (!sessionStorage.getItem('ap:auth:redirectPending')) return;
+  try {
+    await getRedirectResult(auth);
+  } catch(e) {
+    log('Redirect sign-in failed: ' + e.message, 'err');
+    signinBtn.disabled = false;
+  } finally {
+    sessionStorage.removeItem('ap:auth:redirectPending');
+  }
+}
+
+finalizeRedirectSignIn();
 
 onAuthStateChanged(auth, user => {
   if (user) {

@@ -940,7 +940,7 @@
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut as fbSignOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut as fbSignOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -1381,13 +1381,29 @@ function normalizeStatusesForSave(rawStatuses) {
   return normalized;
 }
 
+async function finalizeRedirectSignIn() {
+  if (!sessionStorage.getItem('ap:auth:redirectPending')) return;
+  try {
+    await getRedirectResult(auth);
+  } catch (e) {
+    console.error(e);
+    feedback('login-feedback', 'error', e.message || 'Sign-in failed.');
+    const btn = document.getElementById('google-signin-btn');
+    btn.disabled = false;
+    btn.textContent = 'Sign in with Google';
+  } finally {
+    sessionStorage.removeItem('ap:auth:redirectPending');
+  }
+}
+
 async function signInWithGoogle() {
   const btn = document.getElementById('google-signin-btn');
   btn.disabled = true;
   btn.textContent = 'Signing in…';
   feedback('login-feedback', '', '');
   try {
-    await signInWithPopup(auth, provider);
+    sessionStorage.setItem('ap:auth:redirectPending', '1');
+    await signInWithRedirect(auth, provider);
   } catch (e) {
     console.error(e);
     feedback('login-feedback', 'error', e.message || 'Sign-in failed.');
@@ -2990,6 +3006,7 @@ window.saveMissionModal = function() {
 // ── End Mission Modal ─────────────────────────────────────────────────────────
 
 document.getElementById('google-signin-btn').addEventListener('click', signInWithGoogle);
+finalizeRedirectSignIn();
 document.getElementById('signout-btn').addEventListener('click', doSignOut);
 document.getElementById('create-plant-btn').addEventListener('click', createPlant);
 document.getElementById('load-schedule-file-btn').addEventListener('click', loadScheduleJsonFromFile);
