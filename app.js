@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, collection, updateDoc, deleteDoc, doc, getDoc, getDocs, setDoc, addDoc, onSnapshot, serverTimestamp, query, orderBy, where, writeBatch, arrayUnion, arrayRemove, increment, limit, runTransaction, startAfter } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut as fbSignOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, getRedirectResult, onAuthStateChanged, signOut as fbSignOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getStorage, ref as storageRef, uploadString, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
 const firebaseConfig = {
@@ -2831,7 +2831,10 @@ const JPEG_QUALITY = 0.82;
 async function signInWithGoogle() {
   const btn = document.getElementById('google-signin-btn');
   btn.disabled = true; btn.textContent = 'Signing in…';
-  try { sessionStorage.setItem("ap:auth:redirectPending", "1"); await signInWithRedirect(auth, provider); }
+  try { 
+    sessionStorage.setItem("ap:auth:redirectPending", "1"); 
+    await signInWithPopup(auth, provider); 
+  }
   catch(e) {
     console.error('Sign in error:', e.code, e.message);
     btn.disabled = false; btn.innerHTML = googleBtnHTML;
