@@ -2706,7 +2706,10 @@ let reopenTargetId = null;
 let currentUser = null;
 let issueScope = 'all';
 let issueShiftFilter = 'all';
-let mapMode = 'log'; // 'log' | 'hist'
+let mapMode = 'log'; // 'log' | 'hist' | 'notes'
+let pressContributionIndex = new Map();
+let pressContributionPlantId = null;
+let pressContributionLoading = null;
 let issuePeriod = 'today';
 let unsubscribe = null;
 let issueLogLayoutMode = 'masonic'; // 'masonic' | 'grid'
@@ -3125,18 +3128,84 @@ function periodFilter(i) {
 }
 
 // ── FLOOR MAP ──
+
+async function refreshPressContributionIndex(force = false) {
+  if (!currentPlantId) return;
+  if (!force && pressContributionPlantId === currentPlantId && pressContributionIndex.size) return;
+  if (pressContributionLoading) return pressContributionLoading;
+  pressContributionLoading = (async () => {
+    const next = new Map();
+    const notesSnap = await getDocs(plantCol('pressNotes'));
+    notesSnap.forEach(d => {
+      const data = d.data() || {};
+      const key = toPressId(data.machineCode || data.pressId || '');
+      if (!key) return;
+      const entry = next.get(key) || { hasNotes: false, hasWiki: false, noteCount: 0 };
+      entry.hasNotes = true;
+      entry.noteCount += 1;
+      next.set(key, entry);
+    });
+
+    const allMachines = Object.values(PRESSES || {}).flat().filter(Boolean);
+    await Promise.all(allMachines.map(async machineCode => {
+      const pressId = toPressId(machineCode);
+      if (!pressId) return;
+      const pagesSnap = await getDocs(pressWikiPagesCol(pressId));
+      if (pagesSnap.empty) return;
+      const entry = next.get(pressId) || { hasNotes: false, hasWiki: false, noteCount: 0 };
+      entry.hasWiki = true;
+      next.set(pressId, entry);
+    }));
+
+    pressContributionIndex = next;
+    pressContributionPlantId = currentPlantId;
+  })().finally(() => {
+    pressContributionLoading = null;
+  });
+  return pressContributionLoading;
+}
+
+function pressContributionForMachine(machineCode) {
+  const pressId = toPressId(machineCode);
+  return pressContributionIndex.get(pressId) || { hasNotes: false, hasWiki: false, noteCount: 0 };
+}
+
+function buildPressContributionBadge(machineCode) {
+  const info = pressContributionForMachine(machineCode);
+  if (!info.hasNotes && !info.hasWiki) return null;
+  const badge = document.createElement('span');
+  badge.style.cssText = 'position:absolute;top:4px;right:4px;z-index:3;font-size:10px;font-weight:700;padding:2px 6px;border-radius:999px;line-height:1;background:rgba(8,10,14,.9);border:1px solid rgba(255,255,255,.2);';
+  if (info.hasNotes && info.hasWiki) {
+    badge.textContent = 'N+W';
+    badge.style.color = '#34d399';
+  } else if (info.hasWiki) {
+    badge.textContent = 'W';
+    badge.style.color = '#60a5fa';
+  } else {
+    badge.textContent = 'N';
+    badge.style.color = '#fbbf24';
+  }
+  return badge;
+}
+
 // ── MAP MODE ──
 window.setMapMode = mode => {
   mapMode = mode;
   document.getElementById('mode-log').className = 'map-mode-btn' + (mode==='log' ? ' active-log' : '');
   document.getElementById('mode-hist').className = 'map-mode-btn' + (mode==='hist' ? ' active-hist' : '');
+  document.getElementById('mode-notes').className = 'map-mode-btn' + (mode==='notes' ? ' active-hist' : '');
   document.getElementById('floor-map-label').textContent = mode==='log'
     ? 'FLOOR MAP — CLICK A PRESS TO LOG AN ISSUE'
-    : 'FLOOR MAP — CLICK A PRESS TO VIEW HISTORY';
+    : mode==='hist'
+      ? 'FLOOR MAP — CLICK A PRESS TO VIEW HISTORY'
+      : 'FLOOR MAP — USER NOTES & WIKI CONTRIBUTIONS';
   // Update all press button hover styles
   document.querySelectorAll('.press-btn').forEach(btn => {
     btn.classList.toggle('hist-mode', mode==='hist');
   });
+  if (mode === 'notes') {
+    void refreshPressContributionIndex(true).then(() => renderRowPanels());
+  }
   if (mode === 'log') {
     document.getElementById('machine-filter').value = '';
     renderIssues(); updateFilterBadge();
@@ -3149,6 +3218,11 @@ let activeMiniCard = null; // { machine, rowName }
 
 window.handlePressClick = p => {
   if (mapMode === 'hist') { showMachineHistory(p); return; }
+  if (mapMode === 'notes') {
+    const pressId = toPressId(p);
+    openNotesModal(pressId, p);
+    return;
+  }
 
   // Find which row this press belongs to
   let pressRow = null;
@@ -3848,7 +3922,11 @@ function renderRowPanels() {
       }
 
       // hist-mode class if needed
-      if (mapMode==='hist') btn.classList.add('hist-mode');
+      if (mapMode==='hist' || mapMode==='notes') btn.classList.add('hist-mode');
+      if (mapMode==='notes') {
+        const badge = buildPressContributionBadge(m);
+        if (badge) btn.appendChild(badge);
+      }
       // Mark presses not appearing in today's daily schedule
       if (unscheduledSet && !unscheduledSet.has(m)) {
         btn.classList.add('not-scheduled');
