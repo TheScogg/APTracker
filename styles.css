@@ -1906,7 +1906,7 @@
       padding: 10px 12px 12px;
       border-radius: 22px 22px 0 0;
     }
-    .subcategory-grid { grid-template-columns: 1fr; }
+    .subcategory-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .subcategory-sheet-title { font-size: 20px; }
   }
 
