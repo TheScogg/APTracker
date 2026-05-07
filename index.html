@@ -316,39 +316,56 @@
 
 <!-- ADD ISSUE MODAL -->
 <div class="modal-overlay" id="add-modal">
-  <div class="modal">
+  <div class="modal add-issue-modal">
     <div class="modal-title">Log Issue — <span class="modal-machine" id="modal-machine-name"></span></div>
-    <div style="margin-bottom:14px">
-      <label style="margin-bottom:5px">Date &amp; Time</label>
-      <div style="display:flex;gap:8px;align-items:center">
-        <input type="date" id="issue-date" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;outline:none;flex:1;">
-        <input type="time" id="issue-time-input" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:120px;">
-        <button onclick="resetIssueDateTime()" style="font-size:11px;color:var(--accent);background:none;border:none;cursor:pointer;font-family:'Nunito',sans-serif;white-space:nowrap;padding:0;" title="Reset to now">↺ Now</button>
+    <div class="issue-fast-summary">
+      <div class="issue-fast-label">Fast log</div>
+      <div class="issue-fast-copy">Write one sentence, add a photo, and keep moving. Details are optional.</div>
+    </div>
+    <label>What happened?</label>
+    <textarea id="issue-note" placeholder="Example: Hydraulic leak at press startup" rows="3"></textarea>
+    <div class="issue-quick-phrases" id="issue-quick-phrases"></div>
+    <div class="issue-urgent-row">
+      <label class="issue-urgent-toggle" for="issue-urgent">
+        <input id="issue-urgent" type="checkbox">
+        <span class="issue-urgent-pill">Urgent need</span>
+      </label>
+    </div>
+    <button class="issue-advanced-toggle" id="issue-advanced-toggle" type="button" onclick="toggleIssueAdvancedDetails()">
+      <span>More details</span>
+      <span class="issue-advanced-toggle-state" id="issue-advanced-toggle-state">Show</span>
+    </button>
+    <div class="issue-advanced-panel" id="issue-advanced-panel">
+      <div style="margin-bottom:14px">
+        <label style="margin-bottom:5px">When did it happen?</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="date" id="issue-date" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;outline:none;flex:1;">
+          <input type="time" id="issue-time-input" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:120px;">
+          <button onclick="resetIssueDateTime()" style="font-size:11px;color:var(--accent);background:none;border:none;cursor:pointer;font-family:'Nunito',sans-serif;white-space:nowrap;padding:0;" title="Reset to now">↺ Now</button>
+        </div>
+      </div>
+      <div style="margin-bottom:14px">
+        <label style="margin-bottom:5px">Shift</label>
+        <select id="issue-shift" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:100%;">
+          <option value="auto">Auto-detect from time</option>
+          <option value="first">1st Shift (5:54 AM – 1:54 PM)</option>
+          <option value="second">2nd Shift (1:54 PM – 9:54 PM)</option>
+          <option value="third">3rd Shift (9:54 PM – 5:54 AM)</option>
+        </select>
+      </div>
+      <div style="margin-bottom:14px">
+        <label style="margin-bottom:5px">Check-back timer</label>
+        <select id="issue-timer-minutes" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:100%;">
+          <option value="">No timer</option>
+          <option value="15">15 minutes</option>
+          <option value="30">30 minutes</option>
+          <option value="60">1 hour</option>
+          <option value="120">2 hours</option>
+        </select>
       </div>
     </div>
-    <div style="margin-bottom:14px">
-      <label style="margin-bottom:5px">Shift</label>
-      <select id="issue-shift" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:100%;">
-        <option value="auto">Auto-detect from time</option>
-        <option value="first">1st Shift (5:54 AM – 1:54 PM)</option>
-        <option value="second">2nd Shift (1:54 PM – 9:54 PM)</option>
-        <option value="third">3rd Shift (9:54 PM – 5:54 AM)</option>
-      </select>
-    </div>
-    <div style="margin-bottom:14px">
-      <label style="margin-bottom:5px">Initial Reminder</label>
-      <select id="issue-timer-minutes" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:100%;">
-        <option value="">No timer</option>
-        <option value="15">15 minutes</option>
-        <option value="30">30 minutes</option>
-        <option value="60">1 hour</option>
-        <option value="120">2 hours</option>
-      </select>
-    </div>
-    <label>Issue Description</label>
-    <textarea id="issue-note" placeholder="Describe the issue in detail…"></textarea>
     <div style="margin-bottom:4px">
-      <label style="margin-bottom:6px">Category <span style="color:var(--text3);font-size:9px;letter-spacing:0;text-transform:none;font-family:'Nunito',sans-serif">(optional — defaults to Open)</span></label>
+      <label style="margin-bottom:6px">Status <span style="color:var(--text3);font-size:9px;letter-spacing:0;text-transform:none;font-family:'Nunito',sans-serif">(optional — defaults to Open)</span></label>
       <div class="log-cat-selected" id="log-cat-selected">
         <span class="log-cat-pill" id="log-cat-pill"></span>
         <button class="log-cat-clear" id="log-cat-clear">✕ clear</button>
@@ -357,16 +374,23 @@
       <div class="log-sub-row" id="log-sub-row"></div>
     </div>
     <label>Photos <span style="color:var(--text3);font-size:9px;letter-spacing:0;text-transform:none;font-family:'Nunito',sans-serif">(optional)</span></label>
-    <div class="photo-btn-row">
-      <button class="photo-pick-btn" id="log-camera-btn">📷 Take Photo</button>
-      <button class="photo-pick-btn" id="log-library-btn">🖼️ Choose File</button>
+    <div class="issue-attach-hint">Tap once for camera or library. Photos preview right here.</div>
+    <div class="photo-stack">
+      <div class="photo-btn-row">
+        <button class="photo-pick-btn photo-add-btn" id="log-photo-btn" type="button">➕ Add Photo</button>
+      </div>
+      <div class="photo-source-row" id="log-photo-source-row">
+        <button class="photo-pick-btn photo-source-btn" id="log-camera-btn" type="button">📷 Camera</button>
+        <button class="photo-pick-btn photo-source-btn" id="log-library-btn" type="button">🖼️ Library</button>
+      </div>
     </div>
     <input type="file" id="log-camera-input" accept="image/*" capture="environment" style="display:none">
     <input type="file" id="log-library-input" accept="image/*" multiple style="display:none">
     <div class="photo-previews" id="photo-previews"></div>
     <div class="modal-actions">
       <button class="btn btn-ghost" id="cancel-btn" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-primary" id="submit-btn" onclick="submitIssue()">⚠ Log Issue</button>
+      <button class="btn btn-ghost" id="delegate-btn" onclick="submitIssue(true)">⚡ Log &amp; Handoff</button>
+      <button class="btn btn-primary" id="submit-btn" onclick="submitIssue(false)">⚠ Log Issue</button>
     </div>
   </div>
 </div>

@@ -3996,22 +3996,137 @@ function resizeImage(file) {
 }
 
 // ── ADD MODAL ──
+const ISSUE_LOG_PREFS_KEY = 'aptracker_issue_log_prefs_v1';
+const ISSUE_QUICK_PHRASES = ['Leak', 'Down', 'Needs parts', 'Waiting on maintenance', 'Quality check', 'Escalate'];
+let issueAdvancedExpanded = false;
+
+function loadIssueLogPrefs() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(ISSUE_LOG_PREFS_KEY) || '{}');
+    return {
+      timerMinutes: String(parsed?.timerMinutes || ''),
+      urgent: Boolean(parsed?.urgent),
+      advancedOpen: Boolean(parsed?.advancedOpen),
+      lastShift: parsed?.lastShift || 'auto',
+      lastStatusKey: parsed?.lastStatusKey || '',
+      lastStatusSub: parsed?.lastStatusSub || ''
+    };
+  } catch (_) {
+    return { timerMinutes: '', urgent: false, advancedOpen: false, lastShift: 'auto', lastStatusKey: '', lastStatusSub: '' };
+  }
+}
+
+let issueLogPrefs = loadIssueLogPrefs();
+
+function saveIssueLogPrefs() {
+  try {
+    localStorage.setItem(ISSUE_LOG_PREFS_KEY, JSON.stringify(issueLogPrefs));
+  } catch (_) {}
+}
+
+function setIssueAdvancedDetailsExpanded(on) {
+  issueAdvancedExpanded = Boolean(on);
+  const panel = document.getElementById('issue-advanced-panel');
+  const state = document.getElementById('issue-advanced-toggle-state');
+  panel?.classList.toggle('visible', issueAdvancedExpanded);
+  if (state) state.textContent = issueAdvancedExpanded ? 'Hide' : 'Show';
+}
+
+window.toggleIssueAdvancedDetails = function() {
+  setIssueAdvancedDetailsExpanded(!issueAdvancedExpanded);
+  issueLogPrefs.advancedOpen = issueAdvancedExpanded;
+  saveIssueLogPrefs();
+};
+
+function renderIssueQuickPhrases() {
+  const row = document.getElementById('issue-quick-phrases');
+  if (!row) return;
+  row.innerHTML = '';
+  ISSUE_QUICK_PHRASES.forEach(phrase => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'issue-quick-phrase';
+    btn.textContent = phrase;
+    addTapListener(btn, () => appendIssueNotePhrase(phrase));
+    row.appendChild(btn);
+  });
+}
+
+function appendIssueNotePhrase(phrase) {
+  const field = document.getElementById('issue-note');
+  if (!field) return;
+  const current = String(field.value || '').trim();
+  const next = current ? `${current}${current.endsWith('.') ? '' : ';'} ${phrase}` : phrase;
+  field.value = next;
+  field.focus();
+  field.setSelectionRange?.(field.value.length, field.value.length);
+}
+
+function openIssuePhotoSourceMenu(forceOpen) {
+  const row = document.getElementById('log-photo-source-row');
+  if (!row) return;
+  const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : !row.classList.contains('visible');
+  row.classList.toggle('visible', shouldOpen);
+}
+
+function syncIssueLogPrefsFromModal() {
+  const timer = document.getElementById('issue-timer-minutes');
+  const urgent = document.getElementById('issue-urgent');
+  const shift = document.getElementById('issue-shift');
+  issueLogPrefs.timerMinutes = String(timer?.value || '');
+  issueLogPrefs.urgent = Boolean(urgent?.checked);
+  issueLogPrefs.advancedOpen = issueAdvancedExpanded;
+  if (shift?.dataset?.autoApplied === '1') {
+    issueLogPrefs.lastShift = 'auto';
+  } else if (shift?.value && shift.value !== 'auto') {
+    issueLogPrefs.lastShift = shift.value;
+  } else {
+    issueLogPrefs.lastShift = 'auto';
+  }
+  saveIssueLogPrefs();
+}
+
+function applyIssueLogDefaults() {
+  const timer = document.getElementById('issue-timer-minutes');
+  const urgent = document.getElementById('issue-urgent');
+  const shift = document.getElementById('issue-shift');
+  const issueDate = document.getElementById('issue-date');
+  const issueTime = document.getElementById('issue-time-input');
+  if (timer) timer.value = issueLogPrefs.timerMinutes || '';
+  if (urgent) urgent.checked = Boolean(issueLogPrefs.urgent);
+  if (issueDate && issueTime) resetIssueDateTime();
+  if (shift) {
+    const d = getIssueDateFromInputs('issue-date', 'issue-time-input');
+    if (issueLogPrefs.lastShift === 'auto') {
+      shift.dataset.autoApplied = '1';
+      shift.value = getShiftForTime(d, getShiftSchedule(currentPlantId));
+    } else {
+      shift.dataset.autoApplied = '0';
+      shift.value = issueLogPrefs.lastShift || 'auto';
+    }
+  }
+  setIssueAdvancedDetailsExpanded(Boolean(issueLogPrefs.advancedOpen));
+}
+
 window.openAddModal = m => {
   if (!currentUser) return;
   if (!currentUserPermissions.canCreateIssue) return;
   currentMachine=m; pendingPhotos=[];
-  logCatKey=null; logCatSub=null;
+  logCatKey = issueLogPrefs.lastStatusKey || null;
+  logCatSub = issueLogPrefs.lastStatusSub || null;
   document.getElementById('issue-note').value='';
   document.getElementById('photo-previews').innerHTML='';
   document.getElementById('modal-machine-name').textContent=m;
-  document.getElementById('issue-shift').value='auto';
-  document.getElementById('issue-timer-minutes').value='';
-  resetIssueDateTime(); setSubmitting(false);
+  document.getElementById('log-photo-source-row')?.classList.remove('visible');
+  applyIssueLogDefaults();
+  renderIssueQuickPhrases();
+  setSubmitting(false);
   renderLogCatButtons();
-  document.getElementById('log-cat-selected').classList.remove('visible');
-  document.getElementById('log-sub-row').classList.remove('visible');
-  document.getElementById('log-sub-row').innerHTML='';
+  renderLogSubChips();
+  updateLogCatPill();
+  document.getElementById('log-cat-selected').classList.toggle('visible', Boolean(logCatKey));
   document.getElementById('add-modal').classList.add('visible');
+  requestAnimationFrame(() => document.getElementById('issue-note')?.focus());
 };
 
 // ── LOG ISSUE CATEGORY PICKER ──
@@ -4080,15 +4195,43 @@ function logCatSelectStatus(key) {
   scrollAddModalToBottom();
 }
 
-document.getElementById('log-cat-clear')?.addEventListener('touchend', e=>{e.preventDefault();logCatKey=null;logCatSub=null;renderLogCatButtons();renderLogSubChips();updateLogCatPill();},{passive:false});
-document.getElementById('log-cat-clear')?.addEventListener('click', ()=>{logCatKey=null;logCatSub=null;renderLogCatButtons();renderLogSubChips();updateLogCatPill();});
+document.getElementById('log-cat-clear')?.addEventListener('touchend', e=>{
+  e.preventDefault();
+  logCatKey=null;logCatSub=null;
+  issueLogPrefs.lastStatusKey = '';
+  issueLogPrefs.lastStatusSub = '';
+  saveIssueLogPrefs();
+  renderLogCatButtons();renderLogSubChips();updateLogCatPill();
+},{passive:false});
+document.getElementById('log-cat-clear')?.addEventListener('click', ()=>{
+  logCatKey=null;logCatSub=null;
+  issueLogPrefs.lastStatusKey = '';
+  issueLogPrefs.lastStatusSub = '';
+  saveIssueLogPrefs();
+  renderLogCatButtons();renderLogSubChips();updateLogCatPill();
+});
 
-window.closeModal = () => { document.getElementById('add-modal').classList.remove('visible'); pendingPhotos=[]; currentMachine=null; logCatKey=null; logCatSub=null; };
+window.closeModal = () => {
+  syncIssueLogPrefsFromModal();
+  document.getElementById('add-modal').classList.remove('visible');
+  document.getElementById('log-photo-source-row')?.classList.remove('visible');
+  pendingPhotos=[];
+  currentMachine=null;
+  issueLogPrefs.lastStatusKey = logCatKey || issueLogPrefs.lastStatusKey || '';
+  issueLogPrefs.lastStatusSub = logCatSub || issueLogPrefs.lastStatusSub || '';
+  saveIssueLogPrefs();
+  logCatKey=null;
+  logCatSub=null;
+};
 
 window.resetIssueDateTime = function() {
   const {dateStr,timeStr} = toLocalDTInputs(new Date());
   document.getElementById('issue-date').value=dateStr;
   document.getElementById('issue-time-input').value=timeStr;
+  const shift = document.getElementById('issue-shift');
+  if (shift && shift.dataset.autoApplied === '1') {
+    shift.value = getShiftForTime(new Date(), getShiftSchedule(currentPlantId));
+  }
 };
 
 function toLocalDTInputs(d) {
@@ -4366,11 +4509,31 @@ function refreshReminderClocksInDom() {
 
 loadIssueReminders();
 
+document.getElementById('issue-urgent')?.addEventListener('change', () => {
+  issueLogPrefs.urgent = Boolean(document.getElementById('issue-urgent')?.checked);
+  saveIssueLogPrefs();
+});
+document.getElementById('issue-timer-minutes')?.addEventListener('change', () => {
+  issueLogPrefs.timerMinutes = String(document.getElementById('issue-timer-minutes')?.value || '');
+  saveIssueLogPrefs();
+});
+document.getElementById('issue-shift')?.addEventListener('change', () => {
+  issueLogPrefs.lastShift = String(document.getElementById('issue-shift')?.value || 'auto');
+  const shift = document.getElementById('issue-shift');
+  if (shift) shift.dataset.autoApplied = '0';
+  saveIssueLogPrefs();
+});
+document.getElementById('issue-advanced-toggle')?.addEventListener('click', () => {
+  issueLogPrefs.advancedOpen = issueAdvancedExpanded;
+  saveIssueLogPrefs();
+});
+document.getElementById('log-photo-btn')?.addEventListener('click', () => openIssuePhotoSourceMenu());
+document.getElementById('log-camera-btn')?.addEventListener('touchend', e=>{e.preventDefault();openIssuePhotoSourceMenu(false);document.getElementById('log-camera-input').click();},{passive:false});
+document.getElementById('log-camera-btn')?.addEventListener('click', ()=>{openIssuePhotoSourceMenu(false);document.getElementById('log-camera-input').click();});
+document.getElementById('log-library-btn')?.addEventListener('touchend', e=>{e.preventDefault();openIssuePhotoSourceMenu(false);document.getElementById('log-library-input').click();},{passive:false});
+document.getElementById('log-library-btn')?.addEventListener('click', ()=>{openIssuePhotoSourceMenu(false);document.getElementById('log-library-input').click();});
+
 // photos - add modal
-document.getElementById('log-camera-btn').addEventListener('touchend', e=>{e.preventDefault();document.getElementById('log-camera-input').click();},{passive:false});
-document.getElementById('log-camera-btn').addEventListener('click', ()=>document.getElementById('log-camera-input').click());
-document.getElementById('log-library-btn').addEventListener('touchend', e=>{e.preventDefault();document.getElementById('log-library-input').click();},{passive:false});
-document.getElementById('log-library-btn').addEventListener('click', ()=>document.getElementById('log-library-input').click());
 document.getElementById('log-camera-input').addEventListener('change', function(){ handleFiles(this.files, pendingPhotos, 'photo-previews'); this.value=''; });
 document.getElementById('log-library-input').addEventListener('change', function(){ handleFiles(this.files, pendingPhotos, 'photo-previews'); this.value=''; });
 
@@ -4403,12 +4566,14 @@ function renderPreviews(arr, previewId) {
 
 function setSubmitting(on) {
   document.getElementById('submit-btn').disabled=on;
+  document.getElementById('delegate-btn').disabled=on;
   document.getElementById('cancel-btn').disabled=on;
   document.getElementById('submit-btn').innerHTML=on?'<span class="spinner"></span> Saving…':'⚠ Log Issue';
+  document.getElementById('delegate-btn').innerHTML=on?'<span class="spinner"></span> Saving…':'⚡ Log &amp; Handoff';
 }
 
 // ── SUBMIT NEW ──
-window.submitIssue = async () => {
+window.submitIssue = async (delegateAfter = false) => {
   if (!currentUserPermissions.canCreateIssue) return;
   const note = document.getElementById('issue-note').value.trim() || 'No description provided';
   setSubmitting(true);
@@ -4419,6 +4584,7 @@ window.submitIssue = async () => {
     const shiftSel = document.getElementById('issue-shift').value;
     const shift = shiftSel === 'auto' ? getShiftForTime(d, getShiftSchedule(currentPlantId)) : shiftSel;
     const timerMinutes = parseTimerMinutes(document.getElementById('issue-timer-minutes')?.value);
+    const isUrgent = Boolean(document.getElementById('issue-urgent')?.checked);
     const issueRef = doc(plantCol('issues'));
     const uploadedPhotos = await uploadIssuePhotosToStorage(issueRef.id, pendingPhotos);
     const issuePayload = {
@@ -4430,6 +4596,7 @@ window.submitIssue = async () => {
       photoCount: uploadedPhotos.length,
       createdAt: serverTimestamp(),
       createdBy: currentActor(),
+      ...(isUrgent ? { highPriority: true, priority: 'critical' } : {}),
       ...buildIssueV2Compat({
         machineCode: currentMachine,
         statusKey: initialStatus,
@@ -4445,7 +4612,8 @@ window.submitIssue = async () => {
       machineCode: currentMachine,
       note,
       initialStatusKey: initialStatus,
-      initialSubStatusKey: initialSubStatus
+      initialSubStatusKey: initialSubStatus,
+      urgent: isUrgent
     });
     queueIssueEvent(batch, issueRef.id, 'status_changed', {
       fromStatusKey: null,
@@ -4455,6 +4623,11 @@ window.submitIssue = async () => {
       note: ''
     });
     await batch.commit();
+    issueLogPrefs.lastStatusKey = initialStatus;
+    issueLogPrefs.lastStatusSub = initialSubStatus;
+    issueLogPrefs.timerMinutes = String(document.getElementById('issue-timer-minutes')?.value || '');
+    issueLogPrefs.urgent = isUrgent;
+    saveIssueLogPrefs();
     await queueRoleFeedAlert({ id: issueRef.id, machine: currentMachine }, {
       statusKey: initialStatus,
       subStatus: initialSubStatus,
@@ -4464,7 +4637,23 @@ window.submitIssue = async () => {
     attachmentPhotoCache.set(issueRef.id, uploadedPhotos);
     await awardGamification('issue_created_complete', { issueId: issueRef.id, dedupeSuffix: 'issue-created', tags: ['issue:create', `status:${initialStatus}`] });
     if (uploadedPhotos.length > 0) await awardGamification('photo_attached', { issueId: issueRef.id, dedupeSuffix: 'photo', tags: ['photo:attached'] });
+    const createdIssue = {
+      ...issuePayload,
+      id: issueRef.id,
+      photos: uploadedPhotos,
+      currentStatus: {
+        statusKey: initialStatus,
+        subStatusKey: initialSubStatus,
+        subLabel: initialSubStatus,
+        notePreview: note
+      },
+      lifecycle: { isResolved: initialStatus === 'resolved' }
+    };
     closeModal();
+    showGameToast(`✅ Logged Press ${currentMachine}`);
+    if (delegateAfter) {
+      await openIssueSmsComposer(createdIssue);
+    }
   } catch(e) { setSyncStatus('err','Error saving: '+e.message); setSubmitting(false); }
 };
 
@@ -5532,6 +5721,33 @@ window.closeSmsComposer = async (fallback = false) => {
   }
 };
 
+async function openIssueSmsComposer(issue) {
+  if (!issue) return;
+  const issueLink = (() => {
+    try {
+      return window.location?.href ? `${window.location.origin}${window.location.pathname}?issue=${encodeURIComponent(issue.id)}` : '';
+    } catch (_) {
+      return '';
+    }
+  })();
+  const messageWithLink = formatIssueSmsBody(issue, issueLink);
+  SMS_COMPOSER_STATE.issueId = issue.id;
+  SMS_COMPOSER_STATE.issue = issue;
+  SMS_COMPOSER_STATE.messageWithLink = messageWithLink;
+  SMS_COMPOSER_STATE.recipientOptions = await _smsRecipientOptions();
+  SMS_COMPOSER_STATE.selectedRecipientPhones = new Set();
+  const subtitle = document.getElementById('sms-compose-subtitle');
+  if (subtitle) subtitle.textContent = `${issue.machine || issue.id} • Choose recipients and review before sending.`;
+  const manual = document.getElementById('sms-manual-phone');
+  if (manual) manual.value = '';
+  const includePhotos = document.getElementById('sms-include-photos');
+  if (includePhotos) includePhotos.checked = true;
+  const preview = document.getElementById('sms-preview-text');
+  if (preview) preview.value = messageWithLink;
+  _renderSmsRecipientPicker();
+  document.getElementById('sms-compose-modal')?.classList.add('visible');
+}
+
 window.submitSmsComposer = async () => {
   const sendBtn = document.getElementById('sms-send-btn');
   if (sendBtn) {
@@ -5558,30 +5774,7 @@ window.sendIssueViaSms = async (id, evt) => {
     setSyncStatus('err', 'Unable to send text: issue not found.');
     return;
   }
-
-  const issueLink = (() => {
-    try {
-      return window.location?.href ? `${window.location.origin}${window.location.pathname}?issue=${encodeURIComponent(issue.id)}` : '';
-    } catch (_) {
-      return '';
-    }
-  })();
-  const messageWithLink = formatIssueSmsBody(issue, issueLink);
-  SMS_COMPOSER_STATE.issueId = issue.id;
-  SMS_COMPOSER_STATE.issue = issue;
-  SMS_COMPOSER_STATE.messageWithLink = messageWithLink;
-  SMS_COMPOSER_STATE.recipientOptions = await _smsRecipientOptions();
-  SMS_COMPOSER_STATE.selectedRecipientPhones = new Set();
-  const subtitle = document.getElementById('sms-compose-subtitle');
-  if (subtitle) subtitle.textContent = `${issue.machine || issue.id} • Choose recipients and review before sending.`;
-  const manual = document.getElementById('sms-manual-phone');
-  if (manual) manual.value = '';
-  const includePhotos = document.getElementById('sms-include-photos');
-  if (includePhotos) includePhotos.checked = true;
-  const preview = document.getElementById('sms-preview-text');
-  if (preview) preview.value = messageWithLink;
-  _renderSmsRecipientPicker();
-  document.getElementById('sms-compose-modal')?.classList.add('visible');
+  await openIssueSmsComposer(issue);
 };
 
 // ── DELETE ──
