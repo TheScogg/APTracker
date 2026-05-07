@@ -8939,6 +8939,7 @@ let pendingPressNotePhotos = [];
 let _pressWikiModalPressId = null;
 let _pressWikiSelectedPageId = 'shift-notes';
 let _pressWikiCanEdit = false;
+let _pressWikiAttachmentsCache = [];
 
 function _nid(base) { return base + '-' + NOTES_VARIANT; }
 function _notesModalEl() { return document.getElementById('notes-modal-' + NOTES_VARIANT); }
@@ -9290,14 +9291,14 @@ async function loadPressWikiPage(pageId) {
   const revisionsEl = document.getElementById('press-wiki-revisions');
   const attachmentsEl = document.getElementById('press-wiki-attachments');
   if (!titleEl || !metaEl || !bodyEl || !revisionsEl || !attachmentsEl) return;
-  bodyEl.textContent = 'Loading wiki...';
+  _renderPressWikiBody('Loading wiki...');
   revisionsEl.innerHTML = '';
   attachmentsEl.innerHTML = '';
   try {
     const pageRef = pressWikiPageDoc(_pressWikiModalPressId, pageId);
     const pageSnap = await getDoc(pageRef);
     if (!pageSnap.exists()) {
-      bodyEl.textContent = 'No wiki content yet. Add a press note to seed Shift Notes.';
+      _renderPressWikiBody('No wiki content yet. Add a press note to seed Shift Notes.');
       titleEl.textContent = pageId;
       return;
     }
@@ -9308,7 +9309,7 @@ async function loadPressWikiPage(pageId) {
     const revSnap = await getDocs(query(pressWikiRevisionsCol(_pressWikiModalPressId, pageId), orderBy('editedAt', 'desc'), limit(30)));
     const revisions = revSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     const currentRevision = revisions.find(r => r.id === currentRevisionId) || revisions[0] || null;
-    bodyEl.textContent = currentRevision?.body || 'No revision body available.';
+    _renderPressWikiBody(currentRevision?.body || 'No revision body available.');
     revisionsEl.innerHTML = revisions.length ? '' : '<div style="color:var(--text3);">No revisions yet.</div>';
     revisions.forEach(rev => {
       const row = document.createElement('button');
@@ -9319,12 +9320,12 @@ async function loadPressWikiPage(pageId) {
       row.style.textAlign = 'left';
       row.style.marginBottom = '6px';
       row.textContent = `${_relativeTime(rev.editedAt) || 'just now'} · ${rev.editedBy?.name || 'Unknown'} · ${rev.changeNote || 'Update'}`;
-      row.onclick = () => { bodyEl.textContent = rev.body || ''; };
+      row.onclick = () => { _renderPressWikiBody(rev.body || ''); };
       revisionsEl.appendChild(row);
     });
     const attachSnap = await getDocs(query(pressWikiAttachmentsCol(_pressWikiModalPressId, pageId), orderBy('uploadedAt', 'desc'), limit(24)));
-    attachSnap.docs.forEach((d, idx) => {
-      const data = d.data() || {};
+    _pressWikiAttachmentsCache = attachSnap.docs.map(d => ({ id: d.id, ...(d.data() || {}) }));
+    _pressWikiAttachmentsCache.forEach((data, idx) => {
       if (!data.url) return;
       const btn = document.createElement('button');
       btn.type = 'button';
@@ -9338,10 +9339,46 @@ async function loadPressWikiPage(pageId) {
       btn.onclick = () => openLightbox(0, [data.url]);
       attachmentsEl.appendChild(btn);
     });
+    renderPressWikiPhotoPicker();
   } catch (e) {
     console.error('loadPressWikiPage error', e);
-    bodyEl.textContent = 'Could not load wiki content.';
+    _renderPressWikiBody('Could not load wiki content.');
   }
+}
+
+function _renderPressWikiBody(text) {
+  const bodyEl = document.getElementById('press-wiki-body');
+  if (!bodyEl) return;
+  const raw = String(text || '');
+  bodyEl.innerHTML = '';
+  const lines = raw.split('\n');
+  lines.forEach(line => {
+    const m = line.match(/!\[(.*?)\]\((https?:\/\/[^\s)]+)\)/);
+    if (m) {
+      const figure = document.createElement('figure');
+      figure.style.margin = '8px 0';
+      const img = document.createElement('img');
+      img.src = m[2];
+      img.alt = m[1] || 'wiki image';
+      img.style.maxWidth = '100%';
+      img.style.borderRadius = '10px';
+      img.style.cursor = 'zoom-in';
+      img.onclick = () => openLightbox(0, [m[2]]);
+      figure.appendChild(img);
+      if (m[1]) {
+        const cap = document.createElement('figcaption');
+        cap.style.fontSize = '12px';
+        cap.style.color = 'var(--text3)';
+        cap.textContent = m[1];
+        figure.appendChild(cap);
+      }
+      bodyEl.appendChild(figure);
+    } else {
+      const p = document.createElement('div');
+      p.textContent = line || ' ';
+      bodyEl.appendChild(p);
+    }
+  });
 }
 
 window.closePressWikiModal = () => {
@@ -9387,8 +9424,15 @@ function togglePressWikiEditor(show) {
   editor.style.display = show ? 'block' : 'none';
   if (!show) return;
   document.getElementById('press-wiki-edit-title').value = document.getElementById('press-wiki-title')?.textContent || '';
-  document.getElementById('press-wiki-edit-body').value = document.getElementById('press-wiki-body')?.textContent || '';
+  document.getElementById('press-wiki-edit-body').value = _pressWikiCurrentBodyText();
   document.getElementById('press-wiki-edit-change-note').value = '';
+  renderPressWikiPhotoPicker();
+}
+
+function _pressWikiCurrentBodyText() {
+  const bodyEl = document.getElementById('press-wiki-body');
+  if (!bodyEl) return '';
+  return bodyEl.innerText || '';
 }
 
 function togglePressWikiCreateRow(show) {
@@ -9421,6 +9465,45 @@ async function createPressWikiPageFromInput() {
   await loadPressWikiPage(pageId);
   togglePressWikiEditor(true);
   _setPressWikiError('');
+}
+
+function renderPressWikiPhotoPicker() {
+  const picker = document.getElementById('press-wiki-photo-picker');
+  if (!picker) return;
+  if (!_pressWikiCanEdit || !_pressWikiAttachmentsCache.length || document.getElementById('press-wiki-editor')?.style.display === 'none') {
+    picker.style.display = 'none';
+    picker.innerHTML = '';
+    return;
+  }
+  picker.style.display = 'block';
+  picker.innerHTML = '<div style="font-size:12px;color:var(--text3);margin-bottom:6px;">Insert from press wiki photos</div>';
+  _pressWikiAttachmentsCache.forEach((a, idx) => {
+    if (!a.url) return;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'notes-photo-thumb-btn';
+    btn.title = a.caption || `Photo ${idx + 1}`;
+    btn.style.marginRight = '6px';
+    const img = document.createElement('img');
+    img.className = 'notes-photo-thumb';
+    img.src = a.url;
+    img.alt = a.caption || `Photo ${idx + 1}`;
+    btn.appendChild(img);
+    btn.onclick = () => insertWikiPhotoIntoEditor(a);
+    picker.appendChild(btn);
+  });
+}
+
+function insertWikiPhotoIntoEditor(photo) {
+  const ta = document.getElementById('press-wiki-edit-body');
+  if (!ta || !photo?.url) return;
+  const snippet = `![${photo.caption || 'Photo'}](${photo.url})`;
+  const start = ta.selectionStart ?? ta.value.length;
+  const end = ta.selectionEnd ?? ta.value.length;
+  ta.value = ta.value.slice(0, start) + snippet + ta.value.slice(end);
+  ta.focus();
+  const pos = start + snippet.length;
+  ta.setSelectionRange(pos, pos);
 }
 
 window.openNotesModal = (pressId, machineCode) => {
@@ -9543,6 +9626,12 @@ document.getElementById('press-wiki-page-select')?.addEventListener('change', e 
 document.getElementById('press-wiki-edit-btn')?.addEventListener('click', () => togglePressWikiEditor(true));
 document.getElementById('press-wiki-cancel-edit-btn')?.addEventListener('click', () => togglePressWikiEditor(false));
 document.getElementById('press-wiki-save-btn')?.addEventListener('click', () => savePressWikiRevision());
+document.getElementById('press-wiki-insert-photo-btn')?.addEventListener('click', () => {
+  const picker = document.getElementById('press-wiki-photo-picker');
+  if (!picker) return;
+  picker.style.display = picker.style.display === 'none' ? 'block' : 'none';
+  if (picker.style.display === 'block') renderPressWikiPhotoPicker();
+});
 document.getElementById('press-wiki-new-page-btn')?.addEventListener('click', () => togglePressWikiCreateRow(true));
 document.getElementById('press-wiki-cancel-create-page-btn')?.addEventListener('click', () => togglePressWikiCreateRow(false));
 document.getElementById('press-wiki-create-page-btn')?.addEventListener('click', () => createPressWikiPageFromInput());
