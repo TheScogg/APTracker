@@ -253,6 +253,67 @@ Events are the audit trail and should be append-only.
 
 ---
 
+### `plants/{plantId}/presses/{pressId}/wikiPages/{pageId}`
+
+#### Read
+- active plant members
+
+#### Create / update
+- users with `canManagePresses` or a dedicated wiki-edit permission in app logic
+
+#### Delete
+- owner only
+
+#### Reasoning
+This is the durable press reference layer and should be editable by trusted press owners, leads, or editors.
+
+---
+
+### `plants/{plantId}/presses/{pressId}/wikiPages/{pageId}/revisions/{revisionId}`
+
+#### Read
+- active plant members
+
+#### Create
+- same permission as wiki page edits
+
+#### Update / delete
+- deny
+
+#### Reasoning
+Revisions are append-only history.
+
+---
+
+### `plants/{plantId}/presses/{pressId}/wikiPages/{pageId}/attachments/{attachmentId}`
+
+#### Read
+- active plant members
+
+#### Create / update
+- same permission as wiki page edits
+
+#### Delete
+- owner only
+
+---
+
+### `plants/{plantId}/pressNotes/{noteId}`
+
+#### Read
+- active plant members
+
+#### Create
+- users with `canEditIssue` or similar plant-floor write permission
+
+#### Update / delete
+- deny
+
+#### Reasoning
+These are lightweight event notes and should remain append-only.
+
+---
+
 ## Starter rules file
 
 This is a practical baseline, not the final perfect version.
@@ -389,6 +450,16 @@ Rules should stay reasonably simple. Use app logic for most shape validation, bu
 ### Status definitions
 - keep `key` stable after creation
 - prefer `isActive = false` over deletes
+
+### Press wiki pages
+- keep `slug` stable after creation
+- keep revisions append-only
+- use `lastVerifiedAt` and `lastVerifiedBy` for trusted reference content
+
+### Press notes
+- keep event notes lightweight
+- avoid rewriting old entries in place
+- store photo metadata in Firestore and binaries in Storage
 
 ---
 
