@@ -561,6 +561,14 @@
     <div id="edit-status-sub-wrap"></div>
     <label>Note (optional)</label>
     <textarea id="edit-status-note" placeholder="Additional details…" style="min-height:60px;margin-bottom:14px;"></textarea>
+    <label>Photos (optional)</label>
+    <div class="photo-source-group" style="margin-bottom:10px;">
+      <button class="photo-pick-btn photo-source-btn" id="edit-status-camera-btn" type="button">📷 Take Photo</button>
+      <button class="photo-pick-btn photo-source-btn" id="edit-status-library-btn" type="button">🖼️ Choose Photo</button>
+    </div>
+    <input type="file" id="edit-status-camera-input" accept="image/*" capture="environment" style="display:none">
+    <input type="file" id="edit-status-library-input" accept="image/*" multiple style="display:none">
+    <div class="photo-previews" id="edit-status-photo-previews" style="margin-bottom:14px;"></div>
     <div style="margin-bottom:14px;">
       <label>Date & Time</label>
       <div style="display:flex;gap:8px;">
