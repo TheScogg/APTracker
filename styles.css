@@ -1337,6 +1337,7 @@
     50%       { box-shadow: 0 0 16px rgba(168,85,247,0.85), 0 0 28px rgba(168,85,247,0.35); border-color: #c084fc; }
   }
   .issue-machine-tag { font-family: 'Rajdhani', sans-serif; font-size: 17px; font-weight: 700; letter-spacing: 1px; background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; color: var(--accent); white-space: nowrap; flex-shrink: 0; line-height: 1; margin-top: 4px; }
+  .issue-serial-tag { font-family: 'Share Tech Mono', monospace; font-size: 11px; font-weight: 700; color: var(--text2); background: color-mix(in srgb, var(--bg3) 60%, transparent); border: 1px dashed var(--border); border-radius: 6px; padding: 4px 6px; display: inline-flex; align-items: center; gap: 4px; line-height: 1; white-space: nowrap; user-select: all; letter-spacing: 0.05em; margin-bottom: 2px; }
   .issue-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; }
   .issue-note-preview { font-size: 17px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; letter-spacing: 0.025em; }
   .issue-time { font-family: 'Nunito', sans-serif; font-size: 13px; font-weight: 400; color: var(--text3); margin-top: 2px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; line-height: 1.4; }

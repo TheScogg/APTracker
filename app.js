@@ -6374,10 +6374,27 @@ function renderIssues() {
       : '';
     const timerBadgeHtml = reminderState ? `<span class="shift-badge ${reminderState.isOverdue ? 'status-open' : ''}" data-reminder-id="${issue.id}">${formatReminderClock(reminderState)}</span>` : '';
 
+    let foundSerialNumber = '';
+    const reversedHistory = [...displayHistory].reverse();
+    for (const entry of reversedHistory) {
+      if (!entry.note) continue;
+      const match = entry.note.match(/S\/N:\s*([A-Za-z0-9]+)/i);
+      if (match) {
+        foundSerialNumber = match[1].toUpperCase();
+        break;
+      }
+    }
+    const serialBadgeHtml = foundSerialNumber
+      ? `<div class="issue-serial-tag" title="Serial Number: ${esc(foundSerialNumber)}">🏷️ ${esc(foundSerialNumber)}</div>`
+      : '';
+
     card.innerHTML=`
       <div class="issue-card-header" onclick="toggleCard('${issue.id}')">
         <div class="issue-card-top">
-          <div class="issue-machine-tag">${esc(issue.machine)}</div>
+          <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-start;">
+            <div class="issue-machine-tag">${esc(issue.machine)}</div>
+            ${serialBadgeHtml}
+          </div>
           <div class="issue-meta">
             <div class="issue-note-preview">${esc(issue.note)}</div>
             <div class="issue-time">${datePart} ${submitterHtml}${shiftBadgeHtml}${timerBadgeHtml}${(issue.photos||[]).length?`<span class="photo-count-badge">📷 ${issue.photos.length}</span>`:''}${issue.editedAt?'<span style="color:var(--text3)">(edited)</span>':''}</div>
