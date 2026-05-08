@@ -1637,6 +1637,9 @@
   .role-alert-status-pill { display:inline-flex; align-items:center; gap: 4px; border-radius: 999px; padding: 2px 8px; font-family: 'Share Tech Mono', monospace; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
   .role-alert-status-pill.active { color: #fbbf24; border: 1px solid rgba(251,191,36,0.35); background: rgba(251,191,36,0.10); }
   .role-alert-status-pill.accepted { color: #4ade80; border: 1px solid rgba(74,222,128,0.35); background: rgba(74,222,128,0.10); }
+  .role-alert-category-pill { display:inline-flex; align-items:center; gap: 5px; border-radius:999px; padding:2px 8px; border:1px solid color-mix(in srgb, var(--role-alert-cat-color) 55%, transparent); background: color-mix(in srgb, var(--role-alert-cat-color) 18%, transparent); color: color-mix(in srgb, var(--role-alert-cat-color) 75%, white 25%); font-family:'Share Tech Mono', monospace; font-size:10px; letter-spacing:0.03em; text-transform:uppercase; }
+  .role-alert-category-icon { font-size: 11px; line-height: 1; }
+  .role-alert-category-label { line-height: 1; }
   .role-alert-card-sub { font-family: 'Share Tech Mono', monospace; font-size: 10px; color: var(--text2); }
   .role-alert-ack { font-family: 'Share Tech Mono', monospace; font-size: 10px; color: #4ade80; text-transform: uppercase; letter-spacing: 0.08em; }
   .role-alert-card-note { font-size: 13px; color: var(--text2); line-height: 1.45; word-break: break-word; }
