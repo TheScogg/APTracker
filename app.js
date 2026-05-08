@@ -6447,7 +6447,7 @@ function renderIssues() {
         break;
       }
     }
-    const isMaterialsWorkflow = String(currentKey || '').toLowerCase() === 'materials' && String(subLabel || '').trim().toLowerCase() === 'needed';
+    const isMaterialsWorkflow = String(currentKey || '').toLowerCase() === 'materials';
     const serialBadgeHtml = isMaterialsWorkflow && foundSerialNumber
       ? `<div class="issue-serial-tag" style="margin-left:12px; margin-top:2px;" title="Serial Number: ${esc(foundSerialNumber)}">🏷️ ${esc(foundSerialNumber)}</div>`
       : '';
