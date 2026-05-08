@@ -4057,6 +4057,7 @@ function openIssuePhotoSourceMenu(forceOpen) {
   if (!row) return;
   const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : !row.classList.contains('visible');
   row.classList.toggle('visible', shouldOpen);
+  if (shouldOpen) scrollAddModalToBottom();
 }
 
 function syncIssueLogPrefsFromModal() {
@@ -4175,6 +4176,7 @@ function renderLogSubChips() {
       saveIssueLogPrefs();
       renderLogSubChips();
       updateLogCatPill();
+      scrollAddModalToBottom();
     });
     row.appendChild(item);
   });
@@ -4318,6 +4320,7 @@ function logCatSelectStatus(key) {
   renderLogSubChips();
   updateLogCatPill();
   closeSubcategorySheet();
+  scrollAddModalToBottom();
 }
 
 document.getElementById('log-cat-clear')?.addEventListener('touchend', e=>{

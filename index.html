@@ -317,16 +317,17 @@
 <!-- ADD ISSUE MODAL -->
 <div class="modal-overlay" id="add-modal">
   <div class="modal add-issue-modal">
-    <div class="modal-title">Log Issue — <span class="modal-machine" id="modal-machine-name"></span></div>
+    <div class="modal-title" style="display:flex; justify-content:space-between; align-items:flex-start; padding-right:4px;">
+      <div>Log Issue — <span class="modal-machine" id="modal-machine-name"></span></div>
+      <label class="issue-urgent-toggle" for="issue-urgent" title="Mark as Urgent">
+        <input id="issue-urgent" type="checkbox">
+        <span class="issue-urgent-pill icon-only" title="Urgent">🔥</span>
+      </label>
+    </div>
     <label>What happened?</label>
     <textarea id="issue-note" placeholder="Example: Hydraulic leak at press startup" rows="3"></textarea>
     <div class="issue-quick-phrases" id="issue-quick-phrases"></div>
-    <div class="issue-urgent-row">
-      <label class="issue-urgent-toggle" for="issue-urgent">
-        <input id="issue-urgent" type="checkbox">
-        <span class="issue-urgent-pill">Urgent need</span>
-      </label>
-    </div>
+
     <button class="issue-advanced-toggle" id="issue-advanced-toggle" type="button" onclick="toggleIssueAdvancedDetails()">
       <span>More details</span>
       <span class="issue-advanced-toggle-state" id="issue-advanced-toggle-state">Show</span>
