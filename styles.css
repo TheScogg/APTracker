@@ -1376,9 +1376,6 @@
   .issue-body { display: none; padding: 12px 16px 16px; border-top: 1px solid var(--border); }
   .issue-body.visible { display: block; }
   .issue-body input, .issue-body select, .issue-body textarea, .issue-body button { pointer-events: auto !important; user-select: auto !important; }
-  .issue-text-btn { border:1px solid rgba(96,165,250,0.45); border-radius:10px; background:rgba(59,130,246,0.1); color:#bfdbfe; padding:7px 12px; font-family:'Share Tech Mono', monospace; font-size:12px; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:6px; }
-  .issue-text-btn:hover { background: rgba(59,130,246,0.16); }
-  .issue-text-btn:active { transform: translateY(1px); }
   
   /* Force all form elements to be interactive */
   input, select, textarea {

@@ -4713,12 +4713,12 @@ function setSubmitting(on) {
 // ── SUBMIT NEW ──
 window.submitIssue = async () => {
   if (!currentUserPermissions.canCreateIssue) return;
-  const note = document.getElementById('issue-note').value.trim() || 'No description provided';
   setSubmitting(true);
   try {
     const d = getIssueDateFromInputs('issue-date','issue-time-input');
     const initialStatus = logCatKey || 'open';
     const initialSubStatus = logCatSub || '';
+    const note = document.getElementById('issue-note').value.trim() || initialSubStatus || '';
     const shiftSel = document.getElementById('issue-shift').value;
     const shift = shiftSel === 'auto' ? getShiftForTime(d, getShiftSchedule(currentPlantId)) : shiftSel;
     const timerMinutes = parseTimerMinutes(document.getElementById('issue-timer-minutes')?.value);
@@ -6274,7 +6274,6 @@ function renderIssues() {
       ${addRowHtml}
     </div>
     <div class="action-row issue-footer-actions" style="margin-top:10px;">
-      <button class="issue-text-btn" onclick="event.stopPropagation(); sendIssueViaSms('${issue.id}', event)" title="Send issue by SMS">📲 Text</button>
       <button class="issue-reminder-btn${reminderState?.isOverdue ? ' overdue' : ''}" onclick="event.stopPropagation(); openIssueReminderModal('${issue.id}')" title="Set check-back timer">⏱ <span data-reminder-id="${issue.id}">${formatReminderClock(reminderState)}</span></button>
       ${canEdit ? `<div class="issue-footer-actions-right">
       <button class="btn btn-edit" onclick="openEditModal('${issue.id}')">✏️ Edit</button>
@@ -6352,12 +6351,27 @@ function renderIssues() {
         }).join('')}</div>`
       : '';
 
+    let foundSerialNumber = '';
+    const reversedHistory = [...displayHistory].reverse();
+    for (const entry of reversedHistory) {
+      if (!entry.note) continue;
+      const match = entry.note.match(/S\/N:\s*([A-Za-z0-9]+)/i);
+      if (match) {
+        foundSerialNumber = match[1].toUpperCase();
+        break;
+      }
+    }
+    const serialBadgeHtml = foundSerialNumber
+      ? `<div class="issue-serial-tag" style="margin-left:12px; margin-top:2px;" title="Serial Number: ${esc(foundSerialNumber)}">🏷️ ${esc(foundSerialNumber)}</div>`
+      : '';
+
     const currentWfRowHtml = `<div class="wf-status-row">
       <div class="wf-status-row-info">
         <div class="issue-status" style="color:${sc.color};border-color:${sc.color};background:${alphaColor(sc.color,0.12)}">
           <span class="issue-status-main">${sc.icon} ${baseLabel}</span>
         </div>
         ${subLabel ? `<span class="issue-status-sub" style="color:${sc.color};">${esc(subLabel)}</span>` : ''}
+        ${serialBadgeHtml}
         ${secDotsHtml}
       </div>
       ${wfHeaderHtml}
@@ -6374,27 +6388,10 @@ function renderIssues() {
       : '';
     const timerBadgeHtml = reminderState ? `<span class="shift-badge ${reminderState.isOverdue ? 'status-open' : ''}" data-reminder-id="${issue.id}">${formatReminderClock(reminderState)}</span>` : '';
 
-    let foundSerialNumber = '';
-    const reversedHistory = [...displayHistory].reverse();
-    for (const entry of reversedHistory) {
-      if (!entry.note) continue;
-      const match = entry.note.match(/S\/N:\s*([A-Za-z0-9]+)/i);
-      if (match) {
-        foundSerialNumber = match[1].toUpperCase();
-        break;
-      }
-    }
-    const serialBadgeHtml = foundSerialNumber
-      ? `<div class="issue-serial-tag" title="Serial Number: ${esc(foundSerialNumber)}">🏷️ ${esc(foundSerialNumber)}</div>`
-      : '';
-
     card.innerHTML=`
       <div class="issue-card-header" onclick="toggleCard('${issue.id}')">
         <div class="issue-card-top">
-          <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-start;">
-            <div class="issue-machine-tag">${esc(issue.machine)}</div>
-            ${serialBadgeHtml}
-          </div>
+          <div class="issue-machine-tag">${esc(issue.machine)}</div>
           <div class="issue-meta">
             <div class="issue-note-preview">${esc(issue.note)}</div>
             <div class="issue-time">${datePart} ${submitterHtml}${shiftBadgeHtml}${timerBadgeHtml}${(issue.photos||[]).length?`<span class="photo-count-badge">📷 ${issue.photos.length}</span>`:''}${issue.editedAt?'<span style="color:var(--text3)">(edited)</span>':''}</div>
