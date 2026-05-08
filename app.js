@@ -4679,6 +4679,10 @@ document.getElementById('log-library-input').addEventListener('change', function
 
 // photos - edit modal
 document.getElementById('edit-photo-input').addEventListener('change', function(){ handleFiles(this.files, editPhotos, 'edit-photo-previews'); });
+document.getElementById('edit-status-camera-btn')?.addEventListener('click', () => document.getElementById('edit-status-camera-input')?.click());
+document.getElementById('edit-status-library-btn')?.addEventListener('click', () => document.getElementById('edit-status-library-input')?.click());
+document.getElementById('edit-status-camera-input')?.addEventListener('change', function(){ handleFiles(this.files, editStatusPhotos, 'edit-status-photo-previews'); this.value=''; });
+document.getElementById('edit-status-library-input')?.addEventListener('change', function(){ handleFiles(this.files, editStatusPhotos, 'edit-status-photo-previews'); this.value=''; });
 const edz = document.getElementById('edit-drop-zone');
 edz.addEventListener('dragover', e=>{e.preventDefault();edz.classList.add('drag-over');});
 edz.addEventListener('dragleave', ()=>edz.classList.remove('drag-over'));
@@ -4697,7 +4701,7 @@ function renderPreviews(arr, previewId) {
   const c = document.getElementById(previewId); c.innerHTML='';
   arr.forEach((p,i) => {
     const wrap=document.createElement('div'); wrap.className='photo-preview-item';
-    const img=document.createElement('img'); img.className='photo-preview-img'; img.src=p.dataUrl;
+    const img=document.createElement('img'); img.className='photo-preview-img'; img.src=p.dataUrl || p.downloadURL || '';
     const rm=document.createElement('button'); rm.className='photo-remove'; rm.textContent='✕';
     rm.onclick=()=>{ arr.splice(i,1); renderPreviews(arr,previewId); };
     wrap.appendChild(img); wrap.appendChild(rm); c.appendChild(wrap);
@@ -5100,7 +5104,7 @@ window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
 };
 
 // Update an existing history entry
-window.updateStatusEntry = async (id, idx, status, subStatus, note, dateTime) => {
+window.updateStatusEntry = async (id, idx, status, subStatus, note, dateTime, photos = null) => {
   const issue = issues.find(i=>i.id===id);
   if (!issue) return;
   const latestIssue = await getLatestIssueForStatusMutation(id, issue);
@@ -5120,6 +5124,7 @@ window.updateStatusEntry = async (id, idx, status, subStatus, note, dateTime) =>
   const prev = currentStatus(latestIssue || issue);
   history[idx] = { ...history[idx], status, subStatus: subStatus||'', note: note||'' };
   if (dateTime) history[idx].dateTime = dateTime;
+  if (Array.isArray(photos)) history[idx].photos = photos;
   // Recalculate current status from last entry
   const last = history[history.length - 1];
   try {
@@ -5281,6 +5286,7 @@ window.cancelAddEntry = (id) => { delete pendingEntry[id]; renderIssues(); };
 
 // Edit state per entry
 let editingStatusEntry = null;
+let editStatusPhotos = [];
 window.startEditEntry = (id, idx) => {
   const issue = issues.find(i => i.id === id);
   if (!issue) return;
@@ -5313,6 +5319,8 @@ window.startEditEntry = (id, idx) => {
   }
   
   document.getElementById('edit-status-note').value = entry.note || '';
+  editStatusPhotos = Array.isArray(entry.photos) ? entry.photos.map(p => ({ ...p })) : [];
+  renderPreviews(editStatusPhotos, 'edit-status-photo-previews');
   
   // Parse date/time
   if (entry.dateTime) {
@@ -5349,6 +5357,8 @@ function updateEditStatusSubOptions() {
 window.closeEditStatusModal = () => {
   document.getElementById('edit-status-modal').classList.remove('visible');
   editingStatusEntry = null;
+  editStatusPhotos = [];
+  renderPreviews(editStatusPhotos, 'edit-status-photo-previews');
 };
 
 window.saveEditStatusEntry = async () => {
@@ -5368,7 +5378,18 @@ window.saveEditStatusEntry = async () => {
     dateTime = fmtDate(new Date(dateStr + 'T' + tVal + ':00'));
   }
   
-  await updateStatusEntry(issueId, entryIndex, status, subStatus, note, dateTime);
+  const newStatusPhotos = editStatusPhotos.filter(p => p.dataUrl);
+  const existingStatusPhotos = editStatusPhotos.filter(p => !p.dataUrl);
+  const uploadedStatusPhotos = newStatusPhotos.length ? await uploadIssuePhotosToStorage(issueId, newStatusPhotos) : [];
+  const mergedStatusPhotos = [...existingStatusPhotos, ...uploadedStatusPhotos].map(p => ({
+    name: p.name || '',
+    storagePath: p.storagePath || '',
+    dataUrl: p.dataUrl || p.downloadURL || '',
+    contentType: p.contentType || 'image/jpeg',
+    sizeBytes: Number(p.sizeBytes || p.size || 0),
+    storageBucket: p.storageBucket || ''
+  }));
+  await updateStatusEntry(issueId, entryIndex, status, subStatus, note, dateTime, mergedStatusPhotos);
   closeEditStatusModal();
 };
 
@@ -6231,6 +6252,7 @@ function renderIssues() {
           </div>
           <div class="tl-time">${entry.dateTime||''}${entry.by?' — '+esc(entry.by):''}</div>
           ${entry.note?`<div class="tl-note-text">"${esc(entry.note)}"</div>`:''}
+          ${Array.isArray(entry.photos) && entry.photos.length ? `<div class="issue-photos" style="margin-top:6px;">${entry.photos.map((p,i)=>`<img class="issue-photo-thumb" src="${esc(p.downloadURL || p.dataUrl || '')}" loading="lazy" alt="${esc(p.name || `Status photo ${i+1}`)}" onclick="openLightbox(${i}, [${entry.photos.map(sp => `'${esc(sp.downloadURL || sp.dataUrl || '')}'`).join(',')}])">`).join('')}</div>` : ''}
           ${currentUserPermissions.canEditIssue ? `<div style="display:flex;gap:5px;margin-top:6px;">
             ${!isResolvedEntry && !isCurrent ? `<button class="tl-edit-btn" onclick="setStatusCurrentFromHistory('${issue.id}',${trueIdx})">Set current</button>` : ''}
             ${!isResolvedEntry && entryWorkflowState === 'finished' ? `<button class="tl-edit-btn" onclick="setWorkflowStateForStatus('${issue.id}','${entry.status}','called')">Un-finish</button>` : ''}
