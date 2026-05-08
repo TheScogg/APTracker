@@ -4171,7 +4171,9 @@ function renderSubcategorySheet(statusKey = subcategorySheetState.statusKey) {
     const pill = document.createElement('button');
     pill.type = 'button';
     pill.className = 'subcategory-parent-pill' + (key === activeKey ? ' selected' : '');
-    pill.textContent = getStatusLabel(key, 'short');
+    const st = getStatusDef(key);
+    pill.textContent = st.icon;
+    pill.title = getStatusLabel(key, 'short');
     const chipColor = getStatusColor(key);
     pill.style.color = chipColor;
     if (key === activeKey) {
