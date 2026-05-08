@@ -6443,13 +6443,13 @@ function renderIssues() {
         break;
       }
     }
-    const serialBadgeHtml = foundSerialNumber
+    const isMaterialsWorkflow = String(currentKey || '').toLowerCase() === 'materials';
+    const serialBadgeHtml = isMaterialsWorkflow && foundSerialNumber
       ? `<div class="issue-serial-tag" style="margin-left:12px; margin-top:2px;" title="Serial Number: ${esc(foundSerialNumber)}">🏷️ ${esc(foundSerialNumber)}</div>`
       : '';
     const subLabelWithSerial = (() => {
       if (!subLabel) return '';
-      const isMaterialsNeeded = String(currentKey || '').toLowerCase() === 'materials' && String(subLabel).trim().toLowerCase() === 'needed';
-      if (!isMaterialsNeeded || !foundSerialNumber) return subLabel;
+      if (!isMaterialsWorkflow || !foundSerialNumber) return subLabel;
       return `${subLabel} ${foundSerialNumber}`;
     })();
 
