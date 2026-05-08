@@ -6366,7 +6366,7 @@ function renderIssues() {
       : '';
     const subLabelWithSerial = (() => {
       if (!subLabel) return '';
-      const isMaterialsNeeded = String(sKey || '').toLowerCase() === 'materials' && String(subLabel).trim().toLowerCase() === 'needed';
+      const isMaterialsNeeded = String(currentKey || '').toLowerCase() === 'materials' && String(subLabel).trim().toLowerCase() === 'needed';
       if (!isMaterialsNeeded || !foundSerialNumber) return subLabel;
       return `${subLabel} ${foundSerialNumber}`;
     })();
