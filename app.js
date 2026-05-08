@@ -4145,7 +4145,39 @@ function renderLogCatButtons() {
 function renderLogSubChips() {
   const row = document.getElementById('log-sub-row'); if (!row) return;
   row.innerHTML = '';
-  row.classList.remove('visible');
+  if (!logCatKey) {
+    row.className = 'log-sub-row';
+    return;
+  }
+  const subs = getStatusSubs(logCatKey);
+  if (!subs.length) {
+    row.className = 'log-sub-row';
+    return;
+  }
+  
+  row.className = 'subcategory-grid visible';
+  row.style.marginTop = '12px';
+  row.style.marginBottom = '12px';
+  
+  const activeColor = getStatusColor(logCatKey);
+  
+  subs.forEach(sub => {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = 'subcategory-item' + (logCatSub === sub ? ' selected' : '');
+    item.innerHTML = `<span class="subcategory-item-label">${esc(sub)}</span><span class="subcategory-item-check">✓</span>`;
+    item.style.borderColor = alphaColor(activeColor, 0.32);
+    item.style.color = activeColor;
+    item.style.background = logCatSub === sub ? alphaColor(activeColor, 0.12) : 'linear-gradient(180deg, rgba(255,255,255,0.03), transparent)';
+    addTapListener(item, () => {
+      logCatSub = logCatSub === sub ? '' : sub;
+      issueLogPrefs.lastStatusSub = logCatSub;
+      saveIssueLogPrefs();
+      renderLogSubChips();
+      updateLogCatPill();
+    });
+    row.appendChild(item);
+  });
 }
 
 function renderSubcategorySheet(statusKey = subcategorySheetState.statusKey) {
@@ -4277,17 +4309,15 @@ function logCatSelectStatus(key) {
   const subs = getStatusSubs(key);
   logCatKey = key;
   logCatSub = prevKey === key && subs.includes(logCatSub) ? logCatSub : '';
+  
+  issueLogPrefs.lastStatusKey = key;
+  issueLogPrefs.lastStatusSub = logCatSub;
+  saveIssueLogPrefs();
+
   renderLogCatButtons();
   renderLogSubChips();
   updateLogCatPill();
-  if (subs.length > 0) {
-    openSubcategorySheet(key);
-  } else {
-    issueLogPrefs.lastStatusKey = key;
-    issueLogPrefs.lastStatusSub = '';
-    saveIssueLogPrefs();
-    closeSubcategorySheet();
-  }
+  closeSubcategorySheet();
 }
 
 document.getElementById('log-cat-clear')?.addEventListener('touchend', e=>{
@@ -4309,9 +4339,7 @@ document.getElementById('log-cat-clear')?.addEventListener('click', ()=>{
 });
 document.getElementById('log-cat-selected')?.addEventListener('click', e => {
   if (e.target.closest?.('#log-cat-clear')) return;
-  if (logCatKey && getStatusSubs(logCatKey).length > 0) {
-    openSubcategorySheet(logCatKey);
-  }
+  // Disabled: Subcategories now render inline below the category picker.
 });
 
 window.closeModal = () => {
