@@ -221,10 +221,13 @@ async function queueRoleFeedAlert(issue, { statusKey, subStatus, note = '' } = {
       .map(d => ({ id: d.id, ...d.data() }))
       .filter(m => m?.isActive !== false)
       .filter(m => {
+        const hasExplicitSubscriptions = Object.prototype.hasOwnProperty.call(m || {}, 'alertCategorySubscriptions');
         const categorySubs = Array.isArray(m.alertCategorySubscriptions)
           ? m.alertCategorySubscriptions.map(v => String(v || '').trim().toLowerCase()).filter(Boolean)
           : [];
-        if (categorySubs.includes(categoryKey)) return true;
+        if (hasExplicitSubscriptions) {
+          return categorySubs.includes(categoryKey);
+        }
         const normalizedRoleKeys = [
           ...(Array.isArray(m.jobRoleKeys) ? m.jobRoleKeys : []),
           ...(Array.isArray(m.jobFeeds) ? m.jobFeeds : [])
@@ -323,12 +326,18 @@ function _renderRoleAlertCard(alert) {
   const acceptedMeta = isAccepted
     ? `<div class="role-alert-ack">${acceptedByName ? `Accepted by ${esc(acceptedByName)}` : 'Accepted'}</div>`
     : '';
+  const statusDef = getStatusDef(alert.statusKey || alert.categoryKey || 'open');
+  const statusLabel = getStatusLabel(alert.statusKey || alert.categoryKey || 'open', 'short');
   return `
     <div class="role-alert-card${isAccepted ? ' accepted' : ''}" style="background:${cardBg};border-color:${cardBorder};">
       <div class="role-alert-card-main">
         <div class="role-alert-card-title" style="color:${titleColor};">${esc(alert.feedLabel)} · ${esc(alert.machine)}</div>
         <div class="role-alert-card-meta">
           ${isAccepted ? `<span class="role-alert-status-pill accepted">Accepted</span>` : `<span class="role-alert-status-pill active">Active</span>`}
+          <span class="role-alert-category-pill" style="--role-alert-cat-color:${statusColor};">
+            <span class="role-alert-category-icon">${esc(statusDef.icon || '❔')}</span>
+            <span class="role-alert-category-label">${esc(statusLabel)}</span>
+          </span>
           ${alert.subStatus ? `<span class="role-alert-card-sub">${esc(alert.subStatus)}</span>` : ''}
         </div>
         ${acceptedMeta}
