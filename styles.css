@@ -851,6 +851,28 @@
   .press-btn.has-multi       { --press-state-color: var(--accent);   --press-state-bg: var(--accent-glow); }
   .press-btn.not-scheduled   { --press-state-color: rgba(253,230,138,0.42); --press-state-bg: rgba(253,243,176,0.08); color: var(--yellow); }
   .press-btn.not-scheduled .press-btn-num { color: inherit; }
+  .press-btn.notes-signal,
+  .press-btn.wiki-signal,
+  .press-btn.notes-wiki-signal {
+    box-shadow: inset 0 -2px 0 0 var(--press-signal-color), 0 0 0 1px var(--press-state-color), 0 0 0 2px var(--press-state-bg);
+  }
+  .press-btn.notes-signal { --press-signal-color: #fbbf24; }
+  .press-btn.wiki-signal { --press-signal-color: #60a5fa; }
+  .press-btn.notes-wiki-signal {
+    --press-signal-color: #34d399;
+    background-image: linear-gradient(135deg, rgba(52,211,153,0.12) 0%, rgba(96,165,250,0.12) 100%);
+  }
+  .press-btn[data-note-signal]::after {
+    content: '';
+    position: absolute;
+    top: 5px;
+    left: 5px;
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--press-signal-color);
+    box-shadow: 0 0 0 1px rgba(8,10,14,0.6), 0 0 8px color-mix(in srgb, var(--press-signal-color) 65%, transparent);
+  }
   .press-btn .badge { position: absolute; top: -5px; right: -5px; background: var(--red); color: white; font-size: 9px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; display: flex; align-items: center; justify-content: center; font-family: 'Nunito', sans-serif; font-weight: 800; line-height: 1; border: 2px solid var(--bg2); box-shadow: 0 2px 6px rgba(0,0,0,0.25); }
   .press-btn.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--bg2), 0 0 0 4px var(--accent), 0 6px 16px var(--accent-glow); transform: translateY(-2px); }
   @media (max-width: 640px) {

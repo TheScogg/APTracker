@@ -3238,22 +3238,29 @@ function pressContributionForMachine(machineCode) {
   return pressContributionIndex.get(pressId) || { hasNotes: false, hasWiki: false, noteCount: 0 };
 }
 
-function buildPressContributionBadge(machineCode) {
+function applyPressContributionVisual(btn, machineCode) {
   const info = pressContributionForMachine(machineCode);
-  if (!info.hasNotes && !info.hasWiki) return null;
-  const badge = document.createElement('span');
-  badge.style.cssText = 'position:absolute;top:4px;right:4px;z-index:3;font-size:10px;font-weight:700;padding:2px 6px;border-radius:999px;line-height:1;background:rgba(8,10,14,.9);border:1px solid rgba(255,255,255,.2);';
+  btn.classList.remove('notes-signal', 'wiki-signal', 'notes-wiki-signal');
+  delete btn.dataset.noteSignal;
+
+  if (!info.hasNotes && !info.hasWiki) return;
+
+  let signal = '';
   if (info.hasNotes && info.hasWiki) {
-    badge.textContent = 'N+W';
-    badge.style.color = '#34d399';
+    signal = 'notes-wiki';
+    btn.classList.add('notes-wiki-signal');
   } else if (info.hasWiki) {
-    badge.textContent = 'W';
-    badge.style.color = '#60a5fa';
+    signal = 'wiki';
+    btn.classList.add('wiki-signal');
   } else {
-    badge.textContent = 'N';
-    badge.style.color = '#fbbf24';
+    signal = 'notes';
+    btn.classList.add('notes-signal');
   }
-  return badge;
+
+  btn.dataset.noteSignal = signal;
+  const signalText = signal === 'notes-wiki' ? 'Has notes and wiki content' : signal === 'wiki' ? 'Has wiki content' : 'Has notes';
+  const currentTitle = String(btn.title || '').trim();
+  btn.title = currentTitle ? `${currentTitle} · ${signalText}` : signalText;
 }
 
 // ── MAP MODE ──
@@ -3991,10 +3998,7 @@ function renderRowPanels() {
 
       // hist-mode class if needed
       if (mapMode==='hist' || mapMode==='notes') btn.classList.add('hist-mode');
-      if (mapMode==='notes') {
-        const badge = buildPressContributionBadge(m);
-        if (badge) btn.appendChild(badge);
-      }
+      if (mapMode==='notes') applyPressContributionVisual(btn, m);
       // Mark presses not appearing in today's daily schedule
       if (unscheduledSet && !unscheduledSet.has(m)) {
         btn.classList.add('not-scheduled');
