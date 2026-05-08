@@ -1281,18 +1281,16 @@
   .swipe-sub-cancel:hover { color:var(--text); border-color:color-mix(in srgb, var(--border) 45%, #fff 55%); box-shadow: inset 0 1px 0 rgba(255,255,255,0.24), 0 3px 8px rgba(0,0,0,0.3); }
   .swipe-sub-cancel:active { transform: translateY(1px) scale(0.96); box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 1px 2px rgba(0,0,0,0.3); }
   .swipe-sub-cancel span { font-size:14px; font-weight:800; line-height:1; }
-  .swipe-sub-chip { display: inline-flex; align-items: center; font-size: 10px; font-weight: 500; padding: 4px 10px; border-radius: 9999px; border: 2px solid; cursor: pointer; transition: all 0.15s; white-space: nowrap; font-family: 'Nunito', sans-serif; opacity: 0; animation: swipeSubIn 0.25s ease forwards; line-height: 1.3; margin: 0 8px 8px 0; vertical-align: top; }
-  .swipe-sub-chip:nth-child(1) { animation-delay: 0.02s; }
-  .swipe-sub-chip:nth-child(2) { animation-delay: 0.06s; }
-  .swipe-sub-chip:nth-child(3) { animation-delay: 0.10s; }
-  .swipe-sub-chip:nth-child(4) { animation-delay: 0.14s; }
-  .swipe-sub-chip:nth-child(5) { animation-delay: 0.18s; }
-  .swipe-sub-chip:nth-child(6) { animation-delay: 0.22s; }
-  .swipe-sub-chip:nth-child(7) { animation-delay: 0.26s; }
-  .swipe-sub-chip:hover { background: rgba(255,255,255,0.05); }
-  .swipe-sub-chip:active { transform: scale(0.95); }
-  .swipe-sub-chip.skip { background: transparent; border: 1px dashed var(--border); color: var(--text3); font-weight: 500; }
-  .swipe-sub-chip.skip:hover { color: var(--text); background: var(--bg3); }
+  .swipe-sub-inner .subcategory-item { opacity: 0; animation: swipeSubIn 0.25s ease forwards; }
+  .swipe-sub-inner .subcategory-item:nth-child(1) { animation-delay: 0.02s; }
+  .swipe-sub-inner .subcategory-item:nth-child(2) { animation-delay: 0.06s; }
+  .swipe-sub-inner .subcategory-item:nth-child(3) { animation-delay: 0.10s; }
+  .swipe-sub-inner .subcategory-item:nth-child(4) { animation-delay: 0.14s; }
+  .swipe-sub-inner .subcategory-item:nth-child(5) { animation-delay: 0.18s; }
+  .swipe-sub-inner .subcategory-item:nth-child(6) { animation-delay: 0.22s; }
+  .swipe-sub-inner .subcategory-item:nth-child(7) { animation-delay: 0.26s; }
+  .swipe-sub-inner .subcategory-item:nth-child(8) { animation-delay: 0.30s; }
+  .swipe-sub-inner .subcategory-item.skip { border-style: dashed; opacity: 0.8; }
 
   @keyframes slideIn { from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)} }
   .issue-card:hover { border-color: var(--text3); }

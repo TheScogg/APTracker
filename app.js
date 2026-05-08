@@ -6523,27 +6523,35 @@ function renderIssues() {
 
           const subInner = subPanel.querySelector('.swipe-sub-inner');
           subInner.innerHTML = '';
-
-          // Skip chip
-          const skipChip = document.createElement('div');
-          skipChip.className = 'swipe-sub-chip skip';
-          skipChip.textContent = 'Skip ›';
-          skipChip.dataset.sub = '';
-          subInner.appendChild(skipChip);
+          subInner.className = 'swipe-sub-inner subcategory-grid'; 
+          
+          const activeColor = getStatusColor(statusKey);
 
           // Sub chips
           getStatusSubs(statusKey).forEach(sub => {
-            const chip = document.createElement('div');
-            chip.className = 'swipe-sub-chip';
-            const col = getStatusColor(statusKey);
-            chip.style.cssText = `background:${col}18;color:${col};border-color:${col}`;
-            chip.textContent = sub;
-            chip.dataset.sub = sub;
-            subInner.appendChild(chip);
+            const item = document.createElement('button');
+            item.type = 'button';
+            item.className = 'subcategory-item swipe-sub-action';
+            item.innerHTML = `<span class="subcategory-item-label">${esc(sub)}</span>`;
+            item.style.borderColor = alphaColor(activeColor, 0.32);
+            item.style.color = activeColor;
+            item.style.background = 'linear-gradient(180deg, rgba(255,255,255,0.03), transparent)';
+            item.dataset.sub = sub;
+            subInner.appendChild(item);
           });
 
+          // Skip chip
+          const skipChip = document.createElement('button');
+          skipChip.type = 'button';
+          skipChip.className = 'subcategory-item swipe-sub-action skip';
+          skipChip.innerHTML = `<span class="subcategory-item-label" style="color:var(--text3); font-style:italic;">Skip ›</span>`;
+          skipChip.style.borderColor = 'var(--border)';
+          skipChip.style.background = 'transparent';
+          skipChip.dataset.sub = '';
+          subInner.appendChild(skipChip);
+
           // Add click handlers to sub chips
-          subInner.querySelectorAll('.swipe-sub-chip').forEach(chip => {
+          subInner.querySelectorAll('.swipe-sub-action').forEach(chip => {
             const handleSubClick = () => {
               const sub = chip.dataset.sub;
               closeSwipeCard(card);
