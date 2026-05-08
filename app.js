@@ -6252,7 +6252,7 @@ function renderIssues() {
           </div>
           <div class="tl-time">${entry.dateTime||''}${entry.by?' — '+esc(entry.by):''}</div>
           ${entry.note?`<div class="tl-note-text">"${esc(entry.note)}"</div>`:''}
-          ${Array.isArray(entry.photos) && entry.photos.length ? `<div class="issue-photos" style="margin-top:6px;">${entry.photos.map((p,i)=>`<img class="issue-photo-thumb" src="${esc(p.downloadURL || p.dataUrl || '')}" loading="lazy" alt="${esc(p.name || `Status photo ${i+1}`)}">`).join('')}</div>` : ''}
+          ${Array.isArray(entry.photos) && entry.photos.length ? `<div class="issue-photos" style="margin-top:6px;">${entry.photos.map((p,i)=>`<img class="issue-photo-thumb" src="${esc(p.downloadURL || p.dataUrl || '')}" loading="lazy" alt="${esc(p.name || `Status photo ${i+1}`)}" onclick="openLightbox(${i}, [${entry.photos.map(sp => `'${esc(sp.downloadURL || sp.dataUrl || '')}'`).join(',')}])">`).join('')}</div>` : ''}
           ${currentUserPermissions.canEditIssue ? `<div style="display:flex;gap:5px;margin-top:6px;">
             ${!isResolvedEntry && !isCurrent ? `<button class="tl-edit-btn" onclick="setStatusCurrentFromHistory('${issue.id}',${trueIdx})">Set current</button>` : ''}
             ${!isResolvedEntry && entryWorkflowState === 'finished' ? `<button class="tl-edit-btn" onclick="setWorkflowStateForStatus('${issue.id}','${entry.status}','called')">Un-finish</button>` : ''}
