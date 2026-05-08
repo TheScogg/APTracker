@@ -6364,13 +6364,19 @@ function renderIssues() {
     const serialBadgeHtml = foundSerialNumber
       ? `<div class="issue-serial-tag" style="margin-left:12px; margin-top:2px;" title="Serial Number: ${esc(foundSerialNumber)}">🏷️ ${esc(foundSerialNumber)}</div>`
       : '';
+    const subLabelWithSerial = (() => {
+      if (!subLabel) return '';
+      const isMaterialsNeeded = String(sKey || '').toLowerCase() === 'materials' && String(subLabel).trim().toLowerCase() === 'needed';
+      if (!isMaterialsNeeded || !foundSerialNumber) return subLabel;
+      return `${subLabel} ${foundSerialNumber}`;
+    })();
 
     const currentWfRowHtml = `<div class="wf-status-row">
       <div class="wf-status-row-info">
         <div class="issue-status" style="color:${sc.color};border-color:${sc.color};background:${alphaColor(sc.color,0.12)}">
           <span class="issue-status-main">${sc.icon} ${baseLabel}</span>
         </div>
-        ${subLabel ? `<span class="issue-status-sub" style="color:${sc.color};">${esc(subLabel)}</span>` : ''}
+        ${subLabelWithSerial ? `<span class="issue-status-sub" style="color:${sc.color};">${esc(subLabelWithSerial)}</span>` : ''}
         ${serialBadgeHtml}
         ${secDotsHtml}
       </div>
