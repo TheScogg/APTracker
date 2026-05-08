@@ -6804,7 +6804,15 @@ window.toggleCard = id => {
   const willOpen = bodyEl ? !bodyEl.classList.contains('visible') : false;
   bodyEl?.classList.toggle('visible');
   chevronEl?.classList.toggle('open');
-  if (willOpen) ensureIssueDetailsHydrated(id).catch(() => {});
+  if (willOpen) {
+    ensureIssueDetailsHydrated(id).catch(() => {});
+    setTimeout(() => {
+      const cardEl = bodyEl?.closest('.issue-card');
+      if (cardEl) {
+        cardEl.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      }
+    }, 50);
+  }
   scheduleIssueLogRelayout();
 };
 
