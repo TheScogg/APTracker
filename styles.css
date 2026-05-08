@@ -1761,26 +1761,26 @@
   .subcategory-grid {
     display:grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
+    gap: 6px;
   }
   .subcategory-item {
-    min-height: 60px;
+    min-height: 42px;
     border: 1px solid var(--border);
-    border-radius: 14px;
+    border-radius: 10px;
     background: linear-gradient(180deg, rgba(255,255,255,0.03), transparent);
     color: var(--text);
-    padding: 12px 12px 11px;
+    padding: 6px 10px;
     text-align:left;
     cursor:pointer;
     transition: transform 0.1s, border-color 0.15s, background 0.15s, box-shadow 0.15s;
     display:flex;
     align-items:center;
     justify-content:space-between;
-    gap: 10px;
+    gap: 6px;
     font-family:'Nunito', sans-serif;
     font-weight: 700;
-    font-size: 13px;
-    line-height: 1.25;
+    font-size: 12px;
+    line-height: 1.2;
   }
   .subcategory-item:active { transform: scale(0.98); }
   .subcategory-item:hover { border-color: var(--accent); background: var(--accent-glow); }

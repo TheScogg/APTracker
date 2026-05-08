@@ -4156,8 +4156,8 @@ function renderLogSubChips() {
   }
   
   row.className = 'subcategory-grid visible';
-  row.style.marginTop = '12px';
-  row.style.marginBottom = '12px';
+  row.style.marginTop = '4px';
+  row.style.marginBottom = '8px';
   
   const activeColor = getStatusColor(logCatKey);
   
