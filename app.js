@@ -5384,9 +5384,9 @@ window.saveEditStatusEntry = async () => {
   const mergedStatusPhotos = [...existingStatusPhotos, ...uploadedStatusPhotos].map(p => ({
     name: p.name || '',
     storagePath: p.storagePath || '',
-    downloadURL: p.downloadURL || '',
+    dataUrl: p.dataUrl || p.downloadURL || '',
     contentType: p.contentType || 'image/jpeg',
-    size: Number(p.size || 0),
+    sizeBytes: Number(p.sizeBytes || p.size || 0),
     storageBucket: p.storageBucket || ''
   }));
   await updateStatusEntry(issueId, entryIndex, status, subStatus, note, dateTime, mergedStatusPhotos);
