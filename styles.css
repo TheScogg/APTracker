@@ -369,6 +369,18 @@
   .sync-dot { width: 7px; height: 7px; border-radius: 50%; background: #eab308; animation: pulse 1.2s infinite; flex-shrink: 0; }
   .sync-dot.ok { background: var(--green); animation: none; }
   .sync-dot.err { background: var(--red); animation: none; }
+  .firestore-io-indicator {
+    margin-left: auto;
+    font-size: 11px;
+    letter-spacing: 0.02em;
+    padding: 2px 6px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--bg2);
+    color: var(--text3);
+    min-width: 82px;
+    text-align: center;
+  }
   @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.3} }
 
   /* HEADER */

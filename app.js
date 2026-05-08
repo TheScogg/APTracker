@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, collection, updateDoc, deleteDoc, doc, getDoc, getDocs, setDoc, addDoc, onSnapshot, serverTimestamp, query, orderBy, where, writeBatch, arrayUnion, arrayRemove, increment, limit, runTransaction, startAfter } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, collection, updateDoc as rawUpdateDoc, deleteDoc as rawDeleteDoc, doc, getDoc as rawGetDoc, getDocs as rawGetDocs, setDoc as rawSetDoc, addDoc as rawAddDoc, onSnapshot as rawOnSnapshot, serverTimestamp, query, orderBy, where, writeBatch as rawWriteBatch, arrayUnion, arrayRemove, increment, limit, runTransaction as rawRunTransaction, startAfter } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut as fbSignOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getStorage, ref as storageRef, uploadString, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
@@ -23,6 +23,66 @@ const storageFallback = firebaseConfig.storageBucket && firebaseConfig.storageBu
 const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
 provider.setCustomParameters({ prompt: "select_account" });
+
+const firestoreIoStats = { reads: 0, writes: 0 };
+function refreshFirestoreIoIndicator() {
+  const el = document.getElementById('firestore-io-indicator');
+  if (!el) return;
+  el.textContent = `R:${firestoreIoStats.reads} W:${firestoreIoStats.writes}`;
+}
+function trackFirestoreRead(amount = 1) {
+  firestoreIoStats.reads += Math.max(0, Number(amount) || 0);
+  refreshFirestoreIoIndicator();
+}
+function trackFirestoreWrite(amount = 1) {
+  firestoreIoStats.writes += Math.max(0, Number(amount) || 0);
+  refreshFirestoreIoIndicator();
+}
+const getDoc = async (...args) => {
+  const snap = await rawGetDoc(...args);
+  trackFirestoreRead(1);
+  return snap;
+};
+const getDocs = async (...args) => {
+  const snap = await rawGetDocs(...args);
+  trackFirestoreRead(snap?.size ?? 0);
+  return snap;
+};
+const setDoc = async (...args) => { const out = await rawSetDoc(...args); trackFirestoreWrite(1); return out; };
+const addDoc = async (...args) => { const out = await rawAddDoc(...args); trackFirestoreWrite(1); return out; };
+const updateDoc = async (...args) => { const out = await rawUpdateDoc(...args); trackFirestoreWrite(1); return out; };
+const deleteDoc = async (...args) => { const out = await rawDeleteDoc(...args); trackFirestoreWrite(1); return out; };
+const writeBatch = (...args) => {
+  const batch = rawWriteBatch(...args);
+  const originalCommit = batch.commit.bind(batch);
+  batch.commit = async (...commitArgs) => {
+    const out = await originalCommit(...commitArgs);
+    trackFirestoreWrite(1);
+    return out;
+  };
+  return batch;
+};
+const runTransaction = async (...args) => {
+  const out = await rawRunTransaction(...args);
+  trackFirestoreWrite(1);
+  return out;
+};
+const onSnapshot = (...args) => {
+  if (typeof args[1] === 'function') {
+    const original = args[1];
+    args[1] = (snapshot) => {
+      trackFirestoreRead(snapshot?.size ?? 1);
+      return original(snapshot);
+    };
+  } else if (typeof args[2] === 'function') {
+    const original = args[2];
+    args[2] = (snapshot) => {
+      trackFirestoreRead(snapshot?.size ?? 1);
+      return original(snapshot);
+    };
+  }
+  return rawOnSnapshot(...args);
+};
 
 // ── MULTI-PLANT ──
 let currentPlantId = null;
