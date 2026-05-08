@@ -8375,7 +8375,22 @@ function updateFilterBadge() {
   badge.textContent = count;
 }
 
-document.getElementById('search-input').addEventListener('input', () => { renderIssues(); updateFilterBadge(); });
+function scrollToSearchResultsIfNeeded() {
+  const searchValue = String(document.getElementById('search-input')?.value || '').trim();
+  if (!searchValue) return;
+  const firstResult = document.querySelector('#issues-list .issue-card');
+  if (firstResult) {
+    firstResult.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
+  document.querySelector('.issues-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+document.getElementById('search-input').addEventListener('input', () => {
+  renderIssues();
+  updateFilterBadge();
+  scrollToSearchResultsIfNeeded();
+});
 document.getElementById('machine-filter').addEventListener('change', () => {
   const mf = document.getElementById('machine-filter').value;
   const bc = document.getElementById('machine-breadcrumb');
