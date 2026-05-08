@@ -4158,7 +4158,8 @@ function renderSubcategorySheet(statusKey = subcategorySheetState.statusKey) {
   if (!parentRow || !grid) return;
 
   const ordered = window._STATUS_ORDER ? window._STATUS_ORDER : Object.keys(STATUSES);
-  const activeKey = statusKey || ordered.find(key => getStatusSubs(key).length) || 'open';
+  const alphabetizedKeys = [...ordered].sort((a, b) => getStatusLabel(a, 'short').localeCompare(getStatusLabel(b, 'short')));
+  const activeKey = statusKey || alphabetizedKeys.find(key => getStatusSubs(key).length) || 'open';
   const subs = getStatusSubs(activeKey);
   const activeColor = getStatusColor(activeKey);
 
@@ -4166,12 +4167,20 @@ function renderSubcategorySheet(statusKey = subcategorySheetState.statusKey) {
   if (subtitle) subtitle.textContent = subs.length ? 'Pick the closest match to log faster.' : 'No subcategories are configured for this status.';
 
   parentRow.innerHTML = '';
-  ordered.forEach(key => {
+  alphabetizedKeys.forEach(key => {
     const pill = document.createElement('button');
     pill.type = 'button';
     pill.className = 'subcategory-parent-pill' + (key === activeKey ? ' selected' : '');
     pill.textContent = getStatusLabel(key, 'short');
-    pill.style.color = key === activeKey ? activeColor : '';
+    const chipColor = getStatusColor(key);
+    pill.style.color = chipColor;
+    if (key === activeKey) {
+      pill.style.borderColor = alphaColor(chipColor, 0.4);
+      pill.style.background = alphaColor(chipColor, 0.1);
+    } else {
+      pill.style.borderColor = alphaColor(chipColor, 0.15);
+      pill.style.background = 'transparent';
+    }
     addTapListener(pill, () => {
       subcategorySheetState.statusKey = key;
       subcategorySheetState.selectedSub = '';
