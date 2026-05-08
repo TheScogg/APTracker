@@ -4718,7 +4718,7 @@ window.submitIssue = async () => {
     const d = getIssueDateFromInputs('issue-date','issue-time-input');
     const initialStatus = logCatKey || 'open';
     const initialSubStatus = logCatSub || '';
-    const note = document.getElementById('issue-note').value.trim() || initialSubStatus || '';
+    const note = document.getElementById('issue-note').value.trim() || 'No Description Provided';
     const shiftSel = document.getElementById('issue-shift').value;
     const shift = shiftSel === 'auto' ? getShiftForTime(d, getShiftSchedule(currentPlantId)) : shiftSel;
     const timerMinutes = parseTimerMinutes(document.getElementById('issue-timer-minutes')?.value);
