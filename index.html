@@ -215,11 +215,12 @@
 
   <div class="filter-drawer" id="filter-drawer">
     <div class="filter-inner">
-      <div style="display:flex;flex-wrap:wrap;gap:6px;" id="stat-pills-row">
-        <div class="stat-pill" id="pill-open"            data-shell-action="toggle-stat-filter" data-shell-value="open">           <div class="dot" style="background:var(--red)"></div>      <span id="stat-open">0 Open</span></div>
-        <div class="stat-pill" id="pill-resolved"        data-shell-action="toggle-stat-filter" data-shell-value="resolved">       <div class="dot" style="background:var(--green)"></div>    <span id="stat-resolved">0 Resolved</span></div>
+      <div class="shift-filter-row">
+        <button class="shift-filter-pill active" id="shift-pill-all"    data-shell-action="set-shift-filter" data-shell-value="all">All Shifts</button>
+        <button class="shift-filter-pill"        id="shift-pill-first"  data-shell-action="set-shift-filter" data-shell-value="first">1st Shift</button>
+        <button class="shift-filter-pill"        id="shift-pill-second" data-shell-action="set-shift-filter" data-shell-value="second">2nd Shift</button>
+        <button class="shift-filter-pill"        id="shift-pill-third"  data-shell-action="set-shift-filter" data-shell-value="third">3rd Shift</button>
       </div>
-      <div class="filter-section-divider"></div>
       <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;">
         <select id="machine-filter"><option value="">All Machines</option></select>
         <select id="status-filter">
@@ -240,11 +241,10 @@
         <span class="search-icon">🔍</span>
         <input class="search-box" type="text" id="search-input" placeholder="Search issues…">
       </div>
-      <div class="shift-filter-row">
-        <button class="shift-filter-pill active" id="shift-pill-all"    data-shell-action="set-shift-filter" data-shell-value="all">All Shifts</button>
-        <button class="shift-filter-pill"        id="shift-pill-first"  data-shell-action="set-shift-filter" data-shell-value="first">1st Shift</button>
-        <button class="shift-filter-pill"        id="shift-pill-second" data-shell-action="set-shift-filter" data-shell-value="second">2nd Shift</button>
-        <button class="shift-filter-pill"        id="shift-pill-third"  data-shell-action="set-shift-filter" data-shell-value="third">3rd Shift</button>
+      <div class="filter-section-divider"></div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;" id="stat-pills-row">
+        <div class="stat-pill" id="pill-open"            data-shell-action="toggle-stat-filter" data-shell-value="open">           <div class="dot" style="background:var(--red)"></div>      <span id="stat-open">0 Open</span></div>
+        <div class="stat-pill" id="pill-resolved"        data-shell-action="toggle-stat-filter" data-shell-value="resolved">       <div class="dot" style="background:var(--green)"></div>    <span id="stat-resolved">0 Resolved</span></div>
       </div>
     </div>
   </div>
