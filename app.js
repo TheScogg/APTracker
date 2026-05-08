@@ -4789,6 +4789,14 @@ window.submitIssue = async () => {
     };
     closeModal();
     showGameToast(`✅ Logged Press ${currentMachine}`);
+    if (requiresSerialNumber(initialStatus, initialSubStatus)) {
+      setTimeout(() => {
+        openSerialModal(issueRef.id, initialStatus, initialSubStatus, fmtDate(d));
+        if (!issues.find(i => i.id === issueRef.id)) {
+          document.getElementById('serial-modal-machine').textContent = currentMachine;
+        }
+      }, 50);
+    }
   } catch(e) { setSyncStatus('err','Error saving: '+e.message); setSubmitting(false); }
 };
 
