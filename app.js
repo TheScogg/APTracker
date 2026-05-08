@@ -6307,12 +6307,17 @@ function renderIssues() {
       const wfBadge = isResolvedEntry
         ? `<div class="tl-wf-badge no-action" style="color:${cfg.color}">${cfg.icon} RESOLVED${isCurrent ? ' · CURRENT' : ''}</div>`
         : `<button class="tl-wf-badge" style="color:${wfColor}" onclick="event.stopPropagation(); cycleWorkflowStateForStatus('${issue.id}','${entry.status}')" title="Tap to cycle workflow state">${wfBadgeLabel}</button>`;
+      const entrySerialMatch = String(entry.note || '').match(/S\/N:\s*([A-Za-z0-9]+)/i);
+      const entrySerialNumber = entrySerialMatch ? entrySerialMatch[1].toUpperCase() : '';
+      const entryMaterialBadge = String(entry.status || '').toLowerCase() === 'materials' && entrySerialNumber
+        ? ` <span class="issue-serial-tag" title="Serial Number: ${esc(entrySerialNumber)}">🏷️ ${esc(entrySerialNumber)}</span>`
+        : '';
 
       return `<div class="tl-entry" style="border-left-color:${barColor};${entryBg}">
         ${wfBadge}
         <div>
           <div class="tl-header">
-            <span class="tl-status-label" style="color:${cfg.color}">${cfg.label}${entry.subStatus?' › '+esc(entry.subStatus):''}</span>
+            <span class="tl-status-label" style="color:${cfg.color}">${cfg.label}${entry.subStatus?' › '+esc(entry.subStatus):''}${entryMaterialBadge}</span>
           </div>
           <div class="tl-time">${entry.dateTime||''}${entry.by?' — '+esc(entry.by):''}</div>
           ${entry.note?`<div class="tl-note-text">"${esc(entry.note)}"</div>`:''}
