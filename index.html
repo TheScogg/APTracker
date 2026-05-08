@@ -318,10 +318,6 @@
 <div class="modal-overlay" id="add-modal">
   <div class="modal add-issue-modal">
     <div class="modal-title">Log Issue — <span class="modal-machine" id="modal-machine-name"></span></div>
-    <div class="issue-fast-summary">
-      <div class="issue-fast-label">Fast log</div>
-      <div class="issue-fast-copy">Write one sentence, add a photo, and keep moving. Details are optional.</div>
-    </div>
     <label>What happened?</label>
     <textarea id="issue-note" placeholder="Example: Hydraulic leak at press startup" rows="3"></textarea>
     <div class="issue-quick-phrases" id="issue-quick-phrases"></div>
@@ -389,8 +385,7 @@
     <div class="photo-previews" id="photo-previews"></div>
     <div class="modal-actions">
       <button class="btn btn-ghost" id="cancel-btn" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-ghost" id="delegate-btn" onclick="submitIssue(true)">⚡ Log &amp; Handoff</button>
-      <button class="btn btn-primary" id="submit-btn" onclick="submitIssue(false)">⚠ Log Issue</button>
+      <button class="btn btn-primary" id="submit-btn" onclick="submitIssue()">⚠ Log Issue</button>
     </div>
   </div>
 </div>

@@ -4664,14 +4664,12 @@ function renderPreviews(arr, previewId) {
 
 function setSubmitting(on) {
   document.getElementById('submit-btn').disabled=on;
-  document.getElementById('delegate-btn').disabled=on;
   document.getElementById('cancel-btn').disabled=on;
   document.getElementById('submit-btn').innerHTML=on?'<span class="spinner"></span> Saving…':'⚠ Log Issue';
-  document.getElementById('delegate-btn').innerHTML=on?'<span class="spinner"></span> Saving…':'⚡ Log &amp; Handoff';
 }
 
 // ── SUBMIT NEW ──
-window.submitIssue = async (delegateAfter = false) => {
+window.submitIssue = async () => {
   if (!currentUserPermissions.canCreateIssue) return;
   const note = document.getElementById('issue-note').value.trim() || 'No description provided';
   setSubmitting(true);
@@ -4749,9 +4747,6 @@ window.submitIssue = async (delegateAfter = false) => {
     };
     closeModal();
     showGameToast(`✅ Logged Press ${currentMachine}`);
-    if (delegateAfter) {
-      await openIssueSmsComposer(createdIssue);
-    }
   } catch(e) { setSyncStatus('err','Error saving: '+e.message); setSubmitting(false); }
 };
 

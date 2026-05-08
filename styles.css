@@ -1541,9 +1541,6 @@
   .modal-title { font-family: 'Rajdhani', sans-serif; font-size: 20px; font-weight: 700; letter-spacing: 1px; margin-bottom: 5px; }
   .modal-machine { color: var(--accent); }
   .modal-subtitle { font-size: 11px; color: var(--text2); margin-bottom: 16px; font-family: 'Share Tech Mono', monospace; }
-  .issue-fast-summary { display:flex; flex-direction:column; gap:4px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: linear-gradient(180deg, rgba(255,255,255,0.03), transparent); margin-bottom: 12px; }
-  .issue-fast-label { font-family:'Share Tech Mono', monospace; font-size:10px; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
-  .issue-fast-copy { font-size: 12px; line-height: 1.45; color: var(--text2); }
   .issue-attach-hint { font-size: 11px; line-height: 1.35; color: var(--text3); margin: -2px 0 8px; font-family:'Nunito', sans-serif; }
   .press-wiki-modal-shell { gap: 14px; overflow-x: hidden; overflow-y: auto; }
   .press-wiki-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
