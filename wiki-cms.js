@@ -74,6 +74,10 @@ function showFeedback(msg, isError) {
   elSaveFeedback.style.color = isError ? 'var(--red)' : 'var(--green)';
 }
 
+function currentActor() {
+  return { uid: currentUser.uid, name: currentUser.displayName || currentUser.email || 'Unknown' };
+}
+
 document.getElementById('google-signin-btn').addEventListener('click', async () => {
   try {
     await signInWithPopup(auth, provider);
@@ -348,7 +352,7 @@ elFileInput.addEventListener('change', async (e) => {
         url: url,
         contentType: file.type,
         caption: file.name,
-        uploadedBy: currentUser.uid,
+        uploadedBy: currentActor(),
         uploadedAt: serverTimestamp()
       };
       
@@ -446,7 +450,7 @@ document.getElementById('save-btn').addEventListener('click', async () => {
         summary: summary,
         tags: tagsStr.split(',').map(s=>s.trim()).filter(Boolean),
         searchText: `${title} ${summary} ${tagsStr}`.toLowerCase(),
-        updatedBy: currentUser.uid,
+        updatedBy: currentActor(),
         updatedAt: serverTimestamp(),
         lastActivityAt: serverTimestamp(),
         currentRevisionId: revId
@@ -455,7 +459,7 @@ document.getElementById('save-btn').addEventListener('click', async () => {
       if (isNew) {
         const snap = await t.get(pageRef);
         if (snap.exists()) throw new Error("A page with this slug already exists.");
-        pageData.createdBy = currentUser.uid;
+        pageData.createdBy = currentActor();
         pageData.createdAt = serverTimestamp();
         pageData.photoCount = 0;
         t.set(pageRef, pageData);
@@ -467,7 +471,7 @@ document.getElementById('save-btn').addEventListener('click', async () => {
         body: body,
         changeNote: changeNote,
         prevRevisionId: currentPageDoc ? currentPageDoc.currentRevisionId : null,
-        editedBy: currentUser.uid,
+        editedBy: currentActor(),
         editedAt: serverTimestamp()
       });
     });
