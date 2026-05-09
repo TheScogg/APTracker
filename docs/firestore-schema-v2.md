@@ -33,6 +33,9 @@ plants/{plantId}/statusDefinitions/{statusKey}
 plants/{plantId}/issues/{issueId}
 plants/{plantId}/issues/{issueId}/events/{eventId}
 plants/{plantId}/issues/{issueId}/attachments/{attachmentId}
+plants/{plantId}/presses/{pressId}/wikiPages/{pageId}
+plants/{plantId}/presses/{pressId}/wikiPages/{pageId}/revisions/{revisionId}
+plants/{plantId}/presses/{pressId}/wikiPages/{pageId}/attachments/{attachmentId}
 plants/{plantId}/pressNotes/{noteId}
 plants/{plantId}/pressStats/{pressId}
 plants/{plantId}/dailyStats/{dateKey}
@@ -683,6 +686,9 @@ function hasPermission(plantId, perm) {
 
 Press notes stay lightweight and append-only after creation. Photo attachments are resized client-side, stored in Firebase Storage, and referenced by metadata on the note document.
 Storage rules should allow authenticated plant members to read note photos and plant editors/admins to upload them under `plants/{plantId}/pressNotes/{noteId}/photos/{fileName}`.
+Wiki page attachment uploads should use the same permission model under `plants/{plantId}/presses/{pressId}/wikiPages/{pageId}/attachments/{fileName}`.
+
+These docs are the event-note layer in the press wiki split. They capture the fast, time-based observations that should not overwrite the canonical wiki page.
 
 ```json
 {
@@ -716,6 +722,71 @@ Storage rules should allow authenticated plant members to read note photos and p
 - Keep the note doc writable only at create time.
 - Use the stored `photos[]` metadata to render thumbnails and lightbox views.
 - Preserve the existing `pressId` and `machineCode` fields for fast per-press queries.
+
+---
+
+## 9. Press wiki pages
+
+### `plants/{plantId}/presses/{pressId}/wikiPages/{pageId}`
+
+This is the stable, structured wiki layer for a single press. Use it for operator references, standard setup, troubleshooting, photos, and verified instructions.
+
+```json
+{
+  "title": "Press 12 - Injection Molder A",
+  "slug": "press-wiki",
+  "summary": "Primary operating reference for Press 12.",
+  "tags": ["press", "setup", "process", "quality"],
+  "isPinned": true,
+  "isLocked": false,
+  "visibility": "plant",
+  "currentRevisionId": "rev_20260506_001",
+  "photoCount": 4,
+  "searchText": "press 12 injection molder setup temperatures mold pressure troubleshooting",
+  "createdBy": "uid_123",
+  "createdAt": "serverTimestamp",
+  "updatedBy": "uid_789",
+  "updatedAt": "serverTimestamp",
+  "lastActivityAt": "serverTimestamp",
+  "lastVerifiedAt": "timestamp|null",
+  "lastVerifiedBy": "uid|null",
+  "schemaVersion": 1
+}
+```
+
+### `revisions/{revisionId}`
+
+```json
+{
+  "body": "# Overview\n\nThis press is used for...",
+  "changeNote": "Added zone temperatures and startup notes.",
+  "prevRevisionId": "rev_20260505_004",
+  "editedBy": "uid_789",
+  "editedAt": "serverTimestamp"
+}
+```
+
+### `attachments/{attachmentId}`
+
+```json
+{
+  "storagePath": "plants/{plantId}/presses/{pressId}/wikiPages/{pageId}/attachments/img_01.jpg",
+  "contentType": "image/jpeg",
+  "caption": "Control panel showing normal operating values",
+  "linkedRevisionId": "rev_20260506_001",
+  "uploadedBy": "uid_789",
+  "uploadedAt": "serverTimestamp",
+  "width": 1920,
+  "height": 1080
+}
+```
+
+### Notes
+
+- Use `press-wiki` or another stable slug for the canonical page.
+- Keep revision docs append-only.
+- Treat the page doc as the source of truth for the latest revision pointer and metadata.
+- Keep wiki pages distinct from event notes so the page does not turn into a shift log.
 
 ---
 

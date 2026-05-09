@@ -7,6 +7,17 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AP-Tracker</title>
+<script>
+  if (window.trustedTypes && window.trustedTypes.createPolicy) {
+    if (!window.trustedTypes.defaultPolicy) {
+      window.trustedTypes.createPolicy('default', {
+        createHTML: (string) => string,
+        createScriptURL: (string) => string,
+        createScript: (string) => string,
+      });
+    }
+  }
+</script>
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&family=Nunito:wght@300;400;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -29,6 +40,7 @@
   <div id="sync-banner" class="visible">
     <div class="sync-dot" id="sync-dot"></div>
     <span id="sync-text">Connecting…</span>
+    <span id="firestore-io-indicator" class="firestore-io-indicator" title="Estimated Firestore operations for this session">R:0 W:0</span>
   </div>
 
   <header>
@@ -204,11 +216,16 @@
 
   <div class="filter-drawer" id="filter-drawer">
     <div class="filter-inner">
+      <div class="shift-filter-row">
+        <button class="shift-filter-pill active" id="shift-pill-all"    data-shell-action="set-shift-filter" data-shell-value="all">All Shifts</button>
+        <button class="shift-filter-pill"        id="shift-pill-first"  data-shell-action="set-shift-filter" data-shell-value="first">1st Shift</button>
+        <button class="shift-filter-pill"        id="shift-pill-second" data-shell-action="set-shift-filter" data-shell-value="second">2nd Shift</button>
+        <button class="shift-filter-pill"        id="shift-pill-third"  data-shell-action="set-shift-filter" data-shell-value="third">3rd Shift</button>
+      </div>
       <div style="display:flex;flex-wrap:wrap;gap:6px;" id="stat-pills-row">
         <div class="stat-pill" id="pill-open"            data-shell-action="toggle-stat-filter" data-shell-value="open">           <div class="dot" style="background:var(--red)"></div>      <span id="stat-open">0 Open</span></div>
         <div class="stat-pill" id="pill-resolved"        data-shell-action="toggle-stat-filter" data-shell-value="resolved">       <div class="dot" style="background:var(--green)"></div>    <span id="stat-resolved">0 Resolved</span></div>
       </div>
-      <div class="filter-section-divider"></div>
       <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;">
         <select id="machine-filter"><option value="">All Machines</option></select>
         <select id="status-filter">
@@ -229,12 +246,6 @@
         <span class="search-icon">🔍</span>
         <input class="search-box" type="text" id="search-input" placeholder="Search issues…">
       </div>
-      <div class="shift-filter-row">
-        <button class="shift-filter-pill active" id="shift-pill-all"    data-shell-action="set-shift-filter" data-shell-value="all">All Shifts</button>
-        <button class="shift-filter-pill"        id="shift-pill-first"  data-shell-action="set-shift-filter" data-shell-value="first">1st Shift</button>
-        <button class="shift-filter-pill"        id="shift-pill-second" data-shell-action="set-shift-filter" data-shell-value="second">2nd Shift</button>
-        <button class="shift-filter-pill"        id="shift-pill-third"  data-shell-action="set-shift-filter" data-shell-value="third">3rd Shift</button>
-      </div>
     </div>
   </div>
 
@@ -244,6 +255,7 @@
       <div class="map-mode-toggle">
         <button class="map-mode-btn active-log" id="mode-log" data-shell-action="set-map-mode" data-shell-value="log">+ Log</button>
         <button class="map-mode-btn" id="mode-hist" data-shell-action="set-map-mode" data-shell-value="hist">History</button>
+        <button class="map-mode-btn" id="mode-notes" data-shell-action="set-map-mode" data-shell-value="notes">Notes</button>
       </div>
     </div>
   </div>
@@ -304,39 +316,53 @@
 
 <!-- ADD ISSUE MODAL -->
 <div class="modal-overlay" id="add-modal">
-  <div class="modal">
-    <div class="modal-title">Log Issue — <span class="modal-machine" id="modal-machine-name"></span></div>
-    <div style="margin-bottom:14px">
-      <label style="margin-bottom:5px">Date &amp; Time</label>
-      <div style="display:flex;gap:8px;align-items:center">
-        <input type="date" id="issue-date" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;outline:none;flex:1;">
-        <input type="time" id="issue-time-input" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:120px;">
-        <button onclick="resetIssueDateTime()" style="font-size:11px;color:var(--accent);background:none;border:none;cursor:pointer;font-family:'Nunito',sans-serif;white-space:nowrap;padding:0;" title="Reset to now">↺ Now</button>
+  <div class="modal add-issue-modal">
+    <div class="modal-title" style="display:flex; justify-content:space-between; align-items:flex-start; padding-right:4px;">
+      <div>Log Issue — <span class="modal-machine" id="modal-machine-name"></span></div>
+      <label class="issue-urgent-toggle" for="issue-urgent" title="Mark as Urgent">
+        <input id="issue-urgent" type="checkbox">
+        <span class="issue-urgent-pill icon-only" title="Urgent">🔥</span>
+      </label>
+    </div>
+    <label>What happened?</label>
+    <textarea id="issue-note" placeholder="Example: Hydraulic leak at press startup" rows="3"></textarea>
+    <div class="issue-quick-phrases" id="issue-quick-phrases"></div>
+
+    <button class="issue-advanced-toggle" id="issue-advanced-toggle" type="button" onclick="toggleIssueAdvancedDetails()">
+      <span>More details</span>
+      <span class="issue-advanced-toggle-state" id="issue-advanced-toggle-state">Show</span>
+    </button>
+    <div class="issue-advanced-panel" id="issue-advanced-panel">
+      <div style="margin-bottom:14px">
+        <label style="margin-bottom:5px">When did it happen?</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="date" id="issue-date" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;outline:none;flex:1;">
+          <input type="time" id="issue-time-input" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:120px;">
+          <button onclick="resetIssueDateTime()" style="font-size:11px;color:var(--accent);background:none;border:none;cursor:pointer;font-family:'Nunito',sans-serif;white-space:nowrap;padding:0;" title="Reset to now">↺ Now</button>
+        </div>
+      </div>
+      <div style="margin-bottom:14px">
+        <label style="margin-bottom:5px">Shift</label>
+        <select id="issue-shift" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:100%;">
+          <option value="auto">Auto-detect from time</option>
+          <option value="first">1st Shift (5:54 AM – 1:54 PM)</option>
+          <option value="second">2nd Shift (1:54 PM – 9:54 PM)</option>
+          <option value="third">3rd Shift (9:54 PM – 5:54 AM)</option>
+        </select>
+      </div>
+      <div style="margin-bottom:14px">
+        <label style="margin-bottom:5px">Check-back timer</label>
+        <select id="issue-timer-minutes" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:100%;">
+          <option value="">No timer</option>
+          <option value="15">15 minutes</option>
+          <option value="30">30 minutes</option>
+          <option value="60">1 hour</option>
+          <option value="120">2 hours</option>
+        </select>
       </div>
     </div>
-    <div style="margin-bottom:14px">
-      <label style="margin-bottom:5px">Shift</label>
-      <select id="issue-shift" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:100%;">
-        <option value="auto">Auto-detect from time</option>
-        <option value="first">1st Shift (5:54 AM – 1:54 PM)</option>
-        <option value="second">2nd Shift (1:54 PM – 9:54 PM)</option>
-        <option value="third">3rd Shift (9:54 PM – 5:54 AM)</option>
-      </select>
-    </div>
-    <div style="margin-bottom:14px">
-      <label style="margin-bottom:5px">Initial Reminder</label>
-      <select id="issue-timer-minutes" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:100%;">
-        <option value="">No timer</option>
-        <option value="15">15 minutes</option>
-        <option value="30">30 minutes</option>
-        <option value="60">1 hour</option>
-        <option value="120">2 hours</option>
-      </select>
-    </div>
-    <label>Issue Description</label>
-    <textarea id="issue-note" placeholder="Describe the issue in detail…"></textarea>
     <div style="margin-bottom:4px">
-      <label style="margin-bottom:6px">Category <span style="color:var(--text3);font-size:9px;letter-spacing:0;text-transform:none;font-family:'Nunito',sans-serif">(optional — defaults to Open)</span></label>
+      <label style="margin-bottom:6px">Status <span style="color:var(--text3);font-size:9px;letter-spacing:0;text-transform:none;font-family:'Nunito',sans-serif">(optional — defaults to Open)</span></label>
       <div class="log-cat-selected" id="log-cat-selected">
         <span class="log-cat-pill" id="log-cat-pill"></span>
         <button class="log-cat-clear" id="log-cat-clear">✕ clear</button>
@@ -345,9 +371,15 @@
       <div class="log-sub-row" id="log-sub-row"></div>
     </div>
     <label>Photos <span style="color:var(--text3);font-size:9px;letter-spacing:0;text-transform:none;font-family:'Nunito',sans-serif">(optional)</span></label>
-    <div class="photo-btn-row">
-      <button class="photo-pick-btn" id="log-camera-btn">📷 Take Photo</button>
-      <button class="photo-pick-btn" id="log-library-btn">🖼️ Choose File</button>
+    <div class="issue-attach-hint">Tap once for camera or library. Photos preview right here.</div>
+    <div class="photo-stack">
+      <div class="photo-btn-row">
+        <button class="photo-pick-btn photo-add-btn" id="log-photo-btn" type="button">➕ Add Photo</button>
+      </div>
+      <div class="photo-source-row" id="log-photo-source-row">
+        <button class="photo-pick-btn photo-source-btn" id="log-camera-btn" type="button">📷 Camera</button>
+        <button class="photo-pick-btn photo-source-btn" id="log-library-btn" type="button">🖼️ Library</button>
+      </div>
     </div>
     <input type="file" id="log-camera-input" accept="image/*" capture="environment" style="display:none">
     <input type="file" id="log-library-input" accept="image/*" multiple style="display:none">
@@ -355,6 +387,32 @@
     <div class="modal-actions">
       <button class="btn btn-ghost" id="cancel-btn" onclick="closeModal()">Cancel</button>
       <button class="btn btn-primary" id="submit-btn" onclick="submitIssue()">⚠ Log Issue</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay subcategory-sheet-overlay" id="subcategory-sheet-overlay">
+  <div class="subcategory-sheet" id="subcategory-sheet" role="dialog" aria-modal="true" aria-labelledby="subcategory-sheet-title">
+    <div class="subcategory-sheet-handle"></div>
+    <div class="subcategory-sheet-head">
+      <div class="subcategory-sheet-copy">
+        <div class="subcategory-sheet-kicker">Subcategory</div>
+        <div class="subcategory-sheet-title" id="subcategory-sheet-title">Choose a subcategory</div>
+        <div class="subcategory-sheet-subtitle" id="subcategory-sheet-subtitle">Pick the closest match to log faster.</div>
+      </div>
+      <button class="subcategory-sheet-close" type="button" id="subcategory-sheet-close" aria-label="Close subcategory picker">✕</button>
+    </div>
+    <div class="subcategory-sheet-section">
+      <div class="subcategory-sheet-label">Parent status</div>
+      <div class="subcategory-parent-row" id="subcategory-parent-row"></div>
+    </div>
+    <div class="subcategory-sheet-section">
+      <div class="subcategory-sheet-label">Subcategories</div>
+      <div class="subcategory-grid" id="subcategory-grid"></div>
+    </div>
+    <div class="subcategory-sheet-footer">
+      <button class="btn btn-ghost subcategory-sheet-secondary" id="subcategory-sheet-skip" type="button">Use no subcategory</button>
+      <button class="btn btn-primary subcategory-sheet-primary" id="subcategory-sheet-apply" type="button">Use Subcategory</button>
     </div>
   </div>
 </div>
@@ -503,6 +561,14 @@
     <div id="edit-status-sub-wrap"></div>
     <label>Note (optional)</label>
     <textarea id="edit-status-note" placeholder="Additional details…" style="min-height:60px;margin-bottom:14px;"></textarea>
+    <label>Photos (optional)</label>
+    <div class="photo-source-group" style="margin-bottom:10px;">
+      <button class="photo-pick-btn photo-source-btn" id="edit-status-camera-btn" type="button">📷 Take Photo</button>
+      <button class="photo-pick-btn photo-source-btn" id="edit-status-library-btn" type="button">🖼️ Choose Photo</button>
+    </div>
+    <input type="file" id="edit-status-camera-input" accept="image/*" capture="environment" style="display:none">
+    <input type="file" id="edit-status-library-input" accept="image/*" multiple style="display:none">
+    <div class="photo-previews" id="edit-status-photo-previews" style="margin-bottom:14px;"></div>
     <div style="margin-bottom:14px;">
       <label>Date & Time</label>
       <div style="display:flex;gap:8px;">
@@ -577,88 +643,7 @@
   </div>
 </div>
 
-<!-- PRESS NOTES MODAL — VARIANT A: LOGBOOK -->
-<div class="modal-overlay" id="notes-modal-a">
-  <div class="modal" style="max-width:480px;">
-    <div class="notes-modal-a-wrap">
-      <div class="notes-modal-a-header">
-        <div class="notes-modal-a-id-plate">
-          <div class="notes-modal-a-plate-bar"></div>
-          <div class="notes-modal-a-plate-text">
-            <div class="notes-modal-a-subtitle">PRESS NOTES</div>
-            <div class="notes-modal-a-machine" id="notes-modal-machine-a"></div>
-            <div class="notes-modal-a-context" id="notes-modal-context-a"></div>
-            <div class="notes-modal-a-meta" id="notes-modal-meta-a"></div>
-          </div>
-        </div>
-        <button class="notes-modal-a-close" onclick="closeNotesModal()">✕</button>
-      </div>
-      <div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
-        <button id="open-wiki-btn-a" class="photo-pick-btn" type="button">📚 Open Wiki</button>
-      </div>
-      <div id="notes-list-a" class="log-timeline"></div>
-      <div id="notes-error-a" style="display:none;font-size:11px;color:var(--red);margin-top:4px;"></div>
-      <div class="notes-attach">
-        <div class="notes-attach-label">Attach Photos</div>
-        <div class="photo-btn-row notes-photo-btn-row">
-          <button class="photo-pick-btn" id="notes-camera-btn-a" type="button">📷 Take Photo</button>
-          <button class="photo-pick-btn" id="notes-library-btn-a" type="button">🖼️ Choose File</button>
-        </div>
-        <input type="file" id="notes-camera-input-a" accept="image/*" capture="environment" style="display:none">
-        <input type="file" id="notes-library-input-a" accept="image/*" multiple style="display:none">
-        <div class="photo-previews notes-photo-previews" id="notes-photo-previews-a"></div>
-      </div>
-      <div class="log-compose">
-        <div class="log-compose-label">Append to Log</div>
-        <div class="log-compose-row">
-          <textarea id="notes-textarea-a" class="log-compose-textarea" rows="1" placeholder="Record an observation…" oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"></textarea>
-          <button id="notes-submit-btn-a" class="log-compose-btn" onclick="submitPressNote()">LOG IT</button>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
 
-<!-- PRESS NOTES MODAL — VARIANT B: TEAM CHANNEL -->
-<div class="modal-overlay" id="notes-modal-b">
-  <div class="modal" style="max-width:480px;">
-    <div class="notes-modal-b-header">
-      <div class="notes-modal-b-channel">
-        <div class="notes-modal-b-channel-name">
-          <span class="notes-modal-b-hash">#</span><span class="notes-modal-b-machine" id="notes-modal-machine-b"></span>
-        </div>
-        <div class="notes-modal-b-label">Press Notes</div>
-        <div class="notes-modal-b-context" id="notes-modal-context-b"></div>
-        <div class="notes-modal-b-meta" id="notes-modal-meta-b"></div>
-      </div>
-      <button class="notes-modal-b-close" onclick="closeNotesModal()">✕ close</button>
-    </div>
-    <div style="display:flex;justify-content:flex-end;margin:6px 0 10px;">
-      <button id="open-wiki-btn-b" class="photo-pick-btn" type="button">📚 Open Wiki</button>
-    </div>
-    <div id="notes-list-b" class="chat-list"></div>
-    <div id="notes-error-b" style="display:none;font-size:11px;color:var(--red);margin-top:4px;"></div>
-    <div class="notes-attach">
-      <div class="notes-attach-label">Attach Photos</div>
-      <div class="photo-btn-row notes-photo-btn-row">
-        <button class="photo-pick-btn" id="notes-camera-btn-b" type="button">📷 Take Photo</button>
-        <button class="photo-pick-btn" id="notes-library-btn-b" type="button">🖼️ Choose File</button>
-      </div>
-      <input type="file" id="notes-camera-input-b" accept="image/*" capture="environment" style="display:none">
-      <input type="file" id="notes-library-input-b" accept="image/*" multiple style="display:none">
-      <div class="photo-previews notes-photo-previews" id="notes-photo-previews-b"></div>
-    </div>
-    <div class="chat-compose">
-      <div class="chat-compose-row">
-        <textarea id="notes-textarea-b" class="chat-compose-textarea" rows="1" placeholder="Add a note…" oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"></textarea>
-        <button id="notes-submit-btn-b" class="chat-send-btn" onclick="submitPressNote()" title="Send">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13.5 2.5L7 9M13.5 2.5L9 13.5 7 9l-4.5-2 9-4.5z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
-      </div>
-      <div class="chat-compose-hint">Shift+Enter for new line</div>
-    </div>
-  </div>
-</div>
 
 <!-- PRESS WIKI MODAL -->
 <div class="modal-overlay" id="press-wiki-modal">
@@ -671,25 +656,49 @@
       </div>
       <button class="btn btn-ghost" type="button" onclick="closePressWikiModal()">Close</button>
     </div>
-    <div id="press-wiki-body" style="margin-top:10px;white-space:pre-wrap;font-size:14px;line-height:1.45;"></div>
     <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
       <label style="font-size:12px;color:var(--text3);">Page</label>
       <select id="press-wiki-page-select" class="select" style="min-width:180px;"></select>
       <button id="press-wiki-new-page-btn" class="btn btn-ghost" type="button">New Page</button>
-      <button id="press-wiki-edit-btn" class="btn btn-ghost" type="button">Edit</button>
+      <button id="press-wiki-edit-btn" class="btn btn-ghost" type="button">Quick Edit</button>
     </div>
+    <div id="press-wiki-new-page-row" style="margin-top:8px;display:none;gap:8px;align-items:center;">
+      <input id="press-wiki-new-page-id" class="input" type="text" placeholder="new-page-id" style="flex:1;">
+      <button id="press-wiki-create-page-btn" class="btn btn-blue" type="button">Create</button>
+      <button id="press-wiki-cancel-create-page-btn" class="btn btn-ghost" type="button">Cancel</button>
+    </div>
+    <div id="press-wiki-error" style="display:none;font-size:12px;color:var(--red);margin-top:8px;"></div>
+    
+    <div id="press-wiki-body" style="margin-top:10px;white-space:pre-wrap;font-size:14px;line-height:1.45;"></div>
+    <div id="press-wiki-attachments" style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px;"></div>
+    
     <div id="press-wiki-editor" style="margin-top:10px;display:none;">
       <input id="press-wiki-edit-title" class="input" type="text" placeholder="Page title">
-      <textarea id="press-wiki-edit-body" class="input" rows="6" placeholder="Write wiki content..." style="margin-top:8px;min-height:130px;"></textarea>
+      <div class="formatting-toolbar" style="display:flex;gap:4px;margin-top:8px;padding:4px;background:var(--bg3);border:1px solid var(--border);border-bottom:none;border-radius:8px 8px 0 0;">
+        <button type="button" class="btn btn-ghost" style="padding:4px 8px;font-size:12px;" onclick="insertMarkdown('press-wiki-edit-body', '**', '**')"><b>B</b></button>
+        <button type="button" class="btn btn-ghost" style="padding:4px 8px;font-size:12px;font-style:italic;" onclick="insertMarkdown('press-wiki-edit-body', '*', '*')">I</button>
+        <button type="button" class="btn btn-ghost" style="padding:4px 8px;font-size:12px;text-decoration:underline;" onclick="insertMarkdown('press-wiki-edit-body', '<u>', '</u>')">U</button>
+        <input type="color" id="press-wiki-color-picker" style="width:28px;height:28px;padding:0;border:none;cursor:pointer;background:transparent;border-radius:4px;" onchange="insertMarkdown('press-wiki-edit-body', '<span style=\'color:'+this.value+'\'>', '</span>')">
+      </div>
+      <textarea id="press-wiki-edit-body" class="input" rows="6" placeholder="Write wiki content..." style="margin-top:0;border-radius:0 0 8px 8px;min-height:130px;"></textarea>
       <input id="press-wiki-edit-change-note" class="input" type="text" placeholder="Change note (required)" style="margin-top:8px;">
       <div style="margin-top:8px;display:flex;gap:8px;">
+        <button id="press-wiki-insert-photo-btn" class="btn btn-ghost" type="button">Insert Photo</button>
         <button id="press-wiki-save-btn" class="btn btn-blue" type="button">Save Revision</button>
         <button id="press-wiki-cancel-edit-btn" class="btn btn-ghost" type="button">Cancel</button>
       </div>
+      <input type="file" id="press-wiki-file-input" accept="image/*" multiple style="display:none">
+      <div id="press-wiki-photo-picker" style="margin-top:8px;display:none;border:1px solid var(--line);border-radius:10px;padding:8px;"></div>
     </div>
-    <div id="press-wiki-attachments" style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px;"></div>
-    <div style="margin-top:14px;font-size:12px;font-weight:600;">Revision History</div>
-    <div id="press-wiki-revisions" style="margin-top:8px;max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:8px;"></div>
+    
+    <details style="margin-top:14px;border:1px solid var(--line);border-radius:10px;padding:8px;">
+      <summary style="font-size:12px;font-weight:600;cursor:pointer;user-select:none;outline:none;">Revision History</summary>
+      <div id="press-wiki-revisions" style="margin-top:8px;max-height:220px;overflow:auto;"></div>
+    </details>
+    
+    <div style="margin-top:16px;text-align:center;">
+      <button id="press-wiki-cms-btn" class="btn btn-ghost" type="button" style="color:var(--accent);border-color:var(--accent);display:none;">Edit in CMS</button>
+    </div>
   </div>
 </div>
 

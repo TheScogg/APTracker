@@ -69,6 +69,12 @@ service firebase.storage {
                    && (request.resource == null || isValidImageUpload());
     }
 
+    match /plants/{plantId}/presses/{pressId}/wikiPages/{pageId}/attachments/{fileName} {
+      allow read: if isPlantMember(plantId);
+      allow write: if isEditorOrAbove(plantId)
+                   && (request.resource == null || isValidImageUpload());
+    }
+
     match /plants/{plantId}/conversations/{conversationId}/photos/{fileName} {
       allow read: if isConversationParticipant(plantId, conversationId);
       allow write: if isConversationParticipant(plantId, conversationId)

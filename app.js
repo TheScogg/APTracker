@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, collection, updateDoc, deleteDoc, doc, getDoc, getDocs, setDoc, addDoc, onSnapshot, serverTimestamp, query, orderBy, where, writeBatch, arrayUnion, arrayRemove, increment, limit, runTransaction, startAfter } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, collection, updateDoc as rawUpdateDoc, deleteDoc as rawDeleteDoc, doc, getDoc as rawGetDoc, getDocs as rawGetDocs, setDoc as rawSetDoc, addDoc as rawAddDoc, onSnapshot as rawOnSnapshot, serverTimestamp, query, orderBy, where, writeBatch as rawWriteBatch, arrayUnion, arrayRemove, increment, limit, runTransaction as rawRunTransaction, startAfter } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut as fbSignOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getStorage, ref as storageRef, uploadString, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
@@ -24,14 +24,90 @@ const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
 provider.setCustomParameters({ prompt: "select_account" });
 
+const firestoreIoStats = { reads: 0, writes: 0 };
+function refreshFirestoreIoIndicator() {
+  const el = document.getElementById('firestore-io-indicator');
+  if (!el) return;
+  el.textContent = `R:${firestoreIoStats.reads} W:${firestoreIoStats.writes}`;
+}
+function trackFirestoreRead(amount = 1) {
+  firestoreIoStats.reads += Math.max(0, Number(amount) || 0);
+  refreshFirestoreIoIndicator();
+}
+function trackFirestoreWrite(amount = 1) {
+  firestoreIoStats.writes += Math.max(0, Number(amount) || 0);
+  refreshFirestoreIoIndicator();
+}
+const getDoc = async (...args) => {
+  const snap = await rawGetDoc(...args);
+  trackFirestoreRead(1);
+  return snap;
+};
+const getDocs = async (...args) => {
+  const snap = await rawGetDocs(...args);
+  trackFirestoreRead(snap?.size ?? 0);
+  return snap;
+};
+const setDoc = async (...args) => { const out = await rawSetDoc(...args); trackFirestoreWrite(1); return out; };
+const addDoc = async (...args) => { const out = await rawAddDoc(...args); trackFirestoreWrite(1); return out; };
+const updateDoc = async (...args) => { const out = await rawUpdateDoc(...args); trackFirestoreWrite(1); return out; };
+const deleteDoc = async (...args) => { const out = await rawDeleteDoc(...args); trackFirestoreWrite(1); return out; };
+const writeBatch = (...args) => {
+  const batch = rawWriteBatch(...args);
+  const originalCommit = batch.commit.bind(batch);
+  batch.commit = async (...commitArgs) => {
+    const out = await originalCommit(...commitArgs);
+    trackFirestoreWrite(1);
+    return out;
+  };
+  return batch;
+};
+const runTransaction = async (...args) => {
+  const out = await rawRunTransaction(...args);
+  trackFirestoreWrite(1);
+  return out;
+};
+const onSnapshot = (...args) => {
+  let seenFirstServerSnapshot = false;
+  const wrapSnapshotHandler = (original) => (snapshot) => {
+    const isFromCache = Boolean(snapshot?.metadata?.fromCache);
+    if (!isFromCache) {
+      if (typeof snapshot?.docChanges === 'function') {
+        if (!seenFirstServerSnapshot) {
+          trackFirestoreRead(snapshot?.size ?? 0);
+          seenFirstServerSnapshot = true;
+        } else {
+          const incrementalReads = snapshot.docChanges().reduce((sum, change) => {
+            if (change?.type === 'added' || change?.type === 'modified') return sum + 1;
+            return sum;
+          }, 0);
+          trackFirestoreRead(incrementalReads);
+        }
+      } else {
+        trackFirestoreRead(1);
+      }
+    }
+    return original(snapshot);
+  };
+
+  if (typeof args[1] === 'function') {
+    args[1] = wrapSnapshotHandler(args[1]);
+  } else if (typeof args[2] === 'function') {
+    args[2] = wrapSnapshotHandler(args[2]);
+  }
+  return rawOnSnapshot(...args);
+};
+
 // ── MULTI-PLANT ──
 let currentPlantId = null;
 let currentPlantName = '';
 let userPlants = []; // [{ id, name, location }]
 const scheduleLookupCache = new Map();
 const USER_LOOKUP_HEARTBEAT_MS = 12 * 60 * 60 * 1000;
-const MAX_LIVE_ISSUES = 250;
-const HISTORY_ISSUES_PAGE_SIZE = 200;
+// Firestore read optimization:
+// Keep the real-time listener window tight, and load older issues on demand.
+const MAX_LIVE_ISSUES = 100;
+const HISTORY_ISSUES_PAGE_SIZE = 100;
 let dailyScheduleIndexState = null; // { plantId, date, scheduled: Set<string>|null, lookupByPress: Map<string, { main: any[], changes: any[] }> }
 // Caches the set of scheduled machine codes for the current plant/date.
 // { plantId: string, date: string, scheduled: Set<string> | null }
@@ -161,10 +237,13 @@ async function queueRoleFeedAlert(issue, { statusKey, subStatus, note = '' } = {
       .map(d => ({ id: d.id, ...d.data() }))
       .filter(m => m?.isActive !== false)
       .filter(m => {
+        const hasExplicitSubscriptions = Object.prototype.hasOwnProperty.call(m || {}, 'alertCategorySubscriptions');
         const categorySubs = Array.isArray(m.alertCategorySubscriptions)
           ? m.alertCategorySubscriptions.map(v => String(v || '').trim().toLowerCase()).filter(Boolean)
           : [];
-        if (categorySubs.includes(categoryKey)) return true;
+        if (hasExplicitSubscriptions) {
+          return categorySubs.includes(categoryKey);
+        }
         const normalizedRoleKeys = [
           ...(Array.isArray(m.jobRoleKeys) ? m.jobRoleKeys : []),
           ...(Array.isArray(m.jobFeeds) ? m.jobFeeds : [])
@@ -263,12 +342,18 @@ function _renderRoleAlertCard(alert) {
   const acceptedMeta = isAccepted
     ? `<div class="role-alert-ack">${acceptedByName ? `Accepted by ${esc(acceptedByName)}` : 'Accepted'}</div>`
     : '';
+  const statusDef = getStatusDef(alert.statusKey || alert.categoryKey || 'open');
+  const statusLabel = getStatusLabel(alert.statusKey || alert.categoryKey || 'open', 'short');
   return `
     <div class="role-alert-card${isAccepted ? ' accepted' : ''}" style="background:${cardBg};border-color:${cardBorder};">
       <div class="role-alert-card-main">
         <div class="role-alert-card-title" style="color:${titleColor};">${esc(alert.feedLabel)} · ${esc(alert.machine)}</div>
         <div class="role-alert-card-meta">
           ${isAccepted ? `<span class="role-alert-status-pill accepted">Accepted</span>` : `<span class="role-alert-status-pill active">Active</span>`}
+          <span class="role-alert-category-pill" style="--role-alert-cat-color:${statusColor};">
+            <span class="role-alert-category-icon">${esc(statusDef.icon || '❔')}</span>
+            <span class="role-alert-category-label">${esc(statusLabel)}</span>
+          </span>
           ${alert.subStatus ? `<span class="role-alert-card-sub">${esc(alert.subStatus)}</span>` : ''}
         </div>
         ${acceptedMeta}
@@ -2706,7 +2791,10 @@ let reopenTargetId = null;
 let currentUser = null;
 let issueScope = 'all';
 let issueShiftFilter = 'all';
-let mapMode = 'log'; // 'log' | 'hist'
+let mapMode = 'log'; // 'log' | 'hist' | 'notes'
+let pressContributionIndex = new Map();
+let pressContributionPlantId = null;
+let pressContributionLoading = null;
 let issuePeriod = 'today';
 let unsubscribe = null;
 let issueLogLayoutMode = 'masonic'; // 'masonic' | 'grid'
@@ -2825,13 +2913,22 @@ const MAX_DIM = 1200;
 const JPEG_QUALITY = 0.82;
 
 // ── AUTH ──
+function resetGoogleSignInButton() {
+  const btn = document.getElementById('google-signin-btn');
+  if (!btn) return;
+  btn.disabled = false;
+  btn.innerHTML = googleBtnHTML;
+}
+
 async function signInWithGoogle() {
   const btn = document.getElementById('google-signin-btn');
   btn.disabled = true; btn.textContent = 'Signing in…';
-  try { await signInWithPopup(auth, provider); }
+  try { 
+    await signInWithPopup(auth, provider);
+  }
   catch(e) {
     console.error('Sign in error:', e.code, e.message);
-    btn.disabled = false; btn.innerHTML = googleBtnHTML;
+    resetGoogleSignInButton();
   }
 }
 const googleBtnHTML = `<svg class="google-logo" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg> Sign in with Google`;
@@ -2927,8 +3024,7 @@ onAuthStateChanged(auth, async user => {
     issueEventHistoryCache.clear();
     attachmentsHydrationToken++;
     eventsHydrationToken++;
-    const btn = document.getElementById('google-signin-btn');
-    btn.disabled = false; btn.innerHTML = googleBtnHTML;
+    resetGoogleSignInButton();
   }
 });
 
@@ -3006,7 +3102,6 @@ function startListener() {
     void _refreshRoleAlertBadgeCount();
     if (!issueHistoryCursor && snap.docs.length) {
       issueHistoryCursor = snap.docs[snap.docs.length - 1];
-      loadIssueHistoryPage().catch(() => {});
     }
     setSyncStatus('ok', 'Live — synced across all devices');
   }, err => {
@@ -3035,7 +3130,6 @@ function startListener() {
       void _refreshRoleAlertBadgeCount();
       if (snap.docs.length) {
         issueHistoryCursor = snap.docs[snap.docs.length - 1];
-        loadIssueHistoryPage().catch(() => {});
       }
       setSyncStatus('ok', 'Live connection delayed — loaded cached/latest data');
     } catch (e) {
@@ -3125,18 +3219,91 @@ function periodFilter(i) {
 }
 
 // ── FLOOR MAP ──
+
+async function refreshPressContributionIndex(force = false) {
+  if (!currentPlantId) return;
+  if (!force && pressContributionPlantId === currentPlantId && pressContributionIndex.size) return;
+  if (pressContributionLoading) return pressContributionLoading;
+  pressContributionLoading = (async () => {
+    const next = new Map();
+    const notesSnap = await getDocs(plantCol('pressNotes'));
+    notesSnap.forEach(d => {
+      const data = d.data() || {};
+      const key = toPressId(data.machineCode || data.pressId || '');
+      if (!key) return;
+      const entry = next.get(key) || { hasNotes: false, hasWiki: false, noteCount: 0 };
+      entry.hasNotes = true;
+      entry.noteCount += 1;
+      next.set(key, entry);
+    });
+
+    const allMachines = Object.values(PRESSES || {}).flat().filter(Boolean);
+    await Promise.all(allMachines.map(async machineCode => {
+      const pressId = toPressId(machineCode);
+      if (!pressId) return;
+      const pagesSnap = await getDocs(pressWikiPagesCol(pressId));
+      if (pagesSnap.empty) return;
+      const entry = next.get(pressId) || { hasNotes: false, hasWiki: false, noteCount: 0 };
+      entry.hasWiki = true;
+      next.set(pressId, entry);
+    }));
+
+    pressContributionIndex = next;
+    pressContributionPlantId = currentPlantId;
+  })().finally(() => {
+    pressContributionLoading = null;
+  });
+  return pressContributionLoading;
+}
+
+function pressContributionForMachine(machineCode) {
+  const pressId = toPressId(machineCode);
+  return pressContributionIndex.get(pressId) || { hasNotes: false, hasWiki: false, noteCount: 0 };
+}
+
+function applyPressContributionVisual(btn, machineCode) {
+  const info = pressContributionForMachine(machineCode);
+  btn.classList.remove('notes-signal', 'wiki-signal', 'notes-wiki-signal');
+  delete btn.dataset.noteSignal;
+
+  if (!info.hasNotes && !info.hasWiki) return;
+
+  let signal = '';
+  if (info.hasNotes && info.hasWiki) {
+    signal = 'notes-wiki';
+    btn.classList.add('notes-wiki-signal');
+  } else if (info.hasWiki) {
+    signal = 'wiki';
+    btn.classList.add('wiki-signal');
+  } else {
+    signal = 'notes';
+    btn.classList.add('notes-signal');
+  }
+
+  btn.dataset.noteSignal = signal;
+  const signalText = signal === 'notes-wiki' ? 'Has notes and wiki content' : signal === 'wiki' ? 'Has wiki content' : 'Has notes';
+  const currentTitle = String(btn.title || '').trim();
+  btn.title = currentTitle ? `${currentTitle} · ${signalText}` : signalText;
+}
+
 // ── MAP MODE ──
 window.setMapMode = mode => {
   mapMode = mode;
   document.getElementById('mode-log').className = 'map-mode-btn' + (mode==='log' ? ' active-log' : '');
   document.getElementById('mode-hist').className = 'map-mode-btn' + (mode==='hist' ? ' active-hist' : '');
+  document.getElementById('mode-notes').className = 'map-mode-btn' + (mode==='notes' ? ' active-hist' : '');
   document.getElementById('floor-map-label').textContent = mode==='log'
     ? 'FLOOR MAP — CLICK A PRESS TO LOG AN ISSUE'
-    : 'FLOOR MAP — CLICK A PRESS TO VIEW HISTORY';
+    : mode==='hist'
+      ? 'FLOOR MAP — CLICK A PRESS TO VIEW HISTORY'
+      : 'FLOOR MAP — USER NOTES & WIKI CONTRIBUTIONS';
   // Update all press button hover styles
   document.querySelectorAll('.press-btn').forEach(btn => {
     btn.classList.toggle('hist-mode', mode==='hist');
   });
+  if (mode === 'notes') {
+    void refreshPressContributionIndex(true).then(() => renderRowPanels());
+  }
   if (mode === 'log') {
     document.getElementById('machine-filter').value = '';
     renderIssues(); updateFilterBadge();
@@ -3149,6 +3316,11 @@ let activeMiniCard = null; // { machine, rowName }
 
 window.handlePressClick = p => {
   if (mapMode === 'hist') { showMachineHistory(p); return; }
+  if (mapMode === 'notes') {
+    const pressId = toPressId(p);
+    openPressWikiModal(pressId, p);
+    return;
+  }
 
   // Find which row this press belongs to
   let pressRow = null;
@@ -3303,7 +3475,7 @@ window.handlePressClick = p => {
   notesBtn.className = 'mc-toolbar-btn';
   notesBtn.style.color = 'var(--teal)';
   notesBtn.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><path d="M3 2h10a1 1 0 011 1v8a1 1 0 01-1 1H5l-3 2V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>Notes';
-  notesBtn.onclick = () => { closeMiniCard(); openNotesModal(pressId, p); };
+  notesBtn.onclick = () => { closeMiniCard(); openPressWikiModal(pressId, p); };
   // Badge dot if notes exist (load count async without blocking)
   (async () => {
     try {
@@ -3848,7 +4020,8 @@ function renderRowPanels() {
       }
 
       // hist-mode class if needed
-      if (mapMode==='hist') btn.classList.add('hist-mode');
+      if (mapMode==='hist' || mapMode==='notes') btn.classList.add('hist-mode');
+      if (mapMode==='notes') applyPressContributionVisual(btn, m);
       // Mark presses not appearing in today's daily schedule
       if (unscheduledSet && !unscheduledSet.has(m)) {
         btn.classList.add('not-scheduled');
@@ -3899,22 +4072,141 @@ function resizeImage(file) {
 }
 
 // ── ADD MODAL ──
+const ISSUE_LOG_PREFS_KEY = 'aptracker_issue_log_prefs_v1';
+const ISSUE_QUICK_PHRASES = ['Leak', 'Down', 'Needs parts', 'Waiting on maintenance', 'Quality check', 'Escalate'];
+let issueAdvancedExpanded = false;
+let subcategorySheetState = { open: false, statusKey: '', selectedSub: '' };
+
+function loadIssueLogPrefs() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(ISSUE_LOG_PREFS_KEY) || '{}');
+    return {
+      timerMinutes: String(parsed?.timerMinutes || ''),
+      urgent: Boolean(parsed?.urgent),
+      advancedOpen: Boolean(parsed?.advancedOpen),
+      lastShift: parsed?.lastShift || 'auto',
+      lastStatusKey: parsed?.lastStatusKey || '',
+      lastStatusSub: parsed?.lastStatusSub || ''
+    };
+  } catch (_) {
+    return { timerMinutes: '', urgent: false, advancedOpen: false, lastShift: 'auto', lastStatusKey: '', lastStatusSub: '' };
+  }
+}
+
+let issueLogPrefs = loadIssueLogPrefs();
+
+function saveIssueLogPrefs() {
+  try {
+    localStorage.setItem(ISSUE_LOG_PREFS_KEY, JSON.stringify(issueLogPrefs));
+  } catch (_) {}
+}
+
+function setIssueAdvancedDetailsExpanded(on) {
+  issueAdvancedExpanded = Boolean(on);
+  const panel = document.getElementById('issue-advanced-panel');
+  const state = document.getElementById('issue-advanced-toggle-state');
+  panel?.classList.toggle('visible', issueAdvancedExpanded);
+  if (state) state.textContent = issueAdvancedExpanded ? 'Hide' : 'Show';
+}
+
+window.toggleIssueAdvancedDetails = function() {
+  setIssueAdvancedDetailsExpanded(!issueAdvancedExpanded);
+  issueLogPrefs.advancedOpen = issueAdvancedExpanded;
+  saveIssueLogPrefs();
+};
+
+function renderIssueQuickPhrases() {
+  const row = document.getElementById('issue-quick-phrases');
+  if (!row) return;
+  row.innerHTML = '';
+  ISSUE_QUICK_PHRASES.forEach(phrase => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'issue-quick-phrase';
+    btn.textContent = phrase;
+    addTapListener(btn, () => appendIssueNotePhrase(phrase));
+    row.appendChild(btn);
+  });
+}
+
+function appendIssueNotePhrase(phrase) {
+  const field = document.getElementById('issue-note');
+  if (!field) return;
+  const current = String(field.value || '').trim();
+  const next = current ? `${current}${current.endsWith('.') ? '' : ';'} ${phrase}` : phrase;
+  field.value = next;
+  field.focus();
+  field.setSelectionRange?.(field.value.length, field.value.length);
+}
+
+function openIssuePhotoSourceMenu(forceOpen) {
+  const row = document.getElementById('log-photo-source-row');
+  if (!row) return;
+  const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : !row.classList.contains('visible');
+  row.classList.toggle('visible', shouldOpen);
+  if (shouldOpen) scrollAddModalToBottom();
+}
+
+function syncIssueLogPrefsFromModal() {
+  const timer = document.getElementById('issue-timer-minutes');
+  const urgent = document.getElementById('issue-urgent');
+  const shift = document.getElementById('issue-shift');
+  issueLogPrefs.timerMinutes = String(timer?.value || '');
+  issueLogPrefs.urgent = Boolean(urgent?.checked);
+  issueLogPrefs.advancedOpen = issueAdvancedExpanded;
+  if (shift?.dataset?.autoApplied === '1') {
+    issueLogPrefs.lastShift = 'auto';
+  } else if (shift?.value && shift.value !== 'auto') {
+    issueLogPrefs.lastShift = shift.value;
+  } else {
+    issueLogPrefs.lastShift = 'auto';
+  }
+  saveIssueLogPrefs();
+}
+
+function applyIssueLogDefaults() {
+  const timer = document.getElementById('issue-timer-minutes');
+  const urgent = document.getElementById('issue-urgent');
+  const shift = document.getElementById('issue-shift');
+  const issueDate = document.getElementById('issue-date');
+  const issueTime = document.getElementById('issue-time-input');
+  if (timer) timer.value = issueLogPrefs.timerMinutes || '';
+  if (urgent) urgent.checked = Boolean(issueLogPrefs.urgent);
+  if (issueDate && issueTime) resetIssueDateTime();
+  if (shift) {
+    const d = getIssueDateFromInputs('issue-date', 'issue-time-input');
+    if (issueLogPrefs.lastShift === 'auto') {
+      shift.dataset.autoApplied = '1';
+      shift.value = getShiftForTime(d, getShiftSchedule(currentPlantId));
+    } else {
+      shift.dataset.autoApplied = '0';
+      shift.value = issueLogPrefs.lastShift || 'auto';
+    }
+  }
+  setIssueAdvancedDetailsExpanded(Boolean(issueLogPrefs.advancedOpen));
+}
+
 window.openAddModal = m => {
   if (!currentUser) return;
   if (!currentUserPermissions.canCreateIssue) return;
+  closeSubcategorySheet();
+  subcategorySheetState = { open: false, statusKey: '', selectedSub: '' };
   currentMachine=m; pendingPhotos=[];
-  logCatKey=null; logCatSub=null;
+  logCatKey = issueLogPrefs.lastStatusKey || null;
+  logCatSub = issueLogPrefs.lastStatusSub || null;
   document.getElementById('issue-note').value='';
   document.getElementById('photo-previews').innerHTML='';
   document.getElementById('modal-machine-name').textContent=m;
-  document.getElementById('issue-shift').value='auto';
-  document.getElementById('issue-timer-minutes').value='';
-  resetIssueDateTime(); setSubmitting(false);
+  document.getElementById('log-photo-source-row')?.classList.remove('visible');
+  applyIssueLogDefaults();
+  renderIssueQuickPhrases();
+  setSubmitting(false);
   renderLogCatButtons();
-  document.getElementById('log-cat-selected').classList.remove('visible');
-  document.getElementById('log-sub-row').classList.remove('visible');
-  document.getElementById('log-sub-row').innerHTML='';
+  renderLogSubChips();
+  updateLogCatPill();
+  document.getElementById('log-cat-selected').classList.toggle('visible', Boolean(logCatKey));
   document.getElementById('add-modal').classList.add('visible');
+  requestAnimationFrame(() => document.getElementById('issue-note')?.focus());
 };
 
 // ── LOG ISSUE CATEGORY PICKER ──
@@ -3941,21 +4233,146 @@ function renderLogCatButtons() {
 function renderLogSubChips() {
   const row = document.getElementById('log-sub-row'); if (!row) return;
   row.innerHTML = '';
-  if (!logCatKey || !getStatusSubs(logCatKey).length) { row.classList.remove('visible'); return; }
-  row.classList.add('visible');
-  const st = getStatusDef(logCatKey);
-  const skip = document.createElement('div'); skip.className = 'log-sub-chip skip'; skip.textContent = 'Skip ›';
-  addTapListener(skip, ()=>{logCatSub=null;renderLogSubChips();updateLogCatPill();});
-  row.appendChild(skip);
-  getStatusSubs(logCatKey).forEach(sub => {
-    const chip = document.createElement('div'); chip.className = 'log-sub-chip'+(logCatSub===sub?' selected':'');
-    const col = getStatusColor(logCatKey);
-    chip.style.color=col; chip.style.borderColor=alphaColor(col,0.33);
-    chip.style.background = logCatSub===sub ? alphaColor(col,0.16) : alphaColor(col,0.07);
-    chip.textContent = sub;
-    addTapListener(chip, ()=>{logCatSub=logCatSub===sub?null:sub;renderLogSubChips();updateLogCatPill();});
-    row.appendChild(chip);
+  if (!logCatKey) {
+    row.className = 'log-sub-row';
+    return;
+  }
+  const subs = getStatusSubs(logCatKey);
+  if (!subs.length) {
+    row.className = 'log-sub-row';
+    return;
+  }
+  
+  row.className = 'subcategory-grid visible';
+  row.style.marginTop = '4px';
+  row.style.marginBottom = '8px';
+  
+  const activeColor = getStatusColor(logCatKey);
+  
+  subs.forEach(sub => {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = 'subcategory-item' + (logCatSub === sub ? ' selected' : '');
+    item.innerHTML = `<span class="subcategory-item-label">${esc(sub)}</span><span class="subcategory-item-check">✓</span>`;
+    item.style.borderColor = alphaColor(activeColor, 0.32);
+    item.style.color = activeColor;
+    item.style.background = logCatSub === sub ? alphaColor(activeColor, 0.12) : 'linear-gradient(180deg, rgba(255,255,255,0.03), transparent)';
+    addTapListener(item, () => {
+      logCatSub = logCatSub === sub ? '' : sub;
+      issueLogPrefs.lastStatusSub = logCatSub;
+      saveIssueLogPrefs();
+      renderLogSubChips();
+      updateLogCatPill();
+      scrollAddModalToBottom();
+    });
+    row.appendChild(item);
   });
+}
+
+function renderSubcategorySheet(statusKey = subcategorySheetState.statusKey) {
+  const parentRow = document.getElementById('subcategory-parent-row');
+  const grid = document.getElementById('subcategory-grid');
+  const title = document.getElementById('subcategory-sheet-title');
+  const subtitle = document.getElementById('subcategory-sheet-subtitle');
+  const applyBtn = document.getElementById('subcategory-sheet-apply');
+  const skipBtn = document.getElementById('subcategory-sheet-skip');
+  if (!parentRow || !grid) return;
+
+  const ordered = window._STATUS_ORDER ? window._STATUS_ORDER : Object.keys(STATUSES);
+  const alphabetizedKeys = [...ordered].sort((a, b) => getStatusLabel(a, 'short').localeCompare(getStatusLabel(b, 'short')));
+  const activeKey = statusKey || alphabetizedKeys.find(key => getStatusSubs(key).length) || 'open';
+  const subs = getStatusSubs(activeKey);
+  const activeColor = getStatusColor(activeKey);
+
+  if (title) title.textContent = `${getStatusLabel(activeKey, 'short')} subcategories`;
+  if (subtitle) subtitle.textContent = subs.length ? 'Pick the closest match to log faster.' : 'No subcategories are configured for this status.';
+
+  parentRow.innerHTML = '';
+  alphabetizedKeys.forEach(key => {
+    const pill = document.createElement('button');
+    pill.type = 'button';
+    pill.className = 'subcategory-parent-pill' + (key === activeKey ? ' selected' : '');
+    const st = getStatusDef(key);
+    pill.textContent = st.icon;
+    pill.title = getStatusLabel(key, 'short');
+    const chipColor = getStatusColor(key);
+    pill.style.color = chipColor;
+    if (key === activeKey) {
+      pill.style.borderColor = alphaColor(chipColor, 0.4);
+      pill.style.background = alphaColor(chipColor, 0.1);
+    } else {
+      pill.style.borderColor = alphaColor(chipColor, 0.15);
+      pill.style.background = 'transparent';
+    }
+    addTapListener(pill, () => {
+      subcategorySheetState.statusKey = key;
+      subcategorySheetState.selectedSub = '';
+      logCatSub = '';
+      renderSubcategorySheet(key);
+    });
+    parentRow.appendChild(pill);
+  });
+
+  grid.innerHTML = '';
+  if (!subs.length) {
+    const empty = document.createElement('div');
+    empty.className = 'subcategory-empty';
+    empty.textContent = 'This status has no subcategories. Use no subcategory to continue.';
+    grid.appendChild(empty);
+  } else {
+    subs.forEach(sub => {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'subcategory-item' + (subcategorySheetState.selectedSub === sub ? ' selected' : '');
+      item.innerHTML = `<span class="subcategory-item-label">${esc(sub)}</span><span class="subcategory-item-check">✓</span>`;
+      item.style.borderColor = alphaColor(activeColor, 0.32);
+      item.style.color = activeColor;
+      item.style.background = subcategorySheetState.selectedSub === sub ? alphaColor(activeColor, 0.12) : 'linear-gradient(180deg, rgba(255,255,255,0.03), transparent)';
+      addTapListener(item, () => {
+        subcategorySheetState.selectedSub = sub;
+        logCatSub = sub;
+        renderSubcategorySheet(activeKey);
+        updateLogCatPill();
+      });
+      grid.appendChild(item);
+    });
+  }
+
+  if (applyBtn) applyBtn.disabled = !subcategorySheetState.selectedSub;
+  if (skipBtn) {
+    skipBtn.textContent = subs.length ? 'Use no subcategory' : 'Continue';
+    skipBtn.onclick = () => confirmSubcategorySheet(true);
+  }
+  if (applyBtn) applyBtn.onclick = () => confirmSubcategorySheet(false);
+}
+
+function openSubcategorySheet(statusKey) {
+  const subs = getStatusSubs(statusKey);
+  if (!subs.length) return;
+  subcategorySheetState.open = true;
+  subcategorySheetState.statusKey = statusKey;
+  subcategorySheetState.selectedSub = subs.includes(logCatSub) ? logCatSub : '';
+  renderSubcategorySheet(statusKey);
+  document.getElementById('subcategory-sheet-overlay')?.classList.add('visible');
+}
+
+function closeSubcategorySheet() {
+  subcategorySheetState.open = false;
+  document.getElementById('subcategory-sheet-overlay')?.classList.remove('visible');
+}
+
+function confirmSubcategorySheet(useNoSub = false) {
+  const activeKey = subcategorySheetState.statusKey || logCatKey;
+  if (!activeKey) return;
+  logCatKey = activeKey;
+  logCatSub = useNoSub ? '' : subcategorySheetState.selectedSub;
+  issueLogPrefs.lastStatusKey = logCatKey || '';
+  issueLogPrefs.lastStatusSub = logCatSub || '';
+  saveIssueLogPrefs();
+  renderLogCatButtons();
+  renderLogSubChips();
+  updateLogCatPill();
+  closeSubcategorySheet();
 }
 
 function updateLogCatPill() {
@@ -3977,21 +4394,66 @@ function scrollAddModalToBottom() {
 }
 
 function logCatSelectStatus(key) {
-  logCatKey = logCatKey===key ? null : key;
-  logCatSub = null;
-  renderLogCatButtons(); renderLogSubChips(); updateLogCatPill();
+  const prevKey = logCatKey;
+  const subs = getStatusSubs(key);
+  logCatKey = key;
+  logCatSub = prevKey === key && subs.includes(logCatSub) ? logCatSub : '';
+  
+  issueLogPrefs.lastStatusKey = key;
+  issueLogPrefs.lastStatusSub = logCatSub;
+  saveIssueLogPrefs();
+
+  renderLogCatButtons();
+  renderLogSubChips();
+  updateLogCatPill();
+  closeSubcategorySheet();
   scrollAddModalToBottom();
 }
 
-document.getElementById('log-cat-clear')?.addEventListener('touchend', e=>{e.preventDefault();logCatKey=null;logCatSub=null;renderLogCatButtons();renderLogSubChips();updateLogCatPill();},{passive:false});
-document.getElementById('log-cat-clear')?.addEventListener('click', ()=>{logCatKey=null;logCatSub=null;renderLogCatButtons();renderLogSubChips();updateLogCatPill();});
+document.getElementById('log-cat-clear')?.addEventListener('touchend', e=>{
+  e.preventDefault();
+  closeSubcategorySheet();
+  logCatKey=null;logCatSub=null;
+  issueLogPrefs.lastStatusKey = '';
+  issueLogPrefs.lastStatusSub = '';
+  saveIssueLogPrefs();
+  renderLogCatButtons();renderLogSubChips();updateLogCatPill();
+},{passive:false});
+document.getElementById('log-cat-clear')?.addEventListener('click', ()=>{
+  closeSubcategorySheet();
+  logCatKey=null;logCatSub=null;
+  issueLogPrefs.lastStatusKey = '';
+  issueLogPrefs.lastStatusSub = '';
+  saveIssueLogPrefs();
+  renderLogCatButtons();renderLogSubChips();updateLogCatPill();
+});
+document.getElementById('log-cat-selected')?.addEventListener('click', e => {
+  if (e.target.closest?.('#log-cat-clear')) return;
+  // Disabled: Subcategories now render inline below the category picker.
+});
 
-window.closeModal = () => { document.getElementById('add-modal').classList.remove('visible'); pendingPhotos=[]; currentMachine=null; logCatKey=null; logCatSub=null; };
+window.closeModal = () => {
+  syncIssueLogPrefsFromModal();
+  document.getElementById('add-modal').classList.remove('visible');
+  document.getElementById('log-photo-source-row')?.classList.remove('visible');
+  closeSubcategorySheet();
+  pendingPhotos=[];
+  currentMachine=null;
+  issueLogPrefs.lastStatusKey = logCatKey || issueLogPrefs.lastStatusKey || '';
+  issueLogPrefs.lastStatusSub = logCatSub || issueLogPrefs.lastStatusSub || '';
+  saveIssueLogPrefs();
+  logCatKey=null;
+  logCatSub=null;
+};
 
 window.resetIssueDateTime = function() {
   const {dateStr,timeStr} = toLocalDTInputs(new Date());
   document.getElementById('issue-date').value=dateStr;
   document.getElementById('issue-time-input').value=timeStr;
+  const shift = document.getElementById('issue-shift');
+  if (shift && shift.dataset.autoApplied === '1') {
+    shift.value = getShiftForTime(new Date(), getShiftSchedule(currentPlantId));
+  }
 };
 
 function toLocalDTInputs(d) {
@@ -4269,16 +4731,45 @@ function refreshReminderClocksInDom() {
 
 loadIssueReminders();
 
+document.getElementById('subcategory-sheet-overlay')?.addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeSubcategorySheet();
+});
+document.getElementById('subcategory-sheet-close')?.addEventListener('click', () => closeSubcategorySheet());
+
+document.getElementById('issue-urgent')?.addEventListener('change', () => {
+  issueLogPrefs.urgent = Boolean(document.getElementById('issue-urgent')?.checked);
+  saveIssueLogPrefs();
+});
+document.getElementById('issue-timer-minutes')?.addEventListener('change', () => {
+  issueLogPrefs.timerMinutes = String(document.getElementById('issue-timer-minutes')?.value || '');
+  saveIssueLogPrefs();
+});
+document.getElementById('issue-shift')?.addEventListener('change', () => {
+  issueLogPrefs.lastShift = String(document.getElementById('issue-shift')?.value || 'auto');
+  const shift = document.getElementById('issue-shift');
+  if (shift) shift.dataset.autoApplied = '0';
+  saveIssueLogPrefs();
+});
+document.getElementById('issue-advanced-toggle')?.addEventListener('click', () => {
+  issueLogPrefs.advancedOpen = issueAdvancedExpanded;
+  saveIssueLogPrefs();
+});
+document.getElementById('log-photo-btn')?.addEventListener('click', () => openIssuePhotoSourceMenu());
+document.getElementById('log-camera-btn')?.addEventListener('touchend', e=>{e.preventDefault();openIssuePhotoSourceMenu(false);document.getElementById('log-camera-input').click();},{passive:false});
+document.getElementById('log-camera-btn')?.addEventListener('click', ()=>{openIssuePhotoSourceMenu(false);document.getElementById('log-camera-input').click();});
+document.getElementById('log-library-btn')?.addEventListener('touchend', e=>{e.preventDefault();openIssuePhotoSourceMenu(false);document.getElementById('log-library-input').click();},{passive:false});
+document.getElementById('log-library-btn')?.addEventListener('click', ()=>{openIssuePhotoSourceMenu(false);document.getElementById('log-library-input').click();});
+
 // photos - add modal
-document.getElementById('log-camera-btn').addEventListener('touchend', e=>{e.preventDefault();document.getElementById('log-camera-input').click();},{passive:false});
-document.getElementById('log-camera-btn').addEventListener('click', ()=>document.getElementById('log-camera-input').click());
-document.getElementById('log-library-btn').addEventListener('touchend', e=>{e.preventDefault();document.getElementById('log-library-input').click();},{passive:false});
-document.getElementById('log-library-btn').addEventListener('click', ()=>document.getElementById('log-library-input').click());
 document.getElementById('log-camera-input').addEventListener('change', function(){ handleFiles(this.files, pendingPhotos, 'photo-previews'); this.value=''; });
 document.getElementById('log-library-input').addEventListener('change', function(){ handleFiles(this.files, pendingPhotos, 'photo-previews'); this.value=''; });
 
 // photos - edit modal
 document.getElementById('edit-photo-input').addEventListener('change', function(){ handleFiles(this.files, editPhotos, 'edit-photo-previews'); });
+document.getElementById('edit-status-camera-btn')?.addEventListener('click', () => document.getElementById('edit-status-camera-input')?.click());
+document.getElementById('edit-status-library-btn')?.addEventListener('click', () => document.getElementById('edit-status-library-input')?.click());
+document.getElementById('edit-status-camera-input')?.addEventListener('change', function(){ handleFiles(this.files, editStatusPhotos, 'edit-status-photo-previews'); this.value=''; });
+document.getElementById('edit-status-library-input')?.addEventListener('change', function(){ handleFiles(this.files, editStatusPhotos, 'edit-status-photo-previews'); this.value=''; });
 const edz = document.getElementById('edit-drop-zone');
 edz.addEventListener('dragover', e=>{e.preventDefault();edz.classList.add('drag-over');});
 edz.addEventListener('dragleave', ()=>edz.classList.remove('drag-over'));
@@ -4297,7 +4788,7 @@ function renderPreviews(arr, previewId) {
   const c = document.getElementById(previewId); c.innerHTML='';
   arr.forEach((p,i) => {
     const wrap=document.createElement('div'); wrap.className='photo-preview-item';
-    const img=document.createElement('img'); img.className='photo-preview-img'; img.src=p.dataUrl;
+    const img=document.createElement('img'); img.className='photo-preview-img'; img.src=p.dataUrl || p.downloadURL || '';
     const rm=document.createElement('button'); rm.className='photo-remove'; rm.textContent='✕';
     rm.onclick=()=>{ arr.splice(i,1); renderPreviews(arr,previewId); };
     wrap.appendChild(img); wrap.appendChild(rm); c.appendChild(wrap);
@@ -4313,15 +4804,16 @@ function setSubmitting(on) {
 // ── SUBMIT NEW ──
 window.submitIssue = async () => {
   if (!currentUserPermissions.canCreateIssue) return;
-  const note = document.getElementById('issue-note').value.trim() || 'No description provided';
   setSubmitting(true);
   try {
     const d = getIssueDateFromInputs('issue-date','issue-time-input');
     const initialStatus = logCatKey || 'open';
     const initialSubStatus = logCatSub || '';
+    const note = document.getElementById('issue-note').value.trim() || 'No Description Provided';
     const shiftSel = document.getElementById('issue-shift').value;
     const shift = shiftSel === 'auto' ? getShiftForTime(d, getShiftSchedule(currentPlantId)) : shiftSel;
     const timerMinutes = parseTimerMinutes(document.getElementById('issue-timer-minutes')?.value);
+    const isUrgent = Boolean(document.getElementById('issue-urgent')?.checked);
     const issueRef = doc(plantCol('issues'));
     const uploadedPhotos = await uploadIssuePhotosToStorage(issueRef.id, pendingPhotos);
     const issuePayload = {
@@ -4333,6 +4825,7 @@ window.submitIssue = async () => {
       photoCount: uploadedPhotos.length,
       createdAt: serverTimestamp(),
       createdBy: currentActor(),
+      ...(isUrgent ? { highPriority: true, priority: 'critical' } : {}),
       ...buildIssueV2Compat({
         machineCode: currentMachine,
         statusKey: initialStatus,
@@ -4348,7 +4841,8 @@ window.submitIssue = async () => {
       machineCode: currentMachine,
       note,
       initialStatusKey: initialStatus,
-      initialSubStatusKey: initialSubStatus
+      initialSubStatusKey: initialSubStatus,
+      urgent: isUrgent
     });
     queueIssueEvent(batch, issueRef.id, 'status_changed', {
       fromStatusKey: null,
@@ -4358,6 +4852,11 @@ window.submitIssue = async () => {
       note: ''
     });
     await batch.commit();
+    issueLogPrefs.lastStatusKey = initialStatus;
+    issueLogPrefs.lastStatusSub = initialSubStatus;
+    issueLogPrefs.timerMinutes = String(document.getElementById('issue-timer-minutes')?.value || '');
+    issueLogPrefs.urgent = isUrgent;
+    saveIssueLogPrefs();
     await queueRoleFeedAlert({ id: issueRef.id, machine: currentMachine }, {
       statusKey: initialStatus,
       subStatus: initialSubStatus,
@@ -4367,7 +4866,28 @@ window.submitIssue = async () => {
     attachmentPhotoCache.set(issueRef.id, uploadedPhotos);
     await awardGamification('issue_created_complete', { issueId: issueRef.id, dedupeSuffix: 'issue-created', tags: ['issue:create', `status:${initialStatus}`] });
     if (uploadedPhotos.length > 0) await awardGamification('photo_attached', { issueId: issueRef.id, dedupeSuffix: 'photo', tags: ['photo:attached'] });
+    const createdIssue = {
+      ...issuePayload,
+      id: issueRef.id,
+      photos: uploadedPhotos,
+      currentStatus: {
+        statusKey: initialStatus,
+        subStatusKey: initialSubStatus,
+        subLabel: initialSubStatus,
+        notePreview: note
+      },
+      lifecycle: { isResolved: initialStatus === 'resolved' }
+    };
     closeModal();
+    showGameToast(`✅ Logged Press ${currentMachine}`);
+    if (requiresSerialNumber(initialStatus, initialSubStatus)) {
+      setTimeout(() => {
+        openSerialModal(issueRef.id, initialStatus, initialSubStatus, fmtDate(d));
+        if (!issues.find(i => i.id === issueRef.id)) {
+          document.getElementById('serial-modal-machine').textContent = currentMachine;
+        }
+      }, 50);
+    }
   } catch(e) { setSyncStatus('err','Error saving: '+e.message); setSubmitting(false); }
 };
 
@@ -4671,7 +5191,7 @@ window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
 };
 
 // Update an existing history entry
-window.updateStatusEntry = async (id, idx, status, subStatus, note, dateTime) => {
+window.updateStatusEntry = async (id, idx, status, subStatus, note, dateTime, photos = null) => {
   const issue = issues.find(i=>i.id===id);
   if (!issue) return;
   const latestIssue = await getLatestIssueForStatusMutation(id, issue);
@@ -4691,6 +5211,7 @@ window.updateStatusEntry = async (id, idx, status, subStatus, note, dateTime) =>
   const prev = currentStatus(latestIssue || issue);
   history[idx] = { ...history[idx], status, subStatus: subStatus||'', note: note||'' };
   if (dateTime) history[idx].dateTime = dateTime;
+  if (Array.isArray(photos)) history[idx].photos = photos;
   // Recalculate current status from last entry
   const last = history[history.length - 1];
   try {
@@ -4852,6 +5373,7 @@ window.cancelAddEntry = (id) => { delete pendingEntry[id]; renderIssues(); };
 
 // Edit state per entry
 let editingStatusEntry = null;
+let editStatusPhotos = [];
 window.startEditEntry = (id, idx) => {
   const issue = issues.find(i => i.id === id);
   if (!issue) return;
@@ -4884,6 +5406,8 @@ window.startEditEntry = (id, idx) => {
   }
   
   document.getElementById('edit-status-note').value = entry.note || '';
+  editStatusPhotos = Array.isArray(entry.photos) ? entry.photos.map(p => ({ ...p })) : [];
+  renderPreviews(editStatusPhotos, 'edit-status-photo-previews');
   
   // Parse date/time
   if (entry.dateTime) {
@@ -4920,6 +5444,8 @@ function updateEditStatusSubOptions() {
 window.closeEditStatusModal = () => {
   document.getElementById('edit-status-modal').classList.remove('visible');
   editingStatusEntry = null;
+  editStatusPhotos = [];
+  renderPreviews(editStatusPhotos, 'edit-status-photo-previews');
 };
 
 window.saveEditStatusEntry = async () => {
@@ -4939,7 +5465,18 @@ window.saveEditStatusEntry = async () => {
     dateTime = fmtDate(new Date(dateStr + 'T' + tVal + ':00'));
   }
   
-  await updateStatusEntry(issueId, entryIndex, status, subStatus, note, dateTime);
+  const newStatusPhotos = editStatusPhotos.filter(p => p.dataUrl);
+  const existingStatusPhotos = editStatusPhotos.filter(p => !p.dataUrl);
+  const uploadedStatusPhotos = newStatusPhotos.length ? await uploadIssuePhotosToStorage(issueId, newStatusPhotos) : [];
+  const mergedStatusPhotos = [...existingStatusPhotos, ...uploadedStatusPhotos].map(p => ({
+    name: p.name || '',
+    storagePath: p.storagePath || '',
+    dataUrl: p.dataUrl || p.downloadURL || '',
+    contentType: p.contentType || 'image/jpeg',
+    sizeBytes: Number(p.sizeBytes || p.size || 0),
+    storageBucket: p.storageBucket || ''
+  }));
+  await updateStatusEntry(issueId, entryIndex, status, subStatus, note, dateTime, mergedStatusPhotos);
   closeEditStatusModal();
 };
 
@@ -5435,6 +5972,33 @@ window.closeSmsComposer = async (fallback = false) => {
   }
 };
 
+async function openIssueSmsComposer(issue) {
+  if (!issue) return;
+  const issueLink = (() => {
+    try {
+      return window.location?.href ? `${window.location.origin}${window.location.pathname}?issue=${encodeURIComponent(issue.id)}` : '';
+    } catch (_) {
+      return '';
+    }
+  })();
+  const messageWithLink = formatIssueSmsBody(issue, issueLink);
+  SMS_COMPOSER_STATE.issueId = issue.id;
+  SMS_COMPOSER_STATE.issue = issue;
+  SMS_COMPOSER_STATE.messageWithLink = messageWithLink;
+  SMS_COMPOSER_STATE.recipientOptions = await _smsRecipientOptions();
+  SMS_COMPOSER_STATE.selectedRecipientPhones = new Set();
+  const subtitle = document.getElementById('sms-compose-subtitle');
+  if (subtitle) subtitle.textContent = `${issue.machine || issue.id} • Choose recipients and review before sending.`;
+  const manual = document.getElementById('sms-manual-phone');
+  if (manual) manual.value = '';
+  const includePhotos = document.getElementById('sms-include-photos');
+  if (includePhotos) includePhotos.checked = true;
+  const preview = document.getElementById('sms-preview-text');
+  if (preview) preview.value = messageWithLink;
+  _renderSmsRecipientPicker();
+  document.getElementById('sms-compose-modal')?.classList.add('visible');
+}
+
 window.submitSmsComposer = async () => {
   const sendBtn = document.getElementById('sms-send-btn');
   if (sendBtn) {
@@ -5461,30 +6025,7 @@ window.sendIssueViaSms = async (id, evt) => {
     setSyncStatus('err', 'Unable to send text: issue not found.');
     return;
   }
-
-  const issueLink = (() => {
-    try {
-      return window.location?.href ? `${window.location.origin}${window.location.pathname}?issue=${encodeURIComponent(issue.id)}` : '';
-    } catch (_) {
-      return '';
-    }
-  })();
-  const messageWithLink = formatIssueSmsBody(issue, issueLink);
-  SMS_COMPOSER_STATE.issueId = issue.id;
-  SMS_COMPOSER_STATE.issue = issue;
-  SMS_COMPOSER_STATE.messageWithLink = messageWithLink;
-  SMS_COMPOSER_STATE.recipientOptions = await _smsRecipientOptions();
-  SMS_COMPOSER_STATE.selectedRecipientPhones = new Set();
-  const subtitle = document.getElementById('sms-compose-subtitle');
-  if (subtitle) subtitle.textContent = `${issue.machine || issue.id} • Choose recipients and review before sending.`;
-  const manual = document.getElementById('sms-manual-phone');
-  if (manual) manual.value = '';
-  const includePhotos = document.getElementById('sms-include-photos');
-  if (includePhotos) includePhotos.checked = true;
-  const preview = document.getElementById('sms-preview-text');
-  if (preview) preview.value = messageWithLink;
-  _renderSmsRecipientPicker();
-  document.getElementById('sms-compose-modal')?.classList.add('visible');
+  await openIssueSmsComposer(issue);
 };
 
 // ── DELETE ──
@@ -5789,15 +6330,21 @@ function renderIssues() {
       const wfBadge = isResolvedEntry
         ? `<div class="tl-wf-badge no-action" style="color:${cfg.color}">${cfg.icon} RESOLVED${isCurrent ? ' · CURRENT' : ''}</div>`
         : `<button class="tl-wf-badge" style="color:${wfColor}" onclick="event.stopPropagation(); cycleWorkflowStateForStatus('${issue.id}','${entry.status}')" title="Tap to cycle workflow state">${wfBadgeLabel}</button>`;
+      const entrySerialMatch = String(entry.note || '').match(/S\/N:\s*([A-Za-z0-9]+)/i);
+      const entrySerialNumber = entrySerialMatch ? entrySerialMatch[1].toUpperCase() : '';
+      const entryMaterialBadge = String(entry.status || '').toLowerCase() === 'materials' && entrySerialNumber
+        ? ` <span class="issue-serial-tag" title="Serial Number: ${esc(entrySerialNumber)}">🏷️ ${esc(entrySerialNumber)}</span>`
+        : '';
 
       return `<div class="tl-entry" style="border-left-color:${barColor};${entryBg}">
         ${wfBadge}
         <div>
           <div class="tl-header">
-            <span class="tl-status-label" style="color:${cfg.color}">${cfg.label}${entry.subStatus?' › '+esc(entry.subStatus):''}</span>
+            <span class="tl-status-label" style="color:${cfg.color}">${cfg.label}${entry.subStatus?' › '+esc(entry.subStatus):''}${entryMaterialBadge}</span>
           </div>
           <div class="tl-time">${entry.dateTime||''}${entry.by?' — '+esc(entry.by):''}</div>
           ${entry.note?`<div class="tl-note-text">"${esc(entry.note)}"</div>`:''}
+          ${Array.isArray(entry.photos) && entry.photos.length ? `<div class="issue-photos" style="margin-top:6px;">${entry.photos.map((p,i)=>`<img class="issue-photo-thumb" src="${esc(p.downloadURL || p.dataUrl || '')}" loading="lazy" alt="${esc(p.name || `Status photo ${i+1}`)}" onclick="openLightbox(${i}, [${entry.photos.map(sp => `'${esc(sp.downloadURL || sp.dataUrl || '')}'`).join(',')}])">`).join('')}</div>` : ''}
           ${currentUserPermissions.canEditIssue ? `<div style="display:flex;gap:5px;margin-top:6px;">
             ${!isResolvedEntry && !isCurrent ? `<button class="tl-edit-btn" onclick="setStatusCurrentFromHistory('${issue.id}',${trueIdx})">Set current</button>` : ''}
             ${!isResolvedEntry && entryWorkflowState === 'finished' ? `<button class="tl-edit-btn" onclick="setWorkflowStateForStatus('${issue.id}','${entry.status}','called')">Un-finish</button>` : ''}
@@ -5841,7 +6388,6 @@ function renderIssues() {
       ${addRowHtml}
     </div>
     <div class="action-row issue-footer-actions" style="margin-top:10px;">
-      <button class="issue-text-btn" onclick="event.stopPropagation(); sendIssueViaSms('${issue.id}', event)" title="Send issue by SMS">📲 Text</button>
       <button class="issue-reminder-btn${reminderState?.isOverdue ? ' overdue' : ''}" onclick="event.stopPropagation(); openIssueReminderModal('${issue.id}')" title="Set check-back timer">⏱ <span data-reminder-id="${issue.id}">${formatReminderClock(reminderState)}</span></button>
       ${canEdit ? `<div class="issue-footer-actions-right">
       <button class="btn btn-edit" onclick="openEditModal('${issue.id}')">✏️ Edit</button>
@@ -5919,12 +6465,33 @@ function renderIssues() {
         }).join('')}</div>`
       : '';
 
+    let foundSerialNumber = '';
+    const reversedHistory = [...displayHistory].reverse();
+    for (const entry of reversedHistory) {
+      if (!entry.note) continue;
+      const match = entry.note.match(/S\/N:\s*([A-Za-z0-9]+)/i);
+      if (match) {
+        foundSerialNumber = match[1].toUpperCase();
+        break;
+      }
+    }
+    const isMaterialsWorkflow = String(currentKey || '').toLowerCase() === 'materials';
+    const serialBadgeHtml = isMaterialsWorkflow && foundSerialNumber
+      ? `<div class="issue-serial-tag" style="margin-left:12px; margin-top:2px;" title="Serial Number: ${esc(foundSerialNumber)}">🏷️ ${esc(foundSerialNumber)}</div>`
+      : '';
+    const subLabelWithSerial = (() => {
+      if (!subLabel) return '';
+      if (!isMaterialsWorkflow || !foundSerialNumber) return subLabel;
+      return `${subLabel} ${foundSerialNumber}`;
+    })();
+
     const currentWfRowHtml = `<div class="wf-status-row">
       <div class="wf-status-row-info">
         <div class="issue-status" style="color:${sc.color};border-color:${sc.color};background:${alphaColor(sc.color,0.12)}">
           <span class="issue-status-main">${sc.icon} ${baseLabel}</span>
         </div>
-        ${subLabel ? `<span class="issue-status-sub" style="color:${sc.color};">${esc(subLabel)}</span>` : ''}
+        ${subLabelWithSerial ? `<span class="issue-status-sub" style="color:${sc.color};">${esc(subLabelWithSerial)}</span>` : ''}
+        ${serialBadgeHtml}
         ${secDotsHtml}
       </div>
       ${wfHeaderHtml}
@@ -6090,27 +6657,35 @@ function renderIssues() {
 
           const subInner = subPanel.querySelector('.swipe-sub-inner');
           subInner.innerHTML = '';
-
-          // Skip chip
-          const skipChip = document.createElement('div');
-          skipChip.className = 'swipe-sub-chip skip';
-          skipChip.textContent = 'Skip ›';
-          skipChip.dataset.sub = '';
-          subInner.appendChild(skipChip);
+          subInner.className = 'swipe-sub-inner subcategory-grid'; 
+          
+          const activeColor = getStatusColor(statusKey);
 
           // Sub chips
           getStatusSubs(statusKey).forEach(sub => {
-            const chip = document.createElement('div');
-            chip.className = 'swipe-sub-chip';
-            const col = getStatusColor(statusKey);
-            chip.style.cssText = `background:${col}18;color:${col};border-color:${col}`;
-            chip.textContent = sub;
-            chip.dataset.sub = sub;
-            subInner.appendChild(chip);
+            const item = document.createElement('button');
+            item.type = 'button';
+            item.className = 'subcategory-item swipe-sub-action';
+            item.innerHTML = `<span class="subcategory-item-label">${esc(sub)}</span>`;
+            item.style.borderColor = alphaColor(activeColor, 0.32);
+            item.style.color = activeColor;
+            item.style.background = 'linear-gradient(180deg, rgba(255,255,255,0.03), transparent)';
+            item.dataset.sub = sub;
+            subInner.appendChild(item);
           });
 
+          // Skip chip
+          const skipChip = document.createElement('button');
+          skipChip.type = 'button';
+          skipChip.className = 'subcategory-item swipe-sub-action skip';
+          skipChip.innerHTML = `<span class="subcategory-item-label" style="color:var(--text3); font-style:italic;">Skip ›</span>`;
+          skipChip.style.borderColor = 'var(--border)';
+          skipChip.style.background = 'transparent';
+          skipChip.dataset.sub = '';
+          subInner.appendChild(skipChip);
+
           // Add click handlers to sub chips
-          subInner.querySelectorAll('.swipe-sub-chip').forEach(chip => {
+          subInner.querySelectorAll('.swipe-sub-action').forEach(chip => {
             const handleSubClick = () => {
               const sub = chip.dataset.sub;
               closeSwipeCard(card);
@@ -6234,7 +6809,7 @@ function renderIssues() {
         // Closed: swipe right → open notes modal for this press
         _swipeJustHappened = true;
         setTimeout(() => { _swipeJustHappened = false; }, 50);
-        openNotesModal(toPressId(issue.machine), issue.machine);
+        openPressWikiModal(toPressId(issue.machine), issue.machine);
       } else if (isOpen() && Math.abs(dx) > 25) {
         // Open: swipe either direction to close
         _swipeJustHappened = true;
@@ -6286,7 +6861,7 @@ function renderIssues() {
       } else if (!isOpen() && dx > 25) {
         _swipeJustHappened = true;
         setTimeout(() => { _swipeJustHappened = false; }, 50);
-        openNotesModal(toPressId(issue.machine), issue.machine);
+        openPressWikiModal(toPressId(issue.machine), issue.machine);
       } else if (isOpen() && Math.abs(dx) > 25) {
         _swipeJustHappened = true;
         setTimeout(() => { _swipeJustHappened = false; }, 50);
@@ -6349,7 +6924,15 @@ window.toggleCard = id => {
   const willOpen = bodyEl ? !bodyEl.classList.contains('visible') : false;
   bodyEl?.classList.toggle('visible');
   chevronEl?.classList.toggle('open');
-  if (willOpen) ensureIssueDetailsHydrated(id).catch(() => {});
+  if (willOpen) {
+    ensureIssueDetailsHydrated(id).catch(() => {});
+    setTimeout(() => {
+      const cardEl = bodyEl?.closest('.issue-card');
+      if (cardEl) {
+        cardEl.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      }
+    }, 50);
+  }
   scheduleIssueLogRelayout();
 };
 
@@ -7884,7 +8467,22 @@ function updateFilterBadge() {
   badge.textContent = count;
 }
 
-document.getElementById('search-input').addEventListener('input', () => { renderIssues(); updateFilterBadge(); });
+function scrollToSearchResultsIfNeeded() {
+  const searchValue = String(document.getElementById('search-input')?.value || '').trim();
+  if (!searchValue) return;
+  const firstResult = document.querySelector('#issues-list .issue-card');
+  if (firstResult) {
+    firstResult.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
+  document.querySelector('.issues-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+document.getElementById('search-input').addEventListener('input', () => {
+  renderIssues();
+  updateFilterBadge();
+  scrollToSearchResultsIfNeeded();
+});
 document.getElementById('machine-filter').addEventListener('change', () => {
   const mf = document.getElementById('machine-filter').value;
   const bc = document.getElementById('machine-breadcrumb');
@@ -8930,17 +9528,14 @@ document.getElementById('messaging-photo-input')?.addEventListener('change', e =
 
 // ── PRESS NOTES ──
 // Toggle between 'a' (Logbook) and 'b' (Team Channel) to switch prototypes
-const NOTES_VARIANT = 'a';
 
-let _notesUnsubscribe = null;
-let _notesModalPressId = null;
-let _notesModalMachineCode = null;
-let pendingPressNotePhotos = [];
 let _pressWikiModalPressId = null;
 let _pressWikiSelectedPageId = 'shift-notes';
+let _pressWikiCanEdit = false;
+let _pressWikiAttachmentsCache = [];
+let _pressWikiMachineCode = null;
+let _pressWikiRenderedBodyRaw = '';
 
-function _nid(base) { return base + '-' + NOTES_VARIANT; }
-function _notesModalEl() { return document.getElementById('notes-modal-' + NOTES_VARIANT); }
 function _notesEl(base) { return document.getElementById(base + '-' + NOTES_VARIANT); }
 
 function _relativeTime(ts) {
@@ -8957,278 +9552,10 @@ function _relativeTime(ts) {
   return new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-function _notesPressStats(machineCode) {
-  const normalizedMachine = String(machineCode || '').trim();
-  const rowName = findRowNameForMachine(normalizedMachine);
-  const pressIssues = Array.isArray(issues)
-    ? issues.filter(issue => String(issue.machine || issue.machineCode || '').trim() === normalizedMachine)
-    : [];
-  const openIssues = pressIssues.filter(issue => currentStatusKey(issue) !== 'resolved');
-  let statusLabel = 'Clear';
-  let statusColor = 'var(--green)';
-  if (openIssues.length === 1) {
-    const statusKey = currentStatusKey(openIssues[0]);
-    const statusDef = getStatusDef(statusKey);
-    statusLabel = statusDef?.label || statusKey || 'Open';
-    statusColor = getStatusColor(statusKey);
-  } else if (openIssues.length > 1) {
-    statusLabel = `${openIssues.length} open issues`;
-    statusColor = 'var(--accent)';
-  }
-  return { rowName, normalizedMachine, openIssues, statusLabel, statusColor };
-}
-
-function _notesHeaderCopy(machineCode, notes) {
-  const stats = _notesPressStats(machineCode);
-  const noteCount = Array.isArray(notes) ? notes.length : 0;
-  const latestNote = noteCount > 0 ? notes[notes.length - 1] : null;
-  const latestNoteLabel = latestNote ? _relativeTime(latestNote.createdAt) || 'just now' : '';
-  const contextLine = stats.rowName && stats.rowName !== 'Other'
-    ? `${stats.rowName} · Press ${stats.normalizedMachine || '—'}`
-    : `Press ${stats.normalizedMachine || '—'}`;
-  const metaLine = `${stats.statusLabel} · ${noteCount} note${noteCount === 1 ? '' : 's'}${latestNote ? ` · Last note ${latestNoteLabel}` : ' · No notes yet'}`;
-  return { ...stats, noteCount, latestNote, contextLine, metaLine };
-}
-
-function _setNotesHeader(notes = []) {
-  if (!_notesModalMachineCode) return;
-  const copy = _notesHeaderCopy(_notesModalMachineCode, notes);
-  const contextEl = _notesEl('notes-modal-context');
-  const metaEl = _notesEl('notes-modal-meta');
-  if (contextEl) {
-    contextEl.textContent = copy.contextLine;
-  }
-  if (metaEl) {
-    metaEl.textContent = copy.metaLine;
-    metaEl.style.color = copy.statusColor;
-  }
-  const notesListEl = _notesEl('notes-list');
-  if (notesListEl && notesListEl.dataset) {
-    notesListEl.dataset.noteCount = String(copy.noteCount);
-  }
-}
-
-async function uploadPressNotePhotosToStorage(noteId, photos) {
-  const out = [];
-  for (let idx = 0; idx < (photos || []).length; idx++) {
-    const p = photos[idx] || {};
-    const src = String(p.dataUrl || '');
-    if (!src.startsWith('data:')) { out.push(p); continue; }
-    const meta = parseDataUrlMeta(src);
-    if (!meta) { out.push(p); continue; }
-    const ext = extFromContentType(meta.contentType);
-    const fileName = `${Date.now()}_${idx}.${ext}`;
-    const path = `plants/${currentPlantId}/pressNotes/${noteId}/photos/${fileName}`;
-    const sRef = storageRef(storage, path);
-    await uploadString(sRef, src, 'data_url');
-    const url = await getDownloadURL(sRef);
-    out.push({
-      name: p.name || fileName,
-      dataUrl: url,
-      url,
-      storagePath: path,
-      storageBucket: sRef.bucket,
-      contentType: meta.contentType,
-      sizeBytes: meta.sizeBytes,
-      source: 'storage'
-    });
-  }
-  return out;
-}
-
-function _pressNotePhotoUrls(note) {
-  return Array.isArray(note?.photos)
-    ? note.photos.map(p => p?.dataUrl || p?.url || '').filter(Boolean)
-    : [];
-}
-
-function _renderPressNotePhotoThumbs(note) {
-  const urls = _pressNotePhotoUrls(note);
-  if (!urls.length) return null;
-  const wrap = document.createElement('div');
-  wrap.className = 'notes-photo-strip';
-  urls.forEach((url, idx) => {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'notes-photo-thumb-btn';
-    btn.title = `Open photo ${idx + 1}`;
-    btn.onclick = () => openLightbox(idx, urls);
-    const img = document.createElement('img');
-    img.className = 'notes-photo-thumb';
-    img.src = url;
-    img.alt = `Press note photo ${idx + 1}`;
-    btn.appendChild(img);
-    wrap.appendChild(btn);
-  });
-  return wrap;
-}
-
-async function syncPressNoteToWikiPage(noteRefId, payload) {
-  if (!currentPlantId || !payload?.pressId || !payload?.machineCode) return;
-  const pressId = String(payload.pressId);
-  const machineCode = String(payload.machineCode || '').trim();
-  if (!machineCode) return;
-  const pageId = 'shift-notes';
-  const pageRef = pressWikiPageDoc(pressId, pageId);
-  const revisionRef = doc(pressWikiRevisionsCol(pressId, pageId));
-  const revisionBody = `${payload.text || ''}`.trim();
-  const summary = revisionBody.slice(0, 180);
-  const searchText = [machineCode, 'shift notes', revisionBody].join(' ').toLowerCase().replace(/\s+/g, ' ').trim().slice(0, 2000);
-  await runTransaction(db, async tx => {
-    const pageSnap = await tx.get(pageRef);
-    const prevRevisionId = pageSnap.exists() ? (pageSnap.data()?.currentRevisionId || null) : null;
-    tx.set(revisionRef, {
-      body: revisionBody,
-      changeNote: `Imported from press note ${noteRefId}`,
-      prevRevisionId,
-      sourceNoteId: noteRefId,
-      editedBy: currentActor(),
-      editedAt: serverTimestamp()
-    });
-    tx.set(pageRef, {
-      title: 'Shift Notes',
-      slug: 'shift-notes',
-      summary,
-      tags: ['notes', 'shift'],
-      visibility: 'plant',
-      isPinned: true,
-      isLocked: false,
-      machineCode,
-      currentRevisionId: revisionRef.id,
-      photoCount: payload.photoCount || 0,
-      searchText,
-      createdBy: pageSnap.exists() ? (pageSnap.data()?.createdBy || currentActor()) : currentActor(),
-      createdAt: pageSnap.exists() ? (pageSnap.data()?.createdAt || serverTimestamp()) : serverTimestamp(),
-      updatedBy: currentActor(),
-      updatedAt: serverTimestamp(),
-      lastActivityAt: serverTimestamp()
-    }, { merge: true });
-  });
-  if (Array.isArray(payload.photos) && payload.photos.length) {
-    const batch = writeBatch(db);
-    payload.photos.forEach(photo => {
-      const attachmentRef = doc(pressWikiAttachmentsCol(pressId, pageId));
-      batch.set(attachmentRef, {
-        storagePath: photo.storagePath || null,
-        storageBucket: photo.storageBucket || null,
-        contentType: photo.contentType || null,
-        caption: photo.name || 'Press note photo',
-        linkedRevisionId: revisionRef.id,
-        sourceNoteId: noteRefId,
-        uploadedBy: currentActor(),
-        uploadedAt: serverTimestamp(),
-        url: photo.url || photo.dataUrl || null,
-        sizeBytes: photo.sizeBytes || null
-      });
-    });
-    await batch.commit();
-  }
-}
-
-function _renderPressNotes(notes) {
-  const list = document.getElementById(_nid('notes-list'));
-  if (!list) return;
-  list.innerHTML = '';
-  _setNotesHeader(notes);
-
-  if (NOTES_VARIANT === 'a') {
-    // ── Variant A: Logbook / timeline ──
-    notes.forEach(n => {
-      const isOwn = n.createdBy?.uid === currentUser?.uid;
-      const isAdmin = currentUserRole === 'admin';
-      const entry = document.createElement('div');
-      entry.className = 'log-entry';
-      const leftCol = document.createElement('div');
-      leftCol.className = 'log-entry-left';
-      const dot = document.createElement('div');
-      dot.className = 'log-entry-dot';
-      const line = document.createElement('div');
-      line.className = 'log-entry-line';
-      leftCol.appendChild(dot);
-      leftCol.appendChild(line);
-      const body = document.createElement('div');
-      body.className = 'log-entry-body';
-      const header = document.createElement('div');
-      header.className = 'log-entry-header';
-      const authorEl = document.createElement('span');
-      authorEl.className = 'log-entry-author';
-      authorEl.textContent = n.createdBy?.name || 'Unknown';
-      const timeEl = document.createElement('span');
-      timeEl.className = 'log-entry-time';
-      timeEl.textContent = _relativeTime(n.createdAt);
-      header.appendChild(authorEl);
-      header.appendChild(timeEl);
-      if (isOwn || isAdmin) {
-        const del = document.createElement('button');
-        del.className = 'log-entry-del';
-        del.title = 'Delete entry';
-        del.textContent = '✕';
-        del.onclick = () => _deletePressNote(n.id);
-        header.appendChild(del);
-      }
-      const textEl = document.createElement('div');
-      textEl.className = 'log-entry-text';
-      textEl.textContent = n.text;
-      body.appendChild(header);
-      body.appendChild(textEl);
-      const thumbs = _renderPressNotePhotoThumbs(n);
-      if (thumbs) body.appendChild(thumbs);
-      entry.appendChild(leftCol);
-      entry.appendChild(body);
-      list.appendChild(entry);
-    });
-    list.scrollTop = list.scrollHeight;
-
-  } else {
-    // ── Variant B: Team Channel / chat bubbles ──
-    if (notes.length === 0) {
-      list.innerHTML = `<div class="chat-empty"><div class="chat-empty-icon"><svg width="36" height="36" viewBox="0 0 32 32" fill="none"><path d="M6 4h20a2 2 0 012 2v16a2 2 0 01-2 2H10l-6 4V6a2 2 0 012-2z" stroke="var(--text3)" stroke-width="1.5" stroke-linejoin="round"/><path d="M10 12h12M10 17h8" stroke="var(--text3)" stroke-width="1.3" stroke-linecap="round"/></svg></div><div class="chat-empty-text">Start the conversation</div></div>`;
-      return;
-    }
-    notes.forEach(n => {
-      const isOwn = n.createdBy?.uid === currentUser?.uid;
-      const isAdmin = currentUserRole === 'admin';
-      const msg = document.createElement('div');
-      msg.className = 'chat-msg' + (isOwn ? ' mine' : '');
-      if (!isOwn) {
-        const avatar = document.createElement('div');
-        avatar.className = 'chat-avatar';
-        avatar.textContent = (n.createdBy?.name || '?').charAt(0).toUpperCase();
-        msg.appendChild(avatar);
-      }
-      const wrap = document.createElement('div');
-      wrap.className = 'chat-bubble-wrap';
-      const bubble = document.createElement('div');
-      bubble.className = 'chat-bubble';
-      const textEl = document.createElement('div');
-      textEl.className = 'chat-bubble-text';
-      textEl.textContent = n.text;
-      bubble.appendChild(textEl);
-      const thumbs = _renderPressNotePhotoThumbs(n);
-      if (thumbs) bubble.appendChild(thumbs);
-      if (isOwn || isAdmin) {
-        const del = document.createElement('button');
-        del.className = 'chat-del-btn';
-        del.title = 'Delete';
-        del.innerHTML = '<svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M3 4h10M6 4V2h4v2M5 4v9a1 1 0 001 1h4a1 1 0 001-1V4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-        del.onclick = () => _deletePressNote(n.id);
-        bubble.appendChild(del);
-      }
-      const meta = document.createElement('div');
-      meta.className = 'chat-meta';
-      meta.textContent = (isOwn ? 'You' : (n.createdBy?.name || 'Unknown')) + ' · ' + _relativeTime(n.createdAt);
-      wrap.appendChild(bubble);
-      wrap.appendChild(meta);
-      msg.appendChild(wrap);
-      list.appendChild(msg);
-    });
-    list.scrollTop = list.scrollHeight;
-  }
-}
-
-async function openPressWikiModal() {
-  if (!_notesModalPressId || !currentPlantId) return;
-  _pressWikiModalPressId = String(_notesModalPressId);
+async function openPressWikiModal(pressId, machineCode) {
+  if (!pressId || !currentPlantId) return;
+  _pressWikiModalPressId = String(pressId);
+  _pressWikiMachineCode = String(machineCode || '').trim();
   const modal = document.getElementById('press-wiki-modal');
   const titleEl = document.getElementById('press-wiki-title');
   const metaEl = document.getElementById('press-wiki-meta');
@@ -9236,8 +9563,16 @@ async function openPressWikiModal() {
   const revisionsEl = document.getElementById('press-wiki-revisions');
   const attachmentsEl = document.getElementById('press-wiki-attachments');
   if (!modal || !titleEl || !metaEl || !bodyEl || !revisionsEl || !attachmentsEl) return;
+  _pressWikiCanEdit = (currentUserRole === 'admin' || currentUserRole === 'editor');
+  const editBtn = document.getElementById('press-wiki-edit-btn');
+  const newBtn = document.getElementById('press-wiki-new-page-btn');
+  const cmsBtn = document.getElementById('press-wiki-cms-btn');
+  if (editBtn) editBtn.style.display = _pressWikiCanEdit ? '' : 'none';
+  if (newBtn) newBtn.style.display = _pressWikiCanEdit ? '' : 'none';
+  if (cmsBtn) cmsBtn.style.display = _pressWikiCanEdit ? '' : 'none';
+  _setPressWikiError('');
   titleEl.textContent = 'Shift Notes';
-  metaEl.textContent = `Press ${_notesModalMachineCode || '—'}`;
+  metaEl.textContent = `Press ${_pressWikiMachineCode || '—'}`;
   bodyEl.textContent = 'Loading wiki...';
   revisionsEl.innerHTML = '';
   attachmentsEl.innerHTML = '';
@@ -9283,25 +9618,25 @@ async function loadPressWikiPage(pageId) {
   const revisionsEl = document.getElementById('press-wiki-revisions');
   const attachmentsEl = document.getElementById('press-wiki-attachments');
   if (!titleEl || !metaEl || !bodyEl || !revisionsEl || !attachmentsEl) return;
-  bodyEl.textContent = 'Loading wiki...';
+  _renderPressWikiBody('Loading wiki...');
   revisionsEl.innerHTML = '';
   attachmentsEl.innerHTML = '';
   try {
     const pageRef = pressWikiPageDoc(_pressWikiModalPressId, pageId);
     const pageSnap = await getDoc(pageRef);
     if (!pageSnap.exists()) {
-      bodyEl.textContent = 'No wiki content yet. Add a press note to seed Shift Notes.';
+      _renderPressWikiBody('No wiki content yet. Add a press note to seed Shift Notes.');
       titleEl.textContent = pageId;
       return;
     }
     const page = pageSnap.data() || {};
     const currentRevisionId = page.currentRevisionId || null;
     titleEl.textContent = page.title || pageId;
-    metaEl.textContent = `Press ${page.machineCode || _notesModalMachineCode || '—'} · Updated ${_relativeTime(page.updatedAt) || 'recently'}`;
+    metaEl.textContent = `Press ${page.machineCode || _pressWikiMachineCode || '—'} · Updated ${_relativeTime(page.updatedAt) || 'recently'}`;
     const revSnap = await getDocs(query(pressWikiRevisionsCol(_pressWikiModalPressId, pageId), orderBy('editedAt', 'desc'), limit(30)));
     const revisions = revSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     const currentRevision = revisions.find(r => r.id === currentRevisionId) || revisions[0] || null;
-    bodyEl.textContent = currentRevision?.body || 'No revision body available.';
+    _renderPressWikiBody(currentRevision?.body || 'No revision body available.');
     revisionsEl.innerHTML = revisions.length ? '' : '<div style="color:var(--text3);">No revisions yet.</div>';
     revisions.forEach(rev => {
       const row = document.createElement('button');
@@ -9312,12 +9647,12 @@ async function loadPressWikiPage(pageId) {
       row.style.textAlign = 'left';
       row.style.marginBottom = '6px';
       row.textContent = `${_relativeTime(rev.editedAt) || 'just now'} · ${rev.editedBy?.name || 'Unknown'} · ${rev.changeNote || 'Update'}`;
-      row.onclick = () => { bodyEl.textContent = rev.body || ''; };
+      row.onclick = () => { _renderPressWikiBody(rev.body || ''); };
       revisionsEl.appendChild(row);
     });
     const attachSnap = await getDocs(query(pressWikiAttachmentsCol(_pressWikiModalPressId, pageId), orderBy('uploadedAt', 'desc'), limit(24)));
-    attachSnap.docs.forEach((d, idx) => {
-      const data = d.data() || {};
+    _pressWikiAttachmentsCache = attachSnap.docs.map(d => ({ id: d.id, ...(d.data() || {}) }));
+    _pressWikiAttachmentsCache.forEach((data, idx) => {
       if (!data.url) return;
       const btn = document.createElement('button');
       btn.type = 'button';
@@ -9331,11 +9666,67 @@ async function loadPressWikiPage(pageId) {
       btn.onclick = () => openLightbox(0, [data.url]);
       attachmentsEl.appendChild(btn);
     });
+    renderPressWikiPhotoPicker();
   } catch (e) {
     console.error('loadPressWikiPage error', e);
-    bodyEl.textContent = 'Could not load wiki content.';
+    _renderPressWikiBody('Could not load wiki content.');
   }
 }
+
+function _renderPressWikiBody(text) {
+  const bodyEl = document.getElementById('press-wiki-body');
+  if (!bodyEl) return;
+  const raw = String(text || '');
+  _pressWikiRenderedBodyRaw = raw;
+  bodyEl.innerHTML = '';
+  const lines = raw.split('\n');
+  lines.forEach(line => {
+    const m = line.match(/!\[(.*?)\]\((https?:\/\/[^\s)]+)\)/);
+    if (m) {
+      const figure = document.createElement('figure');
+      figure.style.margin = '8px 0';
+      const img = document.createElement('img');
+      img.src = m[2];
+      img.alt = m[1] || 'wiki image';
+      img.style.maxWidth = '100%';
+      img.style.borderRadius = '10px';
+      img.style.cursor = 'zoom-in';
+      img.onclick = () => openLightbox(0, [m[2]]);
+      figure.appendChild(img);
+      if (m[1]) {
+        const cap = document.createElement('figcaption');
+        cap.style.fontSize = '12px';
+        cap.style.color = 'var(--text3)';
+        cap.textContent = m[1];
+        figure.appendChild(cap);
+      }
+      bodyEl.appendChild(figure);
+    } else {
+      const p = document.createElement('div');
+      p.textContent = line || ' ';
+      let html = p.innerHTML;
+      html = html.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+      html = html.replace(/\*(.+?)\*/g, '<i>$1</i>');
+      html = html.replace(/&lt;u&gt;(.+?)&lt;\/u&gt;/g, '<u>$1</u>');
+      html = html.replace(/&lt;span style=(?:'|&#39;|"|&quot;)color:([a-zA-Z0-9#]+)(?:'|&#39;|"|&quot;)&gt;(.*?)&lt;\/span&gt;/g, '<span style="color:$1">$2</span>');
+      p.innerHTML = html;
+      bodyEl.appendChild(p);
+    }
+  });
+}
+
+window.insertMarkdown = function(textareaId, prefix, suffix) {
+  const ta = document.getElementById(textareaId);
+  if (!ta) return;
+  const start = ta.selectionStart ?? ta.value.length;
+  const end = ta.selectionEnd ?? ta.value.length;
+  const selectedText = ta.value.slice(start, end);
+  const replacement = prefix + selectedText + suffix;
+  ta.value = ta.value.slice(0, start) + replacement + ta.value.slice(end);
+  ta.focus();
+  const newPos = start + prefix.length + selectedText.length;
+  ta.setSelectionRange(newPos, newPos);
+};
 
 window.closePressWikiModal = () => {
   document.getElementById('press-wiki-modal')?.classList.remove('visible');
@@ -9343,11 +9734,18 @@ window.closePressWikiModal = () => {
 };
 
 async function savePressWikiRevision() {
+  if (!_pressWikiCanEdit) return;
   if (!_pressWikiModalPressId || !_pressWikiSelectedPageId || !currentUser) return;
   const title = String(document.getElementById('press-wiki-edit-title')?.value || '').trim();
   const body = String(document.getElementById('press-wiki-edit-body')?.value || '').trim();
-  const changeNote = String(document.getElementById('press-wiki-edit-change-note')?.value || '').trim();
-  if (!body || !changeNote) return alert('Body and change note are required.');
+  const rawChangeNote = String(document.getElementById('press-wiki-edit-change-note')?.value || '').trim();
+  if (!body) return _setPressWikiError('Body is required.');
+  const fallbackActorName = String(currentActor()?.name || currentUser?.displayName || currentUser?.email || 'Unknown').trim() || 'Unknown';
+  const now = new Date();
+  const dd = String(now.getDate()).padStart(2, '0');
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const yy = String(now.getFullYear()).slice(-2);
+  const changeNote = rawChangeNote || `${fallbackActorName} : ${dd}/${mm}/${yy}`;
   const pageRef = pressWikiPageDoc(_pressWikiModalPressId, _pressWikiSelectedPageId);
   const revisionRef = doc(pressWikiRevisionsCol(_pressWikiModalPressId, _pressWikiSelectedPageId));
   await runTransaction(db, async tx => {
@@ -9357,11 +9755,12 @@ async function savePressWikiRevision() {
     tx.set(pageRef, {
       title: title || snap.data()?.title || _pressWikiSelectedPageId,
       slug: _pressWikiSelectedPageId,
-      machineCode: _notesModalMachineCode || '',
+      machineCode: _pressWikiMachineCode || '',
       currentRevisionId: revisionRef.id,
       updatedBy: currentActor(),
       updatedAt: serverTimestamp(),
       lastActivityAt: serverTimestamp(),
+      photoCount: snap.exists() ? (snap.data()?.photoCount || 0) : 0,
       createdBy: snap.exists() ? (snap.data()?.createdBy || currentActor()) : currentActor(),
       createdAt: snap.exists() ? (snap.data()?.createdAt || serverTimestamp()) : serverTimestamp()
     }, { merge: true });
@@ -9369,130 +9768,98 @@ async function savePressWikiRevision() {
   togglePressWikiEditor(false);
   await loadPressWikiPageList();
   await loadPressWikiPage(_pressWikiSelectedPageId);
+  _setPressWikiError('');
 }
 
 function togglePressWikiEditor(show) {
   const editor = document.getElementById('press-wiki-editor');
   if (!editor) return;
+  if (show && !_pressWikiCanEdit) return;
   editor.style.display = show ? 'block' : 'none';
   if (!show) return;
   document.getElementById('press-wiki-edit-title').value = document.getElementById('press-wiki-title')?.textContent || '';
-  document.getElementById('press-wiki-edit-body').value = document.getElementById('press-wiki-body')?.textContent || '';
+  document.getElementById('press-wiki-edit-body').value = _pressWikiCurrentBodyText();
   document.getElementById('press-wiki-edit-change-note').value = '';
+  renderPressWikiPhotoPicker();
 }
 
-window.openNotesModal = (pressId, machineCode) => {
-  _notesModalPressId = pressId;
-  _notesModalMachineCode = String(machineCode || '').trim();
-  document.getElementById(_nid('notes-modal-machine')).textContent = _notesModalMachineCode || '—';
-  const ta = document.getElementById(_nid('notes-textarea'));
-  ta.value = '';
-  ta.style.height = 'auto';
-  document.getElementById(_nid('notes-list')).innerHTML = '';
-  pendingPressNotePhotos = [];
-  renderPreviews(pendingPressNotePhotos, _nid('notes-photo-previews'));
-  const errEl = document.getElementById(_nid('notes-error'));
-  if (errEl) {
-    errEl.style.display = 'none';
-    errEl.textContent = '';
-  }
-  _setNotesHeader([]);
-  _notesModalEl().classList.add('visible');
-  if (_notesUnsubscribe) { _notesUnsubscribe(); _notesUnsubscribe = null; }
-  const q = query(plantCol('pressNotes'), where('pressId', '==', pressId));
-  _notesUnsubscribe = onSnapshot(q, snap => {
-    const notes = snap.docs
-      .map(d => ({ id: d.id, ...d.data() }))
-      .sort((a, b) => {
-        const at = a.createdAt?.toMillis?.() ?? a.createdAt?.seconds * 1000 ?? 0;
-        const bt = b.createdAt?.toMillis?.() ?? b.createdAt?.seconds * 1000 ?? 0;
-        return at - bt; // oldest first (chronological)
-      });
-    _renderPressNotes(notes);
-  }, err => { console.warn('pressNotes listener error', err); });
-  setTimeout(() => ta.focus(), 150);
-};
-
-window.closeNotesModal = () => {
-  _notesModalEl()?.classList.remove('visible');
-  if (_notesUnsubscribe) { _notesUnsubscribe(); _notesUnsubscribe = null; }
-  _notesModalPressId = null;
-  _notesModalMachineCode = null;
-  pendingPressNotePhotos = [];
-  renderPreviews(pendingPressNotePhotos, _nid('notes-photo-previews'));
-};
-
-window.submitPressNote = async () => {
-  const ta = _notesEl('notes-textarea');
-  const rawText = ta.value.trim();
-  const text = rawText || (pendingPressNotePhotos.length ? 'Photo attached' : '');
-  if (!text || !_notesModalPressId || !currentUser) return;
-  const btn = _notesEl('notes-submit-btn');
-  if (btn) btn.disabled = true;
-  const errEl = _notesEl('notes-error');
-  if (errEl) errEl.style.display = 'none';
-  try {
-    const noteRef = doc(plantCol('pressNotes'));
-    const uploadedPhotos = await uploadPressNotePhotosToStorage(noteRef.id, pendingPressNotePhotos);
-    await setDoc(noteRef, {
-      pressId: _notesModalPressId,
-      machineCode: _notesModalMachineCode,
-      text,
-      photoCount: uploadedPhotos.length,
-      photos: uploadedPhotos,
-      createdAt: serverTimestamp(),
-      createdBy: { uid: currentUser.uid, name: currentUser.displayName || currentUser.email || 'Unknown' }
-    });
-    await syncPressNoteToWikiPage(noteRef.id, {
-      pressId: _notesModalPressId,
-      machineCode: _notesModalMachineCode,
-      text,
-      photoCount: uploadedPhotos.length,
-      photos: uploadedPhotos
-    });
-    ta.value = '';
-    ta.style.height = 'auto';
-    pendingPressNotePhotos = [];
-    renderPreviews(pendingPressNotePhotos, _nid('notes-photo-previews'));
-    ta.focus();
-  } catch(e) {
-    console.error('submitPressNote error', e);
-    if (errEl) { errEl.textContent = 'Could not save note: ' + (e.message || 'permission denied'); errEl.style.display = 'block'; }
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-};
-
-async function _deletePressNote(noteId) {
-  if (!noteId || !currentPlantId) return;
-  try {
-    const noteRef = doc(db, 'plants', currentPlantId, 'pressNotes', noteId);
-    const snap = await getDoc(noteRef);
-    const note = snap.exists() ? (snap.data() || {}) : {};
-    const photos = Array.isArray(note.photos) ? note.photos.filter(Boolean) : [];
-    await Promise.allSettled(photos.map(async p => {
-      if (!p?.storagePath) return;
-      const noteStorage = p.storageBucket ? getStorage(app, `gs://${p.storageBucket}`) : storage;
-      await deleteObject(storageRef(noteStorage, p.storagePath));
-    }));
-    await deleteDoc(noteRef);
-  } catch(e) { console.error('deletePressNote error', e); }
+function _pressWikiCurrentBodyText() {
+  return String(_pressWikiRenderedBodyRaw || '');
 }
 
-// Allow Enter to submit (Shift+Enter = newline) — wire up both variant textareas
-['a', 'b'].forEach(v => {
-  document.getElementById('notes-textarea-' + v)?.addEventListener('keydown', e => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitPressNote(); }
+function togglePressWikiCreateRow(show) {
+  const row = document.getElementById('press-wiki-new-page-row');
+  if (!row) return;
+  row.style.display = show ? 'flex' : 'none';
+  if (show) {
+    const inp = document.getElementById('press-wiki-new-page-id');
+    if (inp) inp.value = '';
+  }
+}
+
+function _setPressWikiError(msg) {
+  const el = document.getElementById('press-wiki-error');
+  if (!el) return;
+  const text = String(msg || '').trim();
+  el.textContent = text;
+  el.style.display = text ? 'block' : 'none';
+}
+
+async function createPressWikiPageFromInput() {
+  if (!_pressWikiCanEdit) return;
+  const inp = document.getElementById('press-wiki-new-page-id');
+  const raw = String(inp?.value || '');
+  const pageId = raw.trim().toLowerCase().replace(/[^a-z0-9-_]/g, '-').replace(/-+/g, '-');
+  if (!pageId) return _setPressWikiError('Enter a valid page id (letters, numbers, dash, underscore).');
+  _pressWikiSelectedPageId = pageId;
+  togglePressWikiCreateRow(false);
+  await loadPressWikiPageList();
+  await loadPressWikiPage(pageId);
+  togglePressWikiEditor(true);
+  _setPressWikiError('');
+}
+
+function renderPressWikiPhotoPicker() {
+  const picker = document.getElementById('press-wiki-photo-picker');
+  if (!picker) return;
+  if (!_pressWikiCanEdit || !_pressWikiAttachmentsCache.length || document.getElementById('press-wiki-editor')?.style.display === 'none') {
+    picker.style.display = 'none';
+    picker.innerHTML = '';
+    return;
+  }
+  picker.style.display = 'block';
+  picker.innerHTML = '<div style="font-size:12px;color:var(--text3);margin-bottom:6px;">Insert from press wiki photos</div>';
+  _pressWikiAttachmentsCache.forEach((a, idx) => {
+    if (!a.url) return;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'notes-photo-thumb-btn';
+    btn.title = a.caption || `Photo ${idx + 1}`;
+    btn.style.marginRight = '6px';
+    const img = document.createElement('img');
+    img.className = 'notes-photo-thumb';
+    img.src = a.url;
+    img.alt = a.caption || `Photo ${idx + 1}`;
+    btn.appendChild(img);
+    btn.onclick = () => insertWikiPhotoIntoEditor(a);
+    picker.appendChild(btn);
   });
-  document.getElementById('notes-camera-btn-' + v)?.addEventListener('click', () => document.getElementById('notes-camera-input-' + v)?.click());
-  document.getElementById('notes-library-btn-' + v)?.addEventListener('click', () => document.getElementById('notes-library-input-' + v)?.click());
-  document.getElementById('notes-camera-input-' + v)?.addEventListener('change', function(){ handleFiles(this.files, pendingPressNotePhotos, _nid('notes-photo-previews')); this.value=''; });
-  document.getElementById('notes-library-input-' + v)?.addEventListener('change', function(){ handleFiles(this.files, pendingPressNotePhotos, _nid('notes-photo-previews')); this.value=''; });
-  document.getElementById('notes-modal-' + v)?.addEventListener('click', e => {
-    if (e.target === document.getElementById('notes-modal-' + v)) closeNotesModal();
-  });
-  document.getElementById('open-wiki-btn-' + v)?.addEventListener('click', openPressWikiModal);
-});
+}
+
+function insertWikiPhotoIntoEditor(photo) {
+  const ta = document.getElementById('press-wiki-edit-body');
+  if (!ta || !photo?.url) return;
+  const snippet = `![${photo.caption || 'Photo'}](${photo.url})`;
+  const start = ta.selectionStart ?? ta.value.length;
+  const end = ta.selectionEnd ?? ta.value.length;
+  ta.value = ta.value.slice(0, start) + snippet + ta.value.slice(end);
+  ta.focus();
+  const pos = start + snippet.length;
+  ta.setSelectionRange(pos, pos);
+}
+
+
+
 
 document.getElementById('press-wiki-modal')?.addEventListener('click', e => {
   if (e.target === document.getElementById('press-wiki-modal')) closePressWikiModal();
@@ -9501,14 +9868,97 @@ document.getElementById('press-wiki-page-select')?.addEventListener('change', e 
 document.getElementById('press-wiki-edit-btn')?.addEventListener('click', () => togglePressWikiEditor(true));
 document.getElementById('press-wiki-cancel-edit-btn')?.addEventListener('click', () => togglePressWikiEditor(false));
 document.getElementById('press-wiki-save-btn')?.addEventListener('click', () => savePressWikiRevision());
-document.getElementById('press-wiki-new-page-btn')?.addEventListener('click', async () => {
-  const raw = prompt('New wiki page id (example: setup-notes):', '');
-  const pageId = String(raw || '').trim().toLowerCase().replace(/[^a-z0-9-_]/g, '-').replace(/-+/g, '-');
-  if (!pageId) return;
-  _pressWikiSelectedPageId = pageId;
-  await loadPressWikiPageList();
-  await loadPressWikiPage(pageId);
-  togglePressWikiEditor(true);
+document.getElementById('press-wiki-insert-photo-btn')?.addEventListener('click', () => {
+  document.getElementById('press-wiki-file-input')?.click();
+});
+
+document.getElementById('press-wiki-file-input')?.addEventListener('change', async (e) => {
+  await handlePressWikiFilesUpload(e.target.files, false);
+  e.target.value = '';
+});
+
+const wikiEditBody = document.getElementById('press-wiki-edit-body');
+if (wikiEditBody) {
+  wikiEditBody.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    wikiEditBody.style.borderColor = 'var(--accent)';
+    wikiEditBody.style.background = 'var(--bg2)';
+  });
+  wikiEditBody.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    wikiEditBody.style.borderColor = 'var(--border)';
+    wikiEditBody.style.background = 'var(--bg3)';
+  });
+  wikiEditBody.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    wikiEditBody.style.borderColor = 'var(--border)';
+    wikiEditBody.style.background = 'var(--bg3)';
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      await handlePressWikiFilesUpload(e.dataTransfer.files, true);
+    }
+  });
+}
+
+async function handlePressWikiFilesUpload(files, autoInsert) {
+  if (!files || !files.length || !_pressWikiModalPressId || !_pressWikiSelectedPageId) return;
+  _setPressWikiError("Uploading photos...");
+  try {
+    let uploadedCount = 0;
+    for (const file of files) {
+      if (!file.type.startsWith('image/')) continue;
+      const attId = 'att_' + Date.now() + '_' + Math.floor(Math.random()*1000);
+      const ext = file.name.split('.').pop() || 'png';
+      const path = `plants/${currentPlantId}/presses/${_pressWikiModalPressId}/wikiPages/${_pressWikiSelectedPageId}/attachments/${attId}.${ext}`;
+      const sRef = storageRef(storage, path);
+      
+      await uploadBytesResumable(sRef, file);
+      const url = await getDownloadURL(sRef);
+      
+      const attDoc = {
+        storagePath: path,
+        url: url,
+        contentType: file.type,
+        caption: file.name,
+        uploadedBy: currentActor(),
+        uploadedAt: serverTimestamp()
+      };
+      
+      await setDoc(doc(db, `plants/${currentPlantId}/presses/${_pressWikiModalPressId}/wikiPages/${_pressWikiSelectedPageId}/attachments/${attId}`), attDoc);
+      uploadedCount++;
+      
+      if (autoInsert) {
+        const md = `\n![${attDoc.caption}](${attDoc.url})\n`;
+        const pos = wikiEditBody.selectionStart;
+        const text = wikiEditBody.value;
+        wikiEditBody.value = text.slice(0, pos) + md + text.slice(pos);
+        wikiEditBody.focus();
+        const newPos = pos + md.length;
+        wikiEditBody.setSelectionRange(newPos, newPos);
+      }
+    }
+    
+    if (uploadedCount > 0) {
+      const pageRef = pressWikiPageDoc(_pressWikiModalPressId, _pressWikiSelectedPageId);
+      const snap = await getDoc(pageRef);
+      if (snap.exists()) {
+        const currentCount = snap.data()?.photoCount || 0;
+        await updateDoc(pageRef, { photoCount: currentCount + uploadedCount });
+      }
+    }
+    
+    _setPressWikiError('');
+    await loadPressWikiPage(_pressWikiSelectedPageId);
+  } catch (err) {
+    _setPressWikiError("Upload failed: " + err.message);
+  }
+}
+document.getElementById('press-wiki-new-page-btn')?.addEventListener('click', () => togglePressWikiCreateRow(true));
+document.getElementById('press-wiki-cancel-create-page-btn')?.addEventListener('click', () => togglePressWikiCreateRow(false));
+document.getElementById('press-wiki-create-page-btn')?.addEventListener('click', () => createPressWikiPageFromInput());
+document.getElementById('press-wiki-cms-btn')?.addEventListener('click', () => {
+  if (!_pressWikiModalPressId) return;
+  const url = `wiki-cms.html?plantId=${encodeURIComponent(currentPlantId)}&pressId=${encodeURIComponent(_pressWikiModalPressId)}&pageId=${encodeURIComponent(_pressWikiSelectedPageId || '')}`;
+  window.location.href = url;
 });
 
 // ── EXPORT PDF ──
