@@ -3102,7 +3102,6 @@ function startListener() {
     void _refreshRoleAlertBadgeCount();
     if (!issueHistoryCursor && snap.docs.length) {
       issueHistoryCursor = snap.docs[snap.docs.length - 1];
-      loadIssueHistoryPage().catch(() => {});
     }
     setSyncStatus('ok', 'Live — synced across all devices');
   }, err => {
@@ -3131,7 +3130,6 @@ function startListener() {
       void _refreshRoleAlertBadgeCount();
       if (snap.docs.length) {
         issueHistoryCursor = snap.docs[snap.docs.length - 1];
-        loadIssueHistoryPage().catch(() => {});
       }
       setSyncStatus('ok', 'Live connection delayed — loaded cached/latest data');
     } catch (e) {
