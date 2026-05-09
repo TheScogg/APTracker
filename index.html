@@ -643,88 +643,7 @@
   </div>
 </div>
 
-<!-- PRESS NOTES MODAL — VARIANT A: LOGBOOK -->
-<div class="modal-overlay" id="notes-modal-a">
-  <div class="modal" style="max-width:480px;">
-    <div class="notes-modal-a-wrap">
-      <div class="notes-modal-a-header">
-        <div class="notes-modal-a-id-plate">
-          <div class="notes-modal-a-plate-bar"></div>
-          <div class="notes-modal-a-plate-text">
-            <div class="notes-modal-a-subtitle">PRESS NOTES</div>
-            <div class="notes-modal-a-machine" id="notes-modal-machine-a"></div>
-            <div class="notes-modal-a-context" id="notes-modal-context-a"></div>
-            <div class="notes-modal-a-meta" id="notes-modal-meta-a"></div>
-          </div>
-        </div>
-        <button class="notes-modal-a-close" onclick="closeNotesModal()">✕</button>
-      </div>
-      <div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
-        <button id="open-wiki-btn-a" class="photo-pick-btn" type="button">📚 Open Wiki</button>
-      </div>
-      <div id="notes-list-a" class="log-timeline"></div>
-      <div id="notes-error-a" style="display:none;font-size:11px;color:var(--red);margin-top:4px;"></div>
-      <div class="notes-attach">
-        <div class="notes-attach-label">Attach Photos</div>
-        <div class="photo-btn-row notes-photo-btn-row">
-          <button class="photo-pick-btn" id="notes-camera-btn-a" type="button">📷 Take Photo</button>
-          <button class="photo-pick-btn" id="notes-library-btn-a" type="button">🖼️ Choose File</button>
-        </div>
-        <input type="file" id="notes-camera-input-a" accept="image/*" capture="environment" style="display:none">
-        <input type="file" id="notes-library-input-a" accept="image/*" multiple style="display:none">
-        <div class="photo-previews notes-photo-previews" id="notes-photo-previews-a"></div>
-      </div>
-      <div class="log-compose">
-        <div class="log-compose-label">Append to Log</div>
-        <div class="log-compose-row">
-          <textarea id="notes-textarea-a" class="log-compose-textarea" rows="1" placeholder="Record an observation…" oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"></textarea>
-          <button id="notes-submit-btn-a" class="log-compose-btn" onclick="submitPressNote()">LOG IT</button>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
 
-<!-- PRESS NOTES MODAL — VARIANT B: TEAM CHANNEL -->
-<div class="modal-overlay" id="notes-modal-b">
-  <div class="modal" style="max-width:480px;">
-    <div class="notes-modal-b-header">
-      <div class="notes-modal-b-channel">
-        <div class="notes-modal-b-channel-name">
-          <span class="notes-modal-b-hash">#</span><span class="notes-modal-b-machine" id="notes-modal-machine-b"></span>
-        </div>
-        <div class="notes-modal-b-label">Press Notes</div>
-        <div class="notes-modal-b-context" id="notes-modal-context-b"></div>
-        <div class="notes-modal-b-meta" id="notes-modal-meta-b"></div>
-      </div>
-      <button class="notes-modal-b-close" onclick="closeNotesModal()">✕ close</button>
-    </div>
-    <div style="display:flex;justify-content:flex-end;margin:6px 0 10px;">
-      <button id="open-wiki-btn-b" class="photo-pick-btn" type="button">📚 Open Wiki</button>
-    </div>
-    <div id="notes-list-b" class="chat-list"></div>
-    <div id="notes-error-b" style="display:none;font-size:11px;color:var(--red);margin-top:4px;"></div>
-    <div class="notes-attach">
-      <div class="notes-attach-label">Attach Photos</div>
-      <div class="photo-btn-row notes-photo-btn-row">
-        <button class="photo-pick-btn" id="notes-camera-btn-b" type="button">📷 Take Photo</button>
-        <button class="photo-pick-btn" id="notes-library-btn-b" type="button">🖼️ Choose File</button>
-      </div>
-      <input type="file" id="notes-camera-input-b" accept="image/*" capture="environment" style="display:none">
-      <input type="file" id="notes-library-input-b" accept="image/*" multiple style="display:none">
-      <div class="photo-previews notes-photo-previews" id="notes-photo-previews-b"></div>
-    </div>
-    <div class="chat-compose">
-      <div class="chat-compose-row">
-        <textarea id="notes-textarea-b" class="chat-compose-textarea" rows="1" placeholder="Add a note…" oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"></textarea>
-        <button id="notes-submit-btn-b" class="chat-send-btn" onclick="submitPressNote()" title="Send">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13.5 2.5L7 9M13.5 2.5L9 13.5 7 9l-4.5-2 9-4.5z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
-      </div>
-      <div class="chat-compose-hint">Shift+Enter for new line</div>
-    </div>
-  </div>
-</div>
 
 <!-- PRESS WIKI MODAL -->
 <div class="modal-overlay" id="press-wiki-modal">
@@ -760,6 +679,7 @@
         <button id="press-wiki-save-btn" class="btn btn-blue" type="button">Save Revision</button>
         <button id="press-wiki-cancel-edit-btn" class="btn btn-ghost" type="button">Cancel</button>
       </div>
+      <input type="file" id="press-wiki-file-input" accept="image/*" multiple style="display:none">
       <div id="press-wiki-photo-picker" style="margin-top:8px;display:none;border:1px solid var(--line);border-radius:10px;padding:8px;"></div>
     </div>
     <div id="press-wiki-attachments" style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px;"></div>

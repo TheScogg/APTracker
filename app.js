@@ -3304,7 +3304,7 @@ window.handlePressClick = p => {
   if (mapMode === 'hist') { showMachineHistory(p); return; }
   if (mapMode === 'notes') {
     const pressId = toPressId(p);
-    openNotesModal(pressId, p);
+    openPressWikiModal(pressId, p);
     return;
   }
 
@@ -3461,7 +3461,7 @@ window.handlePressClick = p => {
   notesBtn.className = 'mc-toolbar-btn';
   notesBtn.style.color = 'var(--teal)';
   notesBtn.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><path d="M3 2h10a1 1 0 011 1v8a1 1 0 01-1 1H5l-3 2V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>Notes';
-  notesBtn.onclick = () => { closeMiniCard(); openNotesModal(pressId, p); };
+  notesBtn.onclick = () => { closeMiniCard(); openPressWikiModal(pressId, p); };
   // Badge dot if notes exist (load count async without blocking)
   (async () => {
     try {
@@ -6795,7 +6795,7 @@ function renderIssues() {
         // Closed: swipe right → open notes modal for this press
         _swipeJustHappened = true;
         setTimeout(() => { _swipeJustHappened = false; }, 50);
-        openNotesModal(toPressId(issue.machine), issue.machine);
+        openPressWikiModal(toPressId(issue.machine), issue.machine);
       } else if (isOpen() && Math.abs(dx) > 25) {
         // Open: swipe either direction to close
         _swipeJustHappened = true;
@@ -6847,7 +6847,7 @@ function renderIssues() {
       } else if (!isOpen() && dx > 25) {
         _swipeJustHappened = true;
         setTimeout(() => { _swipeJustHappened = false; }, 50);
-        openNotesModal(toPressId(issue.machine), issue.machine);
+        openPressWikiModal(toPressId(issue.machine), issue.machine);
       } else if (isOpen() && Math.abs(dx) > 25) {
         _swipeJustHappened = true;
         setTimeout(() => { _swipeJustHappened = false; }, 50);
@@ -9514,19 +9514,13 @@ document.getElementById('messaging-photo-input')?.addEventListener('change', e =
 
 // ── PRESS NOTES ──
 // Toggle between 'a' (Logbook) and 'b' (Team Channel) to switch prototypes
-const NOTES_VARIANT = 'a';
 
-let _notesUnsubscribe = null;
-let _notesModalPressId = null;
-let _notesModalMachineCode = null;
-let pendingPressNotePhotos = [];
 let _pressWikiModalPressId = null;
 let _pressWikiSelectedPageId = 'shift-notes';
 let _pressWikiCanEdit = false;
 let _pressWikiAttachmentsCache = [];
+let _pressWikiMachineCode = null;
 
-function _nid(base) { return base + '-' + NOTES_VARIANT; }
-function _notesModalEl() { return document.getElementById('notes-modal-' + NOTES_VARIANT); }
 function _notesEl(base) { return document.getElementById(base + '-' + NOTES_VARIANT); }
 
 function _relativeTime(ts) {
@@ -9543,278 +9537,10 @@ function _relativeTime(ts) {
   return new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-function _notesPressStats(machineCode) {
-  const normalizedMachine = String(machineCode || '').trim();
-  const rowName = findRowNameForMachine(normalizedMachine);
-  const pressIssues = Array.isArray(issues)
-    ? issues.filter(issue => String(issue.machine || issue.machineCode || '').trim() === normalizedMachine)
-    : [];
-  const openIssues = pressIssues.filter(issue => currentStatusKey(issue) !== 'resolved');
-  let statusLabel = 'Clear';
-  let statusColor = 'var(--green)';
-  if (openIssues.length === 1) {
-    const statusKey = currentStatusKey(openIssues[0]);
-    const statusDef = getStatusDef(statusKey);
-    statusLabel = statusDef?.label || statusKey || 'Open';
-    statusColor = getStatusColor(statusKey);
-  } else if (openIssues.length > 1) {
-    statusLabel = `${openIssues.length} open issues`;
-    statusColor = 'var(--accent)';
-  }
-  return { rowName, normalizedMachine, openIssues, statusLabel, statusColor };
-}
-
-function _notesHeaderCopy(machineCode, notes) {
-  const stats = _notesPressStats(machineCode);
-  const noteCount = Array.isArray(notes) ? notes.length : 0;
-  const latestNote = noteCount > 0 ? notes[notes.length - 1] : null;
-  const latestNoteLabel = latestNote ? _relativeTime(latestNote.createdAt) || 'just now' : '';
-  const contextLine = stats.rowName && stats.rowName !== 'Other'
-    ? `${stats.rowName} · Press ${stats.normalizedMachine || '—'}`
-    : `Press ${stats.normalizedMachine || '—'}`;
-  const metaLine = `${stats.statusLabel} · ${noteCount} note${noteCount === 1 ? '' : 's'}${latestNote ? ` · Last note ${latestNoteLabel}` : ' · No notes yet'}`;
-  return { ...stats, noteCount, latestNote, contextLine, metaLine };
-}
-
-function _setNotesHeader(notes = []) {
-  if (!_notesModalMachineCode) return;
-  const copy = _notesHeaderCopy(_notesModalMachineCode, notes);
-  const contextEl = _notesEl('notes-modal-context');
-  const metaEl = _notesEl('notes-modal-meta');
-  if (contextEl) {
-    contextEl.textContent = copy.contextLine;
-  }
-  if (metaEl) {
-    metaEl.textContent = copy.metaLine;
-    metaEl.style.color = copy.statusColor;
-  }
-  const notesListEl = _notesEl('notes-list');
-  if (notesListEl && notesListEl.dataset) {
-    notesListEl.dataset.noteCount = String(copy.noteCount);
-  }
-}
-
-async function uploadPressNotePhotosToStorage(noteId, photos) {
-  const out = [];
-  for (let idx = 0; idx < (photos || []).length; idx++) {
-    const p = photos[idx] || {};
-    const src = String(p.dataUrl || '');
-    if (!src.startsWith('data:')) { out.push(p); continue; }
-    const meta = parseDataUrlMeta(src);
-    if (!meta) { out.push(p); continue; }
-    const ext = extFromContentType(meta.contentType);
-    const fileName = `${Date.now()}_${idx}.${ext}`;
-    const path = `plants/${currentPlantId}/pressNotes/${noteId}/photos/${fileName}`;
-    const sRef = storageRef(storage, path);
-    await uploadString(sRef, src, 'data_url');
-    const url = await getDownloadURL(sRef);
-    out.push({
-      name: p.name || fileName,
-      dataUrl: url,
-      url,
-      storagePath: path,
-      storageBucket: sRef.bucket,
-      contentType: meta.contentType,
-      sizeBytes: meta.sizeBytes,
-      source: 'storage'
-    });
-  }
-  return out;
-}
-
-function _pressNotePhotoUrls(note) {
-  return Array.isArray(note?.photos)
-    ? note.photos.map(p => p?.dataUrl || p?.url || '').filter(Boolean)
-    : [];
-}
-
-function _renderPressNotePhotoThumbs(note) {
-  const urls = _pressNotePhotoUrls(note);
-  if (!urls.length) return null;
-  const wrap = document.createElement('div');
-  wrap.className = 'notes-photo-strip';
-  urls.forEach((url, idx) => {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'notes-photo-thumb-btn';
-    btn.title = `Open photo ${idx + 1}`;
-    btn.onclick = () => openLightbox(idx, urls);
-    const img = document.createElement('img');
-    img.className = 'notes-photo-thumb';
-    img.src = url;
-    img.alt = `Press note photo ${idx + 1}`;
-    btn.appendChild(img);
-    wrap.appendChild(btn);
-  });
-  return wrap;
-}
-
-async function syncPressNoteToWikiPage(noteRefId, payload) {
-  if (!currentPlantId || !payload?.pressId || !payload?.machineCode) return;
-  const pressId = String(payload.pressId);
-  const machineCode = String(payload.machineCode || '').trim();
-  if (!machineCode) return;
-  const pageId = 'shift-notes';
-  const pageRef = pressWikiPageDoc(pressId, pageId);
-  const revisionRef = doc(pressWikiRevisionsCol(pressId, pageId));
-  const revisionBody = `${payload.text || ''}`.trim();
-  const summary = revisionBody.slice(0, 180);
-  const searchText = [machineCode, 'shift notes', revisionBody].join(' ').toLowerCase().replace(/\s+/g, ' ').trim().slice(0, 2000);
-  await runTransaction(db, async tx => {
-    const pageSnap = await tx.get(pageRef);
-    const prevRevisionId = pageSnap.exists() ? (pageSnap.data()?.currentRevisionId || null) : null;
-    tx.set(revisionRef, {
-      body: revisionBody,
-      changeNote: `Imported from press note ${noteRefId}`,
-      prevRevisionId,
-      sourceNoteId: noteRefId,
-      editedBy: currentActor(),
-      editedAt: serverTimestamp()
-    });
-    tx.set(pageRef, {
-      title: 'Shift Notes',
-      slug: 'shift-notes',
-      summary,
-      tags: ['notes', 'shift'],
-      visibility: 'plant',
-      isPinned: true,
-      isLocked: false,
-      machineCode,
-      currentRevisionId: revisionRef.id,
-      photoCount: payload.photoCount || 0,
-      searchText,
-      createdBy: pageSnap.exists() ? (pageSnap.data()?.createdBy || currentActor()) : currentActor(),
-      createdAt: pageSnap.exists() ? (pageSnap.data()?.createdAt || serverTimestamp()) : serverTimestamp(),
-      updatedBy: currentActor(),
-      updatedAt: serverTimestamp(),
-      lastActivityAt: serverTimestamp()
-    }, { merge: true });
-  });
-  if (Array.isArray(payload.photos) && payload.photos.length) {
-    const batch = writeBatch(db);
-    payload.photos.forEach(photo => {
-      const attachmentRef = doc(pressWikiAttachmentsCol(pressId, pageId));
-      batch.set(attachmentRef, {
-        storagePath: photo.storagePath || null,
-        storageBucket: photo.storageBucket || null,
-        contentType: photo.contentType || null,
-        caption: photo.name || 'Press note photo',
-        linkedRevisionId: revisionRef.id,
-        sourceNoteId: noteRefId,
-        uploadedBy: currentActor(),
-        uploadedAt: serverTimestamp(),
-        url: photo.url || photo.dataUrl || null,
-        sizeBytes: photo.sizeBytes || null
-      });
-    });
-    await batch.commit();
-  }
-}
-
-function _renderPressNotes(notes) {
-  const list = document.getElementById(_nid('notes-list'));
-  if (!list) return;
-  list.innerHTML = '';
-  _setNotesHeader(notes);
-
-  if (NOTES_VARIANT === 'a') {
-    // ── Variant A: Logbook / timeline ──
-    notes.forEach(n => {
-      const isOwn = n.createdBy?.uid === currentUser?.uid;
-      const isAdmin = currentUserRole === 'admin';
-      const entry = document.createElement('div');
-      entry.className = 'log-entry';
-      const leftCol = document.createElement('div');
-      leftCol.className = 'log-entry-left';
-      const dot = document.createElement('div');
-      dot.className = 'log-entry-dot';
-      const line = document.createElement('div');
-      line.className = 'log-entry-line';
-      leftCol.appendChild(dot);
-      leftCol.appendChild(line);
-      const body = document.createElement('div');
-      body.className = 'log-entry-body';
-      const header = document.createElement('div');
-      header.className = 'log-entry-header';
-      const authorEl = document.createElement('span');
-      authorEl.className = 'log-entry-author';
-      authorEl.textContent = n.createdBy?.name || 'Unknown';
-      const timeEl = document.createElement('span');
-      timeEl.className = 'log-entry-time';
-      timeEl.textContent = _relativeTime(n.createdAt);
-      header.appendChild(authorEl);
-      header.appendChild(timeEl);
-      if (isOwn || isAdmin) {
-        const del = document.createElement('button');
-        del.className = 'log-entry-del';
-        del.title = 'Delete entry';
-        del.textContent = '✕';
-        del.onclick = () => _deletePressNote(n.id);
-        header.appendChild(del);
-      }
-      const textEl = document.createElement('div');
-      textEl.className = 'log-entry-text';
-      textEl.textContent = n.text;
-      body.appendChild(header);
-      body.appendChild(textEl);
-      const thumbs = _renderPressNotePhotoThumbs(n);
-      if (thumbs) body.appendChild(thumbs);
-      entry.appendChild(leftCol);
-      entry.appendChild(body);
-      list.appendChild(entry);
-    });
-    list.scrollTop = list.scrollHeight;
-
-  } else {
-    // ── Variant B: Team Channel / chat bubbles ──
-    if (notes.length === 0) {
-      list.innerHTML = `<div class="chat-empty"><div class="chat-empty-icon"><svg width="36" height="36" viewBox="0 0 32 32" fill="none"><path d="M6 4h20a2 2 0 012 2v16a2 2 0 01-2 2H10l-6 4V6a2 2 0 012-2z" stroke="var(--text3)" stroke-width="1.5" stroke-linejoin="round"/><path d="M10 12h12M10 17h8" stroke="var(--text3)" stroke-width="1.3" stroke-linecap="round"/></svg></div><div class="chat-empty-text">Start the conversation</div></div>`;
-      return;
-    }
-    notes.forEach(n => {
-      const isOwn = n.createdBy?.uid === currentUser?.uid;
-      const isAdmin = currentUserRole === 'admin';
-      const msg = document.createElement('div');
-      msg.className = 'chat-msg' + (isOwn ? ' mine' : '');
-      if (!isOwn) {
-        const avatar = document.createElement('div');
-        avatar.className = 'chat-avatar';
-        avatar.textContent = (n.createdBy?.name || '?').charAt(0).toUpperCase();
-        msg.appendChild(avatar);
-      }
-      const wrap = document.createElement('div');
-      wrap.className = 'chat-bubble-wrap';
-      const bubble = document.createElement('div');
-      bubble.className = 'chat-bubble';
-      const textEl = document.createElement('div');
-      textEl.className = 'chat-bubble-text';
-      textEl.textContent = n.text;
-      bubble.appendChild(textEl);
-      const thumbs = _renderPressNotePhotoThumbs(n);
-      if (thumbs) bubble.appendChild(thumbs);
-      if (isOwn || isAdmin) {
-        const del = document.createElement('button');
-        del.className = 'chat-del-btn';
-        del.title = 'Delete';
-        del.innerHTML = '<svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M3 4h10M6 4V2h4v2M5 4v9a1 1 0 001 1h4a1 1 0 001-1V4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-        del.onclick = () => _deletePressNote(n.id);
-        bubble.appendChild(del);
-      }
-      const meta = document.createElement('div');
-      meta.className = 'chat-meta';
-      meta.textContent = (isOwn ? 'You' : (n.createdBy?.name || 'Unknown')) + ' · ' + _relativeTime(n.createdAt);
-      wrap.appendChild(bubble);
-      wrap.appendChild(meta);
-      msg.appendChild(wrap);
-      list.appendChild(msg);
-    });
-    list.scrollTop = list.scrollHeight;
-  }
-}
-
-async function openPressWikiModal() {
-  if (!_notesModalPressId || !currentPlantId) return;
-  _pressWikiModalPressId = String(_notesModalPressId);
+async function openPressWikiModal(pressId, machineCode) {
+  if (!pressId || !currentPlantId) return;
+  _pressWikiModalPressId = String(pressId);
+  _pressWikiMachineCode = String(machineCode || '').trim();
   const modal = document.getElementById('press-wiki-modal');
   const titleEl = document.getElementById('press-wiki-title');
   const metaEl = document.getElementById('press-wiki-meta');
@@ -9831,7 +9557,7 @@ async function openPressWikiModal() {
   if (cmsBtn) cmsBtn.style.display = _pressWikiCanEdit ? '' : 'none';
   _setPressWikiError('');
   titleEl.textContent = 'Shift Notes';
-  metaEl.textContent = `Press ${_notesModalMachineCode || '—'}`;
+  metaEl.textContent = `Press ${_pressWikiMachineCode || '—'}`;
   bodyEl.textContent = 'Loading wiki...';
   revisionsEl.innerHTML = '';
   attachmentsEl.innerHTML = '';
@@ -9891,7 +9617,7 @@ async function loadPressWikiPage(pageId) {
     const page = pageSnap.data() || {};
     const currentRevisionId = page.currentRevisionId || null;
     titleEl.textContent = page.title || pageId;
-    metaEl.textContent = `Press ${page.machineCode || _notesModalMachineCode || '—'} · Updated ${_relativeTime(page.updatedAt) || 'recently'}`;
+    metaEl.textContent = `Press ${page.machineCode || _pressWikiMachineCode || '—'} · Updated ${_relativeTime(page.updatedAt) || 'recently'}`;
     const revSnap = await getDocs(query(pressWikiRevisionsCol(_pressWikiModalPressId, pageId), orderBy('editedAt', 'desc'), limit(30)));
     const revisions = revSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     const currentRevision = revisions.find(r => r.id === currentRevisionId) || revisions[0] || null;
@@ -9988,11 +9714,12 @@ async function savePressWikiRevision() {
     tx.set(pageRef, {
       title: title || snap.data()?.title || _pressWikiSelectedPageId,
       slug: _pressWikiSelectedPageId,
-      machineCode: _notesModalMachineCode || '',
+      machineCode: _pressWikiMachineCode || '',
       currentRevisionId: revisionRef.id,
       updatedBy: currentActor(),
       updatedAt: serverTimestamp(),
       lastActivityAt: serverTimestamp(),
+      photoCount: snap.exists() ? (snap.data()?.photoCount || 0) : 0,
       createdBy: snap.exists() ? (snap.data()?.createdBy || currentActor()) : currentActor(),
       createdAt: snap.exists() ? (snap.data()?.createdAt || serverTimestamp()) : serverTimestamp()
     }, { merge: true });
@@ -10092,109 +9819,7 @@ function insertWikiPhotoIntoEditor(photo) {
   ta.setSelectionRange(pos, pos);
 }
 
-window.openNotesModal = (pressId, machineCode) => {
-  _notesModalPressId = pressId;
-  _notesModalMachineCode = String(machineCode || '').trim();
-  document.getElementById(_nid('notes-modal-machine')).textContent = _notesModalMachineCode || '—';
-  const ta = document.getElementById(_nid('notes-textarea'));
-  ta.value = '';
-  ta.style.height = 'auto';
-  document.getElementById(_nid('notes-list')).innerHTML = '';
-  pendingPressNotePhotos = [];
-  renderPreviews(pendingPressNotePhotos, _nid('notes-photo-previews'));
-  const errEl = document.getElementById(_nid('notes-error'));
-  if (errEl) {
-    errEl.style.display = 'none';
-    errEl.textContent = '';
-  }
-  _setNotesHeader([]);
-  _notesModalEl().classList.add('visible');
-  if (_notesUnsubscribe) { _notesUnsubscribe(); _notesUnsubscribe = null; }
-  const q = query(plantCol('pressNotes'), where('pressId', '==', pressId));
-  _notesUnsubscribe = onSnapshot(q, snap => {
-    const notes = snap.docs
-      .map(d => ({ id: d.id, ...d.data() }))
-      .sort((a, b) => {
-        const at = a.createdAt?.toMillis?.() ?? a.createdAt?.seconds * 1000 ?? 0;
-        const bt = b.createdAt?.toMillis?.() ?? b.createdAt?.seconds * 1000 ?? 0;
-        return at - bt; // oldest first (chronological)
-      });
-    _renderPressNotes(notes);
-  }, err => { console.warn('pressNotes listener error', err); });
-  setTimeout(() => ta.focus(), 150);
-};
 
-window.closeNotesModal = () => {
-  _notesModalEl()?.classList.remove('visible');
-  if (_notesUnsubscribe) { _notesUnsubscribe(); _notesUnsubscribe = null; }
-  _notesModalPressId = null;
-  _notesModalMachineCode = null;
-  pendingPressNotePhotos = [];
-  renderPreviews(pendingPressNotePhotos, _nid('notes-photo-previews'));
-};
-
-window.submitPressNote = async () => {
-  const ta = _notesEl('notes-textarea');
-  const rawText = ta.value.trim();
-  const text = rawText || (pendingPressNotePhotos.length ? 'Photo attached' : '');
-  if (!text || !_notesModalPressId || !currentUser) return;
-  const btn = _notesEl('notes-submit-btn');
-  if (btn) btn.disabled = true;
-  const errEl = _notesEl('notes-error');
-  if (errEl) errEl.style.display = 'none';
-  try {
-    const noteRef = doc(plantCol('pressNotes'));
-    const uploadedPhotos = await uploadPressNotePhotosToStorage(noteRef.id, pendingPressNotePhotos);
-    await setDoc(noteRef, {
-      pressId: _notesModalPressId,
-      machineCode: _notesModalMachineCode,
-      text,
-      photoCount: uploadedPhotos.length,
-      photos: uploadedPhotos,
-      createdAt: serverTimestamp(),
-      createdBy: { uid: currentUser.uid, name: currentUser.displayName || currentUser.email || 'Unknown' }
-    });
-    await syncPressNoteToWikiPage(noteRef.id, {
-      pressId: _notesModalPressId,
-      machineCode: _notesModalMachineCode,
-      text,
-      photoCount: uploadedPhotos.length,
-      photos: uploadedPhotos
-    });
-    ta.value = '';
-    ta.style.height = 'auto';
-    pendingPressNotePhotos = [];
-    renderPreviews(pendingPressNotePhotos, _nid('notes-photo-previews'));
-    ta.focus();
-  } catch(e) {
-    console.error('submitPressNote error', e);
-    if (errEl) { errEl.textContent = 'Could not save note: ' + (e.message || 'permission denied'); errEl.style.display = 'block'; }
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-};
-
-async function _deletePressNote(noteId) {
-  if (!noteId || !currentPlantId) return;
-  try {
-    const noteRef = doc(db, 'plants', currentPlantId, 'pressNotes', noteId);
-    const snap = await getDoc(noteRef);
-    const note = snap.exists() ? (snap.data() || {}) : {};
-    const photos = Array.isArray(note.photos) ? note.photos.filter(Boolean) : [];
-    await Promise.allSettled(photos.map(async p => {
-      if (!p?.storagePath) return;
-      const noteStorage = p.storageBucket ? getStorage(app, `gs://${p.storageBucket}`) : storage;
-      await deleteObject(storageRef(noteStorage, p.storagePath));
-    }));
-    await deleteDoc(noteRef);
-  } catch(e) { console.error('deletePressNote error', e); }
-}
-
-// Allow Enter to submit (Shift+Enter = newline) — wire up both variant textareas
-['a', 'b'].forEach(v => {
-  document.getElementById('notes-textarea-' + v)?.addEventListener('keydown', e => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitPressNote(); }
-  });
   document.getElementById('notes-camera-btn-' + v)?.addEventListener('click', () => document.getElementById('notes-camera-input-' + v)?.click());
   document.getElementById('notes-library-btn-' + v)?.addEventListener('click', () => document.getElementById('notes-library-input-' + v)?.click());
   document.getElementById('notes-camera-input-' + v)?.addEventListener('change', function(){ handleFiles(this.files, pendingPressNotePhotos, _nid('notes-photo-previews')); this.value=''; });
@@ -10213,11 +9838,89 @@ document.getElementById('press-wiki-edit-btn')?.addEventListener('click', () => 
 document.getElementById('press-wiki-cancel-edit-btn')?.addEventListener('click', () => togglePressWikiEditor(false));
 document.getElementById('press-wiki-save-btn')?.addEventListener('click', () => savePressWikiRevision());
 document.getElementById('press-wiki-insert-photo-btn')?.addEventListener('click', () => {
-  const picker = document.getElementById('press-wiki-photo-picker');
-  if (!picker) return;
-  picker.style.display = picker.style.display === 'none' ? 'block' : 'none';
-  if (picker.style.display === 'block') renderPressWikiPhotoPicker();
+  document.getElementById('press-wiki-file-input')?.click();
 });
+
+document.getElementById('press-wiki-file-input')?.addEventListener('change', async (e) => {
+  await handlePressWikiFilesUpload(e.target.files, false);
+  e.target.value = '';
+});
+
+const wikiEditBody = document.getElementById('press-wiki-edit-body');
+if (wikiEditBody) {
+  wikiEditBody.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    wikiEditBody.style.borderColor = 'var(--accent)';
+    wikiEditBody.style.background = 'var(--bg2)';
+  });
+  wikiEditBody.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    wikiEditBody.style.borderColor = 'var(--border)';
+    wikiEditBody.style.background = 'var(--bg3)';
+  });
+  wikiEditBody.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    wikiEditBody.style.borderColor = 'var(--border)';
+    wikiEditBody.style.background = 'var(--bg3)';
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      await handlePressWikiFilesUpload(e.dataTransfer.files, true);
+    }
+  });
+}
+
+async function handlePressWikiFilesUpload(files, autoInsert) {
+  if (!files || !files.length || !_pressWikiModalPressId || !_pressWikiSelectedPageId) return;
+  _setPressWikiError("Uploading photos...");
+  try {
+    let uploadedCount = 0;
+    for (const file of files) {
+      if (!file.type.startsWith('image/')) continue;
+      const attId = 'att_' + Date.now() + '_' + Math.floor(Math.random()*1000);
+      const ext = file.name.split('.').pop() || 'png';
+      const path = `plants/${currentPlantId}/presses/${_pressWikiModalPressId}/wikiPages/${_pressWikiSelectedPageId}/attachments/${attId}.${ext}`;
+      const sRef = storageRef(storage, path);
+      
+      await uploadBytesResumable(sRef, file);
+      const url = await getDownloadURL(sRef);
+      
+      const attDoc = {
+        storagePath: path,
+        url: url,
+        contentType: file.type,
+        caption: file.name,
+        uploadedBy: currentActor(),
+        uploadedAt: serverTimestamp()
+      };
+      
+      await setDoc(doc(db, `plants/${currentPlantId}/presses/${_pressWikiModalPressId}/wikiPages/${_pressWikiSelectedPageId}/attachments/${attId}`), attDoc);
+      uploadedCount++;
+      
+      if (autoInsert) {
+        const md = `\n![${attDoc.caption}](${attDoc.url})\n`;
+        const pos = wikiEditBody.selectionStart;
+        const text = wikiEditBody.value;
+        wikiEditBody.value = text.slice(0, pos) + md + text.slice(pos);
+        wikiEditBody.focus();
+        const newPos = pos + md.length;
+        wikiEditBody.setSelectionRange(newPos, newPos);
+      }
+    }
+    
+    if (uploadedCount > 0) {
+      const pageRef = pressWikiPageDoc(_pressWikiModalPressId, _pressWikiSelectedPageId);
+      const snap = await getDoc(pageRef);
+      if (snap.exists()) {
+        const currentCount = snap.data()?.photoCount || 0;
+        await updateDoc(pageRef, { photoCount: currentCount + uploadedCount });
+      }
+    }
+    
+    _setPressWikiError('');
+    await loadPressWikiPage(_pressWikiSelectedPageId);
+  } catch (err) {
+    _setPressWikiError("Upload failed: " + err.message);
+  }
+}
 document.getElementById('press-wiki-new-page-btn')?.addEventListener('click', () => togglePressWikiCreateRow(true));
 document.getElementById('press-wiki-cancel-create-page-btn')?.addEventListener('click', () => togglePressWikiCreateRow(false));
 document.getElementById('press-wiki-create-page-btn')?.addEventListener('click', () => createPressWikiPageFromInput());
