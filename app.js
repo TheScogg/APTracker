@@ -3486,14 +3486,14 @@ window.handlePressClick = p => {
     addBtn.onclick = () => { closeMiniCard(); openAddModal(p); };
     toolbar.appendChild(addBtn);
   }
-  // Notes button (middle)
+  // Wiki button (middle)
   const pressId = toPressId(p);
-  const notesBtn = document.createElement('button');
-  notesBtn.className = 'mc-toolbar-btn';
-  notesBtn.style.color = 'var(--teal)';
-  notesBtn.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><path d="M3 2h10a1 1 0 011 1v8a1 1 0 01-1 1H5l-3 2V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>Notes';
-  notesBtn.onclick = () => { closeMiniCard(); openPressWikiModal(pressId, p); };
-  // Badge dot if notes exist (load count async without blocking)
+  const wikiBtn = document.createElement('button');
+  wikiBtn.className = 'mc-toolbar-btn';
+  wikiBtn.style.color = 'var(--teal)';
+  wikiBtn.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><path d="M3 2h10a1 1 0 011 1v8a1 1 0 01-1 1H5l-3 2V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>Wiki';
+  wikiBtn.onclick = () => { closeMiniCard(); openPressWikiModal(pressId, p); };
+  // Badge dot if wiki content exists (load count async without blocking)
   (async () => {
     try {
       const q = query(plantCol('pressNotes'), where('pressId', '==', pressId));
@@ -3501,17 +3501,17 @@ window.handlePressClick = p => {
       if (snap.size > 0) {
         const dot = document.createElement('span');
         dot.className = 'mc-notes-dot';
-        notesBtn.appendChild(dot);
+        wikiBtn.appendChild(dot);
       }
     } catch(e) {}
   })();
-  toolbar.appendChild(notesBtn);
-  const histBtn = document.createElement('button');
-  histBtn.className = 'mc-toolbar-btn';
-  histBtn.style.color = 'var(--blue)';
-  histBtn.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><path d="M8 2v6l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/></svg>History';
-  histBtn.onclick = () => { closeMiniCard(); showMachineHistory(p); };
-  toolbar.appendChild(histBtn);
+  toolbar.appendChild(wikiBtn);
+  const timelineBtn = document.createElement('button');
+  timelineBtn.className = 'mc-toolbar-btn';
+  timelineBtn.style.color = 'var(--blue)';
+  timelineBtn.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><path d="M8 2v6l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/></svg>Timeline';
+  timelineBtn.onclick = () => { closeMiniCard(); showMachineHistory(p); };
+  toolbar.appendChild(timelineBtn);
   card.appendChild(toolbar);
 
   area.innerHTML = '';
