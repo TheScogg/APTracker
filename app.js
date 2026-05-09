@@ -1659,6 +1659,25 @@ function getStatusSubs(statusKey) {
   return [...st.subs].sort((a, b) => String(a).localeCompare(String(b), undefined, { sensitivity: 'base' }));
 }
 
+function normalizeLoadedStatuses(rawStatuses) {
+  const normalized = deepCopy(DEFAULT_STATUSES);
+  if (!rawStatuses || typeof rawStatuses !== 'object' || Array.isArray(rawStatuses)) return normalized;
+
+  Object.entries(rawStatuses).forEach(([key, value]) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+    normalized[key] = {
+      ...normalized[key],
+      ...value,
+      subs: Array.isArray(value.subs) ? value.subs.map(v => String(v).trim()).filter(Boolean) : (normalized[key]?.subs || [])
+    };
+  });
+
+  // Keep the canonical lockstep statuses present even if Firestore is missing them.
+  if (!normalized.open) normalized.open = deepCopy(DEFAULT_STATUSES.open);
+  if (!normalized.resolved) normalized.resolved = deepCopy(DEFAULT_STATUSES.resolved);
+  return normalized;
+}
+
 function stopStatusConfigListener() {
   if (statusConfigUnsubscribe) {
     statusConfigUnsubscribe();
@@ -1687,26 +1706,8 @@ async function loadConfig() {
     if (mySerial !== statusConfigLoadSerial || plantId !== currentPlantId) return;
     if (snap.exists()) {
       const data = snap.data();
-      
-      // Check if we need to migrate to new comprehensive categories
-      // If the config doesn't have 'alert', 'materials', or 'quality', it's old
-      const needsMigration = !data.statuses?.alert || !data.statuses?.materials || !data.statuses?.quality;
-      
-      if (needsMigration) {
-        console.log('🔄 Migrating to comprehensive ticket categories...');
-        // Use the new STATUSES from code as the source of truth
-        await saveConfig();
-        console.log('✅ Migration complete!');
-      } else {
-        // Use existing config from Firestore
-        STATUSES = data.statuses || {};
-      }
-      
-      // Since we just changed the available statuses,
-      // we must rebuild the logic that buttons depend on
+      STATUSES = normalizeLoadedStatuses(data.statuses);
       rebuildDerivedStatus();
-      
-      // Trigger a UI refresh for the pills
       buildStatusFilterPills();
       renderIssues();
     } else {
@@ -1725,7 +1726,7 @@ async function loadConfig() {
       if (!snap2.exists()) return;
       const data2 = snap2.data() || {};
       if (!data2.statuses) return;
-      STATUSES = data2.statuses || {};
+      STATUSES = normalizeLoadedStatuses(data2.statuses);
       rebuildDerivedStatus();
       refreshStatusDependentUI();
     }, err => {
