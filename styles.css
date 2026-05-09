@@ -1145,7 +1145,12 @@
   .export-dropdown { min-width: 120px; }
   .press-wiki-actions-wrap { position: relative; }
   .press-wiki-actions-btn { min-width: 96px; justify-content: space-between; padding: 4px 10px; font-size: 11px; }
-  .press-wiki-actions-menu { min-width: 172px; right: 0; left: auto; top: calc(100% + 4px); }
+  .press-wiki-actions-menu {
+    min-width: 172px;
+    left: 0;
+    right: auto;
+    top: calc(100% + 4px);
+  }
   .press-wiki-actions-menu .press-wiki-action-item {
     display: flex;
     align-items: center;
