@@ -340,31 +340,37 @@ function _renderRoleAlertCard(alert) {
   const titleColor = isAccepted ? '#4ade80' : statusColor;
   const acceptedByName = isAccepted ? formatWorkflowActorName(alert.acceptedBy?.name || alert.acceptedBy || '') : '';
   const acceptedMeta = isAccepted
-    ? `<div class="role-alert-ack">${acceptedByName ? `Accepted by ${esc(acceptedByName)}` : 'Accepted'}</div>`
+    ? `<div class="role-alert-ack" style="font-size:12px;line-height:1.35;color:${titleColor};opacity:.9;">${acceptedByName ? `Accepted by ${esc(acceptedByName)}` : 'Accepted'}</div>`
     : '';
   const statusDef = getStatusDef(alert.statusKey || alert.categoryKey || 'open');
   const statusLabel = getStatusLabel(alert.statusKey || alert.categoryKey || 'open', 'short');
+  const pressLabel = alert.machine ? `Press ${esc(alert.machine)}` : 'Press';
   return `
-    <div class="role-alert-card${isAccepted ? ' accepted' : ''}" style="background:${cardBg};border-color:${cardBorder};">
-      <div class="role-alert-card-main">
-        <div class="role-alert-card-title" style="color:${titleColor};">${esc(alert.feedLabel)} · ${esc(alert.machine)}</div>
-        <div class="role-alert-card-meta">
-          ${isAccepted ? `<span class="role-alert-status-pill accepted">Accepted</span>` : `<span class="role-alert-status-pill active">Active</span>`}
+    <div class="role-alert-card${isAccepted ? ' accepted' : ''}" style="background:${cardBg};border-color:${cardBorder};cursor:pointer;" role="button" tabindex="0" onclick="focusIssueFromAlert('${esc(alert.issueId)}')" onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); focusIssueFromAlert('${esc(alert.issueId)}'); }">
+      <div class="role-alert-card-main" style="display:flex;flex-direction:column;gap:10px;">
+        <div class="role-alert-card-top" style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap;">
           <span class="role-alert-category-pill" style="--role-alert-cat-color:${statusColor};">
             <span class="role-alert-category-icon">${esc(statusDef.icon || '❔')}</span>
             <span class="role-alert-category-label">${esc(statusLabel)}</span>
           </span>
-          ${alert.subStatus ? `<span class="role-alert-card-sub">${esc(alert.subStatus)}</span>` : ''}
+          <span class="role-alert-press-pill" style="display:inline-flex;align-items:center;justify-content:center;padding:4px 10px;border-radius:999px;background:rgba(255,255,255,0.08);color:var(--text1);font-size:12px;font-weight:800;letter-spacing:.02em;">
+            ${pressLabel}
+          </span>
         </div>
-        ${acceptedMeta}
-        <div class="role-alert-card-note">${esc(alert.note || 'No note')}</div>
+        ${alert.subStatus ? `<div class="role-alert-card-sub" style="font-size:15px;font-weight:800;line-height:1.25;color:var(--text1);">${esc(alert.subStatus)}</div>` : ''}
+        <div class="role-alert-card-note" style="font-size:13px;line-height:1.45;color:var(--text2);">${esc(alert.note || 'No note')}</div>
+        <div class="role-alert-card-footer" style="display:flex;align-items:flex-end;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:2px;">
+          <span style="display:inline-flex;align-items:center;">
+            ${isAccepted ? `<span class="role-alert-status-pill accepted">Accepted</span>` : `<span class="role-alert-status-pill active">Active</span>`}
+          </span>
+          ${acceptedMeta}
+        </div>
       </div>
       <div class="role-alert-card-actions">
-        <button class="btn btn-view role-alert-action-btn" type="button" onclick="focusIssueFromAlert('${esc(alert.issueId)}')">View</button>
         ${isAccepted
-          ? `<button class="btn btn-reopen role-alert-action-btn" type="button" onclick="unacceptRoleAlert('${esc(alert.issueId)}','${esc(alert.statusKey)}')">Unaccept</button>`
-          : `<button class="btn btn-success role-alert-action-btn" type="button" onclick="acceptRoleAlert('${esc(alert.issueId)}','${esc(alert.statusKey)}')">Accept</button>`}
-        <button class="btn btn-danger role-alert-action-btn" type="button" onclick="deleteRoleAlert('${esc(alert.id)}','${esc(alert.categoryKey || '')}','${esc(alert.statusKey || '')}')">Delete</button>
+          ? `<button class="btn btn-reopen role-alert-action-btn" type="button" onclick="event.stopPropagation();unacceptRoleAlert('${esc(alert.issueId)}','${esc(alert.statusKey)}')">Unaccept</button>`
+          : `<button class="btn btn-success role-alert-action-btn" type="button" onclick="event.stopPropagation();acceptRoleAlert('${esc(alert.issueId)}','${esc(alert.statusKey)}')">Accept</button>`}
+        <button class="btn btn-danger role-alert-action-btn" type="button" onclick="event.stopPropagation();deleteRoleAlert('${esc(alert.id)}','${esc(alert.categoryKey || '')}','${esc(alert.statusKey || '')}')">Delete</button>
       </div>
     </div>
   `;
