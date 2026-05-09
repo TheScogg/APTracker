@@ -709,6 +709,9 @@ const DEFAULT_PRESSES = {
 
 let PRESSES = { ...DEFAULT_PRESSES };
 let ALL_MACHINES = Object.values(PRESSES).flat();
+const WIKI_SCOPE_PRESS = 'press';
+const WIKI_SCOPE_SHARED = 'shared';
+let _pressWikiScope = WIKI_SCOPE_PRESS;
 
 // Firestore path helpers — all data scoped under plants/{plantId}/
 function plantCol(colName) { return collection(db, 'plants', currentPlantId, colName); }
@@ -719,6 +722,20 @@ function pressWikiPagesCol(pressId) { return collection(db, 'plants', currentPla
 function pressWikiPageDoc(pressId, pageId) { return doc(db, 'plants', currentPlantId, 'presses', String(pressId), 'wikiPages', pageId); }
 function pressWikiRevisionsCol(pressId, pageId) { return collection(db, 'plants', currentPlantId, 'presses', String(pressId), 'wikiPages', pageId, 'revisions'); }
 function pressWikiAttachmentsCol(pressId, pageId) { return collection(db, 'plants', currentPlantId, 'presses', String(pressId), 'wikiPages', pageId, 'attachments'); }
+function wikiCollectionPath(scope, pressId) {
+  return scope === WIKI_SCOPE_SHARED
+    ? ['plants', currentPlantId, 'wikiPages']
+    : ['plants', currentPlantId, 'presses', String(pressId), 'wikiPages'];
+}
+function wikiPagesColForScope(scope, pressId) { return collection(db, ...wikiCollectionPath(scope, pressId)); }
+function wikiPageDocForScope(scope, pressId, pageId) { return doc(db, ...wikiCollectionPath(scope, pressId), pageId); }
+function wikiRevisionsColForScope(scope, pressId, pageId) { return collection(db, ...wikiCollectionPath(scope, pressId), pageId, 'revisions'); }
+function wikiAttachmentsColForScope(scope, pressId, pageId) { return collection(db, ...wikiCollectionPath(scope, pressId), pageId, 'attachments'); }
+function wikiStoragePrefixForScope(scope, pressId, pageId) {
+  return scope === WIKI_SCOPE_SHARED
+    ? `plants/${currentPlantId}/wikiPages/${pageId}`
+    : `plants/${currentPlantId}/presses/${String(pressId)}/wikiPages/${pageId}`;
+}
 function plantMemberDocRef(plantId, userId) { return doc(db, 'plants', plantId, 'members', userId); }
 function gameConfigDoc() { return doc(db, 'plants', currentPlantId, 'gamificationConfig', 'main'); }
 function gameUserStatsDoc(userId) { return doc(db, 'plants', currentPlantId, 'userGameStats', userId); }
@@ -9536,6 +9553,37 @@ let _pressWikiAttachmentsCache = [];
 let _pressWikiMachineCode = null;
 let _pressWikiRenderedBodyRaw = '';
 
+function _pressWikiScopeLabel(scope = _pressWikiScope) {
+  return scope === WIKI_SCOPE_SHARED ? 'Shared Library' : 'This Press';
+}
+
+function _pressWikiSetScope(scope, { reload = true } = {}) {
+  _pressWikiScope = scope === WIKI_SCOPE_SHARED ? WIKI_SCOPE_SHARED : WIKI_SCOPE_PRESS;
+  const pressBtn = document.getElementById('press-wiki-scope-press');
+  const sharedBtn = document.getElementById('press-wiki-scope-shared');
+  const isShared = _pressWikiScope === WIKI_SCOPE_SHARED;
+  [pressBtn, sharedBtn].forEach(btn => {
+    if (!btn) return;
+    btn.style.background = 'var(--bg3)';
+    btn.style.borderColor = 'var(--border)';
+    btn.style.color = 'var(--text2)';
+  });
+  if (pressBtn) {
+    pressBtn.style.background = !isShared ? 'var(--accent)' : 'var(--bg3)';
+    pressBtn.style.borderColor = !isShared ? 'var(--accent)' : 'var(--border)';
+    pressBtn.style.color = !isShared ? 'white' : 'var(--text2)';
+  }
+  if (sharedBtn) {
+    sharedBtn.style.background = isShared ? 'var(--accent)' : 'var(--bg3)';
+    sharedBtn.style.borderColor = isShared ? 'var(--accent)' : 'var(--border)';
+    sharedBtn.style.color = isShared ? 'white' : 'var(--text2)';
+  }
+  document.getElementById('press-wiki-new-page-btn') && (_pressWikiCanEdit ? (document.getElementById('press-wiki-new-page-btn').disabled = false) : null);
+  if (reload && _pressWikiModalPressId) {
+    loadPressWikiPageList().then(() => loadPressWikiPage(_pressWikiSelectedPageId || 'shift-notes')).catch(err => console.warn('scope reload failed', err));
+  }
+}
+
 function _notesEl(base) { return document.getElementById(base + '-' + NOTES_VARIANT); }
 
 function _relativeTime(ts) {
@@ -9556,6 +9604,7 @@ async function openPressWikiModal(pressId, machineCode) {
   if (!pressId || !currentPlantId) return;
   _pressWikiModalPressId = String(pressId);
   _pressWikiMachineCode = String(machineCode || '').trim();
+  _pressWikiSetScope(WIKI_SCOPE_PRESS, { reload: false });
   const modal = document.getElementById('press-wiki-modal');
   const titleEl = document.getElementById('press-wiki-title');
   const metaEl = document.getElementById('press-wiki-meta');
@@ -9572,7 +9621,7 @@ async function openPressWikiModal(pressId, machineCode) {
   if (cmsBtn) cmsBtn.style.display = _pressWikiCanEdit ? '' : 'none';
   _setPressWikiError('');
   titleEl.textContent = 'Shift Notes';
-  metaEl.textContent = `Press ${_pressWikiMachineCode || '—'}`;
+  metaEl.textContent = `Press ${_pressWikiMachineCode || '—'} · ${_pressWikiScopeLabel()}`;
   bodyEl.textContent = 'Loading wiki...';
   revisionsEl.innerHTML = '';
   attachmentsEl.innerHTML = '';
@@ -9589,19 +9638,19 @@ async function openPressWikiModal(pressId, machineCode) {
 async function loadPressWikiPageList() {
   const selectEl = document.getElementById('press-wiki-page-select');
   if (!selectEl || !_pressWikiModalPressId) return;
-  const pagesSnap = await getDocs(query(pressWikiPagesCol(_pressWikiModalPressId), orderBy('updatedAt', 'desc'), limit(50)));
+  const pagesSnap = await getDocs(query(wikiPagesColForScope(_pressWikiScope, _pressWikiModalPressId), orderBy('updatedAt', 'desc'), limit(50)));
   const pages = pagesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
   selectEl.innerHTML = '';
   if (!pages.length) {
     const opt = document.createElement('option');
     opt.value = 'shift-notes';
-    opt.textContent = 'Shift Notes';
+    opt.textContent = _pressWikiScope === WIKI_SCOPE_SHARED ? 'Shared Notes' : 'Shift Notes';
     selectEl.appendChild(opt);
   } else {
     pages.forEach(page => {
       const opt = document.createElement('option');
       opt.value = page.id;
-      opt.textContent = page.title || page.id;
+      opt.textContent = `${page.title || page.id}${page.scope === WIKI_SCOPE_SHARED ? ' · Shared' : ''}`;
       selectEl.appendChild(opt);
     });
   }
@@ -9622,18 +9671,20 @@ async function loadPressWikiPage(pageId) {
   revisionsEl.innerHTML = '';
   attachmentsEl.innerHTML = '';
   try {
-    const pageRef = pressWikiPageDoc(_pressWikiModalPressId, pageId);
+    const pageRef = wikiPageDocForScope(_pressWikiScope, _pressWikiModalPressId, pageId);
     const pageSnap = await getDoc(pageRef);
     if (!pageSnap.exists()) {
-      _renderPressWikiBody('No wiki content yet. Add a press note to seed Shift Notes.');
+      _renderPressWikiBody(_pressWikiScope === WIKI_SCOPE_SHARED
+        ? 'No shared wiki content yet. Add a plant library page to seed the library.'
+        : 'No wiki content yet. Add a press note to seed Shift Notes.');
       titleEl.textContent = pageId;
       return;
     }
     const page = pageSnap.data() || {};
     const currentRevisionId = page.currentRevisionId || null;
     titleEl.textContent = page.title || pageId;
-    metaEl.textContent = `Press ${page.machineCode || _pressWikiMachineCode || '—'} · Updated ${_relativeTime(page.updatedAt) || 'recently'}`;
-    const revSnap = await getDocs(query(pressWikiRevisionsCol(_pressWikiModalPressId, pageId), orderBy('editedAt', 'desc'), limit(30)));
+    metaEl.textContent = `${_pressWikiScopeLabel(page.scope || _pressWikiScope)} · Updated ${_relativeTime(page.updatedAt) || 'recently'}`;
+    const revSnap = await getDocs(query(wikiRevisionsColForScope(_pressWikiScope, _pressWikiModalPressId, pageId), orderBy('editedAt', 'desc'), limit(30)));
     const revisions = revSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     const currentRevision = revisions.find(r => r.id === currentRevisionId) || revisions[0] || null;
     _renderPressWikiBody(currentRevision?.body || 'No revision body available.');
@@ -9650,7 +9701,7 @@ async function loadPressWikiPage(pageId) {
       row.onclick = () => { _renderPressWikiBody(rev.body || ''); };
       revisionsEl.appendChild(row);
     });
-    const attachSnap = await getDocs(query(pressWikiAttachmentsCol(_pressWikiModalPressId, pageId), orderBy('uploadedAt', 'desc'), limit(24)));
+    const attachSnap = await getDocs(query(wikiAttachmentsColForScope(_pressWikiScope, _pressWikiModalPressId, pageId), orderBy('uploadedAt', 'desc'), limit(24)));
     _pressWikiAttachmentsCache = attachSnap.docs.map(d => ({ id: d.id, ...(d.data() || {}) }));
     _pressWikiAttachmentsCache.forEach((data, idx) => {
       if (!data.url) return;
@@ -9746,8 +9797,8 @@ async function savePressWikiRevision() {
   const mm = String(now.getMonth() + 1).padStart(2, '0');
   const yy = String(now.getFullYear()).slice(-2);
   const changeNote = rawChangeNote || `${fallbackActorName} : ${dd}/${mm}/${yy}`;
-  const pageRef = pressWikiPageDoc(_pressWikiModalPressId, _pressWikiSelectedPageId);
-  const revisionRef = doc(pressWikiRevisionsCol(_pressWikiModalPressId, _pressWikiSelectedPageId));
+  const pageRef = wikiPageDocForScope(_pressWikiScope, _pressWikiModalPressId, _pressWikiSelectedPageId);
+  const revisionRef = doc(wikiRevisionsColForScope(_pressWikiScope, _pressWikiModalPressId, _pressWikiSelectedPageId));
   await runTransaction(db, async tx => {
     const snap = await tx.get(pageRef);
     const prevRevisionId = snap.exists() ? (snap.data()?.currentRevisionId || null) : null;
@@ -9755,7 +9806,9 @@ async function savePressWikiRevision() {
     tx.set(pageRef, {
       title: title || snap.data()?.title || _pressWikiSelectedPageId,
       slug: _pressWikiSelectedPageId,
-      machineCode: _pressWikiMachineCode || '',
+      machineCode: _pressWikiScope === WIKI_SCOPE_SHARED ? '' : (_pressWikiMachineCode || ''),
+      scope: _pressWikiScope,
+      pressId: _pressWikiScope === WIKI_SCOPE_SHARED ? null : _pressWikiModalPressId,
       currentRevisionId: revisionRef.id,
       updatedBy: currentActor(),
       updatedAt: serverTimestamp(),
@@ -9908,7 +9961,7 @@ async function handlePressWikiFilesUpload(files, autoInsert) {
       if (!file.type.startsWith('image/')) continue;
       const attId = 'att_' + Date.now() + '_' + Math.floor(Math.random()*1000);
       const ext = file.name.split('.').pop() || 'png';
-      const path = `plants/${currentPlantId}/presses/${_pressWikiModalPressId}/wikiPages/${_pressWikiSelectedPageId}/attachments/${attId}.${ext}`;
+      const path = wikiStoragePrefixForScope(_pressWikiScope, _pressWikiModalPressId, _pressWikiSelectedPageId) + `/attachments/${attId}.${ext}`;
       const sRef = storageRef(storage, path);
       
       await uploadBytesResumable(sRef, file);
@@ -9923,7 +9976,7 @@ async function handlePressWikiFilesUpload(files, autoInsert) {
         uploadedAt: serverTimestamp()
       };
       
-      await setDoc(doc(db, `plants/${currentPlantId}/presses/${_pressWikiModalPressId}/wikiPages/${_pressWikiSelectedPageId}/attachments/${attId}`), attDoc);
+      await setDoc(doc(db, ...wikiStoragePrefixForScope(_pressWikiScope, _pressWikiModalPressId, _pressWikiSelectedPageId).split('/'), 'attachments', attId), attDoc);
       uploadedCount++;
       
       if (autoInsert) {
@@ -9938,7 +9991,7 @@ async function handlePressWikiFilesUpload(files, autoInsert) {
     }
     
     if (uploadedCount > 0) {
-      const pageRef = pressWikiPageDoc(_pressWikiModalPressId, _pressWikiSelectedPageId);
+      const pageRef = wikiPageDocForScope(_pressWikiScope, _pressWikiModalPressId, _pressWikiSelectedPageId);
       const snap = await getDoc(pageRef);
       if (snap.exists()) {
         const currentCount = snap.data()?.photoCount || 0;
@@ -9955,9 +10008,11 @@ async function handlePressWikiFilesUpload(files, autoInsert) {
 document.getElementById('press-wiki-new-page-btn')?.addEventListener('click', () => togglePressWikiCreateRow(true));
 document.getElementById('press-wiki-cancel-create-page-btn')?.addEventListener('click', () => togglePressWikiCreateRow(false));
 document.getElementById('press-wiki-create-page-btn')?.addEventListener('click', () => createPressWikiPageFromInput());
+document.getElementById('press-wiki-scope-press')?.addEventListener('click', () => _pressWikiSetScope(WIKI_SCOPE_PRESS));
+document.getElementById('press-wiki-scope-shared')?.addEventListener('click', () => _pressWikiSetScope(WIKI_SCOPE_SHARED));
 document.getElementById('press-wiki-cms-btn')?.addEventListener('click', () => {
   if (!_pressWikiModalPressId) return;
-  const url = `wiki-cms.html?plantId=${encodeURIComponent(currentPlantId)}&pressId=${encodeURIComponent(_pressWikiModalPressId)}&pageId=${encodeURIComponent(_pressWikiSelectedPageId || '')}`;
+  const url = `wiki-cms.html?plantId=${encodeURIComponent(currentPlantId)}&pressId=${encodeURIComponent(_pressWikiScope === WIKI_SCOPE_PRESS ? _pressWikiModalPressId : '')}&pageId=${encodeURIComponent(_pressWikiSelectedPageId || '')}&scope=${encodeURIComponent(_pressWikiScope)}`;
   window.location.href = url;
 });
 

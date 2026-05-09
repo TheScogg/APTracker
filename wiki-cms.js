@@ -53,10 +53,14 @@ const elAttachments = document.getElementById('edit-attachments');
 const elRevisionList = document.getElementById('revision-list');
 const elSaveFeedback = document.getElementById('save-feedback');
 
+const WIKI_SCOPE_PRESS = 'press';
+const WIKI_SCOPE_SHARED = 'shared';
+
 // State
 let currentUser = null;
 let currentPlantId = null;
 let currentPressId = null;
+let currentScope = WIKI_SCOPE_PRESS;
 let currentPageId = null;
 let pages = [];
 let currentPageDoc = null;
@@ -72,6 +76,7 @@ const urlParams = new URLSearchParams(window.location.search);
 const initPlantId = urlParams.get('plantId');
 const initPressId = urlParams.get('pressId');
 const initPageId = urlParams.get('pageId');
+const initScope = urlParams.get('scope') === WIKI_SCOPE_SHARED ? WIKI_SCOPE_SHARED : WIKI_SCOPE_PRESS;
 
 function showFeedback(msg, isError) {
   elSaveFeedback.textContent = msg;
@@ -80,6 +85,75 @@ function showFeedback(msg, isError) {
 
 function currentActor() {
   return { uid: currentUser.uid, name: currentUser.displayName || currentUser.email || 'Unknown' };
+}
+
+function scopeLabel(scope = currentScope) {
+  return scope === WIKI_SCOPE_SHARED ? 'Shared Library' : 'This Press';
+}
+
+function wikiCollectionPath(scope = currentScope, pressId = currentPressId) {
+  if (scope === WIKI_SCOPE_SHARED) return ['plants', currentPlantId, 'wikiPages'];
+  return ['plants', currentPlantId, 'presses', String(pressId || '').trim(), 'wikiPages'];
+}
+
+function wikiPagesCol(scope = currentScope, pressId = currentPressId) {
+  return collection(db, ...wikiCollectionPath(scope, pressId));
+}
+
+function wikiPageDoc(scope, pressId, pageId) {
+  return doc(db, ...wikiCollectionPath(scope, pressId), pageId);
+}
+
+function wikiRevisionsCol(scope, pressId, pageId) {
+  return collection(db, ...wikiCollectionPath(scope, pressId), pageId, 'revisions');
+}
+
+function wikiAttachmentsCol(scope, pressId, pageId) {
+  return collection(db, ...wikiCollectionPath(scope, pressId), pageId, 'attachments');
+}
+
+function updateScopeButtons() {
+  const pressBtn = document.getElementById('cms-scope-press');
+  const sharedBtn = document.getElementById('cms-scope-shared');
+  const isShared = currentScope === WIKI_SCOPE_SHARED;
+  if (pressBtn) {
+    pressBtn.classList.toggle('btn-primary', !isShared);
+    pressBtn.style.background = !isShared ? 'var(--accent)' : 'var(--bg3)';
+    pressBtn.style.borderColor = !isShared ? 'var(--accent)' : 'var(--border)';
+    pressBtn.style.color = !isShared ? 'white' : 'var(--text2)';
+  }
+  if (sharedBtn) {
+    sharedBtn.classList.toggle('btn-primary', isShared);
+    sharedBtn.style.background = isShared ? 'var(--accent)' : 'var(--bg3)';
+    sharedBtn.style.borderColor = isShared ? 'var(--accent)' : 'var(--border)';
+    sharedBtn.style.color = isShared ? 'white' : 'var(--text2)';
+  }
+  if (elPressSelect) {
+    elPressSelect.disabled = isShared;
+  }
+}
+
+async function refreshPageData() {
+  resetEditor();
+  if (!currentPlantId) return;
+  if (currentScope === WIKI_SCOPE_PRESS && !currentPressId) {
+    elNewPageBtn.disabled = true;
+    elPageList.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text3);font-size:12px;">Select a press to view pages</div>';
+    return;
+  }
+
+  elNewPageBtn.disabled = false;
+  elPageList.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text3);font-size:12px;">Loading pages...</div>';
+
+  if (unsubscribePages) unsubscribePages();
+  unsubscribePages = onSnapshot(wikiPagesCol(currentScope, currentPressId), (snap) => {
+    pages = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderPageList();
+    if (currentPageId) {
+      const activePage = pages.find(p => p.id === currentPageId);
+      if (activePage) updateEditorMeta(activePage);
+    }
+  });
 }
 
 document.getElementById('google-signin-btn').addEventListener('click', async () => {
@@ -139,13 +213,20 @@ async function loadPlants() {
   
   if (initPlantId && myPlants.find(p => p.id === initPlantId)) {
     elPlantSelect.value = initPlantId;
+    currentScope = initScope;
+    updateScopeButtons();
     await handlePlantChange();
-    if (initPressId) {
+    if (initScope === WIKI_SCOPE_PRESS && initPressId) {
       elPressSelect.value = initPressId;
       await handlePressChange();
-      if (initPageId) {
-        selectPage(initPageId);
+    } else {
+      if (initScope === WIKI_SCOPE_SHARED) {
+        currentPressId = initPressId || currentPressId || '';
       }
+      await refreshPageData();
+    }
+    if (initPageId && (initScope === WIKI_SCOPE_SHARED || initPressId)) {
+      selectPage(initPageId);
     }
   }
 }
@@ -179,34 +260,32 @@ async function handlePlantChange() {
     opt.textContent = p;
     elPressSelect.appendChild(opt);
   });
-  elPressSelect.disabled = false;
+  updateScopeButtons();
+  if (currentScope === WIKI_SCOPE_SHARED) {
+    await refreshPageData();
+  } else {
+    elPressSelect.disabled = false;
+  }
 }
 
 elPressSelect.addEventListener('change', handlePressChange);
 async function handlePressChange() {
   currentPressId = elPressSelect.value;
-  resetEditor();
-  
-  if (!currentPressId) {
-    elNewPageBtn.disabled = true;
-    if (unsubscribePages) { unsubscribePages(); unsubscribePages = null; }
-    elPageList.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text3);font-size:12px;">Select a press to view pages</div>';
-    return;
-  }
-  
-  elNewPageBtn.disabled = false;
-  elPageList.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text3);font-size:12px;">Loading pages...</div>';
-  
-  if (unsubscribePages) unsubscribePages();
-  const pagesRef = collection(db, `plants/${currentPlantId}/presses/${currentPressId}/wikiPages`);
-  unsubscribePages = onSnapshot(pagesRef, (snap) => {
-    pages = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    renderPageList();
-    if (currentPageId) {
-      const activePage = pages.find(p => p.id === currentPageId);
-      if (activePage) updateEditorMeta(activePage);
+  if (currentScope !== WIKI_SCOPE_PRESS) return;
+  await refreshPageData();
+}
+
+async function handleScopeChange(nextScope) {
+  currentScope = nextScope === WIKI_SCOPE_SHARED ? WIKI_SCOPE_SHARED : WIKI_SCOPE_PRESS;
+  updateScopeButtons();
+  if (!currentPlantId) return;
+  if (currentScope === WIKI_SCOPE_PRESS) {
+    if (!currentPressId) {
+      elPageList.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text3);font-size:12px;">Select a press to view pages</div>';
+      return;
     }
-  });
+  }
+  await refreshPageData();
 }
 
 function renderPageList() {
@@ -220,9 +299,11 @@ function renderPageList() {
   pages.forEach(p => {
     const li = document.createElement('li');
     li.className = `page-item ${p.id === currentPageId ? 'active' : ''}`;
+    const scopeBadge = p.scope === WIKI_SCOPE_SHARED ? '<span style="display:inline-block;margin-top:6px;padding:2px 6px;border-radius:999px;background:color-mix(in srgb, var(--accent) 18%, transparent);color:var(--accent);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;">Shared</span>' : '';
     li.innerHTML = `
       <div class="page-title">${p.title || 'Untitled'}</div>
       <div class="page-meta">Photos: ${p.photoCount || 0}</div>
+      ${scopeBadge}
     `;
     li.addEventListener('click', () => selectPage(p.id));
     elPageList.appendChild(li);
@@ -265,50 +346,59 @@ elNewPageBtn.addEventListener('click', () => {
 });
 
 async function selectPage(pageId) {
-  if (pageId === currentPageId) return;
+  if (pageId === currentPageId && currentPageDoc?.id === pageId) return;
   currentPageId = pageId;
   elEditorContainer.style.display = 'block';
   elEmptyState.style.display = 'none';
   renderPageList();
   
-  const pageData = pages.find(p => p.id === pageId);
-  if (pageData) {
-    updateEditorMeta(pageData);
-    currentPageDoc = pageData;
-    
-    // Fetch latest revision body
-    const revsSnap = await getDocs(query(
-      collection(db, `plants/${currentPlantId}/presses/${currentPressId}/wikiPages/${pageId}/revisions`),
-      orderBy('editedAt', 'desc')
-    ));
-    
-    elRevisionList.innerHTML = '';
-    let latestRev = null;
-    
-    revsSnap.docs.forEach((docSnap, i) => {
-      const data = docSnap.data();
-      if (i === 0) {
-        latestRev = data;
-        elBody.value = data.body || '';
-      }
-      
-      const dStr = data.editedAt?.toDate ? data.editedAt.toDate().toLocaleString() : 'Just now';
-      elRevisionList.insertAdjacentHTML('beforeend', `
-        <div class="revision-item">
-          <div class="rev-date">${dStr}</div>
-          <div class="rev-note">${data.changeNote || 'No note'}</div>
-        </div>
-      `);
-    });
-    
-    // Fetch attachments
-    const attSnap = await getDocs(collection(db, `plants/${currentPlantId}/presses/${currentPressId}/wikiPages/${pageId}/attachments`));
-    attachmentsMap.clear();
-    attSnap.docs.forEach(docSnap => attachmentsMap.set(docSnap.id, docSnap.data()));
-    renderAttachments();
-    
-    elChangeNote.value = '';
+  let pageData = pages.find(p => p.id === pageId);
+  if (!pageData) {
+    const pageSnap = await getDoc(wikiPageDoc(currentScope, currentPressId, pageId));
+    if (pageSnap.exists()) pageData = { id: pageSnap.id, ...pageSnap.data() };
   }
+  if (!pageData) {
+    updateEditorMeta({ id: pageId, title: pageId, slug: pageId, tags: [], photoCount: 0 });
+    currentPageDoc = null;
+    elBody.value = '';
+    elRevisionList.innerHTML = '<div style="color:var(--text3);">No wiki page found in this scope.</div>';
+    attachmentsMap.clear();
+    renderAttachments();
+    return;
+  }
+
+  updateEditorMeta(pageData);
+  currentPageDoc = pageData;
+
+  // Fetch latest revision body
+  const revsSnap = await getDocs(query(
+    wikiRevisionsCol(currentScope, currentPressId, pageId),
+    orderBy('editedAt', 'desc')
+  ));
+
+  elRevisionList.innerHTML = '';
+  revsSnap.docs.forEach((docSnap, i) => {
+    const data = docSnap.data();
+    if (i === 0) {
+      elBody.value = data.body || '';
+    }
+
+    const dStr = data.editedAt?.toDate ? data.editedAt.toDate().toLocaleString() : 'Just now';
+    elRevisionList.insertAdjacentHTML('beforeend', `
+      <div class="revision-item">
+        <div class="rev-date">${dStr}</div>
+        <div class="rev-note">${data.changeNote || 'No note'}</div>
+      </div>
+    `);
+  });
+
+  // Fetch attachments
+  const attSnap = await getDocs(wikiAttachmentsCol(currentScope, currentPressId, pageId));
+  attachmentsMap.clear();
+  attSnap.docs.forEach(docSnap => attachmentsMap.set(docSnap.id, docSnap.data()));
+  renderAttachments();
+
+  elChangeNote.value = '';
 }
 
 function updateEditorMeta(page) {
@@ -374,7 +464,9 @@ async function handleFilesUpload(files, autoInsert) {
       
       const attId = 'att_' + Date.now() + '_' + Math.floor(Math.random()*1000);
       const ext = file.name.split('.').pop() || 'png';
-      const path = `plants/${currentPlantId}/presses/${currentPressId}/wikiPages/${currentPageId}/attachments/${attId}.${ext}`;
+      const path = currentScope === WIKI_SCOPE_SHARED
+        ? `plants/${currentPlantId}/wikiPages/${currentPageId}/attachments/${attId}.${ext}`
+        : `plants/${currentPlantId}/presses/${currentPressId}/wikiPages/${currentPageId}/attachments/${attId}.${ext}`;
       const sRef = storageRef(storageFallback, path);
       
       await uploadBytesResumable(sRef, file);
@@ -389,7 +481,10 @@ async function handleFilesUpload(files, autoInsert) {
         uploadedAt: serverTimestamp()
       };
       
-      await setDoc(doc(db, `plants/${currentPlantId}/presses/${currentPressId}/wikiPages/${currentPageId}/attachments/${attId}`), attDoc);
+      await setDoc(doc(db, ...(currentScope === WIKI_SCOPE_SHARED
+        ? ['plants', currentPlantId, 'wikiPages', currentPageId, 'attachments', attId]
+        : ['plants', currentPlantId, 'presses', currentPressId, 'wikiPages', currentPageId, 'attachments', attId]
+      )), attDoc);
       attachmentsMap.set(attId, attDoc);
       
       if (autoInsert) {
@@ -403,7 +498,10 @@ async function handleFilesUpload(files, autoInsert) {
       }
     }
     
-    await updateDoc(doc(db, `plants/${currentPlantId}/presses/${currentPressId}/wikiPages/${currentPageId}`), {
+    await updateDoc(doc(db, ...(currentScope === WIKI_SCOPE_SHARED
+      ? ['plants', currentPlantId, 'wikiPages', currentPageId]
+      : ['plants', currentPlantId, 'presses', currentPressId, 'wikiPages', currentPageId]
+    )), {
       photoCount: attachmentsMap.size
     });
     
@@ -449,8 +547,11 @@ async function deleteAttachment(attId, attData) {
   try {
     const sRef = storageRef(storageFallback, attData.storagePath);
     await deleteObject(sRef).catch(e => console.log('Storage del failed', e));
-    await setDoc(doc(db, `plants/${currentPlantId}/presses/${currentPressId}/wikiPages/${currentPageId}/attachments/${attId}`), { _deleted: true }, { merge: false }); // Optional: archive instead of actual delete. Using deleteDoc.
-    await deleteDoc(doc(db, `plants/${currentPlantId}/presses/${currentPressId}/wikiPages/${currentPageId}/attachments/${attId}`));
+    const attPath = currentScope === WIKI_SCOPE_SHARED
+      ? ['plants', currentPlantId, 'wikiPages', currentPageId, 'attachments', attId]
+      : ['plants', currentPlantId, 'presses', currentPressId, 'wikiPages', currentPageId, 'attachments', attId];
+    await setDoc(doc(db, ...attPath), { _deleted: true }, { merge: false }); // Optional: archive instead of actual delete. Using deleteDoc.
+    await deleteDoc(doc(db, ...attPath));
     attachmentsMap.delete(attId);
     renderAttachments();
   } catch(e) {}
@@ -460,6 +561,9 @@ document.getElementById('cancel-btn').addEventListener('click', () => {
   if (currentPageId === 'NEW') resetEditor();
   else selectPage(currentPageId); // reload
 });
+
+document.getElementById('cms-scope-press')?.addEventListener('click', () => handleScopeChange(WIKI_SCOPE_PRESS));
+document.getElementById('cms-scope-shared')?.addEventListener('click', () => handleScopeChange(WIKI_SCOPE_SHARED));
 
 document.getElementById('save-btn').addEventListener('click', async () => {
   const title = elTitle.value.trim();
@@ -480,8 +584,14 @@ document.getElementById('save-btn').addEventListener('click', async () => {
     const pageId = isNew ? slug : currentPageId;
     const revId = 'rev_' + Date.now();
     
-    const pageRef = doc(db, `plants/${currentPlantId}/presses/${currentPressId}/wikiPages/${pageId}`);
-    const revRef = doc(db, `plants/${currentPlantId}/presses/${currentPressId}/wikiPages/${pageId}/revisions/${revId}`);
+    const pageRef = doc(db, ...(currentScope === WIKI_SCOPE_SHARED
+      ? ['plants', currentPlantId, 'wikiPages', pageId]
+      : ['plants', currentPlantId, 'presses', currentPressId, 'wikiPages', pageId]
+    ));
+    const revRef = doc(db, ...(currentScope === WIKI_SCOPE_SHARED
+      ? ['plants', currentPlantId, 'wikiPages', pageId, 'revisions', revId]
+      : ['plants', currentPlantId, 'presses', currentPressId, 'wikiPages', pageId, 'revisions', revId]
+    ));
     
     await runTransaction(db, async (t) => {
       let pageData = {
@@ -490,6 +600,8 @@ document.getElementById('save-btn').addEventListener('click', async () => {
         summary: summary,
         tags: tagsStr.split(',').map(s=>s.trim()).filter(Boolean),
         searchText: `${title} ${summary} ${tagsStr}`.toLowerCase(),
+        scope: currentScope,
+        pressId: currentScope === WIKI_SCOPE_SHARED ? null : currentPressId,
         updatedBy: currentActor(),
         updatedAt: serverTimestamp(),
         lastActivityAt: serverTimestamp(),
