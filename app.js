@@ -9820,15 +9820,7 @@ function insertWikiPhotoIntoEditor(photo) {
 }
 
 
-  document.getElementById('notes-camera-btn-' + v)?.addEventListener('click', () => document.getElementById('notes-camera-input-' + v)?.click());
-  document.getElementById('notes-library-btn-' + v)?.addEventListener('click', () => document.getElementById('notes-library-input-' + v)?.click());
-  document.getElementById('notes-camera-input-' + v)?.addEventListener('change', function(){ handleFiles(this.files, pendingPressNotePhotos, _nid('notes-photo-previews')); this.value=''; });
-  document.getElementById('notes-library-input-' + v)?.addEventListener('change', function(){ handleFiles(this.files, pendingPressNotePhotos, _nid('notes-photo-previews')); this.value=''; });
-  document.getElementById('notes-modal-' + v)?.addEventListener('click', e => {
-    if (e.target === document.getElementById('notes-modal-' + v)) closeNotesModal();
-  });
-  document.getElementById('open-wiki-btn-' + v)?.addEventListener('click', openPressWikiModal);
-});
+
 
 document.getElementById('press-wiki-modal')?.addEventListener('click', e => {
   if (e.target === document.getElementById('press-wiki-modal')) closePressWikiModal();
