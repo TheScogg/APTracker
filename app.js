@@ -90,8 +90,10 @@ let currentPlantName = '';
 let userPlants = []; // [{ id, name, location }]
 const scheduleLookupCache = new Map();
 const USER_LOOKUP_HEARTBEAT_MS = 12 * 60 * 60 * 1000;
-const MAX_LIVE_ISSUES = 250;
-const HISTORY_ISSUES_PAGE_SIZE = 200;
+// Firestore read optimization:
+// Keep the real-time listener window tight, and load older issues on demand.
+const MAX_LIVE_ISSUES = 100;
+const HISTORY_ISSUES_PAGE_SIZE = 100;
 let dailyScheduleIndexState = null; // { plantId, date, scheduled: Set<string>|null, lookupByPress: Map<string, { main: any[], changes: any[] }> }
 // Caches the set of scheduled machine codes for the current plant/date.
 // { plantId: string, date: string, scheduled: Set<string> | null }
