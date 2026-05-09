@@ -101,15 +101,24 @@ onAuthStateChanged(auth, async (user) => {
 });
 
 async function loadPlants() {
-  const q = query(collection(db, 'plants'));
-  const snap = await getDocs(q);
   const myPlants = [];
-  
-  for (const docSnap of snap.docs) {
-    const memSnap = await getDoc(doc(db, `plants/${docSnap.id}/members/${currentUser.uid}`));
-    if (memSnap.exists()) {
-      myPlants.push({ id: docSnap.id, name: docSnap.data().name || docSnap.id });
+  try {
+    const userSnap = await getDoc(doc(db, 'users', currentUser.uid));
+    if (userSnap.exists()) {
+      const userData = userSnap.data();
+      let pIds = userData.plantIds || [];
+      if (pIds.length === 0 && Array.isArray(userData.plants)) {
+        pIds = userData.plants.map(p => p.id);
+      }
+      for (const pId of pIds) {
+        const pSnap = await getDoc(doc(db, `plants/${pId}`));
+        if (pSnap.exists()) {
+          myPlants.push({ id: pId, name: pSnap.data().name || pId });
+        }
+      }
     }
+  } catch (err) {
+    console.error("Error loading plants:", err);
   }
   
   elPlantSelect.innerHTML = '<option value="">Select a plant...</option>';
