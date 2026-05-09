@@ -9520,6 +9520,7 @@ let _pressWikiSelectedPageId = 'shift-notes';
 let _pressWikiCanEdit = false;
 let _pressWikiAttachmentsCache = [];
 let _pressWikiMachineCode = null;
+let _pressWikiRenderedBodyRaw = '';
 
 function _notesEl(base) { return document.getElementById(base + '-' + NOTES_VARIANT); }
 
@@ -9662,6 +9663,7 @@ function _renderPressWikiBody(text) {
   const bodyEl = document.getElementById('press-wiki-body');
   if (!bodyEl) return;
   const raw = String(text || '');
+  _pressWikiRenderedBodyRaw = raw;
   bodyEl.innerHTML = '';
   const lines = raw.split('\n');
   lines.forEach(line => {
@@ -9722,8 +9724,14 @@ async function savePressWikiRevision() {
   if (!_pressWikiModalPressId || !_pressWikiSelectedPageId || !currentUser) return;
   const title = String(document.getElementById('press-wiki-edit-title')?.value || '').trim();
   const body = String(document.getElementById('press-wiki-edit-body')?.value || '').trim();
-  const changeNote = String(document.getElementById('press-wiki-edit-change-note')?.value || '').trim();
-  if (!body || !changeNote) return _setPressWikiError('Body and change note are required.');
+  const rawChangeNote = String(document.getElementById('press-wiki-edit-change-note')?.value || '').trim();
+  if (!body) return _setPressWikiError('Body is required.');
+  const fallbackActorName = String(currentActor()?.name || currentUser?.displayName || currentUser?.email || 'Unknown').trim() || 'Unknown';
+  const now = new Date();
+  const dd = String(now.getDate()).padStart(2, '0');
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const yy = String(now.getFullYear()).slice(-2);
+  const changeNote = rawChangeNote || `${fallbackActorName} : ${dd}/${mm}/${yy}`;
   const pageRef = pressWikiPageDoc(_pressWikiModalPressId, _pressWikiSelectedPageId);
   const revisionRef = doc(pressWikiRevisionsCol(_pressWikiModalPressId, _pressWikiSelectedPageId));
   await runTransaction(db, async tx => {
@@ -9762,9 +9770,7 @@ function togglePressWikiEditor(show) {
 }
 
 function _pressWikiCurrentBodyText() {
-  const bodyEl = document.getElementById('press-wiki-body');
-  if (!bodyEl) return '';
-  return bodyEl.innerText || '';
+  return String(_pressWikiRenderedBodyRaw || '');
 }
 
 function togglePressWikiCreateRow(show) {
