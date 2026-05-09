@@ -68,18 +68,32 @@ const runTransaction = async (...args) => {
   return out;
 };
 const onSnapshot = (...args) => {
+  let seenFirstServerSnapshot = false;
+  const wrapSnapshotHandler = (original) => (snapshot) => {
+    const isFromCache = Boolean(snapshot?.metadata?.fromCache);
+    if (!isFromCache) {
+      if (typeof snapshot?.docChanges === 'function') {
+        if (!seenFirstServerSnapshot) {
+          trackFirestoreRead(snapshot?.size ?? 0);
+          seenFirstServerSnapshot = true;
+        } else {
+          const incrementalReads = snapshot.docChanges().reduce((sum, change) => {
+            if (change?.type === 'added' || change?.type === 'modified') return sum + 1;
+            return sum;
+          }, 0);
+          trackFirestoreRead(incrementalReads);
+        }
+      } else {
+        trackFirestoreRead(1);
+      }
+    }
+    return original(snapshot);
+  };
+
   if (typeof args[1] === 'function') {
-    const original = args[1];
-    args[1] = (snapshot) => {
-      trackFirestoreRead(snapshot?.size ?? 1);
-      return original(snapshot);
-    };
+    args[1] = wrapSnapshotHandler(args[1]);
   } else if (typeof args[2] === 'function') {
-    const original = args[2];
-    args[2] = (snapshot) => {
-      trackFirestoreRead(snapshot?.size ?? 1);
-      return original(snapshot);
-    };
+    args[2] = wrapSnapshotHandler(args[2]);
   }
   return rawOnSnapshot(...args);
 };
@@ -90,8 +104,10 @@ let currentPlantName = '';
 let userPlants = []; // [{ id, name, location }]
 const scheduleLookupCache = new Map();
 const USER_LOOKUP_HEARTBEAT_MS = 12 * 60 * 60 * 1000;
-const MAX_LIVE_ISSUES = 250;
-const HISTORY_ISSUES_PAGE_SIZE = 200;
+// Firestore read optimization:
+// Keep the real-time listener window tight, and load older issues on demand.
+const MAX_LIVE_ISSUES = 100;
+const HISTORY_ISSUES_PAGE_SIZE = 100;
 let dailyScheduleIndexState = null; // { plantId, date, scheduled: Set<string>|null, lookupByPress: Map<string, { main: any[], changes: any[] }> }
 // Caches the set of scheduled machine codes for the current plant/date.
 // { plantId: string, date: string, scheduled: Set<string> | null }
@@ -3086,7 +3102,6 @@ function startListener() {
     void _refreshRoleAlertBadgeCount();
     if (!issueHistoryCursor && snap.docs.length) {
       issueHistoryCursor = snap.docs[snap.docs.length - 1];
-      loadIssueHistoryPage().catch(() => {});
     }
     setSyncStatus('ok', 'Live — synced across all devices');
   }, err => {
@@ -3115,7 +3130,6 @@ function startListener() {
       void _refreshRoleAlertBadgeCount();
       if (snap.docs.length) {
         issueHistoryCursor = snap.docs[snap.docs.length - 1];
-        loadIssueHistoryPage().catch(() => {});
       }
       setSyncStatus('ok', 'Live connection delayed — loaded cached/latest data');
     } catch (e) {
