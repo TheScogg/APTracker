@@ -327,9 +327,36 @@ document.getElementById('upload-photo-btn').addEventListener('click', () => {
 });
 
 elFileInput.addEventListener('change', async (e) => {
-  if (!e.target.files.length) return;
+  await handleFilesUpload(e.target.files, false);
+  elFileInput.value = '';
+});
+
+// Drag and drop support on the text area
+elBody.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  elBody.style.borderColor = 'var(--accent)';
+  elBody.style.background = 'var(--bg2)';
+});
+
+elBody.addEventListener('dragleave', (e) => {
+  e.preventDefault();
+  elBody.style.borderColor = 'var(--border)';
+  elBody.style.background = 'var(--bg3)';
+});
+
+elBody.addEventListener('drop', async (e) => {
+  e.preventDefault();
+  elBody.style.borderColor = 'var(--border)';
+  elBody.style.background = 'var(--bg3)';
   
-  // We need a pageId before we can attach photos.
+  if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+    await handleFilesUpload(e.dataTransfer.files, true);
+  }
+});
+
+async function handleFilesUpload(files, autoInsert) {
+  if (!files.length) return;
+  
   if (currentPageId === 'NEW') {
     alert("Please save the page first before attaching photos.");
     return;
@@ -338,10 +365,12 @@ elFileInput.addEventListener('change', async (e) => {
   showFeedback("Uploading photos...", false);
   
   try {
-    for (const file of e.target.files) {
+    for (const file of files) {
+      if (!file.type.startsWith('image/')) continue;
+      
       const attId = 'att_' + Date.now() + '_' + Math.floor(Math.random()*1000);
-      const ext = file.name.split('.').pop();
-      const path = `plants/${currentPlantId}/press-wiki/${currentPressId}/${currentPageId}/${attId}.${ext}`;
+      const ext = file.name.split('.').pop() || 'png';
+      const path = `plants/${currentPlantId}/presses/${currentPressId}/wikiPages/${currentPageId}/attachments/${attId}.${ext}`;
       const sRef = storageRef(storageFallback, path);
       
       await uploadBytesResumable(sRef, file);
@@ -358,9 +387,18 @@ elFileInput.addEventListener('change', async (e) => {
       
       await setDoc(doc(db, `plants/${currentPlantId}/presses/${currentPressId}/wikiPages/${currentPageId}/attachments/${attId}`), attDoc);
       attachmentsMap.set(attId, attDoc);
+      
+      if (autoInsert) {
+        const md = `\n![${attDoc.caption}](${attDoc.url})\n`;
+        const pos = elBody.selectionStart;
+        const text = elBody.value;
+        elBody.value = text.slice(0, pos) + md + text.slice(pos);
+        elBody.focus();
+        const newPos = pos + md.length;
+        elBody.setSelectionRange(newPos, newPos);
+      }
     }
     
-    // Update photo count
     await updateDoc(doc(db, `plants/${currentPlantId}/presses/${currentPressId}/wikiPages/${currentPageId}`), {
       photoCount: attachmentsMap.size
     });
@@ -370,9 +408,7 @@ elFileInput.addEventListener('change', async (e) => {
   } catch (err) {
     showFeedback("Upload failed: " + err.message, true);
   }
-  
-  elFileInput.value = '';
-});
+}
 
 function renderAttachments() {
   elAttachments.innerHTML = '';
