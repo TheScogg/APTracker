@@ -68,18 +68,32 @@ const runTransaction = async (...args) => {
   return out;
 };
 const onSnapshot = (...args) => {
+  let seenFirstServerSnapshot = false;
+  const wrapSnapshotHandler = (original) => (snapshot) => {
+    const isFromCache = Boolean(snapshot?.metadata?.fromCache);
+    if (!isFromCache) {
+      if (typeof snapshot?.docChanges === 'function') {
+        if (!seenFirstServerSnapshot) {
+          trackFirestoreRead(snapshot?.size ?? 0);
+          seenFirstServerSnapshot = true;
+        } else {
+          const incrementalReads = snapshot.docChanges().reduce((sum, change) => {
+            if (change?.type === 'added' || change?.type === 'modified') return sum + 1;
+            return sum;
+          }, 0);
+          trackFirestoreRead(incrementalReads);
+        }
+      } else {
+        trackFirestoreRead(1);
+      }
+    }
+    return original(snapshot);
+  };
+
   if (typeof args[1] === 'function') {
-    const original = args[1];
-    args[1] = (snapshot) => {
-      trackFirestoreRead(snapshot?.size ?? 1);
-      return original(snapshot);
-    };
+    args[1] = wrapSnapshotHandler(args[1]);
   } else if (typeof args[2] === 'function') {
-    const original = args[2];
-    args[2] = (snapshot) => {
-      trackFirestoreRead(snapshot?.size ?? 1);
-      return original(snapshot);
-    };
+    args[2] = wrapSnapshotHandler(args[2]);
   }
   return rawOnSnapshot(...args);
 };
