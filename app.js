@@ -9825,8 +9825,10 @@ async function openPressWikiModal() {
   _pressWikiCanEdit = (currentUserRole === 'admin' || currentUserRole === 'editor');
   const editBtn = document.getElementById('press-wiki-edit-btn');
   const newBtn = document.getElementById('press-wiki-new-page-btn');
+  const cmsBtn = document.getElementById('press-wiki-cms-btn');
   if (editBtn) editBtn.style.display = _pressWikiCanEdit ? '' : 'none';
   if (newBtn) newBtn.style.display = _pressWikiCanEdit ? '' : 'none';
+  if (cmsBtn) cmsBtn.style.display = _pressWikiCanEdit ? '' : 'none';
   _setPressWikiError('');
   titleEl.textContent = 'Shift Notes';
   metaEl.textContent = `Press ${_notesModalMachineCode || '—'}`;
@@ -10219,6 +10221,11 @@ document.getElementById('press-wiki-insert-photo-btn')?.addEventListener('click'
 document.getElementById('press-wiki-new-page-btn')?.addEventListener('click', () => togglePressWikiCreateRow(true));
 document.getElementById('press-wiki-cancel-create-page-btn')?.addEventListener('click', () => togglePressWikiCreateRow(false));
 document.getElementById('press-wiki-create-page-btn')?.addEventListener('click', () => createPressWikiPageFromInput());
+document.getElementById('press-wiki-cms-btn')?.addEventListener('click', () => {
+  if (!_pressWikiModalPressId) return;
+  const url = `wiki-cms.html?plantId=${encodeURIComponent(currentPlantId)}&pressId=${encodeURIComponent(_pressWikiModalPressId)}&pageId=${encodeURIComponent(_pressWikiSelectedPageId || '')}`;
+  window.location.href = url;
+});
 
 // ── EXPORT PDF ──
 window.openExportModal = () => {
