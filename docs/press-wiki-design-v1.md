@@ -24,6 +24,7 @@ Recommended plant-wide shared-library paths:
 - `plants/{plantId}/wikiPages/{pageId}/attachments/{attachmentId}`
 
 The same page schema should work in both scopes so the reader, editor, and attachment flow stay identical.
+Shared-library access should follow the user's plant routing profile (`users/{uid}.plantIds`) so the wiki remains writable even if a member doc is still syncing in the browser session.
 
 ### `wikiPages/{pageId}` document
 ```json

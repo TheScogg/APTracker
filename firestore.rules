@@ -272,25 +272,29 @@ service cloud.firestore {
 
       // ── Plant-wide shared wiki ──
       match /wikiPages/{pageId} {
-        allow read: if isPlantMember(plantId);
-        allow create: if canEditWiki(plantId)
+        allow read: if hasPlantAccess();
+        allow create: if hasPlantAccess()
+                      && canEditWiki(plantId)
                       && request.resource.data.createdBy.uid == currentUid()
                       && (!('scope' in request.resource.data) || request.resource.data.scope == 'shared');
-        allow update: if canEditWiki(plantId)
+        allow update: if hasPlantAccess()
+                      && canEditWiki(plantId)
                       && request.resource.data.updatedBy.uid == currentUid()
                       && (!('scope' in request.resource.data) || request.resource.data.scope == 'shared');
         allow delete: if isAdmin(plantId);
 
         match /revisions/{revisionId} {
-          allow read: if isPlantMember(plantId);
-          allow create: if canEditWiki(plantId)
+          allow read: if hasPlantAccess();
+          allow create: if hasPlantAccess()
+                        && canEditWiki(plantId)
                         && request.resource.data.editedBy.uid == currentUid();
           allow update, delete: if false;
         }
 
         match /attachments/{attachmentId} {
-          allow read: if isPlantMember(plantId);
-          allow create, update: if canEditWiki(plantId)
+          allow read: if hasPlantAccess();
+          allow create, update: if hasPlantAccess()
+                                && canEditWiki(plantId)
                                 && request.resource.data.uploadedBy.uid == currentUid();
           allow delete: if isAdmin(plantId);
         }

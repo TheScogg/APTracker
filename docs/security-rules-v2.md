@@ -114,6 +114,8 @@ service cloud.firestore {
 #### Reasoning
 This document stores profile and plant preference data, not plant authorization.
 
+For shared wiki pages, the app also uses the user's `users/{uid}.plantIds` routing list as a plant-access fallback, so shared-library content can be written by any user who is already routed into that plant even if their member doc has not fully synced yet.
+
 ---
 
 ### `plants/{plantId}`

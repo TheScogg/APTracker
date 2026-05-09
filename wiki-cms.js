@@ -40,6 +40,7 @@ const elPageList = document.getElementById('page-list');
 const elNewPageBtn = document.getElementById('new-page-btn');
 const elEditorContainer = document.getElementById('editor-container');
 const elEmptyState = document.getElementById('empty-state');
+const elScopeSummary = document.getElementById('scope-summary');
 
 // Editor DOM
 const elTitle = document.getElementById('edit-title');
@@ -130,6 +131,11 @@ function updateScopeButtons() {
   }
   if (elPressSelect) {
     elPressSelect.disabled = isShared;
+  }
+  if (elScopeSummary) {
+    elScopeSummary.textContent = isShared
+      ? 'Shared Library pages are plant-wide and visible to every press.'
+      : 'This Press pages stay scoped to the selected press.';
   }
 }
 
@@ -299,13 +305,17 @@ function renderPageList() {
   pages.forEach(p => {
     const li = document.createElement('li');
     li.className = `page-item ${p.id === currentPageId ? 'active' : ''}`;
-    const scopeBadge = p.scope === WIKI_SCOPE_SHARED ? '<span style="display:inline-block;margin-top:6px;padding:2px 6px;border-radius:999px;background:color-mix(in srgb, var(--accent) 18%, transparent);color:var(--accent);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;">Shared</span>' : '';
     li.innerHTML = `
       <div class="page-title">${p.title || 'Untitled'}</div>
       <div class="page-meta">Photos: ${p.photoCount || 0}</div>
-      ${scopeBadge}
+      ${p.scope === WIKI_SCOPE_SHARED ? '<button type="button" class="scope-link-badge" data-scope-link="shared">Shared</button>' : ''}
     `;
     li.addEventListener('click', () => selectPage(p.id));
+    li.querySelector('[data-scope-link="shared"]')?.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await handleScopeChange(WIKI_SCOPE_SHARED);
+      await selectPage(p.id);
+    });
     elPageList.appendChild(li);
   });
 }

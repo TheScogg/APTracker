@@ -9557,6 +9557,15 @@ function _pressWikiScopeLabel(scope = _pressWikiScope) {
   return scope === WIKI_SCOPE_SHARED ? 'Shared Library' : 'This Press';
 }
 
+function _pressWikiSyncScopeBadge(scope = _pressWikiScope) {
+  const badge = document.getElementById('press-wiki-scope-badge');
+  if (!badge) return;
+  const isShared = scope === WIKI_SCOPE_SHARED;
+  badge.style.display = isShared ? 'inline-flex' : 'none';
+  badge.title = isShared ? 'Open the shared library view' : '';
+  badge.onclick = isShared ? () => _pressWikiSetScope(WIKI_SCOPE_SHARED) : null;
+}
+
 function _pressWikiSetScope(scope, { reload = true } = {}) {
   _pressWikiScope = scope === WIKI_SCOPE_SHARED ? WIKI_SCOPE_SHARED : WIKI_SCOPE_PRESS;
   const pressBtn = document.getElementById('press-wiki-scope-press');
@@ -9622,6 +9631,7 @@ async function openPressWikiModal(pressId, machineCode) {
   _setPressWikiError('');
   titleEl.textContent = 'Shift Notes';
   metaEl.textContent = `Press ${_pressWikiMachineCode || '—'} · ${_pressWikiScopeLabel()}`;
+  _pressWikiSyncScopeBadge();
   bodyEl.textContent = 'Loading wiki...';
   revisionsEl.innerHTML = '';
   attachmentsEl.innerHTML = '';
@@ -9678,12 +9688,14 @@ async function loadPressWikiPage(pageId) {
         ? 'No shared wiki content yet. Add a plant library page to seed the library.'
         : 'No wiki content yet. Add a press note to seed Shift Notes.');
       titleEl.textContent = pageId;
+      _pressWikiSyncScopeBadge(_pressWikiScope);
       return;
     }
     const page = pageSnap.data() || {};
     const currentRevisionId = page.currentRevisionId || null;
     titleEl.textContent = page.title || pageId;
     metaEl.textContent = `${_pressWikiScopeLabel(page.scope || _pressWikiScope)} · Updated ${_relativeTime(page.updatedAt) || 'recently'}`;
+    _pressWikiSyncScopeBadge(page.scope || _pressWikiScope);
     const revSnap = await getDocs(query(wikiRevisionsColForScope(_pressWikiScope, _pressWikiModalPressId, pageId), orderBy('editedAt', 'desc'), limit(30)));
     const revisions = revSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     const currentRevision = revisions.find(r => r.id === currentRevisionId) || revisions[0] || null;

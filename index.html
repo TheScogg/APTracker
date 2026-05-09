@@ -652,7 +652,10 @@
       <div>
         <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;">Press Wiki</div>
         <div id="press-wiki-title" style="font-size:18px;font-weight:700;margin-top:4px;">Shift Notes</div>
-        <div id="press-wiki-meta" style="font-size:12px;color:var(--text3);margin-top:2px;"></div>
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:2px;">
+          <div id="press-wiki-meta" style="font-size:12px;color:var(--text3);"></div>
+          <button id="press-wiki-scope-badge" type="button" class="scope-link-badge" style="display:none;">Shared</button>
+        </div>
       </div>
       <button class="btn btn-ghost" type="button" onclick="closePressWikiModal()">Close</button>
     </div>
