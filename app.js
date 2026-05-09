@@ -1458,6 +1458,7 @@ async function loadPlantPresses() {
 async function switchPlant(plantId) {
   if (plantId === currentPlantId) return;
   if (unsubscribe) { unsubscribe(); unsubscribe = null; }
+  stopStatusConfigListener();
   stopRoleFeedAlertsWatcher();
   clearRoleAlertBadge();
   if (typeof closeNotesModal === 'function') closeNotesModal();
@@ -1658,9 +1659,32 @@ function getStatusSubs(statusKey) {
   return [...st.subs].sort((a, b) => String(a).localeCompare(String(b), undefined, { sensitivity: 'base' }));
 }
 
+function stopStatusConfigListener() {
+  if (statusConfigUnsubscribe) {
+    statusConfigUnsubscribe();
+    statusConfigUnsubscribe = null;
+  }
+}
+
+function refreshStatusDependentUI() {
+  buildStatusFilterPills();
+  refreshVisibleData();
+
+  if (document.getElementById('add-modal')?.classList.contains('visible')) {
+    renderLogCatButtons();
+    renderLogSubChips();
+    updateLogCatPill();
+    if (subcategorySheetState.open) renderSubcategorySheet();
+  }
+}
+
 async function loadConfig() {
+  const mySerial = ++statusConfigLoadSerial;
+  const plantId = currentPlantId;
+  stopStatusConfigListener();
   try {
     const snap = await getDoc(plantDoc('config', 'statuses'));
+    if (mySerial !== statusConfigLoadSerial || plantId !== currentPlantId) return;
     if (snap.exists()) {
       const data = snap.data();
       
@@ -1694,6 +1718,19 @@ async function loadConfig() {
       buildStatusFilterPills();
       renderIssues();
     }
+
+    if (mySerial !== statusConfigLoadSerial || plantId !== currentPlantId) return;
+    statusConfigUnsubscribe = onSnapshot(plantDoc('config', 'statuses'), snap2 => {
+      if (mySerial !== statusConfigLoadSerial || plantId !== currentPlantId) return;
+      if (!snap2.exists()) return;
+      const data2 = snap2.data() || {};
+      if (!data2.statuses) return;
+      STATUSES = data2.statuses || {};
+      rebuildDerivedStatus();
+      refreshStatusDependentUI();
+    }, err => {
+      console.warn('status config listener error', err);
+    });
   } catch (e) {
     console.error("Error loading config:", e);
   }
@@ -2814,6 +2851,8 @@ let pressContributionPlantId = null;
 let pressContributionLoading = null;
 let issuePeriod = 'today';
 let unsubscribe = null;
+let statusConfigUnsubscribe = null;
+let statusConfigLoadSerial = 0;
 let issueLogLayoutMode = 'masonic'; // 'masonic' | 'grid'
 let issueLogLayoutRaf = null;
 let issueLogDeferredRelayoutTimer = null;
@@ -2954,6 +2993,7 @@ document.getElementById('google-signin-btn').addEventListener('click', signInWit
 
 async function doSignOut() {
   if (unsubscribe) { unsubscribe(); unsubscribe = null; }
+  stopStatusConfigListener();
   stopGamificationListeners();
   await fbSignOut(auth);
 }
@@ -3028,6 +3068,7 @@ onAuthStateChanged(auth, async user => {
   } else {
     stopRoleFeedAlertsWatcher();
     clearRoleAlertBadge();
+    stopStatusConfigListener();
     if (_messagingInboxUnsubscribe) { _messagingInboxUnsubscribe(); _messagingInboxUnsubscribe = null; }
     _updateMessagingEntryBadges(0);
     currentUser = null;
@@ -10760,10 +10801,7 @@ window.resetToDefaults = async () => {
   
   // Rebuild UI
   rebuildDerivedStatus();
-  buildStatusFilterPills();
-  updatePressStates();
-  renderIssues();
-  updateStats();
+  refreshStatusDependentUI();
   
   // Refresh admin panel if open
   if (document.getElementById('admin-overlay').classList.contains('visible')) {
@@ -10814,7 +10852,7 @@ async function saveAdminConfig() {
     await saveConfig();
     rebuildDerivedStatus();
     closeAdminPanel();
-    updatePressStates(); renderIssues(); updateStats();
+    refreshStatusDependentUI();
     btn.textContent = '✓ Saved!';
   } catch(e) {
     btn.textContent = '✕ Error — try again'; console.error(e);
