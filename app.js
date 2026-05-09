@@ -1660,19 +1660,32 @@ function getStatusSubs(statusKey) {
 }
 
 function normalizeLoadedStatuses(rawStatuses) {
-  const normalized = deepCopy(DEFAULT_STATUSES);
-  if (!rawStatuses || typeof rawStatuses !== 'object' || Array.isArray(rawStatuses)) return normalized;
+  if (!rawStatuses || typeof rawStatuses !== 'object' || Array.isArray(rawStatuses)) {
+    return deepCopy(DEFAULT_STATUSES);
+  }
 
-  Object.entries(rawStatuses).forEach(([key, value]) => {
+  const normalized = {};
+  Object.entries(rawStatuses).forEach(([key, value], idx) => {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+    const safeLabel = String(value.label || key || 'Status').trim() || key;
+    const slug = slugifyStatusLabel(safeLabel);
+    const color = String(value.cssColor || value.swipeColor || '#8b949e');
     normalized[key] = {
-      ...normalized[key],
-      ...value,
-      subs: Array.isArray(value.subs) ? value.subs.map(v => String(v).trim()).filter(Boolean) : (normalized[key]?.subs || [])
+      label: safeLabel,
+      shortLabel: String(value.shortLabel || safeLabel),
+      icon: String(value.icon || '●'),
+      cssColor: color,
+      swipeColor: String(value.swipeColor || color),
+      floorCls: String(value.floorCls || (key === 'resolved' ? 'all-resolved' : `has-${slug}`)),
+      cls: String(value.cls || `status-${slug}`),
+      subs: Array.isArray(value.subs) ? value.subs.map(v => String(v).trim()).filter(Boolean) : [],
+      statLabel: String(value.statLabel || safeLabel),
+      order: Number.isFinite(Number(value.order)) ? Number(value.order) : idx
     };
   });
 
-  // Keep the canonical lockstep statuses present even if Firestore is missing them.
+  // Keep the canonical lockstep statuses present if Firestore omits them,
+  // but do not seed any other old in-code defaults into the live config.
   if (!normalized.open) normalized.open = deepCopy(DEFAULT_STATUSES.open);
   if (!normalized.resolved) normalized.resolved = deepCopy(DEFAULT_STATUSES.resolved);
   return normalized;
