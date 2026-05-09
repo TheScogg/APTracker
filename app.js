@@ -9688,10 +9688,29 @@ function _renderPressWikiBody(text) {
     } else {
       const p = document.createElement('div');
       p.textContent = line || ' ';
+      let html = p.innerHTML;
+      html = html.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+      html = html.replace(/\*(.+?)\*/g, '<i>$1</i>');
+      html = html.replace(/&lt;u&gt;(.+?)&lt;\/u&gt;/g, '<u>$1</u>');
+      html = html.replace(/&lt;span style=(?:'|&#39;|"|&quot;)color:([a-zA-Z0-9#]+)(?:'|&#39;|"|&quot;)&gt;(.*?)&lt;\/span&gt;/g, '<span style="color:$1">$2</span>');
+      p.innerHTML = html;
       bodyEl.appendChild(p);
     }
   });
 }
+
+window.insertMarkdown = function(textareaId, prefix, suffix) {
+  const ta = document.getElementById(textareaId);
+  if (!ta) return;
+  const start = ta.selectionStart ?? ta.value.length;
+  const end = ta.selectionEnd ?? ta.value.length;
+  const selectedText = ta.value.slice(start, end);
+  const replacement = prefix + selectedText + suffix;
+  ta.value = ta.value.slice(0, start) + replacement + ta.value.slice(end);
+  ta.focus();
+  const newPos = start + prefix.length + selectedText.length;
+  ta.setSelectionRange(newPos, newPos);
+};
 
 window.closePressWikiModal = () => {
   document.getElementById('press-wiki-modal')?.classList.remove('visible');

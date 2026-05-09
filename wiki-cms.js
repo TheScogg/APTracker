@@ -533,3 +533,16 @@ document.getElementById('save-btn').addEventListener('click', async () => {
     document.getElementById('save-btn').disabled = false;
   }
 });
+
+window.insertMarkdown = function(textareaId, prefix, suffix) {
+  const ta = document.getElementById(textareaId);
+  if (!ta) return;
+  const start = ta.selectionStart ?? ta.value.length;
+  const end = ta.selectionEnd ?? ta.value.length;
+  const selectedText = ta.value.slice(start, end);
+  const replacement = prefix + selectedText + suffix;
+  ta.value = ta.value.slice(0, start) + replacement + ta.value.slice(end);
+  ta.focus();
+  const newPos = start + prefix.length + selectedText.length;
+  ta.setSelectionRange(newPos, newPos);
+};

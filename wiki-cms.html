@@ -158,7 +158,14 @@
             
             <div style="margin-bottom:16px;">
               <label class="editor-label">Content (Markdown supported)</label>
-              <textarea id="edit-body" class="editor-textarea" placeholder="Write documentation here..."></textarea>
+              <div class="formatting-toolbar" style="display:flex;gap:4px;margin-top:8px;padding:4px;background:var(--bg3);border:1px solid var(--border);border-bottom:none;border-radius:8px 8px 0 0;">
+                <button type="button" class="btn btn-ghost" style="padding:4px 8px;font-size:12px;min-width:32px;" onclick="insertMarkdown('edit-body', '**', '**')"><b>B</b></button>
+                <button type="button" class="btn btn-ghost" style="padding:4px 8px;font-size:12px;font-style:italic;min-width:32px;" onclick="insertMarkdown('edit-body', '*', '*')">I</button>
+                <button type="button" class="btn btn-ghost" style="padding:4px 8px;font-size:12px;text-decoration:underline;min-width:32px;" onclick="insertMarkdown('edit-body', '<u>', '</u>')">U</button>
+                <div style="width:1px;background:var(--border);margin:4px;"></div>
+                <input type="color" id="edit-color-picker" style="width:28px;height:28px;padding:0;border:none;cursor:pointer;background:transparent;border-radius:4px;" onchange="insertMarkdown('edit-body', '<span style=\'color:'+this.value+'\'>', '</span>')">
+              </div>
+              <textarea id="edit-body" class="editor-textarea" placeholder="Write documentation here..." style="margin-top:0;border-radius:0 0 8px 8px;"></textarea>
             </div>
             
             <div>
