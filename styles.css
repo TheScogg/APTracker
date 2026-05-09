@@ -1117,6 +1117,30 @@
   .sort-dropdown { display: none; position: absolute; top: calc(100% + 5px); right: 0; background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; min-width: 180px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); z-index: 200; overflow: hidden; animation: dropIn 0.15s ease; }
   .sort-dropdown.visible { display: block; }
   .export-dropdown { min-width: 120px; }
+  .press-wiki-actions-wrap { position: relative; }
+  .press-wiki-actions-btn { min-width: 96px; justify-content: space-between; padding: 4px 10px; font-size: 11px; }
+  .press-wiki-actions-menu { min-width: 172px; right: 0; left: auto; top: calc(100% + 4px); }
+  .press-wiki-actions-menu .press-wiki-action-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    font-size: 12px;
+    color: var(--text2);
+    cursor: pointer;
+    transition: background 0.1s;
+    font-family: 'Nunito', sans-serif;
+    font-weight: 600;
+    white-space: nowrap;
+    border: none;
+    background: none;
+    width: 100%;
+    text-align: left;
+  }
+  .press-wiki-actions-menu .press-wiki-action-item:hover { background: var(--bg3); color: var(--text); }
+  .press-wiki-actions-menu .press-wiki-action-item + .press-wiki-action-item {
+    border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  }
   .sort-opt { display: flex; align-items: center; gap: 8px; padding: 9px 14px; font-size: 12px; color: var(--text2); cursor: pointer; transition: background 0.1s; font-family: 'Nunito', sans-serif; font-weight: 600; white-space: nowrap; border: none; background: none; width: 100%; text-align: left; }
   .sort-opt:hover { background: var(--bg3); color: var(--text); }
   .sort-opt.active { color: var(--accent); }
