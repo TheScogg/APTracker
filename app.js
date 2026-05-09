@@ -3310,10 +3310,10 @@ window.setMapMode = mode => {
   document.getElementById('mode-hist').className = 'map-mode-btn' + (mode==='hist' ? ' active-hist' : '');
   document.getElementById('mode-notes').className = 'map-mode-btn' + (mode==='notes' ? ' active-hist' : '');
   document.getElementById('floor-map-label').textContent = mode==='log'
-    ? 'FLOOR MAP — CLICK A PRESS TO LOG AN ISSUE'
+    ? 'FLOOR MAP — CLICK A PRESS TO REPORT AN ISSUE'
     : mode==='hist'
-      ? 'FLOOR MAP — CLICK A PRESS TO VIEW HISTORY'
-      : 'FLOOR MAP — USER NOTES & WIKI CONTRIBUTIONS';
+      ? 'FLOOR MAP — CLICK A PRESS TO VIEW TIMELINE'
+      : 'FLOOR MAP — USER WIKI CONTRIBUTIONS';
   // Update all press button hover styles
   document.querySelectorAll('.press-btn').forEach(btn => {
     btn.classList.toggle('hist-mode', mode==='hist');
