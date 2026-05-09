@@ -1684,6 +1684,17 @@ function toColumnMajorOrder(items, columnCount) {
   return ordered;
 }
 
+function applyColumnMajorGridLayout(el, itemCount, columnCount = 2) {
+  if (!el) return;
+  const cols = Math.max(1, Number(columnCount) || 1);
+  const rows = Math.max(1, Math.ceil(Math.max(0, Number(itemCount) || 0) / cols));
+  el.style.display = 'grid';
+  el.style.gridAutoFlow = 'column';
+  el.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
+  el.style.gridTemplateRows = `repeat(${rows}, minmax(0, auto))`;
+  el.style.gridAutoColumns = 'minmax(0, 1fr)';
+}
+
 function normalizeLoadedStatuses(rawStatuses) {
   if (!rawStatuses || typeof rawStatuses !== 'object' || Array.isArray(rawStatuses)) {
     return deepCopy(DEFAULT_STATUSES);
@@ -4303,10 +4314,11 @@ function renderLogSubChips() {
   row.className = 'subcategory-grid visible';
   row.style.marginTop = '4px';
   row.style.marginBottom = '8px';
+  applyColumnMajorGridLayout(row, subs.length, 2);
   
   const activeColor = getStatusColor(logCatKey);
   
-  toColumnMajorOrder(subs, 2).forEach(sub => {
+  subs.forEach(sub => {
     const item = document.createElement('button');
     item.type = 'button';
     item.className = 'subcategory-item' + (logCatSub === sub ? ' selected' : '');
@@ -4371,12 +4383,18 @@ function renderSubcategorySheet(statusKey = subcategorySheetState.statusKey) {
 
   grid.innerHTML = '';
   if (!subs.length) {
+    grid.style.display = 'grid';
+    grid.style.gridAutoFlow = '';
+    grid.style.gridTemplateColumns = '';
+    grid.style.gridTemplateRows = '';
+    grid.style.gridAutoColumns = '';
     const empty = document.createElement('div');
     empty.className = 'subcategory-empty';
     empty.textContent = 'This status has no subcategories. Use no subcategory to continue.';
     grid.appendChild(empty);
   } else {
-    toColumnMajorOrder(subs, 2).forEach(sub => {
+    applyColumnMajorGridLayout(grid, subs.length, 2);
+    subs.forEach(sub => {
       const item = document.createElement('button');
       item.type = 'button';
       item.className = 'subcategory-item' + (subcategorySheetState.selectedSub === sub ? ' selected' : '');
@@ -6715,14 +6733,15 @@ function renderIssues() {
           catInner.classList.add('has-selection');
           catPanel.classList.add('has-subs');
 
-          const subInner = subPanel.querySelector('.swipe-sub-inner');
-          subInner.innerHTML = '';
-          subInner.className = 'swipe-sub-inner subcategory-grid'; 
+    const subInner = subPanel.querySelector('.swipe-sub-inner');
+    subInner.innerHTML = '';
+    subInner.className = 'swipe-sub-inner subcategory-grid'; 
+    applyColumnMajorGridLayout(subInner, getStatusSubs(statusKey).length + 1, 2);
           
-          const activeColor = getStatusColor(statusKey);
+    const activeColor = getStatusColor(statusKey);
 
           // Sub chips
-          toColumnMajorOrder(getStatusSubs(statusKey), 2).forEach(sub => {
+          getStatusSubs(statusKey).forEach(sub => {
             const item = document.createElement('button');
             item.type = 'button';
             item.className = 'subcategory-item swipe-sub-action';
