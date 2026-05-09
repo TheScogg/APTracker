@@ -1665,6 +1665,26 @@ function getStatusSubs(statusKey) {
   return [...st.subs].sort((a, b) => String(a).localeCompare(String(b), undefined, { sensitivity: 'base' }));
 }
 
+function getAlphabetizedStatusKeys({ includeOpen = true, includeResolved = true } = {}) {
+  return Object.keys(STATUSES || {})
+    .filter(key => (includeOpen || key !== 'open') && (includeResolved || key !== 'resolved'))
+    .sort((a, b) => getStatusLabel(a, 'short').localeCompare(getStatusLabel(b, 'short'), undefined, { sensitivity: 'base' }));
+}
+
+function toColumnMajorOrder(items, columnCount) {
+  const source = Array.isArray(items) ? items : [];
+  const cols = Math.max(1, Number(columnCount) || 1);
+  const rows = Math.ceil(source.length / cols);
+  const ordered = [];
+  for (let col = 0; col < cols; col++) {
+    for (let row = 0; row < rows; row++) {
+      const idx = row * cols + col;
+      if (idx < source.length) ordered.push(source[idx]);
+    }
+  }
+  return ordered;
+}
+
 function normalizeLoadedStatuses(rawStatuses) {
   if (!rawStatuses || typeof rawStatuses !== 'object' || Array.isArray(rawStatuses)) {
     return deepCopy(DEFAULT_STATUSES);
@@ -1759,34 +1779,16 @@ async function loadConfig() {
 function buildStatusFilterPills() {
   const container = document.getElementById('stat-pills-row');
   if (!container) return;
-
-  // Start with the standard Open/Resolved
-  let html = `
-    <div class="stat-pill" id="pill-open" onclick="toggleStatFilter('open')">
-      <div class="dot" style="background:var(--red)"></div>
-      <span id="stat-open">0 Open</span>
-    </div>
-    <div class="stat-pill" id="pill-resolved" onclick="toggleStatFilter('resolved')">
-      <div class="dot" style="background:var(--green)"></div>
-      <span id="stat-resolved">0 Resolved</span>
-    </div>
-  `;
-
-  // Add the custom pills from your loadConfig/STATUSES data
-  Object.keys(STATUSES).forEach(key => {
-    // Skip if it's already one of the defaults we manually added above
-    if (key === 'open' || key === 'resolved') return;
-
+  const keys = getAlphabetizedStatusKeys();
+  container.innerHTML = keys.map(key => {
     const col = getStatusColor(key);
-    html += `
+    return `
       <div class="stat-pill" id="pill-${key}" onclick="toggleStatFilter('${key}')">
         <div class="dot" style="background:${col}"></div>
         <span id="stat-${key}">0 ${getStatusLabel(key, 'stat')}</span>
       </div>
     `;
-  });
-
-  container.innerHTML = html;
+  }).join('');
 }
 
 async function saveConfig() {
@@ -1795,37 +1797,16 @@ async function saveConfig() {
 
 function rebuildDerivedStatus() {
   // Rebuild ALL_STATUSES and STATUS_ORDER after STATUSES changes
-  window._ALL_STATUSES = Object.keys(STATUSES).filter(k=>k!=='open'&&k!=='resolved');
+  window._ALL_STATUSES = getAlphabetizedStatusKeys({ includeOpen: false, includeResolved: false });
   window._STATUS_ORDER = Object.entries(STATUSES).sort((a,b)=>a[1].order-b[1].order).map(([k])=>k);
-
-  // Rebuild stat pills dynamically
-  const pillsRow = document.getElementById('stat-pills-row');
-  if (pillsRow) {
-    // Keep open + resolved pills, remove dynamically added ones
-    pillsRow.querySelectorAll('.stat-pill.dynamic-pill').forEach(el => el.remove());
-    const resolvedPill = document.getElementById('pill-resolved');
-    window._ALL_STATUSES.forEach(k => {
-      const st = getStatusDef(k);
-      const col = getStatusColor(k);
-      const pill = document.createElement('div');
-      pill.className = 'stat-pill dynamic-pill';
-      pill.id = 'pill-' + k;
-      pill.onclick = () => toggleStatFilter(k);
-      pill.innerHTML = `<div class="dot" style="background:${col}"></div><span id="stat-${k}">0 ${getStatusLabel(k, 'stat')}</span>`;
-      // Insert before resolved pill
-      if (resolvedPill) pillsRow.insertBefore(pill, resolvedPill);
-      else pillsRow.appendChild(pill);
-    });
-    // Move resolved to end
-    if (resolvedPill) pillsRow.appendChild(resolvedPill);
-  }
+  buildStatusFilterPills();
 
   // Rebuild status filter dropdown
   const sf = document.getElementById('status-filter');
   if (sf) {
     const curVal = sf.value;
     sf.innerHTML = '<option value="">All Status</option>';
-    window._STATUS_ORDER.forEach(k => {
+    getAlphabetizedStatusKeys().forEach(k => {
       const opt = document.createElement('option');
       opt.value = k;
       opt.textContent = getStatusLabel(k);
@@ -3896,7 +3877,7 @@ function renderRowPanels() {
         };
       })
       .filter(Boolean)
-      .sort((a, b) => (b.count - a.count) || (a.order - b.order));
+      .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }) || (a.order - b.order));
     const visibleEntries = statusEntries.slice(0, visibleLimit);
     const hiddenEntries = statusEntries.slice(visibleLimit);
 
@@ -4291,8 +4272,7 @@ window.openAddModal = m => {
 function renderLogCatButtons() {
   const row = document.getElementById('log-cat-all-row'); if (!row) return;
   row.innerHTML = '';
-  // Use STATUS_ORDER for consistent ordering
-  const ordered = window._STATUS_ORDER ? window._STATUS_ORDER : Object.keys(STATUSES);
+  const ordered = getAlphabetizedStatusKeys();
   ordered.forEach(key => {
     const st = getStatusDef(key);
     const btn = document.createElement('button'); btn.className = 'log-cat-btn'; btn.dataset.key = key;
@@ -4327,7 +4307,7 @@ function renderLogSubChips() {
   
   const activeColor = getStatusColor(logCatKey);
   
-  subs.forEach(sub => {
+  toColumnMajorOrder(subs, 2).forEach(sub => {
     const item = document.createElement('button');
     item.type = 'button';
     item.className = 'subcategory-item' + (logCatSub === sub ? ' selected' : '');
@@ -4356,8 +4336,7 @@ function renderSubcategorySheet(statusKey = subcategorySheetState.statusKey) {
   const skipBtn = document.getElementById('subcategory-sheet-skip');
   if (!parentRow || !grid) return;
 
-  const ordered = window._STATUS_ORDER ? window._STATUS_ORDER : Object.keys(STATUSES);
-  const alphabetizedKeys = [...ordered].sort((a, b) => getStatusLabel(a, 'short').localeCompare(getStatusLabel(b, 'short')));
+  const alphabetizedKeys = getAlphabetizedStatusKeys();
   const activeKey = statusKey || alphabetizedKeys.find(key => getStatusSubs(key).length) || 'open';
   const subs = getStatusSubs(activeKey);
   const activeColor = getStatusColor(activeKey);
@@ -4398,7 +4377,7 @@ function renderSubcategorySheet(statusKey = subcategorySheetState.statusKey) {
     empty.textContent = 'This status has no subcategories. Use no subcategory to continue.';
     grid.appendChild(empty);
   } else {
-    subs.forEach(sub => {
+    toColumnMajorOrder(subs, 2).forEach(sub => {
       const item = document.createElement('button');
       item.type = 'button';
       item.className = 'subcategory-item' + (subcategorySheetState.selectedSub === sub ? ' selected' : '');
@@ -5470,9 +5449,10 @@ window.startEditEntry = (id, idx) => {
   
   // Populate modal
   const statusSelect = document.getElementById('edit-status-select');
-  statusSelect.innerHTML = Object.entries(STATUSES).map(([k,v]) => 
-    `<option value="${k}" ${k === entry.status ? 'selected' : ''}>${v.icon} ${v.label}</option>`
-  ).join('');
+  statusSelect.innerHTML = getAlphabetizedStatusKeys().map(k => {
+    const v = STATUSES[k];
+    return `<option value="${k}" ${k === entry.status ? 'selected' : ''}>${v.icon} ${v.label}</option>`;
+  }).join('');
   
   // Handle sub-status
   updateEditStatusSubOptions();
@@ -6296,7 +6276,10 @@ function renderIssues() {
   });
 
   // Build options html for status select
-  const statusOptions = Object.entries(STATUS_CONFIG).map(([k,v])=>`<option value="${k}">${v.icon} ${v.label}</option>`).join('');
+  const statusOptions = getAlphabetizedStatusKeys().map(k => {
+    const v = STATUS_CONFIG[k];
+    return `<option value="${k}">${v.icon} ${v.label}</option>`;
+  }).join('');
   function subOptions(statusKey, selectedSub) {
     const cfg = STATUS_CONFIG[statusKey];
     if (!cfg||!cfg.subs.length) return '';
@@ -6617,7 +6600,7 @@ function renderIssues() {
     const teaser = document.createElement('div');
     teaser.className = 'swipe-teaser';
     // Build gradient from first few status colors
-    const statusOrder = window._STATUS_ORDER || Object.keys(STATUSES);
+    const statusOrder = getAlphabetizedStatusKeys();
     const colors = statusOrder.slice(0, 5).map(k => getStatusColor(k)).join(', ');
     teaser.style.background = `linear-gradient(to bottom, ${colors})`;
     card.appendChild(teaser);
@@ -6634,7 +6617,7 @@ function renderIssues() {
     catInner.className = 'swipe-category-inner';
 
     // Build status tiles for ALL statuses (including open/resolved)
-    statusOrder.forEach(key => {
+    toColumnMajorOrder(statusOrder, 5).forEach(key => {
       const st = getStatusDef(key);
       const tile = document.createElement('div');
       tile.className = 'swipe-status-tile' + (currentStatusKey(issue) === key ? ' current' : '');
@@ -6740,7 +6723,7 @@ function renderIssues() {
           const activeColor = getStatusColor(statusKey);
 
           // Sub chips
-          getStatusSubs(statusKey).forEach(sub => {
+          toColumnMajorOrder(getStatusSubs(statusKey), 2).forEach(sub => {
             const item = document.createElement('button');
             item.type = 'button';
             item.className = 'subcategory-item swipe-sub-action';
@@ -10535,7 +10518,7 @@ function renderAdminList() {
 
   Object.entries(adminDraft)
     .filter(([k]) => k !== 'open' && k !== 'resolved')
-    .sort((a,b) => (a[1].order||99) - (b[1].order||99))
+    .sort((a, b) => getStatusLabel(a[0], 'short').localeCompare(getStatusLabel(b[0], 'short'), undefined, { sensitivity: 'base' }))
     .forEach(([key, st]) => {
       const row = document.createElement('div'); row.className = 'admin-status-row';
 
@@ -10687,31 +10670,11 @@ function renderAdminList() {
       // Action buttons
       const actionsRow = document.createElement('div'); actionsRow.className = 'admin-row-actions';
 
-      // Up/down reorder buttons
-      const upBtn = document.createElement('button'); upBtn.className = 'admin-order-btn'; upBtn.textContent = '▲';
-      const downBtn = document.createElement('button'); downBtn.className = 'admin-order-btn'; downBtn.textContent = '▼';
-      const moveOrder = (dir) => {
-        const keys = Object.entries(adminDraft)
-          .filter(([k]) => k !== 'open' && k !== 'resolved')
-          .sort((a,b) => (a[1].order||99) - (b[1].order||99))
-          .map(([k]) => k);
-        const idx = keys.indexOf(key);
-        const swapIdx = idx + dir;
-        if (swapIdx < 0 || swapIdx >= keys.length) return;
-        const swapKey = keys[swapIdx];
-        const tmpOrder = adminDraft[key].order;
-        adminDraft[key].order = adminDraft[swapKey].order;
-        adminDraft[swapKey].order = tmpOrder;
-        renderAdminList();
-      };
-      addTapListener(upBtn, () => moveOrder(-1));
-      addTapListener(downBtn, () => moveOrder(1));
-
       const editBtnEl = document.createElement('button'); editBtnEl.className = 'admin-edit-btn'; editBtnEl.textContent = '✏️ Edit Icon & Color';
       addTapListener(editBtnEl, () => { const open=editPanel.classList.toggle('visible'); editBtnEl.textContent=open?'▲ Close':'✏️ Edit Icon & Color'; if(open)confirmDel.classList.remove('visible'); });
       const deleteBtnEl = document.createElement('button'); deleteBtnEl.className = 'admin-delete-btn'; deleteBtnEl.textContent = '🗑 Delete';
       addTapListener(deleteBtnEl, () => { confirmDel.classList.toggle('visible'); if(confirmDel.classList.contains('visible'))editPanel.classList.remove('visible'); });
-      actionsRow.appendChild(upBtn); actionsRow.appendChild(downBtn); actionsRow.appendChild(editBtnEl); actionsRow.appendChild(deleteBtnEl);
+      actionsRow.appendChild(editBtnEl); actionsRow.appendChild(deleteBtnEl);
       row.appendChild(actionsRow);
       list.appendChild(row);
     });
