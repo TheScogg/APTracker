@@ -63,6 +63,10 @@ let currentPageDoc = null;
 let attachmentsMap = new Map();
 let unsubscribePages = null;
 
+function toPressId(machineCode) {
+  return 'press_' + String(machineCode || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
 // Initialization URL Params
 const urlParams = new URLSearchParams(window.location.search);
 const initPlantId = urlParams.get('plantId');
@@ -171,7 +175,7 @@ async function handlePlantChange() {
   
   presses.forEach(p => {
     const opt = document.createElement('option');
-    opt.value = p;
+    opt.value = toPressId(p);
     opt.textContent = p;
     elPressSelect.appendChild(opt);
   });
