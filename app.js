@@ -335,34 +335,29 @@ function _renderRoleAlertCard(alert) {
   const isAccepted = !!alert.isAccepted;
   const acceptedColor = '#22c55e';
   const statusColor = isAccepted ? acceptedColor : getStatusColor(alert.statusKey || alert.categoryKey || 'open');
-  const cardBg = isAccepted ? 'rgba(34,197,94,0.10)' : alphaColor(statusColor, 0.10);
-  const cardBorder = isAccepted ? 'rgba(34,197,94,0.42)' : alphaColor(statusColor, 0.45);
-  const titleColor = isAccepted ? '#4ade80' : statusColor;
   const acceptedByName = isAccepted ? formatWorkflowActorName(alert.acceptedBy?.name || alert.acceptedBy || '') : '';
   const acceptedMeta = isAccepted
-    ? `<div class="role-alert-ack" style="font-size:12px;line-height:1.35;color:${titleColor};opacity:.9;">${acceptedByName ? `Accepted by ${esc(acceptedByName)}` : 'Accepted'}</div>`
+    ? `<div class="role-alert-ack">${acceptedByName ? `Accepted by ${esc(acceptedByName)}` : 'Accepted'}</div>`
     : '';
   const statusDef = getStatusDef(alert.statusKey || alert.categoryKey || 'open');
   const statusLabel = getStatusLabel(alert.statusKey || alert.categoryKey || 'open', 'short');
   const pressLabel = alert.machine ? `Press ${esc(alert.machine)}` : 'Press';
   return `
-    <div class="role-alert-card${isAccepted ? ' accepted' : ''}" style="background:${cardBg};border-color:${cardBorder};cursor:pointer;" role="button" tabindex="0" onclick="focusIssueFromAlert('${esc(alert.issueId)}')" onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); focusIssueFromAlert('${esc(alert.issueId)}'); }">
-      <div class="role-alert-card-main" style="display:flex;flex-direction:column;gap:10px;">
-        <div class="role-alert-card-top" style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+    <div class="role-alert-card${isAccepted ? ' accepted' : ''}" style="--role-alert-cat-color:${statusColor};--role-alert-card-bg:${isAccepted ? 'rgba(34,197,94,0.12)' : alphaColor(statusColor, 0.12)};--role-alert-card-border:${isAccepted ? 'rgba(34,197,94,0.46)' : alphaColor(statusColor, 0.52)};" role="button" tabindex="0" onclick="focusIssueFromAlert('${esc(alert.issueId)}')" onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); focusIssueFromAlert('${esc(alert.issueId)}'); }">
+      <div class="role-alert-card-main">
+        <div class="role-alert-card-top">
           <span class="role-alert-category-pill" style="--role-alert-cat-color:${statusColor};">
             <span class="role-alert-category-icon">${esc(statusDef.icon || '❔')}</span>
             <span class="role-alert-category-label">${esc(statusLabel)}</span>
           </span>
-          <span class="role-alert-press-pill" style="display:inline-flex;align-items:center;justify-content:center;padding:4px 10px;border-radius:999px;background:rgba(255,255,255,0.08);color:var(--text1);font-size:12px;font-weight:800;letter-spacing:.02em;">
-            ${pressLabel}
-          </span>
+          <span class="role-alert-press-pill">${pressLabel}</span>
         </div>
-        ${alert.subStatus ? `<div class="role-alert-card-sub" style="font-size:15px;font-weight:800;line-height:1.25;color:var(--text1);">${esc(alert.subStatus)}</div>` : ''}
-        <div class="role-alert-card-note" style="font-size:13px;line-height:1.45;color:var(--text2);">${esc(alert.note || 'No note')}</div>
-        <div class="role-alert-card-footer" style="display:flex;align-items:flex-end;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:2px;">
-          <span style="display:inline-flex;align-items:center;">
+        ${alert.subStatus ? `<div class="role-alert-card-sub">${esc(alert.subStatus)}</div>` : ''}
+        <div class="role-alert-card-note">${esc(alert.note || 'No note')}</div>
+        <div class="role-alert-card-footer">
+          <div class="role-alert-card-state">
             ${isAccepted ? `<span class="role-alert-status-pill accepted">Accepted</span>` : `<span class="role-alert-status-pill active">Active</span>`}
-          </span>
+          </div>
           ${acceptedMeta}
         </div>
       </div>
@@ -401,8 +396,12 @@ function _renderRoleAlertsModal(alerts) {
     const acceptedNote = acceptedAlerts.length ? `<div class="role-alert-empty-sub">Toggle on accepted alerts to review acknowledged items.</div>` : '';
     list.innerHTML = `
       <div class="role-alert-empty">
-        <div class="role-alert-empty-title">No active alerts right now.</div>
-        ${acceptedNote}
+        <div class="role-alert-empty-icon" aria-hidden="true">🔔</div>
+        <div class="role-alert-empty-copy">
+          <div class="role-alert-empty-title">No active alerts right now.</div>
+          ${acceptedNote}
+        </div>
+        <div class="role-alert-empty-hint">Alerts from your subscribed categories will appear here automatically.</div>
       </div>
     `;
     return;
