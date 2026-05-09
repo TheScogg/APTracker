@@ -1730,6 +1730,60 @@
   .role-alert-empty-title { font-family: 'Rajdhani', sans-serif; font-size: 16px; font-weight: 700; color: var(--text); letter-spacing: 0.2px; }
   .role-alert-empty-sub { font-size: 12px; color: var(--text2); }
   .role-alert-empty-hint { margin-left:auto; align-self:center; font-size: 11px; line-height: 1.45; color: var(--text3); max-width: 180px; text-align:right; }
+
+  .role-alerts-modal-prototype .modal {
+    max-width: 560px !important;
+    border-radius: 20px;
+    border-color: color-mix(in srgb, var(--accent) 20%, var(--border));
+    background: linear-gradient(180deg, color-mix(in srgb, var(--bg2) 94%, #fff 6%), color-mix(in srgb, var(--bg2) 84%, var(--bg) 16%));
+  }
+  .role-alerts-modal-prototype .role-alerts-list { gap: 8px; }
+  .role-alerts-modal-prototype .role-alert-section-header { font-size: 11px; letter-spacing: 0.09em; }
+  .role-alerts-modal-prototype .role-alert-card {
+    border-radius: 12px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.18);
+    background: color-mix(in srgb, var(--role-alert-card-bg, var(--bg2)) 70%, var(--bg) 30%);
+  }
+  .role-alerts-modal-prototype .role-alert-card::before { display:none; }
+  .role-alerts-modal-prototype .role-alert-card-main { padding: 12px; gap: 8px; }
+  .role-alerts-modal-prototype .role-alert-card-sub { font-size: 15px; }
+  .role-alerts-modal-prototype .role-alert-card-note {
+    padding: 7px 9px;
+    font-size: 12px;
+    border-radius: 8px;
+  }
+  .role-alerts-modal-prototype .role-alert-card-proto { border-width: 1px; }
+  .role-alerts-modal-prototype .role-alert-proto-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .role-alerts-modal-prototype .role-alert-proto-state {
+    display:inline-flex;
+    align-items:center;
+    padding: 4px 9px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    border: 1px solid color-mix(in srgb, var(--role-alert-cat-color) 45%, transparent);
+    background: color-mix(in srgb, var(--role-alert-cat-color) 14%, transparent);
+    color: color-mix(in srgb, var(--role-alert-cat-color) 78%, white 22%);
+  }
+  .role-alerts-modal-prototype .role-alert-proto-press { font-size: 11px; color: var(--text2); }
+  .role-alerts-modal-prototype .role-alert-proto-meta {
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:8px;
+    font-size: 11px;
+    color: var(--text2);
+  }
+  .role-alerts-modal-prototype .role-alert-card-actions-proto { padding-top: 0; }
+  .role-alerts-modal-prototype .role-alert-card-actions {
+    flex-direction: row;
+    min-width: 0;
+    padding: 0 12px 12px 12px;
+    gap: 6px;
+  }
+  .role-alerts-modal-prototype .role-alert-action-btn { min-height: 32px; flex: 1 1 0; }
   label { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--text2); margin-bottom: 5px; }
   textarea { width: 100%; background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 9px 11px; color: var(--text); font-family: 'Nunito', sans-serif; font-size: 13px; outline: none; resize: vertical; min-height: 90px; transition: border-color 0.2s; margin-bottom: 14px; }
   textarea:focus { border-color: var(--accent); }
