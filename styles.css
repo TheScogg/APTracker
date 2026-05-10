@@ -415,7 +415,14 @@
   .logo-text { font-family: 'Rajdhani', sans-serif; font-size: 19px; font-weight: 700; letter-spacing: 1px; }
   .logo-text span { color: var(--accent); }
   .logo:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; border-radius: 10px; }
-  .header-center { display: flex; align-items: center; gap: 8px; }
+  .header-center {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
 
   /* STAT PILLS */
   .stat-pill { background: var(--bg3); border: 1px solid var(--border); border-radius: 20px; padding: 3px 10px; font-size: 11px; font-family: 'Share Tech Mono', monospace; display: flex; align-items: center; gap: 5px; white-space: nowrap; cursor: pointer; transition: all 0.15s; user-select: none; }
@@ -1147,7 +1154,6 @@
     background: #22c55e;
     border-color: #22c55e;
     color: #fff;
-    margin-left: auto;
   }
   #messages-btn-header:hover {
     background: #16a34a;
@@ -1255,6 +1261,7 @@
     }
     .logo-text { font-size: 16px; }
     .logo { gap: 8px; }
+    .header-center { gap: 6px; }
     .plant-switcher-btn { padding: 5px 8px; font-size: 11px; }
     #messages-btn-header { padding: 5px 8px; min-width: 34px; justify-content: center; }
     #wiki-btn-header { width: 34px; min-width: 34px; padding: 5px 0; }

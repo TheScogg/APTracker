@@ -3205,8 +3205,10 @@ function applyUserIdentityToShell(user) {
   const displayName = user.displayName || user.email || 'User';
   const firstName = user.displayName ? user.displayName.split(' ')[0] : user.email || 'User';
   document.getElementById('user-name-display').textContent = firstName;
-  document.getElementById('dropdown-full-name').textContent = displayName;
-  document.getElementById('dropdown-email').textContent = user.email || '';
+  const fullNameEl = document.getElementById('dropdown-full-name');
+  const emailEl = document.getElementById('dropdown-email');
+  if (fullNameEl) fullNameEl.textContent = displayName;
+  if (emailEl) emailEl.textContent = user.email || '';
 
   const initials = displayName.split(' ').filter(Boolean).slice(0, 2).map(w => w.charAt(0)).join('').toUpperCase() || '?';
   const fallback = document.getElementById('user-avatar-fallback');
