@@ -469,39 +469,69 @@ async function _loadActiveRoleAlertsForCurrentUser() {
   ]);
   if (!snap || !Array.isArray(snap.docs)) return [];
   const staleAlertDeletes = [];
+  const issueFetchCache = new Map();
+  const resolveIssueById = async issueId => {
+    const cachedIssue = issues.find(i => i.id === issueId) || null;
+    if (cachedIssue) return cachedIssue;
+    if (!issueFetchCache.has(issueId)) {
+      issueFetchCache.set(issueId, (async () => {
+        try {
+          const issueSnap = await getDoc(plantDoc('issues', issueId));
+          return issueSnap.exists() ? { id: issueId, ...issueSnap.data() } : null;
+        } catch (_) {
+          return null;
+        }
+      })());
+    }
+    return issueFetchCache.get(issueId);
+  };
   const alerts = [];
   for (const d of snap.docs) {
     const data = d.data() || {};
     const issueId = String(data.issueId || '').trim();
     if (!issueId) continue;
-    const issue = issues.find(i => i.id === issueId) || null;
-    const isResolved = !!(issue?.resolved || issue?.lifecycle?.isResolved);
+    const issue = await resolveIssueById(issueId);
+    const issueLifecycle = issue && issue.lifecycle ? issue.lifecycle : null;
+    const isResolved = !!(issue && (issue.resolved || (issueLifecycle && issueLifecycle.isResolved)));
     if (isResolved) {
       staleAlertDeletes.push(deleteDoc(doc(db, 'plants', currentPlantId, 'roleFeedAlerts', d.id)).catch(() => null));
-      return null;
+      continue;
     }
     const alertStatusKey = data.statusKey || currentStatusKey(issue || {}) || '';
     const workflowState = _getRoleAlertWorkflowState(issue || null, alertStatusKey);
-    return {
+    const issueMachine = issue && (issue.machine || issue.machineCode) ? (issue.machine || issue.machineCode) : 'Unknown';
+    const issueCurrentStatus = issue && issue.currentStatus ? issue.currentStatus : null;
+    const issueSubStatus = issueCurrentStatus && issueCurrentStatus.subStatusKey ? issueCurrentStatus.subStatusKey : '';
+    const issueNote = issue && issue.note ? issue.note : '';
+    const createdAt = data.createdAt || null;
+    const createdAtLabel = createdAt && typeof createdAt.toDate === 'function'
+      ? createdAt.toDate().toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+      : '';
+    const workflowAcceptedBy = workflowState === 'accepted'
+      ? (
+          (issue && issue.workflowStateHistory && issue.workflowStateHistory.accepted && issue.workflowStateHistory.accepted.by) ||
+          (issue && issue.workflowStateByStatusHistory && issue.workflowStateByStatusHistory[alertStatusKey] && issue.workflowStateByStatusHistory[alertStatusKey].accepted && issue.workflowStateByStatusHistory[alertStatusKey].accepted.by) ||
+          null
+        )
+      : null;
+    alerts.push({
       id: d.id,
       issueId,
-      machine: data.machine || issue?.machine || issue?.machineCode || 'Unknown',
+      machine: data.machine || issueMachine,
       feedLabel: data.feedLabel || data.categoryKey || data.statusKey || 'Alert',
       statusKey: alertStatusKey,
-      subStatus: data.subStatus || issue?.currentStatus?.subStatusKey || '',
+      subStatus: data.subStatus || issueSubStatus,
       categoryKey: data.categoryKey || data.statusKey || '',
-      note: data.note || issue?.note || '',
-      createdAt: data.createdAt || null,
-      createdAtLabel: data.createdAt?.toDate ? data.createdAt.toDate().toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '',
+      note: data.note || issueNote,
+      createdAt,
+      createdAtLabel,
       plantName: currentPlantName || currentPlantId || '',
       workflowState,
       isAccepted: workflowState === 'accepted',
-      acceptedBy: workflowState === 'accepted'
-        ? (issue?.workflowStateHistory?.accepted?.by || issue?.workflowStateByStatusHistory?.[alertStatusKey]?.accepted?.by || null)
-        : null
+      acceptedBy: workflowAcceptedBy
     });
   }
-  if (staleAlertDeletes.length) void Promise.allSettled(staleAlertDeletes);
+  if (staleAlertDeletes.length) await Promise.allSettled(staleAlertDeletes);
   alerts.sort((a, b) => {
     const aMs = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
     const bMs = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
