@@ -1532,6 +1532,7 @@ let STATUSES = {
   tooldie:         { label:'Tool & Die',       shortLabel:'Tool & Die',   icon:'🔩', cssColor:'var(--orange)',   swipeColor:'#f97316', floorCls:'has-tooldie',         cls:'status-tooldie',         subs:['Broken / Bent Ejector Pin','Hot Runner / Gate Issue','Water Leak in Mold','Stuck Part / Sprue','Mold Greasing / PM'], statLabel:'Tool & Die',    order:8 },
   resolved:        { label:'Resolved',         shortLabel:'Resolved',     icon:'✓',  cssColor:'var(--green)',    swipeColor:'#22c55e', floorCls:'all-resolved',        cls:'status-resolved',        subs:['Process Parameter Adjusted','Mold Cleaned / Repaired','Hardware Replaced','Temporary Workaround'],                      statLabel:'Resolved',      order:9 },
 };
+const DEFAULT_STATUSES = JSON.parse(JSON.stringify(STATUSES));
 
 // ── MASCOT CHARACTERS ──
 // Animated SVG characters, one per job role. Appear in status swipe panels and empty states.
@@ -1652,20 +1653,22 @@ async function loadConfig() {
     const snap = await getDoc(plantDoc('config', 'statuses'));
     if (snap.exists()) {
       const data = snap.data();
-      
-      // Check if we need to migrate to new comprehensive categories
-      // If the config doesn't have 'alert', 'materials', or 'quality', it's old
-      const needsMigration = !data.statuses?.alert || !data.statuses?.materials || !data.statuses?.quality;
-      
-      if (needsMigration) {
-        console.log('🔄 Migrating to comprehensive ticket categories...');
-        // Use the new STATUSES from code as the source of truth
-        await saveConfig();
-        console.log('✅ Migration complete!');
-      } else {
-        // Use existing config from Firestore
-        STATUSES = data.statuses || {};
+
+      const existingStatuses = data.statuses && typeof data.statuses === 'object' && !Array.isArray(data.statuses)
+        ? data.statuses
+        : {};
+      const migratedStatuses = { ...existingStatuses };
+      let addedDefaults = false;
+
+      // Preserve plant-specific custom statuses and only backfill missing built-ins.
+      for (const [key, def] of Object.entries(DEFAULT_STATUSES)) {
+        if (!migratedStatuses[key]) {
+          migratedStatuses[key] = JSON.parse(JSON.stringify(def));
+          addedDefaults = true;
+        }
       }
+
+      STATUSES = migratedStatuses;
       
       // Since we just changed the available statuses,
       // we must rebuild the logic that buttons depend on
@@ -1674,6 +1677,12 @@ async function loadConfig() {
       // Trigger a UI refresh for the pills
       buildStatusFilterPills();
       renderIssues();
+
+      if (addedDefaults) {
+        console.log('🔄 Backfilled missing built-in statuses without overwriting custom categories...');
+        await saveConfig();
+        console.log('✅ Status config merged and saved!');
+      }
     } else {
       // No config exists - save the default comprehensive categories
       console.log('💾 Saving initial comprehensive ticket categories...');
