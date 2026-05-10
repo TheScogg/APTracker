@@ -53,6 +53,7 @@ const elFileInput = document.getElementById('edit-file-input');
 const elAttachments = document.getElementById('edit-attachments');
 const elRevisionList = document.getElementById('revision-list');
 const elSaveFeedback = document.getElementById('save-feedback');
+const elDeletePageBtn = document.getElementById('delete-page-btn');
 
 const WIKI_SCOPE_PRESS = 'press';
 const WIKI_SCOPE_SHARED = 'shared';
@@ -335,6 +336,7 @@ function resetEditor() {
   elRevisionList.innerHTML = '';
   attachmentsMap.clear();
   renderPageList();
+  updateDeleteButtonState();
 }
 
 elNewPageBtn.addEventListener('click', () => {
@@ -352,6 +354,7 @@ elNewPageBtn.addEventListener('click', () => {
   elRevisionList.innerHTML = '<div class="rev-date">No revisions yet</div>';
   attachmentsMap.clear();
   renderPageList();
+  updateDeleteButtonState();
   elTitle.focus();
 });
 
@@ -374,11 +377,13 @@ async function selectPage(pageId) {
     elRevisionList.innerHTML = '<div style="color:var(--text3);">No wiki page found in this scope.</div>';
     attachmentsMap.clear();
     renderAttachments();
+    updateDeleteButtonState();
     return;
   }
 
   updateEditorMeta(pageData);
   currentPageDoc = pageData;
+  updateDeleteButtonState();
 
   // Fetch latest revision body
   const revsSnap = await getDocs(query(
@@ -409,6 +414,13 @@ async function selectPage(pageId) {
   renderAttachments();
 
   elChangeNote.value = '';
+}
+
+function updateDeleteButtonState() {
+  if (!elDeletePageBtn) return;
+  const canDelete = Boolean(currentPageId && currentPageId !== 'NEW');
+  elDeletePageBtn.style.display = canDelete ? '' : 'none';
+  elDeletePageBtn.disabled = !canDelete;
 }
 
 function updateEditorMeta(page) {
@@ -567,10 +579,50 @@ async function deleteAttachment(attId, attData) {
   } catch(e) {}
 }
 
+async function deleteWikiDocsInBatches(colRef) {
+  while (true) {
+    const snap = await getDocs(query(colRef, limit(400)));
+    if (snap.empty) return;
+    const batch = writeBatch(db);
+    snap.docs.forEach(d => batch.delete(d.ref));
+    await batch.commit();
+    if (snap.size < 400) return;
+  }
+}
+
+async function deleteCurrentPage() {
+  if (!currentPageId || currentPageId === 'NEW') return;
+  const title = elTitle.value.trim() || currentPageDoc?.title || currentPageId;
+  const ok = confirm(`Delete "${title}"? This will remove the page, its revisions, and its attachments.`);
+  if (!ok) return;
+
+  showFeedback('Deleting page...', false);
+  try {
+    const attachmentsSnap = await getDocs(wikiAttachmentsCol(currentScope, currentPressId, currentPageId));
+    const attachments = attachmentsSnap.docs.map(d => ({ id: d.id, ...(d.data() || {}) }));
+    await Promise.allSettled(attachments.map(async att => {
+      if (!att?.storagePath) return;
+      await deleteObject(storageRef(storageFallback, att.storagePath));
+    }));
+
+    await deleteWikiDocsInBatches(wikiAttachmentsCol(currentScope, currentPressId, currentPageId));
+    await deleteWikiDocsInBatches(wikiRevisionsCol(currentScope, currentPressId, currentPageId));
+    await deleteDoc(wikiPageDoc(currentScope, currentPressId, currentPageId));
+
+    showFeedback('Page deleted.', false);
+    resetEditor();
+    await refreshPageData();
+  } catch (err) {
+    showFeedback('Could not delete page: ' + err.message, true);
+  }
+}
+
 document.getElementById('cancel-btn').addEventListener('click', () => {
   if (currentPageId === 'NEW') resetEditor();
   else selectPage(currentPageId); // reload
 });
+
+elDeletePageBtn?.addEventListener('click', deleteCurrentPage);
 
 document.getElementById('cms-scope-press')?.addEventListener('click', () => handleScopeChange(WIKI_SCOPE_PRESS));
 document.getElementById('cms-scope-shared')?.addEventListener('click', () => handleScopeChange(WIKI_SCOPE_SHARED));
