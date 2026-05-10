@@ -379,6 +379,11 @@ function _renderRoleAlertCard(alert) {
   `;
 }
 
+// Backward-compat shim: older cached clients may still reference this symbol.
+function _renderRoleAlertCardPrototype(alert) {
+  return _renderRoleAlertCard(alert);
+}
+
 function _renderRoleAlertsModal(alerts) {
   const list = document.getElementById('role-alerts-list');
   if (!list) return;
