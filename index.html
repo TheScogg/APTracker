@@ -956,14 +956,18 @@
         <h3 id="role-alerts-title">Your Alerts</h3>
         <div id="role-alerts-footer" class="role-alerts-footer-text"></div>
       </div>
-      <button class="btn btn-ghost role-alerts-close" type="button" data-role-alert-action="close">Close</button>
+      <div class="role-alerts-header-actions">
+        <button class="role-alerts-retry-fab" type="button" data-role-alert-action="retry" aria-label="Retry loading alerts" title="Retry loading alerts">
+          <span class="role-alerts-retry-icon" aria-hidden="true">⟳</span>
+        </button>
+        <button class="btn btn-ghost role-alerts-close" type="button" data-role-alert-action="close">Close</button>
+      </div>
     </div>
     <div class="role-alerts-toolbar">
       <div class="role-alerts-toggle scope-toggle" role="group" aria-label="Accepted alerts visibility">
         <button class="scope-btn" id="role-alerts-hide-accepted-btn" type="button" data-role-alert-action="hide-accepted">Hide accepted</button>
         <button class="scope-btn active" id="role-alerts-show-accepted-btn" type="button" data-role-alert-action="show-accepted">Show accepted</button>
       </div>
-      <button class="btn btn-primary role-alerts-retry" type="button" data-role-alert-action="retry">Retry</button>
     </div>
     <div id="role-alerts-list" class="role-alerts-list"></div>
     <div class="role-alerts-sheet-footer">

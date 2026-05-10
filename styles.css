@@ -1752,6 +1752,12 @@
     justify-content:space-between;
     gap:12px;
   }
+  .role-alerts-header-actions {
+    display:flex;
+    align-items:flex-start;
+    gap:8px;
+    flex-shrink:0;
+  }
   .role-alerts-shell-title { min-width: 0; }
   .role-alerts-shell-kicker {
     font-family: 'Share Tech Mono', monospace;
@@ -1788,8 +1794,32 @@
   .role-alerts-toggle .scope-btn:hover:not(.active) { color: var(--text); }
   .role-alerts-toggle .scope-btn:first-child { border-top-left-radius: 999px; border-bottom-left-radius: 999px; }
   .role-alerts-toggle .scope-btn:last-child { border-top-right-radius: 999px; border-bottom-right-radius: 999px; }
+  .role-alerts-retry-fab {
+    width: 42px;
+    height: 42px;
+    display:grid;
+    place-items:center;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--orange) 55%, rgba(255,255,255,0.12));
+    background: linear-gradient(180deg, color-mix(in srgb, var(--orange) 88%, white 12%), color-mix(in srgb, var(--orange) 78%, black 22%));
+    box-shadow: 0 10px 24px rgba(249,115,22,0.32), inset 0 1px 0 rgba(255,255,255,0.22);
+    color: white;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s, filter 0.15s;
+    touch-action: manipulation;
+  }
+  .role-alerts-retry-fab:hover { transform: translateY(-1px); filter: brightness(1.05); }
+  .role-alerts-retry-fab:focus-visible {
+    outline: 2px solid rgba(255,255,255,0.8);
+    outline-offset: 2px;
+  }
+  .role-alerts-retry-icon {
+    font-size: 20px;
+    line-height: 1;
+    color: white;
+    text-shadow: 0 1px 1px rgba(0,0,0,0.25);
+  }
   .role-alerts-close { white-space: nowrap; }
-  .role-alerts-retry { white-space: nowrap; }
   .role-alerts-list {
     display:flex;
     flex-direction:column;
@@ -2329,11 +2359,11 @@
       padding: 14px;
     }
     .role-alerts-shell-header { gap: 10px; }
+    .role-alerts-header-actions { gap: 6px; }
     .role-alerts-shell-title h3 { font-size: 24px; }
     .role-alerts-toolbar { align-items: stretch; }
     .role-alerts-toggle { width: 100%; }
     .role-alerts-toggle .scope-btn { flex: 1 1 0; }
-    .role-alerts-retry { width: 100%; min-height: 44px; }
     .role-alerts-list {
       padding-right: 2px;
       touch-action: pan-y;
@@ -2346,6 +2376,7 @@
     .role-alert-empty { flex-direction: column; gap: 10px; }
     .role-alert-empty-hint { margin-left: 0; align-self: stretch; text-align: left; max-width: none; }
     .role-alerts-close { display: none; }
+    .role-alerts-retry-fab { width: 44px; height: 44px; }
     .role-alerts-close-mobile { display: inline-flex; width: 100%; justify-content: center; }
     .role-alerts-sheet-footer { align-items: stretch; }
     .role-alerts-sheet-footer .role-alerts-close-mobile { min-height: 44px; }

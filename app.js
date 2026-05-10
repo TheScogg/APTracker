@@ -532,7 +532,6 @@ function _renderRoleAlertLoadFallback({ title, subtitle }) {
         <div class="role-alert-empty-title">${esc(title)}</div>
         <div class="role-alert-empty-sub">${esc(subtitle)}</div>
         <div class="role-alert-empty-actions">
-          <button class="btn btn-primary" type="button" data-role-alert-action="retry">Retry</button>
           <button class="btn btn-ghost" type="button" data-role-alert-action="close">Close</button>
         </div>
       </div>
@@ -598,7 +597,7 @@ async function _openRoleAlertInboxModalInternal({ resetToggle = true } = {}) {
   } else {
     list.innerHTML = _renderRoleAlertLoadFallback({
       title: 'Checking for alerts…',
-      subtitle: 'If this stalls, tap Retry.'
+      subtitle: 'If this stalls, use the orange button in the top-right corner.'
     });
   }
   void (async () => {
@@ -611,7 +610,7 @@ async function _openRoleAlertInboxModalInternal({ resetToggle = true } = {}) {
       if (alerts === '__timeout__') {
         list.innerHTML = _renderRoleAlertLoadFallback({
           title: 'Alerts are taking too long to load.',
-          subtitle: 'Tap Retry to try again.'
+          subtitle: 'Use the orange button in the top-right corner to try again.'
         });
         return;
       }
@@ -621,7 +620,7 @@ async function _openRoleAlertInboxModalInternal({ resetToggle = true } = {}) {
       if (loadToken !== _roleAlertsLoadToken) return;
       list.innerHTML = _renderRoleAlertLoadFallback({
         title: 'Unable to load alerts.',
-        subtitle: e?.message || 'Tap Retry to try again.'
+        subtitle: e?.message || 'Use the orange button in the top-right corner to try again.'
       });
       _setActiveRoleAlertCount(0);
       _updateRoleAlertModalFooter(0, 0);
