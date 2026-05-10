@@ -11315,5 +11315,32 @@ function openEmbeddedAdminPortal() {
   }
   if (!frame.getAttribute('src')) frame.setAttribute('src', 'admin.html');
   overlay.classList.add('visible');
-  document.body.classList.add('ad
+  document.body.classList.add('admin-portal-open');
+}
+
+function closeEmbeddedAdminPortal() {
+  const overlay = document.getElementById('embedded-admin-overlay');
+  if (!overlay) return;
+  overlay.classList.remove('visible');
+  document.body.classList.remove('admin-portal-open');
+}
+
+window.closeEmbeddedAdminPortal = closeEmbeddedAdminPortal;
+document.getElementById('embedded-admin-overlay')?.addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeEmbeddedAdminPortal();
+});
+document.getElementById('issue-reminder-modal')?.addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeIssueReminderModal();
+});
+
+setInterval(() => {
+  if (document.hidden) return;
+  maybeNotifyIssueReminders(issues);
+  if (issues.length > 0) renderIssues();
+}, 60000);
+
+setInterval(() => {
+  if (document.hidden) return;
+  refreshReminderClocksInDom();
+}, 1000);
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         
