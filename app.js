@@ -10101,6 +10101,12 @@ function renderPressWikiPageTree() {
   selectEl.value = _pressWikiSelectedPageId;
 }
 
+document.getElementById('press-wiki-page-select')?.addEventListener('change', async (e) => {
+  const pageId = String(e.target?.value || '').trim();
+  if (!pageId || pageId === _pressWikiSelectedPageId) return;
+  await loadPressWikiPage(pageId);
+});
+
 function _pressWikiPressLabel() {
   return _pressWikiMachineCode ? `Press ${_pressWikiMachineCode}` : 'This Press';
 }
