@@ -667,6 +667,90 @@
   body[data-theme-mode="light"] .date-input::-webkit-calendar-picker-indicator, body[data-theme-mode="light"] input[type=date]::-webkit-calendar-picker-indicator, body[data-theme-mode="light"] input[type=time]::-webkit-calendar-picker-indicator { filter: none; }
   .date-clear { font-size: 11px; color: var(--accent); background: none; border: none; cursor: pointer; font-family: 'Nunito', sans-serif; white-space: nowrap; padding: 0; }
   .date-clear:hover { text-decoration: underline; }
+  #press-wiki-page-select {
+    appearance: none;
+    -webkit-appearance: none;
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--bg2) 72%, transparent), color-mix(in srgb, var(--bg3) 94%, transparent)),
+      radial-gradient(circle at 14px 50%, rgba(255,255,255,0.05), transparent 34%),
+      linear-gradient(90deg, transparent calc(100% - 38px), rgba(255,255,255,0.08) calc(100% - 38px), rgba(255,255,255,0.08) calc(100% - 37px), transparent calc(100% - 37px)),
+      var(--bg3);
+    border: 1px solid color-mix(in srgb, var(--accent) 36%, var(--border));
+    border-radius: 14px;
+    color: var(--text);
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    line-height: 1.15;
+    min-height: 46px;
+    padding: 12px 46px 12px 14px;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.05),
+      0 8px 22px rgba(0,0,0,0.22),
+      0 0 0 1px rgba(255,255,255,0.02);
+    text-transform: uppercase;
+    transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s, background 0.15s;
+  }
+  #press-wiki-page-select:hover {
+    border-color: color-mix(in srgb, var(--accent2) 72%, var(--border));
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.08),
+      0 10px 26px rgba(0,0,0,0.28),
+      0 0 0 1px color-mix(in srgb, var(--accent) 24%, transparent);
+    transform: translateY(-1px);
+  }
+  #press-wiki-page-select:focus {
+    border-color: var(--accent2);
+    box-shadow:
+      0 0 0 3px var(--accent-glow),
+      inset 0 1px 0 rgba(255,255,255,0.08),
+      0 10px 26px rgba(0,0,0,0.28);
+    outline: none;
+  }
+  #press-wiki-page-select option {
+    background: var(--bg2);
+    color: var(--text);
+    font-family: 'Nunito', sans-serif;
+    font-weight: 600;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  #press-wiki-page-select:disabled {
+    opacity: 0.72;
+    cursor: not-allowed;
+    filter: saturate(0.8);
+  }
+  #press-wiki-page-select:disabled:hover {
+    transform: none;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.05),
+      0 8px 22px rgba(0,0,0,0.22),
+      0 0 0 1px rgba(255,255,255,0.02);
+  }
+  body.theme-starship #press-wiki-page-select,
+  body.theme-ocean #press-wiki-page-select {
+    background:
+      linear-gradient(180deg, rgba(9,20,38,0.92), rgba(12,25,45,0.96)),
+      radial-gradient(circle at 14px 50%, rgba(118,236,255,0.08), transparent 34%),
+      linear-gradient(90deg, transparent calc(100% - 38px), rgba(118,236,255,0.12) calc(100% - 38px), rgba(118,236,255,0.12) calc(100% - 37px), transparent calc(100% - 37px));
+    border-color: rgba(118,236,255,0.28);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.05),
+      0 10px 24px rgba(0,0,0,0.30),
+      0 0 0 1px rgba(118,236,255,0.06);
+  }
+  body.theme-starforge #press-wiki-page-select {
+    background:
+      linear-gradient(180deg, rgba(26,23,20,0.96), rgba(33,28,22,0.98)),
+      radial-gradient(circle at 14px 50%, rgba(255,209,102,0.08), transparent 34%),
+      linear-gradient(90deg, transparent calc(100% - 38px), rgba(255,209,102,0.12) calc(100% - 38px), rgba(255,209,102,0.12) calc(100% - 37px), transparent calc(100% - 37px));
+    border-color: rgba(255,159,28,0.34);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.05),
+      0 10px 24px rgba(0,0,0,0.30),
+      0 0 0 1px rgba(255,159,28,0.08);
+  }
 
   /* FLOOR MAP */
   .section-header { padding: 14px 16px 8px; font-family: 'Rajdhani', sans-serif; font-size: 12px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; color: var(--text2); display: flex; align-items: center; justify-content: space-between; }
