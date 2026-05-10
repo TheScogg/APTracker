@@ -1876,10 +1876,10 @@
   .role-alert-empty-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top: 4px; }
   .role-alert-empty-hint { margin-left:auto; align-self:center; font-size: 11px; line-height: 1.45; color: var(--text3); max-width: 180px; text-align:right; }
   .role-alerts-modal-prototype .modal {
-    width: min(860px, calc(100vw - 20px));
-    max-height: min(90vh, calc(100vh - 20px));
-    padding: 18px;
-    border-radius: 28px;
+    width: min(720px, calc(100vw - 20px));
+    max-height: min(88vh, calc(100vh - 20px));
+    padding: 16px;
+    border-radius: 16px;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -1887,13 +1887,16 @@
     touch-action: manipulation;
     -webkit-transform: translateZ(0);
     transform: translateZ(0);
-    background:
-      radial-gradient(circle at top right, rgba(255,255,255,0.08), transparent 28%),
-      linear-gradient(180deg, color-mix(in srgb, var(--bg2) 84%, transparent), color-mix(in srgb, var(--bg) 10%, var(--bg2) 90%));
-    backdrop-filter: blur(24px) saturate(1.2);
-    -webkit-backdrop-filter: blur(24px) saturate(1.2);
-    box-shadow: 0 24px 80px rgba(0,0,0,0.56), inset 0 1px 0 rgba(255,255,255,0.05);
+    background: var(--bg2);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    box-shadow: 0 16px 36px rgba(0,0,0,0.38);
     position: relative;
+  }
+  .role-alerts-modal-prototype {
+    background: rgba(7, 10, 16, 0.86);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
   .role-alerts-modal-prototype .modal {
     height: min(90vh, calc(100dvh - 20px));
@@ -1905,22 +1908,22 @@
   .role-alerts-modal-prototype button {
     pointer-events: auto;
   }
-  .role-alerts-modal-prototype .modal::before {
-    content:'';
-    position:absolute;
-    inset: 0;
-    pointer-events:none;
-    border-radius: inherit;
-    background:
-      radial-gradient(circle at 14% 10%, rgba(255,255,255,0.12), transparent 30%),
-      radial-gradient(circle at 92% 0%, color-mix(in srgb, var(--accent) 20%, transparent), transparent 24%);
-  }
   .role-alerts-modal-prototype .role-alerts-list { gap: 10px; }
   .role-alerts-modal-prototype .role-alert-section-header { font-size: 11px; letter-spacing: 0.12em; }
-  .role-alerts-modal-prototype .role-alert-card-shell { padding: 15px; }
-  .role-alerts-modal-prototype .role-alert-card-sub { font-size: 19px; }
-  .role-alerts-modal-prototype .role-alert-card-note { padding: 10px 11px; font-size: 12px; }
-  .role-alerts-modal-prototype .role-alert-card-actions { min-width: 126px; }
+  .role-alerts-modal-prototype .role-alert-card {
+    background: var(--bg3);
+    border-color: var(--border);
+    box-shadow: none;
+  }
+  .role-alerts-modal-prototype .role-alert-card::before,
+  .role-alerts-modal-prototype .role-alert-card::after {
+    display: none;
+  }
+  .role-alerts-modal-prototype .role-alert-card-shell { padding: 12px; }
+  .role-alerts-modal-prototype .role-alert-card-rail { display: none; }
+  .role-alerts-modal-prototype .role-alert-card-sub { font-size: 18px; }
+  .role-alerts-modal-prototype .role-alert-card-note { padding: 9px 10px; font-size: 12px; background: var(--bg2); }
+  .role-alerts-modal-prototype .role-alert-card-actions { min-width: 116px; }
   label { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--text2); margin-bottom: 5px; }
   textarea { width: 100%; background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 9px 11px; color: var(--text); font-family: 'Nunito', sans-serif; font-size: 13px; outline: none; resize: vertical; min-height: 90px; transition: border-color 0.2s; margin-bottom: 14px; }
   textarea:focus { border-color: var(--accent); }
@@ -2266,6 +2269,9 @@
     .role-alerts-modal-prototype {
       align-items: center;
       padding: 8px;
+      background: rgba(7, 10, 16, 0.92);
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
     }
     .role-alerts-modal-prototype .modal {
       width: calc(100vw - 16px);
@@ -2274,6 +2280,7 @@
       max-height: calc(100dvh - 16px);
       border-radius: 24px;
       margin: 0;
+      background: var(--bg2);
     }
     .role-alerts-list {
       max-height: none;
@@ -2282,8 +2289,8 @@
       overscroll-behavior: contain;
       touch-action: auto;
     }
-    .role-alert-card-shell { grid-template-columns: 5px minmax(0, 1fr); gap: 10px; padding: 12px; }
-    .role-alert-card-actions { grid-column: 2 / -1; min-width: 0; flex-direction: row; flex-wrap: wrap; padding-left: 0; }
+    .role-alert-card-shell { grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 12px; }
+    .role-alert-card-actions { grid-column: 1 / -1; min-width: 0; flex-direction: row; flex-wrap: wrap; padding-left: 0; }
     .role-alert-action-btn { flex: 1 1 120px; min-height: 38px; }
     .role-alert-empty { flex-direction: column; gap: 10px; }
     .role-alert-empty-hint { margin-left: 0; align-self: stretch; text-align: left; max-width: none; }
