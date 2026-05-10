@@ -1765,34 +1765,16 @@
     padding: 0;
     display:block;
     transition: border-color 0.18s, transform 0.18s, box-shadow 0.18s, opacity 0.18s;
-    box-shadow: 0 18px 40px rgba(0,0,0,0.18);
+    box-shadow: 0 10px 22px rgba(0,0,0,0.14);
     position: relative;
     overflow: hidden;
-    background:
-      linear-gradient(135deg, rgba(255,255,255,0.12), rgba(255,255,255,0.05) 48%, rgba(0,0,0,0.06)),
-      color-mix(in srgb, var(--bg2) 84%, transparent);
-    backdrop-filter: blur(20px) saturate(1.35);
-    -webkit-backdrop-filter: blur(20px) saturate(1.35);
+    background: color-mix(in srgb, var(--bg2) 94%, var(--bg) 6%);
   }
   .role-alert-card::before {
-    content:'';
-    position:absolute;
-    inset:0;
-    pointer-events:none;
-    background:
-      radial-gradient(circle at 18% 12%, rgba(255,255,255,0.22), transparent 34%),
-      radial-gradient(circle at 92% 6%, var(--role-alert-card-glow, rgba(255,255,255,0.08)), transparent 26%),
-      linear-gradient(120deg, rgba(255,255,255,0.10), transparent 28%, transparent 72%, rgba(255,255,255,0.06));
+    content: none;
   }
   .role-alert-card::after {
-    content:'';
-    position:absolute;
-    inset: 12px auto 12px 12px;
-    width: 4px;
-    border-radius: 999px;
-    background: linear-gradient(180deg, var(--role-alert-cat-color, var(--accent)), color-mix(in srgb, var(--role-alert-cat-color, var(--accent)) 40%, transparent));
-    box-shadow: 0 0 0 1px color-mix(in srgb, var(--role-alert-cat-color, var(--accent)) 30%, transparent), 0 0 18px var(--role-alert-card-glow, rgba(255,255,255,0.08));
-    opacity: 0.95;
+    content: none;
   }
   .role-alert-card.accepted { opacity: 0.96; }
   .role-alert-card:hover {
@@ -1807,9 +1789,9 @@
   .role-alert-card-shell {
     position: relative;
     display:grid;
-    grid-template-columns: 4px minmax(0, 1fr) auto;
-    gap: 14px;
-    padding: 14px;
+    grid-template-columns: 5px minmax(0, 1fr) auto;
+    gap: 12px;
+    padding: 15px;
     align-items: stretch;
   }
   .role-alert-card-rail {
@@ -1853,7 +1835,7 @@
     letter-spacing: 0.05em;
     text-transform: uppercase;
   }
-  .role-alert-card-actions { display:flex; flex-direction:column; gap: 8px; align-items:stretch; min-width: 132px; justify-content:center; }
+  .role-alert-card-actions { display:flex; flex-direction:column; gap: 8px; align-items:stretch; min-width: 132px; justify-content:center; padding-left: 4px; }
   .role-alert-action-btn {
     min-height: 40px;
     border-radius: 14px;
@@ -2290,8 +2272,8 @@
       overscroll-behavior: contain;
       touch-action: pan-y;
     }
-    .role-alert-card-shell { grid-template-columns: 4px minmax(0, 1fr); gap: 10px; padding: 12px; }
-    .role-alert-card-actions { grid-column: 1 / -1; min-width: 0; flex-direction: row; flex-wrap: wrap; }
+    .role-alert-card-shell { grid-template-columns: 5px minmax(0, 1fr); gap: 10px; padding: 12px; }
+    .role-alert-card-actions { grid-column: 2 / -1; min-width: 0; flex-direction: row; flex-wrap: wrap; padding-left: 0; }
     .role-alert-action-btn { flex: 1 1 120px; min-height: 38px; }
     .role-alert-empty { flex-direction: column; gap: 10px; }
     .role-alert-empty-hint { margin-left: 0; align-self: stretch; text-align: left; max-width: none; }
