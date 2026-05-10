@@ -1883,6 +1883,10 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    pointer-events: auto;
+    touch-action: manipulation;
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
     background:
       radial-gradient(circle at top right, rgba(255,255,255,0.08), transparent 28%),
       linear-gradient(180deg, color-mix(in srgb, var(--bg2) 84%, transparent), color-mix(in srgb, var(--bg) 10%, var(--bg2) 90%));
@@ -1894,6 +1898,12 @@
   .role-alerts-modal-prototype .modal {
     height: min(90vh, calc(100dvh - 20px));
     min-height: 0;
+  }
+  .role-alerts-modal-prototype,
+  .role-alerts-modal-prototype .modal,
+  .role-alerts-modal-prototype .role-alerts-list,
+  .role-alerts-modal-prototype button {
+    pointer-events: auto;
   }
   .role-alerts-modal-prototype .modal::before {
     content:'';
@@ -2270,7 +2280,7 @@
       padding-right: 2px;
       -webkit-overflow-scrolling: touch;
       overscroll-behavior: contain;
-      touch-action: pan-y;
+      touch-action: auto;
     }
     .role-alert-card-shell { grid-template-columns: 5px minmax(0, 1fr); gap: 10px; padding: 12px; }
     .role-alert-card-actions { grid-column: 2 / -1; min-width: 0; flex-direction: row; flex-wrap: wrap; padding-left: 0; }

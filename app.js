@@ -359,7 +359,7 @@ function _renderRoleAlertCard(alert) {
   const acceptedByName = isAccepted ? formatWorkflowActorName(alert.acceptedBy?.name || alert.acceptedBy || '') : '';
   const noteText = alert.note || 'No note';
   return `
-    <div class="role-alert-card role-alert-card-glass${isAccepted ? ' accepted' : ''}" style="--role-alert-cat-color:${statusColor};--role-alert-card-border:${alphaColor(statusColor, 0.42)};--role-alert-card-glow:${alphaColor(statusColor, 0.16)};" role="button" tabindex="0" onclick="focusIssueFromAlert('${esc(alert.issueId)}')" onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); focusIssueFromAlert('${esc(alert.issueId)}'); }">
+    <div class="role-alert-card role-alert-card-glass${isAccepted ? ' accepted' : ''}" style="--role-alert-cat-color:${statusColor};--role-alert-card-border:${alphaColor(statusColor, 0.42)};--role-alert-card-glow:${alphaColor(statusColor, 0.16)};" role="button" tabindex="0" data-role-alert-action="focus" data-role-alert-issue-id="${esc(alert.issueId)}">
       <div class="role-alert-card-shell">
         <div class="role-alert-card-rail"></div>
         <div class="role-alert-card-main">
@@ -376,8 +376,8 @@ function _renderRoleAlertCard(alert) {
           </div>
         </div>
         <div class="role-alert-card-actions">
-          <button class="role-alert-action-btn role-alert-action-accept" type="button" onclick="event.stopPropagation();acceptRoleAlert('${esc(alert.issueId)}','${esc(alert.statusKey)}')">${isAccepted ? 'Accepted' : 'Accept'}</button>
-          <button class="role-alert-action-btn role-alert-action-delete" type="button" onclick="event.stopPropagation();deleteRoleAlert('${esc(alert.id)}','${esc(alert.categoryKey)}','${esc(alert.statusKey)}')">Delete</button>
+          <button class="role-alert-action-btn role-alert-action-accept" type="button" data-role-alert-action="accept" data-role-alert-issue-id="${esc(alert.issueId)}" data-role-alert-status-key="${esc(alert.statusKey)}">${isAccepted ? 'Accepted' : 'Accept'}</button>
+          <button class="role-alert-action-btn role-alert-action-delete" type="button" data-role-alert-action="delete" data-role-alert-id="${esc(alert.id)}" data-role-alert-category-key="${esc(alert.categoryKey)}" data-role-alert-status-key="${esc(alert.statusKey)}">Delete</button>
         </div>
       </div>
     </div>
@@ -537,12 +537,57 @@ function _renderRoleAlertLoadFallback({ title, subtitle }) {
         <div class="role-alert-empty-title">${esc(title)}</div>
         <div class="role-alert-empty-sub">${esc(subtitle)}</div>
         <div class="role-alert-empty-actions">
-          <button class="btn btn-primary" type="button" onclick="retryRoleAlertInboxModal()">Retry</button>
-          <button class="btn btn-ghost" type="button" onclick="closeRoleAlertInboxModal()">Close</button>
+          <button class="btn btn-primary" type="button" data-role-alert-action="retry">Retry</button>
+          <button class="btn btn-ghost" type="button" data-role-alert-action="close">Close</button>
         </div>
       </div>
     </div>
   `;
+}
+
+function _handleRoleAlertModalAction(action, issueId, statusKey, alertId, categoryKey) {
+  if (action === 'retry') {
+    void retryRoleAlertInboxModal();
+    return;
+  }
+  if (action === 'close') {
+    closeRoleAlertInboxModal();
+    return;
+  }
+  if (action === 'focus' && issueId) {
+    focusIssueFromAlert(issueId);
+    return;
+  }
+  if (action === 'accept' && issueId && statusKey) {
+    void acceptRoleAlert(issueId, statusKey);
+    return;
+  }
+  if (action === 'delete' && alertId) {
+    void deleteRoleAlert(alertId, categoryKey, statusKey);
+  }
+}
+
+function _bindRoleAlertModalTouchGuards() {
+  const modal = document.getElementById('role-alerts-modal');
+  if (!modal || modal.dataset.roleAlertBound === '1') return;
+  modal.dataset.roleAlertBound = '1';
+  const handle = event => {
+    const target = event.target?.closest?.('[data-role-alert-action],[data-role-alert-issue-id]') || null;
+    if (!target) return;
+    const action = target.dataset.roleAlertAction || (target.dataset.roleAlertIssueId ? 'focus' : '');
+    if (!action) return;
+    event.preventDefault();
+    event.stopPropagation();
+    _handleRoleAlertModalAction(
+      action,
+      target.dataset.roleAlertIssueId || '',
+      target.dataset.roleAlertStatusKey || '',
+      target.dataset.roleAlertId || '',
+      target.dataset.roleAlertCategoryKey || ''
+    );
+  };
+  modal.addEventListener('touchend', handle, { passive: false, capture: true });
+  modal.addEventListener('click', handle, true);
 }
 
 async function _openRoleAlertInboxModalInternal({ resetToggle = true } = {}) {
@@ -550,6 +595,7 @@ async function _openRoleAlertInboxModalInternal({ resetToggle = true } = {}) {
   const list = document.getElementById('role-alerts-list');
   if (!modal || !list) return;
   const loadToken = ++_roleAlertsLoadToken;
+  _bindRoleAlertModalTouchGuards();
   modal.classList.add('visible');
   document.body.classList.add('role-alerts-open');
   if (resetToggle) _roleAlertsShowAccepted = true;
