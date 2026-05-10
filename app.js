@@ -150,7 +150,6 @@ let _activeRoleAlertCount = 0;
 let _roleAlertsShowAccepted = false;
 let _roleAlertsCache = [];
 let _roleAlertBadgeRefreshTimer = null;
-let _roleAlertsPrototypeMode = localStorage.getItem('roleAlertsPrototypeMode') === '1';
 const ROLE_KEY_ALIASES = {
   maintenance_employee: ['maintenance_employee', 'main_maintenance_role', 'maintenance'],
   main_maintenance_role: ['maintenance_employee', 'main_maintenance_role', 'maintenance'],
@@ -332,59 +331,7 @@ function _updateRoleAlertModalFooter(activeCount, acceptedCount) {
   footer.textContent = `${activeCount} active · ${acceptedCount} accepted ${acceptedLabel}`;
 }
 
-function _applyRoleAlertPrototypeUI() {
-  const modal = document.getElementById('role-alerts-modal');
-  const btn = document.getElementById('role-alert-prototype-toggle-btn');
-  if (!modal) return;
-  modal.classList.toggle('role-alerts-modal-prototype', !!_roleAlertsPrototypeMode);
-  if (btn) {
-    btn.classList.toggle('active', !!_roleAlertsPrototypeMode);
-    btn.textContent = _roleAlertsPrototypeMode ? 'Preview V2 on' : 'Preview V2';
-  }
-}
-
 function _renderRoleAlertCard(alert) {
-  if (_roleAlertsPrototypeMode) return _renderRoleAlertCardPrototype(alert);
-  const isAccepted = !!alert.isAccepted;
-  const acceptedColor = '#22c55e';
-  const statusColor = isAccepted ? acceptedColor : getStatusColor(alert.statusKey || alert.categoryKey || 'open');
-  const acceptedByName = isAccepted ? formatWorkflowActorName(alert.acceptedBy?.name || alert.acceptedBy || '') : '';
-  const acceptedMeta = isAccepted
-    ? `<div class="role-alert-ack">${acceptedByName ? `Accepted by ${esc(acceptedByName)}` : 'Accepted'}</div>`
-    : '';
-  const statusDef = getStatusDef(alert.statusKey || alert.categoryKey || 'open');
-  const statusLabel = getStatusLabel(alert.statusKey || alert.categoryKey || 'open', 'short');
-  const pressLabel = alert.machine ? `Press ${esc(alert.machine)}` : 'Press';
-  return `
-    <div class="role-alert-card${isAccepted ? ' accepted' : ''}" style="--role-alert-cat-color:${statusColor};--role-alert-card-bg:${isAccepted ? 'rgba(34,197,94,0.12)' : alphaColor(statusColor, 0.12)};--role-alert-card-border:${isAccepted ? 'rgba(34,197,94,0.46)' : alphaColor(statusColor, 0.52)};" role="button" tabindex="0" onclick="focusIssueFromAlert('${esc(alert.issueId)}')" onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); focusIssueFromAlert('${esc(alert.issueId)}'); }">
-      <div class="role-alert-card-main">
-        <div class="role-alert-card-top">
-          <span class="role-alert-category-pill" style="--role-alert-cat-color:${statusColor};">
-            <span class="role-alert-category-icon">${esc(statusDef.icon || '❔')}</span>
-            <span class="role-alert-category-label">${esc(statusLabel)}</span>
-          </span>
-          <span class="role-alert-press-pill">${pressLabel}</span>
-        </div>
-        ${alert.subStatus ? `<div class="role-alert-card-sub">${esc(alert.subStatus)}</div>` : ''}
-        <div class="role-alert-card-note">${esc(alert.note || 'No note')}</div>
-        <div class="role-alert-card-footer">
-          <div class="role-alert-card-state">
-            ${isAccepted ? `<span class="role-alert-status-pill accepted">Accepted</span>` : `<span class="role-alert-status-pill active">Active</span>`}
-          </div>
-          ${acceptedMeta}
-        </div>
-      </div>
-      <div class="role-alert-card-actions">
-        ${isAccepted
-          ? `<button class="btn btn-reopen role-alert-action-btn" type="button" onclick="event.stopPropagation();unacceptRoleAlert('${esc(alert.issueId)}','${esc(alert.statusKey)}')">Unaccept</button>`
-          : `<button class="btn btn-success role-alert-action-btn" type="button" onclick="event.stopPropagation();acceptRoleAlert('${esc(alert.issueId)}','${esc(alert.statusKey)}')">Accept</button>`}
-        <button class="btn btn-danger role-alert-action-btn" type="button" onclick="event.stopPropagation();deleteRoleAlert('${esc(alert.id)}','${esc(alert.categoryKey || '')}','${esc(alert.statusKey || '')}')">Delete</button>
-      </div>
-    </div>
-  `;
-}
-
-function _renderRoleAlertCardPrototype(alert) {
   const isAccepted = !!alert.isAccepted;
   const statusColor = isAccepted ? '#22c55e' : getStatusColor(alert.statusKey || alert.categoryKey || 'open');
   const statusDef = getStatusDef(alert.statusKey || alert.categoryKey || 'open');
@@ -403,6 +350,10 @@ function _renderRoleAlertCardPrototype(alert) {
           ${isAccepted ? `<span>${acceptedByName ? `Accepted by ${esc(acceptedByName)}` : 'Accepted'}</span>` : '<span>Needs response</span>'}
         </div>
         <div class="role-alert-card-note">${esc(alert.note || 'No note')}</div>
+        <div class="role-alert-proto-meta">
+          <span>${esc(alert.plantName || currentPlantName || 'Plant')}</span>
+          <span>${esc(alert.createdAtLabel || 'Time unknown')}</span>
+        </div>
       </div>
       <div class="role-alert-card-actions role-alert-card-actions-proto">
         ${isAccepted
@@ -525,6 +476,8 @@ async function _loadActiveRoleAlertsForCurrentUser() {
       categoryKey: data.categoryKey || data.statusKey || '',
       note: data.note || issue?.note || '',
       createdAt: data.createdAt || null,
+      createdAtLabel: data.createdAt?.toDate ? data.createdAt.toDate().toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '',
+      plantName: currentPlantName || currentPlantId || '',
       workflowState,
       isAccepted: workflowState === 'accepted',
       acceptedBy: workflowState === 'accepted'
@@ -547,7 +500,6 @@ async function _openRoleAlertInboxModalInternal({ resetToggle = true } = {}) {
   if (!modal || !list) return;
   list.innerHTML = `<div style="color:var(--text3);font-size:13px;">Loading active alerts…</div>`;
   modal.classList.add('visible');
-  _applyRoleAlertPrototypeUI();
   if (resetToggle) _roleAlertsShowAccepted = true;
   _updateRoleAlertModalToggleUI();
   try {
@@ -563,12 +515,6 @@ async function _openRoleAlertInboxModalInternal({ resetToggle = true } = {}) {
 
 window.openRoleAlertInboxModal = async function() {
   await _openRoleAlertInboxModalInternal({ resetToggle: true });
-};
-
-window.toggleRoleAlertPrototype = function() {
-  _roleAlertsPrototypeMode = !_roleAlertsPrototypeMode;
-  localStorage.setItem('roleAlertsPrototypeMode', _roleAlertsPrototypeMode ? '1' : '0');
-  _applyRoleAlertPrototypeUI();
 };
 
 window.setRoleAlertsShowAccepted = async function(showAccepted) {
