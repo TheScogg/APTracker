@@ -362,8 +362,8 @@ function _renderRoleAlertCard(alert) {
         <div class="role-alert-card-shell">
           <div class="role-alert-card-main">
             <div class="role-alert-card-kicker">
-              <span class="role-alert-card-chip role-alert-card-chip-state" style="--role-alert-cat-color:${statusColor};">${esc(statusDef.icon || '🔔')} ${esc(statusLabel)}</span>
               <span class="role-alert-card-chip role-alert-card-chip-press">${alert.machine ? `Press ${esc(alert.machine)}` : 'Press not set'}</span>
+              <span class="role-alert-card-chip role-alert-card-chip-state" style="--role-alert-cat-color:${statusColor};">${esc(statusDef.icon || '🔔')} ${esc(statusLabel)}</span>
             </div>
             <div class="role-alert-card-sub">${alert.subStatus ? esc(alert.subStatus) : 'New alert'}</div>
             <div class="role-alert-card-note">${esc(noteText)}</div>
