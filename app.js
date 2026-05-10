@@ -25,6 +25,13 @@ const provider = new GoogleAuthProvider();
 provider.setCustomParameters({ prompt: "select_account" });
 
 const firestoreIoStats = { reads: 0, writes: 0 };
+const APP_VERSION = window.__APP_VERSION__ || 'dev';
+function refreshAppVersionIndicator() {
+  const el = document.getElementById('app-version-indicator');
+  if (!el) return;
+  el.textContent = `rev: ${APP_VERSION}`;
+  el.title = `Current commit version: ${APP_VERSION}`;
+}
 function refreshFirestoreIoIndicator() {
   const el = document.getElementById('firestore-io-indicator');
   if (!el) return;
@@ -97,6 +104,7 @@ const onSnapshot = (...args) => {
   }
   return rawOnSnapshot(...args);
 };
+refreshAppVersionIndicator();
 
 // ── MULTI-PLANT ──
 let currentPlantId = null;
