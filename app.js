@@ -463,6 +463,10 @@ window.clearRoleAlertBadge = function() {
 
 async function _loadActiveRoleAlertsForCurrentUser() {
   if (!currentPlantId || !currentUser?.uid) return [];
+  const withTimeout = (promise, ms, fallback = null) => Promise.race([
+    promise,
+    new Promise(resolve => setTimeout(() => resolve(fallback), ms))
+  ]);
   const q = query(
     collection(db, 'plants', currentPlantId, 'roleFeedAlerts'),
     where('recipientUserIds', 'array-contains', currentUser.uid),
@@ -481,7 +485,8 @@ async function _loadActiveRoleAlertsForCurrentUser() {
     if (!issueFetchCache.has(issueId)) {
       issueFetchCache.set(issueId, (async () => {
         try {
-          const issueSnap = await getDoc(plantDoc('issues', issueId));
+          const issueSnap = await withTimeout(getDoc(plantDoc('issues', issueId)), 2200, null);
+          if (!issueSnap || typeof issueSnap.exists !== 'function') return null;
           return issueSnap.exists() ? { id: issueId, ...issueSnap.data() } : null;
         } catch (_) {
           return null;
@@ -545,6 +550,22 @@ async function _loadActiveRoleAlertsForCurrentUser() {
   return alerts;
 }
 
+function _renderRoleAlertLoadFallback({ title, subtitle }) {
+  return `
+    <div class="role-alert-empty">
+      <div class="role-alert-empty-icon" aria-hidden="true">⏳</div>
+      <div class="role-alert-empty-copy">
+        <div class="role-alert-empty-title">${esc(title)}</div>
+        <div class="role-alert-empty-sub">${esc(subtitle)}</div>
+        <div class="role-alert-empty-actions">
+          <button class="btn btn-primary" type="button" onclick="retryRoleAlertInboxModal()">Retry</button>
+          <button class="btn btn-ghost" type="button" onclick="closeRoleAlertInboxModal()">Close</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 async function _openRoleAlertInboxModalInternal({ resetToggle = true } = {}) {
   const modal = document.getElementById('role-alerts-modal');
   const list = document.getElementById('role-alerts-list');
@@ -556,23 +577,53 @@ async function _openRoleAlertInboxModalInternal({ resetToggle = true } = {}) {
   if (resetToggle) _roleAlertsShowAccepted = true;
   _applyRoleAlertPrototypeUI();
   _updateRoleAlertModalToggleUI();
+  const loadingTimeout = setTimeout(() => {
+    if (loadToken !== _roleAlertsLoadToken) return;
+    list.innerHTML = _renderRoleAlertLoadFallback({
+      title: 'Alerts are taking too long to load.',
+      subtitle: 'This can happen on iOS homescreen mode. Tap Retry to try again.'
+    });
+  }, 3500);
   void (async () => {
     try {
-      const alerts = await _loadActiveRoleAlertsForCurrentUser();
+      const alerts = await Promise.race([
+        _loadActiveRoleAlertsForCurrentUser(),
+        new Promise(resolve => setTimeout(() => resolve('__timeout__'), 6000))
+      ]);
       if (loadToken !== _roleAlertsLoadToken) return;
+      if (alerts === '__timeout__') {
+        list.innerHTML = _renderRoleAlertLoadFallback({
+          title: 'Alerts did not finish loading.',
+          subtitle: 'Tap Retry or Close. Your issues are still safe.'
+        });
+        return;
+      }
       _roleAlertsCache = alerts;
       _renderRoleAlertsModal(alerts);
     } catch (e) {
       if (loadToken !== _roleAlertsLoadToken) return;
-      list.innerHTML = `<div style="color:var(--red);font-size:13px;">${esc(e?.message || 'Unable to load alerts.')}</div>`;
+      list.innerHTML = _renderRoleAlertLoadFallback({
+        title: 'Unable to load alerts.',
+        subtitle: e?.message || 'Tap Retry to try again.'
+      });
       _setActiveRoleAlertCount(0);
       _updateRoleAlertModalFooter(0, 0);
+    } finally {
+      clearTimeout(loadingTimeout);
     }
   })();
 }
 
 window.openRoleAlertInboxModal = async function() {
   await _openRoleAlertInboxModalInternal({ resetToggle: true });
+};
+
+window.retryRoleAlertInboxModal = async function() {
+  if (!document.getElementById('role-alerts-modal')?.classList.contains('visible')) {
+    await _openRoleAlertInboxModalInternal({ resetToggle: false });
+    return;
+  }
+  await _openRoleAlertInboxModalInternal({ resetToggle: false });
 };
 
 window.toggleRoleAlertPrototype = function() {
