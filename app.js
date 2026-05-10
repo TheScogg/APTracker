@@ -350,34 +350,45 @@ function _setRoleAlertsModalVisible(isVisible) {
 }
 
 function _renderRoleAlertCard(alert) {
+  const isResolved = !!alert.isResolved;
   const isAccepted = !!alert.isAccepted;
-  const statusColor = isAccepted ? '#22c55e' : getStatusColor(alert.statusKey || alert.categoryKey || 'open');
-  const statusDef = getStatusDef(alert.statusKey || alert.categoryKey || 'open');
-  const statusLabel = getStatusLabel(alert.statusKey || alert.categoryKey || 'open', 'short');
-  const acceptedByName = isAccepted ? formatWorkflowActorName(alert.acceptedBy?.name || alert.acceptedBy || '') : '';
+  const statusKey = alert.statusKey || alert.categoryKey || 'open';
+  const statusColor = isResolved ? '#64748b' : (isAccepted ? '#22c55e' : getStatusColor(statusKey));
+  const statusDef = isResolved ? { icon: '✅' } : getStatusDef(statusKey);
+  const statusLabel = isResolved ? 'Resolved' : getStatusLabel(statusKey, 'short');
+  const acceptedByName = (isResolved || isAccepted) ? formatWorkflowActorName(alert.acceptedBy?.name || alert.acceptedBy || '') : '';
   const noteText = alert.note || 'No note';
   return `
-    <div class="role-alert-card${isAccepted ? ' accepted' : ''}" style="--role-alert-cat-color:${statusColor};--role-alert-card-border:${alphaColor(statusColor, 0.35)};">
+    <div class="role-alert-card${(isAccepted || isResolved) ? ' accepted' : ''}" style="--role-alert-cat-color:${statusColor};--role-alert-card-border:${alphaColor(statusColor, 0.35)};">
       <button class="role-alert-card-body" type="button" data-role-alert-action="focus" data-role-alert-issue-id="${esc(alert.issueId)}" aria-label="Open issue ${esc(alert.machine || 'alert')}">
         <div class="role-alert-card-shell">
-          <div class="role-alert-card-main">
-            <div class="role-alert-card-kicker">
-              <span class="role-alert-card-chip role-alert-card-chip-press">${alert.machine ? `Press ${esc(alert.machine)}` : 'Press not set'}</span>
-              <span class="role-alert-card-chip role-alert-card-chip-state" style="--role-alert-cat-color:${statusColor};">${esc(statusDef.icon || '🔔')} ${esc(statusLabel)}</span>
-            </div>
-            <div class="role-alert-card-sub">${alert.subStatus ? esc(alert.subStatus) : 'New alert'}</div>
-            <div class="role-alert-card-note">${esc(noteText)}</div>
-            <div class="role-alert-card-meta">
-              <span>${esc(alert.plantName || currentPlantName || 'Plant')}</span>
-              <span>${esc(alert.createdAtLabel || 'Time unknown')}</span>
-              ${isAccepted ? `<span>${acceptedByName ? `Accepted by ${esc(acceptedByName)}` : 'Accepted'}</span>` : '<span>Needs response</span>'}
+          <div class="role-alert-card-header">
+            <div class="role-alert-card-top">
+              <div class="issue-machine-tag role-alert-machine-tag">${alert.machine ? esc(alert.machine) : 'Press not set'}</div>
+              <div class="issue-meta role-alert-meta">
+                <div class="issue-note-preview role-alert-card-sub">${alert.subStatus ? esc(alert.subStatus) : 'New alert'}</div>
+                <div class="issue-time role-alert-card-meta">
+                  <span>${esc(alert.plantName || currentPlantName || 'Plant')}</span>
+                  <span>${esc(alert.createdAtLabel || 'Time unknown')}</span>
+                  ${isResolved
+                    ? `<span>${acceptedByName ? `Resolved by ${esc(acceptedByName)}` : 'Resolved'}</span>`
+                    : (isAccepted
+                      ? `<span>${acceptedByName ? `Accepted by ${esc(acceptedByName)}` : 'Accepted'}</span>`
+                      : '<span>Needs response</span>')}
+                </div>
+              </div>
+              <div class="role-alert-card-side">
+                <span class="role-alert-card-chip role-alert-card-chip-press">${alert.machine ? `Press ${esc(alert.machine)}` : 'Press not set'}</span>
+                <span class="role-alert-card-chip role-alert-card-chip-state" style="--role-alert-cat-color:${statusColor};">${esc(statusDef.icon || '🔔')} ${esc(statusLabel)}</span>
+              </div>
+              <div class="issue-expand-icon role-alert-card-arrow" aria-hidden="true">›</div>
             </div>
           </div>
-          <div class="role-alert-card-arrow" aria-hidden="true">›</div>
+          <div class="role-alert-card-note">${esc(noteText)}</div>
         </div>
       </button>
       <div class="role-alert-card-actions">
-        <button class="role-alert-action-btn role-alert-action-accept" type="button" data-role-alert-action="accept" data-role-alert-issue-id="${esc(alert.issueId)}" data-role-alert-status-key="${esc(alert.statusKey)}">${isAccepted ? 'Accepted' : 'Accept'}</button>
+        <button class="role-alert-action-btn role-alert-action-accept" type="button" data-role-alert-action="accept" data-role-alert-issue-id="${esc(alert.issueId)}" data-role-alert-status-key="${esc(alert.statusKey)}" ${isResolved ? 'disabled' : ''}>${isResolved ? 'Resolved' : (isAccepted ? 'Accepted' : 'Accept')}</button>
         <button class="role-alert-action-btn role-alert-action-delete" type="button" data-role-alert-action="delete" data-role-alert-id="${esc(alert.id)}" data-role-alert-category-key="${esc(alert.categoryKey)}" data-role-alert-status-key="${esc(alert.statusKey)}">Delete</button>
       </div>
     </div>
@@ -387,8 +398,8 @@ function _renderRoleAlertCard(alert) {
 function _renderRoleAlertsModal(alerts) {
   const list = document.getElementById('role-alerts-list');
   if (!list) return;
-  const activeAlerts = alerts.filter(a => !a.isAccepted);
-  const acceptedAlerts = alerts.filter(a => a.isAccepted);
+  const activeAlerts = alerts.filter(a => !a.isAccepted && !a.isResolved);
+  const acceptedAlerts = alerts.filter(a => a.isAccepted || a.isResolved);
   _setActiveRoleAlertCount(activeAlerts.length);
   _updateRoleAlertModalToggleUI();
   _updateRoleAlertModalFooter(activeAlerts.length, acceptedAlerts.length);
@@ -468,7 +479,6 @@ async function _loadActiveRoleAlertsForCurrentUser() {
     new Promise(resolve => setTimeout(() => resolve(null), 2500))
   ]);
   if (!snap || !Array.isArray(snap.docs)) return [];
-  const staleAlertDeletes = [];
   const alerts = [];
   for (const d of snap.docs) {
     const data = d.data() || {};
@@ -477,12 +487,10 @@ async function _loadActiveRoleAlertsForCurrentUser() {
     const issue = issues.find(i => i.id === issueId) || null;
     const issueLifecycle = issue && issue.lifecycle ? issue.lifecycle : null;
     const isResolved = !!(issue && (issue.resolved || (issueLifecycle && issueLifecycle.isResolved)));
-    if (isResolved) {
-      staleAlertDeletes.push(deleteDoc(doc(db, 'plants', currentPlantId, 'roleFeedAlerts', d.id)).catch(() => null));
-      continue;
-    }
     const alertStatusKey = data.statusKey || currentStatusKey(issue || {}) || '';
-    const workflowState = _getRoleAlertWorkflowState(issue || null, alertStatusKey) || data.workflowState || null;
+    const workflowState = isResolved
+      ? 'resolved'
+      : (_getRoleAlertWorkflowState(issue || null, alertStatusKey) || data.workflowState || null);
     const issueMachine = issue && (issue.machine || issue.machineCode) ? (issue.machine || issue.machineCode) : 'Unknown';
     const issueCurrentStatus = issue && issue.currentStatus ? issue.currentStatus : null;
     const issueSubStatus = issueCurrentStatus && issueCurrentStatus.subStatusKey ? issueCurrentStatus.subStatusKey : '';
@@ -511,11 +519,11 @@ async function _loadActiveRoleAlertsForCurrentUser() {
       createdAtLabel,
       plantName: currentPlantName || currentPlantId || '',
       workflowState,
-      isAccepted: workflowState === 'accepted',
-      acceptedBy: workflowAcceptedBy
+      isResolved,
+      isAccepted: isResolved || workflowState === 'accepted',
+      acceptedBy: workflowAcceptedBy || (isResolved ? (issue && (issue.resolvedBy || issue.reopenedBy || issue.workflowStateHistory?.finished?.by || null)) : null)
     });
   }
-  if (staleAlertDeletes.length) await Promise.allSettled(staleAlertDeletes);
   alerts.sort((a, b) => {
     const aMs = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
     const bMs = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
@@ -5254,8 +5262,6 @@ window.confirmResolve = async () => {
     };
     const batch = writeBatch(db);
     batch.update(plantDoc('issues',resolveTargetId), issuePatch);
-    const alertsSnap = await getDocs(query(collection(db, 'plants', currentPlantId, 'roleFeedAlerts'), where('issueId', '==', resolveTargetId)));
-    alertsSnap.docs.forEach(d => batch.delete(doc(db, 'plants', currentPlantId, 'roleFeedAlerts', d.id)));
     queueIssueEvent(batch, resolveTargetId, 'issue_resolved', { resolutionNote: note || 'Resolved (no details provided)' });
     queueIssueEvent(batch, resolveTargetId, 'status_changed', {
       fromStatusKey: last?.status || currentStatusKey(issue || {}),
