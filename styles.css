@@ -1881,46 +1881,36 @@
   .role-alert-section.accepted .role-alert-section-body { gap: 9px; }
   .role-alert-card {
     border: 1px solid var(--role-alert-card-border, var(--border));
-    border-radius: 24px;
-    background:
-      linear-gradient(180deg, color-mix(in srgb, var(--bg2) 84%, white 16%), color-mix(in srgb, var(--bg3) 92%, var(--bg) 8%));
-    overflow: hidden;
-    box-shadow:
-      0 10px 24px rgba(0,0,0,0.16),
-      inset 0 1px 0 rgba(255,255,255,0.05);
-    transition: border-color 0.18s, transform 0.18s, box-shadow 0.18s, opacity 0.18s, background 0.18s;
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+    border-radius: 18px;
+    background: color-mix(in srgb, var(--bg2) 82%, transparent);
+    overflow: visible;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+    transition: transform 0.18s, box-shadow 0.18s, opacity 0.18s, border-color 0.18s, background 0.18s;
   }
   .role-alert-section.active .role-alert-card {
     border-color: color-mix(in srgb, var(--role-alert-cat-color, var(--accent)) 42%, var(--border));
     box-shadow:
-      0 12px 26px rgba(0,0,0,0.18),
-      0 0 0 1px color-mix(in srgb, var(--role-alert-cat-color, var(--accent)) 8%, transparent),
-      inset 0 1px 0 rgba(255,255,255,0.06);
+      0 4px 24px rgba(0,0,0,0.3),
+      0 0 0 1px color-mix(in srgb, var(--role-alert-cat-color, var(--accent)) 8%, transparent);
   }
   .role-alert-section.accepted .role-alert-card {
     opacity: 0.9;
-    background:
-      linear-gradient(180deg, color-mix(in srgb, var(--bg2) 90%, white 10%), color-mix(in srgb, var(--bg3) 96%, var(--bg) 4%));
+    background: color-mix(in srgb, var(--bg2) 88%, transparent);
     border-color: color-mix(in srgb, var(--border) 82%, rgba(255,255,255,0.08));
-    box-shadow:
-      0 8px 18px rgba(0,0,0,0.10),
-      inset 0 1px 0 rgba(255,255,255,0.04);
+    box-shadow: 0 4px 22px rgba(0,0,0,0.24);
     filter: saturate(0.96);
   }
   .role-alert-card:hover {
     border-color: color-mix(in srgb, var(--role-alert-cat-color, var(--text2)) 48%, var(--border));
     transform: translateY(-1px);
     box-shadow:
-      0 16px 34px rgba(0,0,0,0.22),
-      0 0 0 1px color-mix(in srgb, var(--role-alert-cat-color, var(--accent)) 10%, transparent),
-      inset 0 1px 0 rgba(255,255,255,0.06);
+      0 4px 24px rgba(0,0,0,0.3),
+      0 0 0 1px color-mix(in srgb, var(--role-alert-cat-color, var(--accent)) 10%, transparent);
   }
   .role-alert-card-body {
     width: 100%;
     display:block;
-    padding: 16px 16px 14px;
+    padding: 16px 16px 12px;
     background: transparent;
     border: 0;
     color: inherit;
@@ -1934,26 +1924,25 @@
     outline-offset: 2px;
   }
   .role-alert-card-shell {
-    display:grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    display:flex;
     align-items:flex-start;
     gap: 12px;
   }
-  .role-alert-card-main { min-width: 0; display:flex; flex-direction:column; gap: 9px; flex: 1; }
-  .role-alert-card-kicker { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .role-alert-card-main { min-width: 0; display:flex; flex-direction:column; gap: 8px; flex: 1; }
+  .role-alert-card-kicker { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
   .role-alert-card-chip {
     display:inline-flex;
     align-items:center;
     gap:6px;
-    min-height: 26px;
-    padding: 0 11px;
+    min-height: 24px;
+    padding: 0 10px;
     border-radius: 999px;
     border: 1px solid rgba(255,255,255,0.09);
     background: rgba(255,255,255,0.055);
     color: var(--text);
-    font-size: 10.5px;
+    font-size: 10px;
     font-family: 'Share Tech Mono', monospace;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.04em;
     text-transform: uppercase;
     white-space: nowrap;
   }
@@ -1965,7 +1954,7 @@
     box-shadow: 0 0 0 1px color-mix(in srgb, var(--role-alert-cat-color, var(--accent)) 12%, transparent);
   }
   .role-alert-section.accepted .role-alert-card-chip-state {
-    opacity: 0.86;
+    opacity: 0.8;
     background: color-mix(in srgb, var(--role-alert-cat-color, var(--accent)) 12%, rgba(255,255,255,0.04));
   }
   .role-alert-card-chip-press {
@@ -1975,25 +1964,24 @@
   }
   .role-alert-section.accepted .role-alert-card-chip-press {
     color: var(--text3);
-    background: rgba(255,255,255,0.035);
+    background: rgba(255,255,255,0.03);
   }
   .role-alert-card-sub {
     font-family: 'Rajdhani', sans-serif;
-    font-size: 19px;
+    font-size: 17px;
     font-weight: 700;
-    line-height: 1.05;
-    letter-spacing: 0.15px;
+    line-height: 1.1;
+    letter-spacing: 0.2px;
     color: var(--text);
   }
   .role-alert-card-note {
-    font-size: 13px;
+    font-size: 14px;
     color: var(--text2);
-    line-height: 1.45;
+    line-height: 1.55;
     word-break: break-word;
-    padding: 10px 12px;
-    border-radius: 14px;
-    background: color-mix(in srgb, var(--bg3) 72%, rgba(255,255,255,0.06));
-    border: 1px solid rgba(255,255,255,0.08);
+    padding: 0;
+    background: transparent;
+    border: 0;
   }
   .role-alert-card-meta {
     display:flex;
@@ -2009,26 +1997,27 @@
   }
   .role-alert-card-arrow {
     flex-shrink: 0;
-    font-size: 30px;
+    font-size: 26px;
     line-height: 1;
     color: var(--text3);
-    opacity: 0.74;
-    padding-top: 1px;
+    opacity: 0.62;
+    padding-top: 2px;
   }
   .role-alert-card-actions {
     display:flex;
     flex-wrap:wrap;
     gap: 8px;
     padding: 0 16px 16px;
+    margin-top: -2px;
   }
   .role-alert-action-btn {
-    min-height: 40px;
+    min-height: 38px;
     border-radius: 999px;
-    padding: 0 16px;
+    padding: 0 14px;
     font-family: 'Rajdhani', sans-serif;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 700;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.09em;
     text-transform: uppercase;
     cursor: pointer;
     transition: transform 0.15s, box-shadow 0.15s, background 0.15s, border-color 0.15s, color 0.15s;
