@@ -786,10 +786,15 @@ document.getElementById('save-btn').addEventListener('click', async () => {
   const summary = elSummary.value.trim();
   const tagsStr = elTags.value.trim();
   const body = elBody.value.trim();
-  const changeNote = elChangeNote.value.trim();
+  const rawChangeNote = elChangeNote.value.trim();
+  const fallbackActorName = String(currentActor()?.name || currentUser?.displayName || currentUser?.email || 'Unknown').trim() || 'Unknown';
+  const now = new Date();
+  const dd = String(now.getDate()).padStart(2, '0');
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const yy = String(now.getFullYear()).slice(-2);
+  const changeNote = rawChangeNote || `${fallbackActorName} : ${dd}/${mm}/${yy}`;
   
   if (!title) return showFeedback("Title is required", true);
-  if (!changeNote) return showFeedback("Change Note is required", true);
   
   showFeedback("Saving...", false);
   document.getElementById('save-btn').disabled = true;
