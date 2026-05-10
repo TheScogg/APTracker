@@ -150,7 +150,7 @@ let _activeRoleAlertCount = 0;
 let _roleAlertsShowAccepted = false;
 let _roleAlertsCache = [];
 let _roleAlertBadgeRefreshTimer = null;
-let _roleAlertsPrototypeMode = localStorage.getItem('roleAlertsPrototypeMode') === '1';
+let _roleAlertsLoadToken = 0;
 const ROLE_KEY_ALIASES = {
   maintenance_employee: ['maintenance_employee', 'main_maintenance_role', 'maintenance'],
   main_maintenance_role: ['maintenance_employee', 'main_maintenance_role', 'maintenance'],
@@ -463,29 +463,18 @@ async function _loadActiveRoleAlertsForCurrentUser() {
     where('recipientUserIds', 'array-contains', currentUser.uid),
     limit(80)
   );
-  const snap = await getDocs(q);
+  const snap = await Promise.race([
+    getDocs(q),
+    new Promise(resolve => setTimeout(() => resolve(null), 4500))
+  ]);
+  if (!snap || !Array.isArray(snap.docs)) return [];
   const staleAlertDeletes = [];
-  const issueFetchCache = new Map();
-  const resolveIssueById = async issueId => {
-    const cachedIssue = issues.find(i => i.id === issueId) || null;
-    if (cachedIssue) return cachedIssue;
-    if (!issueFetchCache.has(issueId)) {
-      issueFetchCache.set(issueId, (async () => {
-        try {
-          const issueSnap = await getDoc(plantDoc('issues', issueId));
-          return issueSnap.exists() ? { id: issueId, ...issueSnap.data() } : null;
-        } catch (_) {
-          return null;
-        }
-      })());
-    }
-    return issueFetchCache.get(issueId);
-  };
-  const alerts = (await Promise.all(snap.docs.map(async d => {
+  const alerts = [];
+  for (const d of snap.docs) {
     const data = d.data() || {};
     const issueId = String(data.issueId || '').trim();
-    if (!issueId) return null;
-    const issue = await resolveIssueById(issueId);
+    if (!issueId) continue;
+    const issue = issues.find(i => i.id === issueId) || null;
     const isResolved = !!(issue?.resolved || issue?.lifecycle?.isResolved);
     if (isResolved) {
       staleAlertDeletes.push(deleteDoc(doc(db, 'plants', currentPlantId, 'roleFeedAlerts', d.id)).catch(() => null));
@@ -510,9 +499,9 @@ async function _loadActiveRoleAlertsForCurrentUser() {
       acceptedBy: workflowState === 'accepted'
         ? (issue?.workflowStateHistory?.accepted?.by || issue?.workflowStateByStatusHistory?.[alertStatusKey]?.accepted?.by || null)
         : null
-    };
-  }))).filter(Boolean);
-  if (staleAlertDeletes.length) await Promise.all(staleAlertDeletes);
+    });
+  }
+  if (staleAlertDeletes.length) void Promise.allSettled(staleAlertDeletes);
   alerts.sort((a, b) => {
     const aMs = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
     const bMs = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
@@ -525,20 +514,25 @@ async function _openRoleAlertInboxModalInternal({ resetToggle = true } = {}) {
   const modal = document.getElementById('role-alerts-modal');
   const list = document.getElementById('role-alerts-list');
   if (!modal || !list) return;
+  const loadToken = ++_roleAlertsLoadToken;
   list.innerHTML = `<div style="color:var(--text3);font-size:13px;">Loading active alerts…</div>`;
   modal.classList.add('visible');
-  _applyRoleAlertPrototypeUI();
+  document.body.classList.add('role-alerts-open');
   if (resetToggle) _roleAlertsShowAccepted = true;
   _updateRoleAlertModalToggleUI();
-  try {
-    const alerts = await _loadActiveRoleAlertsForCurrentUser();
-    _roleAlertsCache = alerts;
-    _renderRoleAlertsModal(alerts);
-  } catch (e) {
-    list.innerHTML = `<div style="color:var(--red);font-size:13px;">${esc(e?.message || 'Unable to load alerts.')}</div>`;
-    _setActiveRoleAlertCount(0);
-    _updateRoleAlertModalFooter(0, 0);
-  }
+  void (async () => {
+    try {
+      const alerts = await _loadActiveRoleAlertsForCurrentUser();
+      if (loadToken !== _roleAlertsLoadToken) return;
+      _roleAlertsCache = alerts;
+      _renderRoleAlertsModal(alerts);
+    } catch (e) {
+      if (loadToken !== _roleAlertsLoadToken) return;
+      list.innerHTML = `<div style="color:var(--red);font-size:13px;">${esc(e?.message || 'Unable to load alerts.')}</div>`;
+      _setActiveRoleAlertCount(0);
+      _updateRoleAlertModalFooter(0, 0);
+    }
+  })();
 }
 
 window.openRoleAlertInboxModal = async function() {
@@ -561,7 +555,9 @@ window.setRoleAlertsShowAccepted = async function(showAccepted) {
 };
 
 window.closeRoleAlertInboxModal = function() {
+  _roleAlertsLoadToken += 1;
   document.getElementById('role-alerts-modal')?.classList.remove('visible');
+  document.body.classList.remove('role-alerts-open');
 };
 
 window.focusIssueFromAlert = function(issueId) {
@@ -1579,6 +1575,7 @@ let STATUSES = {
   tooldie:         { label:'Tool & Die',       shortLabel:'Tool & Die',   icon:'🔩', cssColor:'var(--orange)',   swipeColor:'#f97316', floorCls:'has-tooldie',         cls:'status-tooldie',         subs:['Broken / Bent Ejector Pin','Hot Runner / Gate Issue','Water Leak in Mold','Stuck Part / Sprue','Mold Greasing / PM'], statLabel:'Tool & Die',    order:8 },
   resolved:        { label:'Resolved',         shortLabel:'Resolved',     icon:'✓',  cssColor:'var(--green)',    swipeColor:'#22c55e', floorCls:'all-resolved',        cls:'status-resolved',        subs:['Process Parameter Adjusted','Mold Cleaned / Repaired','Hardware Replaced','Temporary Workaround'],                      statLabel:'Resolved',      order:9 },
 };
+const DEFAULT_STATUSES = JSON.parse(JSON.stringify(STATUSES));
 
 // ── MASCOT CHARACTERS ──
 // Animated SVG characters, one per job role. Appear in status swipe panels and empty states.
@@ -1785,10 +1782,34 @@ async function loadConfig() {
     if (mySerial !== statusConfigLoadSerial || plantId !== currentPlantId) return;
     if (snap.exists()) {
       const data = snap.data();
-      STATUSES = normalizeLoadedStatuses(data.statuses);
+
+      const existingStatuses = data.statuses && typeof data.statuses === 'object' && !Array.isArray(data.statuses)
+        ? data.statuses
+        : {};
+      const migratedStatuses = { ...existingStatuses };
+      let addedDefaults = false;
+
+      // Preserve plant-specific custom statuses and only backfill missing built-ins.
+      for (const [key, def] of Object.entries(DEFAULT_STATUSES)) {
+        if (!migratedStatuses[key]) {
+          migratedStatuses[key] = JSON.parse(JSON.stringify(def));
+          addedDefaults = true;
+        }
+      }
+
+      STATUSES = migratedStatuses;
+      
+      // Since we just changed the available statuses,
+      // we must rebuild the logic that buttons depend on
       rebuildDerivedStatus();
       buildStatusFilterPills();
       renderIssues();
+
+      if (addedDefaults) {
+        console.log('🔄 Backfilled missing built-in statuses without overwriting custom categories...');
+        await saveConfig();
+        console.log('✅ Status config merged and saved!');
+      }
     } else {
       // No config exists - save the default comprehensive categories
       console.log('💾 Saving initial comprehensive ticket categories...');
