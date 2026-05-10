@@ -1,4 +1,8 @@
 {
+  "scripts": {
+    "prebuild": "node scripts/write-build-version.mjs",
+    "build": "node -e \"console.log('build-info generated')\""
+  },
   "dependencies": {
     "firebase": "^12.12.1",
     "firebase-admin": "^13.8.0"

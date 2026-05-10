@@ -21,7 +21,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&family=Nunito:wght@300;400;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<link rel="stylesheet" href="./styles.css">
+<script src="./build-info.js?v=20260509-1"></script>
+<link rel="stylesheet" href="./styles.css?v=20260509-1">
 </head>
 <body>
 
@@ -40,6 +41,7 @@
   <div id="sync-banner" class="visible">
     <div class="sync-dot" id="sync-dot"></div>
     <span id="sync-text">Connecting…</span>
+    <span id="app-version-indicator" class="app-version-indicator" title="Current commit version">rev: 54a3d56</span>
     <span id="firestore-io-indicator" class="firestore-io-indicator" title="Estimated Firestore operations for this session">R:0 W:0</span>
   </div>
 
@@ -327,7 +329,17 @@
     <label>What happened?</label>
     <textarea id="issue-note" placeholder="Example: Hydraulic leak at press startup" rows="3"></textarea>
     <div class="issue-quick-phrases" id="issue-quick-phrases"></div>
-
+    <label>Photos <span style="color:var(--text3);font-size:9px;letter-spacing:0;text-transform:none;font-family:'Nunito',sans-serif">(optional)</span></label>
+    <div class="issue-attach-hint">Tap once for camera or library. Photos preview right here.</div>
+    <div class="photo-stack">
+      <div class="photo-btn-row">
+        <button class="photo-pick-btn photo-add-btn" id="log-photo-btn" type="button">➕ Add Photo</button>
+      </div>
+      <div class="photo-source-row" id="log-photo-source-row">
+        <button class="photo-pick-btn photo-source-btn" id="log-camera-btn" type="button">📷 Camera</button>
+        <button class="photo-pick-btn photo-source-btn" id="log-library-btn" type="button">🖼️ Library</button>
+      </div>
+    </div>
     <button class="issue-advanced-toggle" id="issue-advanced-toggle" type="button" onclick="toggleIssueAdvancedDetails()">
       <span>More details</span>
       <span class="issue-advanced-toggle-state" id="issue-advanced-toggle-state">Show</span>
@@ -369,17 +381,6 @@
       </div>
       <div class="log-cat-all-row" id="log-cat-all-row"></div>
       <div class="log-sub-row" id="log-sub-row"></div>
-    </div>
-    <label>Photos <span style="color:var(--text3);font-size:9px;letter-spacing:0;text-transform:none;font-family:'Nunito',sans-serif">(optional)</span></label>
-    <div class="issue-attach-hint">Tap once for camera or library. Photos preview right here.</div>
-    <div class="photo-stack">
-      <div class="photo-btn-row">
-        <button class="photo-pick-btn photo-add-btn" id="log-photo-btn" type="button">➕ Add Photo</button>
-      </div>
-      <div class="photo-source-row" id="log-photo-source-row">
-        <button class="photo-pick-btn photo-source-btn" id="log-camera-btn" type="button">📷 Camera</button>
-        <button class="photo-pick-btn photo-source-btn" id="log-library-btn" type="button">🖼️ Library</button>
-      </div>
     </div>
     <input type="file" id="log-camera-input" accept="image/*" capture="environment" style="display:none">
     <input type="file" id="log-library-input" accept="image/*" multiple style="display:none">
@@ -649,37 +650,34 @@
 <div class="modal-overlay" id="press-wiki-modal">
   <div class="modal" style="max-width:620px;">
     <div class="modal-header-row" style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
-      <div style="min-width:0;">
-        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;">Press Wiki</div>
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:2px;">
+      <div style="min-width:0;flex:1;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+          <div style="display:inline-flex;gap:3px;padding:3px;background:var(--bg3);border:1px solid var(--line);border-radius:999px;">
+          <button id="press-wiki-scope-press" class="btn btn-ghost" type="button" style="padding:4px 10px;border-radius:999px;font-size:12px;">This Press</button>
+          <button id="press-wiki-scope-shared" class="btn btn-ghost" type="button" style="padding:4px 10px;border-radius:999px;font-size:12px;">Shared Library</button>
+          </div>
+          <div id="press-wiki-actions-wrap" class="press-wiki-actions-wrap" style="display:none;margin-left:auto;">
+            <button id="press-wiki-actions-btn" class="sort-dropdown-btn press-wiki-actions-btn" type="button" aria-haspopup="true" aria-expanded="false">
+              Actions
+              <svg class="sort-chevron" width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <div id="press-wiki-actions-menu" class="sort-dropdown press-wiki-actions-menu">
+              <button id="press-wiki-new-page-btn" class="sort-opt press-wiki-action-item" type="button">Create Entry</button>
+              <button id="press-wiki-edit-btn" class="sort-opt press-wiki-action-item" type="button">Quick Edit</button>
+              <button id="press-wiki-cms-btn" class="sort-opt press-wiki-action-item" type="button">Edit in CMS</button>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:8px;">
+          <label style="font-size:12px;color:var(--text3);white-space:nowrap;">Select Page</label>
+          <select id="press-wiki-page-select" class="select" style="min-width:172px;"></select>
+        </div>
+        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-top:8px;">Press Wiki</div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px;">
           <div id="press-wiki-title" style="font-size:18px;font-weight:700;line-height:1.1;">Shift Notes</div>
           <button id="press-wiki-scope-badge" type="button" class="scope-link-badge" style="display:none;">Shared</button>
         </div>
         <div id="press-wiki-meta" style="font-size:12px;color:var(--text3);margin-top:3px;"></div>
-      </div>
-      <button class="btn btn-ghost" type="button" onclick="closePressWikiModal()">Close</button>
-    </div>
-    <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0;">
-        <div style="display:flex;align-items:center;gap:6px;">
-          <label style="font-size:12px;color:var(--text3);white-space:nowrap;">Page</label>
-          <select id="press-wiki-page-select" class="select" style="min-width:172px;"></select>
-        </div>
-        <div style="display:inline-flex;gap:3px;padding:3px;background:var(--bg3);border:1px solid var(--line);border-radius:999px;">
-          <button id="press-wiki-scope-press" class="btn btn-ghost" type="button" style="padding:4px 10px;border-radius:999px;font-size:12px;">This Press</button>
-          <button id="press-wiki-scope-shared" class="btn btn-ghost" type="button" style="padding:4px 10px;border-radius:999px;font-size:12px;">Shared Library</button>
-        </div>
-      </div>
-      <div id="press-wiki-actions-wrap" class="press-wiki-actions-wrap" style="display:none;">
-        <button id="press-wiki-actions-btn" class="sort-dropdown-btn press-wiki-actions-btn" type="button" aria-haspopup="true" aria-expanded="false">
-          Actions
-          <svg class="sort-chevron" width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
-        <div id="press-wiki-actions-menu" class="sort-dropdown press-wiki-actions-menu">
-          <button id="press-wiki-new-page-btn" class="sort-opt press-wiki-action-item" type="button">New Page</button>
-          <button id="press-wiki-edit-btn" class="sort-opt press-wiki-action-item" type="button">Quick Edit</button>
-          <button id="press-wiki-cms-btn" class="sort-opt press-wiki-action-item" type="button">Edit in CMS</button>
-        </div>
       </div>
     </div>
     <div id="press-wiki-new-page-row" style="margin-top:6px;display:none;gap:8px;align-items:center;">
@@ -945,26 +943,35 @@
   </div>
 </div>
 
-<div class="modal-overlay role-alerts-modal-prototype" id="role-alerts-modal">
-  <div class="modal" style="max-width:680px">
-    <div class="role-alerts-header">
-      <div class="role-alerts-title-wrap">
-        <h3 style="margin:0">Your Alerts</h3>
-        <button class="btn btn-ghost role-alert-prototype-toggle" id="role-alert-prototype-toggle-btn" type="button" onclick="toggleRoleAlertPrototype()">Preview V2</button>
+<div class="role-alerts-modal" id="role-alerts-modal" aria-hidden="true">
+  <div class="role-alerts-backdrop" data-role-alert-action="close" aria-hidden="true"></div>
+  <section class="role-alerts-sheet" role="dialog" aria-modal="true" aria-labelledby="role-alerts-title">
+    <div class="role-alerts-shell-header">
+      <div class="role-alerts-shell-title">
+        <div class="role-alerts-shell-kicker">Alerts</div>
+        <h3 id="role-alerts-title">Your Alerts</h3>
+        <div id="role-alerts-footer" class="role-alerts-footer-text"></div>
+      </div>
+      <div class="role-alerts-header-actions">
+        <button class="role-alerts-retry-fab" type="button" data-role-alert-action="retry" aria-label="Retry loading alerts" title="Retry loading alerts">
+          <svg class="role-alerts-retry-icon" viewBox="0 0 487.23 487.23" aria-hidden="true" focusable="false">
+            <g fill="currentColor">
+              <path d="M55.323,203.641c15.664,0,29.813-9.405,35.872-23.854c25.017-59.604,83.842-101.61,152.42-101.61c37.797,0,72.449,12.955,100.23,34.442l-21.775,3.371c-7.438,1.153-13.224,7.054-14.232,14.512c-1.01,7.454,3.008,14.686,9.867,17.768l119.746,53.872c5.249,2.357,11.33,1.904,16.168-1.205c4.83-3.114,7.764-8.458,7.796-14.208l0.621-131.943c0.042-7.506-4.851-14.144-12.024-16.332c-7.185-2.188-14.947,0.589-19.104,6.837l-16.505,24.805C370.398,26.778,310.1,0,243.615,0C142.806,0,56.133,61.562,19.167,149.06c-5.134,12.128-3.84,26.015,3.429,36.987C29.865,197.023,42.152,203.641,55.323,203.641z"/>
+              <path d="M464.635,301.184c-7.27-10.977-19.558-17.594-32.728-17.594c-15.664,0-29.813,9.405-35.872,23.854c-25.018,59.604-83.843,101.61-152.42,101.61c-37.798,0-72.45-12.955-100.232-34.442l21.776-3.369c7.437-1.153,13.223-7.055,14.233-14.514c1.009-7.453-3.008-14.686-9.867-17.768L49.779,285.089c-5.25-2.356-11.33-1.905-16.169,1.205c-4.829,3.114-7.764,8.458-7.795,14.207l-0.622,131.943c-0.042,7.506,4.85,14.144,12.024,16.332c7.185,2.188,14.948-0.59,19.104-6.839l16.505-24.805c44.004,43.32,104.303,70.098,170.788,70.098c100.811,0,187.481-61.561,224.446-149.059C473.197,326.043,471.903,312.157,464.635,301.184z"/>
+            </g>
+          </svg>
+        </button>
+        <button class="btn btn-ghost role-alerts-close" type="button" data-role-alert-action="close">Close</button>
+      </div>
+    </div>
+    <div class="role-alerts-toolbar">
+      <div class="role-alerts-toggle scope-toggle" role="group" aria-label="Accepted alerts visibility">
+        <button class="scope-btn" id="role-alerts-hide-accepted-btn" type="button" data-role-alert-action="hide-accepted">Hide accepted</button>
+        <button class="scope-btn active" id="role-alerts-show-accepted-btn" type="button" data-role-alert-action="show-accepted">Show accepted</button>
       </div>
     </div>
     <div id="role-alerts-list" class="role-alerts-list"></div>
-    <div class="role-alerts-footer">
-      <div id="role-alerts-footer" class="role-alerts-footer-text"></div>
-      <div class="role-alerts-footer-actions">
-        <div class="role-alerts-toggle scope-toggle" role="group" aria-label="Accepted alerts visibility">
-          <button class="scope-btn" id="role-alerts-hide-accepted-btn" type="button" onclick="setRoleAlertsShowAccepted(false)">Hide accepted</button>
-          <button class="scope-btn active" id="role-alerts-show-accepted-btn" type="button" onclick="setRoleAlertsShowAccepted(true)">Show accepted</button>
-        </div>
-        <button class="btn btn-ghost role-alerts-close" type="button" onclick="closeRoleAlertInboxModal()">Close</button>
-      </div>
-    </div>
-  </div>
+  </section>
 </div>
 
 <!-- STATUS SHEET -->
@@ -1038,7 +1045,7 @@
   </div>
 </div>
 
-<script type="module" src="./app.js"></script>
+<script type="module" src="./app.js?v=20260509-1"></script>
 
 <!-- MASCOT CHARACTER CARD POPOVER -->
 <div class="mascot-popover-backdrop" id="mascot-popover-backdrop" onclick="if(event.target===this)closeMascotPopover()">

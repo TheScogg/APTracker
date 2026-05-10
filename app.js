@@ -25,6 +25,13 @@ const provider = new GoogleAuthProvider();
 provider.setCustomParameters({ prompt: "select_account" });
 
 const firestoreIoStats = { reads: 0, writes: 0 };
+const APP_VERSION = window.__APP_VERSION__ || 'dev';
+function refreshAppVersionIndicator() {
+  const el = document.getElementById('app-version-indicator');
+  if (!el) return;
+  el.textContent = `rev: ${APP_VERSION}`;
+  el.title = `Current commit version: ${APP_VERSION}`;
+}
 function refreshFirestoreIoIndicator() {
   const el = document.getElementById('firestore-io-indicator');
   if (!el) return;
@@ -97,6 +104,7 @@ const onSnapshot = (...args) => {
   }
   return rawOnSnapshot(...args);
 };
+refreshAppVersionIndicator();
 
 // ── MULTI-PLANT ──
 let currentPlantId = null;
@@ -151,6 +159,7 @@ let _roleAlertsShowAccepted = false;
 let _roleAlertsCache = [];
 let _roleAlertBadgeRefreshTimer = null;
 let _roleAlertsLoadToken = 0;
+let _roleAlertFocusIssueId = '';
 const ROLE_KEY_ALIASES = {
   maintenance_employee: ['maintenance_employee', 'main_maintenance_role', 'maintenance'],
   main_maintenance_role: ['maintenance_employee', 'main_maintenance_role', 'maintenance'],
@@ -332,63 +341,62 @@ function _updateRoleAlertModalFooter(activeCount, acceptedCount) {
   footer.textContent = `${activeCount} active · ${acceptedCount} accepted ${acceptedLabel}`;
 }
 
-function _applyRoleAlertPrototypeUI() {
+function _setRoleAlertsModalVisible(isVisible) {
   const modal = document.getElementById('role-alerts-modal');
-  const btn = document.getElementById('role-alert-prototype-toggle-btn');
   if (!modal) return;
-  modal.classList.toggle('role-alerts-modal-prototype', !!_roleAlertsPrototypeMode);
-  if (btn) {
-    btn.classList.toggle('active', !!_roleAlertsPrototypeMode);
-    btn.textContent = _roleAlertsPrototypeMode ? 'Preview V2 on' : 'Preview V2';
-  }
+  modal.classList.toggle('visible', !!isVisible);
+  modal.setAttribute('aria-hidden', isVisible ? 'false' : 'true');
+  document.body.classList.toggle('role-alerts-open', !!isVisible);
 }
 
 function _renderRoleAlertCard(alert) {
-  if (_roleAlertsPrototypeMode) return _renderRoleAlertCardPrototype(alert);
+  const isResolved = !!alert.isResolved;
   const isAccepted = !!alert.isAccepted;
-  const statusColor = isAccepted ? '#22c55e' : getStatusColor(alert.statusKey || alert.categoryKey || 'open');
-  const statusDef = getStatusDef(alert.statusKey || alert.categoryKey || 'open');
-  const statusLabel = getStatusLabel(alert.statusKey || alert.categoryKey || 'open', 'short');
-  const acceptedByName = isAccepted ? formatWorkflowActorName(alert.acceptedBy?.name || alert.acceptedBy || '') : '';
+  const statusKey = alert.statusKey || alert.categoryKey || 'open';
+  const statusColor = isResolved ? '#64748b' : (isAccepted ? '#22c55e' : getStatusColor(statusKey));
+  const statusDef = isResolved ? { icon: '✅' } : getStatusDef(statusKey);
+  const statusLabel = isResolved ? 'Resolved' : getStatusLabel(statusKey, 'short');
+  const acceptedByName = (isResolved || isAccepted) ? formatWorkflowActorName(alert.acceptedBy?.name || alert.acceptedBy || '') : '';
+  const noteText = alert.note || 'No note';
   return `
-    <div class="role-alert-card role-alert-card-proto${isAccepted ? ' accepted' : ''}" style="--role-alert-cat-color:${statusColor};--role-alert-card-border:${alphaColor(statusColor, 0.45)};" role="button" tabindex="0" onclick="focusIssueFromAlert('${esc(alert.issueId)}')" onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); focusIssueFromAlert('${esc(alert.issueId)}'); }">
-      <div class="role-alert-card-main">
-        <div class="role-alert-proto-head">
-          <span class="role-alert-proto-state" style="--role-alert-cat-color:${statusColor};">${esc(statusLabel)}</span>
-          <span class="role-alert-proto-press">${alert.machine ? `Press ${esc(alert.machine)}` : 'Press not set'}</span>
+    <div class="role-alert-card${(isAccepted || isResolved) ? ' accepted' : ''}" style="--role-alert-cat-color:${statusColor};--role-alert-card-border:${alphaColor(statusColor, 0.35)};">
+      <button class="role-alert-card-body" type="button" data-role-alert-action="focus" data-role-alert-issue-id="${esc(alert.issueId)}" aria-label="Open issue ${esc(alert.machine || 'alert')}">
+        <div class="role-alert-card-shell">
+          <div class="role-alert-card-header">
+            <div class="role-alert-card-top">
+              <div class="issue-machine-tag role-alert-machine-tag">${alert.machine ? esc(alert.machine) : 'Press not set'}</div>
+              <div class="issue-meta role-alert-meta">
+                <div class="issue-note-preview role-alert-card-sub">${alert.subStatus ? esc(alert.subStatus) : 'New alert'}</div>
+              </div>
+              <span class="role-alert-card-chip role-alert-card-chip-state" style="--role-alert-cat-color:${statusColor};">${esc(statusDef.icon || '🔔')} ${esc(statusLabel)}</span>
+              <div class="issue-expand-icon role-alert-card-arrow" aria-hidden="true">›</div>
+            </div>
+            <div class="issue-time role-alert-card-time">
+              <span>${esc(alert.plantName || currentPlantName || 'Plant')}</span>
+              <span>${esc(alert.createdAtLabel || 'Time unknown')}</span>
+              ${isResolved
+                ? `<span>${acceptedByName ? `Resolved by ${esc(acceptedByName)}` : 'Resolved'}</span>`
+                : (isAccepted
+                  ? `<span>${acceptedByName ? `Accepted by ${esc(acceptedByName)}` : 'Accepted'}</span>`
+                  : '<span>Needs response</span>')}
+            </div>
+          </div>
+          <div class="role-alert-card-note">${esc(noteText)}</div>
         </div>
-        <div class="role-alert-card-sub">${alert.subStatus ? esc(alert.subStatus) : 'New alert'}</div>
-        <div class="role-alert-proto-meta">
-          <span>${esc(statusDef.icon || '🔔')} ${esc(statusLabel)}</span>
-          ${isAccepted ? `<span>${acceptedByName ? `Accepted by ${esc(acceptedByName)}` : 'Accepted'}</span>` : '<span>Needs response</span>'}
-        </div>
-        <div class="role-alert-card-note">${esc(alert.note || 'No note')}</div>
-        <div class="role-alert-proto-meta">
-          <span>${esc(alert.plantName || currentPlantName || 'Plant')}</span>
-          <span>${esc(alert.createdAtLabel || 'Time unknown')}</span>
-        </div>
-        <div class="role-alert-card-note">${esc(alert.note || 'No note')}</div>
-      </div>
-      <div class="role-alert-card-actions role-alert-card-actions-proto">
-        ${isAccepted
-          ? `<button class="btn btn-reopen role-alert-action-btn" type="button" onclick="event.stopPropagation();unacceptRoleAlert('${esc(alert.issueId)}','${esc(alert.statusKey)}')">Unaccept</button>`
-          : `<button class="btn btn-success role-alert-action-btn" type="button" onclick="event.stopPropagation();acceptRoleAlert('${esc(alert.issueId)}','${esc(alert.statusKey)}')">Accept</button>`}
-        <button class="btn btn-ghost role-alert-action-btn" type="button" onclick="event.stopPropagation();focusIssueFromAlert('${esc(alert.issueId)}')">Open</button>
+      </button>
+      <div class="role-alert-card-actions">
+        <button class="role-alert-action-btn role-alert-action-accept" type="button" data-role-alert-action="accept" data-role-alert-issue-id="${esc(alert.issueId)}" data-role-alert-status-key="${esc(alert.statusKey)}" ${isResolved ? 'disabled' : ''}>${isResolved ? 'Resolved' : (isAccepted ? 'Accepted' : 'Accept')}</button>
+        <button class="role-alert-action-btn role-alert-action-delete" type="button" data-role-alert-action="delete" data-role-alert-id="${esc(alert.id)}" data-role-alert-category-key="${esc(alert.categoryKey)}" data-role-alert-status-key="${esc(alert.statusKey)}">Delete</button>
       </div>
     </div>
   `;
 }
 
-// Backward-compat shim: older cached clients may still reference this symbol.
-function _renderRoleAlertCardPrototype(alert) {
-  return _renderRoleAlertCard(alert);
-}
-
 function _renderRoleAlertsModal(alerts) {
   const list = document.getElementById('role-alerts-list');
   if (!list) return;
-  const activeAlerts = alerts.filter(a => !a.isAccepted);
-  const acceptedAlerts = alerts.filter(a => a.isAccepted);
+  const activeAlerts = alerts.filter(a => !a.isAccepted && !a.isResolved);
+  const acceptedAlerts = alerts.filter(a => a.isAccepted || a.isResolved);
   _setActiveRoleAlertCount(activeAlerts.length);
   _updateRoleAlertModalToggleUI();
   _updateRoleAlertModalFooter(activeAlerts.length, acceptedAlerts.length);
@@ -465,43 +473,54 @@ async function _loadActiveRoleAlertsForCurrentUser() {
   );
   const snap = await Promise.race([
     getDocs(q),
-    new Promise(resolve => setTimeout(() => resolve(null), 4500))
+    new Promise(resolve => setTimeout(() => resolve(null), 2500))
   ]);
   if (!snap || !Array.isArray(snap.docs)) return [];
-  const staleAlertDeletes = [];
   const alerts = [];
   for (const d of snap.docs) {
     const data = d.data() || {};
     const issueId = String(data.issueId || '').trim();
     if (!issueId) continue;
     const issue = issues.find(i => i.id === issueId) || null;
-    const isResolved = !!(issue?.resolved || issue?.lifecycle?.isResolved);
-    if (isResolved) {
-      staleAlertDeletes.push(deleteDoc(doc(db, 'plants', currentPlantId, 'roleFeedAlerts', d.id)).catch(() => null));
-      return null;
-    }
+    const issueLifecycle = issue && issue.lifecycle ? issue.lifecycle : null;
+    const isResolved = !!(issue && (issue.resolved || (issueLifecycle && issueLifecycle.isResolved)));
     const alertStatusKey = data.statusKey || currentStatusKey(issue || {}) || '';
-    const workflowState = _getRoleAlertWorkflowState(issue || null, alertStatusKey);
-    return {
+    const workflowState = isResolved
+      ? 'resolved'
+      : (_getRoleAlertWorkflowState(issue || null, alertStatusKey) || data.workflowState || null);
+    const issueMachine = issue && (issue.machine || issue.machineCode) ? (issue.machine || issue.machineCode) : 'Unknown';
+    const issueCurrentStatus = issue && issue.currentStatus ? issue.currentStatus : null;
+    const issueSubStatus = issueCurrentStatus && issueCurrentStatus.subStatusKey ? issueCurrentStatus.subStatusKey : '';
+    const issueNote = issue && issue.note ? issue.note : '';
+    const createdAt = data.createdAt || null;
+    const createdAtLabel = createdAt && typeof createdAt.toDate === 'function'
+      ? createdAt.toDate().toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+      : '';
+    const workflowAcceptedBy = workflowState === 'accepted'
+      ? (
+          (issue && issue.workflowStateHistory && issue.workflowStateHistory.accepted && issue.workflowStateHistory.accepted.by) ||
+          (issue && issue.workflowStateByStatusHistory && issue.workflowStateByStatusHistory[alertStatusKey] && issue.workflowStateByStatusHistory[alertStatusKey].accepted && issue.workflowStateByStatusHistory[alertStatusKey].accepted.by) ||
+          null
+        )
+      : null;
+    alerts.push({
       id: d.id,
       issueId,
-      machine: data.machine || issue?.machine || issue?.machineCode || 'Unknown',
+      machine: data.machine || issueMachine,
       feedLabel: data.feedLabel || data.categoryKey || data.statusKey || 'Alert',
       statusKey: alertStatusKey,
-      subStatus: data.subStatus || issue?.currentStatus?.subStatusKey || '',
+      subStatus: data.subStatus || issueSubStatus,
       categoryKey: data.categoryKey || data.statusKey || '',
-      note: data.note || issue?.note || '',
-      createdAt: data.createdAt || null,
-      createdAtLabel: data.createdAt?.toDate ? data.createdAt.toDate().toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '',
+      note: data.note || issueNote,
+      createdAt,
+      createdAtLabel,
       plantName: currentPlantName || currentPlantId || '',
       workflowState,
-      isAccepted: workflowState === 'accepted',
-      acceptedBy: workflowState === 'accepted'
-        ? (issue?.workflowStateHistory?.accepted?.by || issue?.workflowStateByStatusHistory?.[alertStatusKey]?.accepted?.by || null)
-        : null
+      isResolved,
+      isAccepted: isResolved || workflowState === 'accepted',
+      acceptedBy: workflowAcceptedBy || (isResolved ? (issue && (issue.resolvedBy || issue.reopenedBy || issue.workflowStateHistory?.finished?.by || null)) : null)
     });
   }
-  if (staleAlertDeletes.length) void Promise.allSettled(staleAlertDeletes);
   alerts.sort((a, b) => {
     const aMs = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
     const bMs = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
@@ -510,25 +529,119 @@ async function _loadActiveRoleAlertsForCurrentUser() {
   return alerts;
 }
 
+function _renderRoleAlertLoadFallback({ title, subtitle }) {
+  return `
+    <div class="role-alert-empty">
+      <div class="role-alert-empty-icon" aria-hidden="true">⏳</div>
+      <div class="role-alert-empty-copy">
+        <div class="role-alert-empty-title">${esc(title)}</div>
+        <div class="role-alert-empty-sub">${esc(subtitle)}</div>
+        <div class="role-alert-empty-actions">
+          <button class="btn btn-ghost" type="button" data-role-alert-action="close">Close</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function _handleRoleAlertModalAction(action, issueId, statusKey, alertId, categoryKey) {
+  if (action === 'retry') {
+    const retryBtn = document.querySelector('#role-alerts-modal .role-alerts-retry-fab');
+    if (retryBtn) {
+      retryBtn.classList.remove('spinning');
+      void retryBtn.offsetWidth;
+      retryBtn.classList.add('spinning');
+      window.setTimeout(() => retryBtn.classList.remove('spinning'), 700);
+    }
+    void retryRoleAlertInboxModal();
+    return;
+  }
+  if (action === 'hide-accepted') {
+    void setRoleAlertsShowAccepted(false);
+    return;
+  }
+  if (action === 'show-accepted') {
+    void setRoleAlertsShowAccepted(true);
+    return;
+  }
+  if (action === 'close') {
+    closeRoleAlertInboxModal();
+    return;
+  }
+  if (action === 'focus' && issueId) {
+    focusIssueFromAlert(issueId);
+    return;
+  }
+  if (action === 'accept' && issueId && statusKey) {
+    void acceptRoleAlert(issueId, statusKey);
+    return;
+  }
+  if (action === 'delete' && alertId) {
+    void deleteRoleAlert(alertId, categoryKey, statusKey);
+  }
+}
+
+function _bindRoleAlertModalActions() {
+  const modal = document.getElementById('role-alerts-modal');
+  if (!modal || modal.dataset.roleAlertBound === '1') return;
+  modal.dataset.roleAlertBound = '1';
+  modal.addEventListener('click', event => {
+    const target = event.target?.closest?.('[data-role-alert-action],[data-role-alert-issue-id]') || null;
+    if (!target) return;
+    const action = target.dataset.roleAlertAction || (target.dataset.roleAlertIssueId ? 'focus' : '');
+    if (!action) return;
+    event.preventDefault();
+    event.stopPropagation();
+    _handleRoleAlertModalAction(
+      action,
+      target.dataset.roleAlertIssueId || '',
+      target.dataset.roleAlertStatusKey || '',
+      target.dataset.roleAlertId || '',
+      target.dataset.roleAlertCategoryKey || ''
+    );
+  });
+}
+
 async function _openRoleAlertInboxModalInternal({ resetToggle = true } = {}) {
   const modal = document.getElementById('role-alerts-modal');
   const list = document.getElementById('role-alerts-list');
   if (!modal || !list) return;
   const loadToken = ++_roleAlertsLoadToken;
-  list.innerHTML = `<div style="color:var(--text3);font-size:13px;">Loading active alerts…</div>`;
-  modal.classList.add('visible');
-  document.body.classList.add('role-alerts-open');
+  _bindRoleAlertModalActions();
+  _setRoleAlertsModalVisible(true);
   if (resetToggle) _roleAlertsShowAccepted = true;
   _updateRoleAlertModalToggleUI();
+  const cachedAlerts = Array.isArray(_roleAlertsCache) ? _roleAlertsCache : [];
+  if (cachedAlerts.length) {
+    _renderRoleAlertsModal(cachedAlerts);
+  } else {
+    list.innerHTML = _renderRoleAlertLoadFallback({
+      title: 'Checking for alerts…',
+      subtitle: 'If this stalls, use the orange button in the top-right corner.'
+    });
+  }
   void (async () => {
     try {
-      const alerts = await _loadActiveRoleAlertsForCurrentUser();
+      const alerts = await Promise.race([
+        _loadActiveRoleAlertsForCurrentUser(),
+        new Promise(resolve => setTimeout(() => resolve('__timeout__'), 2500))
+      ]);
       if (loadToken !== _roleAlertsLoadToken) return;
+      if (alerts === '__timeout__') {
+        list.innerHTML = _renderRoleAlertLoadFallback({
+          title: 'Alerts are taking too long to load.',
+          subtitle: 'Use the orange button in the top-right corner to try again.'
+        });
+        return;
+      }
       _roleAlertsCache = alerts;
       _renderRoleAlertsModal(alerts);
     } catch (e) {
       if (loadToken !== _roleAlertsLoadToken) return;
-      list.innerHTML = `<div style="color:var(--red);font-size:13px;">${esc(e?.message || 'Unable to load alerts.')}</div>`;
+      list.innerHTML = _renderRoleAlertLoadFallback({
+        title: 'Unable to load alerts.',
+        subtitle: e?.message || 'Use the orange button in the top-right corner to try again.'
+      });
       _setActiveRoleAlertCount(0);
       _updateRoleAlertModalFooter(0, 0);
     }
@@ -539,37 +652,48 @@ window.openRoleAlertInboxModal = async function() {
   await _openRoleAlertInboxModalInternal({ resetToggle: true });
 };
 
+window.retryRoleAlertInboxModal = async function() {
+  if (!document.getElementById('role-alerts-modal')?.classList.contains('visible')) {
+    await _openRoleAlertInboxModalInternal({ resetToggle: false });
+    return;
+  }
+  await _openRoleAlertInboxModalInternal({ resetToggle: false });
+};
+
 window.toggleRoleAlertPrototype = function() {
-  _roleAlertsPrototypeMode = !_roleAlertsPrototypeMode;
-  localStorage.setItem('roleAlertsPrototypeMode', _roleAlertsPrototypeMode ? '1' : '0');
-  _applyRoleAlertPrototypeUI();
+  // Deprecated shim for old cached builds.
 };
 
 window.setRoleAlertsShowAccepted = async function(showAccepted) {
   _roleAlertsShowAccepted = !!showAccepted;
-  if (!_roleAlertsCache.length) {
-    _updateRoleAlertModalToggleUI();
-    return;
+  _updateRoleAlertModalToggleUI();
+  if (_roleAlertsCache.length) {
+    _renderRoleAlertsModal(_roleAlertsCache);
+  } else {
+    _updateRoleAlertModalFooter(0, 0);
   }
-  _renderRoleAlertsModal(_roleAlertsCache);
 };
 
 window.closeRoleAlertInboxModal = function() {
   _roleAlertsLoadToken += 1;
-  document.getElementById('role-alerts-modal')?.classList.remove('visible');
-  document.body.classList.remove('role-alerts-open');
+  _setRoleAlertsModalVisible(false);
 };
 
 window.focusIssueFromAlert = function(issueId) {
+  const focusId = String(issueId || '').trim();
+  if (!focusId) return;
+  _roleAlertFocusIssueId = focusId;
   closeRoleAlertInboxModal();
-  const issueRow = document.querySelector(`.issue-row[data-id="${CSS.escape(String(issueId || ''))}"]`);
-  if (issueRow) {
-    const body = document.getElementById('body-' + issueId);
-    if (body && !body.classList.contains('visible') && typeof toggleCard === 'function') toggleCard(issueId);
+  renderIssues();
+  requestAnimationFrame(() => {
+    const issueRow = document.querySelector(`.issue-row[data-id="${CSS.escape(focusId)}"]`);
+    if (!issueRow) return;
+    const body = document.getElementById('body-' + focusId);
+    if (body && !body.classList.contains('visible') && typeof toggleCard === 'function') toggleCard(focusId);
     issueRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    issueRow.classList.add('highlight');
-    setTimeout(() => issueRow.classList.remove('highlight'), 1200);
-  }
+    issueRow.classList.add('highlight', 'alert-focus-issue');
+    setTimeout(() => issueRow.classList.remove('highlight', 'alert-focus-issue'), 1200);
+  });
 };
 
 window.deleteRoleAlert = async function(alertId, categoryKey, statusKey) {
@@ -1716,7 +1840,7 @@ function applyColumnMajorGridLayout(el, itemCount, columnCount = 2) {
   const cols = Math.max(1, Number(columnCount) || 1);
   const rows = Math.max(1, Math.ceil(Math.max(0, Number(itemCount) || 0) / cols));
   el.style.display = 'grid';
-  el.style.gridAutoFlow = 'column';
+  el.style.gridAutoFlow = 'row';
   el.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
   el.style.gridTemplateRows = `repeat(${rows}, minmax(0, auto))`;
   el.style.gridAutoColumns = 'minmax(0, 1fr)';
@@ -5135,8 +5259,6 @@ window.confirmResolve = async () => {
     };
     const batch = writeBatch(db);
     batch.update(plantDoc('issues',resolveTargetId), issuePatch);
-    const alertsSnap = await getDocs(query(collection(db, 'plants', currentPlantId, 'roleFeedAlerts'), where('issueId', '==', resolveTargetId)));
-    alertsSnap.docs.forEach(d => batch.delete(doc(db, 'plants', currentPlantId, 'roleFeedAlerts', d.id)));
     queueIssueEvent(batch, resolveTargetId, 'issue_resolved', { resolutionNote: note || 'Resolved (no details provided)' });
     queueIssueEvent(batch, resolveTargetId, 'status_changed', {
       fromStatusKey: last?.status || currentStatusKey(issue || {}),
@@ -6307,6 +6429,17 @@ function renderIssues() {
     });
   }
 
+  if (_roleAlertFocusIssueId) {
+    const focusIdx = filtered.findIndex(i => i.id === _roleAlertFocusIssueId);
+    if (focusIdx > 0) {
+      const [focusIssue] = filtered.splice(focusIdx, 1);
+      filtered.unshift(focusIssue);
+    } else if (focusIdx === -1) {
+      const focusIssue = issues.find(i => i.id === _roleAlertFocusIssueId);
+      if (focusIssue) filtered.unshift({ ...focusIssue, __alertFocus: true });
+    }
+  }
+
   // Reset display limit when filter/sort parameters change
   const filterKey = `${issueScope}|${issuePeriod}|${document.getElementById('date-filter')?.value}|${mf}|${sf}|${search}|${sort}|${issueRowScope}|${issueShiftFilter}`;
   if (filterKey !== renderIssues._lastFilterKey) {
@@ -6360,9 +6493,11 @@ function renderIssues() {
   visible.forEach(issue => {
     const wasOpen=expanded.has(issue.id);
     const isMyIssue=issue.userId===currentUser?.uid;
+    const isAlertFocus = !!issue.__alertFocus;
     const row=document.createElement('div'); row.className='issue-row'; row.dataset.id = issue.id;
+    if (isAlertFocus) row.classList.add('alert-focus-issue');
     const card=document.createElement('div');
-    card.className='issue-card'+(issueIsResolvedV2(issue)?' resolved':'')+(issue.highPriority?' high-priority':'');
+    card.className='issue-card'+(issueIsResolvedV2(issue)?' resolved':'')+(issue.highPriority?' high-priority':'')+(isAlertFocus?' alert-focus-card':'');
 
     const _photoList = (issue.photos||[]).map(p => p.dataUrl);
     if (_photoList.length) window._issuePhotos = window._issuePhotos || {};
@@ -6526,6 +6661,7 @@ function renderIssues() {
 
     const datePart = issue.dateTime ? issue.dateTime.replace(/,\s*\d{4}/, '') : '';
     const submitterHtml=issue.userName?`<span class="issue-submitter">${esc(issue.userName.split(' ')[0])}${isMyIssue?' (you)':''}</span>`:'';
+    const alertFocusHtml = isAlertFocus ? `<span class="issue-alert-focus-badge">Outside current time frame</span>` : '';
 
     // Secondary status keys (needed by workflow rows below)
     const secKeys = getSecondaryStatuses(issue).filter(k => k !== 'resolved');
@@ -6643,7 +6779,7 @@ function renderIssues() {
           <div class="issue-machine-tag">${esc(issue.machine)}</div>
           <div class="issue-meta">
             <div class="issue-note-preview">${esc(issue.note)}</div>
-            <div class="issue-time">${datePart} ${submitterHtml}${shiftBadgeHtml}${timerBadgeHtml}${(issue.photos||[]).length?`<span class="photo-count-badge">📷 ${issue.photos.length}</span>`:''}${issue.editedAt?'<span style="color:var(--text3)">(edited)</span>':''}</div>
+            <div class="issue-time">${datePart} ${submitterHtml}${shiftBadgeHtml}${timerBadgeHtml}${(issue.photos||[]).length?`<span class="photo-count-badge">📷 ${issue.photos.length}</span>`:''}${issue.editedAt?'<span style="color:var(--text3)">(edited)</span>':''}${alertFocusHtml}</div>
           </div>
           <button class="priority-btn${issue.highPriority?' active':''}" onclick="event.stopPropagation(); togglePriority('${issue.id}')" title="${issue.highPriority?'Remove high priority':'Mark as high priority'}">!</button>
           <div class="issue-expand-icon ${wasOpen?'open':''}" id="chevron-${issue.id}">▼</div>
@@ -8737,7 +8873,6 @@ document.getElementById('theme-editor-modal')?.addEventListener('click', e => {
 });
 document.getElementById('appearance-modal')?.addEventListener('click', e => { if (e.target === document.getElementById('appearance-modal')) closeAppearanceModal(); });
 document.getElementById('role-prefs-modal')?.addEventListener('click', e => { if (e.target === document.getElementById('role-prefs-modal')) closeRolePreferencesModal(); });
-document.getElementById('role-alerts-modal')?.addEventListener('click', e => { if (e.target === document.getElementById('role-alerts-modal')) closeRoleAlertInboxModal(); });
 
 // ── SERIAL NUMBER PROMPT ──
 // Define which status+sub combos require a serial number
