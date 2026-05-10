@@ -6,3 +6,8 @@
 !.env.example
 serviceAccountKey.json
 node_modules/
+bookmarklet-fixed.png
+chrome-after-click.png
+chrome-bookmarklet-test.png
+chrome-restored.png
+chrome-window.png

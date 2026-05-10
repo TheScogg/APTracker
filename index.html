@@ -329,15 +329,6 @@
     <label>What happened?</label>
     <textarea id="issue-note" placeholder="Example: Hydraulic leak at press startup" rows="3"></textarea>
     <div class="issue-quick-phrases" id="issue-quick-phrases"></div>
-    <div style="margin-bottom:4px">
-      <label style="margin-bottom:6px">Status <span style="color:var(--text3);font-size:9px;letter-spacing:0;text-transform:none;font-family:'Nunito',sans-serif">(optional — defaults to Open)</span></label>
-      <div class="log-cat-selected" id="log-cat-selected">
-        <span class="log-cat-pill" id="log-cat-pill"></span>
-        <button class="log-cat-clear" id="log-cat-clear">✕ clear</button>
-      </div>
-      <div class="log-cat-all-row" id="log-cat-all-row"></div>
-      <div class="log-sub-row" id="log-sub-row"></div>
-    </div>
     <label>Photos <span style="color:var(--text3);font-size:9px;letter-spacing:0;text-transform:none;font-family:'Nunito',sans-serif">(optional)</span></label>
     <div class="issue-attach-hint">Tap once for camera or library. Photos preview right here.</div>
     <div class="photo-stack">
@@ -381,6 +372,15 @@
           <option value="120">2 hours</option>
         </select>
       </div>
+    </div>
+    <div style="margin-bottom:4px">
+      <label style="margin-bottom:6px">Status <span style="color:var(--text3);font-size:9px;letter-spacing:0;text-transform:none;font-family:'Nunito',sans-serif">(optional — defaults to Open)</span></label>
+      <div class="log-cat-selected" id="log-cat-selected">
+        <span class="log-cat-pill" id="log-cat-pill"></span>
+        <button class="log-cat-clear" id="log-cat-clear">✕ clear</button>
+      </div>
+      <div class="log-cat-all-row" id="log-cat-all-row"></div>
+      <div class="log-sub-row" id="log-sub-row"></div>
     </div>
     <input type="file" id="log-camera-input" accept="image/*" capture="environment" style="display:none">
     <input type="file" id="log-library-input" accept="image/*" multiple style="display:none">
