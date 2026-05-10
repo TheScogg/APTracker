@@ -150,6 +150,7 @@ let _activeRoleAlertCount = 0;
 let _roleAlertsShowAccepted = false;
 let _roleAlertsCache = [];
 let _roleAlertBadgeRefreshTimer = null;
+let _roleAlertsLoadToken = 0;
 const ROLE_KEY_ALIASES = {
   maintenance_employee: ['maintenance_employee', 'main_maintenance_role', 'maintenance'],
   main_maintenance_role: ['maintenance_employee', 'main_maintenance_role', 'maintenance'],
@@ -445,21 +446,18 @@ async function _loadActiveRoleAlertsForCurrentUser() {
     where('recipientUserIds', 'array-contains', currentUser.uid),
     limit(80)
   );
-  const snap = await getDocs(q);
+  const snap = await Promise.race([
+    getDocs(q),
+    new Promise(resolve => setTimeout(() => resolve(null), 4500))
+  ]);
+  if (!snap || !Array.isArray(snap.docs)) return [];
   const staleAlertDeletes = [];
   const alerts = [];
   for (const d of snap.docs) {
     const data = d.data() || {};
     const issueId = String(data.issueId || '').trim();
     if (!issueId) continue;
-    const cachedIssue = issues.find(i => i.id === issueId) || null;
-    let issue = cachedIssue;
-    if (!issue) {
-      try {
-        const issueSnap = await getDoc(plantDoc('issues', issueId));
-        issue = issueSnap.exists() ? { id: issueId, ...issueSnap.data() } : null;
-      } catch (_) {}
-    }
+    const issue = issues.find(i => i.id === issueId) || null;
     const isResolved = !!(issue?.resolved || issue?.lifecycle?.isResolved);
     if (isResolved) {
       staleAlertDeletes.push(deleteDoc(doc(db, 'plants', currentPlantId, 'roleFeedAlerts', d.id)).catch(() => null));
@@ -484,7 +482,7 @@ async function _loadActiveRoleAlertsForCurrentUser() {
         : null
     });
   }
-  if (staleAlertDeletes.length) await Promise.all(staleAlertDeletes);
+  if (staleAlertDeletes.length) void Promise.allSettled(staleAlertDeletes);
   alerts.sort((a, b) => {
     const aMs = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
     const bMs = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
@@ -497,19 +495,25 @@ async function _openRoleAlertInboxModalInternal({ resetToggle = true } = {}) {
   const modal = document.getElementById('role-alerts-modal');
   const list = document.getElementById('role-alerts-list');
   if (!modal || !list) return;
+  const loadToken = ++_roleAlertsLoadToken;
   list.innerHTML = `<div style="color:var(--text3);font-size:13px;">Loading active alerts…</div>`;
   modal.classList.add('visible');
+  document.body.classList.add('role-alerts-open');
   if (resetToggle) _roleAlertsShowAccepted = true;
   _updateRoleAlertModalToggleUI();
-  try {
-    const alerts = await _loadActiveRoleAlertsForCurrentUser();
-    _roleAlertsCache = alerts;
-    _renderRoleAlertsModal(alerts);
-  } catch (e) {
-    list.innerHTML = `<div style="color:var(--red);font-size:13px;">${esc(e?.message || 'Unable to load alerts.')}</div>`;
-    _setActiveRoleAlertCount(0);
-    _updateRoleAlertModalFooter(0, 0);
-  }
+  void (async () => {
+    try {
+      const alerts = await _loadActiveRoleAlertsForCurrentUser();
+      if (loadToken !== _roleAlertsLoadToken) return;
+      _roleAlertsCache = alerts;
+      _renderRoleAlertsModal(alerts);
+    } catch (e) {
+      if (loadToken !== _roleAlertsLoadToken) return;
+      list.innerHTML = `<div style="color:var(--red);font-size:13px;">${esc(e?.message || 'Unable to load alerts.')}</div>`;
+      _setActiveRoleAlertCount(0);
+      _updateRoleAlertModalFooter(0, 0);
+    }
+  })();
 }
 
 window.openRoleAlertInboxModal = async function() {
@@ -526,7 +530,9 @@ window.setRoleAlertsShowAccepted = async function(showAccepted) {
 };
 
 window.closeRoleAlertInboxModal = function() {
+  _roleAlertsLoadToken += 1;
   document.getElementById('role-alerts-modal')?.classList.remove('visible');
+  document.body.classList.remove('role-alerts-open');
 };
 
 window.focusIssueFromAlert = function(issueId) {
