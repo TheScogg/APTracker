@@ -463,10 +463,6 @@ window.clearRoleAlertBadge = function() {
 
 async function _loadActiveRoleAlertsForCurrentUser() {
   if (!currentPlantId || !currentUser?.uid) return [];
-  const withTimeout = (promise, ms, fallback = null) => Promise.race([
-    promise,
-    new Promise(resolve => setTimeout(() => resolve(fallback), ms))
-  ]);
   const q = query(
     collection(db, 'plants', currentPlantId, 'roleFeedAlerts'),
     where('recipientUserIds', 'array-contains', currentUser.uid),
@@ -474,33 +470,16 @@ async function _loadActiveRoleAlertsForCurrentUser() {
   );
   const snap = await Promise.race([
     getDocs(q),
-    new Promise(resolve => setTimeout(() => resolve(null), 4500))
+    new Promise(resolve => setTimeout(() => resolve(null), 2500))
   ]);
   if (!snap || !Array.isArray(snap.docs)) return [];
   const staleAlertDeletes = [];
-  const issueFetchCache = new Map();
-  const resolveIssueById = async issueId => {
-    const cachedIssue = issues.find(i => i.id === issueId) || null;
-    if (cachedIssue) return cachedIssue;
-    if (!issueFetchCache.has(issueId)) {
-      issueFetchCache.set(issueId, (async () => {
-        try {
-          const issueSnap = await withTimeout(getDoc(plantDoc('issues', issueId)), 2200, null);
-          if (!issueSnap || typeof issueSnap.exists !== 'function') return null;
-          return issueSnap.exists() ? { id: issueId, ...issueSnap.data() } : null;
-        } catch (_) {
-          return null;
-        }
-      })());
-    }
-    return issueFetchCache.get(issueId);
-  };
   const alerts = [];
   for (const d of snap.docs) {
     const data = d.data() || {};
     const issueId = String(data.issueId || '').trim();
     if (!issueId) continue;
-    const issue = await resolveIssueById(issueId);
+    const issue = issues.find(i => i.id === issueId) || null;
     const issueLifecycle = issue && issue.lifecycle ? issue.lifecycle : null;
     const isResolved = !!(issue && (issue.resolved || (issueLifecycle && issueLifecycle.isResolved)));
     if (isResolved) {
@@ -508,7 +487,7 @@ async function _loadActiveRoleAlertsForCurrentUser() {
       continue;
     }
     const alertStatusKey = data.statusKey || currentStatusKey(issue || {}) || '';
-    const workflowState = _getRoleAlertWorkflowState(issue || null, alertStatusKey);
+    const workflowState = _getRoleAlertWorkflowState(issue || null, alertStatusKey) || data.workflowState || null;
     const issueMachine = issue && (issue.machine || issue.machineCode) ? (issue.machine || issue.machineCode) : 'Unknown';
     const issueCurrentStatus = issue && issue.currentStatus ? issue.currentStatus : null;
     const issueSubStatus = issueCurrentStatus && issueCurrentStatus.subStatusKey ? issueCurrentStatus.subStatusKey : '';
@@ -571,30 +550,31 @@ async function _openRoleAlertInboxModalInternal({ resetToggle = true } = {}) {
   const list = document.getElementById('role-alerts-list');
   if (!modal || !list) return;
   const loadToken = ++_roleAlertsLoadToken;
-  list.innerHTML = `<div style="color:var(--text3);font-size:13px;">Loading active alerts…</div>`;
   modal.classList.add('visible');
   document.body.classList.add('role-alerts-open');
   if (resetToggle) _roleAlertsShowAccepted = true;
   _applyRoleAlertPrototypeUI();
   _updateRoleAlertModalToggleUI();
-  const loadingTimeout = setTimeout(() => {
-    if (loadToken !== _roleAlertsLoadToken) return;
+  const cachedAlerts = Array.isArray(_roleAlertsCache) ? _roleAlertsCache : [];
+  if (cachedAlerts.length) {
+    _renderRoleAlertsModal(cachedAlerts);
+  } else {
     list.innerHTML = _renderRoleAlertLoadFallback({
-      title: 'Alerts are taking too long to load.',
-      subtitle: 'This can happen on iOS homescreen mode. Tap Retry to try again.'
+      title: 'Checking for alerts…',
+      subtitle: 'If this stalls, tap Retry.'
     });
-  }, 3500);
+  }
   void (async () => {
     try {
       const alerts = await Promise.race([
         _loadActiveRoleAlertsForCurrentUser(),
-        new Promise(resolve => setTimeout(() => resolve('__timeout__'), 6000))
+        new Promise(resolve => setTimeout(() => resolve('__timeout__'), 2500))
       ]);
       if (loadToken !== _roleAlertsLoadToken) return;
       if (alerts === '__timeout__') {
         list.innerHTML = _renderRoleAlertLoadFallback({
-          title: 'Alerts did not finish loading.',
-          subtitle: 'Tap Retry or Close. Your issues are still safe.'
+          title: 'Alerts are taking too long to load.',
+          subtitle: 'Tap Retry to try again.'
         });
         return;
       }
@@ -608,8 +588,6 @@ async function _openRoleAlertInboxModalInternal({ resetToggle = true } = {}) {
       });
       _setActiveRoleAlertCount(0);
       _updateRoleAlertModalFooter(0, 0);
-    } finally {
-      clearTimeout(loadingTimeout);
     }
   })();
 }
