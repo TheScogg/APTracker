@@ -48,6 +48,7 @@ const elSlug = document.getElementById('edit-slug');
 const elSummary = document.getElementById('edit-summary');
 const elTags = document.getElementById('edit-tags');
 const elBody = document.getElementById('edit-body');
+const elPreview = document.getElementById('edit-preview');
 const elChangeNote = document.getElementById('edit-change-note');
 const elFileInput = document.getElementById('edit-file-input');
 const elAttachments = document.getElementById('edit-attachments');
@@ -91,6 +92,152 @@ function currentActor() {
 
 function scopeLabel(scope = currentScope) {
   return scope === WIKI_SCOPE_SHARED ? 'Shared Library' : 'This Press';
+}
+
+function slugify(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+}
+
+function resolveWikiLinkTarget(href) {
+  const raw = String(href || '').trim();
+  if (!raw) return null;
+  const rawSlug = slugify(raw);
+  const cleanRaw = raw.replace(/^#/, '').trim();
+
+  return pages.find(page => {
+    const title = String(page.title || '');
+    const pageSlug = String(page.slug || page.id || '');
+    return page.id === raw ||
+      page.id === rawSlug ||
+      pageSlug === cleanRaw ||
+      pageSlug === rawSlug ||
+      title.toLowerCase() === cleanRaw.toLowerCase() ||
+      slugify(title) === rawSlug;
+  }) || null;
+}
+
+function appendPreviewInline(parent, text) {
+  const tokens = String(text || '').split(/(\[[^\]]+\]\([^)]+\)|\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g).filter(Boolean);
+  tokens.forEach(token => {
+    const linkMatch = token.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+    if (linkMatch) {
+      const label = linkMatch[1];
+      const href = linkMatch[2];
+      const target = resolveWikiLinkTarget(href);
+      const link = document.createElement('a');
+      link.href = target ? `#${target.id}` : href;
+      link.textContent = label;
+      link.style.color = 'var(--accent)';
+      link.style.textDecoration = 'underline';
+      link.style.cursor = 'pointer';
+      if (target) {
+        link.addEventListener('click', (e) => {
+          e.preventDefault();
+          selectPage(target.id);
+        });
+      } else if (/^https?:\/\//i.test(href)) {
+        link.target = '_blank';
+        link.rel = 'noreferrer';
+      }
+      parent.appendChild(link);
+      return;
+    }
+
+    if (token.startsWith('**') && token.endsWith('**')) {
+      const strong = document.createElement('strong');
+      strong.textContent = token.slice(2, -2);
+      parent.appendChild(strong);
+      return;
+    }
+
+    if (token.startsWith('*') && token.endsWith('*')) {
+      const em = document.createElement('em');
+      em.textContent = token.slice(1, -1);
+      parent.appendChild(em);
+      return;
+    }
+
+    if (token.startsWith('`') && token.endsWith('`')) {
+      const code = document.createElement('code');
+      code.textContent = token.slice(1, -1);
+      parent.appendChild(code);
+      return;
+    }
+
+    parent.appendChild(document.createTextNode(token));
+  });
+}
+
+function renderPreview() {
+  if (!elPreview) return;
+  const source = String(elBody?.value || '').trim();
+  if (!source) {
+    elPreview.innerHTML = '<div style="color:var(--text3);">Preview will appear here.</div>';
+    return;
+  }
+
+  elPreview.innerHTML = '';
+  const lines = source.split(/\r?\n/);
+  let listEl = null;
+
+  const flushList = () => {
+    if (listEl) {
+      elPreview.appendChild(listEl);
+      listEl = null;
+    }
+  };
+
+  lines.forEach(line => {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      flushList();
+      return;
+    }
+
+    const headingMatch = trimmed.match(/^(#{1,3})\s+(.*)$/);
+    if (headingMatch) {
+      flushList();
+      const h = document.createElement(`h${Math.min(3, headingMatch[1].length)}`);
+      h.style.margin = '0 0 8px';
+      h.style.fontFamily = "'Rajdhani', sans-serif";
+      appendPreviewInline(h, headingMatch[2]);
+      elPreview.appendChild(h);
+      return;
+    }
+
+    const bulletMatch = trimmed.match(/^[-*]\s+(.*)$/);
+    if (bulletMatch) {
+      if (!listEl) listEl = document.createElement('ul');
+      const li = document.createElement('li');
+      appendPreviewInline(li, bulletMatch[1]);
+      listEl.appendChild(li);
+      return;
+    }
+
+    const numberedMatch = trimmed.match(/^\d+\.\s+(.*)$/);
+    if (numberedMatch) {
+      if (!listEl || listEl.tagName !== 'OL') {
+        flushList();
+        listEl = document.createElement('ol');
+      }
+      const li = document.createElement('li');
+      appendPreviewInline(li, numberedMatch[1]);
+      listEl.appendChild(li);
+      return;
+    }
+
+    flushList();
+    const p = document.createElement('p');
+    p.style.margin = '0 0 10px';
+    appendPreviewInline(p, trimmed);
+    elPreview.appendChild(p);
+  });
+
+  flushList();
 }
 
 function wikiCollectionPath(scope = currentScope, pressId = currentPressId) {
@@ -334,6 +481,7 @@ function resetEditor() {
   elChangeNote.value = '';
   elAttachments.innerHTML = '';
   elRevisionList.innerHTML = '';
+  if (elPreview) elPreview.innerHTML = '';
   attachmentsMap.clear();
   renderPageList();
   updateDeleteButtonState();
@@ -352,6 +500,7 @@ elNewPageBtn.addEventListener('click', () => {
   elChangeNote.value = 'Initial creation';
   elAttachments.innerHTML = '';
   elRevisionList.innerHTML = '<div class="rev-date">No revisions yet</div>';
+  renderPreview();
   attachmentsMap.clear();
   renderPageList();
   updateDeleteButtonState();
@@ -375,6 +524,7 @@ async function selectPage(pageId) {
     currentPageDoc = null;
     elBody.value = '';
     elRevisionList.innerHTML = '<div style="color:var(--text3);">No wiki page found in this scope.</div>';
+    renderPreview();
     attachmentsMap.clear();
     renderAttachments();
     updateDeleteButtonState();
@@ -412,6 +562,7 @@ async function selectPage(pageId) {
   attachmentsMap.clear();
   attSnap.docs.forEach(docSnap => attachmentsMap.set(docSnap.id, docSnap.data()));
   renderAttachments();
+  renderPreview();
 
   elChangeNote.value = '';
 }
@@ -469,6 +620,8 @@ elBody.addEventListener('drop', async (e) => {
     await handleFilesUpload(e.dataTransfer.files, true);
   }
 });
+
+elBody.addEventListener('input', renderPreview);
 
 async function handleFilesUpload(files, autoInsert) {
   if (!files.length) return;
