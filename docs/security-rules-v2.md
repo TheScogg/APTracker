@@ -114,6 +114,8 @@ service cloud.firestore {
 #### Reasoning
 This document stores profile and plant preference data, not plant authorization.
 
+For shared wiki pages, the app also uses the user's `users/{uid}.plantIds` routing list as a plant-access fallback, so shared-library content can be written by any user who is already routed into that plant even if their member doc has not fully synced yet.
+
 ---
 
 ### `plants/{plantId}`
@@ -286,6 +288,51 @@ Revisions are append-only history.
 ---
 
 ### `plants/{plantId}/presses/{pressId}/wikiPages/{pageId}/attachments/{attachmentId}`
+
+#### Read
+- active plant members
+
+#### Create / update
+- same permission as wiki page edits
+
+#### Delete
+- owner only
+
+---
+
+### `plants/{plantId}/wikiPages/{pageId}`
+
+#### Read
+- active plant members
+
+#### Create / update
+- same permission as press wiki pages
+
+#### Delete
+- owner only
+
+#### Reasoning
+This is the plant-wide shared wiki library and should use the same editor, revision, and attachment rules as the press-scoped wiki.
+
+---
+
+### `plants/{plantId}/wikiPages/{pageId}/revisions/{revisionId}`
+
+#### Read
+- active plant members
+
+#### Create
+- same permission as wiki page edits
+
+#### Update / delete
+- deny
+
+#### Reasoning
+Shared library revisions are append-only history.
+
+---
+
+### `plants/{plantId}/wikiPages/{pageId}/attachments/{attachmentId}`
 
 #### Read
 - active plant members

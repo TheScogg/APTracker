@@ -332,43 +332,56 @@ function _updateRoleAlertModalFooter(activeCount, acceptedCount) {
   footer.textContent = `${activeCount} active · ${acceptedCount} accepted ${acceptedLabel}`;
 }
 
+function _applyRoleAlertPrototypeUI() {
+  const modal = document.getElementById('role-alerts-modal');
+  const btn = document.getElementById('role-alert-prototype-toggle-btn');
+  if (!modal) return;
+  modal.classList.toggle('role-alerts-modal-prototype', !!_roleAlertsPrototypeMode);
+  if (btn) {
+    btn.classList.toggle('active', !!_roleAlertsPrototypeMode);
+    btn.textContent = _roleAlertsPrototypeMode ? 'Preview V2 on' : 'Preview V2';
+  }
+}
+
 function _renderRoleAlertCard(alert) {
+  if (_roleAlertsPrototypeMode) return _renderRoleAlertCardPrototype(alert);
   const isAccepted = !!alert.isAccepted;
-  const acceptedColor = '#22c55e';
-  const statusColor = isAccepted ? acceptedColor : getStatusColor(alert.statusKey || alert.categoryKey || 'open');
-  const cardBg = isAccepted ? 'rgba(34,197,94,0.10)' : alphaColor(statusColor, 0.10);
-  const cardBorder = isAccepted ? 'rgba(34,197,94,0.42)' : alphaColor(statusColor, 0.45);
-  const titleColor = isAccepted ? '#4ade80' : statusColor;
-  const acceptedByName = isAccepted ? formatWorkflowActorName(alert.acceptedBy?.name || alert.acceptedBy || '') : '';
-  const acceptedMeta = isAccepted
-    ? `<div class="role-alert-ack">${acceptedByName ? `Accepted by ${esc(acceptedByName)}` : 'Accepted'}</div>`
-    : '';
+  const statusColor = isAccepted ? '#22c55e' : getStatusColor(alert.statusKey || alert.categoryKey || 'open');
   const statusDef = getStatusDef(alert.statusKey || alert.categoryKey || 'open');
   const statusLabel = getStatusLabel(alert.statusKey || alert.categoryKey || 'open', 'short');
+  const acceptedByName = isAccepted ? formatWorkflowActorName(alert.acceptedBy?.name || alert.acceptedBy || '') : '';
   return `
-    <div class="role-alert-card${isAccepted ? ' accepted' : ''}" style="background:${cardBg};border-color:${cardBorder};">
+    <div class="role-alert-card role-alert-card-proto${isAccepted ? ' accepted' : ''}" style="--role-alert-cat-color:${statusColor};--role-alert-card-border:${alphaColor(statusColor, 0.45)};" role="button" tabindex="0" onclick="focusIssueFromAlert('${esc(alert.issueId)}')" onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); focusIssueFromAlert('${esc(alert.issueId)}'); }">
       <div class="role-alert-card-main">
-        <div class="role-alert-card-title" style="color:${titleColor};">${esc(alert.feedLabel)} · ${esc(alert.machine)}</div>
-        <div class="role-alert-card-meta">
-          ${isAccepted ? `<span class="role-alert-status-pill accepted">Accepted</span>` : `<span class="role-alert-status-pill active">Active</span>`}
-          <span class="role-alert-category-pill" style="--role-alert-cat-color:${statusColor};">
-            <span class="role-alert-category-icon">${esc(statusDef.icon || '❔')}</span>
-            <span class="role-alert-category-label">${esc(statusLabel)}</span>
-          </span>
-          ${alert.subStatus ? `<span class="role-alert-card-sub">${esc(alert.subStatus)}</span>` : ''}
+        <div class="role-alert-proto-head">
+          <span class="role-alert-proto-state" style="--role-alert-cat-color:${statusColor};">${esc(statusLabel)}</span>
+          <span class="role-alert-proto-press">${alert.machine ? `Press ${esc(alert.machine)}` : 'Press not set'}</span>
         </div>
-        ${acceptedMeta}
+        <div class="role-alert-card-sub">${alert.subStatus ? esc(alert.subStatus) : 'New alert'}</div>
+        <div class="role-alert-proto-meta">
+          <span>${esc(statusDef.icon || '🔔')} ${esc(statusLabel)}</span>
+          ${isAccepted ? `<span>${acceptedByName ? `Accepted by ${esc(acceptedByName)}` : 'Accepted'}</span>` : '<span>Needs response</span>'}
+        </div>
+        <div class="role-alert-card-note">${esc(alert.note || 'No note')}</div>
+        <div class="role-alert-proto-meta">
+          <span>${esc(alert.plantName || currentPlantName || 'Plant')}</span>
+          <span>${esc(alert.createdAtLabel || 'Time unknown')}</span>
+        </div>
         <div class="role-alert-card-note">${esc(alert.note || 'No note')}</div>
       </div>
-      <div class="role-alert-card-actions">
-        <button class="btn btn-view role-alert-action-btn" type="button" onclick="focusIssueFromAlert('${esc(alert.issueId)}')">View</button>
+      <div class="role-alert-card-actions role-alert-card-actions-proto">
         ${isAccepted
-          ? `<button class="btn btn-reopen role-alert-action-btn" type="button" onclick="unacceptRoleAlert('${esc(alert.issueId)}','${esc(alert.statusKey)}')">Unaccept</button>`
-          : `<button class="btn btn-success role-alert-action-btn" type="button" onclick="acceptRoleAlert('${esc(alert.issueId)}','${esc(alert.statusKey)}')">Accept</button>`}
-        <button class="btn btn-danger role-alert-action-btn" type="button" onclick="deleteRoleAlert('${esc(alert.id)}','${esc(alert.categoryKey || '')}','${esc(alert.statusKey || '')}')">Delete</button>
+          ? `<button class="btn btn-reopen role-alert-action-btn" type="button" onclick="event.stopPropagation();unacceptRoleAlert('${esc(alert.issueId)}','${esc(alert.statusKey)}')">Unaccept</button>`
+          : `<button class="btn btn-success role-alert-action-btn" type="button" onclick="event.stopPropagation();acceptRoleAlert('${esc(alert.issueId)}','${esc(alert.statusKey)}')">Accept</button>`}
+        <button class="btn btn-ghost role-alert-action-btn" type="button" onclick="event.stopPropagation();focusIssueFromAlert('${esc(alert.issueId)}')">Open</button>
       </div>
     </div>
   `;
+}
+
+// Backward-compat shim: older cached clients may still reference this symbol.
+function _renderRoleAlertCardPrototype(alert) {
+  return _renderRoleAlertCard(alert);
 }
 
 function _renderRoleAlertsModal(alerts) {
@@ -396,8 +409,12 @@ function _renderRoleAlertsModal(alerts) {
     const acceptedNote = acceptedAlerts.length ? `<div class="role-alert-empty-sub">Toggle on accepted alerts to review acknowledged items.</div>` : '';
     list.innerHTML = `
       <div class="role-alert-empty">
-        <div class="role-alert-empty-title">No active alerts right now.</div>
-        ${acceptedNote}
+        <div class="role-alert-empty-icon" aria-hidden="true">🔔</div>
+        <div class="role-alert-empty-copy">
+          <div class="role-alert-empty-title">No active alerts right now.</div>
+          ${acceptedNote}
+        </div>
+        <div class="role-alert-empty-hint">Alerts from your subscribed categories will appear here automatically.</div>
       </div>
     `;
     return;
@@ -461,11 +478,11 @@ async function _loadActiveRoleAlertsForCurrentUser() {
     const isResolved = !!(issue?.resolved || issue?.lifecycle?.isResolved);
     if (isResolved) {
       staleAlertDeletes.push(deleteDoc(doc(db, 'plants', currentPlantId, 'roleFeedAlerts', d.id)).catch(() => null));
-      continue;
+      return null;
     }
     const alertStatusKey = data.statusKey || currentStatusKey(issue || {}) || '';
     const workflowState = _getRoleAlertWorkflowState(issue || null, alertStatusKey);
-    alerts.push({
+    return {
       id: d.id,
       issueId,
       machine: data.machine || issue?.machine || issue?.machineCode || 'Unknown',
@@ -475,6 +492,8 @@ async function _loadActiveRoleAlertsForCurrentUser() {
       categoryKey: data.categoryKey || data.statusKey || '',
       note: data.note || issue?.note || '',
       createdAt: data.createdAt || null,
+      createdAtLabel: data.createdAt?.toDate ? data.createdAt.toDate().toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '',
+      plantName: currentPlantName || currentPlantId || '',
       workflowState,
       isAccepted: workflowState === 'accepted',
       acceptedBy: workflowState === 'accepted'
@@ -518,6 +537,12 @@ async function _openRoleAlertInboxModalInternal({ resetToggle = true } = {}) {
 
 window.openRoleAlertInboxModal = async function() {
   await _openRoleAlertInboxModalInternal({ resetToggle: true });
+};
+
+window.toggleRoleAlertPrototype = function() {
+  _roleAlertsPrototypeMode = !_roleAlertsPrototypeMode;
+  localStorage.setItem('roleAlertsPrototypeMode', _roleAlertsPrototypeMode ? '1' : '0');
+  _applyRoleAlertPrototypeUI();
 };
 
 window.setRoleAlertsShowAccepted = async function(showAccepted) {
@@ -715,6 +740,9 @@ const DEFAULT_PRESSES = {
 
 let PRESSES = { ...DEFAULT_PRESSES };
 let ALL_MACHINES = Object.values(PRESSES).flat();
+const WIKI_SCOPE_PRESS = 'press';
+const WIKI_SCOPE_SHARED = 'shared';
+let _pressWikiScope = WIKI_SCOPE_PRESS;
 
 // Firestore path helpers — all data scoped under plants/{plantId}/
 function plantCol(colName) { return collection(db, 'plants', currentPlantId, colName); }
@@ -725,6 +753,20 @@ function pressWikiPagesCol(pressId) { return collection(db, 'plants', currentPla
 function pressWikiPageDoc(pressId, pageId) { return doc(db, 'plants', currentPlantId, 'presses', String(pressId), 'wikiPages', pageId); }
 function pressWikiRevisionsCol(pressId, pageId) { return collection(db, 'plants', currentPlantId, 'presses', String(pressId), 'wikiPages', pageId, 'revisions'); }
 function pressWikiAttachmentsCol(pressId, pageId) { return collection(db, 'plants', currentPlantId, 'presses', String(pressId), 'wikiPages', pageId, 'attachments'); }
+function wikiCollectionPath(scope, pressId) {
+  return scope === WIKI_SCOPE_SHARED
+    ? ['plants', currentPlantId, 'wikiPages']
+    : ['plants', currentPlantId, 'presses', String(pressId), 'wikiPages'];
+}
+function wikiPagesColForScope(scope, pressId) { return collection(db, ...wikiCollectionPath(scope, pressId)); }
+function wikiPageDocForScope(scope, pressId, pageId) { return doc(db, ...wikiCollectionPath(scope, pressId), pageId); }
+function wikiRevisionsColForScope(scope, pressId, pageId) { return collection(db, ...wikiCollectionPath(scope, pressId), pageId, 'revisions'); }
+function wikiAttachmentsColForScope(scope, pressId, pageId) { return collection(db, ...wikiCollectionPath(scope, pressId), pageId, 'attachments'); }
+function wikiStoragePrefixForScope(scope, pressId, pageId) {
+  return scope === WIKI_SCOPE_SHARED
+    ? `plants/${currentPlantId}/wikiPages/${pageId}`
+    : `plants/${currentPlantId}/presses/${String(pressId)}/wikiPages/${pageId}`;
+}
 function plantMemberDocRef(plantId, userId) { return doc(db, 'plants', plantId, 'members', userId); }
 function gameConfigDoc() { return doc(db, 'plants', currentPlantId, 'gamificationConfig', 'main'); }
 function gameUserStatsDoc(userId) { return doc(db, 'plants', currentPlantId, 'userGameStats', userId); }
@@ -1447,6 +1489,7 @@ async function loadPlantPresses() {
 async function switchPlant(plantId) {
   if (plantId === currentPlantId) return;
   if (unsubscribe) { unsubscribe(); unsubscribe = null; }
+  stopStatusConfigListener();
   stopRoleFeedAlertsWatcher();
   clearRoleAlertBadge();
   if (typeof closeNotesModal === 'function') closeNotesModal();
@@ -1648,9 +1691,95 @@ function getStatusSubs(statusKey) {
   return [...st.subs].sort((a, b) => String(a).localeCompare(String(b), undefined, { sensitivity: 'base' }));
 }
 
+function getAlphabetizedStatusKeys({ includeOpen = true, includeResolved = true } = {}) {
+  return Object.keys(STATUSES || {})
+    .filter(key => (includeOpen || key !== 'open') && (includeResolved || key !== 'resolved'))
+    .sort((a, b) => getStatusLabel(a, 'short').localeCompare(getStatusLabel(b, 'short'), undefined, { sensitivity: 'base' }));
+}
+
+function toColumnMajorOrder(items, columnCount) {
+  const source = Array.isArray(items) ? items : [];
+  const cols = Math.max(1, Number(columnCount) || 1);
+  const rows = Math.ceil(source.length / cols);
+  const ordered = [];
+  for (let col = 0; col < cols; col++) {
+    for (let row = 0; row < rows; row++) {
+      const idx = row * cols + col;
+      if (idx < source.length) ordered.push(source[idx]);
+    }
+  }
+  return ordered;
+}
+
+function applyColumnMajorGridLayout(el, itemCount, columnCount = 2) {
+  if (!el) return;
+  const cols = Math.max(1, Number(columnCount) || 1);
+  const rows = Math.max(1, Math.ceil(Math.max(0, Number(itemCount) || 0) / cols));
+  el.style.display = 'grid';
+  el.style.gridAutoFlow = 'column';
+  el.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
+  el.style.gridTemplateRows = `repeat(${rows}, minmax(0, auto))`;
+  el.style.gridAutoColumns = 'minmax(0, 1fr)';
+}
+
+function normalizeLoadedStatuses(rawStatuses) {
+  if (!rawStatuses || typeof rawStatuses !== 'object' || Array.isArray(rawStatuses)) {
+    return deepCopy(DEFAULT_STATUSES);
+  }
+
+  const normalized = {};
+  Object.entries(rawStatuses).forEach(([key, value], idx) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+    const safeLabel = String(value.label || key || 'Status').trim() || key;
+    const slug = slugifyStatusLabel(safeLabel);
+    const color = String(value.cssColor || value.swipeColor || '#8b949e');
+    normalized[key] = {
+      label: safeLabel,
+      shortLabel: String(value.shortLabel || safeLabel),
+      icon: String(value.icon || '●'),
+      cssColor: color,
+      swipeColor: String(value.swipeColor || color),
+      floorCls: String(value.floorCls || (key === 'resolved' ? 'all-resolved' : `has-${slug}`)),
+      cls: String(value.cls || `status-${slug}`),
+      subs: Array.isArray(value.subs) ? value.subs.map(v => String(v).trim()).filter(Boolean) : [],
+      statLabel: String(value.statLabel || safeLabel),
+      order: Number.isFinite(Number(value.order)) ? Number(value.order) : idx
+    };
+  });
+
+  // Keep the canonical lockstep statuses present if Firestore omits them,
+  // but do not seed any other old in-code defaults into the live config.
+  if (!normalized.open) normalized.open = deepCopy(DEFAULT_STATUSES.open);
+  if (!normalized.resolved) normalized.resolved = deepCopy(DEFAULT_STATUSES.resolved);
+  return normalized;
+}
+
+function stopStatusConfigListener() {
+  if (statusConfigUnsubscribe) {
+    statusConfigUnsubscribe();
+    statusConfigUnsubscribe = null;
+  }
+}
+
+function refreshStatusDependentUI() {
+  buildStatusFilterPills();
+  refreshVisibleData();
+
+  if (document.getElementById('add-modal')?.classList.contains('visible')) {
+    renderLogCatButtons();
+    renderLogSubChips();
+    updateLogCatPill();
+    if (subcategorySheetState.open) renderSubcategorySheet();
+  }
+}
+
 async function loadConfig() {
+  const mySerial = ++statusConfigLoadSerial;
+  const plantId = currentPlantId;
+  stopStatusConfigListener();
   try {
     const snap = await getDoc(plantDoc('config', 'statuses'));
+    if (mySerial !== statusConfigLoadSerial || plantId !== currentPlantId) return;
     if (snap.exists()) {
       const data = snap.data();
 
@@ -1673,8 +1802,6 @@ async function loadConfig() {
       // Since we just changed the available statuses,
       // we must rebuild the logic that buttons depend on
       rebuildDerivedStatus();
-      
-      // Trigger a UI refresh for the pills
       buildStatusFilterPills();
       renderIssues();
 
@@ -1692,6 +1819,19 @@ async function loadConfig() {
       buildStatusFilterPills();
       renderIssues();
     }
+
+    if (mySerial !== statusConfigLoadSerial || plantId !== currentPlantId) return;
+    statusConfigUnsubscribe = onSnapshot(plantDoc('config', 'statuses'), snap2 => {
+      if (mySerial !== statusConfigLoadSerial || plantId !== currentPlantId) return;
+      if (!snap2.exists()) return;
+      const data2 = snap2.data() || {};
+      if (!data2.statuses) return;
+      STATUSES = normalizeLoadedStatuses(data2.statuses);
+      rebuildDerivedStatus();
+      refreshStatusDependentUI();
+    }, err => {
+      console.warn('status config listener error', err);
+    });
   } catch (e) {
     console.error("Error loading config:", e);
   }
@@ -1700,34 +1840,16 @@ async function loadConfig() {
 function buildStatusFilterPills() {
   const container = document.getElementById('stat-pills-row');
   if (!container) return;
-
-  // Start with the standard Open/Resolved
-  let html = `
-    <div class="stat-pill" id="pill-open" onclick="toggleStatFilter('open')">
-      <div class="dot" style="background:var(--red)"></div>
-      <span id="stat-open">0 Open</span>
-    </div>
-    <div class="stat-pill" id="pill-resolved" onclick="toggleStatFilter('resolved')">
-      <div class="dot" style="background:var(--green)"></div>
-      <span id="stat-resolved">0 Resolved</span>
-    </div>
-  `;
-
-  // Add the custom pills from your loadConfig/STATUSES data
-  Object.keys(STATUSES).forEach(key => {
-    // Skip if it's already one of the defaults we manually added above
-    if (key === 'open' || key === 'resolved') return;
-
+  const keys = getAlphabetizedStatusKeys();
+  container.innerHTML = keys.map(key => {
     const col = getStatusColor(key);
-    html += `
+    return `
       <div class="stat-pill" id="pill-${key}" onclick="toggleStatFilter('${key}')">
         <div class="dot" style="background:${col}"></div>
         <span id="stat-${key}">0 ${getStatusLabel(key, 'stat')}</span>
       </div>
     `;
-  });
-
-  container.innerHTML = html;
+  }).join('');
 }
 
 async function saveConfig() {
@@ -1736,37 +1858,16 @@ async function saveConfig() {
 
 function rebuildDerivedStatus() {
   // Rebuild ALL_STATUSES and STATUS_ORDER after STATUSES changes
-  window._ALL_STATUSES = Object.keys(STATUSES).filter(k=>k!=='open'&&k!=='resolved');
+  window._ALL_STATUSES = getAlphabetizedStatusKeys({ includeOpen: false, includeResolved: false });
   window._STATUS_ORDER = Object.entries(STATUSES).sort((a,b)=>a[1].order-b[1].order).map(([k])=>k);
-
-  // Rebuild stat pills dynamically
-  const pillsRow = document.getElementById('stat-pills-row');
-  if (pillsRow) {
-    // Keep open + resolved pills, remove dynamically added ones
-    pillsRow.querySelectorAll('.stat-pill.dynamic-pill').forEach(el => el.remove());
-    const resolvedPill = document.getElementById('pill-resolved');
-    window._ALL_STATUSES.forEach(k => {
-      const st = getStatusDef(k);
-      const col = getStatusColor(k);
-      const pill = document.createElement('div');
-      pill.className = 'stat-pill dynamic-pill';
-      pill.id = 'pill-' + k;
-      pill.onclick = () => toggleStatFilter(k);
-      pill.innerHTML = `<div class="dot" style="background:${col}"></div><span id="stat-${k}">0 ${getStatusLabel(k, 'stat')}</span>`;
-      // Insert before resolved pill
-      if (resolvedPill) pillsRow.insertBefore(pill, resolvedPill);
-      else pillsRow.appendChild(pill);
-    });
-    // Move resolved to end
-    if (resolvedPill) pillsRow.appendChild(resolvedPill);
-  }
+  buildStatusFilterPills();
 
   // Rebuild status filter dropdown
   const sf = document.getElementById('status-filter');
   if (sf) {
     const curVal = sf.value;
     sf.innerHTML = '<option value="">All Status</option>';
-    window._STATUS_ORDER.forEach(k => {
+    getAlphabetizedStatusKeys().forEach(k => {
       const opt = document.createElement('option');
       opt.value = k;
       opt.textContent = getStatusLabel(k);
@@ -2812,6 +2913,8 @@ let pressContributionPlantId = null;
 let pressContributionLoading = null;
 let issuePeriod = 'today';
 let unsubscribe = null;
+let statusConfigUnsubscribe = null;
+let statusConfigLoadSerial = 0;
 let issueLogLayoutMode = 'masonic'; // 'masonic' | 'grid'
 let issueLogLayoutRaf = null;
 let issueLogDeferredRelayoutTimer = null;
@@ -2952,6 +3055,7 @@ document.getElementById('google-signin-btn').addEventListener('click', signInWit
 
 async function doSignOut() {
   if (unsubscribe) { unsubscribe(); unsubscribe = null; }
+  stopStatusConfigListener();
   stopGamificationListeners();
   await fbSignOut(auth);
 }
@@ -3026,6 +3130,7 @@ onAuthStateChanged(auth, async user => {
   } else {
     stopRoleFeedAlertsWatcher();
     clearRoleAlertBadge();
+    stopStatusConfigListener();
     if (_messagingInboxUnsubscribe) { _messagingInboxUnsubscribe(); _messagingInboxUnsubscribe = null; }
     _updateMessagingEntryBadges(0);
     currentUser = null;
@@ -3308,10 +3413,10 @@ window.setMapMode = mode => {
   document.getElementById('mode-hist').className = 'map-mode-btn' + (mode==='hist' ? ' active-hist' : '');
   document.getElementById('mode-notes').className = 'map-mode-btn' + (mode==='notes' ? ' active-hist' : '');
   document.getElementById('floor-map-label').textContent = mode==='log'
-    ? 'FLOOR MAP — CLICK A PRESS TO LOG AN ISSUE'
+    ? 'FLOOR MAP — CLICK A PRESS TO REPORT AN ISSUE'
     : mode==='hist'
-      ? 'FLOOR MAP — CLICK A PRESS TO VIEW HISTORY'
-      : 'FLOOR MAP — USER NOTES & WIKI CONTRIBUTIONS';
+      ? 'FLOOR MAP — CLICK A PRESS TO VIEW TIMELINE'
+      : 'FLOOR MAP — USER WIKI CONTRIBUTIONS';
   // Update all press button hover styles
   document.querySelectorAll('.press-btn').forEach(btn => {
     btn.classList.toggle('hist-mode', mode==='hist');
@@ -3484,14 +3589,14 @@ window.handlePressClick = p => {
     addBtn.onclick = () => { closeMiniCard(); openAddModal(p); };
     toolbar.appendChild(addBtn);
   }
-  // Notes button (middle)
+  // Wiki button (middle)
   const pressId = toPressId(p);
-  const notesBtn = document.createElement('button');
-  notesBtn.className = 'mc-toolbar-btn';
-  notesBtn.style.color = 'var(--teal)';
-  notesBtn.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><path d="M3 2h10a1 1 0 011 1v8a1 1 0 01-1 1H5l-3 2V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>Notes';
-  notesBtn.onclick = () => { closeMiniCard(); openPressWikiModal(pressId, p); };
-  // Badge dot if notes exist (load count async without blocking)
+  const wikiBtn = document.createElement('button');
+  wikiBtn.className = 'mc-toolbar-btn';
+  wikiBtn.style.color = 'var(--teal)';
+  wikiBtn.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><path d="M3 2h10a1 1 0 011 1v8a1 1 0 01-1 1H5l-3 2V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>Wiki';
+  wikiBtn.onclick = () => { closeMiniCard(); openPressWikiModal(pressId, p); };
+  // Badge dot if wiki content exists (load count async without blocking)
   (async () => {
     try {
       const q = query(plantCol('pressNotes'), where('pressId', '==', pressId));
@@ -3499,17 +3604,17 @@ window.handlePressClick = p => {
       if (snap.size > 0) {
         const dot = document.createElement('span');
         dot.className = 'mc-notes-dot';
-        notesBtn.appendChild(dot);
+        wikiBtn.appendChild(dot);
       }
     } catch(e) {}
   })();
-  toolbar.appendChild(notesBtn);
-  const histBtn = document.createElement('button');
-  histBtn.className = 'mc-toolbar-btn';
-  histBtn.style.color = 'var(--blue)';
-  histBtn.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><path d="M8 2v6l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/></svg>History';
-  histBtn.onclick = () => { closeMiniCard(); showMachineHistory(p); };
-  toolbar.appendChild(histBtn);
+  toolbar.appendChild(wikiBtn);
+  const timelineBtn = document.createElement('button');
+  timelineBtn.className = 'mc-toolbar-btn';
+  timelineBtn.style.color = 'var(--blue)';
+  timelineBtn.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><path d="M8 2v6l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/></svg>Timeline';
+  timelineBtn.onclick = () => { closeMiniCard(); showMachineHistory(p); };
+  toolbar.appendChild(timelineBtn);
   card.appendChild(toolbar);
 
   area.innerHTML = '';
@@ -3833,7 +3938,7 @@ function renderRowPanels() {
         };
       })
       .filter(Boolean)
-      .sort((a, b) => (b.count - a.count) || (a.order - b.order));
+      .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }) || (a.order - b.order));
     const visibleEntries = statusEntries.slice(0, visibleLimit);
     const hiddenEntries = statusEntries.slice(visibleLimit);
 
@@ -4228,8 +4333,7 @@ window.openAddModal = m => {
 function renderLogCatButtons() {
   const row = document.getElementById('log-cat-all-row'); if (!row) return;
   row.innerHTML = '';
-  // Use STATUS_ORDER for consistent ordering
-  const ordered = window._STATUS_ORDER ? window._STATUS_ORDER : Object.keys(STATUSES);
+  const ordered = getAlphabetizedStatusKeys();
   ordered.forEach(key => {
     const st = getStatusDef(key);
     const btn = document.createElement('button'); btn.className = 'log-cat-btn'; btn.dataset.key = key;
@@ -4261,6 +4365,7 @@ function renderLogSubChips() {
   row.className = 'subcategory-grid visible';
   row.style.marginTop = '4px';
   row.style.marginBottom = '8px';
+  applyColumnMajorGridLayout(row, subs.length, 2);
   
   const activeColor = getStatusColor(logCatKey);
   
@@ -4293,8 +4398,7 @@ function renderSubcategorySheet(statusKey = subcategorySheetState.statusKey) {
   const skipBtn = document.getElementById('subcategory-sheet-skip');
   if (!parentRow || !grid) return;
 
-  const ordered = window._STATUS_ORDER ? window._STATUS_ORDER : Object.keys(STATUSES);
-  const alphabetizedKeys = [...ordered].sort((a, b) => getStatusLabel(a, 'short').localeCompare(getStatusLabel(b, 'short')));
+  const alphabetizedKeys = getAlphabetizedStatusKeys();
   const activeKey = statusKey || alphabetizedKeys.find(key => getStatusSubs(key).length) || 'open';
   const subs = getStatusSubs(activeKey);
   const activeColor = getStatusColor(activeKey);
@@ -4330,11 +4434,17 @@ function renderSubcategorySheet(statusKey = subcategorySheetState.statusKey) {
 
   grid.innerHTML = '';
   if (!subs.length) {
+    grid.style.display = 'grid';
+    grid.style.gridAutoFlow = '';
+    grid.style.gridTemplateColumns = '';
+    grid.style.gridTemplateRows = '';
+    grid.style.gridAutoColumns = '';
     const empty = document.createElement('div');
     empty.className = 'subcategory-empty';
     empty.textContent = 'This status has no subcategories. Use no subcategory to continue.';
     grid.appendChild(empty);
   } else {
+    applyColumnMajorGridLayout(grid, subs.length, 2);
     subs.forEach(sub => {
       const item = document.createElement('button');
       item.type = 'button';
@@ -5407,9 +5517,10 @@ window.startEditEntry = (id, idx) => {
   
   // Populate modal
   const statusSelect = document.getElementById('edit-status-select');
-  statusSelect.innerHTML = Object.entries(STATUSES).map(([k,v]) => 
-    `<option value="${k}" ${k === entry.status ? 'selected' : ''}>${v.icon} ${v.label}</option>`
-  ).join('');
+  statusSelect.innerHTML = getAlphabetizedStatusKeys().map(k => {
+    const v = STATUSES[k];
+    return `<option value="${k}" ${k === entry.status ? 'selected' : ''}>${v.icon} ${v.label}</option>`;
+  }).join('');
   
   // Handle sub-status
   updateEditStatusSubOptions();
@@ -6233,7 +6344,10 @@ function renderIssues() {
   });
 
   // Build options html for status select
-  const statusOptions = Object.entries(STATUS_CONFIG).map(([k,v])=>`<option value="${k}">${v.icon} ${v.label}</option>`).join('');
+  const statusOptions = getAlphabetizedStatusKeys().map(k => {
+    const v = STATUS_CONFIG[k];
+    return `<option value="${k}">${v.icon} ${v.label}</option>`;
+  }).join('');
   function subOptions(statusKey, selectedSub) {
     const cfg = STATUS_CONFIG[statusKey];
     if (!cfg||!cfg.subs.length) return '';
@@ -6554,7 +6668,7 @@ function renderIssues() {
     const teaser = document.createElement('div');
     teaser.className = 'swipe-teaser';
     // Build gradient from first few status colors
-    const statusOrder = window._STATUS_ORDER || Object.keys(STATUSES);
+    const statusOrder = getAlphabetizedStatusKeys();
     const colors = statusOrder.slice(0, 5).map(k => getStatusColor(k)).join(', ');
     teaser.style.background = `linear-gradient(to bottom, ${colors})`;
     card.appendChild(teaser);
@@ -6571,7 +6685,7 @@ function renderIssues() {
     catInner.className = 'swipe-category-inner';
 
     // Build status tiles for ALL statuses (including open/resolved)
-    statusOrder.forEach(key => {
+    toColumnMajorOrder(statusOrder, 5).forEach(key => {
       const st = getStatusDef(key);
       const tile = document.createElement('div');
       tile.className = 'swipe-status-tile' + (currentStatusKey(issue) === key ? ' current' : '');
@@ -6670,11 +6784,12 @@ function renderIssues() {
           catInner.classList.add('has-selection');
           catPanel.classList.add('has-subs');
 
-          const subInner = subPanel.querySelector('.swipe-sub-inner');
-          subInner.innerHTML = '';
-          subInner.className = 'swipe-sub-inner subcategory-grid'; 
+    const subInner = subPanel.querySelector('.swipe-sub-inner');
+    subInner.innerHTML = '';
+    subInner.className = 'swipe-sub-inner subcategory-grid'; 
+    applyColumnMajorGridLayout(subInner, getStatusSubs(statusKey).length + 1, 2);
           
-          const activeColor = getStatusColor(statusKey);
+    const activeColor = getStatusColor(statusKey);
 
           // Sub chips
           getStatusSubs(statusKey).forEach(sub => {
@@ -9551,6 +9666,52 @@ let _pressWikiAttachmentsCache = [];
 let _pressWikiMachineCode = null;
 let _pressWikiRenderedBodyRaw = '';
 
+function _pressWikiScopeLabel(scope = _pressWikiScope) {
+  return scope === WIKI_SCOPE_SHARED ? 'Shared Library' : 'This Press';
+}
+
+function _pressWikiPressLabel() {
+  return _pressWikiMachineCode ? `Press ${_pressWikiMachineCode}` : 'This Press';
+}
+
+function _pressWikiSyncScopeBadge(scope = _pressWikiScope) {
+  const badge = document.getElementById('press-wiki-scope-badge');
+  if (!badge) return;
+  const isShared = scope === WIKI_SCOPE_SHARED;
+  badge.style.display = isShared ? 'inline-flex' : 'none';
+  badge.title = isShared ? 'Open the shared library view' : '';
+  badge.onclick = isShared ? () => _pressWikiSetScope(WIKI_SCOPE_SHARED) : null;
+}
+
+function _pressWikiSetScope(scope, { reload = true } = {}) {
+  _pressWikiScope = scope === WIKI_SCOPE_SHARED ? WIKI_SCOPE_SHARED : WIKI_SCOPE_PRESS;
+  const pressBtn = document.getElementById('press-wiki-scope-press');
+  const sharedBtn = document.getElementById('press-wiki-scope-shared');
+  const isShared = _pressWikiScope === WIKI_SCOPE_SHARED;
+  [pressBtn, sharedBtn].forEach(btn => {
+    if (!btn) return;
+    btn.style.background = 'var(--bg3)';
+    btn.style.borderColor = 'var(--border)';
+    btn.style.color = 'var(--text2)';
+  });
+  if (pressBtn) {
+    pressBtn.style.background = !isShared ? 'var(--accent)' : 'var(--bg3)';
+    pressBtn.style.borderColor = !isShared ? 'var(--accent)' : 'var(--border)';
+    pressBtn.style.color = !isShared ? 'white' : 'var(--text2)';
+  }
+  if (sharedBtn) {
+    sharedBtn.style.background = isShared ? 'var(--accent)' : 'var(--bg3)';
+    sharedBtn.style.borderColor = isShared ? 'var(--accent)' : 'var(--border)';
+    sharedBtn.style.color = isShared ? 'white' : 'var(--text2)';
+  }
+  const pressLabelBtn = document.getElementById('press-wiki-scope-press');
+  if (pressLabelBtn) pressLabelBtn.textContent = _pressWikiPressLabel();
+  document.getElementById('press-wiki-new-page-btn') && (_pressWikiCanEdit ? (document.getElementById('press-wiki-new-page-btn').disabled = false) : null);
+  if (reload && _pressWikiModalPressId) {
+    loadPressWikiPageList().then(() => loadPressWikiPage(_pressWikiSelectedPageId || 'shift-notes')).catch(err => console.warn('scope reload failed', err));
+  }
+}
+
 function _notesEl(base) { return document.getElementById(base + '-' + NOTES_VARIANT); }
 
 function _relativeTime(ts) {
@@ -9571,6 +9732,7 @@ async function openPressWikiModal(pressId, machineCode) {
   if (!pressId || !currentPlantId) return;
   _pressWikiModalPressId = String(pressId);
   _pressWikiMachineCode = String(machineCode || '').trim();
+  _pressWikiSetScope(WIKI_SCOPE_PRESS, { reload: false });
   const modal = document.getElementById('press-wiki-modal');
   const titleEl = document.getElementById('press-wiki-title');
   const metaEl = document.getElementById('press-wiki-meta');
@@ -9585,9 +9747,13 @@ async function openPressWikiModal(pressId, machineCode) {
   if (editBtn) editBtn.style.display = _pressWikiCanEdit ? '' : 'none';
   if (newBtn) newBtn.style.display = _pressWikiCanEdit ? '' : 'none';
   if (cmsBtn) cmsBtn.style.display = _pressWikiCanEdit ? '' : 'none';
+  const actionsWrap = document.getElementById('press-wiki-actions-wrap');
+  if (actionsWrap) actionsWrap.style.display = _pressWikiCanEdit ? 'inline-flex' : 'none';
   _setPressWikiError('');
   titleEl.textContent = 'Shift Notes';
-  metaEl.textContent = `Press ${_pressWikiMachineCode || '—'}`;
+  metaEl.textContent = `Press ${_pressWikiMachineCode || '—'} · ${_pressWikiScopeLabel()}`;
+  _pressWikiSyncScopeBadge();
+  _pressWikiSetScope(_pressWikiScope, { reload: false });
   bodyEl.textContent = 'Loading wiki...';
   revisionsEl.innerHTML = '';
   attachmentsEl.innerHTML = '';
@@ -9604,19 +9770,19 @@ async function openPressWikiModal(pressId, machineCode) {
 async function loadPressWikiPageList() {
   const selectEl = document.getElementById('press-wiki-page-select');
   if (!selectEl || !_pressWikiModalPressId) return;
-  const pagesSnap = await getDocs(query(pressWikiPagesCol(_pressWikiModalPressId), orderBy('updatedAt', 'desc'), limit(50)));
+  const pagesSnap = await getDocs(query(wikiPagesColForScope(_pressWikiScope, _pressWikiModalPressId), orderBy('updatedAt', 'desc'), limit(50)));
   const pages = pagesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
   selectEl.innerHTML = '';
   if (!pages.length) {
     const opt = document.createElement('option');
     opt.value = 'shift-notes';
-    opt.textContent = 'Shift Notes';
+    opt.textContent = _pressWikiScope === WIKI_SCOPE_SHARED ? 'Shared Notes' : 'Shift Notes';
     selectEl.appendChild(opt);
   } else {
     pages.forEach(page => {
       const opt = document.createElement('option');
       opt.value = page.id;
-      opt.textContent = page.title || page.id;
+      opt.textContent = `${page.title || page.id}${page.scope === WIKI_SCOPE_SHARED ? ' · Shared' : ''}`;
       selectEl.appendChild(opt);
     });
   }
@@ -9637,18 +9803,22 @@ async function loadPressWikiPage(pageId) {
   revisionsEl.innerHTML = '';
   attachmentsEl.innerHTML = '';
   try {
-    const pageRef = pressWikiPageDoc(_pressWikiModalPressId, pageId);
+    const pageRef = wikiPageDocForScope(_pressWikiScope, _pressWikiModalPressId, pageId);
     const pageSnap = await getDoc(pageRef);
     if (!pageSnap.exists()) {
-      _renderPressWikiBody('No wiki content yet. Add a press note to seed Shift Notes.');
+      _renderPressWikiBody(_pressWikiScope === WIKI_SCOPE_SHARED
+        ? 'No shared wiki content yet. Add a plant library page to seed the library.'
+        : 'No wiki content yet. Add a press note to seed Shift Notes.');
       titleEl.textContent = pageId;
+      _pressWikiSyncScopeBadge(_pressWikiScope);
       return;
     }
     const page = pageSnap.data() || {};
     const currentRevisionId = page.currentRevisionId || null;
     titleEl.textContent = page.title || pageId;
-    metaEl.textContent = `Press ${page.machineCode || _pressWikiMachineCode || '—'} · Updated ${_relativeTime(page.updatedAt) || 'recently'}`;
-    const revSnap = await getDocs(query(pressWikiRevisionsCol(_pressWikiModalPressId, pageId), orderBy('editedAt', 'desc'), limit(30)));
+    metaEl.textContent = `${_pressWikiScopeLabel(page.scope || _pressWikiScope)} · Updated ${_relativeTime(page.updatedAt) || 'recently'}`;
+    _pressWikiSyncScopeBadge(page.scope || _pressWikiScope);
+    const revSnap = await getDocs(query(wikiRevisionsColForScope(_pressWikiScope, _pressWikiModalPressId, pageId), orderBy('editedAt', 'desc'), limit(30)));
     const revisions = revSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     const currentRevision = revisions.find(r => r.id === currentRevisionId) || revisions[0] || null;
     _renderPressWikiBody(currentRevision?.body || 'No revision body available.');
@@ -9665,7 +9835,7 @@ async function loadPressWikiPage(pageId) {
       row.onclick = () => { _renderPressWikiBody(rev.body || ''); };
       revisionsEl.appendChild(row);
     });
-    const attachSnap = await getDocs(query(pressWikiAttachmentsCol(_pressWikiModalPressId, pageId), orderBy('uploadedAt', 'desc'), limit(24)));
+    const attachSnap = await getDocs(query(wikiAttachmentsColForScope(_pressWikiScope, _pressWikiModalPressId, pageId), orderBy('uploadedAt', 'desc'), limit(24)));
     _pressWikiAttachmentsCache = attachSnap.docs.map(d => ({ id: d.id, ...(d.data() || {}) }));
     _pressWikiAttachmentsCache.forEach((data, idx) => {
       if (!data.url) return;
@@ -9746,6 +9916,7 @@ window.insertMarkdown = function(textareaId, prefix, suffix) {
 window.closePressWikiModal = () => {
   document.getElementById('press-wiki-modal')?.classList.remove('visible');
   _pressWikiModalPressId = null;
+  closePressWikiActionsMenu();
 };
 
 async function savePressWikiRevision() {
@@ -9761,8 +9932,8 @@ async function savePressWikiRevision() {
   const mm = String(now.getMonth() + 1).padStart(2, '0');
   const yy = String(now.getFullYear()).slice(-2);
   const changeNote = rawChangeNote || `${fallbackActorName} : ${dd}/${mm}/${yy}`;
-  const pageRef = pressWikiPageDoc(_pressWikiModalPressId, _pressWikiSelectedPageId);
-  const revisionRef = doc(pressWikiRevisionsCol(_pressWikiModalPressId, _pressWikiSelectedPageId));
+  const pageRef = wikiPageDocForScope(_pressWikiScope, _pressWikiModalPressId, _pressWikiSelectedPageId);
+  const revisionRef = doc(wikiRevisionsColForScope(_pressWikiScope, _pressWikiModalPressId, _pressWikiSelectedPageId));
   await runTransaction(db, async tx => {
     const snap = await tx.get(pageRef);
     const prevRevisionId = snap.exists() ? (snap.data()?.currentRevisionId || null) : null;
@@ -9770,7 +9941,9 @@ async function savePressWikiRevision() {
     tx.set(pageRef, {
       title: title || snap.data()?.title || _pressWikiSelectedPageId,
       slug: _pressWikiSelectedPageId,
-      machineCode: _pressWikiMachineCode || '',
+      machineCode: _pressWikiScope === WIKI_SCOPE_SHARED ? '' : (_pressWikiMachineCode || ''),
+      scope: _pressWikiScope,
+      pressId: _pressWikiScope === WIKI_SCOPE_SHARED ? null : _pressWikiModalPressId,
       currentRevisionId: revisionRef.id,
       updatedBy: currentActor(),
       updatedAt: serverTimestamp(),
@@ -9880,7 +10053,10 @@ document.getElementById('press-wiki-modal')?.addEventListener('click', e => {
   if (e.target === document.getElementById('press-wiki-modal')) closePressWikiModal();
 });
 document.getElementById('press-wiki-page-select')?.addEventListener('change', e => loadPressWikiPage(e.target.value));
-document.getElementById('press-wiki-edit-btn')?.addEventListener('click', () => togglePressWikiEditor(true));
+document.getElementById('press-wiki-edit-btn')?.addEventListener('click', () => {
+  closePressWikiActionsMenu();
+  togglePressWikiEditor(true);
+});
 document.getElementById('press-wiki-cancel-edit-btn')?.addEventListener('click', () => togglePressWikiEditor(false));
 document.getElementById('press-wiki-save-btn')?.addEventListener('click', () => savePressWikiRevision());
 document.getElementById('press-wiki-insert-photo-btn')?.addEventListener('click', () => {
@@ -9890,6 +10066,31 @@ document.getElementById('press-wiki-insert-photo-btn')?.addEventListener('click'
 document.getElementById('press-wiki-file-input')?.addEventListener('change', async (e) => {
   await handlePressWikiFilesUpload(e.target.files, false);
   e.target.value = '';
+});
+
+function togglePressWikiActionsMenu() {
+  const wrap = document.getElementById('press-wiki-actions-wrap');
+  const menu = document.getElementById('press-wiki-actions-menu');
+  const btn = document.getElementById('press-wiki-actions-btn');
+  if (!wrap || !menu || !btn) return;
+  const isOpen = menu.classList.contains('visible');
+  menu.classList.toggle('visible', !isOpen);
+  btn.classList.toggle('open', !isOpen);
+  btn.setAttribute('aria-expanded', String(!isOpen));
+}
+
+function closePressWikiActionsMenu() {
+  const menu = document.getElementById('press-wiki-actions-menu');
+  const btn = document.getElementById('press-wiki-actions-btn');
+  if (!menu || !btn) return;
+  menu.classList.remove('visible');
+  btn.classList.remove('open');
+  btn.setAttribute('aria-expanded', 'false');
+}
+
+document.getElementById('press-wiki-actions-btn')?.addEventListener('click', e => {
+  e.stopPropagation();
+  togglePressWikiActionsMenu();
 });
 
 const wikiEditBody = document.getElementById('press-wiki-edit-body');
@@ -9923,7 +10124,7 @@ async function handlePressWikiFilesUpload(files, autoInsert) {
       if (!file.type.startsWith('image/')) continue;
       const attId = 'att_' + Date.now() + '_' + Math.floor(Math.random()*1000);
       const ext = file.name.split('.').pop() || 'png';
-      const path = `plants/${currentPlantId}/presses/${_pressWikiModalPressId}/wikiPages/${_pressWikiSelectedPageId}/attachments/${attId}.${ext}`;
+      const path = wikiStoragePrefixForScope(_pressWikiScope, _pressWikiModalPressId, _pressWikiSelectedPageId) + `/attachments/${attId}.${ext}`;
       const sRef = storageRef(storage, path);
       
       await uploadBytesResumable(sRef, file);
@@ -9938,7 +10139,7 @@ async function handlePressWikiFilesUpload(files, autoInsert) {
         uploadedAt: serverTimestamp()
       };
       
-      await setDoc(doc(db, `plants/${currentPlantId}/presses/${_pressWikiModalPressId}/wikiPages/${_pressWikiSelectedPageId}/attachments/${attId}`), attDoc);
+      await setDoc(doc(db, ...wikiStoragePrefixForScope(_pressWikiScope, _pressWikiModalPressId, _pressWikiSelectedPageId).split('/'), 'attachments', attId), attDoc);
       uploadedCount++;
       
       if (autoInsert) {
@@ -9953,7 +10154,7 @@ async function handlePressWikiFilesUpload(files, autoInsert) {
     }
     
     if (uploadedCount > 0) {
-      const pageRef = pressWikiPageDoc(_pressWikiModalPressId, _pressWikiSelectedPageId);
+      const pageRef = wikiPageDocForScope(_pressWikiScope, _pressWikiModalPressId, _pressWikiSelectedPageId);
       const snap = await getDoc(pageRef);
       if (snap.exists()) {
         const currentCount = snap.data()?.photoCount || 0;
@@ -9967,13 +10168,24 @@ async function handlePressWikiFilesUpload(files, autoInsert) {
     _setPressWikiError("Upload failed: " + err.message);
   }
 }
-document.getElementById('press-wiki-new-page-btn')?.addEventListener('click', () => togglePressWikiCreateRow(true));
+document.getElementById('press-wiki-new-page-btn')?.addEventListener('click', () => {
+  closePressWikiActionsMenu();
+  togglePressWikiCreateRow(true);
+});
 document.getElementById('press-wiki-cancel-create-page-btn')?.addEventListener('click', () => togglePressWikiCreateRow(false));
 document.getElementById('press-wiki-create-page-btn')?.addEventListener('click', () => createPressWikiPageFromInput());
+document.getElementById('press-wiki-scope-press')?.addEventListener('click', () => _pressWikiSetScope(WIKI_SCOPE_PRESS));
+document.getElementById('press-wiki-scope-shared')?.addEventListener('click', () => _pressWikiSetScope(WIKI_SCOPE_SHARED));
 document.getElementById('press-wiki-cms-btn')?.addEventListener('click', () => {
+  closePressWikiActionsMenu();
   if (!_pressWikiModalPressId) return;
-  const url = `wiki-cms.html?plantId=${encodeURIComponent(currentPlantId)}&pressId=${encodeURIComponent(_pressWikiModalPressId)}&pageId=${encodeURIComponent(_pressWikiSelectedPageId || '')}`;
+  const url = `wiki-cms.html?plantId=${encodeURIComponent(currentPlantId)}&pressId=${encodeURIComponent(_pressWikiScope === WIKI_SCOPE_PRESS ? _pressWikiModalPressId : '')}&pageId=${encodeURIComponent(_pressWikiSelectedPageId || '')}&scope=${encodeURIComponent(_pressWikiScope)}`;
   window.location.href = url;
+});
+
+document.addEventListener('click', e => {
+  const wrap = document.getElementById('press-wiki-actions-wrap');
+  if (wrap && !wrap.contains(e.target)) closePressWikiActionsMenu();
 });
 
 // ── EXPORT PDF ──
@@ -10375,7 +10587,7 @@ function renderAdminList() {
 
   Object.entries(adminDraft)
     .filter(([k]) => k !== 'open' && k !== 'resolved')
-    .sort((a,b) => (a[1].order||99) - (b[1].order||99))
+    .sort((a, b) => getStatusLabel(a[0], 'short').localeCompare(getStatusLabel(b[0], 'short'), undefined, { sensitivity: 'base' }))
     .forEach(([key, st]) => {
       const row = document.createElement('div'); row.className = 'admin-status-row';
 
@@ -10527,31 +10739,11 @@ function renderAdminList() {
       // Action buttons
       const actionsRow = document.createElement('div'); actionsRow.className = 'admin-row-actions';
 
-      // Up/down reorder buttons
-      const upBtn = document.createElement('button'); upBtn.className = 'admin-order-btn'; upBtn.textContent = '▲';
-      const downBtn = document.createElement('button'); downBtn.className = 'admin-order-btn'; downBtn.textContent = '▼';
-      const moveOrder = (dir) => {
-        const keys = Object.entries(adminDraft)
-          .filter(([k]) => k !== 'open' && k !== 'resolved')
-          .sort((a,b) => (a[1].order||99) - (b[1].order||99))
-          .map(([k]) => k);
-        const idx = keys.indexOf(key);
-        const swapIdx = idx + dir;
-        if (swapIdx < 0 || swapIdx >= keys.length) return;
-        const swapKey = keys[swapIdx];
-        const tmpOrder = adminDraft[key].order;
-        adminDraft[key].order = adminDraft[swapKey].order;
-        adminDraft[swapKey].order = tmpOrder;
-        renderAdminList();
-      };
-      addTapListener(upBtn, () => moveOrder(-1));
-      addTapListener(downBtn, () => moveOrder(1));
-
       const editBtnEl = document.createElement('button'); editBtnEl.className = 'admin-edit-btn'; editBtnEl.textContent = '✏️ Edit Icon & Color';
       addTapListener(editBtnEl, () => { const open=editPanel.classList.toggle('visible'); editBtnEl.textContent=open?'▲ Close':'✏️ Edit Icon & Color'; if(open)confirmDel.classList.remove('visible'); });
       const deleteBtnEl = document.createElement('button'); deleteBtnEl.className = 'admin-delete-btn'; deleteBtnEl.textContent = '🗑 Delete';
       addTapListener(deleteBtnEl, () => { confirmDel.classList.toggle('visible'); if(confirmDel.classList.contains('visible'))editPanel.classList.remove('visible'); });
-      actionsRow.appendChild(upBtn); actionsRow.appendChild(downBtn); actionsRow.appendChild(editBtnEl); actionsRow.appendChild(deleteBtnEl);
+      actionsRow.appendChild(editBtnEl); actionsRow.appendChild(deleteBtnEl);
       row.appendChild(actionsRow);
       list.appendChild(row);
     });
@@ -10661,10 +10853,7 @@ window.resetToDefaults = async () => {
   
   // Rebuild UI
   rebuildDerivedStatus();
-  buildStatusFilterPills();
-  updatePressStates();
-  renderIssues();
-  updateStats();
+  refreshStatusDependentUI();
   
   // Refresh admin panel if open
   if (document.getElementById('admin-overlay').classList.contains('visible')) {
@@ -10715,7 +10904,7 @@ async function saveAdminConfig() {
     await saveConfig();
     rebuildDerivedStatus();
     closeAdminPanel();
-    updatePressStates(); renderIssues(); updateStats();
+    refreshStatusDependentUI();
     btn.textContent = '✓ Saved!';
   } catch(e) {
     btn.textContent = '✕ Error — try again'; console.error(e);

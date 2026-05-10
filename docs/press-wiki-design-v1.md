@@ -12,6 +12,20 @@
 - `plants/{plantId}/presses/{pressId}/wikiPages/{pageId}/revisions/{revisionId}`
 - `plants/{plantId}/presses/{pressId}/wikiPages/{pageId}/attachments/{attachmentId}`
 
+### Scope model
+Support two scopes while keeping one editor experience:
+
+- `press` scope: content belongs to one press and uses the existing press-scoped paths.
+- `shared` scope: content belongs to a plant-wide library and can be reused from any press.
+
+Recommended plant-wide shared-library paths:
+- `plants/{plantId}/wikiPages/{pageId}`
+- `plants/{plantId}/wikiPages/{pageId}/revisions/{revisionId}`
+- `plants/{plantId}/wikiPages/{pageId}/attachments/{attachmentId}`
+
+The same page schema should work in both scopes so the reader, editor, and attachment flow stay identical.
+Shared-library access should follow the user's plant routing profile (`users/{uid}.plantIds`) so the wiki remains writable even if a member doc is still syncing in the browser session.
+
 ### `wikiPages/{pageId}` document
 ```json
 {
@@ -64,6 +78,8 @@
 - `plants/{plantId}/press-wiki/{pressId}/{pageId}/{attachmentId}-{filename}`
 
 This keeps tenant isolation aligned with existing issue attachment strategy.
+
+For shared pages, use the same filename convention under `plants/{plantId}/wikiPages/{pageId}/...` or another consistent plant-level prefix.
 
 ## Security rules snippet (Firestore)
 Use member-role checks from existing plant membership docs.
@@ -143,6 +159,20 @@ service cloud.firestore {
      - create new `revisions/{revisionId}`
      - transactionally update `wikiPages.currentRevisionId`, `updatedAt`, `updatedBy`, `lastActivityAt`
 
+### Shared-library entry point
+- Add a compact `Scope` segmented control in the existing press wiki header or CMS context bar.
+- Use two options: `This Press` and `Shared Library`.
+- Keep `This Press` as the default so no existing workflow changes.
+- When `Shared Library` is selected, reuse the same list, reader, editor, and revision history components.
+- Show a subtle `Shared` badge on cards and in the page header so scope is obvious without adding a new screen.
+- Treat scope as a filter in the current UI, not a separate app.
+
+### Navigation behavior
+- The page list should remain in the same left-column location in the CMS.
+- Users can switch scope before creating a page.
+- A press page can link to a shared page, but the shared page is authored once at the plant level.
+- Shared pages should be discoverable from every press while still allowing press-specific pages to remain local.
+
 ### Tablet-first interaction details
 - Keep one-hand actions in bottom sticky bar: `Save`, `Add Photo`, `Cancel`.
 - Use large touch targets for page cards and image thumbnails.
@@ -153,6 +183,14 @@ service cloud.firestore {
 2. Create new revision doc with `prevRevisionId = currentRevisionId`.
 3. Update page doc with new `currentRevisionId`, summary/searchText refresh, audit fields.
 4. On conflict (`updatedAt` changed), prompt user to reload and merge.
+
+### Scope-aware revision algorithm
+For shared pages, keep the same revision steps but read and write from the plant-level `wikiPages` collection.
+
+1. Read current page doc from the selected scope.
+2. Create a new revision doc with `prevRevisionId = currentRevisionId`.
+3. Update the page doc with new `currentRevisionId`, metadata, and audit fields.
+4. Refresh the current scope list so the user stays anchored in the same view after save.
 
 ## Gamification hooks
 Suggested XP events:
@@ -168,3 +206,4 @@ Suggested mission examples:
 - **Phase 1 (MVP):** list/read/edit pages, revisions, attachments, basic role checks.
 - **Phase 2:** pin/lock moderation, revision viewer/revert workflow, templates.
 - **Phase 3:** contribution leaderboard tie-in and stale-page prompts.
+- **Phase 4:** shared plant-wide library with scope switching and cross-press discovery.
