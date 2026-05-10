@@ -1685,6 +1685,9 @@
   .press-wiki-editor { display:none; border-top: 1px solid var(--border); padding-top: 12px; }
   .press-wiki-editor-actions { display:flex; gap:8px; justify-content:flex-end; margin-top: 8px; }
   .role-alerts-header { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:12px; flex-wrap:wrap; padding-bottom:10px; border-bottom:1px solid var(--border); }
+  .role-alerts-title-wrap { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .role-alert-prototype-toggle { min-height: 28px; padding: 4px 10px; font-size: 11px; }
+  .role-alert-prototype-toggle.active { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--text); }
   .role-alerts-header h3 { font-family: 'Rajdhani', sans-serif; letter-spacing: 0.8px; }
   .role-alerts-toggle { flex-shrink:0; }
   .role-alerts-toggle .scope-btn { min-width: 0; }
