@@ -9886,6 +9886,7 @@ let _pressWikiRenderedBodyRaw = '';
 let _pressWikiPageListCache = [];
 let _pressWikiExpandedPageIds = new Set();
 let _pressWikiKnownTreeNodeIds = new Set();
+let _pressWikiPickerOpen = false;
 
 function _pressWikiScopeLabel(scope = _pressWikiScope) {
   return scope === WIKI_SCOPE_SHARED ? 'Shared Library' : 'This Press';
@@ -9967,6 +9968,138 @@ function _pressWikiAncestors(pageId, parentById) {
     parentId = parentById.get(parentId) || null;
   }
   return output;
+}
+
+function _pressWikiPickerLabelForScope(scope = _pressWikiScope) {
+  return scope === WIKI_SCOPE_SHARED ? 'Shared Library' : _pressWikiPressLabel();
+}
+
+function _pressWikiPickerTrail(tree, pageId = _pressWikiSelectedPageId) {
+  const page = tree?.nodesById?.get(pageId) || null;
+  if (!page) {
+    return {
+      title: 'Shift Notes',
+      path: _pressWikiPickerLabelForScope(_pressWikiScope),
+      count: `${_pressWikiPageListCache.length} page${_pressWikiPageListCache.length === 1 ? '' : 's'}`
+    };
+  }
+  const ancestorNodes = _pressWikiAncestors(pageId, tree.parentById)
+    .reverse()
+    .map(id => tree.nodesById.get(id))
+    .filter(Boolean);
+  return {
+    title: page.title || page.id || 'Untitled',
+    path: [
+      _pressWikiPickerLabelForScope(page.scope || _pressWikiScope),
+      ...ancestorNodes.map(node => node.title || node.id || 'Untitled')
+    ].join(' / '),
+    count: `${_pressWikiPageListCache.length} page${_pressWikiPageListCache.length === 1 ? '' : 's'}`
+  };
+}
+
+function _pressWikiSetPickerOpen(open) {
+  _pressWikiPickerOpen = Boolean(open);
+  const wrap = document.querySelector('.press-wiki-picker-wrap');
+  const btn = document.getElementById('press-wiki-picker-btn');
+  const panel = document.getElementById('press-wiki-picker-panel');
+  if (wrap) wrap.classList.toggle('open', _pressWikiPickerOpen);
+  if (btn) btn.setAttribute('aria-expanded', String(_pressWikiPickerOpen));
+  if (panel) {
+    panel.classList.toggle('visible', _pressWikiPickerOpen);
+    panel.setAttribute('aria-hidden', String(!_pressWikiPickerOpen));
+  }
+}
+
+function _pressWikiSyncPickerSummary(tree = null) {
+  const titleEl = document.getElementById('press-wiki-picker-title');
+  const pathEl = document.getElementById('press-wiki-picker-path');
+  const countEl = document.getElementById('press-wiki-picker-count');
+  if (!titleEl || !pathEl || !countEl) return;
+  const summary = _pressWikiPickerTrail(tree, _pressWikiSelectedPageId);
+  titleEl.textContent = summary.title;
+  pathEl.textContent = summary.path;
+  countEl.textContent = summary.count;
+}
+
+function _pressWikiRenderPickerNode(parentEl, node, tree, depth = 0) {
+  const children = tree.childrenById.get(node.id) || [];
+  const wrapper = document.createElement('div');
+  wrapper.className = 'press-wiki-picker-node';
+  wrapper.style.setProperty('--press-wiki-depth', String(depth));
+
+  const row = document.createElement('div');
+  row.className = `press-wiki-picker-row ${node.id === _pressWikiSelectedPageId ? 'active' : ''}`;
+
+  const toggle = document.createElement('button');
+  toggle.type = 'button';
+  toggle.className = 'press-wiki-picker-toggle';
+  toggle.disabled = !children.length;
+  toggle.setAttribute('aria-label', children.length
+    ? (_pressWikiExpandedPageIds.has(node.id) ? 'Collapse section' : 'Expand section')
+    : 'Leaf page');
+  toggle.textContent = children.length ? (_pressWikiExpandedPageIds.has(node.id) ? '▾' : '▸') : '•';
+  if (!children.length) toggle.classList.add('leaf');
+  toggle.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!children.length) return;
+    if (_pressWikiExpandedPageIds.has(node.id)) _pressWikiExpandedPageIds.delete(node.id);
+    else _pressWikiExpandedPageIds.add(node.id);
+    renderPressWikiPageTree();
+  });
+
+  const main = document.createElement('button');
+  main.type = 'button';
+  main.className = 'press-wiki-picker-main';
+  main.setAttribute('aria-current', node.id === _pressWikiSelectedPageId ? 'page' : 'false');
+  main.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    await loadPressWikiPage(node.id);
+    _pressWikiSetPickerOpen(false);
+  });
+
+  const copy = document.createElement('div');
+  copy.className = 'press-wiki-picker-main-copy';
+  const title = document.createElement('div');
+  title.className = 'press-wiki-picker-row-title';
+  title.textContent = node.title || node.id || 'Untitled';
+  const meta = document.createElement('div');
+  meta.className = 'press-wiki-picker-row-meta';
+  meta.textContent = `${children.length ? `${children.length} child${children.length === 1 ? '' : 'ren'} · ` : ''}${node.id}`;
+  copy.appendChild(title);
+  copy.appendChild(meta);
+  main.appendChild(copy);
+
+  const badges = document.createElement('div');
+  badges.className = 'press-wiki-picker-row-badges';
+  const scopeBadge = document.createElement('span');
+  scopeBadge.className = `press-wiki-picker-scope ${node.scope === WIKI_SCOPE_SHARED ? 'shared' : 'press'}`;
+  scopeBadge.textContent = node.scope === WIKI_SCOPE_SHARED ? 'Shared' : 'Press';
+  badges.appendChild(scopeBadge);
+  if (node.id === _pressWikiSelectedPageId) {
+    const currentBadge = document.createElement('span');
+    currentBadge.className = 'press-wiki-picker-current';
+    currentBadge.textContent = 'Current';
+    badges.appendChild(currentBadge);
+  }
+  main.appendChild(badges);
+
+  row.appendChild(toggle);
+  row.appendChild(main);
+  row.addEventListener('click', async () => {
+    await loadPressWikiPage(node.id);
+    _pressWikiSetPickerOpen(false);
+  });
+  wrapper.appendChild(row);
+
+  if (children.length) {
+    const childWrap = document.createElement('div');
+    childWrap.className = 'press-wiki-picker-children';
+    childWrap.style.display = _pressWikiExpandedPageIds.has(node.id) ? 'grid' : 'none';
+    children.forEach(child => _pressWikiRenderPickerNode(childWrap, child, tree, depth + 1));
+    wrapper.appendChild(childWrap);
+  }
+
+  parentEl.appendChild(wrapper);
 }
 
 function _pressWikiExpandDefaults(tree) {
@@ -10064,19 +10197,19 @@ function _pressWikiRenderTreeNode(parentEl, node, tree, depth = 0) {
 }
 
 function renderPressWikiPageTree() {
-  const selectEl = document.getElementById('press-wiki-page-select');
-  if (!selectEl) return;
-  selectEl.innerHTML = '';
+  const panel = document.getElementById('press-wiki-picker-panel');
+  const treeEl = document.getElementById('press-wiki-picker-tree');
+  if (!panel || !treeEl) return;
+  treeEl.innerHTML = '';
+
   if (!_pressWikiPageListCache.length) {
-    const opt = document.createElement('option');
-    opt.value = 'shift-notes';
-    opt.textContent = 'No pages found';
-    selectEl.appendChild(opt);
-    selectEl.disabled = true;
+    panel.classList.add('empty');
+    treeEl.innerHTML = '<div class="press-wiki-picker-empty">No pages found in this scope.</div>';
+    _pressWikiSyncPickerSummary(null);
     return;
   }
 
-  selectEl.disabled = false;
+  panel.classList.remove('empty');
 
   const tree = _pressWikiBuildTree(_pressWikiPageListCache);
   _pressWikiExpandDefaults(tree);
@@ -10084,27 +10217,17 @@ function renderPressWikiPageTree() {
     _pressWikiAncestors(_pressWikiSelectedPageId, tree.parentById).forEach(id => _pressWikiExpandedPageIds.add(id));
   }
 
-  const addOption = (node, depth = 0) => {
-    const opt = document.createElement('option');
-    opt.value = node.id;
-    const prefix = depth > 0 ? `${'— '.repeat(depth)}` : '';
-    opt.textContent = `${prefix}${node.title || node.id || 'Untitled'}`;
-    selectEl.appendChild(opt);
-    const children = tree.childrenById.get(node.id) || [];
-    children.forEach(child => addOption(child, depth + 1));
-  };
-
-  tree.roots.forEach(node => addOption(node, 0));
-  if (![...selectEl.options].some(o => o.value === _pressWikiSelectedPageId)) {
-    _pressWikiSelectedPageId = selectEl.options[0]?.value || 'shift-notes';
+  if (!tree.nodesById.has(_pressWikiSelectedPageId)) {
+    _pressWikiSelectedPageId = tree.roots[0]?.id || 'shift-notes';
   }
-  selectEl.value = _pressWikiSelectedPageId;
+
+  _pressWikiSyncPickerSummary(tree);
+  tree.roots.forEach(node => _pressWikiRenderPickerNode(treeEl, node, tree, 0));
 }
 
-document.getElementById('press-wiki-page-select')?.addEventListener('change', async (e) => {
-  const pageId = String(e.target?.value || '').trim();
-  if (!pageId || pageId === _pressWikiSelectedPageId) return;
-  await loadPressWikiPage(pageId);
+document.getElementById('press-wiki-picker-btn')?.addEventListener('click', e => {
+  e.stopPropagation();
+  _pressWikiSetPickerOpen(!_pressWikiPickerOpen);
 });
 
 function _pressWikiPressLabel() {
@@ -10310,6 +10433,7 @@ async function openPressWikiModal(pressId, machineCode, options = {}) {
     : `Press ${_pressWikiMachineCode || '—'} · ${_pressWikiScopeLabel()}`;
   _pressWikiSyncScopeBadge();
   _pressWikiSetScope(_pressWikiScope, { reload: false });
+  _pressWikiSetPickerOpen(false);
   bodyEl.textContent = 'Loading wiki...';
   revisionsEl.innerHTML = '';
   attachmentsEl.innerHTML = '';
@@ -10324,8 +10448,7 @@ async function openPressWikiModal(pressId, machineCode, options = {}) {
 }
 
 async function loadPressWikiPageList() {
-  const selectEl = document.getElementById('press-wiki-page-select');
-  if (!selectEl || !_pressWikiModalPressId) return;
+  if (!_pressWikiModalPressId) return;
   const pagesSnap = await getDocs(wikiPagesColForScope(_pressWikiScope, _pressWikiModalPressId));
   const pages = pagesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
   _pressWikiPageListCache = pages;
@@ -10659,6 +10782,13 @@ function insertWikiPhotoIntoEditor(photo) {
 
 document.getElementById('press-wiki-modal')?.addEventListener('click', e => {
   if (e.target === document.getElementById('press-wiki-modal')) closePressWikiModal();
+});
+document.addEventListener('click', e => {
+  const pickerWrap = document.querySelector('.press-wiki-picker-wrap');
+  if (pickerWrap && !pickerWrap.contains(e.target)) _pressWikiSetPickerOpen(false);
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') _pressWikiSetPickerOpen(false);
 });
 document.getElementById('press-wiki-edit-btn')?.addEventListener('click', () => {
   closePressWikiActionsMenu();

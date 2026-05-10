@@ -666,9 +666,25 @@
             </div>
           </div>
         </div>
-        <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;">
-          <label for="press-wiki-page-select" style="font-size:12px;color:var(--text3);white-space:nowrap;">Select Page</label>
-          <select id="press-wiki-page-select" class="select" style="width:100%;min-width:0;"></select>
+        <div class="press-wiki-picker-wrap" style="margin-top:8px;">
+          <label for="press-wiki-picker-btn" style="display:block;font-size:12px;color:var(--text3);white-space:nowrap;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px;">Select Page</label>
+          <button id="press-wiki-picker-btn" class="press-wiki-picker-btn" type="button" aria-haspopup="tree" aria-expanded="false">
+            <span class="press-wiki-picker-copy">
+              <span id="press-wiki-picker-title" class="press-wiki-picker-title">Shift Notes</span>
+              <span id="press-wiki-picker-path" class="press-wiki-picker-path">Shared Library</span>
+            </span>
+            <span class="press-wiki-picker-meta">
+              <span id="press-wiki-picker-count" class="press-wiki-picker-count">1 page</span>
+              <svg class="press-wiki-picker-caret" width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </span>
+          </button>
+          <div id="press-wiki-picker-panel" class="press-wiki-picker-panel" aria-hidden="true">
+            <div class="press-wiki-picker-panel-head">
+              <div class="press-wiki-picker-panel-kicker">Hierarchy</div>
+              <div id="press-wiki-picker-panel-copy" class="press-wiki-picker-panel-copy">Choose a page to read or edit.</div>
+            </div>
+            <div id="press-wiki-picker-tree" class="press-wiki-picker-tree"></div>
+          </div>
         </div>
         <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-top:8px;">Press Wiki</div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px;">
