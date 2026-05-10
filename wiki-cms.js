@@ -55,6 +55,9 @@ const elAttachments = document.getElementById('edit-attachments');
 const elRevisionList = document.getElementById('revision-list');
 const elSaveFeedback = document.getElementById('save-feedback');
 const elDeletePageBtn = document.getElementById('delete-page-btn');
+const elParentPage = document.getElementById('edit-parent');
+const elMovePageUpBtn = document.getElementById('move-page-up-btn');
+const elMovePageDownBtn = document.getElementById('move-page-down-btn');
 
 const WIKI_SCOPE_PRESS = 'press';
 const WIKI_SCOPE_SHARED = 'shared';
@@ -69,6 +72,8 @@ let pages = [];
 let currentPageDoc = null;
 let attachmentsMap = new Map();
 let unsubscribePages = null;
+let expandedPageIds = new Set();
+let knownPageTreeNodeIds = new Set();
 
 function toPressId(machineCode) {
   return 'press_' + String(machineCode || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
@@ -100,6 +105,210 @@ function slugify(value) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-|-$)/g, '');
+}
+
+function normalizeParentPageId(value) {
+  const trimmed = String(value || '').trim();
+  return trimmed ? trimmed : null;
+}
+
+function getWikiSortValue(page, fallbackIndex = 0) {
+  const raw = Number(page?.sortOrder);
+  return Number.isFinite(raw) ? raw : fallbackIndex;
+}
+
+function compareWikiPages(a, b) {
+  const sortDelta = getWikiSortValue(a) - getWikiSortValue(b);
+  if (sortDelta !== 0) return sortDelta;
+  const titleDelta = String(a.title || '').localeCompare(String(b.title || ''));
+  if (titleDelta !== 0) return titleDelta;
+  return String(a.id || '').localeCompare(String(b.id || ''));
+}
+
+function buildWikiTree(sourcePages = pages) {
+  const nodesById = new Map();
+  const parentById = new Map();
+  const childrenById = new Map();
+  const roots = [];
+
+  sourcePages.forEach((page, index) => {
+    if (!page?.id) return;
+    nodesById.set(page.id, {
+      ...page,
+      parentPageId: normalizeParentPageId(page.parentPageId),
+      sortOrder: Number.isFinite(Number(page.sortOrder)) ? Number(page.sortOrder) : index
+    });
+  });
+
+  nodesById.forEach((page, pageId) => {
+    const parentId = page.parentPageId && nodesById.has(page.parentPageId) && page.parentPageId !== pageId
+      ? page.parentPageId
+      : null;
+    parentById.set(pageId, parentId);
+    if (parentId) {
+      if (!childrenById.has(parentId)) childrenById.set(parentId, []);
+      childrenById.get(parentId).push(page);
+    } else {
+      roots.push(page);
+    }
+  });
+
+  const sortList = list => list.sort(compareWikiPages);
+  sortList(roots);
+  childrenById.forEach(sortList);
+  return { nodesById, parentById, childrenById, roots };
+}
+
+function collectWikiDescendants(pageId, childrenById, output = new Set()) {
+  const children = childrenById.get(pageId) || [];
+  children.forEach(child => {
+    if (!child?.id || output.has(child.id)) return;
+    output.add(child.id);
+    collectWikiDescendants(child.id, childrenById, output);
+  });
+  return output;
+}
+
+function collectWikiAncestors(pageId, parentById) {
+  const output = [];
+  const seen = new Set();
+  let parentId = parentById.get(pageId) || null;
+  while (parentId && !seen.has(parentId)) {
+    output.push(parentId);
+    seen.add(parentId);
+    parentId = parentById.get(parentId) || null;
+  }
+  return output;
+}
+
+function getPageSiblings(targetPage, sourcePages = pages) {
+  const parentId = normalizeParentPageId(targetPage?.parentPageId);
+  return sourcePages
+    .filter(page => page?.id && page.id !== targetPage?.id && normalizeParentPageId(page.parentPageId) === parentId)
+    .sort(compareWikiPages);
+}
+
+function getNextWikiSortOrder(parentPageId, ignorePageId = null) {
+  const parentId = normalizeParentPageId(parentPageId);
+  const siblingOrders = pages
+    .filter(page => page?.id && page.id !== ignorePageId && normalizeParentPageId(page.parentPageId) === parentId)
+    .map(page => Number(page.sortOrder))
+    .filter(Number.isFinite);
+  return siblingOrders.length ? Math.max(...siblingOrders) + 1 : 0;
+}
+
+function syncExpandedDefaults(tree) {
+  tree.nodesById.forEach((page, pageId) => {
+    if (!knownPageTreeNodeIds.has(pageId) && (tree.childrenById.get(pageId) || []).length > 0) {
+      expandedPageIds.add(pageId);
+    }
+    knownPageTreeNodeIds.add(pageId);
+  });
+}
+
+function renderWikiTreeNode(parentEl, node, tree, depth = 0) {
+  const children = tree.childrenById.get(node.id) || [];
+  const wrapper = document.createElement('div');
+  wrapper.className = 'page-tree-node';
+
+  const row = document.createElement('div');
+  row.className = `page-tree-row ${node.id === currentPageId ? 'active' : ''}`;
+  row.style.paddingLeft = `${12 + depth * 18}px`;
+  row.style.display = 'flex';
+  row.style.alignItems = 'center';
+  row.style.gap = '8px';
+  row.style.border = 'none';
+  row.style.background = 'transparent';
+  row.dataset.pageId = node.id;
+  row.innerHTML = '';
+
+  const spacer = document.createElement('span');
+  spacer.style.width = '22px';
+  spacer.style.flex = '0 0 auto';
+
+  if (children.length) {
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'page-tree-toggle';
+    toggle.textContent = expandedPageIds.has(node.id) ? '▾' : '▸';
+    toggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (expandedPageIds.has(node.id)) expandedPageIds.delete(node.id);
+      else expandedPageIds.add(node.id);
+      renderPageList();
+    });
+    row.appendChild(toggle);
+  } else {
+    row.appendChild(spacer);
+  }
+
+  const main = document.createElement('div');
+  main.className = 'page-tree-main';
+  const title = document.createElement('div');
+  title.className = 'page-title';
+  title.textContent = node.title || 'Untitled';
+  const meta = document.createElement('div');
+  meta.className = 'page-meta';
+  meta.textContent = `Photos: ${node.photoCount || 0}`;
+  main.appendChild(title);
+  main.appendChild(meta);
+  row.appendChild(main);
+
+  if (node.scope === WIKI_SCOPE_SHARED) {
+    const badge = document.createElement('button');
+    badge.type = 'button';
+    badge.className = 'scope-link-badge';
+    badge.textContent = 'Shared';
+    badge.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await handleScopeChange(WIKI_SCOPE_SHARED);
+      await selectPage(node.id);
+    });
+    row.appendChild(badge);
+  }
+
+  row.addEventListener('click', () => selectPage(node.id));
+  wrapper.appendChild(row);
+
+  if (children.length) {
+    const childWrap = document.createElement('div');
+    childWrap.className = 'page-tree-children';
+    childWrap.style.display = expandedPageIds.has(node.id) ? 'block' : 'none';
+    children.forEach(child => renderWikiTreeNode(childWrap, child, tree, depth + 1));
+    wrapper.appendChild(childWrap);
+  }
+
+  parentEl.appendChild(wrapper);
+}
+
+function renderParentPageOptions(selectedParentId = null, currentId = currentPageId) {
+  if (!elParentPage) return;
+  const tree = buildWikiTree(pages);
+  const parentId = normalizeParentPageId(selectedParentId);
+  const exclude = currentId && currentId !== 'NEW'
+    ? new Set([currentId, ...collectWikiDescendants(currentId, tree.childrenById)])
+    : new Set();
+
+  elParentPage.innerHTML = '';
+  const rootOpt = document.createElement('option');
+  rootOpt.value = '';
+  rootOpt.textContent = 'Root page';
+  elParentPage.appendChild(rootOpt);
+
+  const appendOptions = (nodes, depth = 0) => {
+    nodes.forEach(node => {
+      if (exclude.has(node.id)) return;
+      const opt = document.createElement('option');
+      opt.value = node.id;
+      opt.textContent = `${'\u00a0\u00a0'.repeat(depth)}${depth ? '↳ ' : ''}${node.title || node.id}`;
+      elParentPage.appendChild(opt);
+      const children = tree.childrenById.get(node.id) || [];
+      if (children.length) appendOptions(children, depth + 1);
+    });
+  };
+
+  appendOptions(tree.roots);
+  elParentPage.value = parentId || '';
 }
 
 function resolveWikiLinkTarget(href) {
@@ -300,6 +509,8 @@ async function refreshPageData() {
   elPageList.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text3);font-size:12px;">Loading pages...</div>';
 
   if (unsubscribePages) unsubscribePages();
+  expandedPageIds = new Set();
+  knownPageTreeNodeIds = new Set();
   unsubscribePages = onSnapshot(wikiPagesCol(currentScope, currentPressId), (snap) => {
     pages = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderPageList();
@@ -307,6 +518,7 @@ async function refreshPageData() {
       const activePage = pages.find(p => p.id === currentPageId);
       if (activePage) updateEditorMeta(activePage);
     }
+    updateDeleteButtonState();
   });
 }
 
@@ -448,24 +660,17 @@ function renderPageList() {
     elPageList.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text3);font-size:12px;">No pages found</div>';
     return;
   }
-  
-  pages.sort((a,b) => (a.title || '').localeCompare(b.title || ''));
-  pages.forEach(p => {
-    const li = document.createElement('li');
-    li.className = `page-item ${p.id === currentPageId ? 'active' : ''}`;
-    li.innerHTML = `
-      <div class="page-title">${p.title || 'Untitled'}</div>
-      <div class="page-meta">Photos: ${p.photoCount || 0}</div>
-      ${p.scope === WIKI_SCOPE_SHARED ? '<button type="button" class="scope-link-badge" data-scope-link="shared">Shared</button>' : ''}
-    `;
-    li.addEventListener('click', () => selectPage(p.id));
-    li.querySelector('[data-scope-link="shared"]')?.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      await handleScopeChange(WIKI_SCOPE_SHARED);
-      await selectPage(p.id);
-    });
-    elPageList.appendChild(li);
-  });
+
+  const tree = buildWikiTree(pages);
+  syncExpandedDefaults(tree);
+  if (currentPageId && currentPageId !== 'NEW') {
+    collectWikiAncestors(currentPageId, tree.parentById).forEach(id => expandedPageIds.add(id));
+  }
+
+  const treeWrap = document.createElement('div');
+  treeWrap.className = 'page-tree';
+  tree.roots.forEach(node => renderWikiTreeNode(treeWrap, node, tree, 0));
+  elPageList.appendChild(treeWrap);
 }
 
 function resetEditor() {
@@ -477,6 +682,7 @@ function resetEditor() {
   elSlug.value = '';
   elSummary.value = '';
   elTags.value = '';
+  if (elParentPage) elParentPage.innerHTML = '<option value="">Root page</option>';
   elBody.value = '';
   elChangeNote.value = '';
   elAttachments.innerHTML = '';
@@ -488,6 +694,7 @@ function resetEditor() {
 }
 
 elNewPageBtn.addEventListener('click', () => {
+  const defaultParentId = currentPageDoc?.id || (currentPageId && currentPageId !== 'NEW' ? currentPageId : null);
   currentPageId = 'NEW';
   currentPageDoc = null;
   elEditorContainer.style.display = 'block';
@@ -496,6 +703,8 @@ elNewPageBtn.addEventListener('click', () => {
   elSlug.value = '';
   elSummary.value = '';
   elTags.value = '';
+  renderParentPageOptions(defaultParentId, 'NEW');
+  if (elParentPage) elParentPage.value = defaultParentId || '';
   elBody.value = '';
   elChangeNote.value = 'Initial creation';
   elAttachments.innerHTML = '';
@@ -533,6 +742,8 @@ async function selectPage(pageId) {
 
   updateEditorMeta(pageData);
   currentPageDoc = pageData;
+  const tree = buildWikiTree(pages);
+  collectWikiAncestors(pageId, tree.parentById).forEach(id => expandedPageIds.add(id));
   updateDeleteButtonState();
 
   // Fetch latest revision body
@@ -569,9 +780,12 @@ async function selectPage(pageId) {
 
 function updateDeleteButtonState() {
   if (!elDeletePageBtn) return;
-  const canDelete = Boolean(currentPageId && currentPageId !== 'NEW');
-  elDeletePageBtn.style.display = canDelete ? '' : 'none';
+  const hasChildren = Boolean(currentPageId && currentPageId !== 'NEW' && pages.some(page => normalizeParentPageId(page.parentPageId) === currentPageId));
+  const hasPage = Boolean(currentPageId && currentPageId !== 'NEW');
+  const canDelete = Boolean(hasPage && !hasChildren);
+  elDeletePageBtn.style.display = hasPage ? '' : 'none';
   elDeletePageBtn.disabled = !canDelete;
+  elDeletePageBtn.title = hasChildren ? 'Move child pages first.' : '';
 }
 
 function updateEditorMeta(page) {
@@ -579,6 +793,8 @@ function updateEditorMeta(page) {
   elSlug.value = page.slug || page.id || '';
   elSummary.value = page.summary || '';
   elTags.value = (page.tags || []).join(', ');
+  renderParentPageOptions(page.parentPageId || null, page.id || currentPageId);
+  if (elParentPage) elParentPage.value = normalizeParentPageId(page.parentPageId) || '';
 }
 
 // Generate an ID for new pages based on title
@@ -622,6 +838,38 @@ elBody.addEventListener('drop', async (e) => {
 });
 
 elBody.addEventListener('input', renderPreview);
+
+async function moveCurrentPage(direction) {
+  if (!currentPageDoc || !currentPageId || currentPageId === 'NEW') return;
+  const tree = buildWikiTree(pages);
+  const parentId = normalizeParentPageId(currentPageDoc.parentPageId);
+  const siblings = (tree.childrenById.get(parentId) || tree.roots).filter(page => page.id !== currentPageId);
+  const ordered = [...siblings, currentPageDoc].sort(compareWikiPages);
+  const index = ordered.findIndex(page => page.id === currentPageId);
+  const target = ordered[index + direction];
+  if (!target) return showFeedback(direction < 0 ? 'Already at the top of this group.' : 'Already at the bottom of this group.', true);
+
+  const currentSort = Number.isFinite(Number(currentPageDoc.sortOrder)) ? Number(currentPageDoc.sortOrder) : index;
+  const targetSort = Number.isFinite(Number(target.sortOrder)) ? Number(target.sortOrder) : index + direction;
+  try {
+    showFeedback('Reordering...', false);
+    await runTransaction(db, async tx => {
+      tx.update(wikiPageDoc(currentScope, currentPressId, currentPageId), {
+        sortOrder: targetSort,
+        updatedBy: currentActor(),
+        updatedAt: serverTimestamp()
+      });
+      tx.update(wikiPageDoc(currentScope, currentPressId, target.id), {
+        sortOrder: currentSort,
+        updatedBy: currentActor(),
+        updatedAt: serverTimestamp()
+      });
+    });
+    showFeedback('Reordered.', false);
+  } catch (err) {
+    showFeedback('Could not reorder page: ' + err.message, true);
+  }
+}
 
 async function handleFilesUpload(files, autoInsert) {
   if (!files.length) return;
@@ -745,6 +993,11 @@ async function deleteWikiDocsInBatches(colRef) {
 
 async function deleteCurrentPage() {
   if (!currentPageId || currentPageId === 'NEW') return;
+  const hasChildren = pages.some(page => normalizeParentPageId(page.parentPageId) === currentPageId);
+  if (hasChildren) {
+    showFeedback('Move child pages first before deleting this page.', true);
+    return;
+  }
   const title = elTitle.value.trim() || currentPageDoc?.title || currentPageId;
   const ok = confirm(`Delete "${title}"? This will remove the page, its revisions, and its attachments.`);
   if (!ok) return;
@@ -776,6 +1029,8 @@ document.getElementById('cancel-btn').addEventListener('click', () => {
 });
 
 elDeletePageBtn?.addEventListener('click', deleteCurrentPage);
+elMovePageUpBtn?.addEventListener('click', () => moveCurrentPage(-1));
+elMovePageDownBtn?.addEventListener('click', () => moveCurrentPage(1));
 
 document.getElementById('cms-scope-press')?.addEventListener('click', () => handleScopeChange(WIKI_SCOPE_PRESS));
 document.getElementById('cms-scope-shared')?.addEventListener('click', () => handleScopeChange(WIKI_SCOPE_SHARED));
@@ -787,6 +1042,7 @@ document.getElementById('save-btn').addEventListener('click', async () => {
   const tagsStr = elTags.value.trim();
   const body = elBody.value.trim();
   const rawChangeNote = elChangeNote.value.trim();
+  const parentPageId = normalizeParentPageId(elParentPage?.value);
   const fallbackActorName = String(currentActor()?.name || currentUser?.displayName || currentUser?.email || 'Unknown').trim() || 'Unknown';
   const now = new Date();
   const dd = String(now.getDate()).padStart(2, '0');
@@ -803,6 +1059,13 @@ document.getElementById('save-btn').addEventListener('click', async () => {
     const isNew = (currentPageId === 'NEW');
     const pageId = isNew ? slug : currentPageId;
     const revId = 'rev_' + Date.now();
+    const tree = buildWikiTree(pages);
+    const invalidParent = parentPageId && (parentPageId === pageId || collectWikiDescendants(pageId, tree.childrenById).has(parentPageId));
+    if (invalidParent) throw new Error('Choose a different parent page.');
+    const currentParentId = normalizeParentPageId(currentPageDoc?.parentPageId);
+    const sortOrder = isNew || parentPageId !== currentParentId || !Number.isFinite(Number(currentPageDoc?.sortOrder))
+      ? getNextWikiSortOrder(parentPageId, isNew ? null : pageId)
+      : Number(currentPageDoc?.sortOrder);
     
     const pageRef = doc(db, ...(currentScope === WIKI_SCOPE_SHARED
       ? ['plants', currentPlantId, 'wikiPages', pageId]
@@ -825,7 +1088,10 @@ document.getElementById('save-btn').addEventListener('click', async () => {
         updatedBy: currentActor(),
         updatedAt: serverTimestamp(),
         lastActivityAt: serverTimestamp(),
-        currentRevisionId: revId
+        currentRevisionId: revId,
+        parentPageId,
+        sortOrder,
+        schemaVersion: 2
       };
       
       if (isNew) {
@@ -836,9 +1102,12 @@ document.getElementById('save-btn').addEventListener('click', async () => {
         pageData.photoCount = 0;
         t.set(pageRef, pageData);
       } else {
+        if (parentPageId && collectWikiDescendants(pageId, tree.childrenById).has(parentPageId)) {
+          throw new Error('Choose a different parent page.');
+        }
         t.update(pageRef, pageData);
       }
-      
+
       t.set(revRef, {
         body: body,
         changeNote: changeNote,

@@ -25,6 +25,7 @@ Recommended plant-wide shared-library paths:
 
 The same page schema should work in both scopes so the reader, editor, and attachment flow stay identical.
 Shared-library access should follow the user's plant routing profile (`users/{uid}.plantIds`) so the wiki remains writable even if a member doc is still syncing in the browser session.
+Pages can be organized as a true tree by setting `parentPageId` and `sortOrder`.
 
 ### `wikiPages/{pageId}` document
 ```json
@@ -33,6 +34,8 @@ Shared-library access should follow the user's plant routing profile (`users/{ui
   "slug": "common-sensor-faults",
   "summary": "Quick fixes for top 5 recurring sensor alarms.",
   "tags": ["sensor", "alarms", "troubleshooting"],
+  "parentPageId": null,
+  "sortOrder": 0,
   "isPinned": true,
   "isLocked": false,
   "visibility": "plant",
