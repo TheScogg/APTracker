@@ -551,6 +551,14 @@ function _handleRoleAlertModalAction(action, issueId, statusKey, alertId, catego
     void retryRoleAlertInboxModal();
     return;
   }
+  if (action === 'hide-accepted') {
+    void setRoleAlertsShowAccepted(false);
+    return;
+  }
+  if (action === 'show-accepted') {
+    void setRoleAlertsShowAccepted(true);
+    return;
+  }
   if (action === 'close') {
     closeRoleAlertInboxModal();
     return;
@@ -654,10 +662,11 @@ window.toggleRoleAlertPrototype = function() {
 window.setRoleAlertsShowAccepted = async function(showAccepted) {
   _roleAlertsShowAccepted = !!showAccepted;
   _updateRoleAlertModalToggleUI();
-  if (!_roleAlertsCache.length) {
-    return;
+  if (_roleAlertsCache.length) {
+    _renderRoleAlertsModal(_roleAlertsCache);
+  } else {
+    _updateRoleAlertModalFooter(0, 0);
   }
-  _renderRoleAlertsModal(_roleAlertsCache);
 };
 
 window.closeRoleAlertInboxModal = function() {
