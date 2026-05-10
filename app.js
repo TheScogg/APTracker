@@ -367,35 +367,6 @@ function _renderRoleAlertCard(alert) {
           <span>${esc(alert.plantName || currentPlantName || 'Plant')}</span>
           <span>${esc(alert.createdAtLabel || 'Time unknown')}</span>
         </div>
-      </div>
-      <div class="role-alert-card-actions role-alert-card-actions-proto">
-        ${isAccepted
-          ? `<button class="btn btn-reopen role-alert-action-btn" type="button" onclick="event.stopPropagation();unacceptRoleAlert('${esc(alert.issueId)}','${esc(alert.statusKey)}')">Unaccept</button>`
-          : `<button class="btn btn-success role-alert-action-btn" type="button" onclick="event.stopPropagation();acceptRoleAlert('${esc(alert.issueId)}','${esc(alert.statusKey)}')">Accept</button>`}
-        <button class="btn btn-ghost role-alert-action-btn" type="button" onclick="event.stopPropagation();focusIssueFromAlert('${esc(alert.issueId)}')">Open</button>
-      </div>
-    </div>
-  `;
-}
-
-function _renderRoleAlertCardPrototype(alert) {
-  const isAccepted = !!alert.isAccepted;
-  const statusColor = isAccepted ? '#22c55e' : getStatusColor(alert.statusKey || alert.categoryKey || 'open');
-  const statusDef = getStatusDef(alert.statusKey || alert.categoryKey || 'open');
-  const statusLabel = getStatusLabel(alert.statusKey || alert.categoryKey || 'open', 'short');
-  const acceptedByName = isAccepted ? formatWorkflowActorName(alert.acceptedBy?.name || alert.acceptedBy || '') : '';
-  return `
-    <div class="role-alert-card role-alert-card-proto${isAccepted ? ' accepted' : ''}" style="--role-alert-cat-color:${statusColor};--role-alert-card-border:${alphaColor(statusColor, 0.45)};" role="button" tabindex="0" onclick="focusIssueFromAlert('${esc(alert.issueId)}')" onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); focusIssueFromAlert('${esc(alert.issueId)}'); }">
-      <div class="role-alert-card-main">
-        <div class="role-alert-proto-head">
-          <span class="role-alert-proto-state" style="--role-alert-cat-color:${statusColor};">${esc(statusLabel)}</span>
-          <span class="role-alert-proto-press">${alert.machine ? `Press ${esc(alert.machine)}` : 'Press not set'}</span>
-        </div>
-        <div class="role-alert-card-sub">${alert.subStatus ? esc(alert.subStatus) : 'New alert'}</div>
-        <div class="role-alert-proto-meta">
-          <span>${esc(statusDef.icon || '🔔')} ${esc(statusLabel)}</span>
-          ${isAccepted ? `<span>${acceptedByName ? `Accepted by ${esc(acceptedByName)}` : 'Accepted'}</span>` : '<span>Needs response</span>'}
-        </div>
         <div class="role-alert-card-note">${esc(alert.note || 'No note')}</div>
       </div>
       <div class="role-alert-card-actions role-alert-card-actions-proto">
