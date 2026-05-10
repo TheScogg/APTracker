@@ -10087,8 +10087,8 @@ function renderPressWikiPageTree() {
   const addOption = (node, depth = 0) => {
     const opt = document.createElement('option');
     opt.value = node.id;
-    const prefix = depth > 0 ? `${'\u00A0'.repeat(depth * 2)}↳ ` : '';
-    opt.textContent = `${prefix}${node.title || node.id || 'Untitled'}${node.scope === WIKI_SCOPE_SHARED ? ' · Shared' : ''}`;
+    const prefix = depth > 0 ? `${'— '.repeat(depth)}` : '';
+    opt.textContent = `${prefix}${node.title || node.id || 'Untitled'}`;
     selectEl.appendChild(opt);
     const children = tree.childrenById.get(node.id) || [];
     children.forEach(child => addOption(child, depth + 1));
