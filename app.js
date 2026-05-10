@@ -541,6 +541,13 @@ function _renderRoleAlertLoadFallback({ title, subtitle }) {
 
 function _handleRoleAlertModalAction(action, issueId, statusKey, alertId, categoryKey) {
   if (action === 'retry') {
+    const retryBtn = document.querySelector('#role-alerts-modal .role-alerts-retry-fab');
+    if (retryBtn) {
+      retryBtn.classList.remove('spinning');
+      void retryBtn.offsetWidth;
+      retryBtn.classList.add('spinning');
+      window.setTimeout(() => retryBtn.classList.remove('spinning'), 700);
+    }
     void retryRoleAlertInboxModal();
     return;
   }

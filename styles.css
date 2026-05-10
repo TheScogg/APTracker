@@ -1735,7 +1735,7 @@
     position: relative;
     z-index: 1;
     width: min(760px, calc(100vw - 32px));
-    max-height: min(88vh, calc(100dvh - 40px));
+    max-height: min(84vh, calc(100dvh - 56px));
     display: flex;
     flex-direction: column;
     gap: 12px;
@@ -1807,6 +1807,9 @@
     cursor: pointer;
     transition: transform 0.15s, box-shadow 0.15s, filter 0.15s;
     touch-action: manipulation;
+  }
+  .role-alerts-retry-fab.spinning .role-alerts-retry-icon {
+    animation: roleAlertsRetrySpin 0.65s ease-in-out;
   }
   .role-alerts-retry-fab:hover { transform: translateY(-1px); filter: brightness(1.05); }
   .role-alerts-retry-fab:focus-visible {
@@ -2353,7 +2356,7 @@
     .role-alerts-sheet {
       width: calc(100vw - 16px);
       max-width: calc(100vw - 16px);
-      max-height: calc(84dvh);
+      max-height: calc(78dvh);
       border-radius: 24px 24px 16px 16px;
       margin: 0;
       padding: 14px;
@@ -2388,6 +2391,10 @@
   @keyframes mascot-wrench-spin { 0%{transform:rotate(-20deg)} 50%{transform:rotate(20deg)} 100%{transform:rotate(-20deg)} }
   @keyframes mascot-gear-rotate { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
   @keyframes mascot-gear-counter { from{transform:rotate(0deg)} to{transform:rotate(-360deg)} }
+  @keyframes roleAlertsRetrySpin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
   @keyframes mascot-gauge-bob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
   @keyframes mascot-mold-left { 0%,100%{transform:translateX(0)} 40%,60%{transform:translateX(-10px)} }
   @keyframes mascot-mold-right { 0%,100%{transform:translateX(0)} 40%,60%{transform:translateX(10px)} }
