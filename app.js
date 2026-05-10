@@ -151,6 +151,12 @@ let _roleAlertsShowAccepted = false;
 let _roleAlertsCache = [];
 let _roleAlertBadgeRefreshTimer = null;
 let _roleAlertsLoadToken = 0;
+let _roleAlertsPrototypeMode = false;
+try {
+  _roleAlertsPrototypeMode = localStorage.getItem('roleAlertsPrototypeMode') === '1';
+} catch (e) {
+  _roleAlertsPrototypeMode = false;
+}
 const ROLE_KEY_ALIASES = {
   maintenance_employee: ['maintenance_employee', 'main_maintenance_role', 'maintenance'],
   main_maintenance_role: ['maintenance_employee', 'main_maintenance_role', 'maintenance'],
@@ -549,6 +555,7 @@ async function _openRoleAlertInboxModalInternal({ resetToggle = true } = {}) {
   modal.classList.add('visible');
   document.body.classList.add('role-alerts-open');
   if (resetToggle) _roleAlertsShowAccepted = true;
+  _applyRoleAlertPrototypeUI();
   _updateRoleAlertModalToggleUI();
   void (async () => {
     try {
