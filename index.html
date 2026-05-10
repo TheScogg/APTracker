@@ -329,7 +329,26 @@
     <label>What happened?</label>
     <textarea id="issue-note" placeholder="Example: Hydraulic leak at press startup" rows="3"></textarea>
     <div class="issue-quick-phrases" id="issue-quick-phrases"></div>
-
+    <div style="margin-bottom:4px">
+      <label style="margin-bottom:6px">Status <span style="color:var(--text3);font-size:9px;letter-spacing:0;text-transform:none;font-family:'Nunito',sans-serif">(optional — defaults to Open)</span></label>
+      <div class="log-cat-selected" id="log-cat-selected">
+        <span class="log-cat-pill" id="log-cat-pill"></span>
+        <button class="log-cat-clear" id="log-cat-clear">✕ clear</button>
+      </div>
+      <div class="log-cat-all-row" id="log-cat-all-row"></div>
+      <div class="log-sub-row" id="log-sub-row"></div>
+    </div>
+    <label>Photos <span style="color:var(--text3);font-size:9px;letter-spacing:0;text-transform:none;font-family:'Nunito',sans-serif">(optional)</span></label>
+    <div class="issue-attach-hint">Tap once for camera or library. Photos preview right here.</div>
+    <div class="photo-stack">
+      <div class="photo-btn-row">
+        <button class="photo-pick-btn photo-add-btn" id="log-photo-btn" type="button">➕ Add Photo</button>
+      </div>
+      <div class="photo-source-row" id="log-photo-source-row">
+        <button class="photo-pick-btn photo-source-btn" id="log-camera-btn" type="button">📷 Camera</button>
+        <button class="photo-pick-btn photo-source-btn" id="log-library-btn" type="button">🖼️ Library</button>
+      </div>
+    </div>
     <button class="issue-advanced-toggle" id="issue-advanced-toggle" type="button" onclick="toggleIssueAdvancedDetails()">
       <span>More details</span>
       <span class="issue-advanced-toggle-state" id="issue-advanced-toggle-state">Show</span>
@@ -361,26 +380,6 @@
           <option value="60">1 hour</option>
           <option value="120">2 hours</option>
         </select>
-      </div>
-    </div>
-    <div style="margin-bottom:4px">
-      <label style="margin-bottom:6px">Status <span style="color:var(--text3);font-size:9px;letter-spacing:0;text-transform:none;font-family:'Nunito',sans-serif">(optional — defaults to Open)</span></label>
-      <div class="log-cat-selected" id="log-cat-selected">
-        <span class="log-cat-pill" id="log-cat-pill"></span>
-        <button class="log-cat-clear" id="log-cat-clear">✕ clear</button>
-      </div>
-      <div class="log-cat-all-row" id="log-cat-all-row"></div>
-      <div class="log-sub-row" id="log-sub-row"></div>
-    </div>
-    <label>Photos <span style="color:var(--text3);font-size:9px;letter-spacing:0;text-transform:none;font-family:'Nunito',sans-serif">(optional)</span></label>
-    <div class="issue-attach-hint">Tap once for camera or library. Photos preview right here.</div>
-    <div class="photo-stack">
-      <div class="photo-btn-row">
-        <button class="photo-pick-btn photo-add-btn" id="log-photo-btn" type="button">➕ Add Photo</button>
-      </div>
-      <div class="photo-source-row" id="log-photo-source-row">
-        <button class="photo-pick-btn photo-source-btn" id="log-camera-btn" type="button">📷 Camera</button>
-        <button class="photo-pick-btn photo-source-btn" id="log-library-btn" type="button">🖼️ Library</button>
       </div>
     </div>
     <input type="file" id="log-camera-input" accept="image/*" capture="environment" style="display:none">
