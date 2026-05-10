@@ -23,6 +23,13 @@ const storageFallback = firebaseConfig.storageBucket && firebaseConfig.storageBu
 const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
 provider.setCustomParameters({ prompt: "select_account" });
+const NO_AUTH_MODE = location.pathname.endsWith('/noauth.html');
+const NO_AUTH_USER = {
+  uid: 'noauth-local',
+  displayName: 'No Auth Guest',
+  email: '',
+  photoURL: ''
+};
 
 const firestoreIoStats = { reads: 0, writes: 0 };
 const APP_VERSION = window.__APP_VERSION__ || 'dev';
@@ -3156,6 +3163,7 @@ const JPEG_QUALITY = 0.82;
 
 // ── AUTH ──
 function resetGoogleSignInButton() {
+  if (NO_AUTH_MODE) return;
   const btn = document.getElementById('google-signin-btn');
   if (!btn) return;
   btn.disabled = false;
@@ -3163,7 +3171,9 @@ function resetGoogleSignInButton() {
 }
 
 async function signInWithGoogle() {
+  if (NO_AUTH_MODE) return;
   const btn = document.getElementById('google-signin-btn');
+  if (!btn) return;
   btn.disabled = true; btn.textContent = 'Signing in…';
   try { 
     await signInWithPopup(auth, provider);
@@ -3174,40 +3184,74 @@ async function signInWithGoogle() {
   }
 }
 const googleBtnHTML = `<svg class="google-logo" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg> Sign in with Google`;
-document.getElementById('google-signin-btn').innerHTML = googleBtnHTML;
-document.getElementById('google-signin-btn').addEventListener('click', signInWithGoogle);
+const googleSignInBtn = document.getElementById('google-signin-btn');
+if (googleSignInBtn) {
+  googleSignInBtn.innerHTML = googleBtnHTML;
+  googleSignInBtn.addEventListener('click', signInWithGoogle);
+}
 
 async function doSignOut() {
+  if (NO_AUTH_MODE) {
+    await bootstrapNoAuthSession();
+    return;
+  }
   if (unsubscribe) { unsubscribe(); unsubscribe = null; }
   stopStatusConfigListener();
   stopGamificationListeners();
   await fbSignOut(auth);
 }
 
+function applyUserIdentityToShell(user) {
+  const displayName = user.displayName || user.email || 'User';
+  const firstName = user.displayName ? user.displayName.split(' ')[0] : user.email || 'User';
+  document.getElementById('user-name-display').textContent = firstName;
+  document.getElementById('dropdown-full-name').textContent = displayName;
+  document.getElementById('dropdown-email').textContent = user.email || '';
+
+  const initials = displayName.split(' ').filter(Boolean).slice(0, 2).map(w => w.charAt(0)).join('').toUpperCase() || '?';
+  const fallback = document.getElementById('user-avatar-fallback');
+  const udAvatar = document.getElementById('ud-avatar');
+  if (!fallback || !udAvatar) return;
+
+  if (user.photoURL) {
+    fallback.style.backgroundImage = 'url(' + user.photoURL + ')';
+    fallback.style.backgroundSize = 'cover';
+    fallback.textContent = '';
+    udAvatar.style.backgroundImage = 'url(' + user.photoURL + ')';
+    udAvatar.textContent = '';
+  } else {
+    fallback.style.backgroundImage = '';
+    fallback.textContent = displayName.charAt(0).toUpperCase();
+    udAvatar.style.backgroundImage = '';
+    udAvatar.textContent = initials;
+  }
+}
+
+async function bootstrapNoAuthSession() {
+  currentUser = { ...NO_AUTH_USER };
+  const loginScreen = document.getElementById('login-screen');
+  if (loginScreen) loginScreen.remove();
+  document.getElementById('app').classList.add('visible');
+  applyUserIdentityToShell(currentUser);
+  const plantNameEl = document.getElementById('plant-name-display');
+  if (plantNameEl) plantNameEl.textContent = 'No auth mode';
+  const issuesList = document.getElementById('issues-list');
+  if (issuesList) {
+    issuesList.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon">🔓</div>
+        <div class="empty-state-text" style="margin-bottom:12px;">No-auth mode is loaded. Google sign-in is disabled on this page.</div>
+      </div>`;
+  }
+  buildFloorMap();
+  setTodayDate();
+}
+
 async function bootstrapSignedInSession(user) {
   currentUser = user;
   document.getElementById('login-screen').classList.remove('visible');
   document.getElementById('app').classList.add('visible');
-
-  const name = user.displayName || user.email || 'User';
-  const firstName = user.displayName ? user.displayName.split(' ')[0] : user.email;
-  document.getElementById('user-name-display').textContent = firstName;
-  document.getElementById('dropdown-full-name').textContent = user.displayName || user.email || 'User';
-  document.getElementById('dropdown-email').textContent = user.email || '';
-
-  const initials = name.split(' ').filter(Boolean).slice(0, 2).map(w => w.charAt(0)).join('').toUpperCase() || '?';
-  const fallback = document.getElementById('user-avatar-fallback');
-  const udAvatar = document.getElementById('ud-avatar');
-  if (user.photoURL) {
-    fallback.style.backgroundImage = 'url('+user.photoURL+')';
-    fallback.style.backgroundSize = 'cover';
-    fallback.textContent = '';
-    if (udAvatar) { udAvatar.style.backgroundImage = 'url('+user.photoURL+')'; udAvatar.textContent = ''; }
-  } else {
-    fallback.style.backgroundImage = '';
-    fallback.textContent = name.charAt(0).toUpperCase();
-    if (udAvatar) { udAvatar.style.backgroundImage = ''; udAvatar.textContent = initials; }
-  }
+  applyUserIdentityToShell(user);
 
   // Write user lookup record so admins can find this user by email when adding to plants.
   // Fire-and-forget — failure is non-fatal.
@@ -3238,6 +3282,10 @@ async function bootstrapSignedInSession(user) {
 }
 
 onAuthStateChanged(auth, async user => {
+  if (NO_AUTH_MODE) {
+    await bootstrapNoAuthSession();
+    return;
+  }
   if (user) {
     try {
       await bootstrapSignedInSession(user);
@@ -9015,12 +9063,14 @@ function _conversationType(inputType) {
 }
 
 function _requireChatContext() {
+  if (NO_AUTH_MODE) return false;
   if (!currentPlantId) throw new Error('No active plant selected.');
   if (!currentUser?.uid) throw new Error('You must be signed in.');
+  return true;
 }
 
 window.createConversation = async ({ type = 'group', title = '', memberIds = [], pressId = null } = {}) => {
-  _requireChatContext();
+  if (!_requireChatContext()) return null;
   const actor = currentActor();
   const normalizedType = _conversationType(type);
   const uniqueMembers = Array.from(new Set([...(memberIds || []), actor.uid].map(v => String(v || '').trim()).filter(Boolean)));
@@ -9081,7 +9131,7 @@ window.createConversation = async ({ type = 'group', title = '', memberIds = [],
 };
 
 window.watchConversations = (onConversations, { type = null } = {}, onError = null) => {
-  _requireChatContext();
+  if (!_requireChatContext()) return () => {};
   if (_conversationListUnsubscribe) {
     _conversationListUnsubscribe();
     _conversationListUnsubscribe = null;
@@ -9104,7 +9154,7 @@ window.watchConversations = (onConversations, { type = null } = {}, onError = nu
 };
 
 window.openConversation = (conversationId, onMessages) => {
-  _requireChatContext();
+  if (!_requireChatContext()) return () => {};
   if (!conversationId) throw new Error('conversationId is required.');
   if (_conversationThreadUnsubscribe) {
     _conversationThreadUnsubscribe();
@@ -9119,7 +9169,7 @@ window.openConversation = (conversationId, onMessages) => {
 };
 
 window.sendConversationMessage = async (conversationId, text, { mentions = [], attachments = [] } = {}) => {
-  _requireChatContext();
+  if (!_requireChatContext()) return null;
   const trimmedText = String(text || '').trim();
   const normalizedAttachments = Array.isArray(attachments) ? attachments.filter(Boolean) : [];
   if (!conversationId || (!trimmedText && !normalizedAttachments.length)) return null;
@@ -9159,7 +9209,7 @@ window.sendConversationMessage = async (conversationId, text, { mentions = [], a
 };
 
 window.markConversationRead = async (conversationId, lastReadMessageId = null) => {
-  _requireChatContext();
+  if (!_requireChatContext()) return;
   if (!conversationId) return;
   await setDoc(conversationMemberDoc(conversationId, currentUser.uid), {
     userId: currentUser.uid,
@@ -9555,6 +9605,7 @@ function _renderMessagingMemberPicks() {
 }
 
 async function _messagingSelectableMembers() {
+  if (NO_AUTH_MODE || !currentPlantId || !currentUser?.uid) return [];
   const membersSnap = await getDocs(collection(db, 'plants', currentPlantId, 'members'));
   return membersSnap.docs
     .map(d => ({ uid: d.id, ...d.data() }))
@@ -9574,6 +9625,17 @@ window.openMessagingModal = () => {
   _messagingSetError('');
   _messagingSetPhotoPreview(null);
   document.getElementById('msg-list-panel')?.classList.remove('hidden');
+  if (NO_AUTH_MODE || !currentPlantId || !currentUser?.uid) {
+    _messagingState.conversations = [];
+    _messagingState.activeConversationId = null;
+    _messagingState.selectableMembers = [];
+    _renderMessagingConversations();
+    _renderMessagingThreadHeader(null);
+    const panel = document.getElementById('messaging-thread-messages');
+    if (panel) panel.innerHTML = '<div class="msg-empty"><div class="msg-empty-icon">💬</div><div class="msg-empty-text">Messaging is disabled until a plant and signed-in user are available.</div></div>';
+    _messagingSetError('Messaging is disabled in no-auth mode.');
+    return;
+  }
   _messagingLoadMemberSelectors().catch(err => {
     console.warn('messaging member load failed', err);
     _messagingSetError(`Could not load members: ${err?.message || 'permission denied'}`);
@@ -9800,6 +9862,7 @@ let _pressWikiCanEdit = false;
 let _pressWikiAttachmentsCache = [];
 let _pressWikiMachineCode = null;
 let _pressWikiRenderedBodyRaw = '';
+let _pressWikiPageListCache = [];
 
 function _pressWikiScopeLabel(scope = _pressWikiScope) {
   return scope === WIKI_SCOPE_SHARED ? 'Shared Library' : 'This Press';
@@ -9845,6 +9908,116 @@ function _pressWikiSetScope(scope, { reload = true } = {}) {
   if (reload && _pressWikiModalPressId) {
     loadPressWikiPageList().then(() => loadPressWikiPage(_pressWikiSelectedPageId || 'shift-notes')).catch(err => console.warn('scope reload failed', err));
   }
+}
+
+function _pressWikiSlugify(value) {
+  return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+function _pressWikiResolveLinkTarget(href) {
+  const raw = String(href || '').trim();
+  if (!raw) return null;
+  if (/^(https?:|mailto:|tel:|#)/i.test(raw)) return { kind: 'external', href: raw };
+  const rawSlug = _pressWikiSlugify(raw);
+  const match = _pressWikiPageListCache.find(page => {
+    const title = String(page.title || '').trim();
+    return page.id === raw || page.id === rawSlug || title.toLowerCase() === raw.toLowerCase() || _pressWikiSlugify(title) === rawSlug;
+  });
+  return match ? { kind: 'internal', pageId: match.id } : { kind: 'internal', pageId: raw };
+}
+
+function _pressWikiAppendInlineMarkdown(parent, text) {
+  const raw = String(text || '');
+  const tokenRe = /(\*\*[\s\S]+?\*\*|\[[^\]]+\]\([^)]+\))/g;
+  let lastIndex = 0;
+  const appendText = chunk => {
+    if (chunk) parent.appendChild(document.createTextNode(chunk));
+  };
+  for (const match of raw.matchAll(tokenRe)) {
+    const token = match[0];
+    appendText(raw.slice(lastIndex, match.index));
+    if (token.startsWith('**')) {
+      const strong = document.createElement('strong');
+      strong.textContent = token.slice(2, -2);
+      parent.appendChild(strong);
+    } else {
+      const linkMatch = token.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+      if (linkMatch) {
+        const label = linkMatch[1];
+        const href = linkMatch[2];
+        const target = _pressWikiResolveLinkTarget(href);
+        const a = document.createElement('a');
+        a.textContent = label;
+        a.href = target?.kind === 'external' ? target.href : '#';
+        a.style.color = 'var(--ios-blue)';
+        a.style.textDecoration = 'underline';
+        a.style.cursor = 'pointer';
+        a.addEventListener('click', evt => {
+          if (target?.kind === 'external') return;
+          evt.preventDefault();
+          if (target?.pageId) loadPressWikiPage(target.pageId);
+        });
+        parent.appendChild(a);
+      } else {
+        appendText(token);
+      }
+    }
+    lastIndex = match.index + token.length;
+  }
+  appendText(raw.slice(lastIndex));
+}
+
+function _pressWikiAppendMarkdownBlock(bodyEl, line) {
+  const trimmed = String(line || '').trim();
+  if (!trimmed) return false;
+
+  const imgMatch = trimmed.match(/^!\[(.*?)\]\((https?:\/\/[^\s)]+)\)$/);
+  if (imgMatch) {
+    const figure = document.createElement('figure');
+    figure.style.margin = '8px 0';
+    const img = document.createElement('img');
+    img.src = imgMatch[2];
+    img.alt = imgMatch[1] || 'wiki image';
+    img.style.maxWidth = '100%';
+    img.style.borderRadius = '10px';
+    img.style.cursor = 'zoom-in';
+    img.onclick = () => openLightbox(0, [imgMatch[2]]);
+    figure.appendChild(img);
+    if (imgMatch[1]) {
+      const cap = document.createElement('figcaption');
+      cap.style.fontSize = '12px';
+      cap.style.color = 'var(--text3)';
+      cap.style.marginTop = '4px';
+      cap.textContent = imgMatch[1];
+      figure.appendChild(cap);
+    }
+    bodyEl.appendChild(figure);
+    return true;
+  }
+
+  const headingMatch = trimmed.match(/^(#{1,3})\s+(.*)$/);
+  if (headingMatch) {
+    const level = headingMatch[1].length;
+    const heading = document.createElement(`h${level}`);
+    heading.style.margin = level === 1 ? '10px 0 8px' : '8px 0 6px';
+    heading.style.lineHeight = '1.2';
+    heading.style.fontSize = level === 1 ? '18px' : level === 2 ? '16px' : '14px';
+    heading.style.fontWeight = '700';
+    _pressWikiAppendInlineMarkdown(heading, headingMatch[2]);
+    bodyEl.appendChild(heading);
+    return true;
+  }
+
+  if (/^---+$/.test(trimmed)) {
+    const hr = document.createElement('hr');
+    hr.style.border = 'none';
+    hr.style.borderTop = '1px solid var(--line)';
+    hr.style.margin = '10px 0';
+    bodyEl.appendChild(hr);
+    return true;
+  }
+
+  return false;
 }
 
 function _notesEl(base) { return document.getElementById(base + '-' + NOTES_VARIANT); }
@@ -9907,6 +10080,7 @@ async function loadPressWikiPageList() {
   if (!selectEl || !_pressWikiModalPressId) return;
   const pagesSnap = await getDocs(query(wikiPagesColForScope(_pressWikiScope, _pressWikiModalPressId), orderBy('updatedAt', 'desc'), limit(50)));
   const pages = pagesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  _pressWikiPageListCache = pages;
   selectEl.innerHTML = '';
   if (!pages.length) {
     const opt = document.createElement('option');
@@ -9928,6 +10102,8 @@ async function loadPressWikiPageList() {
 async function loadPressWikiPage(pageId) {
   if (!_pressWikiModalPressId || !pageId) return;
   _pressWikiSelectedPageId = pageId;
+  const selectEl = document.getElementById('press-wiki-page-select');
+  if (selectEl) selectEl.value = pageId;
   const titleEl = document.getElementById('press-wiki-title');
   const metaEl = document.getElementById('press-wiki-meta');
   const bodyEl = document.getElementById('press-wiki-body');
@@ -9999,39 +10175,48 @@ function _renderPressWikiBody(text) {
   const raw = String(text || '');
   _pressWikiRenderedBodyRaw = raw;
   bodyEl.innerHTML = '';
+  bodyEl.style.whiteSpace = 'normal';
   const lines = raw.split('\n');
+  let currentList = null;
+  let currentListType = null;
+  const closeList = () => { currentList = null; currentListType = null; };
   lines.forEach(line => {
-    const m = line.match(/!\[(.*?)\]\((https?:\/\/[^\s)]+)\)/);
-    if (m) {
-      const figure = document.createElement('figure');
-      figure.style.margin = '8px 0';
-      const img = document.createElement('img');
-      img.src = m[2];
-      img.alt = m[1] || 'wiki image';
-      img.style.maxWidth = '100%';
-      img.style.borderRadius = '10px';
-      img.style.cursor = 'zoom-in';
-      img.onclick = () => openLightbox(0, [m[2]]);
-      figure.appendChild(img);
-      if (m[1]) {
-        const cap = document.createElement('figcaption');
-        cap.style.fontSize = '12px';
-        cap.style.color = 'var(--text3)';
-        cap.textContent = m[1];
-        figure.appendChild(cap);
-      }
-      bodyEl.appendChild(figure);
-    } else {
-      const p = document.createElement('div');
-      p.textContent = line || ' ';
-      let html = p.innerHTML;
-      html = html.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
-      html = html.replace(/\*(.+?)\*/g, '<i>$1</i>');
-      html = html.replace(/&lt;u&gt;(.+?)&lt;\/u&gt;/g, '<u>$1</u>');
-      html = html.replace(/&lt;span style=(?:'|&#39;|"|&quot;)color:([a-zA-Z0-9#]+)(?:'|&#39;|"|&quot;)&gt;(.*?)&lt;\/span&gt;/g, '<span style="color:$1">$2</span>');
-      p.innerHTML = html;
-      bodyEl.appendChild(p);
+    const trimmed = String(line || '').trim();
+    if (!trimmed) {
+      closeList();
+      const spacer = document.createElement('div');
+      spacer.style.height = '8px';
+      bodyEl.appendChild(spacer);
+      return;
     }
+    if (_pressWikiAppendMarkdownBlock(bodyEl, line)) {
+      closeList();
+      return;
+    }
+    const ulMatch = trimmed.match(/^[-*]\s+(.*)$/);
+    const olMatch = trimmed.match(/^\d+\.\s+(.*)$/);
+    if (ulMatch || olMatch) {
+      const listType = olMatch ? 'ol' : 'ul';
+      const itemText = (olMatch || ulMatch)[1];
+      if (!currentList || currentListType !== listType) {
+        closeList();
+        currentListType = listType;
+        currentList = document.createElement(listType);
+        currentList.style.margin = '6px 0 6px 22px';
+        currentList.style.paddingLeft = listType === 'ol' ? '20px' : '18px';
+        bodyEl.appendChild(currentList);
+      }
+      const li = document.createElement('li');
+      li.style.margin = '2px 0';
+      _pressWikiAppendInlineMarkdown(li, itemText);
+      currentList.appendChild(li);
+      return;
+    }
+    closeList();
+    const p = document.createElement('div');
+    p.style.margin = '6px 0';
+    _pressWikiAppendInlineMarkdown(p, line);
+    bodyEl.appendChild(p);
   });
 }
 
@@ -10092,6 +10277,47 @@ async function savePressWikiRevision() {
   await loadPressWikiPageList();
   await loadPressWikiPage(_pressWikiSelectedPageId);
   _setPressWikiError('');
+}
+
+async function _deleteWikiDocsInBatches(colRef) {
+  while (true) {
+    const snap = await getDocs(query(colRef, limit(400)));
+    if (snap.empty) return;
+    const batch = writeBatch(db);
+    snap.docs.forEach(d => batch.delete(d.ref));
+    await batch.commit();
+    if (snap.size < 400) return;
+  }
+}
+
+async function deletePressWikiPage() {
+  if (!_pressWikiCanEdit) return;
+  if (!_pressWikiModalPressId || !_pressWikiSelectedPageId || !currentUser) return;
+  const pageId = _pressWikiSelectedPageId;
+  const pageTitle = document.getElementById('press-wiki-title')?.textContent || pageId;
+  const ok = confirm(`Delete "${pageTitle}"? This will remove the page, its revisions, and its attachments.`);
+  if (!ok) return;
+  _setPressWikiError('');
+  try {
+    const attachmentSnap = await getDocs(wikiAttachmentsColForScope(_pressWikiScope, _pressWikiModalPressId, pageId));
+    const attachments = attachmentSnap.docs.map(d => ({ id: d.id, ...(d.data() || {}) }));
+    await Promise.allSettled(attachments.map(async a => {
+      if (!a?.storagePath) return;
+      const attStorage = a.storageBucket ? getStorage(app, `gs://${a.storageBucket}`) : storage;
+      await deleteObject(storageRef(attStorage, a.storagePath));
+    }));
+    await _deleteWikiDocsInBatches(wikiAttachmentsColForScope(_pressWikiScope, _pressWikiModalPressId, pageId));
+    await _deleteWikiDocsInBatches(wikiRevisionsColForScope(_pressWikiScope, _pressWikiModalPressId, pageId));
+    await deleteDoc(wikiPageDocForScope(_pressWikiScope, _pressWikiModalPressId, pageId));
+    _pressWikiSelectedPageId = '';
+    await loadPressWikiPageList();
+    const nextPageId = document.getElementById('press-wiki-page-select')?.value || 'shift-notes';
+    await loadPressWikiPage(nextPageId);
+    togglePressWikiEditor(false);
+  } catch (e) {
+    console.error('deletePressWikiPage error', e);
+    _setPressWikiError('Could not delete the page.');
+  }
 }
 
 function togglePressWikiEditor(show) {
@@ -10194,6 +10420,7 @@ document.getElementById('press-wiki-edit-btn')?.addEventListener('click', () => 
 });
 document.getElementById('press-wiki-cancel-edit-btn')?.addEventListener('click', () => togglePressWikiEditor(false));
 document.getElementById('press-wiki-save-btn')?.addEventListener('click', () => savePressWikiRevision());
+document.getElementById('press-wiki-delete-btn')?.addEventListener('click', () => deletePressWikiPage());
 document.getElementById('press-wiki-insert-photo-btn')?.addEventListener('click', () => {
   document.getElementById('press-wiki-file-input')?.click();
 });
@@ -11088,31 +11315,5 @@ function openEmbeddedAdminPortal() {
   }
   if (!frame.getAttribute('src')) frame.setAttribute('src', 'admin.html');
   overlay.classList.add('visible');
-  document.body.classList.add('admin-portal-open');
-}
-
-function closeEmbeddedAdminPortal() {
-  const overlay = document.getElementById('embedded-admin-overlay');
-  if (!overlay) return;
-  overlay.classList.remove('visible');
-  document.body.classList.remove('admin-portal-open');
-}
-
-window.closeEmbeddedAdminPortal = closeEmbeddedAdminPortal;
-document.getElementById('embedded-admin-overlay')?.addEventListener('click', e => {
-  if (e.target === e.currentTarget) closeEmbeddedAdminPortal();
-});
-document.getElementById('issue-reminder-modal')?.addEventListener('click', e => {
-  if (e.target === e.currentTarget) closeIssueReminderModal();
-});
-
-setInterval(() => {
-  if (document.hidden) return;
-  maybeNotifyIssueReminders(issues);
-  if (issues.length > 0) renderIssues();
-}, 60000);
-
-setInterval(() => {
-  if (document.hidden) return;
-  refreshReminderClocksInDom();
-}, 1000);
+  document.body.classList.add('ad
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
