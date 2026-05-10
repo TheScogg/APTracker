@@ -1944,6 +1944,22 @@
     display:flex;
     flex-direction:column;
   }
+  .role-alert-card-time {
+    margin-top: 3px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    color: var(--text2);
+    font-size: 12.5px;
+    font-family: 'Nunito', sans-serif;
+    font-weight: 700;
+    line-height: 1.45;
+  }
+  .role-alert-card-time span {
+    color: inherit;
+  }
+  .role-alert-section.accepted .role-alert-card-time {
+    color: var(--text3);
+  }
   .role-alert-card-chip {
     display:inline-flex;
     align-items:center;
@@ -1961,13 +1977,7 @@
     white-space: nowrap;
   }
   .role-alert-card-side {
-    display:flex;
-    flex-direction:column;
-    align-items:flex-end;
-    gap:6px;
-    flex-shrink:0;
-    min-width: 0;
-    margin-left: auto;
+    display:none;
   }
   .role-alert-card-chip-state {
     border-color: color-mix(in srgb, var(--role-alert-cat-color, var(--accent)) 42%, rgba(255,255,255,0.16));
@@ -2016,11 +2026,13 @@
     justify-content:flex-start;
     gap: 8px;
     flex-wrap:wrap;
-    font-size: 10px;
-    color: var(--text3);
-    font-family: 'Share Tech Mono', monospace;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
+    font-size: 11px;
+    color: var(--text2);
+    font-family: 'Nunito', sans-serif;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    text-transform: none;
+    line-height: 1.4;
   }
   .role-alert-card-arrow {
     flex-shrink: 0;

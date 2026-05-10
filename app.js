@@ -367,21 +367,18 @@ function _renderRoleAlertCard(alert) {
               <div class="issue-machine-tag role-alert-machine-tag">${alert.machine ? esc(alert.machine) : 'Press not set'}</div>
               <div class="issue-meta role-alert-meta">
                 <div class="issue-note-preview role-alert-card-sub">${alert.subStatus ? esc(alert.subStatus) : 'New alert'}</div>
-                <div class="issue-time role-alert-card-meta">
-                  <span>${esc(alert.plantName || currentPlantName || 'Plant')}</span>
-                  <span>${esc(alert.createdAtLabel || 'Time unknown')}</span>
-                  ${isResolved
-                    ? `<span>${acceptedByName ? `Resolved by ${esc(acceptedByName)}` : 'Resolved'}</span>`
-                    : (isAccepted
-                      ? `<span>${acceptedByName ? `Accepted by ${esc(acceptedByName)}` : 'Accepted'}</span>`
-                      : '<span>Needs response</span>')}
-                </div>
               </div>
-              <div class="role-alert-card-side">
-                <span class="role-alert-card-chip role-alert-card-chip-press">${alert.machine ? `Press ${esc(alert.machine)}` : 'Press not set'}</span>
-                <span class="role-alert-card-chip role-alert-card-chip-state" style="--role-alert-cat-color:${statusColor};">${esc(statusDef.icon || '🔔')} ${esc(statusLabel)}</span>
-              </div>
+              <span class="role-alert-card-chip role-alert-card-chip-state" style="--role-alert-cat-color:${statusColor};">${esc(statusDef.icon || '🔔')} ${esc(statusLabel)}</span>
               <div class="issue-expand-icon role-alert-card-arrow" aria-hidden="true">›</div>
+            </div>
+            <div class="issue-time role-alert-card-time">
+              <span>${esc(alert.plantName || currentPlantName || 'Plant')}</span>
+              <span>${esc(alert.createdAtLabel || 'Time unknown')}</span>
+              ${isResolved
+                ? `<span>${acceptedByName ? `Resolved by ${esc(acceptedByName)}` : 'Resolved'}</span>`
+                : (isAccepted
+                  ? `<span>${acceptedByName ? `Accepted by ${esc(acceptedByName)}` : 'Accepted'}</span>`
+                  : '<span>Needs response</span>')}
             </div>
           </div>
           <div class="role-alert-card-note">${esc(noteText)}</div>
