@@ -566,14 +566,8 @@
   .user-dropdown { display: none; position: absolute; top: calc(100% + 12px); right: 0; background: color-mix(in srgb, var(--bg2) 65%, transparent); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; width: 300px; box-shadow: 0 24px 60px rgba(0,0,0,0.8), 0 4px 12px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05), 0 0 24px var(--accent-glow); z-index: 300; overflow: visible; animation: dropIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards; transform-origin: top right; }
   .user-dropdown.visible { display: block; }
   @keyframes dropIn { from{opacity:0;transform:scale(0.95) translateY(-10px)}to{opacity:1;transform:scale(1) translateY(0)} }
-  /* Header */
-  .user-dropdown-header { padding: 16px; display: flex; align-items: center; gap: 12px; background: linear-gradient(180deg, rgba(255,255,255,0.03) 0%, transparent 100%); border-bottom: 1px solid rgba(255, 255, 255, 0.04); border-radius: 12px 12px 0 0; overflow: hidden; }
-  .ud-avatar { width: 44px; height: 44px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), var(--blue, #3b82f6)); display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 700; color: white; flex-shrink: 0; box-shadow: 0 0 12px var(--accent-glow), inset 0 0 0 2px var(--bg2); font-family: 'Rajdhani', sans-serif; letter-spacing: -0.02em; }
-  .ud-header-info { min-width: 0; }
-  .user-dropdown-name { font-size: 16px; font-weight: 700; color: var(--text); font-family: 'Rajdhani', sans-serif; letter-spacing: 0.5px; line-height: 1.2; }
-  .user-dropdown-email { font-size: 11px; color: var(--accent); margin-top: 2px; font-family: 'Share Tech Mono', monospace; opacity: 0.8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* Sections */
-  .user-dropdown-section { padding: 12px 8px 4px; }
+  .user-dropdown-section { padding: 8px 8px 4px; }
   .user-dropdown-section:last-of-type { padding-bottom: 8px; border-bottom: none; }
   .user-dropdown-section-label { font-size: 10px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: var(--text3); padding: 0 10px 8px; font-family: 'Share Tech Mono', monospace; display: flex; align-items: center; gap: 8px; }
   .user-dropdown-section-label::after { content: ""; flex: 1; height: 1px; background: rgba(255,255,255,0.05); }

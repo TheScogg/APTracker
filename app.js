@@ -3213,19 +3213,23 @@ function applyUserIdentityToShell(user) {
   const initials = displayName.split(' ').filter(Boolean).slice(0, 2).map(w => w.charAt(0)).join('').toUpperCase() || '?';
   const fallback = document.getElementById('user-avatar-fallback');
   const udAvatar = document.getElementById('ud-avatar');
-  if (!fallback || !udAvatar) return;
+  if (!fallback) return;
 
   if (user.photoURL) {
     fallback.style.backgroundImage = 'url(' + user.photoURL + ')';
     fallback.style.backgroundSize = 'cover';
     fallback.textContent = '';
-    udAvatar.style.backgroundImage = 'url(' + user.photoURL + ')';
-    udAvatar.textContent = '';
+    if (udAvatar) {
+      udAvatar.style.backgroundImage = 'url(' + user.photoURL + ')';
+      udAvatar.textContent = '';
+    }
   } else {
     fallback.style.backgroundImage = '';
     fallback.textContent = displayName.charAt(0).toUpperCase();
-    udAvatar.style.backgroundImage = '';
-    udAvatar.textContent = initials;
+    if (udAvatar) {
+      udAvatar.style.backgroundImage = '';
+      udAvatar.textContent = initials;
+    }
   }
 }
 
