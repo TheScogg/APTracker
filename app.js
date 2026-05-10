@@ -152,6 +152,7 @@ let _roleAlertsCache = [];
 let _roleAlertBadgeRefreshTimer = null;
 let _roleAlertsLoadToken = 0;
 let _roleAlertsPrototypeMode = false;
+let _roleAlertFocusIssueId = '';
 try {
   _roleAlertsPrototypeMode = localStorage.getItem('roleAlertsPrototypeMode') === '1';
 } catch (e) {
@@ -356,30 +357,28 @@ function _renderRoleAlertCard(alert) {
   const statusDef = getStatusDef(alert.statusKey || alert.categoryKey || 'open');
   const statusLabel = getStatusLabel(alert.statusKey || alert.categoryKey || 'open', 'short');
   const acceptedByName = isAccepted ? formatWorkflowActorName(alert.acceptedBy?.name || alert.acceptedBy || '') : '';
+  const noteText = alert.note || 'No note';
   return `
-    <div class="role-alert-card role-alert-card-proto${isAccepted ? ' accepted' : ''}" style="--role-alert-cat-color:${statusColor};--role-alert-card-border:${alphaColor(statusColor, 0.45)};" role="button" tabindex="0" onclick="focusIssueFromAlert('${esc(alert.issueId)}')" onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); focusIssueFromAlert('${esc(alert.issueId)}'); }">
-      <div class="role-alert-card-main">
-        <div class="role-alert-proto-head">
-          <span class="role-alert-proto-state" style="--role-alert-cat-color:${statusColor};">${esc(statusLabel)}</span>
-          <span class="role-alert-proto-press">${alert.machine ? `Press ${esc(alert.machine)}` : 'Press not set'}</span>
+    <div class="role-alert-card role-alert-card-glass${isAccepted ? ' accepted' : ''}" style="--role-alert-cat-color:${statusColor};--role-alert-card-border:${alphaColor(statusColor, 0.42)};--role-alert-card-glow:${alphaColor(statusColor, 0.16)};" role="button" tabindex="0" onclick="focusIssueFromAlert('${esc(alert.issueId)}')" onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); focusIssueFromAlert('${esc(alert.issueId)}'); }">
+      <div class="role-alert-card-shell">
+        <div class="role-alert-card-rail"></div>
+        <div class="role-alert-card-main">
+          <div class="role-alert-card-kicker">
+            <span class="role-alert-card-chip role-alert-card-chip-state" style="--role-alert-cat-color:${statusColor};">${esc(statusDef.icon || '🔔')} ${esc(statusLabel)}</span>
+            <span class="role-alert-card-chip role-alert-card-chip-press">${alert.machine ? `Press ${esc(alert.machine)}` : 'Press not set'}</span>
+          </div>
+          <div class="role-alert-card-sub">${alert.subStatus ? esc(alert.subStatus) : 'New alert'}</div>
+          <div class="role-alert-card-note">${esc(noteText)}</div>
+          <div class="role-alert-card-meta">
+            <span>${esc(alert.plantName || currentPlantName || 'Plant')}</span>
+            <span>${esc(alert.createdAtLabel || 'Time unknown')}</span>
+            ${isAccepted ? `<span>${acceptedByName ? `Accepted by ${esc(acceptedByName)}` : 'Accepted'}</span>` : '<span>Needs response</span>'}
+          </div>
         </div>
-        <div class="role-alert-card-sub">${alert.subStatus ? esc(alert.subStatus) : 'New alert'}</div>
-        <div class="role-alert-proto-meta">
-          <span>${esc(statusDef.icon || '🔔')} ${esc(statusLabel)}</span>
-          ${isAccepted ? `<span>${acceptedByName ? `Accepted by ${esc(acceptedByName)}` : 'Accepted'}</span>` : '<span>Needs response</span>'}
+        <div class="role-alert-card-actions">
+          <button class="role-alert-action-btn role-alert-action-accept" type="button" onclick="event.stopPropagation();acceptRoleAlert('${esc(alert.issueId)}','${esc(alert.statusKey)}')">${isAccepted ? 'Accepted' : 'Accept'}</button>
+          <button class="role-alert-action-btn role-alert-action-delete" type="button" onclick="event.stopPropagation();deleteRoleAlert('${esc(alert.id)}','${esc(alert.categoryKey)}','${esc(alert.statusKey)}')">Delete</button>
         </div>
-        <div class="role-alert-card-note">${esc(alert.note || 'No note')}</div>
-        <div class="role-alert-proto-meta">
-          <span>${esc(alert.plantName || currentPlantName || 'Plant')}</span>
-          <span>${esc(alert.createdAtLabel || 'Time unknown')}</span>
-        </div>
-        <div class="role-alert-card-note">${esc(alert.note || 'No note')}</div>
-      </div>
-      <div class="role-alert-card-actions role-alert-card-actions-proto">
-        ${isAccepted
-          ? `<button class="btn btn-reopen role-alert-action-btn" type="button" onclick="event.stopPropagation();unacceptRoleAlert('${esc(alert.issueId)}','${esc(alert.statusKey)}')">Unaccept</button>`
-          : `<button class="btn btn-success role-alert-action-btn" type="button" onclick="event.stopPropagation();acceptRoleAlert('${esc(alert.issueId)}','${esc(alert.statusKey)}')">Accept</button>`}
-        <button class="btn btn-ghost role-alert-action-btn" type="button" onclick="event.stopPropagation();focusIssueFromAlert('${esc(alert.issueId)}')">Open</button>
       </div>
     </div>
   `;
@@ -598,15 +597,20 @@ window.closeRoleAlertInboxModal = function() {
 };
 
 window.focusIssueFromAlert = function(issueId) {
+  const focusId = String(issueId || '').trim();
+  if (!focusId) return;
+  _roleAlertFocusIssueId = focusId;
   closeRoleAlertInboxModal();
-  const issueRow = document.querySelector(`.issue-row[data-id="${CSS.escape(String(issueId || ''))}"]`);
-  if (issueRow) {
-    const body = document.getElementById('body-' + issueId);
-    if (body && !body.classList.contains('visible') && typeof toggleCard === 'function') toggleCard(issueId);
+  renderIssues();
+  requestAnimationFrame(() => {
+    const issueRow = document.querySelector(`.issue-row[data-id="${CSS.escape(focusId)}"]`);
+    if (!issueRow) return;
+    const body = document.getElementById('body-' + focusId);
+    if (body && !body.classList.contains('visible') && typeof toggleCard === 'function') toggleCard(focusId);
     issueRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    issueRow.classList.add('highlight');
-    setTimeout(() => issueRow.classList.remove('highlight'), 1200);
-  }
+    issueRow.classList.add('highlight', 'alert-focus-issue');
+    setTimeout(() => issueRow.classList.remove('highlight', 'alert-focus-issue'), 1200);
+  });
 };
 
 window.deleteRoleAlert = async function(alertId, categoryKey, statusKey) {
@@ -6344,6 +6348,17 @@ function renderIssues() {
     });
   }
 
+  if (_roleAlertFocusIssueId) {
+    const focusIdx = filtered.findIndex(i => i.id === _roleAlertFocusIssueId);
+    if (focusIdx > 0) {
+      const [focusIssue] = filtered.splice(focusIdx, 1);
+      filtered.unshift(focusIssue);
+    } else if (focusIdx === -1) {
+      const focusIssue = issues.find(i => i.id === _roleAlertFocusIssueId);
+      if (focusIssue) filtered.unshift({ ...focusIssue, __alertFocus: true });
+    }
+  }
+
   // Reset display limit when filter/sort parameters change
   const filterKey = `${issueScope}|${issuePeriod}|${document.getElementById('date-filter')?.value}|${mf}|${sf}|${search}|${sort}|${issueRowScope}|${issueShiftFilter}`;
   if (filterKey !== renderIssues._lastFilterKey) {
@@ -6397,9 +6412,11 @@ function renderIssues() {
   visible.forEach(issue => {
     const wasOpen=expanded.has(issue.id);
     const isMyIssue=issue.userId===currentUser?.uid;
+    const isAlertFocus = !!issue.__alertFocus;
     const row=document.createElement('div'); row.className='issue-row'; row.dataset.id = issue.id;
+    if (isAlertFocus) row.classList.add('alert-focus-issue');
     const card=document.createElement('div');
-    card.className='issue-card'+(issueIsResolvedV2(issue)?' resolved':'')+(issue.highPriority?' high-priority':'');
+    card.className='issue-card'+(issueIsResolvedV2(issue)?' resolved':'')+(issue.highPriority?' high-priority':'')+(isAlertFocus?' alert-focus-card':'');
 
     const _photoList = (issue.photos||[]).map(p => p.dataUrl);
     if (_photoList.length) window._issuePhotos = window._issuePhotos || {};
@@ -6563,6 +6580,7 @@ function renderIssues() {
 
     const datePart = issue.dateTime ? issue.dateTime.replace(/,\s*\d{4}/, '') : '';
     const submitterHtml=issue.userName?`<span class="issue-submitter">${esc(issue.userName.split(' ')[0])}${isMyIssue?' (you)':''}</span>`:'';
+    const alertFocusHtml = isAlertFocus ? `<span class="issue-alert-focus-badge">Outside current time frame</span>` : '';
 
     // Secondary status keys (needed by workflow rows below)
     const secKeys = getSecondaryStatuses(issue).filter(k => k !== 'resolved');
@@ -6680,7 +6698,7 @@ function renderIssues() {
           <div class="issue-machine-tag">${esc(issue.machine)}</div>
           <div class="issue-meta">
             <div class="issue-note-preview">${esc(issue.note)}</div>
-            <div class="issue-time">${datePart} ${submitterHtml}${shiftBadgeHtml}${timerBadgeHtml}${(issue.photos||[]).length?`<span class="photo-count-badge">📷 ${issue.photos.length}</span>`:''}${issue.editedAt?'<span style="color:var(--text3)">(edited)</span>':''}</div>
+            <div class="issue-time">${datePart} ${submitterHtml}${shiftBadgeHtml}${timerBadgeHtml}${(issue.photos||[]).length?`<span class="photo-count-badge">📷 ${issue.photos.length}</span>`:''}${issue.editedAt?'<span style="color:var(--text3)">(edited)</span>':''}${alertFocusHtml}</div>
           </div>
           <button class="priority-btn${issue.highPriority?' active':''}" onclick="event.stopPropagation(); togglePriority('${issue.id}')" title="${issue.highPriority?'Remove high priority':'Mark as high priority'}">!</button>
           <div class="issue-expand-icon ${wasOpen?'open':''}" id="chevron-${issue.id}">▼</div>
