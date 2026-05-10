@@ -465,27 +465,35 @@ async function _loadActiveRoleAlertsForCurrentUser() {
   );
   const snap = await getDocs(q);
   const staleAlertDeletes = [];
-  const alerts = [];
-  for (const d of snap.docs) {
+  const issueFetchCache = new Map();
+  const resolveIssueById = async issueId => {
+    const cachedIssue = issues.find(i => i.id === issueId) || null;
+    if (cachedIssue) return cachedIssue;
+    if (!issueFetchCache.has(issueId)) {
+      issueFetchCache.set(issueId, (async () => {
+        try {
+          const issueSnap = await getDoc(plantDoc('issues', issueId));
+          return issueSnap.exists() ? { id: issueId, ...issueSnap.data() } : null;
+        } catch (_) {
+          return null;
+        }
+      })());
+    }
+    return issueFetchCache.get(issueId);
+  };
+  const alerts = (await Promise.all(snap.docs.map(async d => {
     const data = d.data() || {};
     const issueId = String(data.issueId || '').trim();
-    if (!issueId) continue;
-    const cachedIssue = issues.find(i => i.id === issueId) || null;
-    let issue = cachedIssue;
-    if (!issue) {
-      try {
-        const issueSnap = await getDoc(plantDoc('issues', issueId));
-        issue = issueSnap.exists() ? { id: issueId, ...issueSnap.data() } : null;
-      } catch (_) {}
-    }
+    if (!issueId) return null;
+    const issue = await resolveIssueById(issueId);
     const isResolved = !!(issue?.resolved || issue?.lifecycle?.isResolved);
     if (isResolved) {
       staleAlertDeletes.push(deleteDoc(doc(db, 'plants', currentPlantId, 'roleFeedAlerts', d.id)).catch(() => null));
-      continue;
+      return null;
     }
     const alertStatusKey = data.statusKey || currentStatusKey(issue || {}) || '';
     const workflowState = _getRoleAlertWorkflowState(issue || null, alertStatusKey);
-    alerts.push({
+    return {
       id: d.id,
       issueId,
       machine: data.machine || issue?.machine || issue?.machineCode || 'Unknown',
@@ -502,8 +510,8 @@ async function _loadActiveRoleAlertsForCurrentUser() {
       acceptedBy: workflowState === 'accepted'
         ? (issue?.workflowStateHistory?.accepted?.by || issue?.workflowStateByStatusHistory?.[alertStatusKey]?.accepted?.by || null)
         : null
-    });
-  }
+    };
+  }))).filter(Boolean);
   if (staleAlertDeletes.length) await Promise.all(staleAlertDeletes);
   alerts.sort((a, b) => {
     const aMs = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
