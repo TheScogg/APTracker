@@ -159,13 +159,7 @@ let _roleAlertsShowAccepted = false;
 let _roleAlertsCache = [];
 let _roleAlertBadgeRefreshTimer = null;
 let _roleAlertsLoadToken = 0;
-let _roleAlertsPrototypeMode = false;
 let _roleAlertFocusIssueId = '';
-try {
-  _roleAlertsPrototypeMode = localStorage.getItem('roleAlertsPrototypeMode') === '1';
-} catch (e) {
-  _roleAlertsPrototypeMode = false;
-}
 const ROLE_KEY_ALIASES = {
   maintenance_employee: ['maintenance_employee', 'main_maintenance_role', 'maintenance'],
   main_maintenance_role: ['maintenance_employee', 'main_maintenance_role', 'maintenance'],
@@ -347,19 +341,15 @@ function _updateRoleAlertModalFooter(activeCount, acceptedCount) {
   footer.textContent = `${activeCount} active · ${acceptedCount} accepted ${acceptedLabel}`;
 }
 
-function _applyRoleAlertPrototypeUI() {
+function _setRoleAlertsModalVisible(isVisible) {
   const modal = document.getElementById('role-alerts-modal');
-  const btn = document.getElementById('role-alert-prototype-toggle-btn');
   if (!modal) return;
-  modal.classList.toggle('role-alerts-modal-prototype', !!_roleAlertsPrototypeMode);
-  if (btn) {
-    btn.classList.toggle('active', !!_roleAlertsPrototypeMode);
-    btn.textContent = _roleAlertsPrototypeMode ? 'Preview V2 on' : 'Preview V2';
-  }
+  modal.classList.toggle('visible', !!isVisible);
+  modal.setAttribute('aria-hidden', isVisible ? 'false' : 'true');
+  document.body.classList.toggle('role-alerts-open', !!isVisible);
 }
 
 function _renderRoleAlertCard(alert) {
-  if (_roleAlertsPrototypeMode) return _renderRoleAlertCardPrototype(alert);
   const isAccepted = !!alert.isAccepted;
   const statusColor = isAccepted ? '#22c55e' : getStatusColor(alert.statusKey || alert.categoryKey || 'open');
   const statusDef = getStatusDef(alert.statusKey || alert.categoryKey || 'open');
@@ -367,34 +357,31 @@ function _renderRoleAlertCard(alert) {
   const acceptedByName = isAccepted ? formatWorkflowActorName(alert.acceptedBy?.name || alert.acceptedBy || '') : '';
   const noteText = alert.note || 'No note';
   return `
-    <div class="role-alert-card role-alert-card-glass${isAccepted ? ' accepted' : ''}" style="--role-alert-cat-color:${statusColor};--role-alert-card-border:${alphaColor(statusColor, 0.42)};--role-alert-card-glow:${alphaColor(statusColor, 0.16)};" role="button" tabindex="0" data-role-alert-action="focus" data-role-alert-issue-id="${esc(alert.issueId)}">
-      <div class="role-alert-card-shell">
-        <div class="role-alert-card-rail"></div>
-        <div class="role-alert-card-main">
-          <div class="role-alert-card-kicker">
-            <span class="role-alert-card-chip role-alert-card-chip-state" style="--role-alert-cat-color:${statusColor};">${esc(statusDef.icon || '🔔')} ${esc(statusLabel)}</span>
-            <span class="role-alert-card-chip role-alert-card-chip-press">${alert.machine ? `Press ${esc(alert.machine)}` : 'Press not set'}</span>
+    <div class="role-alert-card${isAccepted ? ' accepted' : ''}" style="--role-alert-cat-color:${statusColor};--role-alert-card-border:${alphaColor(statusColor, 0.35)};">
+      <button class="role-alert-card-body" type="button" data-role-alert-action="focus" data-role-alert-issue-id="${esc(alert.issueId)}" aria-label="Open issue ${esc(alert.machine || 'alert')}">
+        <div class="role-alert-card-shell">
+          <div class="role-alert-card-main">
+            <div class="role-alert-card-kicker">
+              <span class="role-alert-card-chip role-alert-card-chip-state" style="--role-alert-cat-color:${statusColor};">${esc(statusDef.icon || '🔔')} ${esc(statusLabel)}</span>
+              <span class="role-alert-card-chip role-alert-card-chip-press">${alert.machine ? `Press ${esc(alert.machine)}` : 'Press not set'}</span>
+            </div>
+            <div class="role-alert-card-sub">${alert.subStatus ? esc(alert.subStatus) : 'New alert'}</div>
+            <div class="role-alert-card-note">${esc(noteText)}</div>
+            <div class="role-alert-card-meta">
+              <span>${esc(alert.plantName || currentPlantName || 'Plant')}</span>
+              <span>${esc(alert.createdAtLabel || 'Time unknown')}</span>
+              ${isAccepted ? `<span>${acceptedByName ? `Accepted by ${esc(acceptedByName)}` : 'Accepted'}</span>` : '<span>Needs response</span>'}
+            </div>
           </div>
-          <div class="role-alert-card-sub">${alert.subStatus ? esc(alert.subStatus) : 'New alert'}</div>
-          <div class="role-alert-card-note">${esc(noteText)}</div>
-          <div class="role-alert-card-meta">
-            <span>${esc(alert.plantName || currentPlantName || 'Plant')}</span>
-            <span>${esc(alert.createdAtLabel || 'Time unknown')}</span>
-            ${isAccepted ? `<span>${acceptedByName ? `Accepted by ${esc(acceptedByName)}` : 'Accepted'}</span>` : '<span>Needs response</span>'}
-          </div>
+          <div class="role-alert-card-arrow" aria-hidden="true">›</div>
         </div>
-        <div class="role-alert-card-actions">
-          <button class="role-alert-action-btn role-alert-action-accept" type="button" data-role-alert-action="accept" data-role-alert-issue-id="${esc(alert.issueId)}" data-role-alert-status-key="${esc(alert.statusKey)}">${isAccepted ? 'Accepted' : 'Accept'}</button>
-          <button class="role-alert-action-btn role-alert-action-delete" type="button" data-role-alert-action="delete" data-role-alert-id="${esc(alert.id)}" data-role-alert-category-key="${esc(alert.categoryKey)}" data-role-alert-status-key="${esc(alert.statusKey)}">Delete</button>
-        </div>
+      </button>
+      <div class="role-alert-card-actions">
+        <button class="role-alert-action-btn role-alert-action-accept" type="button" data-role-alert-action="accept" data-role-alert-issue-id="${esc(alert.issueId)}" data-role-alert-status-key="${esc(alert.statusKey)}">${isAccepted ? 'Accepted' : 'Accept'}</button>
+        <button class="role-alert-action-btn role-alert-action-delete" type="button" data-role-alert-action="delete" data-role-alert-id="${esc(alert.id)}" data-role-alert-category-key="${esc(alert.categoryKey)}" data-role-alert-status-key="${esc(alert.statusKey)}">Delete</button>
       </div>
     </div>
   `;
-}
-
-// Backward-compat shim: older cached clients may still reference this symbol.
-function _renderRoleAlertCardPrototype(alert) {
-  return _renderRoleAlertCard(alert);
 }
 
 function _renderRoleAlertsModal(alerts) {
@@ -575,11 +562,11 @@ function _handleRoleAlertModalAction(action, issueId, statusKey, alertId, catego
   }
 }
 
-function _bindRoleAlertModalTouchGuards() {
+function _bindRoleAlertModalActions() {
   const modal = document.getElementById('role-alerts-modal');
   if (!modal || modal.dataset.roleAlertBound === '1') return;
   modal.dataset.roleAlertBound = '1';
-  const handle = event => {
+  modal.addEventListener('click', event => {
     const target = event.target?.closest?.('[data-role-alert-action],[data-role-alert-issue-id]') || null;
     if (!target) return;
     const action = target.dataset.roleAlertAction || (target.dataset.roleAlertIssueId ? 'focus' : '');
@@ -593,9 +580,7 @@ function _bindRoleAlertModalTouchGuards() {
       target.dataset.roleAlertId || '',
       target.dataset.roleAlertCategoryKey || ''
     );
-  };
-  modal.addEventListener('touchend', handle, { passive: false, capture: true });
-  modal.addEventListener('click', handle, true);
+  });
 }
 
 async function _openRoleAlertInboxModalInternal({ resetToggle = true } = {}) {
@@ -603,11 +588,9 @@ async function _openRoleAlertInboxModalInternal({ resetToggle = true } = {}) {
   const list = document.getElementById('role-alerts-list');
   if (!modal || !list) return;
   const loadToken = ++_roleAlertsLoadToken;
-  _bindRoleAlertModalTouchGuards();
-  modal.classList.add('visible');
-  document.body.classList.add('role-alerts-open');
+  _bindRoleAlertModalActions();
+  _setRoleAlertsModalVisible(true);
   if (resetToggle) _roleAlertsShowAccepted = true;
-  _applyRoleAlertPrototypeUI();
   _updateRoleAlertModalToggleUI();
   const cachedAlerts = Array.isArray(_roleAlertsCache) ? _roleAlertsCache : [];
   if (cachedAlerts.length) {
@@ -659,15 +642,13 @@ window.retryRoleAlertInboxModal = async function() {
 };
 
 window.toggleRoleAlertPrototype = function() {
-  _roleAlertsPrototypeMode = !_roleAlertsPrototypeMode;
-  localStorage.setItem('roleAlertsPrototypeMode', _roleAlertsPrototypeMode ? '1' : '0');
-  _applyRoleAlertPrototypeUI();
+  // Deprecated shim for old cached builds.
 };
 
 window.setRoleAlertsShowAccepted = async function(showAccepted) {
   _roleAlertsShowAccepted = !!showAccepted;
+  _updateRoleAlertModalToggleUI();
   if (!_roleAlertsCache.length) {
-    _updateRoleAlertModalToggleUI();
     return;
   }
   _renderRoleAlertsModal(_roleAlertsCache);
@@ -675,8 +656,7 @@ window.setRoleAlertsShowAccepted = async function(showAccepted) {
 
 window.closeRoleAlertInboxModal = function() {
   _roleAlertsLoadToken += 1;
-  document.getElementById('role-alerts-modal')?.classList.remove('visible');
-  document.body.classList.remove('role-alerts-open');
+  _setRoleAlertsModalVisible(false);
 };
 
 window.focusIssueFromAlert = function(issueId) {
@@ -8875,7 +8855,6 @@ document.getElementById('theme-editor-modal')?.addEventListener('click', e => {
 });
 document.getElementById('appearance-modal')?.addEventListener('click', e => { if (e.target === document.getElementById('appearance-modal')) closeAppearanceModal(); });
 document.getElementById('role-prefs-modal')?.addEventListener('click', e => { if (e.target === document.getElementById('role-prefs-modal')) closeRolePreferencesModal(); });
-document.getElementById('role-alerts-modal')?.addEventListener('click', e => { if (e.target === document.getElementById('role-alerts-modal')) closeRoleAlertInboxModal(); });
 
 // ── SERIAL NUMBER PROMPT ──
 // Define which status+sub combos require a serial number
