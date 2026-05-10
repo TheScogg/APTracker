@@ -46,10 +46,10 @@
   </div>
 
   <header>
-    <div class="logo">
+    <button class="logo" id="home-logo-btn" type="button" data-shell-action="go-home" aria-label="Home" title="Home">
       <div class="logo-icon">⚙</div>
       <div class="logo-text">AP-<span>TRACKER</span></div>
-    </div>
+    </button>
 
     <button class="sort-dropdown-btn" id="messages-btn-header" data-messages-trigger="true" data-shell-action="open-messages" style="gap:4px;" aria-label="Messages" title="Messages">
       <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;opacity:0.7;"><path d="M3 2h10a1 1 0 011 1v8a1 1 0 01-1 1H5l-3 2V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
@@ -59,6 +59,10 @@
     <button class="sort-dropdown-btn" id="alerts-btn-header" type="button" style="gap:4px;" aria-label="Category alerts" title="Category alerts from delegated tasks">
       <span id="role-alert-icon" class="role-alert-icon" aria-hidden="true">!</span>
       <span class="msg-btn-badge" id="role-alert-badge" style="display:none;">0</span>
+    </button>
+
+    <button class="sort-dropdown-btn" id="wiki-btn-header" type="button" data-shell-action="open-shared-library" aria-label="Shared Library Wiki" title="Shared Library Wiki">
+      <span class="wiki-btn-icon" aria-hidden="true">W</span>
     </button>
 
     <div class="user-pill-wrap" id="user-pill-wrap">

@@ -7839,9 +7839,24 @@ function closeUserMenus() {
 
 function handleShellAction(action, value, trigger, event) {
   switch (action) {
+    case 'go-home':
+      closeUserMenus();
+      closeSortDropdown();
+      window.closeExportDropdown?.();
+      window.closeMessagingModal?.();
+      window.closePressWikiModal?.();
+      window.closeExportModal?.();
+      window.closeRoleAlertInboxModal?.();
+      if (typeof closeMiniCard === 'function') closeMiniCard();
+      window.clearMachineBreadcrumb?.();
+      window.setMapMode?.('log');
+      break;
     case 'open-messages':
       closeUserMenus();
       window.openMessagingModal?.();
+      break;
+    case 'open-shared-library':
+      window.openSharedLibraryWiki?.();
       break;
     case 'open-role-prefs':
       closeUserMenus();
@@ -9868,6 +9883,10 @@ function _pressWikiScopeLabel(scope = _pressWikiScope) {
   return scope === WIKI_SCOPE_SHARED ? 'Shared Library' : 'This Press';
 }
 
+function _pressWikiBaseTitle(scope = _pressWikiScope) {
+  return scope === WIKI_SCOPE_SHARED ? 'Shared Library' : 'Shift Notes';
+}
+
 function _pressWikiPressLabel() {
   return _pressWikiMachineCode ? `Press ${_pressWikiMachineCode}` : 'This Press';
 }
@@ -10036,11 +10055,13 @@ function _relativeTime(ts) {
   return new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-async function openPressWikiModal(pressId, machineCode) {
+async function openPressWikiModal(pressId, machineCode, options = {}) {
   if (!pressId || !currentPlantId) return;
+  const initialScope = options.scope === WIKI_SCOPE_SHARED ? WIKI_SCOPE_SHARED : WIKI_SCOPE_PRESS;
+  const initialTitle = String(options.title || '').trim() || _pressWikiBaseTitle(initialScope);
   _pressWikiModalPressId = String(pressId);
   _pressWikiMachineCode = String(machineCode || '').trim();
-  _pressWikiSetScope(WIKI_SCOPE_PRESS, { reload: false });
+  _pressWikiSetScope(initialScope, { reload: false });
   const modal = document.getElementById('press-wiki-modal');
   const titleEl = document.getElementById('press-wiki-title');
   const metaEl = document.getElementById('press-wiki-meta');
@@ -10049,6 +10070,9 @@ async function openPressWikiModal(pressId, machineCode) {
   const attachmentsEl = document.getElementById('press-wiki-attachments');
   if (!modal || !titleEl || !metaEl || !bodyEl || !revisionsEl || !attachmentsEl) return;
   _pressWikiCanEdit = (currentUserRole === 'admin' || currentUserRole === 'editor');
+  togglePressWikiEditor(false);
+  togglePressWikiCreateRow(false);
+  closePressWikiActionsMenu();
   const editBtn = document.getElementById('press-wiki-edit-btn');
   const newBtn = document.getElementById('press-wiki-new-page-btn');
   const cmsBtn = document.getElementById('press-wiki-cms-btn');
@@ -10058,8 +10082,10 @@ async function openPressWikiModal(pressId, machineCode) {
   const actionsWrap = document.getElementById('press-wiki-actions-wrap');
   if (actionsWrap) actionsWrap.style.display = _pressWikiCanEdit ? 'inline-flex' : 'none';
   _setPressWikiError('');
-  titleEl.textContent = 'Shift Notes';
-  metaEl.textContent = `Press ${_pressWikiMachineCode || '—'} · ${_pressWikiScopeLabel()}`;
+  titleEl.textContent = initialTitle;
+  metaEl.textContent = initialScope === WIKI_SCOPE_SHARED
+    ? 'Plant-wide shared knowledge surface'
+    : `Press ${_pressWikiMachineCode || '—'} · ${_pressWikiScopeLabel()}`;
   _pressWikiSyncScopeBadge();
   _pressWikiSetScope(_pressWikiScope, { reload: false });
   bodyEl.textContent = 'Loading wiki...';
@@ -10085,7 +10111,7 @@ async function loadPressWikiPageList() {
   if (!pages.length) {
     const opt = document.createElement('option');
     opt.value = 'shift-notes';
-    opt.textContent = _pressWikiScope === WIKI_SCOPE_SHARED ? 'Shared Notes' : 'Shift Notes';
+    opt.textContent = _pressWikiBaseTitle(_pressWikiScope);
     selectEl.appendChild(opt);
   } else {
     pages.forEach(page => {
@@ -10118,9 +10144,9 @@ async function loadPressWikiPage(pageId) {
     const pageSnap = await getDoc(pageRef);
     if (!pageSnap.exists()) {
       _renderPressWikiBody(_pressWikiScope === WIKI_SCOPE_SHARED
-        ? 'No shared wiki content yet. Add a plant library page to seed the library.'
+        ? 'No shared library content yet. Add a plant-wide page to seed the library.'
         : 'No wiki content yet. Add a press note to seed Shift Notes.');
-      titleEl.textContent = pageId;
+      titleEl.textContent = _pressWikiBaseTitle(_pressWikiScope);
       _pressWikiSyncScopeBadge(_pressWikiScope);
       return;
     }
@@ -10544,6 +10570,14 @@ document.getElementById('press-wiki-cms-btn')?.addEventListener('click', () => {
   const url = `wiki-cms.html?plantId=${encodeURIComponent(currentPlantId)}&pressId=${encodeURIComponent(_pressWikiScope === WIKI_SCOPE_PRESS ? _pressWikiModalPressId : '')}&pageId=${encodeURIComponent(_pressWikiSelectedPageId || '')}&scope=${encodeURIComponent(_pressWikiScope)}`;
   window.location.href = url;
 });
+
+window.openSharedLibraryWiki = async function() {
+  if (!currentPlantId) return;
+  closeUserMenus();
+  closeSortDropdown();
+  window.closeExportDropdown?.();
+  await openPressWikiModal('shared-library', '', { scope: WIKI_SCOPE_SHARED, title: 'Shared Library' });
+};
 
 document.addEventListener('click', e => {
   const wrap = document.getElementById('press-wiki-actions-wrap');
@@ -11343,4 +11377,3 @@ setInterval(() => {
   if (document.hidden) return;
   refreshReminderClocksInDom();
 }, 1000);
-

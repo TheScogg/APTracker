@@ -397,10 +397,24 @@
 
   /* HEADER */
   header { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 10px 16px; display: flex; align-items: center; justify-content: flex-start; position: sticky; top: 0; z-index: 100; box-shadow: 0 4px 24px rgba(0,0,0,0.4); gap: 12px; }
-  .logo { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    padding: 0;
+    color: inherit;
+    cursor: pointer;
+    text-align: left;
+    appearance: none;
+    -webkit-appearance: none;
+  }
   .logo-icon { width: 32px; height: 32px; background: var(--accent); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
   .logo-text { font-family: 'Rajdhani', sans-serif; font-size: 19px; font-weight: 700; letter-spacing: 1px; }
   .logo-text span { color: var(--accent); }
+  .logo:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; border-radius: 10px; }
   .header-center { display: flex; align-items: center; gap: 8px; }
 
   /* STAT PILLS */
@@ -1151,6 +1165,31 @@
     border-color: #16a34a;
     color: #fff;
   }
+  #wiki-btn-header {
+    background: var(--blue);
+    border-color: var(--blue);
+    color: #fff;
+    min-width: 34px;
+    justify-content: center;
+    padding: 4px 0;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+  }
+  #wiki-btn-header:hover {
+    background: color-mix(in srgb, var(--blue) 88%, #000 12%);
+    border-color: color-mix(in srgb, var(--blue) 88%, #000 12%);
+    color: #fff;
+  }
+  .wiki-btn-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1em;
+    line-height: 1;
+    transform: translateY(-0.5px);
+  }
   .sort-chevron { transition: transform 0.2s; }
   .sort-dropdown { display: none; position: absolute; top: calc(100% + 5px); right: 0; background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; min-width: 180px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); z-index: 200; overflow: hidden; animation: dropIn 0.15s ease; }
   .sort-dropdown.visible { display: block; }
@@ -1218,6 +1257,7 @@
     .logo { gap: 8px; }
     .plant-switcher-btn { padding: 5px 8px; font-size: 11px; }
     #messages-btn-header { padding: 5px 8px; min-width: 34px; justify-content: center; }
+    #wiki-btn-header { width: 34px; min-width: 34px; padding: 5px 0; }
     .user-pill { padding: 4px 8px; }
     .user-name { max-width: 72px; }
     .game-pill {
