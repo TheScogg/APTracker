@@ -10064,13 +10064,19 @@ function _pressWikiRenderTreeNode(parentEl, node, tree, depth = 0) {
 }
 
 function renderPressWikiPageTree() {
-  const treeEl = document.getElementById('press-wiki-page-tree');
-  if (!treeEl) return;
-  treeEl.innerHTML = '';
+  const selectEl = document.getElementById('press-wiki-page-select');
+  if (!selectEl) return;
+  selectEl.innerHTML = '';
   if (!_pressWikiPageListCache.length) {
-    treeEl.innerHTML = '<div style="padding:10px 8px;color:var(--text3);font-size:12px;">No pages found.</div>';
+    const opt = document.createElement('option');
+    opt.value = 'shift-notes';
+    opt.textContent = 'No pages found';
+    selectEl.appendChild(opt);
+    selectEl.disabled = true;
     return;
   }
+
+  selectEl.disabled = false;
 
   const tree = _pressWikiBuildTree(_pressWikiPageListCache);
   _pressWikiExpandDefaults(tree);
@@ -10078,12 +10084,21 @@ function renderPressWikiPageTree() {
     _pressWikiAncestors(_pressWikiSelectedPageId, tree.parentById).forEach(id => _pressWikiExpandedPageIds.add(id));
   }
 
-  const wrap = document.createElement('div');
-  wrap.style.display = 'flex';
-  wrap.style.flexDirection = 'column';
-  wrap.style.gap = '2px';
-  tree.roots.forEach(node => _pressWikiRenderTreeNode(wrap, node, tree, 0));
-  treeEl.appendChild(wrap);
+  const addOption = (node, depth = 0) => {
+    const opt = document.createElement('option');
+    opt.value = node.id;
+    const prefix = depth > 0 ? `${'\u00A0'.repeat(depth * 2)}↳ ` : '';
+    opt.textContent = `${prefix}${node.title || node.id || 'Untitled'}${node.scope === WIKI_SCOPE_SHARED ? ' · Shared' : ''}`;
+    selectEl.appendChild(opt);
+    const children = tree.childrenById.get(node.id) || [];
+    children.forEach(child => addOption(child, depth + 1));
+  };
+
+  tree.roots.forEach(node => addOption(node, 0));
+  if (![...selectEl.options].some(o => o.value === _pressWikiSelectedPageId)) {
+    _pressWikiSelectedPageId = selectEl.options[0]?.value || 'shift-notes';
+  }
+  selectEl.value = _pressWikiSelectedPageId;
 }
 
 function _pressWikiPressLabel() {
@@ -10303,8 +10318,8 @@ async function openPressWikiModal(pressId, machineCode, options = {}) {
 }
 
 async function loadPressWikiPageList() {
-  const treeEl = document.getElementById('press-wiki-page-tree');
-  if (!treeEl || !_pressWikiModalPressId) return;
+  const selectEl = document.getElementById('press-wiki-page-select');
+  if (!selectEl || !_pressWikiModalPressId) return;
   const pagesSnap = await getDocs(wikiPagesColForScope(_pressWikiScope, _pressWikiModalPressId));
   const pages = pagesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
   _pressWikiPageListCache = pages;
