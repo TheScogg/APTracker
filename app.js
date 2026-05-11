@@ -8933,6 +8933,223 @@ document.querySelectorAll('.modal').forEach(modal => {
   modal.addEventListener('click', e => e.stopPropagation());
 });
 
+const MOBILE_MODAL_SWIPE_BREAKPOINT = 700;
+const MOBILE_MODAL_SWIPE_CLOSES = {
+  'add-modal': () => window.closeModal?.(),
+  'edit-modal': () => window.closeEditModal?.(),
+  'resolve-modal': () => window.closeResolveModal?.(),
+  'reopen-modal': () => window.closeReopenModal?.(),
+  'issue-reminder-modal': () => window.closeIssueReminderModal?.(),
+  'sms-compose-modal': () => window.closeSmsComposer?.(true),
+  'edit-status-modal': () => window.closeEditStatusModal?.(),
+  'export-modal': () => window.closeExportModal?.(),
+  'serial-modal': () => window.closeSerialModal?.(),
+  'press-wiki-modal': () => window.closePressWikiModal?.(),
+  'appearance-modal': () => window.closeAppearanceModal?.(),
+  'theme-editor-modal': () => window.closeThemeEditor?.(),
+  'role-prefs-modal': () => window.closeRolePreferencesModal?.(),
+  'role-alerts-modal': () => window.closeRoleAlertInboxModal?.(),
+  'subcategory-sheet': () => window.closeSubcategorySheet?.(),
+  'subcategory-sheet-overlay': () => window.closeSubcategorySheet?.(),
+  'notes-modal-a': () => window.closeNotesModal?.(),
+  'notes-modal-b': () => window.closeNotesModal?.(),
+  'store-modal': () => window.closeStoreModal?.(),
+  'purchase-confirm-modal': () => window.closePurchaseConfirm?.(),
+  'messaging-modal': () => window.closeMessagingModal?.()
+};
+
+const MOBILE_MODAL_SWIPE_BLOCKERS = [
+  'button',
+  'input',
+  'textarea',
+  'select',
+  'option',
+  'label',
+  'a',
+  '[contenteditable="true"]',
+  '[role="button"]',
+  '[data-no-swipe]',
+  '.btn',
+  '.sort-dropdown-btn',
+  '.scope-btn',
+  '.photo-pick-btn',
+  '.timer-chip',
+  '.subcategory-item',
+  '.subcategory-parent-pill',
+  '.store-tab',
+  '.msg-tab',
+  '.msg-icon-btn',
+  '.msg-close-btn',
+  '.store-modal-close',
+  '.notes-modal-a-close',
+  '.notes-modal-b-close',
+  '.role-alerts-close',
+  '.role-alerts-retry-fab'
+].join(',');
+
+const _mobileModalSwipeState = {
+  modal: null,
+  close: null,
+  pointerId: null,
+  startX: 0,
+  startY: 0,
+  lastY: 0,
+  dragging: false,
+  dismissing: false,
+  restoreTimer: null,
+  startTransition: '',
+  startTransform: '',
+  startOpacity: ''
+};
+
+function _mobileModalSwipeViewportOk() {
+  return window.matchMedia?.(`(max-width: ${MOBILE_MODAL_SWIPE_BREAKPOINT}px)`)?.matches || false;
+}
+
+function _mobileModalSwipeResetStyle(modal, restore = true) {
+  if (!modal) return;
+  if (restore) {
+    modal.style.transition = _mobileModalSwipeState.startTransition || '';
+    modal.style.transform = _mobileModalSwipeState.startTransform || '';
+    modal.style.opacity = _mobileModalSwipeState.startOpacity || '';
+  } else {
+    modal.style.transition = '';
+    modal.style.transform = '';
+    modal.style.opacity = '';
+  }
+  modal.classList.remove('modal-swipe-active');
+  document.body.classList.remove('modal-swipe-dragging');
+}
+
+function _mobileModalSwipeFinish(restore = true) {
+  const modal = _mobileModalSwipeState.modal;
+  if (_mobileModalSwipeState.restoreTimer) {
+    clearTimeout(_mobileModalSwipeState.restoreTimer);
+    _mobileModalSwipeState.restoreTimer = null;
+  }
+  if (modal) _mobileModalSwipeResetStyle(modal, restore);
+  _mobileModalSwipeState.modal = null;
+  _mobileModalSwipeState.close = null;
+  _mobileModalSwipeState.pointerId = null;
+  _mobileModalSwipeState.dragging = false;
+  _mobileModalSwipeState.dismissing = false;
+}
+
+function _mobileModalSwipeCloseFor(modal) {
+  if (!modal) return null;
+  const modalId = modal.id || modal.closest('[id]')?.id || '';
+  return MOBILE_MODAL_SWIPE_CLOSES[modalId] || null;
+}
+
+function _mobileModalSwipeCanStart(target) {
+  if (!target || !target.closest) return null;
+  if (target.closest(MOBILE_MODAL_SWIPE_BLOCKERS)) return null;
+  return target.closest('.modal, .subcategory-sheet, .role-alerts-sheet, .store-modal, .msg-modal');
+}
+
+function _mobileModalSwipeStart(event) {
+  if (event.button && event.button !== 0) return;
+  if (!_mobileModalSwipeViewportOk()) return;
+  if (event.pointerType && event.pointerType === 'mouse') return;
+  if (_mobileModalSwipeState.modal) return;
+
+  const modal = _mobileModalSwipeCanStart(event.target);
+  if (!modal || modal.getClientRects().length === 0) return;
+
+  const rect = modal.getBoundingClientRect();
+  const topZone = Math.min(72, Math.max(48, rect.height * 0.18));
+  const insideTopZone = event.clientY <= rect.top + topZone;
+  if (!insideTopZone) return;
+
+  const close = _mobileModalSwipeCloseFor(modal);
+  if (!close) return;
+
+  _mobileModalSwipeState.modal = modal;
+  _mobileModalSwipeState.close = close;
+  _mobileModalSwipeState.pointerId = event.pointerId;
+  _mobileModalSwipeState.startX = event.clientX;
+  _mobileModalSwipeState.startY = event.clientY;
+  _mobileModalSwipeState.lastY = event.clientY;
+  _mobileModalSwipeState.dragging = false;
+  _mobileModalSwipeState.dismissing = false;
+  _mobileModalSwipeState.startTransition = modal.style.transition || '';
+  _mobileModalSwipeState.startTransform = modal.style.transform || '';
+  _mobileModalSwipeState.startOpacity = modal.style.opacity || '';
+  document.body.classList.add('modal-swipe-dragging');
+
+  try { modal.setPointerCapture?.(event.pointerId); } catch (_) {}
+}
+
+function _mobileModalSwipeMove(event) {
+  const modal = _mobileModalSwipeState.modal;
+  if (!modal || event.pointerId !== _mobileModalSwipeState.pointerId) return;
+  if (_mobileModalSwipeState.dismissing) {
+    event.preventDefault();
+    return;
+  }
+
+  const dx = event.clientX - _mobileModalSwipeState.startX;
+  const dy = event.clientY - _mobileModalSwipeState.startY;
+  _mobileModalSwipeState.lastY = event.clientY;
+
+  if (!_mobileModalSwipeState.dragging) {
+    if (dy < 8 || Math.abs(dy) < Math.abs(dx) * 1.1 || dy < 0) return;
+    _mobileModalSwipeState.dragging = true;
+    modal.classList.add('modal-swipe-active');
+    modal.style.transition = 'none';
+  }
+
+  event.preventDefault();
+  const dragY = Math.max(0, dy);
+  const fade = Math.max(0.55, 1 - (dragY / 420));
+  modal.style.transform = `translate3d(0, ${dragY}px, 0)`;
+  modal.style.opacity = String(fade);
+}
+
+function _mobileModalSwipeEnd(event) {
+  const modal = _mobileModalSwipeState.modal;
+  if (!modal || event.pointerId !== _mobileModalSwipeState.pointerId) return;
+
+  const dy = (event.clientY || _mobileModalSwipeState.lastY) - _mobileModalSwipeState.startY;
+  const dx = (event.clientX || _mobileModalSwipeState.startX) - _mobileModalSwipeState.startX;
+  const shouldDismiss = _mobileModalSwipeState.dragging && dy > 84 && dy > Math.abs(dx) * 1.15;
+
+  if (shouldDismiss) {
+    _mobileModalSwipeState.dismissing = true;
+    modal.style.transition = 'transform 150ms ease, opacity 150ms ease';
+    modal.style.transform = 'translate3d(0, 110%, 0)';
+    modal.style.opacity = '0';
+    _mobileModalSwipeState.restoreTimer = window.setTimeout(() => {
+      _mobileModalSwipeState.close?.();
+      _mobileModalSwipeFinish(false);
+    }, 150);
+    return;
+  }
+
+  if (_mobileModalSwipeState.dragging) {
+    modal.style.transition = 'transform 140ms ease, opacity 140ms ease';
+    modal.style.transform = _mobileModalSwipeState.startTransform || '';
+    modal.style.opacity = _mobileModalSwipeState.startOpacity || '';
+    _mobileModalSwipeState.restoreTimer = window.setTimeout(() => {
+      _mobileModalSwipeFinish(true);
+    }, 150);
+    return;
+  }
+
+  _mobileModalSwipeFinish(true);
+}
+
+function _bindMobileModalSwipe(modal) {
+  if (!modal || modal.dataset.mobileSwipeBound === '1') return;
+  modal.dataset.mobileSwipeBound = '1';
+  modal.addEventListener('pointerdown', _mobileModalSwipeStart, true);
+}
+
+document.querySelectorAll('.modal, .subcategory-sheet, .role-alerts-sheet, .store-modal, .msg-modal').forEach(_bindMobileModalSwipe);
+document.addEventListener('pointermove', _mobileModalSwipeMove, true);
+document.addEventListener('pointerup', _mobileModalSwipeEnd, true);
+document.addEventListener('pointercancel', _mobileModalSwipeEnd, true);
+
 document.addEventListener('keydown', e=>{ if(e.key==='Escape'){closeModal();closeEditModal();closeResolveModal();closeReopenModal();closeLightbox();closeSortDropdown();closeExportModal();closeSerialModal();closeEditStatusModal();closeNotesModal();closeSmsComposer(true);window.closeMessagingModal?.();window.closeConversation?.();closeAppearanceModal();closeThemeEditor();closeRolePreferencesModal();closeRoleAlertInboxModal();} });
 
 document.getElementById('theme-editor-modal')?.addEventListener('click', e => {
