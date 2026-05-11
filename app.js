@@ -10277,6 +10277,7 @@ let _notesContext = { pressId: null, issueId: null, label: 'Plant-wide' };
 const _notesState = {
   notes: [],
   activeNoteId: null,
+  view: 'list',
   filter: 'all',
   search: '',
   saving: false,
@@ -10285,8 +10286,29 @@ const _notesState = {
   dirty: false,
   creating: false,
   lockContext: false,
+  error: '',
   currentNote: null
 };
+
+function _notesIsMobileLayout() {
+  return window.innerWidth <= 860;
+}
+
+function _notesSyncLayout() {
+  const modal = document.getElementById('notes-modal');
+  if (!modal) return;
+  const mobile = _notesIsMobileLayout();
+  const listMode = mobile && _notesState.view !== 'editor';
+  const editorMode = mobile && _notesState.view === 'editor' && !!_notesState.currentNote?.id;
+  modal.classList.toggle('notes-mobile', mobile);
+  modal.classList.toggle('notes-mobile-list', listMode);
+  modal.classList.toggle('notes-mobile-editor', editorMode);
+}
+
+function _notesSetView(view) {
+  _notesState.view = view === 'editor' ? 'editor' : 'list';
+  _notesSyncLayout();
+}
 
 function _pressWikiScopeLabel(scope = _pressWikiScope) {
   return scope === WIKI_SCOPE_SHARED ? 'Shared Library' : 'This Press';
@@ -11745,9 +11767,13 @@ function _notesRenderList() {
   if (!visibleNotes.length) {
     const empty = document.createElement('div');
     empty.className = 'notes-list-empty';
-    empty.textContent = _notesState.search || _notesState.filter !== 'all'
-      ? 'No notes match this filter yet.'
-      : 'No notes yet. Tap New Note to start your notebook.';
+    if (_notesState.error) {
+      empty.textContent = 'Notes are unavailable for this plant right now.';
+    } else {
+      empty.textContent = _notesState.search || _notesState.filter !== 'all'
+        ? 'No notes match this filter yet.'
+        : 'No notes yet. Tap New Note to start your notebook.';
+    }
     listEl.innerHTML = '';
     listEl.appendChild(empty);
     return;
@@ -11964,6 +11990,7 @@ function _notesRenderEditor(note = null) {
   const pinBtn = document.getElementById('notes-pin-btn');
   const archiveBtn = document.getElementById('notes-archive-btn');
   const deleteBtn = document.getElementById('notes-delete-btn');
+  const backBtn = document.getElementById('notes-back-btn');
   if (!titleEl || !tagsEl || !bodyEl || !pinBtn || !archiveBtn || !deleteBtn) return;
 
   _notesState.currentNote = note ? { ...note, checklistItems: normalizeChecklistItems(note.checklistItems) } : null;
@@ -11982,9 +12009,11 @@ function _notesRenderEditor(note = null) {
   tagsEl.disabled = !note?.id;
   bodyEl.contentEditable = note?.id ? 'true' : 'false';
   bodyEl.dataset.placeholder = note?.id ? 'Write something useful...' : 'Select a note to begin.';
+  if (backBtn) backBtn.disabled = !note?.id;
   _notesRenderContextChips(note);
   _notesRenderChecklist(note);
   _notesRenderAttachments();
+  _notesSyncLayout();
 }
 
 function _notesFocusBody() {
@@ -12180,6 +12209,7 @@ async function _notesCreateNewNote() {
   };
   _notesState.creating = true;
   _notesState.activeNoteId = ref.id;
+  _notesSetView('editor');
   _notesRenderEditor(_notesNormalizeDoc(draft));
   await setDoc(ref, draft);
   await _notesLoadAttachments(ref.id);
@@ -12279,6 +12309,7 @@ async function _notesSelectNote(noteId) {
   const note = _notesState.notes.find(n => n.id === noteId) || null;
   if (!note) return;
   _notesState.activeNoteId = noteId;
+  _notesSetView('editor');
   _notesState.currentNote = { ...note, checklistItems: normalizeChecklistItems(note.checklistItems) };
   _notesAttachmentsCache = [];
   _notesRenderEditor(_notesState.currentNote);
@@ -12293,6 +12324,12 @@ async function _notesSelectNote(noteId) {
 function _notesEnsureActiveSelection() {
   const visible = _notesVisibleNotes();
   if (_notesState.activeNoteId && visible.some(note => note.id === _notesState.activeNoteId)) return;
+  if (_notesIsMobileLayout()) {
+    _notesState.activeNoteId = null;
+    _notesRenderEditor(null);
+    _notesSyncLayout();
+    return;
+  }
   const firstVisible = visible[0] || null;
   if (firstVisible) {
     void _notesSelectNote(firstVisible.id);
@@ -12307,6 +12344,7 @@ function _notesSetVisible(isVisible) {
   if (!modal) return;
   modal.classList.toggle('visible', !!isVisible);
   document.body.classList.toggle('notes-open', !!isVisible);
+  if (isVisible) _notesSyncLayout();
 }
 
 function _notesResetState() {
@@ -12315,12 +12353,15 @@ function _notesResetState() {
   _notesAttachmentsCache = [];
   _notesState.notes = [];
   _notesState.activeNoteId = null;
+  _notesState.view = 'list';
   _notesState.search = '';
   _notesState.filter = 'all';
   _notesState.saving = false;
   _notesState.dirty = false;
   _notesState.currentNote = null;
   _notesState.creating = false;
+  _notesState.error = '';
+  _notesSyncLayout();
 }
 
 async function _notesStartListener() {
@@ -12337,6 +12378,7 @@ async function _notesStartListener() {
   const q = query(notesCol());
   _notesUnsubscribe = onSnapshot(q, snap => {
     if (token !== _notesLoadToken) return;
+    _notesState.error = '';
     _notesState.notes = snap.docs.map(d => _notesNormalizeDoc({ id: d.id, ...d.data() }));
     _notesState.notes.sort(_notesCompare);
     _notesRenderList();
@@ -12353,6 +12395,8 @@ async function _notesStartListener() {
     _notesEnsureActiveSelection();
   }, err => {
     console.warn('notes listener error', err);
+    _notesState.error = String(err?.message || '');
+    _notesRenderList();
     _notesSetStatus('Could not load notes', err?.message || '');
   });
 }
@@ -12389,9 +12433,12 @@ window.openNotesModal = async function(context = {}) {
   _notesState.filter = context.filter || (linkedPressId || issueId ? 'linked' : 'all');
   _notesState.search = '';
   _notesState.activeNoteId = null;
+  _notesState.view = 'list';
   _notesState.currentNote = null;
+  _notesState.error = '';
   _notesAttachmentsCache = [];
   _notesSetVisible(true);
+  _notesSyncLayout();
   _notesSetStatus('Loading notes…', _notesContextTitle(_notesContext));
   const contextEl = document.getElementById('notes-modal-context');
   if (contextEl) contextEl.textContent = _notesContextTitle(_notesContext);
@@ -12402,7 +12449,11 @@ window.openNotesModal = async function(context = {}) {
   _notesSyncFilterButtons();
   await _notesStartListener();
   _notesRenderList();
-  _notesRenderEditor(null);
+  if (_notesState.currentNote?.id) {
+    _notesRenderEditor(_notesState.currentNote);
+  } else {
+    _notesRenderEditor(null);
+  }
   if (!_notesState.notes.length) {
     _notesSetStatus('No notes yet', 'Tap New Note to create one.');
   }
@@ -12471,6 +12522,11 @@ document.getElementById('notes-body')?.addEventListener('blur', () => {
 });
 document.getElementById('notes-new-btn')?.addEventListener('click', () => {
   void _notesCreateNewNote();
+});
+document.getElementById('notes-back-btn')?.addEventListener('click', () => {
+  _notesSetView('list');
+  _notesRenderEditor(null);
+  _notesRenderList();
 });
 document.getElementById('notes-pin-btn')?.addEventListener('click', () => {
   void _notesTogglePin();
@@ -12547,6 +12603,12 @@ document.getElementById('notes-filter-archived')?.addEventListener('click', () =
   _notesState.filter = 'archived';
   _notesSyncFilterButtons();
   _notesRenderList();
+});
+window.addEventListener('resize', () => {
+  if (document.getElementById('notes-modal')?.classList.contains('visible')) {
+    _notesSyncLayout();
+    _notesEnsureActiveSelection();
+  }
 });
 
 // ── EXPORT PDF ──
