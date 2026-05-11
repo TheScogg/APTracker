@@ -9874,7 +9874,9 @@ async function _messagingLoadMemberSelectors() {
 }
 
 window.openMessagingModal = () => {
-  document.getElementById('messaging-modal')?.classList.add('visible');
+  const modal = document.getElementById('messaging-modal');
+  if (modal) modal.classList.add('visible');
+  document.body.classList.add('messaging-open');
   _messagingSetError('');
   _messagingSetPhotoPreview(null);
   document.getElementById('msg-list-panel')?.classList.remove('hidden');
@@ -9917,6 +9919,7 @@ window.openMessagingModal = () => {
 
 window.closeMessagingModal = () => {
   document.getElementById('messaging-modal')?.classList.remove('visible');
+  document.body.classList.remove('messaging-open');
   hideMessagingSheets();
   _messagingSetPhotoPreview(null);
   closeConversation();
