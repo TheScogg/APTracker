@@ -10523,10 +10523,13 @@ function _pressWikiRenderPickerNode(parentEl, node, tree, depth = 0) {
 
   const badges = document.createElement('div');
   badges.className = 'press-wiki-picker-row-badges';
-  const scopeBadge = document.createElement('span');
-  scopeBadge.className = `press-wiki-picker-scope ${node.scope === WIKI_SCOPE_SHARED ? 'shared' : 'press'}`;
-  scopeBadge.textContent = node.scope === WIKI_SCOPE_SHARED ? 'Shared' : 'Press';
-  badges.appendChild(scopeBadge);
+  const showSharedBadge = node.scope === WIKI_SCOPE_SHARED && node.id === PRESS_WIKI_SHARED_INDEX_PAGE_ID;
+  if (node.scope === WIKI_SCOPE_SHARED || node.scope === WIKI_SCOPE_PRESS) {
+    const scopeBadge = document.createElement('span');
+    scopeBadge.className = `press-wiki-picker-scope ${node.scope === WIKI_SCOPE_SHARED ? 'shared' : 'press'}`;
+    scopeBadge.textContent = showSharedBadge ? 'Shared' : 'Press';
+    if (showSharedBadge || node.scope === WIKI_SCOPE_PRESS) badges.appendChild(scopeBadge);
+  }
   if (node.id === _pressWikiSelectedPageId) {
     const currentBadge = document.createElement('span');
     currentBadge.className = 'press-wiki-picker-current';
@@ -10627,7 +10630,7 @@ function _pressWikiRenderTreeNode(parentEl, node, tree, depth = 0) {
   main.appendChild(meta);
   row.appendChild(main);
 
-  if (node.scope === WIKI_SCOPE_SHARED && _pressWikiScope !== WIKI_SCOPE_SHARED) {
+  if (node.scope === WIKI_SCOPE_SHARED && node.id === PRESS_WIKI_SHARED_INDEX_PAGE_ID) {
     const badge = document.createElement('span');
     badge.className = 'scope-link-badge';
     badge.textContent = 'Shared';
