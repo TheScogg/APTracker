@@ -6,7 +6,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AP-Tracker</title>
+<title>AP-Tracker - No Auth</title>
 <script>
   if (window.trustedTypes && window.trustedTypes.createPolicy) {
     if (!window.trustedTypes.defaultPolicy) {
@@ -21,51 +21,32 @@
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&family=Nunito:wght@300;400;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="./build-info.js?v=20260509-1"></script>
-<link rel="stylesheet" href="./styles.css?v=20260509-1">
+<link rel="stylesheet" href="./styles.css">
 </head>
 <body>
-
-<!-- LOGIN -->
-<div id="login-screen">
-  <div class="login-card">
-    <div class="login-icon">⚙</div>
-    <div class="login-title">AP <span>TRACKER</span></div>
-    <div class="login-sub">Sign in to log and track issues</div>
-    <button class="google-btn" id="google-signin-btn"></button>
-  </div>
-</div>
 
 <!-- APP -->
 <div id="app">
   <div id="sync-banner" class="visible">
     <div class="sync-dot" id="sync-dot"></div>
     <span id="sync-text">Connecting…</span>
-    <span id="app-version-indicator" class="app-version-indicator" title="Current commit version">rev: 54a3d56</span>
-    <span id="firestore-io-indicator" class="firestore-io-indicator" title="Estimated Firestore operations for this session">R:0 W:0</span>
   </div>
 
   <header>
-    <button class="logo" id="home-logo-btn" type="button" data-shell-action="go-home" aria-label="Home" title="Home">
+    <div class="logo">
       <div class="logo-icon">⚙</div>
       <div class="logo-text">AP-<span>TRACKER</span></div>
+    </div>
+
+    <button class="sort-dropdown-btn" id="messages-btn-header" data-messages-trigger="true" data-shell-action="open-messages" style="gap:4px;" aria-label="Messages" title="Messages">
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;opacity:0.7;"><path d="M3 2h10a1 1 0 011 1v8a1 1 0 01-1 1H5l-3 2V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
+      <span class="msg-btn-badge" data-messages-badge style="display:none;">0</span>
     </button>
 
-    <div class="header-center">
-      <button class="sort-dropdown-btn" id="wiki-btn-header" type="button" data-shell-action="open-shared-library" aria-label="Shared Library Wiki" title="Shared Library Wiki">
-        <span class="wiki-btn-icon" aria-hidden="true">W</span>
-      </button>
-
-      <button class="sort-dropdown-btn" id="messages-btn-header" data-messages-trigger="true" data-shell-action="open-messages" style="gap:4px;" aria-label="Messages" title="Messages">
-        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;opacity:0.7;"><path d="M3 2h10a1 1 0 011 1v8a1 1 0 01-1 1H5l-3 2V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
-        <span class="msg-btn-badge" data-messages-badge style="display:none;">0</span>
-      </button>
-
-      <button class="sort-dropdown-btn" id="alerts-btn-header" type="button" style="gap:4px;" aria-label="Category alerts" title="Category alerts from delegated tasks">
-        <span id="role-alert-icon" class="role-alert-icon" aria-hidden="true">!</span>
-        <span class="msg-btn-badge" id="role-alert-badge" style="display:none;">0</span>
-      </button>
-    </div>
+    <button class="sort-dropdown-btn" id="alerts-btn-header" type="button" style="gap:4px;" aria-label="Category alerts" title="Category alerts from delegated tasks">
+      <span id="role-alert-icon" class="role-alert-icon" aria-hidden="true">!</span>
+      <span class="msg-btn-badge" id="role-alert-badge" style="display:none;">0</span>
+    </button>
 
     <div class="user-pill-wrap" id="user-pill-wrap">
       <div class="user-pill" id="user-pill">
@@ -74,6 +55,14 @@
         <span class="user-chevron">▼</span>
       </div>
       <div class="user-dropdown" id="user-dropdown">
+        <!-- Header: avatar + name + email -->
+        <div class="user-dropdown-header">
+          <div class="ud-avatar" id="ud-avatar">?</div>
+          <div class="ud-header-info">
+            <div class="user-dropdown-name" id="dropdown-full-name">—</div>
+            <div class="user-dropdown-email" id="dropdown-email">—</div>
+          </div>
+        </div>
         <!-- Account -->
         <div class="user-dropdown-section">
           <div class="user-dropdown-section-label">Account</div>
@@ -158,13 +147,6 @@
           </div>
         </div>
         <div class="ud-divider"></div>
-        <!-- Sign out -->
-        <div class="user-dropdown-section" style="padding-bottom:6px">
-          <button class="user-dropdown-item danger" id="signout-btn">
-            <span class="ud-item-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 2H3a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3M11 11l3-3-3-3M14 8H6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-            Sign Out
-          </button>
-        </div>
       </div>
     </div>
   </header>
@@ -216,16 +198,11 @@
 
   <div class="filter-drawer" id="filter-drawer">
     <div class="filter-inner">
-      <div class="shift-filter-row">
-        <button class="shift-filter-pill active" id="shift-pill-all"    data-shell-action="set-shift-filter" data-shell-value="all">All Shifts</button>
-        <button class="shift-filter-pill"        id="shift-pill-first"  data-shell-action="set-shift-filter" data-shell-value="first">1st Shift</button>
-        <button class="shift-filter-pill"        id="shift-pill-second" data-shell-action="set-shift-filter" data-shell-value="second">2nd Shift</button>
-        <button class="shift-filter-pill"        id="shift-pill-third"  data-shell-action="set-shift-filter" data-shell-value="third">3rd Shift</button>
-      </div>
       <div style="display:flex;flex-wrap:wrap;gap:6px;" id="stat-pills-row">
         <div class="stat-pill" id="pill-open"            data-shell-action="toggle-stat-filter" data-shell-value="open">           <div class="dot" style="background:var(--red)"></div>      <span id="stat-open">0 Open</span></div>
         <div class="stat-pill" id="pill-resolved"        data-shell-action="toggle-stat-filter" data-shell-value="resolved">       <div class="dot" style="background:var(--green)"></div>    <span id="stat-resolved">0 Resolved</span></div>
       </div>
+      <div class="filter-section-divider"></div>
       <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;">
         <select id="machine-filter"><option value="">All Machines</option></select>
         <select id="status-filter">
@@ -246,6 +223,12 @@
         <span class="search-icon">🔍</span>
         <input class="search-box" type="text" id="search-input" placeholder="Search issues…">
       </div>
+      <div class="shift-filter-row">
+        <button class="shift-filter-pill active" id="shift-pill-all"    data-shell-action="set-shift-filter" data-shell-value="all">All Shifts</button>
+        <button class="shift-filter-pill"        id="shift-pill-first"  data-shell-action="set-shift-filter" data-shell-value="first">1st Shift</button>
+        <button class="shift-filter-pill"        id="shift-pill-second" data-shell-action="set-shift-filter" data-shell-value="second">2nd Shift</button>
+        <button class="shift-filter-pill"        id="shift-pill-third"  data-shell-action="set-shift-filter" data-shell-value="third">3rd Shift</button>
+      </div>
     </div>
   </div>
 
@@ -253,9 +236,9 @@
     <span id="floor-map-label">FLOOR MAP</span>
     <div class="map-controls">
       <div class="map-mode-toggle">
-        <button class="map-mode-btn active-log" id="mode-log" data-shell-action="set-map-mode" data-shell-value="log">+ Report</button>
-        <button class="map-mode-btn" id="mode-hist" data-shell-action="set-map-mode" data-shell-value="hist">Timeline</button>
-        <button class="map-mode-btn" id="mode-notes" data-shell-action="set-map-mode" data-shell-value="notes">Wiki</button>
+        <button class="map-mode-btn active-log" id="mode-log" data-shell-action="set-map-mode" data-shell-value="log">+ Log</button>
+        <button class="map-mode-btn" id="mode-hist" data-shell-action="set-map-mode" data-shell-value="hist">History</button>
+        <button class="map-mode-btn" id="mode-notes" data-shell-action="set-map-mode" data-shell-value="notes">Notes</button>
       </div>
     </div>
   </div>
@@ -317,26 +300,15 @@
 <!-- ADD ISSUE MODAL -->
 <div class="modal-overlay" id="add-modal">
   <div class="modal add-issue-modal">
-    <div class="modal-title" style="display:flex; justify-content:space-between; align-items:flex-start; padding-right:4px;">
-      <div>Log Issue — <span class="modal-machine" id="modal-machine-name"></span></div>
-      <label class="issue-urgent-toggle" for="issue-urgent" title="Mark as Urgent">
-        <input id="issue-urgent" type="checkbox">
-        <span class="issue-urgent-pill icon-only" title="Urgent">🔥</span>
-      </label>
-    </div>
+    <div class="modal-title">Log Issue — <span class="modal-machine" id="modal-machine-name"></span></div>
     <label>What happened?</label>
     <textarea id="issue-note" placeholder="Example: Hydraulic leak at press startup" rows="3"></textarea>
     <div class="issue-quick-phrases" id="issue-quick-phrases"></div>
-    <label>Photos <span style="color:var(--text3);font-size:9px;letter-spacing:0;text-transform:none;font-family:'Nunito',sans-serif">(optional)</span></label>
-    <div class="issue-attach-hint">Tap once for camera or library. Photos preview right here.</div>
-    <div class="photo-stack">
-      <div class="photo-btn-row">
-        <button class="photo-pick-btn photo-add-btn" id="log-photo-btn" type="button">➕ Add Photo</button>
-      </div>
-      <div class="photo-source-row" id="log-photo-source-row">
-        <button class="photo-pick-btn photo-source-btn" id="log-camera-btn" type="button">📷 Camera</button>
-        <button class="photo-pick-btn photo-source-btn" id="log-library-btn" type="button">🖼️ Library</button>
-      </div>
+    <div class="issue-urgent-row">
+      <label class="issue-urgent-toggle" for="issue-urgent">
+        <input id="issue-urgent" type="checkbox">
+        <span class="issue-urgent-pill">Urgent need</span>
+      </label>
     </div>
     <button class="issue-advanced-toggle" id="issue-advanced-toggle" type="button" onclick="toggleIssueAdvancedDetails()">
       <span>More details</span>
@@ -379,6 +351,17 @@
       </div>
       <div class="log-cat-all-row" id="log-cat-all-row"></div>
       <div class="log-sub-row" id="log-sub-row"></div>
+    </div>
+    <label>Photos <span style="color:var(--text3);font-size:9px;letter-spacing:0;text-transform:none;font-family:'Nunito',sans-serif">(optional)</span></label>
+    <div class="issue-attach-hint">Tap once for camera or library. Photos preview right here.</div>
+    <div class="photo-stack">
+      <div class="photo-btn-row">
+        <button class="photo-pick-btn photo-add-btn" id="log-photo-btn" type="button">➕ Add Photo</button>
+      </div>
+      <div class="photo-source-row" id="log-photo-source-row">
+        <button class="photo-pick-btn photo-source-btn" id="log-camera-btn" type="button">📷 Camera</button>
+        <button class="photo-pick-btn photo-source-btn" id="log-library-btn" type="button">🖼️ Library</button>
+      </div>
     </div>
     <input type="file" id="log-camera-input" accept="image/*" capture="environment" style="display:none">
     <input type="file" id="log-library-input" accept="image/*" multiple style="display:none">
@@ -560,14 +543,6 @@
     <div id="edit-status-sub-wrap"></div>
     <label>Note (optional)</label>
     <textarea id="edit-status-note" placeholder="Additional details…" style="min-height:60px;margin-bottom:14px;"></textarea>
-    <label>Photos (optional)</label>
-    <div class="photo-source-group" style="margin-bottom:10px;">
-      <button class="photo-pick-btn photo-source-btn" id="edit-status-camera-btn" type="button">📷 Take Photo</button>
-      <button class="photo-pick-btn photo-source-btn" id="edit-status-library-btn" type="button">🖼️ Choose Photo</button>
-    </div>
-    <input type="file" id="edit-status-camera-input" accept="image/*" capture="environment" style="display:none">
-    <input type="file" id="edit-status-library-input" accept="image/*" multiple style="display:none">
-    <div class="photo-previews" id="edit-status-photo-previews" style="margin-bottom:14px;"></div>
     <div style="margin-bottom:14px;">
       <label>Date & Time</label>
       <div style="display:flex;gap:8px;">
@@ -593,7 +568,7 @@
 
 <!-- EXPORT PDF MODAL -->
 <div class="modal-overlay" id="export-modal">
-  <div class="modal press-wiki-modal-shell" style="max-width:620px;">
+  <div class="modal" style="max-width:620px;">
     <div class="modal-title" style="display:flex;align-items:center;justify-content:space-between;">
       <span style="display:flex;align-items:center;gap:8px;">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 1h6l4 4v9a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1z" stroke="var(--accent)" stroke-width="1.3"/><path d="M10 1v4h4M5 9h6M5 11.5h4" stroke="var(--accent)" stroke-width="1.3" stroke-linecap="round"/></svg>
@@ -642,101 +617,128 @@
   </div>
 </div>
 
+<!-- PRESS NOTES MODAL — VARIANT A: LOGBOOK -->
+<div class="modal-overlay" id="notes-modal-a">
+  <div class="modal" style="max-width:480px;">
+    <div class="notes-modal-a-wrap">
+      <div class="notes-modal-a-header">
+        <div class="notes-modal-a-id-plate">
+          <div class="notes-modal-a-plate-bar"></div>
+          <div class="notes-modal-a-plate-text">
+            <div class="notes-modal-a-subtitle">PRESS NOTES</div>
+            <div class="notes-modal-a-machine" id="notes-modal-machine-a"></div>
+            <div class="notes-modal-a-context" id="notes-modal-context-a"></div>
+            <div class="notes-modal-a-meta" id="notes-modal-meta-a"></div>
+          </div>
+        </div>
+        <button class="notes-modal-a-close" onclick="closeNotesModal()">✕</button>
+      </div>
+      <div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
+        <button id="open-wiki-btn-a" class="photo-pick-btn" type="button">📚 Open Wiki</button>
+      </div>
+      <div id="notes-list-a" class="log-timeline"></div>
+      <div id="notes-error-a" style="display:none;font-size:11px;color:var(--red);margin-top:4px;"></div>
+      <div class="notes-attach">
+        <div class="notes-attach-label">Attach Photos</div>
+        <div class="photo-btn-row notes-photo-btn-row">
+          <button class="photo-pick-btn" id="notes-camera-btn-a" type="button">📷 Take Photo</button>
+          <button class="photo-pick-btn" id="notes-library-btn-a" type="button">🖼️ Choose File</button>
+        </div>
+        <input type="file" id="notes-camera-input-a" accept="image/*" capture="environment" style="display:none">
+        <input type="file" id="notes-library-input-a" accept="image/*" multiple style="display:none">
+        <div class="photo-previews notes-photo-previews" id="notes-photo-previews-a"></div>
+      </div>
+      <div class="log-compose">
+        <div class="log-compose-label">Append to Log</div>
+        <div class="log-compose-row">
+          <textarea id="notes-textarea-a" class="log-compose-textarea" rows="1" placeholder="Record an observation…" oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"></textarea>
+          <button id="notes-submit-btn-a" class="log-compose-btn" onclick="submitPressNote()">LOG IT</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
+<!-- PRESS NOTES MODAL — VARIANT B: TEAM CHANNEL -->
+<div class="modal-overlay" id="notes-modal-b">
+  <div class="modal" style="max-width:480px;">
+    <div class="notes-modal-b-header">
+      <div class="notes-modal-b-channel">
+        <div class="notes-modal-b-channel-name">
+          <span class="notes-modal-b-hash">#</span><span class="notes-modal-b-machine" id="notes-modal-machine-b"></span>
+        </div>
+        <div class="notes-modal-b-label">Press Notes</div>
+        <div class="notes-modal-b-context" id="notes-modal-context-b"></div>
+        <div class="notes-modal-b-meta" id="notes-modal-meta-b"></div>
+      </div>
+      <button class="notes-modal-b-close" onclick="closeNotesModal()">✕ close</button>
+    </div>
+    <div style="display:flex;justify-content:flex-end;margin:6px 0 10px;">
+      <button id="open-wiki-btn-b" class="photo-pick-btn" type="button">📚 Open Wiki</button>
+    </div>
+    <div id="notes-list-b" class="chat-list"></div>
+    <div id="notes-error-b" style="display:none;font-size:11px;color:var(--red);margin-top:4px;"></div>
+    <div class="notes-attach">
+      <div class="notes-attach-label">Attach Photos</div>
+      <div class="photo-btn-row notes-photo-btn-row">
+        <button class="photo-pick-btn" id="notes-camera-btn-b" type="button">📷 Take Photo</button>
+        <button class="photo-pick-btn" id="notes-library-btn-b" type="button">🖼️ Choose File</button>
+      </div>
+      <input type="file" id="notes-camera-input-b" accept="image/*" capture="environment" style="display:none">
+      <input type="file" id="notes-library-input-b" accept="image/*" multiple style="display:none">
+      <div class="photo-previews notes-photo-previews" id="notes-photo-previews-b"></div>
+    </div>
+    <div class="chat-compose">
+      <div class="chat-compose-row">
+        <textarea id="notes-textarea-b" class="chat-compose-textarea" rows="1" placeholder="Add a note…" oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"></textarea>
+        <button id="notes-submit-btn-b" class="chat-send-btn" onclick="submitPressNote()" title="Send">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13.5 2.5L7 9M13.5 2.5L9 13.5 7 9l-4.5-2 9-4.5z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+      <div class="chat-compose-hint">Shift+Enter for new line</div>
+    </div>
+  </div>
+</div>
 
 <!-- PRESS WIKI MODAL -->
 <div class="modal-overlay" id="press-wiki-modal">
-  <div class="modal press-wiki-modal-shell" style="max-width:620px;">
-    <div class="modal-header-row" style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
-      <div style="min-width:0;flex:1;">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:8px;">
-          <div style="display:inline-flex;gap:3px;padding:3px;background:var(--bg3);border:1px solid var(--line);border-radius:999px;">
-            <button id="press-wiki-scope-press" class="btn btn-ghost" type="button" aria-haspopup="dialog" aria-expanded="false" style="padding:4px 10px;border-radius:999px;font-size:12px;">This Press</button>
-            <button id="press-wiki-scope-shared" class="btn btn-ghost" type="button" style="padding:4px 10px;border-radius:999px;font-size:12px;">Shared Library</button>
-          </div>
-          <div id="press-wiki-actions-wrap" class="press-wiki-actions-wrap" style="display:none;margin-left:auto;">
-            <button id="press-wiki-actions-btn" class="sort-dropdown-btn press-wiki-actions-btn" type="button" aria-haspopup="true" aria-expanded="false">
-              Actions
-              <svg class="sort-chevron" width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </button>
-            <div id="press-wiki-actions-menu" class="sort-dropdown press-wiki-actions-menu">
-              <button id="press-wiki-new-page-btn" class="sort-opt press-wiki-action-item" type="button">Create Entry</button>
-              <button id="press-wiki-edit-btn" class="sort-opt press-wiki-action-item" type="button">Quick Edit</button>
-              <button id="press-wiki-cms-btn" class="sort-opt press-wiki-action-item" type="button">Edit in CMS</button>
-            </div>
-          </div>
-        </div>
-        <div class="press-wiki-press-picker-wrap" style="margin-top:8px;display:none;">
-          <div class="press-wiki-press-picker-panel-head">
-            <div>
-              <div class="press-wiki-press-picker-panel-kicker">Press Deck</div>
-              <div id="press-wiki-press-picker-panel-copy" class="press-wiki-press-picker-panel-copy">Pick a press to load its wiki.</div>
-            </div>
-            <button id="press-wiki-press-picker-close" class="btn btn-ghost" type="button" style="padding:4px 10px;border-radius:999px;font-size:12px;">Close</button>
-          </div>
-          <div id="press-wiki-press-picker-tree" class="press-wiki-press-picker-tree"></div>
-        </div>
-        <div class="press-wiki-picker-wrap" style="margin-top:8px;">
-          <label for="press-wiki-picker-btn" style="display:block;font-size:12px;color:var(--text3);white-space:nowrap;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px;">Select Page</label>
-          <button id="press-wiki-picker-btn" class="press-wiki-picker-btn" type="button" aria-haspopup="tree" aria-expanded="false">
-            <span class="press-wiki-picker-copy">
-              <span id="press-wiki-picker-title" class="press-wiki-picker-title">No page selected</span>
-              <span id="press-wiki-picker-path" class="press-wiki-picker-path">This Press</span>
-            </span>
-            <span class="press-wiki-picker-meta">
-              <span id="press-wiki-picker-count" class="press-wiki-picker-count">0 pages</span>
-              <svg class="press-wiki-picker-caret" width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </span>
-          </button>
-          <div id="press-wiki-picker-panel" class="press-wiki-picker-panel" aria-hidden="true">
-            <div class="press-wiki-picker-panel-head">
-              <div class="press-wiki-picker-panel-kicker">Hierarchy</div>
-              <div id="press-wiki-picker-panel-copy" class="press-wiki-picker-panel-copy">Choose a page to read or edit.</div>
-            </div>
-            <div id="press-wiki-picker-tree" class="press-wiki-picker-tree"></div>
-          </div>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px;">
-          <div id="press-wiki-title" style="display:none;font-size:18px;font-weight:700;line-height:1.1;">No page selected</div>
-        </div>
-        <div id="press-wiki-meta" style="font-size:12px;color:var(--text3);margin-top:3px;"></div>
+  <div class="modal" style="max-width:620px;">
+    <div class="modal-header-row" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+      <div>
+        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;">Press Wiki</div>
+        <div id="press-wiki-title" style="font-size:18px;font-weight:700;margin-top:4px;">No page selected</div>
+        <div id="press-wiki-meta" style="font-size:12px;color:var(--text3);margin-top:2px;"></div>
       </div>
+      <button class="btn btn-ghost" type="button" onclick="closePressWikiModal()">Close</button>
     </div>
-    <div id="press-wiki-new-page-row" style="margin-top:6px;display:none;gap:8px;align-items:center;">
+    <div id="press-wiki-body" style="margin-top:10px;white-space:normal;font-size:14px;line-height:1.45;"></div>
+    <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <label style="font-size:12px;color:var(--text3);">Page</label>
+      <select id="press-wiki-page-select" class="select" style="min-width:180px;"></select>
+      <button id="press-wiki-new-page-btn" class="btn btn-ghost" type="button">New Page</button>
+      <button id="press-wiki-edit-btn" class="btn btn-ghost" type="button">Edit</button>
+    </div>
+    <div id="press-wiki-new-page-row" style="margin-top:8px;display:none;gap:8px;align-items:center;">
       <input id="press-wiki-new-page-id" class="input" type="text" placeholder="new-page-id" style="flex:1;">
       <button id="press-wiki-create-page-btn" class="btn btn-blue" type="button">Create</button>
       <button id="press-wiki-cancel-create-page-btn" class="btn btn-ghost" type="button">Cancel</button>
     </div>
-    <div id="press-wiki-error" style="display:none;font-size:12px;color:var(--red);margin-top:6px;"></div>
-    
-    <div id="press-wiki-body" style="margin-top:8px;white-space:normal;font-size:14px;line-height:1.45;"></div>
-    <div id="press-wiki-attachments" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:8px;"></div>
-    
-    <div id="press-wiki-editor" style="margin-top:8px;display:none;">
+    <div id="press-wiki-error" style="display:none;font-size:12px;color:var(--red);margin-top:8px;"></div>
+    <div id="press-wiki-editor" style="margin-top:10px;display:none;">
       <input id="press-wiki-edit-title" class="input" type="text" placeholder="Page title">
-      <div class="formatting-toolbar" style="display:flex;gap:4px;margin-top:6px;padding:4px;background:var(--bg3);border:1px solid var(--border);border-bottom:none;border-radius:8px 8px 0 0;">
-        <button type="button" class="btn btn-ghost" style="padding:4px 8px;font-size:12px;" onclick="insertMarkdown('press-wiki-edit-body', '**', '**')"><b>B</b></button>
-        <button type="button" class="btn btn-ghost" style="padding:4px 8px;font-size:12px;font-style:italic;" onclick="insertMarkdown('press-wiki-edit-body', '*', '*')">I</button>
-        <button type="button" class="btn btn-ghost" style="padding:4px 8px;font-size:12px;text-decoration:underline;" onclick="insertMarkdown('press-wiki-edit-body', '<u>', '</u>')">U</button>
-        <input type="color" id="press-wiki-color-picker" style="width:28px;height:28px;padding:0;border:none;cursor:pointer;background:transparent;border-radius:4px;" onchange="insertMarkdown('press-wiki-edit-body', '<span style=\'color:'+this.value+'\'>', '</span>')">
-      </div>
-      <textarea id="press-wiki-edit-body" class="input" rows="6" placeholder="Write wiki content..." style="margin-top:0;border-radius:0 0 8px 8px;min-height:130px;"></textarea>
-      <input id="press-wiki-edit-change-note" class="input" type="text" placeholder="Change note (required)" style="margin-top:6px;">
-      <div style="margin-top:6px;display:flex;gap:8px;">
+      <textarea id="press-wiki-edit-body" class="input" rows="6" placeholder="Write wiki content..." style="margin-top:8px;min-height:130px;"></textarea>
+      <input id="press-wiki-edit-change-note" class="input" type="text" placeholder="Change note (required)" style="margin-top:8px;">
+      <div style="margin-top:8px;display:flex;gap:8px;">
         <button id="press-wiki-insert-photo-btn" class="btn btn-ghost" type="button">Insert Photo</button>
         <button id="press-wiki-save-btn" class="btn btn-blue" type="button">Save Revision</button>
         <button id="press-wiki-delete-btn" class="btn btn-danger" type="button">Delete Page</button>
         <button id="press-wiki-cancel-edit-btn" class="btn btn-ghost" type="button">Cancel</button>
       </div>
-      <input type="file" id="press-wiki-file-input" accept="image/*" multiple style="display:none">
-      <div id="press-wiki-photo-picker" style="margin-top:6px;display:none;border:1px solid var(--line);border-radius:10px;padding:8px;"></div>
+      <div id="press-wiki-photo-picker" style="margin-top:8px;display:none;border:1px solid var(--line);border-radius:10px;padding:8px;"></div>
     </div>
-    
-    <details style="margin-top:10px;border:1px solid var(--line);border-radius:10px;padding:8px;">
-      <summary style="font-size:12px;font-weight:600;cursor:pointer;user-select:none;outline:none;">Revision History</summary>
-      <div id="press-wiki-revisions" style="margin-top:8px;max-height:220px;overflow:auto;"></div>
-    </details>
-    
+    <div id="press-wiki-attachments" style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px;"></div>
+    <div style="margin-top:14px;font-size:12px;font-weight:600;">Revision History</div>
+    <div id="press-wiki-revisions" style="margin-top:8px;max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:8px;"></div>
   </div>
 </div>
 
@@ -966,35 +968,25 @@
   </div>
 </div>
 
-<div class="role-alerts-modal" id="role-alerts-modal" aria-hidden="true">
-  <div class="role-alerts-backdrop" data-role-alert-action="close" aria-hidden="true"></div>
-  <section class="role-alerts-sheet" role="dialog" aria-modal="true" aria-labelledby="role-alerts-title">
-    <div class="role-alerts-shell-header">
-      <div class="role-alerts-shell-title">
-        <div class="role-alerts-shell-kicker">Alerts</div>
-        <h3 id="role-alerts-title">Your Alerts</h3>
-        <div id="role-alerts-footer" class="role-alerts-footer-text"></div>
-      </div>
-      <div class="role-alerts-header-actions">
-        <button class="role-alerts-retry-fab" type="button" data-role-alert-action="retry" aria-label="Retry loading alerts" title="Retry loading alerts">
-          <svg class="role-alerts-retry-icon" viewBox="0 0 487.23 487.23" aria-hidden="true" focusable="false">
-            <g fill="currentColor">
-              <path d="M55.323,203.641c15.664,0,29.813-9.405,35.872-23.854c25.017-59.604,83.842-101.61,152.42-101.61c37.797,0,72.449,12.955,100.23,34.442l-21.775,3.371c-7.438,1.153-13.224,7.054-14.232,14.512c-1.01,7.454,3.008,14.686,9.867,17.768l119.746,53.872c5.249,2.357,11.33,1.904,16.168-1.205c4.83-3.114,7.764-8.458,7.796-14.208l0.621-131.943c0.042-7.506-4.851-14.144-12.024-16.332c-7.185-2.188-14.947,0.589-19.104,6.837l-16.505,24.805C370.398,26.778,310.1,0,243.615,0C142.806,0,56.133,61.562,19.167,149.06c-5.134,12.128-3.84,26.015,3.429,36.987C29.865,197.023,42.152,203.641,55.323,203.641z"/>
-              <path d="M464.635,301.184c-7.27-10.977-19.558-17.594-32.728-17.594c-15.664,0-29.813,9.405-35.872,23.854c-25.018,59.604-83.843,101.61-152.42,101.61c-37.798,0-72.45-12.955-100.232-34.442l21.776-3.369c7.437-1.153,13.223-7.055,14.233-14.514c1.009-7.453-3.008-14.686-9.867-17.768L49.779,285.089c-5.25-2.356-11.33-1.905-16.169,1.205c-4.829,3.114-7.764,8.458-7.795,14.207l-0.622,131.943c-0.042,7.506,4.85,14.144,12.024,16.332c7.185,2.188,14.948-0.59,19.104-6.839l16.505-24.805c44.004,43.32,104.303,70.098,170.788,70.098c100.811,0,187.481-61.561,224.446-149.059C473.197,326.043,471.903,312.157,464.635,301.184z"/>
-            </g>
-          </svg>
-        </button>
-        <button class="btn btn-ghost role-alerts-close" type="button" data-role-alert-action="close">Close</button>
+<div class="modal-overlay" id="role-alerts-modal">
+  <div class="modal" style="max-width:620px">
+    <div class="role-alerts-header">
+      <div>
+        <h3 style="margin:0">Your Alerts</h3>
       </div>
     </div>
-    <div class="role-alerts-toolbar">
-      <div class="role-alerts-toggle scope-toggle" role="group" aria-label="Accepted alerts visibility">
-        <button class="scope-btn" id="role-alerts-hide-accepted-btn" type="button" data-role-alert-action="hide-accepted">Hide accepted</button>
-        <button class="scope-btn active" id="role-alerts-show-accepted-btn" type="button" data-role-alert-action="show-accepted">Show accepted</button>
+    <div id="role-alerts-list" style="display:flex;flex-direction:column;gap:8px;max-height:55vh;overflow:auto;"></div>
+    <div class="role-alerts-footer">
+      <div id="role-alerts-footer" class="role-alerts-footer-text"></div>
+      <div class="role-alerts-footer-actions">
+        <div class="role-alerts-toggle scope-toggle" role="group" aria-label="Accepted alerts visibility">
+          <button class="scope-btn" id="role-alerts-hide-accepted-btn" type="button" onclick="setRoleAlertsShowAccepted(false)">Hide accepted</button>
+          <button class="scope-btn active" id="role-alerts-show-accepted-btn" type="button" onclick="setRoleAlertsShowAccepted(true)">Show accepted</button>
+        </div>
+        <button class="btn btn-ghost role-alerts-close" type="button" onclick="closeRoleAlertInboxModal()">Close</button>
       </div>
     </div>
-    <div id="role-alerts-list" class="role-alerts-list"></div>
-  </section>
+  </div>
 </div>
 
 <!-- STATUS SHEET -->
@@ -1068,7 +1060,16 @@
   </div>
 </div>
 
-<script type="module" src="./app.js?v=20260509-1"></script>
+<script>
+  if (location.protocol === 'file:') {
+    location.replace('http://127.0.0.1:8000/noauth.html');
+  } else {
+    const appScript = document.createElement('script');
+    appScript.type = 'module';
+    appScript.src = './app.js';
+    document.body.appendChild(appScript);
+  }
+</script>
 
 <!-- MASCOT CHARACTER CARD POPOVER -->
 <div class="mascot-popover-backdrop" id="mascot-popover-backdrop" onclick="if(event.target===this)closeMascotPopover()">

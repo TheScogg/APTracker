@@ -259,7 +259,8 @@ service cloud.firestore {
           allow read: if isPlantMember(plantId);
           allow create: if canEditWiki(plantId)
             && request.resource.data.editedBy.uid == currentUid();
-          allow update, delete: if false;
+          allow update: if false;
+          allow delete: if isAdmin(plantId);
         }
 
         match /attachments/{attachmentId} {
@@ -288,7 +289,8 @@ service cloud.firestore {
           allow create: if hasPlantAccess()
                         && canEditWiki(plantId)
                         && request.resource.data.editedBy.uid == currentUid();
-          allow update, delete: if false;
+          allow update: if false;
+          allow delete: if isAdmin(plantId);
         }
 
         match /attachments/{attachmentId} {

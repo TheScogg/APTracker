@@ -737,6 +737,8 @@ This is the stable, structured wiki layer for a single press. Use it for operato
   "slug": "press-wiki",
   "summary": "Primary operating reference for Press 12.",
   "tags": ["press", "setup", "process", "quality"],
+  "parentPageId": null,
+  "sortOrder": 0,
   "isPinned": true,
   "isLocked": false,
   "visibility": "plant",
