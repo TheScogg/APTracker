@@ -2209,6 +2209,326 @@
   .press-wiki-event-photos { display:flex; flex-wrap:wrap; gap: 6px; }
   .press-wiki-editor { display:none; border-top: 1px solid var(--border); padding-top: 12px; }
   .press-wiki-editor-actions { display:flex; gap:8px; justify-content:flex-end; margin-top: 8px; }
+
+  /* NOTES MODAL */
+  body.notes-open { overflow: hidden; overscroll-behavior: none; }
+  .notes-modal-shell {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: min(1120px, 96vw);
+    height: min(90vh, 880px);
+    max-height: min(90vh, 880px);
+    overflow: hidden;
+    padding: 0;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--bg2) 94%, var(--yellow) 6%), var(--bg2));
+  }
+  .notes-modal-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px 16px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--yellow) 12%, var(--bg2)), var(--bg2));
+  }
+  .notes-modal-header-copy { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+  .notes-modal-kicker { font-family: 'Share Tech Mono', monospace; font-size: 10px; letter-spacing: .18em; text-transform: uppercase; color: var(--yellow); }
+  .notes-modal-title-row { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .notes-modal-title { font-family: 'Rajdhani', sans-serif; font-size: 22px; font-weight: 700; letter-spacing: .6px; line-height: 1.1; }
+  .notes-modal-context { font-family: 'Share Tech Mono', monospace; font-size: 10px; color: var(--text3); letter-spacing: .08em; text-transform: uppercase; }
+  .notes-modal-subtitle { font-family: 'Nunito', sans-serif; font-size: 12px; color: var(--text2); line-height: 1.45; }
+  .notes-modal-header-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .notes-modal-close { width: 40px; height: 40px; border-radius: 999px; border: 1px solid var(--border); background: var(--bg3); color: var(--text2); cursor: pointer; transition: border-color .15s, color .15s, background .15s; }
+  .notes-modal-close:hover { border-color: var(--yellow); color: var(--text); background: color-mix(in srgb, var(--yellow) 8%, var(--bg3)); }
+  .notes-modal-body { display: grid; grid-template-columns: 330px minmax(0, 1fr); min-height: 0; flex: 1; overflow: hidden; }
+  .notes-list-panel {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--border);
+    background: color-mix(in srgb, var(--bg3) 82%, var(--yellow) 4%);
+  }
+  .notes-list-controls { padding: 12px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 10px; }
+  .notes-search { width: 100%; background: var(--bg2); border-color: var(--border); border-radius: 999px; }
+  .notes-filter-row { display: flex; gap: 6px; flex-wrap: wrap; }
+  .notes-filter-btn {
+    border: 1px solid var(--border);
+    background: var(--bg2);
+    color: var(--text2);
+    border-radius: 999px;
+    padding: 6px 10px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: border-color .15s, color .15s, background .15s;
+  }
+  .notes-filter-btn.active,
+  .notes-filter-btn:hover {
+    border-color: var(--yellow);
+    color: var(--text);
+    background: color-mix(in srgb, var(--yellow) 10%, var(--bg2));
+  }
+  .notes-list { flex: 1; min-height: 0; overflow: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .notes-list-empty {
+    padding: 18px 10px;
+    color: var(--text3);
+    font-family: 'Nunito', sans-serif;
+    font-size: 13px;
+    line-height: 1.5;
+    text-align: center;
+  }
+  .notes-list-item {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--bg2);
+    padding: 11px 12px;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color .15s, transform .15s, background .15s;
+  }
+  .notes-list-item:hover { border-color: var(--yellow); transform: translateY(-1px); }
+  .notes-list-item.active {
+    border-color: color-mix(in srgb, var(--yellow) 70%, var(--border));
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--yellow) 40%, transparent);
+    background: color-mix(in srgb, var(--yellow) 8%, var(--bg2));
+  }
+  .notes-list-item-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .notes-list-item-title { font-family: 'Rajdhani', sans-serif; font-size: 16px; font-weight: 700; color: var(--text); line-height: 1.15; }
+  .notes-list-item-time { font-family: 'Share Tech Mono', monospace; font-size: 9px; color: var(--text3); white-space: nowrap; }
+  .notes-list-item-preview { margin-top: 4px; font-family: 'Nunito', sans-serif; font-size: 12px; color: var(--text2); line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .notes-list-item-badges { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .notes-list-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--bg3);
+    color: var(--text2);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 9px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+  .notes-list-badge.pinned { border-color: color-mix(in srgb, var(--yellow) 45%, var(--border)); color: var(--yellow); }
+  .notes-list-badge.linked { border-color: color-mix(in srgb, var(--teal) 45%, var(--border)); color: var(--teal); }
+  .notes-list-badge.archived { border-color: color-mix(in srgb, var(--text3) 45%, var(--border)); color: var(--text3); }
+  .notes-editor-panel { min-height: 0; display: flex; flex-direction: column; gap: 10px; overflow: auto; padding: 16px; }
+  .notes-editor-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .notes-editor-meta { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+  .notes-editor-save-state { font-family: 'Share Tech Mono', monospace; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--yellow); }
+  .notes-editor-updated { font-family: 'Nunito', sans-serif; font-size: 12px; color: var(--text3); }
+  .notes-editor-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .notes-context-box { border: 1px solid var(--border); border-radius: 14px; background: var(--bg3); padding: 10px 12px; }
+  .notes-context-label { font-family: 'Share Tech Mono', monospace; font-size: 9px; letter-spacing: .18em; text-transform: uppercase; color: var(--text3); margin-bottom: 8px; }
+  .notes-context-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .notes-context-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--bg2);
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+  .notes-context-chip button {
+    background: none;
+    border: none;
+    color: var(--text2);
+    padding: 0;
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 1;
+  }
+  .notes-title,
+  .notes-tags {
+    background: var(--bg2);
+    border-color: var(--border);
+    border-radius: 14px;
+    min-height: 46px;
+  }
+  .notes-title { font-family: 'Rajdhani', sans-serif; font-size: 20px; font-weight: 700; }
+  .notes-tags { font-family: 'Share Tech Mono', monospace; font-size: 11px; letter-spacing: .05em; }
+  .notes-toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
+  .notes-toolbar-btn {
+    border: 1px solid var(--border);
+    background: var(--bg2);
+    color: var(--text2);
+    border-radius: 12px;
+    padding: 8px 10px;
+    min-height: 40px;
+    cursor: pointer;
+    font-family: 'Nunito', sans-serif;
+    font-size: 12px;
+    transition: border-color .15s, color .15s, background .15s, transform .1s;
+  }
+  .notes-toolbar-btn:hover { border-color: var(--yellow); color: var(--text); background: color-mix(in srgb, var(--yellow) 8%, var(--bg2)); }
+  .notes-toolbar-btn:active { transform: scale(.98); }
+  .notes-body {
+    min-height: 180px;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: var(--bg2);
+    color: var(--text);
+    padding: 14px 14px 18px;
+    line-height: 1.55;
+    font-family: 'Nunito', sans-serif;
+    font-size: 14px;
+    outline: none;
+    overflow: auto;
+  }
+  .notes-body:empty::before {
+    content: attr(data-placeholder);
+    color: var(--text3);
+  }
+  .notes-body p { margin: 0 0 10px; }
+  .notes-body ul,
+  .notes-body ol { margin: 0 0 10px 20px; padding-left: 20px; }
+  .notes-body li { margin: 2px 0; }
+  .notes-body h1,
+  .notes-body h2,
+  .notes-body h3 { margin: 12px 0 8px; line-height: 1.2; }
+  .notes-body a { color: var(--blue); }
+  .notes-section-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 2px; }
+  .notes-section-title { font-family: 'Share Tech Mono', monospace; font-size: 10px; letter-spacing: .18em; text-transform: uppercase; color: var(--text3); }
+  .notes-checklist { display: flex; flex-direction: column; gap: 8px; }
+  .notes-checklist-empty {
+    border: 1px dashed var(--border);
+    border-radius: 12px;
+    padding: 12px;
+    color: var(--text3);
+    font-family: 'Nunito', sans-serif;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .notes-check-item {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 10px 12px;
+    background: var(--bg2);
+  }
+  .notes-check-item input[type="checkbox"] { width: 18px; height: 18px; margin-top: 2px; accent-color: var(--yellow); flex-shrink: 0; }
+  .notes-check-text {
+    flex: 1;
+    min-width: 0;
+    border: none;
+    background: transparent;
+    color: var(--text);
+    font-family: 'Nunito', sans-serif;
+    font-size: 14px;
+    line-height: 1.45;
+    outline: none;
+    padding: 0;
+  }
+  .notes-check-text::placeholder { color: var(--text3); }
+  .notes-check-remove {
+    border: none;
+    background: none;
+    color: var(--text3);
+    cursor: pointer;
+    padding: 0;
+    font-size: 14px;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+  .notes-add-checklist-row { display: flex; gap: 8px; align-items: center; }
+  .notes-add-checklist-row .input { flex: 1; background: var(--bg2); border-color: var(--border); border-radius: 12px; }
+  .notes-attachments { display: flex; flex-wrap: wrap; gap: 10px; }
+  .notes-attachment {
+    width: 88px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .notes-attachment-thumb {
+    width: 88px;
+    height: 88px;
+    border-radius: 14px;
+    object-fit: cover;
+    border: 1px solid var(--border);
+    background: var(--bg3);
+    display: block;
+  }
+  .notes-attachment-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 9px;
+    line-height: 1.35;
+    color: var(--text3);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .notes-attachment-remove {
+    border: none;
+    background: none;
+    color: var(--text3);
+    padding: 0;
+    font-size: 12px;
+    cursor: pointer;
+    align-self: flex-start;
+  }
+  .notes-editor-panel .btn { min-height: 40px; }
+  @media (max-width: 860px) {
+    .notes-modal-shell {
+      width: 98vw;
+      height: 92vh;
+      max-height: 92vh;
+    }
+    .notes-modal-body {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto minmax(0, 1fr);
+    }
+    .notes-list-panel {
+      border-right: none;
+      border-bottom: 1px solid var(--border);
+      max-height: 34vh;
+    }
+    .notes-editor-panel {
+      padding: 14px 12px 12px;
+    }
+  }
+  @media (max-width: 520px) {
+    #notes-modal > .notes-modal-shell {
+      width: 100vw;
+      max-width: 100vw;
+      height: 100dvh;
+      max-height: 100dvh;
+      border-radius: 0;
+      border-left: none;
+      border-right: none;
+      border-bottom: none;
+    }
+    #notes-modal .notes-modal-header {
+      padding: 10px 12px 8px;
+    }
+    #notes-modal .notes-modal-title {
+      font-size: 18px;
+    }
+    #notes-modal .notes-modal-header-actions {
+      width: 100%;
+      justify-content: space-between;
+    }
+    .notes-toolbar-btn,
+    .notes-editor-actions .btn {
+      min-height: 44px;
+    }
+    .notes-body {
+      min-height: 160px;
+    }
+  }
   .role-alerts-modal {
     position: fixed;
     inset: 0;

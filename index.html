@@ -55,6 +55,9 @@
       <button class="sort-dropdown-btn" id="wiki-btn-header" type="button" data-shell-action="open-shared-library" aria-label="Shared Library Wiki" title="Shared Library Wiki">
         <span class="wiki-btn-icon" aria-hidden="true">W</span>
       </button>
+      <button class="sort-dropdown-btn" id="notes-btn-header" type="button" data-shell-action="open-notes-modal" aria-label="Notes" title="Notes">
+        <span class="wiki-btn-icon" aria-hidden="true">N</span>
+      </button>
 
       <button class="sort-dropdown-btn" id="messages-btn-header" data-messages-trigger="true" data-shell-action="open-messages" style="gap:4px;" aria-label="Messages" title="Messages">
         <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;opacity:0.7;"><path d="M3 2h10a1 1 0 011 1v8a1 1 0 01-1 1H5l-3 2V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
@@ -738,6 +741,86 @@
         <summary style="font-size:12px;font-weight:600;cursor:pointer;user-select:none;outline:none;">Revision History</summary>
         <div id="press-wiki-revisions" style="margin-top:8px;max-height:220px;overflow:auto;"></div>
       </details>
+    </div>
+  </div>
+</div>
+
+<!-- NOTES MODAL -->
+<div class="modal-overlay" id="notes-modal" onclick="if(event.target===this)closeNotesModal()">
+  <div class="modal notes-modal-shell" onclick="event.stopPropagation()">
+    <div class="notes-modal-header">
+      <div class="notes-modal-header-copy">
+        <div class="notes-modal-kicker">Notes</div>
+        <div class="notes-modal-title-row">
+          <div class="notes-modal-title">Notebook</div>
+          <div id="notes-modal-context" class="notes-modal-context">Plant-wide</div>
+        </div>
+        <div id="notes-modal-subtitle" class="notes-modal-subtitle">Quick capture, mobile first, Apple Notes inspired.</div>
+      </div>
+      <div class="notes-modal-header-actions">
+        <button id="notes-new-btn" class="btn btn-blue" type="button">New Note</button>
+        <button class="notes-modal-close" type="button" onclick="closeNotesModal()" aria-label="Close notes">✕</button>
+      </div>
+    </div>
+    <div class="notes-modal-body">
+      <aside class="notes-list-panel">
+        <div class="notes-list-controls">
+          <div class="notes-search-wrap">
+            <input id="notes-search" class="input notes-search" type="search" placeholder="Search notes">
+          </div>
+          <div class="notes-filter-row" role="tablist" aria-label="Notes filters">
+            <button class="notes-filter-btn active" id="notes-filter-all" type="button" data-notes-filter="all">All</button>
+            <button class="notes-filter-btn" id="notes-filter-pinned" type="button" data-notes-filter="pinned">Pinned</button>
+            <button class="notes-filter-btn" id="notes-filter-linked" type="button" data-notes-filter="linked">Linked</button>
+            <button class="notes-filter-btn" id="notes-filter-archived" type="button" data-notes-filter="archived">Archived</button>
+          </div>
+        </div>
+        <div id="notes-list" class="notes-list"></div>
+      </aside>
+      <section class="notes-editor-panel">
+        <div class="notes-editor-head">
+          <div class="notes-editor-meta">
+            <div id="notes-editor-save-state" class="notes-editor-save-state">Select a note to begin.</div>
+            <div id="notes-editor-updated" class="notes-editor-updated"></div>
+          </div>
+          <div class="notes-editor-actions">
+            <button id="notes-pin-btn" class="btn btn-ghost" type="button">Pin</button>
+            <button id="notes-archive-btn" class="btn btn-ghost" type="button">Archive</button>
+            <button id="notes-delete-btn" class="btn btn-danger" type="button">Delete</button>
+          </div>
+        </div>
+        <div class="notes-context-box">
+          <div class="notes-context-label">Linked Context</div>
+          <div id="notes-context-chips" class="notes-context-chips"></div>
+        </div>
+        <input id="notes-title" class="input notes-title" type="text" placeholder="Note title">
+        <input id="notes-tags" class="input notes-tags" type="text" placeholder="Tags separated by commas">
+        <div class="notes-toolbar" role="toolbar" aria-label="Text formatting">
+          <button id="notes-bold-btn" class="notes-toolbar-btn" type="button"><b>B</b></button>
+          <button id="notes-italic-btn" class="notes-toolbar-btn" type="button"><i>I</i></button>
+          <button id="notes-underline-btn" class="notes-toolbar-btn" type="button"><u>U</u></button>
+          <button id="notes-bullet-btn" class="notes-toolbar-btn" type="button">• List</button>
+          <button id="notes-checklist-btn" class="notes-toolbar-btn" type="button">☑ Checklist</button>
+          <button id="notes-link-press-btn" class="notes-toolbar-btn" type="button">Link Press</button>
+          <button id="notes-link-issue-btn" class="notes-toolbar-btn" type="button">Link Issue</button>
+          <button id="notes-photo-btn" class="notes-toolbar-btn" type="button">Attach Photo</button>
+        </div>
+        <div id="notes-body" class="notes-body" contenteditable="true" role="textbox" aria-multiline="true" data-placeholder="Write something useful..."></div>
+        <div class="notes-section-head">
+          <div class="notes-section-title">Checklist</div>
+          <button id="notes-add-checklist-btn" class="btn btn-ghost" type="button">Add item</button>
+        </div>
+        <div id="notes-checklist" class="notes-checklist"></div>
+        <div class="notes-add-checklist-row">
+          <input id="notes-checklist-input" class="input" type="text" placeholder="Add a checklist item">
+          <button id="notes-add-checklist-inline-btn" class="btn btn-blue" type="button">Add</button>
+        </div>
+        <div class="notes-section-head" style="margin-top:12px;">
+          <div class="notes-section-title">Attachments</div>
+        </div>
+        <div id="notes-attachments" class="notes-attachments"></div>
+        <input type="file" id="notes-photo-input" accept="image/*" multiple hidden>
+      </section>
     </div>
   </div>
 </div>

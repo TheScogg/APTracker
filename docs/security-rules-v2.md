@@ -361,6 +361,35 @@ These are lightweight event notes and should remain append-only.
 
 ---
 
+### `plants/{plantId}/notes/{noteId}`
+
+#### Read
+- active plant members
+
+#### Create / update
+- active plant members
+
+#### Delete
+- owner only or same permission as note edits
+
+#### Reasoning
+This is the mobile notebook surface and should stay easy to use without leaving the plant boundary.
+
+---
+
+### `plants/{plantId}/notes/{noteId}/attachments/{attachmentId}`
+
+#### Read
+- active plant members
+
+#### Create / update
+- same permission as note edits
+
+#### Delete
+- same permission as note edits
+
+---
+
 ## Starter rules file
 
 This is a practical baseline, not the final perfect version.

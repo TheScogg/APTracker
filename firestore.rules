@@ -246,6 +246,24 @@ service cloud.firestore {
         allow update: if false;
       }
 
+      // ── Mobile Notes ──
+      match /notes/{noteId} {
+        allow read: if isPlantMember(plantId);
+        allow create: if isPlantMember(plantId)
+                      && request.resource.data.createdBy.uid == currentUid();
+        allow update: if isPlantMember(plantId)
+                      && request.resource.data.updatedBy.uid == currentUid();
+        allow delete: if isAdmin(plantId)
+                      || (signedIn() && resource.data.createdBy.uid == currentUid());
+
+        match /attachments/{attachmentId} {
+          allow read: if isPlantMember(plantId);
+          allow create, update: if isPlantMember(plantId)
+                                && request.resource.data.uploadedBy.uid == currentUid();
+          allow delete: if isPlantMember(plantId);
+        }
+      }
+
       // ── Press Wiki ──
       match /presses/{pressId}/wikiPages/{pageId} {
         allow read: if isPlantMember(plantId);
