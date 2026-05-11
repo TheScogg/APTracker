@@ -9880,7 +9880,7 @@ document.getElementById('messaging-photo-input')?.addEventListener('change', e =
 // Toggle between 'a' (Logbook) and 'b' (Team Channel) to switch prototypes
 
 let _pressWikiModalPressId = null;
-let _pressWikiSelectedPageId = 'shift-notes';
+let _pressWikiSelectedPageId = null;
 let _pressWikiCanEdit = false;
 let _pressWikiAttachmentsCache = [];
 let _pressWikiMachineCode = null;
@@ -9896,6 +9896,12 @@ function _pressWikiScopeLabel(scope = _pressWikiScope) {
 
 function _pressWikiBaseTitle(scope = _pressWikiScope) {
   return scope === WIKI_SCOPE_SHARED ? 'Shared Library' : 'Shift Notes';
+}
+
+function _pressWikiEmptySelectionMessage(scope = _pressWikiScope) {
+  return scope === WIKI_SCOPE_SHARED
+    ? 'The shared library is empty. Create the first page to seed it.'
+    : 'This press has no pages yet. Create the first page to seed Shift Notes.';
 }
 
 function _pressWikiNormalizeParentId(value) {
@@ -9979,10 +9985,11 @@ function _pressWikiPickerLabelForScope(scope = _pressWikiScope) {
 function _pressWikiPickerTrail(tree, pageId = _pressWikiSelectedPageId) {
   const page = tree?.nodesById?.get(pageId) || null;
   if (!page) {
+    const pageCount = _pressWikiPageListCache.length;
     return {
-      title: 'Shift Notes',
+      title: 'No page selected',
       path: _pressWikiPickerLabelForScope(_pressWikiScope),
-      count: `${_pressWikiPageListCache.length} page${_pressWikiPageListCache.length === 1 ? '' : 's'}`
+      count: `${pageCount} page${pageCount === 1 ? '' : 's'}`
     };
   }
   const ancestorNodes = _pressWikiAncestors(pageId, tree.parentById)
@@ -10220,7 +10227,7 @@ function renderPressWikiPageTree() {
   }
 
   if (!tree.nodesById.has(_pressWikiSelectedPageId)) {
-    _pressWikiSelectedPageId = tree.roots[0]?.id || 'shift-notes';
+    _pressWikiSelectedPageId = tree.roots[0]?.id || null;
   }
 
   _pressWikiSyncPickerSummary(tree);
@@ -10270,7 +10277,9 @@ function _pressWikiSetScope(scope, { reload = true } = {}) {
   if (pressLabelBtn) pressLabelBtn.textContent = _pressWikiPressLabel();
   document.getElementById('press-wiki-new-page-btn') && (_pressWikiCanEdit ? (document.getElementById('press-wiki-new-page-btn').disabled = false) : null);
   if (reload && _pressWikiModalPressId) {
-    loadPressWikiPageList().then(() => loadPressWikiPage(_pressWikiSelectedPageId || 'shift-notes')).catch(err => console.warn('scope reload failed', err));
+    loadPressWikiPageList()
+      .then(() => (_pressWikiSelectedPageId ? loadPressWikiPage(_pressWikiSelectedPageId) : renderPressWikiEmptySelection()))
+      .catch(err => console.warn('scope reload failed', err));
   }
 }
 
@@ -10384,6 +10393,29 @@ function _pressWikiAppendMarkdownBlock(bodyEl, line) {
   return false;
 }
 
+function renderPressWikiEmptySelection(message = _pressWikiEmptySelectionMessage()) {
+  const titleEl = document.getElementById('press-wiki-title');
+  const metaEl = document.getElementById('press-wiki-meta');
+  const bodyEl = document.getElementById('press-wiki-body');
+  const revisionsEl = document.getElementById('press-wiki-revisions');
+  const attachmentsEl = document.getElementById('press-wiki-attachments');
+  if (titleEl) titleEl.textContent = 'No page selected';
+  if (metaEl) metaEl.textContent = `${_pressWikiScopeLabel(_pressWikiScope)} · No page selected`;
+  if (bodyEl) {
+    bodyEl.innerHTML = '';
+    const empty = document.createElement('div');
+    empty.style.color = 'var(--text3)';
+    empty.style.fontSize = '13px';
+    empty.style.lineHeight = '1.45';
+    empty.textContent = message;
+    bodyEl.appendChild(empty);
+  }
+  if (revisionsEl) revisionsEl.innerHTML = '';
+  if (attachmentsEl) attachmentsEl.innerHTML = '';
+  _pressWikiRenderedBodyRaw = '';
+  _pressWikiAttachmentsCache = [];
+}
+
 function _notesEl(base) { return document.getElementById(base + '-' + NOTES_VARIANT); }
 
 function _relativeTime(ts) {
@@ -10442,7 +10474,11 @@ async function openPressWikiModal(pressId, machineCode, options = {}) {
   modal.classList.add('visible');
   try {
     await loadPressWikiPageList();
-    await loadPressWikiPage(_pressWikiSelectedPageId || 'shift-notes');
+    if (_pressWikiSelectedPageId) {
+      await loadPressWikiPage(_pressWikiSelectedPageId);
+    } else {
+      renderPressWikiEmptySelection();
+    }
   } catch (e) {
     console.error('openPressWikiModal error', e);
     bodyEl.textContent = 'Could not load wiki content.';
@@ -10455,11 +10491,12 @@ async function loadPressWikiPageList() {
   const pages = pagesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
   _pressWikiPageListCache = pages;
   if (!pages.length) {
-    _pressWikiSelectedPageId = 'shift-notes';
+    _pressWikiSelectedPageId = null;
   } else if (!pages.some(page => page.id === _pressWikiSelectedPageId)) {
-    _pressWikiSelectedPageId = pages[0]?.id || 'shift-notes';
+    _pressWikiSelectedPageId = pages[0]?.id || null;
   }
   renderPressWikiPageTree();
+  return pages;
 }
 
 async function loadPressWikiPage(pageId) {
@@ -10479,10 +10516,8 @@ async function loadPressWikiPage(pageId) {
     const pageRef = wikiPageDocForScope(_pressWikiScope, _pressWikiModalPressId, pageId);
     const pageSnap = await getDoc(pageRef);
     if (!pageSnap.exists()) {
-      _renderPressWikiBody(_pressWikiScope === WIKI_SCOPE_SHARED
-        ? 'No shared library content yet. Add a plant-wide page to seed the library.'
-        : 'No wiki content yet. Add a press note to seed Shift Notes.');
-      titleEl.textContent = _pressWikiBaseTitle(_pressWikiScope);
+      _pressWikiSelectedPageId = null;
+      renderPressWikiEmptySelection(_pressWikiEmptySelectionMessage());
       _pressWikiSyncScopeBadge(_pressWikiScope);
       return;
     }
@@ -10682,10 +10717,13 @@ async function deletePressWikiPage() {
     await _deleteWikiDocsInBatches(wikiAttachmentsColForScope(_pressWikiScope, _pressWikiModalPressId, pageId));
     await _deleteWikiDocsInBatches(wikiRevisionsColForScope(_pressWikiScope, _pressWikiModalPressId, pageId));
     await deleteDoc(wikiPageDocForScope(_pressWikiScope, _pressWikiModalPressId, pageId));
-    _pressWikiSelectedPageId = '';
+    _pressWikiSelectedPageId = null;
     await loadPressWikiPageList();
-    const nextPageId = _pressWikiPageListCache[0]?.id || 'shift-notes';
-    await loadPressWikiPage(nextPageId);
+    if (_pressWikiSelectedPageId) {
+      await loadPressWikiPage(_pressWikiSelectedPageId);
+    } else {
+      renderPressWikiEmptySelection();
+    }
     togglePressWikiEditor(false);
   } catch (e) {
     console.error('deletePressWikiPage error', e);
