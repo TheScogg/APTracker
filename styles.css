@@ -938,10 +938,10 @@
   .press-wiki-press-picker-wrap {
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    padding: 12px;
-    border-radius: 16px;
-    border: 1px solid color-mix(in srgb, var(--teal) 28%, var(--border));
+    gap: 8px;
+    padding: 10px;
+    border-radius: 14px;
+    border: 1px solid color-mix(in srgb, #f97316 28%, var(--border));
     background:
       linear-gradient(180deg, color-mix(in srgb, var(--bg2) 72%, white 3%), color-mix(in srgb, var(--bg3) 94%, transparent)),
       radial-gradient(circle at 18px 50%, rgba(255,255,255,0.05), transparent 34%);
@@ -949,39 +949,60 @@
       inset 0 1px 0 rgba(255,255,255,0.05),
       0 12px 26px rgba(0,0,0,0.24),
       0 0 0 1px rgba(255,255,255,0.03);
+    max-height: min(40vh, 360px);
+    overflow: hidden;
   }
   .press-wiki-press-picker-panel-head {
     display:flex;
     align-items:flex-start;
     justify-content:space-between;
-    gap:12px;
+    gap:10px;
   }
   .press-wiki-press-picker-panel-kicker {
     font-family:'Share Tech Mono', monospace;
     font-size: 10px;
     text-transform: uppercase;
     letter-spacing: 0.18em;
-    color: var(--teal);
+    color: #f97316;
   }
   .press-wiki-press-picker-panel-copy {
     font-size: 12px;
     color: var(--text2);
     line-height: 1.35;
   }
-  .press-wiki-press-picker-tree { display:block; }
+  .press-wiki-press-picker-tree {
+    display:flex;
+    flex-direction:column;
+    gap: 8px;
+    overflow:auto;
+    min-height: 0;
+    padding-right: 2px;
+  }
+  .press-wiki-press-picker-row {
+    display:flex;
+    flex-direction:column;
+    gap: 5px;
+  }
+  .press-wiki-press-picker-row-label {
+    font-family:'Share Tech Mono', monospace;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: #f97316;
+  }
   .press-wiki-press-picker-grid {
     display:grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
+    grid-template-columns: repeat(auto-fit, minmax(54px, 1fr));
+    gap: 5px;
   }
   .press-wiki-press-picker-item {
-    min-height: 54px;
+    min-height: 34px;
     display:flex;
     align-items:center;
     justify-content:center;
-    padding: 10px 12px;
-    border-radius: 12px;
-    border: 1px solid color-mix(in srgb, var(--teal) 22%, var(--border));
+    padding: 6px 8px;
+    border-radius: 10px;
+    border: 1px solid color-mix(in srgb, #f97316 24%, var(--border));
     background:
       linear-gradient(180deg, color-mix(in srgb, var(--bg2) 64%, white 2%), color-mix(in srgb, var(--bg3) 94%, transparent));
     box-shadow:
@@ -991,27 +1012,28 @@
     cursor: pointer;
     text-align: center;
     font-family: 'Rajdhani', sans-serif;
-    font-size: 18px;
+    font-size: 13px;
     font-weight: 700;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.2px;
+    line-height: 1;
     transition: transform 0.16s, border-color 0.16s, box-shadow 0.16s, background 0.16s;
   }
   .press-wiki-press-picker-item:hover {
-    border-color: color-mix(in srgb, var(--teal) 58%, var(--border));
+    border-color: color-mix(in srgb, #f97316 60%, var(--border));
     box-shadow:
       inset 0 1px 0 rgba(255,255,255,0.08),
       0 14px 26px rgba(0,0,0,0.24),
-      0 0 0 1px color-mix(in srgb, var(--teal) 20%, transparent);
+      0 0 0 1px color-mix(in srgb, #f97316 20%, transparent);
     transform: translateY(-1px);
   }
   .press-wiki-press-picker-item.active {
-    border-color: color-mix(in srgb, var(--accent) 60%, var(--border));
+    border-color: color-mix(in srgb, #f97316 72%, var(--border));
     box-shadow:
       inset 0 1px 0 rgba(255,255,255,0.08),
-      0 0 0 1px color-mix(in srgb, var(--accent) 32%, transparent),
+      0 0 0 1px color-mix(in srgb, #f97316 34%, transparent),
       0 16px 26px rgba(0,0,0,0.26);
     background:
-      linear-gradient(180deg, color-mix(in srgb, var(--accent) 16%, var(--bg2)), color-mix(in srgb, var(--bg3) 92%, transparent));
+      linear-gradient(180deg, color-mix(in srgb, #f97316 18%, var(--bg2)), color-mix(in srgb, var(--bg3) 92%, transparent));
   }
   .press-wiki-press-picker-empty {
     color: var(--text2);
@@ -1033,10 +1055,10 @@
   }
   body.theme-starship .press-wiki-press-picker-wrap,
   body.theme-ocean .press-wiki-press-picker-wrap {
-    border-color: rgba(118,236,255,0.22);
+    border-color: rgba(249,115,22,0.28);
   }
   body.theme-starforge .press-wiki-press-picker-wrap {
-    border-color: rgba(255,159,28,0.26);
+    border-color: rgba(249,115,22,0.28);
   }
 
   /* FLOOR MAP */
@@ -1305,8 +1327,9 @@
     .press-btn-num { font-size: 12px; font-family: 'Share Tech Mono', monospace; font-weight: 400; }
     .press-btn-bars { width: min(28px, 78%); min-height: 3px; }
     .press-btn-bar { height: 3px; min-width: 3px; }
-    .press-wiki-press-picker-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .press-wiki-press-picker-item { min-height: 48px; font-size: 16px; }
+    .press-wiki-press-picker-wrap { max-height: min(34vh, 300px); }
+    .press-wiki-press-picker-grid { grid-template-columns: repeat(auto-fit, minmax(48px, 1fr)); }
+    .press-wiki-press-picker-item { min-height: 30px; font-size: 12px; padding: 5px 6px; }
   }
 
   /* PRESS MINI-CARD */

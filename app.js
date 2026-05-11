@@ -9944,6 +9944,15 @@ function _pressWikiDefaultSharedPageId(sourcePages = _pressWikiPageListCache) {
   return match?.id || PRESS_WIKI_SHARED_INDEX_PAGE_ID;
 }
 
+function _pressWikiRowSortValue(rowName) {
+  const raw = String(rowName || '').trim();
+  const match = raw.match(/(\d+)/);
+  if (match) return Number(match[1]);
+  if (!raw) return Number.MAX_SAFE_INTEGER - 1;
+  if (raw.toLowerCase() === 'other') return Number.MAX_SAFE_INTEGER;
+  return 1000 + raw.toLowerCase().charCodeAt(0);
+}
+
 function _pressWikiActivePressId() {
   if (_pressWikiScope !== WIKI_SCOPE_PRESS) return null;
   if (_pressWikiSelectedPressId && _pressWikiIsKnownPressId(_pressWikiSelectedPressId)) return _pressWikiSelectedPressId;
@@ -10011,30 +10020,44 @@ function renderPressWikiPressPicker() {
     closeBtn.onclick = () => _pressWikiSetPressPickerOpen(false);
   }
 
-  const entries = Object.entries(PRESSES || {}).flatMap(([rowName, machines]) => (machines || []).map(machineCode => ({
-    machineCode: String(machineCode || '').trim(),
-    pressId: toPressId(machineCode),
-    rowName: String(rowName || '').trim()
-  })));
-  if (!entries.length) {
+  const rowEntries = Object.entries(PRESSES || {})
+    .map(([rowName, machines]) => ({
+      rowName: String(rowName || '').trim(),
+      rowSort: _pressWikiRowSortValue(rowName),
+      machines: (machines || []).map(machineCode => String(machineCode || '').trim()).filter(Boolean)
+    }))
+    .sort((a, b) => a.rowSort - b.rowSort || a.rowName.localeCompare(b.rowName));
+
+  if (!rowEntries.length) {
     treeEl.innerHTML = '<div class="press-wiki-press-picker-empty">No presses found in this plant.</div>';
     return;
   }
 
-  const grid = document.createElement('div');
-  grid.className = 'press-wiki-press-picker-grid';
-  entries.forEach(({ machineCode, pressId }) => {
-    const item = document.createElement('button');
-    item.type = 'button';
-    item.className = `press-wiki-press-picker-item ${activePressId === pressId ? 'active' : ''}`;
-    item.setAttribute('aria-current', activePressId === pressId ? 'true' : 'false');
-    item.textContent = machineCode || pressId;
-    item.onclick = () => {
-      void _pressWikiSelectPress(pressId);
-    };
-    grid.appendChild(item);
+  rowEntries.forEach(({ rowName, machines }) => {
+    if (!machines.length) return;
+    const section = document.createElement('div');
+    section.className = 'press-wiki-press-picker-row';
+    const label = document.createElement('div');
+    label.className = 'press-wiki-press-picker-row-label';
+    label.textContent = rowName;
+    const grid = document.createElement('div');
+    grid.className = 'press-wiki-press-picker-grid';
+    machines.forEach(machineCode => {
+      const pressId = toPressId(machineCode);
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = `press-wiki-press-picker-item ${activePressId === pressId ? 'active' : ''}`;
+      item.setAttribute('aria-current', activePressId === pressId ? 'true' : 'false');
+      item.textContent = machineCode || pressId;
+      item.onclick = () => {
+        void _pressWikiSelectPress(pressId);
+      };
+      grid.appendChild(item);
+    });
+    section.appendChild(label);
+    section.appendChild(grid);
+    treeEl.appendChild(section);
   });
-  treeEl.appendChild(grid);
 }
 
 function _pressWikiNormalizeParentId(value) {
