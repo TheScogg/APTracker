@@ -8828,17 +8828,47 @@ function scrollToSearchResultsIfNeeded() {
   document.querySelector('.issues-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-function syncSearchPeriodToAllTime() {
-  const searchValue = String(document.getElementById('search-input')?.value || '').trim();
-  if (!searchValue || issuePeriod === 'all') return false;
-  window.setPeriod('all');
+let searchPeriodSnapshot = null;
+
+function captureSearchPeriodSnapshot() {
+  if (searchPeriodSnapshot) return;
+  searchPeriodSnapshot = {
+    period: issuePeriod,
+    dateValue: document.getElementById('date-filter')?.value || ''
+  };
+}
+
+function restoreSearchPeriodSnapshot() {
+  if (!searchPeriodSnapshot) return false;
+  const snapshot = searchPeriodSnapshot;
+  searchPeriodSnapshot = null;
+  if (snapshot.period === 'date' && snapshot.dateValue) {
+    document.getElementById('date-filter').value = snapshot.dateValue;
+    window.onCalendarPick(snapshot.dateValue);
+  } else {
+    window.setPeriod(snapshot.period || 'all');
+  }
   updateFilterBadge();
   return true;
 }
 
+function syncSearchPeriodWithQuery() {
+  const searchValue = String(document.getElementById('search-input')?.value || '').trim();
+  if (searchValue) {
+    if (!searchPeriodSnapshot && issuePeriod !== 'all') captureSearchPeriodSnapshot();
+    if (issuePeriod !== 'all') {
+      window.setPeriod('all');
+      updateFilterBadge();
+      return true;
+    }
+    return false;
+  }
+  return restoreSearchPeriodSnapshot();
+}
+
 const searchInput = document.getElementById('search-input');
 searchInput?.addEventListener('input', () => {
-  const periodChanged = syncSearchPeriodToAllTime();
+  const periodChanged = syncSearchPeriodWithQuery();
   if (!periodChanged) {
     renderIssues();
     updateFilterBadge();
@@ -8847,12 +8877,12 @@ searchInput?.addEventListener('input', () => {
 searchInput?.addEventListener('keydown', e => {
   if (e.key !== 'Enter') return;
   e.preventDefault();
-  const periodChanged = syncSearchPeriodToAllTime();
+  const periodChanged = syncSearchPeriodWithQuery();
   if (!periodChanged) {
     renderIssues();
     updateFilterBadge();
   }
-  scrollToSearchResultsIfNeeded();
+  if (String(searchInput.value || '').trim()) scrollToSearchResultsIfNeeded();
 });
 document.getElementById('machine-filter').addEventListener('change', () => {
   const mf = document.getElementById('machine-filter').value;
