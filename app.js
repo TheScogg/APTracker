@@ -3602,6 +3602,9 @@ window.setMapMode = mode => {
   if (mode === 'notes') {
     void refreshPressContributionIndex(true).then(() => renderRowPanels());
   }
+  if (mode === 'hist' && issuePeriod !== 'all') {
+    window.setPeriod?.('all');
+  }
   if (mode === 'log') {
     document.getElementById('machine-filter').value = '';
     renderIssues(); updateFilterBadge();
@@ -3822,6 +3825,9 @@ window.showMachineHistory = machine => {
   // Show breadcrumb
   const bc = document.getElementById('machine-breadcrumb');
   if (bc) { bc.classList.add('visible'); document.getElementById('breadcrumb-machine').textContent = 'Press ' + machine; }
+  if (issuePeriod !== 'all') {
+    window.setPeriod?.('all');
+  }
   // Scroll down to the issue log smoothly
   document.querySelector('.issues-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   renderIssues(); updateFilterBadge();
