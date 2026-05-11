@@ -7856,6 +7856,8 @@ function handleShellAction(action, value, trigger, event) {
       if (typeof closeMiniCard === 'function') closeMiniCard();
       window.clearMachineBreadcrumb?.();
       window.setMapMode?.('log');
+      startListener();
+      refreshVisibleData();
       break;
     case 'open-messages':
       closeUserMenus();
@@ -10597,6 +10599,7 @@ window.insertMarkdown = function(textareaId, prefix, suffix) {
 window.closePressWikiModal = () => {
   document.getElementById('press-wiki-modal')?.classList.remove('visible');
   _pressWikiModalPressId = null;
+  _pressWikiSetPickerOpen(false);
   closePressWikiActionsMenu();
 };
 
