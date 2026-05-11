@@ -3158,7 +3158,6 @@
     .role-alerts-header-actions { gap: 6px; }
     .role-alerts-toolbar { align-items: stretch; }
     .role-alerts-toggle,
-    .scope-toggle,
     .msg-header-tabs,
     .store-modal-tabs {
       display: flex;
@@ -3171,12 +3170,10 @@
       background: var(--bg3);
       flex-shrink: 0;
     }
-    .role-alerts-toggle,
-    .scope-toggle {
+    .role-alerts-toggle {
       flex-wrap: nowrap;
     }
     .role-alerts-toggle .scope-btn,
-    .scope-toggle .scope-btn,
     .msg-header-tabs .msg-tab,
     .store-modal-tabs .store-tab {
       flex: 1 1 0;
@@ -3195,13 +3192,11 @@
       white-space: nowrap;
     }
     .role-alerts-toggle .scope-btn:last-child,
-    .scope-toggle .scope-btn:last-child,
     .msg-header-tabs .msg-tab:last-child,
     .store-modal-tabs .store-tab:last-child {
       border-right: none;
     }
     .role-alerts-toggle .scope-btn.active,
-    .scope-toggle .scope-btn.active,
     .msg-header-tabs .msg-tab.active,
     .store-modal-tabs .store-tab.active {
       background: var(--accent);
@@ -3234,14 +3229,8 @@
     .msg-header-tabs .msg-tab {
       font-size: 11px;
     }
-    .role-alerts-toggle,
-    .scope-toggle {
-      width: 100%;
-    }
-    .role-alerts-toggle .scope-btn,
-    .scope-toggle .scope-btn {
-      flex: 1 1 0;
-    }
+    .role-alerts-toggle { width: 100%; }
+    .role-alerts-toggle .scope-btn { flex: 1 1 0; }
     .role-alerts-list {
       padding-right: 2px;
       touch-action: pan-y;
