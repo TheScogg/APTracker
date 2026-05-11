@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut as fbSignOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut as fbSignOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp, runTransaction, query, orderBy, writeBatch, limit } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getStorage, ref as storageRef, uploadBytesResumable, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
@@ -542,12 +542,31 @@ async function refreshPageData() {
 }
 
 document.getElementById('google-signin-btn').addEventListener('click', async () => {
+  const btn = document.getElementById('google-signin-btn');
   try {
-    await signInWithPopup(auth, provider);
+    if (btn) btn.textContent = 'Signing in…';
+    document.getElementById('login-feedback').textContent = '';
+    sessionStorage.setItem('ap:auth:redirectPending', '1');
+    await signInWithRedirect(auth, provider);
   } catch (err) {
     document.getElementById('login-feedback').textContent = err.message;
+    if (btn) btn.textContent = 'Sign in with Google';
   }
 });
+
+async function finalizeRedirectSignIn() {
+  if (!sessionStorage.getItem('ap:auth:redirectPending')) return;
+  try {
+    await getRedirectResult(auth);
+  } catch (err) {
+    console.error('Redirect sign in error:', err.code, err.message);
+    document.getElementById('login-feedback').textContent = err.message || 'Sign-in failed.';
+    const btn = document.getElementById('google-signin-btn');
+    if (btn) btn.textContent = 'Sign in with Google';
+  } finally {
+    sessionStorage.removeItem('ap:auth:redirectPending');
+  }
+}
 
 document.getElementById('signout-btn').addEventListener('click', () => {
   fbSignOut(auth);
@@ -566,6 +585,8 @@ onAuthStateChanged(auth, async (user) => {
     elApp.classList.remove('visible');
   }
 });
+
+void finalizeRedirectSignIn();
 
 async function loadPlants() {
   const myPlants = [];

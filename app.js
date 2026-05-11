@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, collection, updateDoc as rawUpdateDoc, deleteDoc as rawDeleteDoc, doc, getDoc as rawGetDoc, getDocs as rawGetDocs, setDoc as rawSetDoc, addDoc as rawAddDoc, onSnapshot as rawOnSnapshot, serverTimestamp, query, orderBy, where, writeBatch as rawWriteBatch, arrayUnion, arrayRemove, increment, limit, runTransaction as rawRunTransaction, startAfter } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut as fbSignOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut as fbSignOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getStorage, ref as storageRef, uploadString, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
 const firebaseConfig = {
@@ -3238,13 +3238,27 @@ function resetGoogleSignInButton() {
   btn.innerHTML = googleBtnHTML;
 }
 
+async function finalizeRedirectSignIn() {
+  if (NO_AUTH_MODE) return;
+  if (!sessionStorage.getItem('ap:auth:redirectPending')) return;
+  try {
+    await getRedirectResult(auth);
+  } catch (e) {
+    console.error('Redirect sign in error:', e.code, e.message);
+    resetGoogleSignInButton();
+  } finally {
+    sessionStorage.removeItem('ap:auth:redirectPending');
+  }
+}
+
 async function signInWithGoogle() {
   if (NO_AUTH_MODE) return;
   const btn = document.getElementById('google-signin-btn');
   if (!btn) return;
   btn.disabled = true; btn.textContent = 'Signing in…';
   try { 
-    await signInWithPopup(auth, provider);
+    sessionStorage.setItem('ap:auth:redirectPending', '1');
+    await signInWithRedirect(auth, provider);
   }
   catch(e) {
     console.error('Sign in error:', e.code, e.message);
@@ -3257,6 +3271,8 @@ if (googleSignInBtn) {
   googleSignInBtn.innerHTML = googleBtnHTML;
   googleSignInBtn.addEventListener('click', signInWithGoogle);
 }
+
+void finalizeRedirectSignIn();
 
 async function doSignOut() {
   if (NO_AUTH_MODE) {
