@@ -9891,6 +9891,7 @@ let _pressWikiExpandedPageIds = new Set();
 let _pressWikiKnownTreeNodeIds = new Set();
 let _pressWikiPickerOpen = false;
 let _pressWikiPressPickerOpen = false;
+const PRESS_WIKI_SHARED_INDEX_PAGE_ID = 'shared-library-index';
 
 function _pressWikiScopeLabel(scope = _pressWikiScope) {
   return scope === WIKI_SCOPE_SHARED ? 'Shared Library' : 'This Press';
@@ -9928,6 +9929,19 @@ function _pressWikiPressInfo(pressId) {
     }
   }
   return null;
+}
+
+function _pressWikiDefaultSharedPageId(sourcePages = _pressWikiPageListCache) {
+  const pages = Array.isArray(sourcePages) ? sourcePages : [];
+  const targetSlug = _pressWikiSlugify('Shared Library Index');
+  const match = pages.find(page => {
+    const pageTitle = String(page?.title || '').trim();
+    const pageSlug = _pressWikiSlugify(page?.slug || page?.id || pageTitle);
+    return page?.id === PRESS_WIKI_SHARED_INDEX_PAGE_ID ||
+      pageSlug === targetSlug ||
+      _pressWikiSlugify(pageTitle) === targetSlug;
+  });
+  return match?.id || PRESS_WIKI_SHARED_INDEX_PAGE_ID;
 }
 
 function _pressWikiActivePressId() {
@@ -10581,8 +10595,10 @@ async function openPressWikiModal(pressId, machineCode, options = {}) {
   const initialScope = options.scope === WIKI_SCOPE_SHARED ? WIKI_SCOPE_SHARED : WIKI_SCOPE_PRESS;
   const initialTitle = String(options.title || '').trim() || _pressWikiBaseTitle(initialScope);
   const knownPressId = _pressWikiIsKnownPressId(pressId) ? String(pressId).trim() : null;
+  const initialPageId = String(options.pageId || '').trim() || (initialScope === WIKI_SCOPE_SHARED ? PRESS_WIKI_SHARED_INDEX_PAGE_ID : null);
   _pressWikiModalPressId = initialScope === WIKI_SCOPE_SHARED ? 'shared-library' : (knownPressId || null);
   _pressWikiSelectedPressId = initialScope === WIKI_SCOPE_PRESS ? knownPressId : null;
+  _pressWikiSelectedPageId = initialPageId;
   _pressWikiMachineCode = initialScope === WIKI_SCOPE_PRESS ? String(machineCode || '').trim() : '';
   _pressWikiExpandedPageIds = new Set();
   _pressWikiKnownTreeNodeIds = new Set();
@@ -10655,7 +10671,9 @@ async function loadPressWikiPageList() {
   if (!pages.length) {
     _pressWikiSelectedPageId = null;
   } else if (!pages.some(page => page.id === _pressWikiSelectedPageId)) {
-    _pressWikiSelectedPageId = pages[0]?.id || null;
+    _pressWikiSelectedPageId = _pressWikiScope === WIKI_SCOPE_SHARED
+      ? _pressWikiDefaultSharedPageId(pages)
+      : (pages[0]?.id || null);
   }
   renderPressWikiPageTree();
   renderPressWikiPressPicker();
@@ -11157,7 +11175,11 @@ window.openSharedLibraryWiki = async function() {
   closeUserMenus();
   closeSortDropdown();
   window.closeExportDropdown?.();
-  await openPressWikiModal('shared-library', '', { scope: WIKI_SCOPE_SHARED, title: 'Shared Library' });
+  await openPressWikiModal('shared-library', '', {
+    scope: WIKI_SCOPE_SHARED,
+    title: 'Shared Library',
+    pageId: PRESS_WIKI_SHARED_INDEX_PAGE_ID
+  });
 };
 
 document.addEventListener('click', e => {

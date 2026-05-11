@@ -61,6 +61,7 @@ const elMovePageDownBtn = document.getElementById('move-page-down-btn');
 
 const WIKI_SCOPE_PRESS = 'press';
 const WIKI_SCOPE_SHARED = 'shared';
+const SHARED_LIBRARY_INDEX_PAGE_ID = 'shared-library-index';
 
 // State
 let currentUser = null;
@@ -105,6 +106,18 @@ function slugify(value) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-|-$)/g, '');
+}
+
+function defaultSharedPageId(sourcePages = pages) {
+  const targetSlug = slugify('Shared Library Index');
+  const match = (Array.isArray(sourcePages) ? sourcePages : []).find(page => {
+    const pageTitle = String(page?.title || '').trim();
+    const pageSlug = slugify(page?.slug || page?.id || pageTitle);
+    return page?.id === SHARED_LIBRARY_INDEX_PAGE_ID ||
+      pageSlug === targetSlug ||
+      slugify(pageTitle) === targetSlug;
+  });
+  return match?.id || SHARED_LIBRARY_INDEX_PAGE_ID;
 }
 
 function normalizeParentPageId(value) {
@@ -514,6 +527,12 @@ async function refreshPageData() {
   unsubscribePages = onSnapshot(wikiPagesCol(currentScope, currentPressId), (snap) => {
     pages = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderPageList();
+    if (currentScope === WIKI_SCOPE_SHARED && (!currentPageId || !pages.some(page => page.id === currentPageId))) {
+      const preferredPageId = defaultSharedPageId(pages);
+      if (preferredPageId && preferredPageId !== currentPageId) {
+        selectPage(preferredPageId);
+      }
+    }
     if (currentPageId) {
       const activePage = pages.find(p => p.id === currentPageId);
       if (activePage) updateEditorMeta(activePage);
@@ -591,8 +610,9 @@ async function loadPlants() {
       }
       await refreshPageData();
     }
-    if (initPageId && (initScope === WIKI_SCOPE_SHARED || initPressId)) {
-      selectPage(initPageId);
+    const initialPageId = initPageId || (initScope === WIKI_SCOPE_SHARED ? SHARED_LIBRARY_INDEX_PAGE_ID : '');
+    if (initialPageId && (initScope === WIKI_SCOPE_SHARED || initPressId)) {
+      selectPage(initialPageId);
     }
   }
 }
