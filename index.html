@@ -593,7 +593,7 @@
 
 <!-- EXPORT PDF MODAL -->
 <div class="modal-overlay" id="export-modal">
-  <div class="modal" style="max-width:620px;">
+  <div class="modal press-wiki-modal-shell" style="max-width:620px;">
     <div class="modal-title" style="display:flex;align-items:center;justify-content:space-between;">
       <span style="display:flex;align-items:center;gap:8px;">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 1h6l4 4v9a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1z" stroke="var(--accent)" stroke-width="1.3"/><path d="M10 1v4h4M5 9h6M5 11.5h4" stroke="var(--accent)" stroke-width="1.3" stroke-linecap="round"/></svg>
@@ -646,9 +646,36 @@
 
 <!-- PRESS WIKI MODAL -->
 <div class="modal-overlay" id="press-wiki-modal">
-  <div class="modal" style="max-width:620px;">
+  <div class="modal press-wiki-modal-shell" style="max-width:620px;">
     <div class="modal-header-row" style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
       <div style="min-width:0;flex:1;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:8px;">
+          <div style="display:inline-flex;gap:3px;padding:3px;background:var(--bg3);border:1px solid var(--line);border-radius:999px;">
+            <button id="press-wiki-scope-press" class="btn btn-ghost" type="button" aria-haspopup="dialog" aria-expanded="false" style="padding:4px 10px;border-radius:999px;font-size:12px;">This Press</button>
+            <button id="press-wiki-scope-shared" class="btn btn-ghost" type="button" style="padding:4px 10px;border-radius:999px;font-size:12px;">Shared Library</button>
+          </div>
+          <div id="press-wiki-actions-wrap" class="press-wiki-actions-wrap" style="display:none;margin-left:auto;">
+            <button id="press-wiki-actions-btn" class="sort-dropdown-btn press-wiki-actions-btn" type="button" aria-haspopup="true" aria-expanded="false">
+              Actions
+              <svg class="sort-chevron" width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <div id="press-wiki-actions-menu" class="sort-dropdown press-wiki-actions-menu">
+              <button id="press-wiki-new-page-btn" class="sort-opt press-wiki-action-item" type="button">Create Entry</button>
+              <button id="press-wiki-edit-btn" class="sort-opt press-wiki-action-item" type="button">Quick Edit</button>
+              <button id="press-wiki-cms-btn" class="sort-opt press-wiki-action-item" type="button">Edit in CMS</button>
+            </div>
+          </div>
+        </div>
+        <div class="press-wiki-press-picker-wrap" style="margin-top:8px;display:none;">
+          <div class="press-wiki-press-picker-panel-head">
+            <div>
+              <div class="press-wiki-press-picker-panel-kicker">Press Deck</div>
+              <div id="press-wiki-press-picker-panel-copy" class="press-wiki-press-picker-panel-copy">Pick a press to load its wiki.</div>
+            </div>
+            <button id="press-wiki-press-picker-close" class="btn btn-ghost" type="button" style="padding:4px 10px;border-radius:999px;font-size:12px;">Close</button>
+          </div>
+          <div id="press-wiki-press-picker-tree" class="press-wiki-press-picker-tree"></div>
+        </div>
         <div class="press-wiki-picker-wrap" style="margin-top:8px;">
           <label for="press-wiki-picker-btn" style="display:block;font-size:12px;color:var(--text3);white-space:nowrap;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px;">Select Page</label>
           <button id="press-wiki-picker-btn" class="press-wiki-picker-btn" type="button" aria-haspopup="tree" aria-expanded="false">
@@ -667,43 +694,6 @@
               <div id="press-wiki-picker-panel-copy" class="press-wiki-picker-panel-copy">Choose a page to read or edit.</div>
             </div>
             <div id="press-wiki-picker-tree" class="press-wiki-picker-tree"></div>
-          </div>
-        </div>
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:8px;">
-          <div style="display:inline-flex;gap:3px;padding:3px;background:var(--bg3);border:1px solid var(--line);border-radius:999px;">
-            <button id="press-wiki-scope-press" class="btn btn-ghost" type="button" style="padding:4px 10px;border-radius:999px;font-size:12px;">This Press</button>
-            <button id="press-wiki-scope-shared" class="btn btn-ghost" type="button" style="padding:4px 10px;border-radius:999px;font-size:12px;">Shared Library</button>
-          </div>
-          <div id="press-wiki-actions-wrap" class="press-wiki-actions-wrap" style="display:none;margin-left:auto;">
-            <button id="press-wiki-actions-btn" class="sort-dropdown-btn press-wiki-actions-btn" type="button" aria-haspopup="true" aria-expanded="false">
-              Actions
-              <svg class="sort-chevron" width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </button>
-            <div id="press-wiki-actions-menu" class="sort-dropdown press-wiki-actions-menu">
-              <button id="press-wiki-new-page-btn" class="sort-opt press-wiki-action-item" type="button">Create Entry</button>
-              <button id="press-wiki-edit-btn" class="sort-opt press-wiki-action-item" type="button">Quick Edit</button>
-              <button id="press-wiki-cms-btn" class="sort-opt press-wiki-action-item" type="button">Edit in CMS</button>
-            </div>
-          </div>
-        </div>
-        <div class="press-wiki-press-picker-wrap" style="margin-top:8px;display:none;">
-          <label for="press-wiki-press-picker-btn" style="display:block;font-size:12px;color:var(--text3);white-space:nowrap;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px;">Select Press</label>
-          <button id="press-wiki-press-picker-btn" class="press-wiki-press-picker-btn" type="button" aria-haspopup="dialog" aria-expanded="false">
-            <span class="press-wiki-press-picker-copy">
-              <span id="press-wiki-press-picker-title" class="press-wiki-press-picker-title">Choose a press</span>
-              <span id="press-wiki-press-picker-path" class="press-wiki-press-picker-path">Tap to browse the plant</span>
-            </span>
-            <span class="press-wiki-press-picker-meta">
-              <span id="press-wiki-press-picker-count" class="press-wiki-press-picker-count">0 presses</span>
-              <svg class="press-wiki-press-picker-caret" width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </span>
-          </button>
-          <div id="press-wiki-press-picker-panel" class="press-wiki-press-picker-panel" aria-hidden="true">
-            <div class="press-wiki-press-picker-panel-head">
-              <div class="press-wiki-press-picker-panel-kicker">Press Deck</div>
-              <div id="press-wiki-press-picker-panel-copy" class="press-wiki-press-picker-panel-copy">Pick a press to load its wiki.</div>
-            </div>
-            <div id="press-wiki-press-picker-tree" class="press-wiki-press-picker-tree"></div>
           </div>
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px;">

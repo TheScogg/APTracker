@@ -935,15 +935,11 @@
   .press-wiki-picker-node .press-wiki-picker-children {
     margin-top: 2px;
   }
-  .press-wiki-press-picker-wrap { position: relative; }
-  .press-wiki-press-picker-btn {
-    width: 100%;
-    min-height: 58px;
-    display:flex;
-    align-items:center;
-    justify-content:space-between;
-    gap: 12px;
-    padding: 12px 14px;
+  .press-wiki-press-picker-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
     border-radius: 16px;
     border: 1px solid color-mix(in srgb, var(--teal) 28%, var(--border));
     background:
@@ -953,90 +949,12 @@
       inset 0 1px 0 rgba(255,255,255,0.05),
       0 12px 26px rgba(0,0,0,0.24),
       0 0 0 1px rgba(255,255,255,0.03);
-    color: var(--text);
-    cursor: pointer;
-    transition: transform 0.16s, border-color 0.16s, box-shadow 0.16s, background 0.16s;
-    text-align: left;
   }
-  .press-wiki-press-picker-btn:hover,
-  .press-wiki-press-picker-wrap.open .press-wiki-press-picker-btn {
-    border-color: color-mix(in srgb, var(--teal) 58%, var(--border));
-    box-shadow:
-      inset 0 1px 0 rgba(255,255,255,0.08),
-      0 16px 32px rgba(0,0,0,0.28),
-      0 0 0 1px color-mix(in srgb, var(--teal) 20%, transparent);
-    transform: translateY(-1px);
-  }
-  .press-wiki-press-picker-btn:disabled {
-    cursor: not-allowed;
-    opacity: 0.72;
-    transform: none;
-    box-shadow:
-      inset 0 1px 0 rgba(255,255,255,0.04),
-      0 10px 22px rgba(0,0,0,0.20),
-      0 0 0 1px rgba(255,255,255,0.02);
-  }
-  .press-wiki-press-picker-copy { display:flex; flex-direction:column; gap:3px; min-width:0; flex:1; }
-  .press-wiki-press-picker-title {
-    font-family: 'Rajdhani', sans-serif;
-    font-size: 17px;
-    font-weight: 700;
-    letter-spacing: 0.5px;
-    line-height: 1.1;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .press-wiki-press-picker-path {
-    font-size: 11px;
-    color: var(--text2);
-    font-family: 'Share Tech Mono', monospace;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .press-wiki-press-picker-meta { display:flex; align-items:center; gap:8px; flex-shrink:0; color: var(--text3); }
-  .press-wiki-press-picker-count {
-    font-size: 10px;
-    font-family: 'Share Tech Mono', monospace;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--text3);
-    padding: 3px 7px;
-    border-radius: 999px;
-    border: 1px solid rgba(255,255,255,0.07);
-    background: rgba(255,255,255,0.03);
-  }
-  .press-wiki-press-picker-caret { transition: transform 0.18s; }
-  .press-wiki-press-picker-wrap.open .press-wiki-press-picker-caret { transform: rotate(180deg); }
-  .press-wiki-press-picker-panel {
-    display:none;
-    position: absolute;
-    z-index: 45;
-    top: calc(100% + 8px);
-    left: 0;
-    right: 0;
-    border-radius: 18px;
-    border: 1px solid rgba(255,255,255,0.08);
-    background:
-      linear-gradient(180deg, color-mix(in srgb, var(--bg2) 74%, white 3%), color-mix(in srgb, var(--bg2) 92%, transparent)),
-      radial-gradient(circle at top left, rgba(255,255,255,0.04), transparent 40%);
-    box-shadow: 0 26px 60px rgba(0,0,0,0.42), 0 0 0 1px rgba(255,255,255,0.03);
-    padding: 12px;
-    max-height: min(58vh, 460px);
-    overflow: hidden;
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-  }
-  .press-wiki-press-picker-panel.visible { display:block; }
   .press-wiki-press-picker-panel-head {
     display:flex;
     align-items:flex-start;
     justify-content:space-between;
     gap:12px;
-    padding: 2px 4px 10px;
-    margin-bottom: 10px;
-    border-bottom: 1px solid rgba(255,255,255,0.05);
   }
   .press-wiki-press-picker-panel-kicker {
     font-family:'Share Tech Mono', monospace;
@@ -1048,97 +966,58 @@
   .press-wiki-press-picker-panel-copy {
     font-size: 12px;
     color: var(--text2);
-    text-align: right;
     line-height: 1.35;
-    max-width: 54%;
   }
-  .press-wiki-press-picker-tree {
-    display:flex;
-    flex-direction:column;
-    gap: 10px;
-    overflow:auto;
-    max-height: calc(min(58vh, 460px) - 54px);
-    padding-right: 2px;
-  }
-  .press-wiki-press-picker-row {
-    display:flex;
-    flex-direction:column;
-    gap: 8px;
-    padding: 0 0 12px;
-    border-bottom: 1px solid rgba(255,255,255,0.05);
-  }
-  .press-wiki-press-picker-row:last-child {
-    padding-bottom: 0;
-    border-bottom: none;
-  }
-  .press-wiki-press-picker-row-label {
-    font-family:'Share Tech Mono', monospace;
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.18em;
-    color: var(--teal);
-  }
+  .press-wiki-press-picker-tree { display:block; }
   .press-wiki-press-picker-grid {
     display:grid;
-    grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 8px;
   }
   .press-wiki-press-picker-item {
-    min-height: 56px;
+    min-height: 54px;
     display:flex;
-    flex-direction:column;
-    align-items:flex-start;
-    gap: 4px;
-    padding: 10px 11px;
-    border-radius: 14px;
-    border: 1px solid rgba(255,255,255,0.08);
+    align-items:center;
+    justify-content:center;
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1px solid color-mix(in srgb, var(--teal) 22%, var(--border));
     background:
-      linear-gradient(180deg, color-mix(in srgb, var(--bg3) 74%, white 2%), color-mix(in srgb, var(--bg2) 96%, transparent));
-    color: var(--text);
-    cursor: pointer;
-    text-align:left;
-    transition: transform 0.14s, border-color 0.14s, box-shadow 0.14s, background 0.14s;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
-  }
-  .press-wiki-press-picker-item:hover {
-    transform: translateY(-1px);
-    border-color: color-mix(in srgb, var(--teal) 34%, var(--border));
+      linear-gradient(180deg, color-mix(in srgb, var(--bg2) 64%, white 2%), color-mix(in srgb, var(--bg3) 94%, transparent));
     box-shadow:
       inset 0 1px 0 rgba(255,255,255,0.05),
-      0 8px 20px rgba(0,0,0,0.22);
+      0 8px 18px rgba(0,0,0,0.16);
+    color: var(--text);
+    cursor: pointer;
+    text-align: center;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    transition: transform 0.16s, border-color 0.16s, box-shadow 0.16s, background 0.16s;
+  }
+  .press-wiki-press-picker-item:hover {
+    border-color: color-mix(in srgb, var(--teal) 58%, var(--border));
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.08),
+      0 14px 26px rgba(0,0,0,0.24),
+      0 0 0 1px color-mix(in srgb, var(--teal) 20%, transparent);
+    transform: translateY(-1px);
   }
   .press-wiki-press-picker-item.active {
-    border-color: color-mix(in srgb, var(--teal) 48%, transparent);
-    background:
-      linear-gradient(180deg, color-mix(in srgb, var(--teal) 16%, var(--bg3)), color-mix(in srgb, var(--teal) 7%, var(--bg2)));
+    border-color: color-mix(in srgb, var(--accent) 60%, var(--border));
     box-shadow:
-      inset 0 0 0 1px color-mix(in srgb, var(--teal) 18%, transparent),
-      0 8px 20px rgba(0,0,0,0.24);
-  }
-  .press-wiki-press-picker-item-code {
-    font-family:'Rajdhani', sans-serif;
-    font-size: 14px;
-    font-weight: 700;
-    line-height: 1.1;
-    width: 100%;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .press-wiki-press-picker-item-sub {
-    width: 100%;
-    font-family:'Share Tech Mono', monospace;
-    font-size: 10px;
-    color: var(--text2);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+      inset 0 1px 0 rgba(255,255,255,0.08),
+      0 0 0 1px color-mix(in srgb, var(--accent) 32%, transparent),
+      0 16px 26px rgba(0,0,0,0.26);
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--accent) 16%, var(--bg2)), color-mix(in srgb, var(--bg3) 92%, transparent));
   }
   .press-wiki-press-picker-empty {
     color: var(--text2);
     font-size: 12px;
     font-style: italic;
-    padding: 12px 4px 2px;
+    padding: 4px 2px 2px;
   }
   body.theme-starship .press-wiki-picker-panel,
   body.theme-ocean .press-wiki-picker-panel,
@@ -1152,11 +1031,11 @@
   body.theme-starforge .press-wiki-picker-btn {
     border-color: rgba(255,159,28,0.26);
   }
-  body.theme-starship .press-wiki-press-picker-btn,
-  body.theme-ocean .press-wiki-press-picker-btn {
+  body.theme-starship .press-wiki-press-picker-wrap,
+  body.theme-ocean .press-wiki-press-picker-wrap {
     border-color: rgba(118,236,255,0.22);
   }
-  body.theme-starforge .press-wiki-press-picker-btn {
+  body.theme-starforge .press-wiki-press-picker-wrap {
     border-color: rgba(255,159,28,0.26);
   }
 
@@ -1427,7 +1306,7 @@
     .press-btn-bars { width: min(28px, 78%); min-height: 3px; }
     .press-btn-bar { height: 3px; min-width: 3px; }
     .press-wiki-press-picker-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .press-wiki-press-picker-panel-copy { max-width: 62%; }
+    .press-wiki-press-picker-item { min-height: 48px; font-size: 16px; }
   }
 
   /* PRESS MINI-CARD */
@@ -2209,7 +2088,16 @@
   .modal-machine { color: var(--accent); }
   .modal-subtitle { font-size: 11px; color: var(--text2); margin-bottom: 16px; font-family: 'Share Tech Mono', monospace; }
   .issue-attach-hint { font-size: 11px; line-height: 1.35; color: var(--text3); margin: -2px 0 8px; font-family:'Nunito', sans-serif; }
-  .press-wiki-modal-shell { gap: 14px; overflow-x: hidden; overflow-y: auto; }
+  .press-wiki-modal-shell {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    width: min(620px, 95vw);
+    height: min(88vh, 860px);
+    max-height: min(88vh, 860px);
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
   .press-wiki-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
   .press-wiki-head-copy { min-width: 0; display:flex; flex-direction:column; gap:4px; }
   .press-wiki-kicker { font-family:'Share Tech Mono', monospace; font-size: 9px; letter-spacing: 2.5px; text-transform: uppercase; color: var(--accent); opacity: 0.85; }

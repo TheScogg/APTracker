@@ -9930,10 +9930,6 @@ function _pressWikiPressInfo(pressId) {
   return null;
 }
 
-function _pressWikiPressTotalCount() {
-  return Object.values(PRESSES || {}).reduce((sum, machines) => sum + (Array.isArray(machines) ? machines.length : 0), 0);
-}
-
 function _pressWikiActivePressId() {
   if (_pressWikiScope !== WIKI_SCOPE_PRESS) return null;
   if (_pressWikiSelectedPressId && _pressWikiIsKnownPressId(_pressWikiSelectedPressId)) return _pressWikiSelectedPressId;
@@ -9941,47 +9937,23 @@ function _pressWikiActivePressId() {
   return null;
 }
 
-function _pressWikiPressPickerSummary(pressId = _pressWikiActivePressId()) {
-  const info = _pressWikiPressInfo(pressId);
-  if (!info) {
-    return {
-      title: 'Choose a press',
-      path: 'Tap to browse the plant',
-      count: `${_pressWikiPressTotalCount()} presses`
-    };
-  }
-  return {
-    title: info.label,
-    path: `${info.rowName} · ${info.pressId}`,
-    count: `${_pressWikiPressTotalCount()} presses`
-  };
-}
-
 function _pressWikiSetPressPickerOpen(open) {
-  _pressWikiPressPickerOpen = Boolean(open);
+  _pressWikiPressPickerOpen = Boolean(open) && _pressWikiScope === WIKI_SCOPE_PRESS;
   const wrap = document.querySelector('.press-wiki-press-picker-wrap');
-  const btn = document.getElementById('press-wiki-press-picker-btn');
-  const panel = document.getElementById('press-wiki-press-picker-panel');
-  if (wrap) wrap.classList.toggle('open', _pressWikiPressPickerOpen);
-  if (btn) btn.setAttribute('aria-expanded', String(_pressWikiPressPickerOpen));
-  if (panel) {
-    panel.classList.toggle('visible', _pressWikiPressPickerOpen);
-    panel.setAttribute('aria-hidden', String(!_pressWikiPressPickerOpen));
+  const btn = document.getElementById('press-wiki-scope-press');
+  if (wrap) {
+    wrap.classList.toggle('visible', _pressWikiPressPickerOpen);
+    wrap.style.display = _pressWikiPressPickerOpen ? 'flex' : 'none';
   }
+  if (btn) btn.setAttribute('aria-expanded', String(_pressWikiPressPickerOpen));
+  renderPressWikiPressPicker();
 }
 
 function _pressWikiSyncPressPickerSummary() {
-  const titleEl = document.getElementById('press-wiki-press-picker-title');
-  const pathEl = document.getElementById('press-wiki-press-picker-path');
-  const countEl = document.getElementById('press-wiki-press-picker-count');
   const panelCopy = document.getElementById('press-wiki-press-picker-panel-copy');
-  if (!titleEl || !pathEl || !countEl || !panelCopy) return;
-  const summary = _pressWikiPressPickerSummary();
-  titleEl.textContent = summary.title;
-  pathEl.textContent = summary.path;
-  countEl.textContent = summary.count;
+  if (!panelCopy) return;
   panelCopy.textContent = _pressWikiActivePressId()
-    ? 'Swap press to load another wiki.'
+    ? 'Pick a different press to switch wiki context.'
     : 'Pick a press to load its wiki.';
 }
 
@@ -10003,76 +9975,52 @@ async function _pressWikiSelectPress(pressId) {
 
 function renderPressWikiPressPicker() {
   const wrap = document.querySelector('.press-wiki-press-picker-wrap');
-  const panel = document.getElementById('press-wiki-press-picker-panel');
   const treeEl = document.getElementById('press-wiki-press-picker-tree');
-  const btn = document.getElementById('press-wiki-press-picker-btn');
-  if (!wrap || !panel || !treeEl || !btn) return;
+  const closeBtn = document.getElementById('press-wiki-press-picker-close');
+  const pressBtn = document.getElementById('press-wiki-scope-press');
+  if (!wrap || !treeEl || !pressBtn) return;
   const activePressId = _pressWikiActivePressId();
-  const summary = _pressWikiPressPickerSummary(activePressId);
-  const showPicker = _pressWikiScope === WIKI_SCOPE_PRESS;
+  const showPicker = _pressWikiScope === WIKI_SCOPE_PRESS && _pressWikiPressPickerOpen;
 
   wrap.style.display = showPicker ? '' : 'none';
-  btn.disabled = !showPicker;
   treeEl.innerHTML = '';
 
   if (!showPicker) {
-    _pressWikiSetPressPickerOpen(false);
     return;
   }
 
-  if (_pressWikiPressPickerOpen) {
-    panel.classList.add('visible');
-    panel.setAttribute('aria-hidden', 'false');
-    wrap.classList.add('open');
+  wrap.classList.add('visible');
+  wrap.setAttribute('aria-hidden', 'false');
+
+  _pressWikiSyncPressPickerSummary();
+  if (closeBtn) {
+    closeBtn.onclick = () => _pressWikiSetPressPickerOpen(false);
   }
 
-  const titleEl = document.getElementById('press-wiki-press-picker-title');
-  const pathEl = document.getElementById('press-wiki-press-picker-path');
-  const countEl = document.getElementById('press-wiki-press-picker-count');
-  const panelCopy = document.getElementById('press-wiki-press-picker-panel-copy');
-  if (titleEl) titleEl.textContent = summary.title;
-  if (pathEl) pathEl.textContent = summary.path;
-  if (countEl) countEl.textContent = summary.count;
-  if (panelCopy) panelCopy.textContent = activePressId
-    ? 'Swap press to load another wiki.'
-    : 'Pick a press to load its wiki.';
-
-  const entries = Object.entries(PRESSES || {});
+  const entries = Object.entries(PRESSES || {}).flatMap(([rowName, machines]) => (machines || []).map(machineCode => ({
+    machineCode: String(machineCode || '').trim(),
+    pressId: toPressId(machineCode),
+    rowName: String(rowName || '').trim()
+  })));
   if (!entries.length) {
     treeEl.innerHTML = '<div class="press-wiki-press-picker-empty">No presses found in this plant.</div>';
     return;
   }
 
-  entries.forEach(([rowName, machines]) => {
-    const row = document.createElement('div');
-    row.className = 'press-wiki-press-picker-row';
-    const rowLabel = document.createElement('div');
-    rowLabel.className = 'press-wiki-press-picker-row-label';
-    rowLabel.textContent = rowName;
-    const grid = document.createElement('div');
-    grid.className = 'press-wiki-press-picker-grid';
-
-    (machines || []).forEach(machineCode => {
-      const pressId = toPressId(machineCode);
-      const info = _pressWikiPressInfo(pressId) || { pressId, machineCode, rowName };
-      const item = document.createElement('button');
-      item.type = 'button';
-      item.className = `press-wiki-press-picker-item ${activePressId === pressId ? 'active' : ''}`;
-      item.setAttribute('aria-current', activePressId === pressId ? 'true' : 'false');
-      item.innerHTML = `
-        <span class="press-wiki-press-picker-item-code">${info.label || machineCode}</span>
-        <span class="press-wiki-press-picker-item-sub">${pressId}</span>
-      `;
-      item.onclick = () => {
-        void _pressWikiSelectPress(pressId);
-      };
-      grid.appendChild(item);
-    });
-
-    row.appendChild(rowLabel);
-    row.appendChild(grid);
-    treeEl.appendChild(row);
+  const grid = document.createElement('div');
+  grid.className = 'press-wiki-press-picker-grid';
+  entries.forEach(({ machineCode, pressId }) => {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = `press-wiki-press-picker-item ${activePressId === pressId ? 'active' : ''}`;
+    item.setAttribute('aria-current', activePressId === pressId ? 'true' : 'false');
+    item.textContent = machineCode || pressId;
+    item.onclick = () => {
+      void _pressWikiSelectPress(pressId);
+    };
+    grid.appendChild(item);
   });
+  treeEl.appendChild(grid);
 }
 
 function _pressWikiNormalizeParentId(value) {
@@ -10457,6 +10405,7 @@ function _pressWikiSetScope(scope, { reload = true } = {}) {
   }
   const pressLabelBtn = document.getElementById('press-wiki-scope-press');
   if (pressLabelBtn) pressLabelBtn.textContent = _pressWikiPressLabel();
+  if (isShared) _pressWikiSetPressPickerOpen(false);
   const hasActivePressContext = _pressWikiScope === WIKI_SCOPE_SHARED || !!_pressWikiActivePressId();
   const actionsBtn = document.getElementById('press-wiki-actions-btn');
   const newBtn = document.getElementById('press-wiki-new-page-btn');
@@ -11052,7 +11001,10 @@ document.addEventListener('click', e => {
   const pickerWrap = document.querySelector('.press-wiki-picker-wrap');
   if (pickerWrap && !pickerWrap.contains(e.target)) _pressWikiSetPickerOpen(false);
   const pressPickerWrap = document.querySelector('.press-wiki-press-picker-wrap');
-  if (pressPickerWrap && !pressPickerWrap.contains(e.target)) _pressWikiSetPressPickerOpen(false);
+  const pressPickerBtn = document.getElementById('press-wiki-scope-press');
+  if (pressPickerWrap && !pressPickerWrap.contains(e.target) && !(pressPickerBtn && pressPickerBtn.contains(e.target))) {
+    _pressWikiSetPressPickerOpen(false);
+  }
 });
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') _pressWikiSetPickerOpen(false);
@@ -11181,12 +11133,17 @@ document.getElementById('press-wiki-new-page-btn')?.addEventListener('click', ()
 });
 document.getElementById('press-wiki-cancel-create-page-btn')?.addEventListener('click', () => togglePressWikiCreateRow(false));
 document.getElementById('press-wiki-create-page-btn')?.addEventListener('click', () => createPressWikiPageFromInput());
-document.getElementById('press-wiki-scope-press')?.addEventListener('click', () => _pressWikiSetScope(WIKI_SCOPE_PRESS));
-document.getElementById('press-wiki-scope-shared')?.addEventListener('click', () => _pressWikiSetScope(WIKI_SCOPE_SHARED));
-document.getElementById('press-wiki-press-picker-btn')?.addEventListener('click', e => {
+document.getElementById('press-wiki-scope-press')?.addEventListener('click', e => {
   e.stopPropagation();
-  if (e.currentTarget?.disabled) return;
+  if (_pressWikiScope !== WIKI_SCOPE_PRESS) {
+    _pressWikiSetScope(WIKI_SCOPE_PRESS);
+  }
   _pressWikiSetPressPickerOpen(!_pressWikiPressPickerOpen);
+});
+document.getElementById('press-wiki-scope-shared')?.addEventListener('click', () => _pressWikiSetScope(WIKI_SCOPE_SHARED));
+document.getElementById('press-wiki-press-picker-close')?.addEventListener('click', e => {
+  e.stopPropagation();
+  _pressWikiSetPressPickerOpen(false);
 });
 document.getElementById('press-wiki-cms-btn')?.addEventListener('click', () => {
   closePressWikiActionsMenu();
