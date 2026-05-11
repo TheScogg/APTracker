@@ -350,6 +350,7 @@
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background-color: var(--bg); background-image: var(--bg-svg-image, none); background-repeat: no-repeat; background-size: cover; background-position: center; background-attachment: fixed; color: var(--text); font-family: 'Nunito', sans-serif; min-height: 100vh; position: relative; }
   body.role-alerts-open { overflow: hidden; overscroll-behavior: none; }
+  body.press-wiki-open { overflow: hidden; overscroll-behavior: none; }
 
   /* LOGIN */
   #login-screen { display: none; position: fixed; inset: 0; background: var(--bg); z-index: 500; align-items: center; justify-content: center; flex-direction: column; gap: 24px; }
@@ -2928,16 +2929,17 @@
     }
     .press-wiki-drag-handle {
       display: block;
-      width: 42px;
-      height: 4px;
+      width: 58px;
+      height: 6px;
       border-radius: 999px;
       background: color-mix(in srgb, var(--text3) 58%, transparent);
-      margin: 0 auto 10px;
+      margin: 0 auto 12px;
       opacity: 0.9;
       flex-shrink: 0;
       touch-action: none;
       user-select: none;
       -webkit-user-drag: none;
+      cursor: grab;
     }
     .press-wiki-scroll-content {
       display: flex;
@@ -2949,6 +2951,7 @@
       overflow-x: hidden;
       overscroll-behavior: contain;
       -webkit-overflow-scrolling: touch;
+      touch-action: pan-y;
     }
     .press-wiki-header-row {
       position: sticky;

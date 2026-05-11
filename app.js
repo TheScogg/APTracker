@@ -10889,7 +10889,7 @@ async function openPressWikiModal(pressId, machineCode, options = {}) {
   bodyEl.textContent = 'Loading wiki...';
   revisionsEl.innerHTML = '';
   attachmentsEl.innerHTML = '';
-  modal.classList.add('visible');
+  _setPressWikiModalVisible(true);
   try {
     if (_pressWikiScope === WIKI_SCOPE_PRESS && !_pressWikiActivePressId()) {
       renderPressWikiEmptySelection(_pressWikiEmptySelectionMessage());
@@ -11067,7 +11067,7 @@ window.insertMarkdown = function(textareaId, prefix, suffix) {
 };
 
 window.closePressWikiModal = () => {
-  document.getElementById('press-wiki-modal')?.classList.remove('visible');
+  _setPressWikiModalVisible(false);
   _pressWikiModalPressId = null;
   _pressWikiSelectedPressId = null;
   _pressWikiSetPickerOpen(false);
@@ -11202,6 +11202,13 @@ function _setPressWikiError(msg) {
   const text = String(msg || '').trim();
   el.textContent = text;
   el.style.display = text ? 'block' : 'none';
+}
+
+function _setPressWikiModalVisible(isVisible) {
+  const modal = document.getElementById('press-wiki-modal');
+  if (!modal) return;
+  modal.classList.toggle('visible', !!isVisible);
+  document.body.classList.toggle('press-wiki-open', !!isVisible);
 }
 
 async function createPressWikiPageFromInput() {
