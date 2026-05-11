@@ -811,7 +811,7 @@
     grid-template-columns: 26px minmax(0, 1fr);
     align-items:stretch;
     gap: 8px;
-    padding-left: calc(4px + var(--press-wiki-depth, 0) * 16px);
+    padding-left: calc(2px + var(--press-wiki-depth, 0) * 10px);
     border-radius: 14px;
     transition: background 0.14s, transform 0.14s, box-shadow 0.14s;
   }
@@ -930,8 +930,8 @@
   .press-wiki-picker-children {
     display:none;
     gap: 4px;
-    margin-left: 26px;
-    padding-left: 8px;
+    margin-left: 14px;
+    padding-left: 6px;
     border-left: 1px solid rgba(255,255,255,0.05);
   }
   .press-wiki-picker-node .press-wiki-picker-children {

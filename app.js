@@ -10480,6 +10480,7 @@ function _pressWikiRenderPickerNode(parentEl, node, tree, depth = 0) {
 
   const row = document.createElement('div');
   row.className = `press-wiki-picker-row ${node.id === _pressWikiSelectedPageId ? 'active' : ''}`;
+  row.style.setProperty('--press-wiki-depth', String(depth));
 
   const toggle = document.createElement('button');
   toggle.type = 'button';
@@ -10626,7 +10627,7 @@ function _pressWikiRenderTreeNode(parentEl, node, tree, depth = 0) {
   main.appendChild(meta);
   row.appendChild(main);
 
-  if (node.scope === WIKI_SCOPE_SHARED) {
+  if (node.scope === WIKI_SCOPE_SHARED && _pressWikiScope !== WIKI_SCOPE_SHARED) {
     const badge = document.createElement('span');
     badge.className = 'scope-link-badge';
     badge.textContent = 'Shared';
