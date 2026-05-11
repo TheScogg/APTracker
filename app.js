@@ -3586,6 +3586,7 @@ function applyPressContributionVisual(btn, machineCode) {
 
 // ── MAP MODE ──
 window.setMapMode = mode => {
+  const prevMode = mapMode;
   mapMode = mode;
   document.getElementById('mode-log').className = 'map-mode-btn' + (mode==='log' ? ' active-log' : '');
   document.getElementById('mode-hist').className = 'map-mode-btn' + (mode==='hist' ? ' active-hist' : '');
@@ -3606,6 +3607,12 @@ window.setMapMode = mode => {
     window.setPeriod?.('all');
   }
   if (mode === 'log') {
+    if (prevMode === 'hist') {
+      document.getElementById('machine-filter').value = '';
+      const bc = document.getElementById('machine-breadcrumb');
+      if (bc) bc.classList.remove('visible');
+      window.setPeriod?.('today');
+    }
     document.getElementById('machine-filter').value = '';
     renderIssues(); updateFilterBadge();
   }

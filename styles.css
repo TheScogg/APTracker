@@ -2121,6 +2121,12 @@
     overflow-x: hidden;
     overflow-y: auto;
   }
+  .press-wiki-scroll-content {
+    display: contents;
+  }
+  .press-wiki-drag-handle {
+    display: none;
+  }
   .press-wiki-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
   .press-wiki-head-copy { min-width: 0; display:flex; flex-direction:column; gap:4px; }
   .press-wiki-kicker { font-family:'Share Tech Mono', monospace; font-size: 9px; letter-spacing: 2.5px; text-transform: uppercase; color: var(--accent); opacity: 0.85; }
@@ -2910,11 +2916,50 @@
       max-height: calc(100dvh - 10px);
       gap: 12px;
       box-sizing: border-box;
+      overflow: hidden;
+    }
+    .press-wiki-modal-shell::before {
+      display: none;
     }
     #press-wiki-modal > .modal {
       height: calc(100dvh - 10px);
       max-height: calc(100dvh - 10px);
       box-sizing: border-box;
+    }
+    .press-wiki-drag-handle {
+      display: block;
+      width: 42px;
+      height: 4px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--text3) 58%, transparent);
+      margin: 0 auto 10px;
+      opacity: 0.9;
+      flex-shrink: 0;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-drag: none;
+    }
+    .press-wiki-scroll-content {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-height: 0;
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
+    }
+    .press-wiki-header-row {
+      position: sticky;
+      top: 0;
+      z-index: 3;
+      background: linear-gradient(180deg, var(--bg2) 82%, rgba(0,0,0,0));
+      padding-top: 2px;
+      padding-bottom: 8px;
+      margin-top: -2px;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
     }
     .add-issue-modal {
       width: 100vw;
