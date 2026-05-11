@@ -8828,9 +8828,30 @@ function scrollToSearchResultsIfNeeded() {
   document.querySelector('.issues-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-document.getElementById('search-input').addEventListener('input', () => {
-  renderIssues();
+function syncSearchPeriodToAllTime() {
+  const searchValue = String(document.getElementById('search-input')?.value || '').trim();
+  if (!searchValue || issuePeriod === 'all') return false;
+  window.setPeriod('all');
   updateFilterBadge();
+  return true;
+}
+
+const searchInput = document.getElementById('search-input');
+searchInput?.addEventListener('input', () => {
+  const periodChanged = syncSearchPeriodToAllTime();
+  if (!periodChanged) {
+    renderIssues();
+    updateFilterBadge();
+  }
+});
+searchInput?.addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  const periodChanged = syncSearchPeriodToAllTime();
+  if (!periodChanged) {
+    renderIssues();
+    updateFilterBadge();
+  }
   scrollToSearchResultsIfNeeded();
 });
 document.getElementById('machine-filter').addEventListener('change', () => {
