@@ -7964,7 +7964,7 @@ function toggleHeaderQuickMenu() {
   const btn = document.getElementById('header-quick-menu-btn');
   const menu = document.getElementById('header-quick-menu');
   if (!btn || !menu) return;
-  closeUserMenus();
+  closeUserDropdownOnly();
   const isOpen = menu.classList.contains('visible');
   menu.classList.toggle('visible', !isOpen);
   btn.classList.toggle('open', !isOpen);
@@ -7984,6 +7984,14 @@ function closeUserMenus() {
   document.getElementById('user-dropdown')?.classList.remove('visible');
   document.getElementById('user-pill')?.classList.remove('open');
   closeHeaderQuickMenu();
+  document.getElementById('theme-select-grid')?.classList.remove('open');
+  document.getElementById('theme-select-toggle')?.classList.remove('open');
+  document.getElementById('theme-select-toggle')?.setAttribute('aria-expanded', 'false');
+}
+
+function closeUserDropdownOnly() {
+  document.getElementById('user-dropdown')?.classList.remove('visible');
+  document.getElementById('user-pill')?.classList.remove('open');
   document.getElementById('theme-select-grid')?.classList.remove('open');
   document.getElementById('theme-select-toggle')?.classList.remove('open');
   document.getElementById('theme-select-toggle')?.setAttribute('aria-expanded', 'false');
@@ -8109,7 +8117,7 @@ document.addEventListener('click', e => {
 document.addEventListener('click', e => {
   const wrap=document.getElementById('user-pill-wrap');
   if (wrap && !wrap.contains(e.target)) {
-    closeUserMenus();
+    closeUserDropdownOnly();
   }
 });
 document.addEventListener('click', e => {
