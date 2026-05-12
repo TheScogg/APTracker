@@ -2382,8 +2382,17 @@
   .notes-modal-context { font-family: 'Share Tech Mono', monospace; font-size: 10px; color: var(--text3); letter-spacing: .08em; text-transform: uppercase; }
   .notes-modal-subtitle { font-family: 'Nunito', sans-serif; font-size: 12px; color: var(--text2); line-height: 1.45; }
   .notes-modal-header-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
-  .notes-modal-close { width: 40px; height: 40px; border-radius: 999px; border: 1px solid var(--border); background: var(--bg3); color: var(--text2); cursor: pointer; transition: border-color .15s, color .15s, background .15s; }
-  .notes-modal-close:hover { border-color: var(--yellow); color: var(--text); background: color-mix(in srgb, var(--yellow) 8%, var(--bg3)); }
+  #notes-new-btn {
+    min-height: 40px;
+    padding: 0 16px;
+    border-radius: 12px;
+    font-family: 'Nunito', sans-serif;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.15);
+  }
+  .notes-modal-close { width: 40px; height: 40px; border-radius: 12px; border: 1px solid var(--border); background: color-mix(in srgb, var(--bg3) 90%, white 2%); color: var(--text2); cursor: pointer; font-size: 18px; line-height: 1; transition: border-color .15s, color .15s, background .15s, transform .15s; }
+  .notes-modal-close:hover { border-color: color-mix(in srgb, var(--teal) 45%, var(--border)); color: var(--text); background: rgba(255,255,255,0.04); transform: translateY(-1px); }
   .notes-modal-body { display: grid; grid-template-columns: 330px minmax(0, 1fr); min-height: 0; flex: 1; overflow: hidden; }
   .notes-list-panel {
     min-height: 0;
@@ -2467,7 +2476,17 @@
   .notes-back-btn { display: none; align-self: flex-start; min-height: 36px; padding: 0 12px; border-radius: 999px; }
   .notes-editor-save-state { font-family: 'Share Tech Mono', monospace; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--yellow); }
   .notes-editor-updated { font-family: 'Nunito', sans-serif; font-size: 12px; color: var(--text3); }
-  .notes-editor-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .notes-editor-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    padding: 6px;
+    border-radius: 16px;
+    border: 1px solid color-mix(in srgb, var(--border) 76%, var(--accent) 24%);
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--bg2) 86%, white 2%), color-mix(in srgb, var(--bg2) 96%, transparent));
+  }
   .notes-context-box { border: 1px solid var(--border); border-radius: 14px; background: var(--bg3); padding: 10px 12px; }
   .notes-context-label { font-family: 'Share Tech Mono', monospace; font-size: 9px; letter-spacing: .18em; text-transform: uppercase; color: var(--text3); margin-bottom: 8px; }
   .notes-context-chips { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -2505,15 +2524,18 @@
   .notes-tags { font-family: 'Share Tech Mono', monospace; font-size: 11px; letter-spacing: .05em; }
   .notes-toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-start; }
   .notes-toolbar-btn {
-    border: 1px solid var(--border);
-    background: var(--bg2);
+    border: 1px solid color-mix(in srgb, var(--border) 74%, var(--accent) 26%);
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--bg2) 84%, white 2%), color-mix(in srgb, var(--bg2) 96%, transparent));
     color: var(--text2);
     border-radius: 12px;
-    padding: 8px 10px;
+    padding: 8px 11px;
     min-height: 40px;
     cursor: pointer;
     font-family: 'Nunito', sans-serif;
     font-size: 12px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
     transition: border-color .15s, color .15s, background .15s, transform .1s;
   }
   .notes-toolbar-btn:hover { border-color: var(--yellow); color: var(--text); background: color-mix(in srgb, var(--yellow) 8%, var(--bg2)); }
@@ -2664,9 +2686,18 @@
       height: 92vh;
       max-height: 92vh;
     }
-    .notes-modal-header { padding: 12px 12px 10px; }
+    .notes-modal-header {
+      padding: 12px 12px 10px;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 10px;
+    }
     .notes-modal-subtitle { display: none; }
-    .notes-modal-header-actions { width: 100%; justify-content: space-between; }
+    .notes-modal-header-actions {
+      width: 100%;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+    }
     .notes-modal-body { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr); }
     .notes-list-panel {
       border-right: none;
@@ -2689,8 +2720,8 @@
       z-index: 2;
       padding: 8px;
       border-radius: 18px;
-      border: 1px solid color-mix(in srgb, var(--border) 70%, var(--yellow) 30%);
-      background: color-mix(in srgb, var(--bg2) 88%, var(--yellow) 12%);
+      border: 1px solid color-mix(in srgb, var(--border) 70%, var(--teal) 30%);
+      background: color-mix(in srgb, var(--bg2) 90%, var(--teal) 10%);
       box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
       justify-content: flex-start;
     }
@@ -2720,7 +2751,13 @@
     #notes-modal .notes-modal-title {
       font-size: 18px;
     }
+    #notes-modal .notes-modal-context { font-size: 9px; }
     #notes-modal .notes-modal-header-actions { gap: 8px; }
+    #notes-modal #notes-new-btn {
+      flex: 1;
+      min-width: 0;
+      justify-content: center;
+    }
     .notes-editor-head { gap: 8px; }
     .notes-editor-meta { gap: 2px; }
     .notes-editor-actions { gap: 6px; padding: 7px; }
