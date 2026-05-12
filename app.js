@@ -301,10 +301,14 @@ function stopRoleFeedAlertsWatcher() {
 }
 
 function _updateRoleAlertBadge() {
-  const badge = document.getElementById('role-alert-badge');
-  if (!badge) return;
-  badge.textContent = String(_activeRoleAlertCount);
-  badge.style.display = _activeRoleAlertCount > 0 ? '' : 'none';
+  const badges = [
+    document.getElementById('role-alert-badge'),
+    document.getElementById('header-tools-alert-badge')
+  ].filter(Boolean);
+  badges.forEach(badge => {
+    badge.textContent = String(_activeRoleAlertCount);
+    badge.style.display = _activeRoleAlertCount > 0 ? '' : 'none';
+  });
 }
 
 function _updateRoleAlertIndicator() {
@@ -7971,7 +7975,26 @@ function closeUserMenus() {
   document.getElementById('theme-select-toggle')?.setAttribute('aria-expanded', 'false');
 }
 
+function closeHeaderToolsMenu() {
+  const menu = document.getElementById('header-tools-menu');
+  const btn = document.getElementById('header-tools-toggle');
+  menu?.classList.remove('visible');
+  btn?.classList.remove('open');
+  btn?.setAttribute('aria-expanded', 'false');
+}
+
+window.toggleHeaderToolsMenu = function() {
+  const menu = document.getElementById('header-tools-menu');
+  const btn = document.getElementById('header-tools-toggle');
+  if (!menu || !btn) return;
+  const isOpen = menu.classList.contains('visible');
+  menu.classList.toggle('visible', !isOpen);
+  btn.classList.toggle('open', !isOpen);
+  btn.setAttribute('aria-expanded', String(!isOpen));
+};
+
 function handleShellAction(action, value, trigger, event) {
+  if (action !== 'toggle-header-tools-menu') closeHeaderToolsMenu();
   switch (action) {
     case 'go-home':
       closeUserMenus();
@@ -7993,10 +8016,16 @@ function handleShellAction(action, value, trigger, event) {
       window.openMessagingModal?.();
       break;
     case 'open-shared-library':
+      closeUserMenus();
       window.openSharedLibraryWiki?.();
       break;
     case 'open-notes-modal':
+      closeUserMenus();
       window.openNotesModal?.();
+      break;
+    case 'open-role-alerts':
+      closeUserMenus();
+      window.openRoleAlertInboxModal?.();
       break;
     case 'open-role-prefs':
       closeUserMenus();
@@ -8029,6 +8058,10 @@ function handleShellAction(action, value, trigger, event) {
       break;
     case 'toggle-filter-drawer':
       window.toggleFilterDrawer?.();
+      break;
+    case 'toggle-header-tools-menu':
+      closeUserMenus();
+      window.toggleHeaderToolsMenu?.();
       break;
     case 'toggle-stat-filter':
       window.toggleStatFilter?.(value);
@@ -8078,6 +8111,12 @@ document.addEventListener('click', e => {
   const wrap=document.getElementById('user-pill-wrap');
   if (wrap && !wrap.contains(e.target)) {
     closeUserMenus();
+  }
+});
+document.addEventListener('click', e => {
+  const wrap = document.getElementById('header-tools-wrap');
+  if (wrap && !wrap.contains(e.target)) {
+    closeHeaderToolsMenu();
   }
 });
 const signoutBtn=document.getElementById('signout-btn');
@@ -9335,7 +9374,7 @@ document.addEventListener('pointermove', _mobileModalSwipeMove, true);
 document.addEventListener('pointerup', _mobileModalSwipeEnd, true);
 document.addEventListener('pointercancel', _mobileModalSwipeEnd, true);
 
-document.addEventListener('keydown', e=>{ if(e.key==='Escape'){closeModal();closeEditModal();closeResolveModal();closeReopenModal();closeLightbox();closeSortDropdown();closeExportModal();closeSerialModal();closeEditStatusModal();closeNotesModal();closeSmsComposer(true);window.closeMessagingModal?.();window.closeConversation?.();closeAppearanceModal();closeThemeEditor();closeRolePreferencesModal();closeRoleAlertInboxModal();} });
+document.addEventListener('keydown', e=>{ if(e.key==='Escape'){closeModal();closeEditModal();closeResolveModal();closeReopenModal();closeLightbox();closeSortDropdown();closeExportModal();closeSerialModal();closeEditStatusModal();closeNotesModal();closeSmsComposer(true);window.closeMessagingModal?.();window.closeConversation?.();closeAppearanceModal();closeThemeEditor();closeRolePreferencesModal();closeRoleAlertInboxModal();closeHeaderToolsMenu();} });
 
 document.getElementById('theme-editor-modal')?.addEventListener('click', e => {
   const modal = document.getElementById('theme-editor-modal');

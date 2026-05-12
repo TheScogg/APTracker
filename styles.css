@@ -425,6 +425,85 @@
     flex: 1 1 auto;
     min-width: 0;
   }
+  .header-tools-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+  .header-tools-inline {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+  .header-tools-toggle,
+  .header-tools-menu {
+    display: none;
+  }
+  .header-tools-menu {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    min-width: 190px;
+    padding: 6px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--bg2);
+    box-shadow: 0 14px 36px rgba(0,0,0,0.45);
+    z-index: 260;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .header-tools-menu.visible {
+    display: flex;
+  }
+  .header-tools-menu-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: none;
+    background: transparent;
+    color: var(--text2);
+    border-radius: 8px;
+    padding: 10px 12px;
+    cursor: pointer;
+    font-family: 'Nunito', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    text-align: left;
+    transition: background 0.15s, color 0.15s;
+  }
+  .header-tools-menu-item:hover {
+    background: var(--bg3);
+    color: var(--text);
+  }
+  .header-tools-menu-icon {
+    width: 20px;
+    height: 20px;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    color: var(--accent);
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 12px;
+    font-weight: 800;
+    flex-shrink: 0;
+  }
+  .header-tools-menu-alerts {
+    color: var(--orange);
+  }
+  .header-tools-menu-alerts .header-tools-menu-icon {
+    background: color-mix(in srgb, var(--orange) 14%, transparent);
+    color: var(--orange);
+  }
+  .header-tools-menu-badge {
+    margin-left: auto;
+  }
 
   /* STAT PILLS */
   .stat-pill { background: var(--bg3); border: 1px solid var(--border); border-radius: 20px; padding: 3px 10px; font-size: 11px; font-family: 'Share Tech Mono', monospace; display: flex; align-items: center; gap: 5px; white-space: nowrap; cursor: pointer; transition: all 0.15s; user-select: none; }
@@ -1653,7 +1732,32 @@
     }
     .logo-text { font-size: 16px; }
     .logo { gap: 8px; }
-    .header-center { gap: 6px; }
+    .header-center {
+      gap: 6px;
+      justify-content: flex-start;
+      flex: 1 1 auto;
+    }
+    .header-tools-wrap {
+      margin-left: auto;
+    }
+    .header-tools-inline {
+      display: none;
+    }
+    .header-tools-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      white-space: nowrap;
+    }
+    .header-tools-menu {
+      display: none;
+      right: 0;
+      left: auto;
+      min-width: 170px;
+    }
+    .header-tools-menu.visible {
+      display: flex;
+    }
     .plant-switcher-btn { padding: 5px 8px; font-size: 11px; }
     #messages-btn-header { padding: 5px 8px; min-width: 34px; justify-content: center; }
     #wiki-btn-header { width: 34px; min-width: 34px; padding: 5px 0; }

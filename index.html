@@ -52,22 +52,54 @@
     </button>
 
     <div class="header-center">
-      <button class="sort-dropdown-btn" id="wiki-btn-header" type="button" data-shell-action="open-shared-library" aria-label="Shared Library Wiki" title="Shared Library Wiki">
-        <span class="wiki-btn-icon" aria-hidden="true">W</span>
-      </button>
-      <button class="sort-dropdown-btn" id="notes-btn-header" type="button" data-shell-action="open-notes-modal" aria-label="Notes" title="Notes">
-        <span class="wiki-btn-icon" aria-hidden="true">N</span>
-      </button>
+      <div class="header-tools-wrap" id="header-tools-wrap">
+        <div class="header-tools-inline" aria-label="Header tools">
+          <button class="sort-dropdown-btn" id="wiki-btn-header" type="button" data-shell-action="open-shared-library" aria-label="Shared Library Wiki" title="Shared Library Wiki">
+            <span class="wiki-btn-icon" aria-hidden="true">W</span>
+          </button>
+          <button class="sort-dropdown-btn" id="notes-btn-header" type="button" data-shell-action="open-notes-modal" aria-label="Notes" title="Notes">
+            <span class="wiki-btn-icon" aria-hidden="true">N</span>
+          </button>
 
-      <button class="sort-dropdown-btn" id="messages-btn-header" data-messages-trigger="true" data-shell-action="open-messages" style="gap:4px;" aria-label="Messages" title="Messages">
-        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;opacity:0.7;"><path d="M3 2h10a1 1 0 011 1v8a1 1 0 01-1 1H5l-3 2V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
-        <span class="msg-btn-badge" data-messages-badge style="display:none;">0</span>
-      </button>
+          <button class="sort-dropdown-btn" id="messages-btn-header" data-messages-trigger="true" data-shell-action="open-messages" style="gap:4px;" aria-label="Messages" title="Messages">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;opacity:0.7;"><path d="M3 2h10a1 1 0 011 1v8a1 1 0 01-1 1H5l-3 2V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
+            <span class="msg-btn-badge" data-messages-badge style="display:none;">0</span>
+          </button>
 
-      <button class="sort-dropdown-btn" id="alerts-btn-header" type="button" style="gap:4px;" aria-label="Category alerts" title="Category alerts from delegated tasks">
-        <span id="role-alert-icon" class="role-alert-icon" aria-hidden="true">!</span>
-        <span class="msg-btn-badge" id="role-alert-badge" style="display:none;">0</span>
-      </button>
+          <button class="sort-dropdown-btn" id="alerts-btn-header" type="button" style="gap:4px;" aria-label="Category alerts" title="Category alerts from delegated tasks">
+            <span id="role-alert-icon" class="role-alert-icon" aria-hidden="true">!</span>
+            <span class="msg-btn-badge" id="role-alert-badge" style="display:none;">0</span>
+          </button>
+        </div>
+
+        <button class="sort-dropdown-btn header-tools-toggle" id="header-tools-toggle" type="button" data-shell-action="toggle-header-tools-menu" aria-label="Open header tools" aria-expanded="false" aria-controls="header-tools-menu">
+          More
+          <span class="sort-chevron" aria-hidden="true">
+            <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>
+        </button>
+
+        <div class="header-tools-menu" id="header-tools-menu" role="menu" aria-label="Header tools">
+          <button class="header-tools-menu-item" type="button" data-shell-action="open-shared-library" role="menuitem">
+            <span class="header-tools-menu-icon">W</span>
+            Wiki
+          </button>
+          <button class="header-tools-menu-item" type="button" data-shell-action="open-notes-modal" role="menuitem">
+            <span class="header-tools-menu-icon">N</span>
+            Notes
+          </button>
+          <button class="header-tools-menu-item" type="button" data-shell-action="open-messages" data-messages-trigger="true" role="menuitem">
+            <span class="header-tools-menu-icon">✉</span>
+            Messages
+            <span class="msg-btn-badge header-tools-menu-badge" data-messages-badge style="display:none;">0</span>
+          </button>
+          <button class="header-tools-menu-item header-tools-menu-alerts" type="button" data-shell-action="open-role-alerts" role="menuitem">
+            <span class="header-tools-menu-icon" id="header-tools-alert-icon">!</span>
+            Alerts
+            <span class="msg-btn-badge header-tools-menu-badge" id="header-tools-alert-badge" style="display:none;">0</span>
+          </button>
+        </div>
+      </div>
     </div>
 
     <div class="user-pill-wrap" id="user-pill-wrap">
