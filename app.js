@@ -300,10 +300,10 @@ function stopRoleFeedAlertsWatcher() {
 }
 
 function _updateRoleAlertBadge() {
-  const badge = document.getElementById('role-alert-badge');
-  if (!badge) return;
-  badge.textContent = String(_activeRoleAlertCount);
-  badge.style.display = _activeRoleAlertCount > 0 ? '' : 'none';
+  document.querySelectorAll('[data-role-alert-badge]').forEach(badge => {
+    badge.textContent = String(_activeRoleAlertCount);
+    badge.style.display = _activeRoleAlertCount > 0 ? 'inline-flex' : 'none';
+  });
 }
 
 function _updateRoleAlertIndicator() {
@@ -830,10 +830,6 @@ window.openRolePreferencesModal = async function() {
 window.closeRolePreferencesModal = function() {
   document.getElementById('role-prefs-modal')?.classList.remove('visible');
 };
-
-document.getElementById('alerts-btn-header')?.addEventListener('click', () => {
-  openRoleAlertInboxModal();
-});
 
 window.saveRolePreferences = async function() {
   const msg = document.getElementById('role-prefs-msg');
@@ -7923,6 +7919,7 @@ function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;'
 function toggleUserDropdown() {
   const pill=document.getElementById('user-pill');
   const dropdown=document.getElementById('user-dropdown');
+  closeHeaderQuickMenu();
   const isOpen=dropdown.classList.contains('visible');
   dropdown.classList.toggle('visible',!isOpen);
   pill.classList.toggle('open',!isOpen);
@@ -7934,9 +7931,30 @@ function toggleUserDropdown() {
 }
 document.getElementById('user-pill').addEventListener('click', toggleUserDropdown);
 
+function toggleHeaderQuickMenu() {
+  const btn = document.getElementById('header-quick-menu-btn');
+  const menu = document.getElementById('header-quick-menu');
+  if (!btn || !menu) return;
+  closeUserMenus();
+  const isOpen = menu.classList.contains('visible');
+  menu.classList.toggle('visible', !isOpen);
+  btn.classList.toggle('open', !isOpen);
+  btn.setAttribute('aria-expanded', !isOpen ? 'true' : 'false');
+}
+
+function closeHeaderQuickMenu() {
+  const btn = document.getElementById('header-quick-menu-btn');
+  const menu = document.getElementById('header-quick-menu');
+  if (!btn || !menu) return;
+  menu.classList.remove('visible');
+  btn.classList.remove('open');
+  btn.setAttribute('aria-expanded', 'false');
+}
+
 function closeUserMenus() {
   document.getElementById('user-dropdown')?.classList.remove('visible');
   document.getElementById('user-pill')?.classList.remove('open');
+  closeHeaderQuickMenu();
   document.getElementById('theme-select-grid')?.classList.remove('open');
   document.getElementById('theme-select-toggle')?.classList.remove('open');
   document.getElementById('theme-select-toggle')?.setAttribute('aria-expanded', 'false');
@@ -7945,6 +7963,7 @@ function closeUserMenus() {
 function handleShellAction(action, value, trigger, event) {
   switch (action) {
     case 'go-home':
+      closeHeaderQuickMenu();
       closeUserMenus();
       closeSortDropdown();
       window.closeExportDropdown?.();
@@ -7960,14 +7979,24 @@ function handleShellAction(action, value, trigger, event) {
       refreshVisibleData();
       break;
     case 'open-messages':
+      closeHeaderQuickMenu();
       closeUserMenus();
       window.openMessagingModal?.();
       break;
     case 'open-shared-library':
+      closeHeaderQuickMenu();
+      closeUserMenus();
       window.openSharedLibraryWiki?.();
       break;
     case 'open-notes-modal':
+      closeHeaderQuickMenu();
+      closeUserMenus();
       window.openNotesModal?.();
+      break;
+    case 'open-role-alerts':
+      closeHeaderQuickMenu();
+      closeUserMenus();
+      window.openRoleAlertInboxModal?.();
       break;
     case 'open-role-prefs':
       closeUserMenus();
@@ -8016,6 +8045,9 @@ function handleShellAction(action, value, trigger, event) {
     case 'toggle-sort-dropdown':
       window.toggleSortDropdown?.();
       break;
+    case 'toggle-header-quick-menu':
+      toggleHeaderQuickMenu();
+      break;
     case 'toggle-export-dropdown':
       window.toggleExportDropdown?.();
       break;
@@ -8049,6 +8081,12 @@ document.addEventListener('click', e => {
   const wrap=document.getElementById('user-pill-wrap');
   if (wrap && !wrap.contains(e.target)) {
     closeUserMenus();
+  }
+});
+document.addEventListener('click', e => {
+  const wrap = document.getElementById('header-quick-wrap');
+  if (wrap && !wrap.contains(e.target)) {
+    closeHeaderQuickMenu();
   }
 });
 const signoutBtn=document.getElementById('signout-btn');

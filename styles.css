@@ -1500,6 +1500,118 @@
   .sort-dropdown-btn:hover { border-color: var(--text2); color: var(--text); }
   .sort-dropdown-btn.open { border-color: var(--accent); color: var(--accent); }
   .sort-dropdown-btn.open .sort-chevron { transform: rotate(180deg); }
+  .header-quick-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .header-quick-inline {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-width: 0;
+    flex-wrap: nowrap;
+  }
+  .header-quick-menu-btn,
+  .header-quick-menu {
+    display: none;
+  }
+  .header-quick-menu-btn {
+    align-items: center;
+    gap: 6px;
+    padding-inline: 10px;
+  }
+  .header-quick-menu-label {
+    font-family: 'Nunito', sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  .header-quick-menu {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(320px, calc(100vw - 24px));
+    min-width: 0;
+    padding: 8px;
+    border-radius: 16px;
+    border-color: color-mix(in srgb, var(--accent) 24%, var(--border));
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--bg2) 78%, white 2%), color-mix(in srgb, var(--bg2) 92%, transparent)),
+      radial-gradient(circle at top, rgba(255,255,255,0.06), transparent 42%);
+    box-shadow: 0 20px 42px rgba(0,0,0,0.52), 0 0 0 1px rgba(255,255,255,0.03);
+    z-index: 210;
+  }
+  .header-quick-menu.visible { display: block; }
+  .header-quick-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 12px;
+    border: none;
+    border-radius: 12px;
+    background: transparent;
+    color: var(--text2);
+    cursor: pointer;
+    text-align: left;
+    font-family: 'Nunito', sans-serif;
+    transition: background 0.15s, transform 0.15s, color 0.15s;
+  }
+  .header-quick-item:hover {
+    background: rgba(255,255,255,0.04);
+    color: var(--text);
+    transform: translateY(-1px);
+  }
+  .header-quick-item + .header-quick-item {
+    margin-top: 4px;
+  }
+  .header-quick-item-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 11px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    color: #fff;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.15);
+  }
+  .header-quick-item-icon-wiki { background: linear-gradient(135deg, #3b82f6, #2563eb); }
+  .header-quick-item-icon-notes { background: linear-gradient(135deg, #14b8a6, #0f766e); }
+  .header-quick-item-icon-messages { background: linear-gradient(135deg, #22c55e, #16a34a); }
+  .header-quick-item-icon-alerts { background: linear-gradient(135deg, #f59e0b, #ea580c); }
+  .header-quick-item-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1;
+  }
+  .header-quick-item-title {
+    font-size: 13.5px;
+    font-weight: 800;
+    color: var(--text);
+    line-height: 1.1;
+  }
+  .header-quick-item-sub {
+    font-size: 11px;
+    color: var(--text3);
+    line-height: 1.2;
+  }
+  .header-quick-item-badge {
+    margin-left: auto;
+    flex-shrink: 0;
+  }
   .role-alert-icon {
     display: inline-flex;
     align-items: center;
@@ -1653,12 +1765,17 @@
     }
     .logo-text { font-size: 16px; }
     .logo { gap: 8px; }
-    .header-center { gap: 6px; }
+    .header-center { gap: 6px; justify-content: center; }
     .plant-switcher-btn { padding: 5px 8px; font-size: 11px; }
     #messages-btn-header { padding: 5px 8px; min-width: 34px; justify-content: center; }
     #wiki-btn-header { width: 34px; min-width: 34px; padding: 5px 0; }
     .user-pill { padding: 4px 8px; }
     .user-name { max-width: 72px; }
+    .header-quick-inline { display: none; }
+    .header-quick-menu-btn { display: inline-flex; }
+    .header-quick-menu-btn.open { border-color: var(--accent); color: var(--accent); }
+    .header-quick-menu-btn.open .sort-chevron { transform: rotate(180deg); }
+    .header-quick-menu { width: min(320px, calc(100vw - 16px)); }
     .game-pill {
       order: 0;
       flex: 0 0 auto;
