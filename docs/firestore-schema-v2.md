@@ -741,7 +741,7 @@ This is the mobile-first notebook surface. Use it for fast capture, rich formatt
 
 Press notes stay lightweight and append-only after creation. Photo attachments are resized client-side, stored in Firebase Storage, and referenced by metadata on the note document.
 Storage rules should allow authenticated plant members to read note photos and plant editors/admins to upload them under `plants/{plantId}/pressNotes/{noteId}/photos/{fileName}`.
-Wiki page attachment uploads should use the same permission model under `plants/{plantId}/presses/{pressId}/wikiPages/{pageId}/attachments/{fileName}`.
+Wiki page attachment uploads should use the same permission model under both `plants/{plantId}/presses/{pressId}/wikiPages/{pageId}/attachments/{fileName}` and `plants/{plantId}/wikiPages/{pageId}/attachments/{fileName}` for the shared library.
 
 These docs are the event-note layer in the press wiki split. They capture the fast, time-based observations that should not overwrite the canonical wiki page.
 
