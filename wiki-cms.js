@@ -94,6 +94,17 @@ function showFeedback(msg, isError) {
   elSaveFeedback.style.color = isError ? 'var(--red)' : 'var(--green)';
 }
 
+function formatWikiUploadError(err) {
+  const code = String(err?.code || '').trim().toLowerCase();
+  const message = String(err?.message || '').trim();
+  if (code === 'storage/unauthorized' || message.includes('storage/unauthorized')) {
+    return currentScope === WIKI_SCOPE_SHARED
+      ? 'Upload blocked by Storage rules for the shared library. Make sure the shared wiki storage rule is deployed and that your account has editor/admin access.'
+      : 'Upload blocked by Storage rules. Make sure your account has editor/admin access and the wiki storage rule is deployed.';
+  }
+  return message || 'Unknown upload error.';
+}
+
 function currentActor() {
   return { uid: currentUser.uid, name: currentUser.displayName || currentUser.email || 'Unknown' };
 }
@@ -985,7 +996,7 @@ async function handleFilesUpload(files, autoInsert) {
     renderAttachments();
     showFeedback("Upload complete.", false);
   } catch (err) {
-    showFeedback("Upload failed: " + err.message, true);
+    showFeedback("Upload failed: " + formatWikiUploadError(err), true);
   }
 }
 
