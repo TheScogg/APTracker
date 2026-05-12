@@ -12068,14 +12068,25 @@ function _notesRenderEditor(note = null) {
   const backBtn = document.getElementById('notes-back-btn');
   if (!titleEl || !tagsEl || !bodyEl || !pinBtn || !archiveBtn || !deleteBtn) return;
 
+  const prevNoteId = _notesState.currentNote?.id || null;
+  const activeEl = document.activeElement;
+  const titleFocused = activeEl === titleEl;
+  const tagsFocused = activeEl === tagsEl;
+  const bodyFocused = activeEl === bodyEl;
+  const sameActiveNote = Boolean(note?.id) && note.id === prevNoteId;
+
   _notesState.currentNote = note ? { ...note, checklistItems: normalizeChecklistItems(note.checklistItems) } : null;
   if (!note) _notesAttachmentsCache = [];
   _notesState.dirty = false;
   _notesSetStatus(note ? 'Saved' : 'Select a note to begin.', note ? `Updated ${_notesDisplayTime(note.updatedAt)}` : '');
 
-  titleEl.value = note?.title || '';
-  tagsEl.value = Array.isArray(note?.tags) ? note.tags.join(', ') : '';
-  bodyEl.innerHTML = note?.bodyHtml || '';
+  const nextTitle = note?.title || '';
+  const nextTags = Array.isArray(note?.tags) ? note.tags.join(', ') : '';
+  const nextBodyHtml = note?.bodyHtml || '';
+
+  if (!sameActiveNote || !titleFocused) titleEl.value = nextTitle;
+  if (!sameActiveNote || !tagsFocused) tagsEl.value = nextTags;
+  if (!sameActiveNote || !bodyFocused) bodyEl.innerHTML = nextBodyHtml;
   bodyEl.classList.toggle('empty', !note?.bodyHtml);
   pinBtn.textContent = note?.isPinned ? 'Unpin' : 'Pin';
   archiveBtn.textContent = note?.isArchived ? 'Unarchive' : 'Archive';
