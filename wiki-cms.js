@@ -1,11 +1,11 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut as fbSignOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getAuth, setPersistence, browserLocalPersistence, GoogleAuthProvider, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut as fbSignOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp, runTransaction, query, orderBy, writeBatch, limit } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getStorage, ref as storageRef, uploadBytesResumable, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyABjasNBbJnsqq4M_UxKruKrN6-O2FXCwc",
-  authDomain: "press-tracker-9d9c9.firebaseapp.com",
+  authDomain: window.location.hostname || "press-tracker-9d9c9.firebaseapp.com",
   projectId: "press-tracker-9d9c9",
   storageBucket: "press-tracker-9d9c9.firebasestorage.app",
   messagingSenderId: "943200266003",
@@ -15,6 +15,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
+void setPersistence(auth, browserLocalPersistence).catch(() => {});
 const storageFallback = firebaseConfig.storageBucket && firebaseConfig.storageBucket.includes('.appspot.com')
   ? getStorage(app, `gs://${firebaseConfig.projectId}.appspot.com`)
   : getStorage(app);
@@ -58,6 +59,7 @@ const elDeletePageBtn = document.getElementById('delete-page-btn');
 const elParentPage = document.getElementById('edit-parent');
 const elMovePageUpBtn = document.getElementById('move-page-up-btn');
 const elMovePageDownBtn = document.getElementById('move-page-down-btn');
+let redirectResultPromise = null;
 
 const WIKI_SCOPE_PRESS = 'press';
 const WIKI_SCOPE_SHARED = 'shared';
@@ -555,17 +557,23 @@ document.getElementById('google-signin-btn').addEventListener('click', async () 
 });
 
 async function finalizeRedirectSignIn() {
-  if (!sessionStorage.getItem('ap:auth:redirectPending')) return;
-  try {
-    await getRedirectResult(auth);
-  } catch (err) {
-    console.error('Redirect sign in error:', err.code, err.message);
-    document.getElementById('login-feedback').textContent = err.message || 'Sign-in failed.';
-    const btn = document.getElementById('google-signin-btn');
-    if (btn) btn.textContent = 'Sign in with Google';
-  } finally {
-    sessionStorage.removeItem('ap:auth:redirectPending');
-  }
+  if (redirectResultPromise) return redirectResultPromise;
+  const hadPendingRedirect = sessionStorage.getItem('ap:auth:redirectPending') === '1';
+  if (!hadPendingRedirect) return;
+  redirectResultPromise = (async () => {
+    try {
+      await getRedirectResult(auth);
+    } catch (err) {
+      console.error('Redirect sign in error:', err.code, err.message);
+      document.getElementById('login-feedback').textContent = err.message || 'Sign-in failed.';
+      const btn = document.getElementById('google-signin-btn');
+      if (btn) btn.textContent = 'Sign in with Google';
+    } finally {
+      sessionStorage.removeItem('ap:auth:redirectPending');
+      redirectResultPromise = null;
+    }
+  })();
+  return redirectResultPromise;
 }
 
 document.getElementById('signout-btn').addEventListener('click', () => {
@@ -573,11 +581,16 @@ document.getElementById('signout-btn').addEventListener('click', () => {
 });
 
 onAuthStateChanged(auth, async (user) => {
-  if (user) {
-    currentUser = user;
+  let resolvedUser = user;
+  if (!resolvedUser && sessionStorage.getItem('ap:auth:redirectPending') === '1') {
+    await (redirectResultPromise || finalizeRedirectSignIn());
+    resolvedUser = auth.currentUser;
+  }
+  if (resolvedUser) {
+    currentUser = resolvedUser;
     elLogin.classList.remove('visible');
     elApp.classList.add('visible');
-    elWhoami.textContent = user.email;
+    elWhoami.textContent = resolvedUser.email;
     await loadPlants();
   } else {
     currentUser = null;
@@ -586,7 +599,7 @@ onAuthStateChanged(auth, async (user) => {
   }
 });
 
-void finalizeRedirectSignIn();
+redirectResultPromise = finalizeRedirectSignIn();
 
 async function loadPlants() {
   const myPlants = [];
