@@ -12125,6 +12125,7 @@ function _notesFocusBody() {
 
 function _notesToolbarCommand(command) {
   _notesFocusBody();
+  try { document.execCommand('styleWithCSS', false, false); } catch (_) {}
   document.execCommand(command, false, null);
   _notesSyncFormatButtons();
   _notesState.dirty = true;
@@ -12135,22 +12136,34 @@ function _notesSyncFormatButtons() {
   const bodyEl = document.getElementById('notes-body');
   const boldBtn = document.getElementById('notes-bold-btn');
   const italicBtn = document.getElementById('notes-italic-btn');
+  const underlineBtn = document.getElementById('notes-underline-btn');
+  const bulletBtn = document.getElementById('notes-bullet-btn');
   if (!bodyEl || !boldBtn || !italicBtn) return;
   const selection = window.getSelection();
   const inBody = Boolean(selection && selection.rangeCount > 0 && bodyEl.contains(selection.anchorNode));
   if (!inBody) {
     boldBtn.classList.remove('active');
     italicBtn.classList.remove('active');
+    underlineBtn?.classList.remove('active');
+    bulletBtn?.classList.remove('active');
     boldBtn.setAttribute('aria-pressed', 'false');
     italicBtn.setAttribute('aria-pressed', 'false');
+    underlineBtn?.setAttribute('aria-pressed', 'false');
+    bulletBtn?.setAttribute('aria-pressed', 'false');
     return;
   }
   const boldOn = !!document.queryCommandState('bold');
   const italicOn = !!document.queryCommandState('italic');
+  const underlineOn = !!document.queryCommandState('underline');
+  const bulletOn = !!document.queryCommandState('insertUnorderedList');
   boldBtn.classList.toggle('active', boldOn);
   italicBtn.classList.toggle('active', italicOn);
+  underlineBtn?.classList.toggle('active', underlineOn);
+  bulletBtn?.classList.toggle('active', bulletOn);
   boldBtn.setAttribute('aria-pressed', String(boldOn));
   italicBtn.setAttribute('aria-pressed', String(italicOn));
+  underlineBtn?.setAttribute('aria-pressed', String(underlineOn));
+  bulletBtn?.setAttribute('aria-pressed', String(bulletOn));
 }
 
 async function _notesLoadAttachments(noteId) {
@@ -12637,6 +12650,21 @@ document.getElementById('notes-body')?.addEventListener('blur', () => {
     _notesQueueAutosave();
   }
 });
+document.getElementById('notes-body')?.addEventListener('keydown', e => {
+  const cmd = e.metaKey || e.ctrlKey;
+  if (!cmd) return;
+  const key = String(e.key || '').toLowerCase();
+  if (key === 'b') {
+    e.preventDefault();
+    _notesToolbarCommand('bold');
+  } else if (key === 'i') {
+    e.preventDefault();
+    _notesToolbarCommand('italic');
+  } else if (key === 'u') {
+    e.preventDefault();
+    _notesToolbarCommand('underline');
+  }
+});
 document.getElementById('notes-new-btn')?.addEventListener('click', () => {
   void _notesCreateNewNote();
 });
@@ -12720,6 +12748,11 @@ document.getElementById('notes-filter-archived')?.addEventListener('click', () =
   _notesState.filter = 'archived';
   _notesSyncFilterButtons();
   _notesRenderList();
+});
+document.querySelectorAll('.notes-toolbar-btn').forEach(btn => {
+  btn.addEventListener('mousedown', e => {
+    e.preventDefault();
+  });
 });
 document.getElementById('notes-body')?.addEventListener('mouseup', _notesSyncFormatButtons);
 document.getElementById('notes-body')?.addEventListener('keyup', _notesSyncFormatButtons);
