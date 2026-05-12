@@ -792,90 +792,82 @@
 </div>
 
 <!-- NOTES MODAL -->
-<div class="modal-overlay" id="notes-modal" onclick="if(event.target===this)closeNotesModal()">
-  <div class="modal notes-modal-shell" onclick="event.stopPropagation()">
-    <div class="notes-modal-header">
-      <div class="notes-modal-header-copy">
-        <div class="notes-modal-kicker">Notes</div>
-        <div class="notes-modal-title-row">
-          <div class="notes-modal-title">Notebook</div>
-          <div id="notes-modal-context" class="notes-modal-context">Plant-wide</div>
-        </div>
-        <div id="notes-modal-subtitle" class="notes-modal-subtitle">Quick capture, mobile first, Apple Notes inspired.</div>
-      </div>
-      <div class="notes-modal-header-actions">
-        <button id="notes-new-btn" class="btn btn-blue" type="button">New Note</button>
-        <button class="notes-modal-close" type="button" onclick="closeNotesModal()" aria-label="Close notes">✕</button>
-      </div>
+<div class="modal-overlay" id="notes-modal" onclick="if(event.target===this) this.style.display='none'">
+  <div class="phone">
+    <div class="status-bar">
+      <span>9:41</span>
+      <span>📶 🔋</span>
     </div>
-    <div class="notes-modal-body">
-      <aside class="notes-list-panel">
-        <div class="notes-list-controls">
-          <div class="notes-search-wrap">
-            <input id="notes-search" class="input notes-search" type="search" placeholder="Search notes">
-          </div>
-          <div class="notes-filter-row" role="tablist" aria-label="Notes filters">
-            <button class="notes-filter-btn active" id="notes-filter-all" type="button" data-notes-filter="all">All</button>
-            <button class="notes-filter-btn" id="notes-filter-pinned" type="button" data-notes-filter="pinned">Pinned</button>
-            <button class="notes-filter-btn" id="notes-filter-linked" type="button" data-notes-filter="linked">Linked</button>
-            <button class="notes-filter-btn" id="notes-filter-archived" type="button" data-notes-filter="archived">Archived</button>
-          </div>
-        </div>
-        <div id="notes-list" class="notes-list"></div>
-      </aside>
-      <section class="notes-editor-panel">
-        <div class="notes-editor-head">
-          <div class="notes-editor-meta">
-            <button id="notes-back-btn" class="btn btn-ghost notes-back-btn" type="button">‹ Notes</button>
-            <div id="notes-editor-save-state" class="notes-editor-save-state">Select a note to begin.</div>
-            <div id="notes-editor-updated" class="notes-editor-updated"></div>
-          </div>
-          <div class="notes-editor-actions">
-            <button id="notes-pin-btn" class="btn btn-ghost" type="button">Pin</button>
-            <button id="notes-archive-btn" class="btn btn-ghost" type="button">Archive</button>
-            <button id="notes-delete-btn" class="btn btn-danger" type="button">Delete</button>
-          </div>
-        </div>
-        <div class="notes-context-box">
-          <div class="notes-context-label">Linked Context</div>
-          <div id="notes-context-chips" class="notes-context-chips"></div>
-        </div>
-        <input id="notes-title" class="input notes-title" type="text" placeholder="Note title">
-        <input id="notes-tags" class="input notes-tags" type="text" placeholder="Tags separated by commas">
-        <div class="notes-toolbar" role="toolbar" aria-label="Text formatting">
-          <button id="notes-bold-btn" class="notes-toolbar-btn" type="button"><b>B</b></button>
-          <button id="notes-italic-btn" class="notes-toolbar-btn" type="button"><i>I</i></button>
-          <button id="notes-checklist-btn" class="notes-toolbar-btn" type="button">☑ Checklist</button>
-          <button id="notes-photo-btn" class="notes-toolbar-btn" type="button">Attach Photo</button>
-          <details class="notes-toolbar-more">
-            <summary class="notes-toolbar-btn notes-toolbar-more-toggle">More</summary>
-            <div class="notes-toolbar-more-menu">
-              <button id="notes-underline-btn" class="notes-toolbar-btn" type="button"><u>U</u> Underline</button>
-              <button id="notes-bullet-btn" class="notes-toolbar-btn" type="button">• List</button>
-              <button id="notes-link-press-btn" class="notes-toolbar-btn" type="button">Link Press</button>
-              <button id="notes-link-issue-btn" class="notes-toolbar-btn" type="button">Link Issue</button>
-            </div>
-          </details>
-        </div>
-        <div id="notes-body" class="notes-body" contenteditable="true" role="textbox" aria-multiline="true" data-placeholder="Write something useful..."></div>
-        <div class="notes-section-head">
-          <div class="notes-section-title">Checklist</div>
-          <button id="notes-add-checklist-btn" class="btn btn-ghost" type="button">Add item</button>
-        </div>
-        <div id="notes-checklist" class="notes-checklist"></div>
-        <div class="notes-add-checklist-row">
-          <input id="notes-checklist-input" class="input" type="text" placeholder="Add a checklist item">
-          <button id="notes-add-checklist-inline-btn" class="btn btn-blue" type="button">Add</button>
-        </div>
-        <div class="notes-section-head" style="margin-top:12px;">
-          <div class="notes-section-title">Attachments</div>
-        </div>
-        <div id="notes-attachments" class="notes-attachments"></div>
-        <input type="file" id="notes-photo-input" accept="image/*" multiple hidden>
-      </section>
+
+    <div class="sync-banner">
+      <div class="sync-dot" id="sync-dot"></div>
+      <span id="sync-text">Ready</span>
+    </div>
+
+    <div class="app-container" id="appContainer">
+      <div class="header">
+        <div class="greeting">Muse</div>
+        <div class="subtitle">Think beautifully</div>
+      </div>
+
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input type="text" class="search-box" id="searchInput" placeholder="Search notes...">
+      </div>
+
+      <div class="filter-row" id="filterRow">
+        <button class="filter-pill active" data-filter="all">All</button>
+        <button class="filter-pill" data-filter="pinned">Pinned</button>
+        <button class="filter-pill" data-filter="tagged">Tagged</button>
+      </div>
+
+      <div id="notesList"></div>
+    </div>
+
+    <div class="fab" id="fabBtn">+</div>
+  </div>
+</div>
+
+<!-- Editor Modal -->
+<div class="modal-overlay" id="editorModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modalTitle">New Note</div>
+      <button class="modal-close" id="closeModalBtn">✕</button>
+    </div>
+
+    <label>Title</label>
+    <input type="text" id="noteTitle" placeholder="Note title" maxlength="100">
+
+    <label>Content</label>
+    <textarea id="noteContent" placeholder="Write something useful... Use #hashtags for tags"></textarea>
+    <div class="tag-hint">💡 Type # anywhere to add a tag</div>
+
+    <div class="toolbar">
+      <button class="tool-btn" id="boldBtn">Bold</button>
+      <button class="tool-btn" id="italicBtn">Italic</button>
+      <button class="tool-btn" id="checklistBtn">☑ Checklist</button>
+    </div>
+
+    <div class="checklist-header">
+      <label>Checklist</label>
+      <button class="tool-btn" id="addChecklistBtn" style="padding: 4px 12px;">+ Add</button>
+    </div>
+    <div id="checklistContainer"></div>
+
+    <div class="add-checklist-row" id="addChecklistRow" style="display: none;">
+      <input type="text" id="newChecklistItem" placeholder="Checklist item">
+      <button class="btn btn-primary" id="confirmAddChecklistBtn">Add</button>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="cancelNoteBtn">Cancel</button>
+      <button class="btn btn-primary" id="saveNoteBtn">Save Note</button>
     </div>
   </div>
 </div>
+
+<div class="game-toast" id="gameToast"></div>
 
 <!-- MESSAGING MODAL -->
 <div class="msg-overlay" id="messaging-modal">
@@ -1216,23 +1208,425 @@
 <!-- SPOTLIGHT TUTORIAL -->
 <div class="spotlight-overlay" id="spotlight-overlay"></div>
 <div class="spotlight-hl" id="spotlight-hl"></div>
-<div class="spt-wrap" id="spt-wrap">
-  <div class="spt-caret spt-caret-up" id="spt-caret-up" style="display:none"></div>
-  <div class="spt-card" id="spt-card">
-    <div class="spt-accent-bar" id="spt-accent"></div>
-    <button class="spt-skip-btn" onclick="window.closeTutorial()">Skip</button>
-    <div id="spt-mascot"></div>
-    <div class="spt-content">
-      <div class="spt-headline" id="spt-headline"></div>
-      <div class="spt-body" id="spt-body"></div>
-    </div>
-    <div class="spt-progress" id="spt-progress"></div>
-    <div class="spt-nav">
-      <button class="btn btn-ghost spt-back-btn" id="spt-back" onclick="window.tutorialBack()">← Back</button>
-      <button class="btn btn-primary spt-next-btn" id="spt-next" onclick="window.tutorialNext()">Next →</button>
-    </div>
-  </div>
-  <div class="spt-caret spt-caret-down" id="spt-caret-down" style="display:none"></div>
+<script>
+  // ========== DATA MODEL ==========
+  let museNotes = [
+    {
+      id: "1",
+      title: "Morning pages",
+      content: "Woke up early, felt the fog lift. Today I'll finish the prototype. #journal",
+      tags: ["journal"],
+      pinned: false,
+      createdAt: new Date(Date.now() - 2 * 3600000),
+      checklist: []
+    },
+    {
+      id: "2",
+      title: "Grocery run",
+      content: "Apples, Almond milk, Cinnamon, Bread #errands",
+      tags: ["errands"],
+      pinned: true,
+      createdAt: new Date(Date.now() - 86400000),
+      checklist: [
+        { id: "c1", text: "Apples", done: false },
+        { id: "c2", text: "Almond milk", done: true },
+        { id: "c3", text: "Cinnamon", done: false }
+      ]
+    },
+    {
+      id: "3",
+      title: "Project Moon",
+      content: "Draft outline due Friday. Review with Sam at 3pm. #work #deadline",
+      tags: ["work", "deadline"],
+      pinned: false,
+      createdAt: new Date(Date.now() - 172800000),
+      checklist: []
+    }
+  ];
+
+  let museCurrentFilter = "all";
+  let museSearchQuery = "";
+  let museEditingNoteId = null;
+  let museTempChecklist = [];
+
+  // Helper functions
+  function formatTime(date) {
+    const diff = Date.now() - new Date(date);
+    const hours = Math.floor(diff / 3600000);
+    if (hours < 1) return "just now";
+    if (hours < 24) return `${hours}h ago`;
+    return `${Math.floor(hours / 24)}d ago`;
+  }
+
+  function extractTags(text) {
+    const matches = text.match(/#(\w+)/g);
+    if (!matches) return [];
+    return matches.map(t => t.slice(1).toLowerCase());
+  }
+
+  function removeTagSyntax(text) {
+    // Remove #tags but keep the words after (remove the # symbol)
+    return text.replace(/#(\w+)/g, '$1');
+  }
+
+  function escapeHtml(str) {
+    return String(str || '').replace(/[&<>]/g, function(m) {
+      if (m === '&') return '&amp;';
+      if (m === '<') return '&lt;';
+      if (m === '>') return '&gt;';
+      return m;
+    });
+  }
+
+  function showToast(message) {
+    const toast = document.getElementById('gameToast');
+    if (!toast) return;
+    toast.textContent = message;
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 2000);
+  }
+
+  // Filter notes
+  function getFilteredNotes() {
+    let filtered = [...museNotes];
+    
+    // Search filter
+    if (museSearchQuery) {
+      const q = museSearchQuery.toLowerCase();
+      filtered = filtered.filter(n => 
+        n.title.toLowerCase().includes(q) || 
+        n.content.toLowerCase().includes(q) ||
+        n.tags.some(t => t.toLowerCase().includes(q))
+      );
+    }
+    
+    // Tab filter
+    if (museCurrentFilter === "pinned") {
+      filtered = filtered.filter(n => n.pinned);
+    } else if (museCurrentFilter === "tagged") {
+      filtered = filtered.filter(n => n.tags.length > 0);
+    }
+    
+    // Sort: pinned first, then by newest
+    filtered.sort((a, b) => {
+      if (a.pinned !== b.pinned) return b.pinned - a.pinned;
+      return new Date(b.createdAt) - new Date(a.createdAt);
+    });
+    
+    return filtered;
+  }
+
+  // Render notes list
+  function renderNotes() {
+    const container = document.getElementById('notesList');
+    if (!container) return;
+    const filtered = getFilteredNotes();
+    
+    if (filtered.length === 0) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-state-icon">📝</div>
+          <div class="empty-state-text">No notes yet. Tap + to create one.</div>
+        </div>
+      `;
+      return;
+    }
+    
+    container.innerHTML = filtered.map(note => `
+      <div class="note-card" data-id="${note.id}">
+        <div class="note-title">
+          <span>${escapeHtml(note.title)}</span>
+          ${note.pinned ? '<span class="pin-icon">📌</span>' : ''}
+        </div>
+        <div class="note-preview">${escapeHtml(note.content.substring(0, 100))}${note.content.length > 100 ? '…' : ''}</div>
+        <div class="note-meta">
+          <div class="tags">
+            ${note.tags.map(t => `<span class="tag">#${escapeHtml(t)}</span>`).join('')}
+          </div>
+          <div class="timestamp">${formatTime(note.createdAt)}</div>
+        </div>
+      </div>
+    `).join('');
+    
+    // Attach click handlers
+    document.querySelectorAll('.note-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const id = card.getAttribute('data-id');
+        openEditor(id);
+      });
+    });
+  }
+
+  // Save note
+  function saveNote() {
+    const title = document.getElementById('noteTitle').value.trim();
+    let content = document.getElementById('noteContent').value;
+    const tags = extractTags(content);
+    // Clean content: remove # symbols from tags but keep the words
+    const cleanContent = removeTagSyntax(content);
+    const checklist = museTempChecklist.filter(item => item.text.trim());
+    
+    if (!title && !cleanContent && checklist.length === 0) {
+      showToast("Note is empty");
+      return;
+    }
+    
+    const finalTitle = title || "Untitled";
+    
+    if (museEditingNoteId) {
+      // Update existing
+      const index = museNotes.findIndex(n => n.id === museEditingNoteId);
+      if (index !== -1) {
+        museNotes[index] = {
+          ...museNotes[index],
+          title: finalTitle,
+          content: cleanContent,
+          tags: tags,
+          checklist: checklist,
+          updatedAt: new Date()
+        };
+        showToast("Note updated");
+      }
+    } else {
+      // Create new
+      const newNote = {
+        id: Date.now().toString(),
+        title: finalTitle,
+        content: cleanContent,
+        tags: tags,
+        pinned: false,
+        createdAt: new Date(),
+        checklist: checklist
+      };
+      museNotes.unshift(newNote);
+      showToast("Note created");
+    }
+    
+    closeEditor();
+    renderNotes();
+    updateFilterUI();
+  }
+
+  // Delete note
+  function deleteNote(id) {
+    museNotes = museNotes.filter(n => n.id !== id);
+    renderNotes();
+    updateFilterUI();
+    showToast("Note deleted");
+  }
+
+  // Open editor
+  function openEditor(id = null) {
+    museEditingNoteId = id;
+    const modal = document.getElementById('editorModal');
+    if (!modal) return;
+    const titleInput = document.getElementById('noteTitle');
+    const contentInput = document.getElementById('noteContent');
+    const modalTitle = document.getElementById('modalTitle');
+    
+    if (id) {
+      const note = museNotes.find(n => n.id === id);
+      if (note) {
+        titleInput.value = note.title;
+        contentInput.value = note.content;
+        museTempChecklist = JSON.parse(JSON.stringify(note.checklist || []));
+        modalTitle.textContent = "Edit Note";
+      }
+    } else {
+      titleInput.value = "";
+      contentInput.value = "";
+      museTempChecklist = [];
+      modalTitle.textContent = "New Note";
+    }
+    
+    renderChecklist();
+    modal.classList.add('visible');
+  }
+
+  // Close editor
+  function closeEditor() {
+    const modal = document.getElementById('editorModal');
+    if (modal) modal.classList.remove('visible');
+    const checklistRow = document.getElementById('addChecklistRow');
+    if (checklistRow) checklistRow.style.display = 'none';
+    museEditingNoteId = null;
+    museTempChecklist = [];
+  }
+
+  // Render checklist in modal
+  function renderChecklist() {
+    const container = document.getElementById('checklistContainer');
+    if (!container) return;
+    if (!museTempChecklist.length) {
+      container.innerHTML = '<div style="color: var(--text3); font-size: 12px; padding: 8px 0;">No checklist items. Tap + Add to create one.</div>';
+      return;
+    }
+    
+    container.innerHTML = museTempChecklist.map((item, idx) => `
+      <div class="checklist-item ${item.done ? 'done' : ''}">
+        <input type="checkbox" ${item.done ? 'checked' : ''} data-idx="${idx}">
+        <span>${escapeHtml(item.text)}</span>
+        <button class="delete-checklist" data-idx="${idx}">✕</button>
+      </div>
+    `).join('');
+    
+    // Attach checkbox handlers
+    container.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+      cb.addEventListener('change', (e) => {
+        const idx = parseInt(e.target.getAttribute('data-idx'));
+        if (!isNaN(idx) && museTempChecklist[idx]) {
+          museTempChecklist[idx].done = e.target.checked;
+        }
+      });
+    });
+    
+    // Attach delete handlers
+    container.querySelectorAll('.delete-checklist').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const idx = parseInt(btn.getAttribute('data-idx'));
+        if (!isNaN(idx)) {
+          museTempChecklist.splice(idx, 1);
+          renderChecklist();
+        }
+      });
+    });
+  }
+
+  // Add checklist item
+  function addChecklistItem() {
+    const input = document.getElementById('newChecklistItem');
+    const text = input.value.trim();
+    if (text) {
+      museTempChecklist.push({
+        id: Date.now().toString() + Math.random(),
+        text: text,
+        done: false
+      });
+      input.value = '';
+      document.getElementById('addChecklistRow').style.display = 'none';
+      renderChecklist();
+    }
+  }
+
+  // Update filter UI
+  function updateFilterUI() {
+    document.querySelectorAll('.filter-pill').forEach(pill => {
+      const filter = pill.getAttribute('data-filter');
+      if (filter === museCurrentFilter) {
+        pill.classList.add('active');
+      } else {
+        pill.classList.remove('active');
+      }
+    });
+  }
+
+  // ========== INITIALIZATION ==========
+  function initMuseNotes() {
+    renderNotes();
+    
+    // Search input
+    const searchInput = document.getElementById('searchInput');
+    if (searchInput) {
+      searchInput.addEventListener('input', (e) => {
+        museSearchQuery = e.target.value;
+        renderNotes();
+      });
+    }
+    
+    // Filter buttons
+    document.querySelectorAll('.filter-pill').forEach(pill => {
+      pill.addEventListener('click', () => {
+        museCurrentFilter = pill.getAttribute('data-filter');
+        updateFilterUI();
+        renderNotes();
+      });
+    });
+    
+    // FAB button
+    const fabBtn = document.getElementById('fabBtn');
+    if (fabBtn) {
+      fabBtn.addEventListener('click', () => {
+        openEditor(null);
+      });
+    }
+    
+    // Modal close buttons
+    const closeModalBtn = document.getElementById('closeModalBtn');
+    if (closeModalBtn) closeModalBtn.addEventListener('click', closeEditor);
+    
+    const cancelNoteBtn = document.getElementById('cancelNoteBtn');
+    if (cancelNoteBtn) cancelNoteBtn.addEventListener('click', closeEditor);
+    
+    const saveNoteBtn = document.getElementById('saveNoteBtn');
+    if (saveNoteBtn) saveNoteBtn.addEventListener('click', saveNote);
+    
+    // Toolbar buttons
+    const boldBtn = document.getElementById('boldBtn');
+    if (boldBtn) {
+      boldBtn.addEventListener('click', () => {
+        const textarea = document.getElementById('noteContent');
+        textarea.value += '**bold text**';
+      });
+    }
+    const italicBtn = document.getElementById('italicBtn');
+    if (italicBtn) {
+      italicBtn.addEventListener('click', () => {
+        const textarea = document.getElementById('noteContent');
+        textarea.value += '*italic text*';
+      });
+    }
+    const checklistBtn = document.getElementById('checklistBtn');
+    if (checklistBtn) {
+      checklistBtn.addEventListener('click', () => {
+        document.getElementById('addChecklistRow').style.display = 'flex';
+        document.getElementById('newChecklistItem').focus();
+      });
+    }
+    const addChecklistBtn = document.getElementById('addChecklistBtn');
+    if (addChecklistBtn) {
+      addChecklistBtn.addEventListener('click', () => {
+        document.getElementById('addChecklistRow').style.display = 'flex';
+        document.getElementById('newChecklistItem').focus();
+      });
+    }
+    const confirmAddChecklistBtn = document.getElementById('confirmAddChecklistBtn');
+    if (confirmAddChecklistBtn) {
+      confirmAddChecklistBtn.addEventListener('click', addChecklistItem);
+    }
+    const newChecklistItem = document.getElementById('newChecklistItem');
+    if (newChecklistItem) {
+      newChecklistItem.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') addChecklistItem();
+      });
+    }
+    
+    // Close modal on overlay click
+    const editorModal = document.getElementById('editorModal');
+    if (editorModal) {
+      editorModal.addEventListener('click', (e) => {
+        if (e.target === editorModal) closeEditor();
+      });
+    }
+    
+    // Update sync banner
+    setInterval(() => {
+      const dot = document.getElementById('sync-dot');
+      if (dot) {
+        dot.classList.add('syncing');
+        setTimeout(() => dot.classList.remove('syncing'), 300);
+      }
+    }, 30000);
+  }
+  
+  // Initialize when DOM is ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initMuseNotes);
+  } else {
+    initMuseNotes();
+  }
+</script>
+</body>
+</html>
 </div>
 
 </body>
