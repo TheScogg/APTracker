@@ -2401,12 +2401,20 @@
     border-right: 1px solid var(--border);
     background: color-mix(in srgb, var(--bg3) 82%, var(--yellow) 4%);
   }
-  .notes-list-controls { padding: 12px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 10px; }
-  .notes-search { width: 100%; background: var(--bg2); border-color: var(--border); border-radius: 999px; }
+  .notes-list-controls {
+    padding: 12px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--bg3) 70%, white 2%), color-mix(in srgb, var(--bg3) 96%, transparent));
+  }
+  .notes-search { width: 100%; background: color-mix(in srgb, var(--bg2) 88%, white 3%); border-color: color-mix(in srgb, var(--border) 78%, var(--accent) 22%); border-radius: 999px; }
   .notes-filter-row { display: flex; gap: 6px; flex-wrap: wrap; }
   .notes-filter-btn {
-    border: 1px solid var(--border);
-    background: var(--bg2);
+    border: 1px solid color-mix(in srgb, var(--border) 74%, var(--accent) 26%);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--bg2) 84%, white 2%), color-mix(in srgb, var(--bg2) 96%, transparent));
     color: var(--text2);
     border-radius: 999px;
     padding: 6px 10px;
@@ -2434,22 +2442,24 @@
   }
   .notes-list-item {
     width: 100%;
-    border: 1px solid var(--border);
+    border: 1px solid color-mix(in srgb, var(--border) 74%, var(--accent) 26%);
     border-radius: 14px;
-    background: var(--bg2);
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--bg2) 84%, white 2%), color-mix(in srgb, var(--bg2) 96%, transparent));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
     padding: 11px 12px;
     text-align: left;
     cursor: pointer;
     transition: border-color .15s, transform .15s, background .15s;
   }
-  .notes-list-item:hover { border-color: var(--yellow); transform: translateY(-1px); }
+  .notes-list-item:hover { border-color: color-mix(in srgb, var(--teal) 46%, var(--border)); background: color-mix(in srgb, var(--bg2) 84%, var(--teal) 16%); transform: translateY(-1px); }
   .notes-list-item.active {
-    border-color: color-mix(in srgb, var(--yellow) 70%, var(--border));
-    box-shadow: 0 0 0 1px color-mix(in srgb, var(--yellow) 40%, transparent);
-    background: color-mix(in srgb, var(--yellow) 8%, var(--bg2));
+    border-color: color-mix(in srgb, var(--teal) 68%, var(--border));
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--teal) 44%, transparent), inset 0 1px 0 rgba(255,255,255,0.09);
+    background: color-mix(in srgb, var(--bg2) 80%, var(--teal) 20%);
   }
   .notes-list-item-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-  .notes-list-item-title { font-family: 'Rajdhani', sans-serif; font-size: 16px; font-weight: 700; color: var(--text); line-height: 1.15; }
+  .notes-list-item-title { font-family: 'Nunito', sans-serif; font-size: 15px; font-weight: 800; letter-spacing: -0.01em; color: var(--text); line-height: 1.15; }
   .notes-list-item-time { font-family: 'Share Tech Mono', monospace; font-size: 9px; color: var(--text3); white-space: nowrap; }
   .notes-list-item-preview { margin-top: 4px; font-family: 'Nunito', sans-serif; font-size: 12px; color: var(--text2); line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .notes-list-item-badges { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
@@ -2470,7 +2480,7 @@
   .notes-list-badge.pinned { border-color: color-mix(in srgb, var(--yellow) 45%, var(--border)); color: var(--yellow); }
   .notes-list-badge.linked { border-color: color-mix(in srgb, var(--teal) 45%, var(--border)); color: var(--teal); }
   .notes-list-badge.archived { border-color: color-mix(in srgb, var(--text3) 45%, var(--border)); color: var(--text3); }
-  .notes-editor-panel { min-height: 0; display: flex; flex-direction: column; gap: 10px; overflow: auto; padding: 16px; }
+  .notes-editor-panel { min-height: 0; display: flex; flex-direction: column; gap: 10px; overflow: auto; padding: 16px; background: linear-gradient(180deg, color-mix(in srgb, var(--bg2) 90%, white 2%), var(--bg2)); }
   .notes-editor-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
   .notes-editor-meta { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
   .notes-back-btn { display: none; align-self: flex-start; min-height: 36px; padding: 0 12px; border-radius: 999px; }
@@ -2487,7 +2497,7 @@
     background:
       linear-gradient(180deg, color-mix(in srgb, var(--bg2) 86%, white 2%), color-mix(in srgb, var(--bg2) 96%, transparent));
   }
-  .notes-context-box { border: 1px solid var(--border); border-radius: 14px; background: var(--bg3); padding: 10px 12px; }
+  .notes-context-box { border: 1px solid color-mix(in srgb, var(--border) 74%, var(--accent) 26%); border-radius: 14px; background: linear-gradient(180deg, color-mix(in srgb, var(--bg3) 84%, white 2%), color-mix(in srgb, var(--bg3) 96%, transparent)); padding: 10px 12px; }
   .notes-context-label { font-family: 'Share Tech Mono', monospace; font-size: 9px; letter-spacing: .18em; text-transform: uppercase; color: var(--text3); margin-bottom: 8px; }
   .notes-context-chips { display: flex; gap: 8px; flex-wrap: wrap; }
   .notes-context-chip {
