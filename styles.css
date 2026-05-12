@@ -2557,6 +2557,13 @@
     transition: border-color .15s, color .15s, background .15s, transform .1s;
   }
   .notes-toolbar-btn:hover { border-color: color-mix(in srgb, var(--accent) 56%, var(--border)); color: var(--text); background: var(--notes-chip-hover-bg); }
+  .notes-toolbar-btn.active,
+  .notes-toolbar-btn[aria-pressed="true"] {
+    border-color: color-mix(in srgb, var(--accent) 62%, var(--border));
+    color: var(--text);
+    background: color-mix(in srgb, var(--bg2) 74%, var(--accent) 26%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.14);
+  }
   .notes-toolbar-btn:active { transform: scale(.98); }
   .notes-toolbar-more {
     position: relative;
