@@ -12068,14 +12068,25 @@ function _notesRenderEditor(note = null) {
   const backBtn = document.getElementById('notes-back-btn');
   if (!titleEl || !tagsEl || !bodyEl || !pinBtn || !archiveBtn || !deleteBtn) return;
 
+  const prevNoteId = _notesState.currentNote?.id || null;
+  const activeEl = document.activeElement;
+  const titleFocused = activeEl === titleEl;
+  const tagsFocused = activeEl === tagsEl;
+  const bodyFocused = activeEl === bodyEl;
+  const sameActiveNote = Boolean(note?.id) && note.id === prevNoteId;
+
   _notesState.currentNote = note ? { ...note, checklistItems: normalizeChecklistItems(note.checklistItems) } : null;
   if (!note) _notesAttachmentsCache = [];
   _notesState.dirty = false;
   _notesSetStatus(note ? 'Saved' : 'Select a note to begin.', note ? `Updated ${_notesDisplayTime(note.updatedAt)}` : '');
 
-  titleEl.value = note?.title || '';
-  tagsEl.value = Array.isArray(note?.tags) ? note.tags.join(', ') : '';
-  bodyEl.innerHTML = note?.bodyHtml || '';
+  const nextTitle = note?.title || '';
+  const nextTags = Array.isArray(note?.tags) ? note.tags.join(', ') : '';
+  const nextBodyHtml = note?.bodyHtml || '';
+
+  if (!sameActiveNote || !titleFocused) titleEl.value = nextTitle;
+  if (!sameActiveNote || !tagsFocused) tagsEl.value = nextTags;
+  if (!sameActiveNote || !bodyFocused) bodyEl.innerHTML = nextBodyHtml;
   bodyEl.classList.toggle('empty', !note?.bodyHtml);
   pinBtn.textContent = note?.isPinned ? 'Unpin' : 'Pin';
   archiveBtn.textContent = note?.isArchived ? 'Unarchive' : 'Archive';
@@ -12094,7 +12105,14 @@ function _notesRenderEditor(note = null) {
 function _notesFocusBody() {
   const bodyEl = document.getElementById('notes-body');
   if (!bodyEl) return;
+  const selection = window.getSelection();
+  const hasBodySelection = Boolean(
+    selection &&
+    selection.rangeCount > 0 &&
+    bodyEl.contains(selection.anchorNode)
+  );
   bodyEl.focus();
+  if (hasBodySelection) return;
   try {
     const range = document.createRange();
     range.selectNodeContents(bodyEl);
@@ -12107,9 +12125,45 @@ function _notesFocusBody() {
 
 function _notesToolbarCommand(command) {
   _notesFocusBody();
+  try { document.execCommand('styleWithCSS', false, false); } catch (_) {}
   document.execCommand(command, false, null);
+  _notesSyncFormatButtons();
   _notesState.dirty = true;
   _notesQueueAutosave();
+}
+
+function _notesSyncFormatButtons() {
+  const bodyEl = document.getElementById('notes-body');
+  const boldBtn = document.getElementById('notes-bold-btn');
+  const italicBtn = document.getElementById('notes-italic-btn');
+  const underlineBtn = document.getElementById('notes-underline-btn');
+  const bulletBtn = document.getElementById('notes-bullet-btn');
+  if (!bodyEl || !boldBtn || !italicBtn) return;
+  const selection = window.getSelection();
+  const inBody = Boolean(selection && selection.rangeCount > 0 && bodyEl.contains(selection.anchorNode));
+  if (!inBody) {
+    boldBtn.classList.remove('active');
+    italicBtn.classList.remove('active');
+    underlineBtn?.classList.remove('active');
+    bulletBtn?.classList.remove('active');
+    boldBtn.setAttribute('aria-pressed', 'false');
+    italicBtn.setAttribute('aria-pressed', 'false');
+    underlineBtn?.setAttribute('aria-pressed', 'false');
+    bulletBtn?.setAttribute('aria-pressed', 'false');
+    return;
+  }
+  const boldOn = !!document.queryCommandState('bold');
+  const italicOn = !!document.queryCommandState('italic');
+  const underlineOn = !!document.queryCommandState('underline');
+  const bulletOn = !!document.queryCommandState('insertUnorderedList');
+  boldBtn.classList.toggle('active', boldOn);
+  italicBtn.classList.toggle('active', italicOn);
+  underlineBtn?.classList.toggle('active', underlineOn);
+  bulletBtn?.classList.toggle('active', bulletOn);
+  boldBtn.setAttribute('aria-pressed', String(boldOn));
+  italicBtn.setAttribute('aria-pressed', String(italicOn));
+  underlineBtn?.setAttribute('aria-pressed', String(underlineOn));
+  bulletBtn?.setAttribute('aria-pressed', String(bulletOn));
 }
 
 async function _notesLoadAttachments(noteId) {
@@ -12584,6 +12638,7 @@ document.getElementById('notes-body')?.addEventListener('input', () => {
   if (_notesState.currentNote) {
     _notesState.currentNote.bodyHtml = sanitizeNoteHtml(document.getElementById('notes-body')?.innerHTML || '');
     _notesState.currentNote.bodyText = _noteTextFromHtml(_notesState.currentNote.bodyHtml);
+    _notesSyncFormatButtons();
     _notesQueueAutosave();
     _notesRenderList();
   }
@@ -12593,6 +12648,21 @@ document.getElementById('notes-body')?.addEventListener('blur', () => {
     _notesState.currentNote.bodyHtml = sanitizeNoteHtml(document.getElementById('notes-body')?.innerHTML || '');
     _notesState.currentNote.bodyText = _noteTextFromHtml(_notesState.currentNote.bodyHtml);
     _notesQueueAutosave();
+  }
+});
+document.getElementById('notes-body')?.addEventListener('keydown', e => {
+  const cmd = e.metaKey || e.ctrlKey;
+  if (!cmd) return;
+  const key = String(e.key || '').toLowerCase();
+  if (key === 'b') {
+    e.preventDefault();
+    _notesToolbarCommand('bold');
+  } else if (key === 'i') {
+    e.preventDefault();
+    _notesToolbarCommand('italic');
+  } else if (key === 'u') {
+    e.preventDefault();
+    _notesToolbarCommand('underline');
   }
 });
 document.getElementById('notes-new-btn')?.addEventListener('click', () => {
@@ -12678,6 +12748,17 @@ document.getElementById('notes-filter-archived')?.addEventListener('click', () =
   _notesState.filter = 'archived';
   _notesSyncFilterButtons();
   _notesRenderList();
+});
+document.querySelectorAll('.notes-toolbar-btn').forEach(btn => {
+  btn.addEventListener('mousedown', e => {
+    e.preventDefault();
+  });
+});
+document.getElementById('notes-body')?.addEventListener('mouseup', _notesSyncFormatButtons);
+document.getElementById('notes-body')?.addEventListener('keyup', _notesSyncFormatButtons);
+document.addEventListener('selectionchange', () => {
+  if (!document.getElementById('notes-modal')?.classList.contains('visible')) return;
+  _notesSyncFormatButtons();
 });
 window.addEventListener('resize', () => {
   if (document.getElementById('notes-modal')?.classList.contains('visible')) {
