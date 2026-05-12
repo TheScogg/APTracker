@@ -2534,9 +2534,13 @@
     border-color: var(--border);
     border-radius: 14px;
     min-height: 46px;
+    color: var(--text);
+    caret-color: var(--text);
   }
   .notes-title { font-family: 'Rajdhani', sans-serif; font-size: 20px; font-weight: 700; }
   .notes-tags { font-family: 'Share Tech Mono', monospace; font-size: 11px; letter-spacing: .05em; }
+  .notes-title::placeholder,
+  .notes-tags::placeholder { color: var(--text3); }
   .notes-toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-start; }
   .notes-toolbar-btn {
     border: 1px solid var(--notes-chip-border);
