@@ -2366,6 +2366,12 @@
     padding: 0;
     background: linear-gradient(180deg, color-mix(in srgb, var(--bg2) 94%, var(--yellow) 6%), var(--bg2));
   }
+
+  .notes-modal-shell {
+    --notes-chip-border: color-mix(in srgb, var(--border) 70%, var(--accent) 30%);
+    --notes-chip-bg: linear-gradient(180deg, color-mix(in srgb, var(--bg2) 82%, white 2%), color-mix(in srgb, var(--bg2) 96%, transparent));
+    --notes-chip-hover-bg: color-mix(in srgb, var(--bg2) 80%, rgba(255,255,255,0.08) 20%);
+  }
   .notes-modal-header {
     display: flex;
     align-items: flex-start;
@@ -2413,8 +2419,8 @@
   .notes-search { width: 100%; background: color-mix(in srgb, var(--bg2) 88%, white 3%); border-color: color-mix(in srgb, var(--border) 78%, var(--accent) 22%); border-radius: 999px; }
   .notes-filter-row { display: flex; gap: 6px; flex-wrap: wrap; }
   .notes-filter-btn {
-    border: 1px solid color-mix(in srgb, var(--border) 74%, var(--accent) 26%);
-    background: linear-gradient(180deg, color-mix(in srgb, var(--bg2) 84%, white 2%), color-mix(in srgb, var(--bg2) 96%, transparent));
+    border: 1px solid var(--notes-chip-border);
+    background: var(--notes-chip-bg);
     color: var(--text2);
     border-radius: 999px;
     padding: 6px 10px;
@@ -2442,21 +2448,20 @@
   }
   .notes-list-item {
     width: 100%;
-    border: 1px solid color-mix(in srgb, var(--border) 74%, var(--accent) 26%);
+    border: 1px solid var(--notes-chip-border);
     border-radius: 14px;
-    background:
-      linear-gradient(180deg, color-mix(in srgb, var(--bg2) 84%, white 2%), color-mix(in srgb, var(--bg2) 96%, transparent));
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+    background: var(--notes-chip-bg);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 0 0 1px rgba(255,255,255,0.02);
     padding: 11px 12px;
     text-align: left;
     cursor: pointer;
     transition: border-color .15s, transform .15s, background .15s;
   }
-  .notes-list-item:hover { border-color: color-mix(in srgb, var(--teal) 46%, var(--border)); background: color-mix(in srgb, var(--bg2) 84%, var(--teal) 16%); transform: translateY(-1px); }
+  .notes-list-item:hover { border-color: color-mix(in srgb, var(--accent) 56%, var(--border)); background: var(--notes-chip-hover-bg); transform: translateY(-1px); }
   .notes-list-item.active {
-    border-color: color-mix(in srgb, var(--teal) 68%, var(--border));
-    box-shadow: 0 0 0 1px color-mix(in srgb, var(--teal) 44%, transparent), inset 0 1px 0 rgba(255,255,255,0.09);
-    background: color-mix(in srgb, var(--bg2) 80%, var(--teal) 20%);
+    border-color: color-mix(in srgb, var(--accent) 64%, var(--border));
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 42%, transparent), inset 0 1px 0 rgba(255,255,255,0.11);
+    background: color-mix(in srgb, var(--bg2) 76%, var(--accent) 24%);
   }
   .notes-list-item-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
   .notes-list-item-title { font-family: 'Nunito', sans-serif; font-size: 15px; font-weight: 800; letter-spacing: -0.01em; color: var(--text); line-height: 1.15; }
@@ -2491,11 +2496,11 @@
     gap: 8px;
     flex-wrap: wrap;
     justify-content: flex-end;
-    padding: 6px;
+    padding: 8px;
     border-radius: 16px;
-    border: 1px solid color-mix(in srgb, var(--border) 76%, var(--accent) 24%);
-    background:
-      linear-gradient(180deg, color-mix(in srgb, var(--bg2) 86%, white 2%), color-mix(in srgb, var(--bg2) 96%, transparent));
+    border: 1px solid var(--notes-chip-border);
+    background: var(--notes-chip-bg);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
   }
   .notes-context-box { border: 1px solid color-mix(in srgb, var(--border) 74%, var(--accent) 26%); border-radius: 14px; background: linear-gradient(180deg, color-mix(in srgb, var(--bg3) 84%, white 2%), color-mix(in srgb, var(--bg3) 96%, transparent)); padding: 10px 12px; }
   .notes-context-label { font-family: 'Share Tech Mono', monospace; font-size: 9px; letter-spacing: .18em; text-transform: uppercase; color: var(--text3); margin-bottom: 8px; }
@@ -2534,9 +2539,8 @@
   .notes-tags { font-family: 'Share Tech Mono', monospace; font-size: 11px; letter-spacing: .05em; }
   .notes-toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-start; }
   .notes-toolbar-btn {
-    border: 1px solid color-mix(in srgb, var(--border) 74%, var(--accent) 26%);
-    background:
-      linear-gradient(180deg, color-mix(in srgb, var(--bg2) 84%, white 2%), color-mix(in srgb, var(--bg2) 96%, transparent));
+    border: 1px solid var(--notes-chip-border);
+    background: var(--notes-chip-bg);
     color: var(--text2);
     border-radius: 12px;
     padding: 8px 11px;
@@ -2548,7 +2552,7 @@
     letter-spacing: -0.01em;
     transition: border-color .15s, color .15s, background .15s, transform .1s;
   }
-  .notes-toolbar-btn:hover { border-color: var(--yellow); color: var(--text); background: color-mix(in srgb, var(--yellow) 8%, var(--bg2)); }
+  .notes-toolbar-btn:hover { border-color: color-mix(in srgb, var(--accent) 56%, var(--border)); color: var(--text); background: var(--notes-chip-hover-bg); }
   .notes-toolbar-btn:active { transform: scale(.98); }
   .notes-toolbar-more {
     position: relative;
