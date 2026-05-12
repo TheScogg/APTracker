@@ -2733,16 +2733,36 @@
     .notes-editor-panel {
       padding: 12px 12px 14px;
     }
+    .notes-title,
+    .notes-tags,
+    .notes-add-checklist-row .input,
+    #notes-checklist-input {
+      padding-left: 14px;
+      padding-right: 12px;
+    }
     #notes-modal.notes-mobile-list .notes-editor-panel,
     #notes-modal.notes-mobile-list .notes-list-panel { display: none; }
     #notes-modal.notes-mobile-list .notes-list-panel { display: flex; }
     #notes-modal.notes-mobile-editor .notes-list-panel { display: none; }
     #notes-modal.notes-mobile-editor .notes-editor-panel { display: flex; }
     .notes-back-btn { display: inline-flex; }
+    .notes-editor-head { display: contents; }
+    .notes-editor-meta { order: 0; }
+    .notes-context-box { order: 1; }
+    .notes-title { order: 2; }
+    .notes-tags { order: 3; }
+    .notes-toolbar { order: 4; }
+    .notes-body { order: 5; }
+    .notes-section-head { order: 6; }
+    .notes-checklist { order: 7; }
+    .notes-add-checklist-row { order: 8; }
+    .notes-attachments { order: 10; }
     .notes-editor-actions {
+      order: 11;
       position: sticky;
       bottom: 8px;
       z-index: 2;
+      width: 100%;
       padding: 8px;
       border-radius: 18px;
       border: 1px solid color-mix(in srgb, var(--border) 70%, var(--teal) 30%);
