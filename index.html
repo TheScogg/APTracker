@@ -828,52 +828,79 @@
 
 <!-- Editor Modal -->
 <div class="modal-overlay" id="notes-editor-modal" onclick="if(event.target===this)closeNotesEditorModal()">
-  <div class="modal" onclick="event.stopPropagation()">
-    <div class="modal-header">
-      <div class="modal-title" id="notes-editor-title">New Note</div>
-      <button class="modal-close" id="notes-editor-close-btn" onclick="closeNotesEditorModal()">✕</button>
-    </div>
-
-    <label>Title</label>
-    <input type="text" id="notes-title" placeholder="Note title" maxlength="100">
-
-    <label>Content</label>
-    <div id="notes-body" class="notes-body" contenteditable="true" data-placeholder="Write something useful... Use #hashtags for tags" style="width: 100%; background: var(--bg3); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; color: var(--text); font-family: 'Nunito', sans-serif; font-size: 14px; outline: none; transition: border-color 0.2s; margin-bottom: 16px; min-height: 100px; overflow-y: auto;"></div>
-    <div class="tag-hint">💡 Type # anywhere to add a tag</div>
-    <input type="text" id="notes-tags" placeholder="Tags (comma separated)" style="display:none">
-
-    <div class="toolbar">
-      <button class="tool-btn" id="notes-bold-btn">Bold</button>
-      <button class="tool-btn" id="notes-italic-btn">Italic</button>
-      <button class="tool-btn" id="notes-checklist-btn">☑ Checklist</button>
-      <button class="tool-btn" id="notes-photo-btn">📷 Attach</button>
-    </div>
-
-    <div class="checklist-header">
-      <label>Checklist</label>
-      <button class="tool-btn" id="notes-add-checklist-btn" style="padding: 4px 12px;">+ Add</button>
-    </div>
-    <div id="notes-checklist"></div>
-
-    <div class="add-checklist-row" id="notes-add-checklist-row" style="display: none;">
-      <input type="text" id="notes-checklist-input" placeholder="Checklist item">
-      <button class="btn btn-primary" id="notes-add-checklist-inline-btn">Add</button>
-    </div>
-
-    <div class="checklist-header" style="margin-top:12px;">
-      <label>Attachments</label>
-    </div>
-    <div id="notes-attachments"></div>
-    <input type="file" id="notes-photo-input" accept="image/*" multiple hidden>
-
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;">
-      <div style="display:flex;gap:6px;">
-        <button class="btn btn-ghost" id="notes-pin-btn" style="padding: 6px 10px; font-size:11px;">📌 Pin</button>
-        <button class="btn btn-ghost" id="notes-archive-btn" style="padding: 6px 10px; font-size:11px;">📦 Archive</button>
+  <div class="modal notes-modal-shell" onclick="event.stopPropagation()">
+    <div class="notes-modal-header">
+      <div class="notes-modal-header-copy">
+        <div class="notes-modal-kicker">Quick capture</div>
+        <div class="notes-modal-title-row">
+          <div class="notes-modal-title" id="notes-editor-title">New Note</div>
+          <div class="notes-modal-context" id="notes-modal-context">Plant-wide</div>
+        </div>
+        <div class="notes-modal-subtitle" id="notes-modal-subtitle">Quick capture, mobile first, and saved as you type.</div>
+        <div id="notes-editor-save-state" class="notes-editor-save-state"></div>
+        <div id="notes-editor-updated" class="notes-editor-updated"></div>
       </div>
-      <div class="modal-actions" style="margin-top:0;">
-        <button class="btn btn-danger" id="notes-delete-btn">Delete</button>
+      <div class="notes-modal-header-actions">
+        <button class="btn btn-primary" id="notes-new-btn" type="button">+ New Note</button>
+        <button class="notes-modal-close" id="notes-editor-close-btn" type="button" onclick="closeNotesEditorModal()" aria-label="Close notes editor">✕</button>
       </div>
+    </div>
+
+    <div class="notes-editor-panel">
+      <div class="notes-editor-head">
+        <button class="btn btn-ghost notes-back-btn" id="notes-back-btn" type="button">← Notes</button>
+        <div class="notes-editor-actions">
+          <button class="btn btn-ghost" id="notes-pin-btn" type="button">📌 Pin</button>
+          <button class="btn btn-ghost" id="notes-archive-btn" type="button">📦 Archive</button>
+          <button class="btn btn-danger" id="notes-delete-btn" type="button">Delete</button>
+        </div>
+      </div>
+
+      <div class="notes-context-box">
+        <div class="notes-context-label">Linked Context</div>
+        <div id="notes-context-chips" class="notes-context-chips"></div>
+        <div class="notes-context-actions">
+          <button class="notes-toolbar-btn" id="notes-link-press-btn" type="button">Link Press</button>
+          <button class="notes-toolbar-btn" id="notes-link-issue-btn" type="button">Link Issue</button>
+        </div>
+      </div>
+
+      <label for="notes-title">Title</label>
+      <input type="text" id="notes-title" class="notes-title" placeholder="Note title" maxlength="100">
+
+      <label for="notes-tags">Tags</label>
+      <input type="text" id="notes-tags" class="notes-tags" placeholder="Tags (comma separated)">
+
+      <label for="notes-body">Content</label>
+      <div id="notes-body" class="notes-body" contenteditable="true" data-placeholder="Write something useful... Use #hashtags for tags"></div>
+      <div class="tag-hint">💡 Type # anywhere to add a tag</div>
+
+      <div class="notes-toolbar">
+        <button class="notes-toolbar-btn" id="notes-bold-btn" type="button">Bold</button>
+        <button class="notes-toolbar-btn" id="notes-italic-btn" type="button">Italic</button>
+        <button class="notes-toolbar-btn" id="notes-underline-btn" type="button">Underline</button>
+        <button class="notes-toolbar-btn" id="notes-bullet-btn" type="button">Bullets</button>
+        <button class="notes-toolbar-btn" id="notes-checklist-btn" type="button">☑ Checklist</button>
+        <button class="notes-toolbar-btn" id="notes-photo-btn" type="button">📷 Attach</button>
+      </div>
+
+      <div class="notes-section-head">
+        <div class="notes-section-title">Checklist</div>
+        <button class="notes-toolbar-btn" id="notes-add-checklist-btn" type="button">+ Add</button>
+      </div>
+      <div id="notes-checklist" class="notes-checklist"></div>
+
+      <div class="add-checklist-row" id="notes-add-checklist-row">
+        <input type="text" id="notes-checklist-input" class="input" placeholder="Checklist item">
+        <button class="btn btn-primary" id="notes-add-checklist-inline-btn" type="button">Add</button>
+      </div>
+
+      <div class="notes-section-head" style="margin-top:12px;">
+        <div class="notes-section-title">Attachments</div>
+        <div class="notes-editor-updated">Drop photos here or tap Attach</div>
+      </div>
+      <div id="notes-attachments" class="notes-attachments"></div>
+      <input type="file" id="notes-photo-input" accept="image/*" multiple hidden>
     </div>
   </div>
 </div>

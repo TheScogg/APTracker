@@ -12120,6 +12120,13 @@ function _notesRenderEditor(note = null) {
   bodyEl.contentEditable = note?.id ? 'true' : 'false';
   bodyEl.dataset.placeholder = note?.id ? 'Write something useful...' : 'Select a note to begin.';
   if (backBtn) backBtn.disabled = !note?.id;
+  document.getElementById('notes-checklist-btn')?.toggleAttribute('disabled', !note?.id);
+  document.getElementById('notes-add-checklist-btn')?.toggleAttribute('disabled', !note?.id);
+  document.getElementById('notes-add-checklist-inline-btn')?.toggleAttribute('disabled', !note?.id);
+  document.getElementById('notes-checklist-input')?.toggleAttribute('disabled', !note?.id);
+  document.getElementById('notes-photo-btn')?.toggleAttribute('disabled', !note?.id);
+  document.getElementById('notes-link-press-btn')?.toggleAttribute('disabled', !note?.id || !_notesContext.pressId);
+  document.getElementById('notes-link-issue-btn')?.toggleAttribute('disabled', !note?.id || !_notesContext.issueId);
   _notesRenderContextChips(note);
   _notesRenderChecklist(note);
   _notesRenderAttachments();
@@ -12145,6 +12152,13 @@ function _notesFocusBody() {
     sel.removeAllRanges();
     sel.addRange(range);
   } catch (_) {}
+}
+
+function _notesFocusTitle() {
+  const titleEl = document.getElementById('notes-title');
+  if (!titleEl) return;
+  titleEl.focus();
+  titleEl.select?.();
 }
 
 function _notesToolbarCommand(command) {
@@ -12364,6 +12378,7 @@ async function _notesCreateNewNote() {
   _notesState.activeNoteId = ref.id;
   _notesSetView('editor');
   _notesRenderEditor(_notesNormalizeDoc(draft));
+  queueMicrotask(_notesFocusTitle);
   await setDoc(ref, draft);
   await _notesLoadAttachments(ref.id);
   _notesState.creating = false;
@@ -12648,6 +12663,12 @@ document.getElementById('notes-title')?.addEventListener('input', () => {
     _notesState.currentNote.title = document.getElementById('notes-title')?.value || '';
     _notesQueueAutosave();
     _notesRenderList();
+  }
+});
+document.getElementById('notes-title')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    _notesFocusBody();
   }
 });
 document.getElementById('notes-tags')?.addEventListener('input', () => {

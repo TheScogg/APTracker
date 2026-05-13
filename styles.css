@@ -2528,6 +2528,20 @@
     font-size: 12px;
     line-height: 1;
   }
+  .notes-context-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+  }
+  .notes-editor-panel > label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 9px;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: var(--text3);
+    margin-top: 2px;
+  }
   .notes-title,
   .notes-tags {
     background: var(--bg2);
