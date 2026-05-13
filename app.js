@@ -10224,23 +10224,23 @@ window.createMessagingGroup = async () => {
 
 window.showMessagingNewDm = () => {
   const sheet = document.getElementById('messaging-new-dm');
-  if (sheet) sheet.style.display = 'flex';
-  document.getElementById('messaging-new-group').style.display = 'none';
+  if (sheet) sheet.classList.add('visible');
+  document.getElementById('messaging-new-group')?.classList.remove('visible');
   _renderMessagingMemberPicks();
 };
 
 window.showMessagingNewGroup = () => {
   const sheet = document.getElementById('messaging-new-group');
-  if (sheet) sheet.style.display = 'flex';
-  document.getElementById('messaging-new-dm').style.display = 'none';
+  if (sheet) sheet.classList.add('visible');
+  document.getElementById('messaging-new-dm')?.classList.remove('visible');
   _renderMessagingMemberPicks();
 };
 
 window.hideMessagingSheets = () => {
   const dm = document.getElementById('messaging-new-dm');
   const group = document.getElementById('messaging-new-group');
-  if (dm) dm.style.display = 'none';
-  if (group) group.style.display = 'none';
+  if (dm) dm.classList.remove('visible');
+  if (group) group.classList.remove('visible');
 };
 
 window.enableMessagingNotifications = async () => {
