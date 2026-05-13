@@ -3100,10 +3100,16 @@
     #notes-modal .notes-modal-header {
       padding: 7px 8px 5px;
     }
-    #notes-modal .notes-modal-title {
-      font-size: 20px;
+    #notes-modal .notes-modal-kicker,
+    #notes-modal .notes-modal-context {
+      display: none;
     }
-    #notes-modal .notes-modal-context { font-size: 9px; }
+    #notes-modal .notes-modal-title {
+      font-size: 18px;
+    }
+    #notes-modal .notes-modal-title-row {
+      gap: 6px;
+    }
     #notes-modal .notes-modal-header-actions { gap: 6px; }
     #notes-modal #notes-new-btn {
       flex: 1;
@@ -3112,6 +3118,9 @@
     }
     .notes-editor-panel {
       padding-bottom: 18px;
+    }
+    .notes-editor-card-main {
+      flex: 0 0 auto;
     }
     .notes-editor-head { gap: 8px; }
     .notes-editor-meta { gap: 2px; }
@@ -3123,7 +3132,7 @@
     }
     .notes-editor-card-main .notes-body,
     .notes-body-preview {
-      min-height: 320px;
+      min-height: 200px;
     }
     .notes-context-box { padding: 8px 10px; }
     .notes-list-controls { padding: 10px; }
