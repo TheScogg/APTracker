@@ -3035,10 +3035,10 @@
     .notes-back-btn { display: inline-flex; }
     .notes-editor-head { display: contents; }
     .notes-editor-meta { order: 0; }
-    .notes-context-box { order: 1; }
-    .notes-editor-card-main { order: 2; }
-    .notes-editor-card-checklist { order: 3; }
-    .notes-editor-card-attachments { order: 4; }
+    .notes-editor-card-main { order: 1; }
+    .notes-editor-card-checklist { order: 2; }
+    .notes-editor-card-attachments { order: 3; }
+    .notes-context-box { order: 4; }
     .notes-editor-actions {
       order: 11;
       position: sticky;
