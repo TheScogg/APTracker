@@ -13046,7 +13046,7 @@ document.getElementById('notes-body')?.addEventListener('keydown', e => {
     document.getElementById('notes-checklist-input')?.focus();
   }
 });
-document.getElementById('notes-new-btn')?.addEventListener('click', () => {
+document.getElementById('notes-create-btn')?.addEventListener('click', () => {
   void _notesCreateNewNote();
 });
 document.getElementById('notes-template-btn')?.addEventListener('click', e => {
