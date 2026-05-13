@@ -9175,6 +9175,8 @@ const MOBILE_MODAL_SWIPE_CLOSES = {
   'serial-modal': () => window.closeSerialModal?.(),
   'press-wiki-modal': () => window.closePressWikiModal?.(),
   'notes-modal': () => window.closeNotesModal?.(),
+  'notes-phone-frame': () => window.closeNotesModal?.(),
+  'notes-editor-modal': () => window.closeNotesEditorModal?.(),
   'appearance-modal': () => window.closeAppearanceModal?.(),
   'theme-editor-modal': () => window.closeThemeEditor?.(),
   'role-prefs-modal': () => window.closeRolePreferencesModal?.(),
@@ -9275,7 +9277,7 @@ function _mobileModalSwipeCloseFor(modal) {
 function _mobileModalSwipeCanStart(target) {
   if (!target || !target.closest) return null;
   if (target.closest(MOBILE_MODAL_SWIPE_BLOCKERS)) return null;
-  return target.closest('.modal, .subcategory-sheet, .role-alerts-sheet, .store-modal, .msg-modal');
+  return target.closest('.modal, .subcategory-sheet, .role-alerts-sheet, .store-modal, .msg-modal, .phone');
 }
 
 function _mobileModalSwipeStart(event) {
@@ -9376,7 +9378,7 @@ function _bindMobileModalSwipe(modal) {
   modal.addEventListener('pointerdown', _mobileModalSwipeStart, true);
 }
 
-document.querySelectorAll('.modal, .subcategory-sheet, .role-alerts-sheet, .store-modal, .msg-modal').forEach(_bindMobileModalSwipe);
+document.querySelectorAll('.modal, .subcategory-sheet, .role-alerts-sheet, .store-modal, .msg-modal, .phone').forEach(_bindMobileModalSwipe);
 document.addEventListener('pointermove', _mobileModalSwipeMove, true);
 document.addEventListener('pointerup', _mobileModalSwipeEnd, true);
 document.addEventListener('pointercancel', _mobileModalSwipeEnd, true);

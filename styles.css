@@ -4853,16 +4853,18 @@
   margin: 40px auto;
 }
 
-/* Status bar */
-.status-bar {
-  padding: 14px 20px 8px;
-  display: flex;
-  justify-content: space-between;
-  font-size: 14px;
-  font-weight: 590;
-  color: var(--text2);
-  background: var(--bg);
-  font-family: 'Share Tech Mono', monospace;
+/* Drag handle */
+.notes-drag-handle {
+  width: 36px;
+  height: 5px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--border) 60%, white 40%);
+  margin: 10px auto;
+  cursor: grab;
+  flex-shrink: 0;
+}
+.notes-drag-handle:active {
+  cursor: grabbing;
 }
 
 /* Sync banner (AP-Tracker style) */
