@@ -12035,23 +12035,50 @@ function _notesRenderBodyPreview(note = _notesState.currentNote) {
   wrap.classList.toggle('empty', !text);
 }
 
+function _notesSyncEditorHeaderTitle(noteTitle = '') {
+  const headerTitleEl = document.getElementById('notes-editor-title');
+  if (!headerTitleEl) return;
+  const title = String(noteTitle || '').trim();
+  headerTitleEl.textContent = title || 'New Note';
+}
+
 function _notesRenderContextSummary(note = _notesState.currentNote) {
   const summaryEl = document.getElementById('notes-context-summary');
+  const helpEl = document.getElementById('notes-context-help');
+  const pressBtn = document.getElementById('notes-link-press-btn');
+  const issueBtn = document.getElementById('notes-link-issue-btn');
   if (!summaryEl) return;
   if (note?.issueId) {
     const issue = issues.find(i => i.id === note.issueId);
     summaryEl.textContent = `Linked to issue ${issue?.machine || note.issueId}`;
+    if (helpEl) helpEl.textContent = 'This note is attached to the selected issue.';
+    if (pressBtn) pressBtn.textContent = _notesContext.pressId ? 'Relink to Open Press' : 'Link Open Press';
+    if (issueBtn) issueBtn.textContent = 'Linked to Issue';
     return;
   }
   if (note?.pressId) {
-    summaryEl.textContent = `Linked to press ${note.machineCode || note.pressId}`;
+    const matchesCurrentPress = Boolean(_notesContext.pressId && note.pressId === _notesContext.pressId);
+    summaryEl.textContent = matchesCurrentPress
+      ? `Linked to the open press ${note.machineCode || note.pressId}`
+      : `Linked to press ${note.machineCode || note.pressId}`;
+    if (helpEl) helpEl.textContent = matchesCurrentPress
+      ? 'The note will stay attached to the press you are viewing.'
+      : 'This note is linked to a different press than the one currently open.';
+    if (pressBtn) pressBtn.textContent = matchesCurrentPress ? 'Keep Open Press Link' : 'Relink to Open Press';
+    if (issueBtn) issueBtn.textContent = _notesContext.issueId ? 'Link Open Issue' : 'Issue Not Open';
     return;
   }
   if (_notesContext.pressId || _notesContext.issueId) {
     summaryEl.textContent = `${_notesContextTitle(_notesContext)} note`;
+    if (helpEl) helpEl.textContent = 'Attach this note to the current press or issue if it belongs with the floor work.';
+    if (pressBtn) pressBtn.textContent = 'Link Open Press';
+    if (issueBtn) issueBtn.textContent = 'Link Open Issue';
     return;
   }
   summaryEl.textContent = 'Plant-wide note';
+  if (helpEl) helpEl.textContent = 'Use this note without attaching it to a press or issue.';
+  if (pressBtn) pressBtn.textContent = 'Link Open Press';
+  if (issueBtn) issueBtn.textContent = 'Link Open Issue';
 }
 
 function _notesApplyTemplate(templateKey = 'blank') {
@@ -12071,12 +12098,14 @@ function _notesApplyTemplate(templateKey = 'blank') {
   }
   if (bodyEl && (!currentBody || templateKey !== 'blank')) bodyEl.innerHTML = template.bodyHtml || '';
   if (_notesState.currentNote) {
-    _notesState.currentNote.title = titleEl?.value || _notesState.currentNote.title;
+    const nextTitle = titleEl?.value || _notesState.currentNote.title;
+    _notesState.currentNote.title = nextTitle;
     _notesState.currentNote.bodyHtml = sanitizeNoteHtml(bodyEl?.innerHTML || '');
     _notesState.currentNote.bodyText = _noteTextFromHtml(_notesState.currentNote.bodyHtml);
     _notesState.currentNote.checklistItems = template.checklistItems.length
       ? template.checklistItems.map(item => ({ ...item }))
       : normalizeChecklistItems(_notesState.currentNote.checklistItems);
+    _notesSyncEditorHeaderTitle(nextTitle);
   }
   _notesRenderTagChips(_notesState.currentNote);
   _notesRenderTagSuggestions(_notesState.currentNote);
@@ -12361,6 +12390,7 @@ function _notesRenderEditor(note = null) {
   if (!sameActiveNote) _notesState.previewMode = false;
   _notesState.dirty = false;
   _notesSetStatus(note ? 'Saved' : 'Select a note to begin.', note ? `Updated ${_notesDisplayTime(note.updatedAt)}` : '');
+  _notesSyncEditorHeaderTitle(note?.title || '');
 
   const nextTitle = note?.title || '';
   const nextTags = Array.isArray(note?.tags) ? note.tags.join(', ') : '';
@@ -12371,6 +12401,7 @@ function _notesRenderEditor(note = null) {
   if (!sameActiveNote || !bodyFocused) bodyEl.innerHTML = nextBodyHtml;
   bodyEl.classList.toggle('empty', !note?.bodyHtml);
   if (previewEl) previewEl.hidden = !_notesState.previewMode;
+  _notesSyncEditorHeaderTitle(titleEl.value || nextTitle);
   pinBtn.textContent = note?.isPinned ? 'Unpin' : 'Pin';
   archiveBtn.textContent = note?.isArchived ? 'Unarchive' : 'Archive';
   deleteBtn.disabled = !note?.id;
@@ -12946,7 +12977,9 @@ document.getElementById('notes-search')?.addEventListener('input', e => {
 });
 document.getElementById('notes-title')?.addEventListener('input', () => {
   if (_notesState.currentNote) {
-    _notesState.currentNote.title = document.getElementById('notes-title')?.value || '';
+    const title = document.getElementById('notes-title')?.value || '';
+    _notesState.currentNote.title = title;
+    _notesSyncEditorHeaderTitle(title);
     _notesQueueAutosave();
     _notesRenderList();
   }
