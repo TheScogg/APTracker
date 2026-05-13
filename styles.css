@@ -5088,6 +5088,26 @@
   .msg-modal {
     /* Handled by .notes-modal-shell mobile queries */
   }
+  #messaging-modal .msg-header-tabs {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+    margin-top: 4px;
+  }
+  #messaging-modal .msg-header-tabs .msg-tab {
+    padding: 7px 6px 8px;
+    font-size: 10px;
+    line-height: 1;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--bg3);
+    text-align: center;
+  }
+  #messaging-modal .msg-header-tabs .msg-tab.active {
+    border-color: var(--yellow);
+    background: color-mix(in srgb, var(--yellow) 10%, var(--bg3));
+  }
   .msg-modal-handle {
     display: block;
     width: 64px;
@@ -5103,6 +5123,21 @@
     -webkit-user-drag: none;
   }
   .msg-overlay { align-items: flex-end; padding: 0; }
+  .msg-modal .notes-modal-header {
+    padding: 6px 8px 4px;
+  }
+  .msg-modal .notes-modal-header-copy {
+    padding: 8px 10px 10px;
+    gap: 4px;
+  }
+  .msg-modal .notes-modal-header-actions {
+    padding-top: 4px;
+  }
+  .msg-modal .notes-modal-header-actions .btn,
+  .msg-modal .notes-modal-close {
+    min-height: 34px;
+    height: 34px;
+  }
   .store-modal-overlay { padding: 0; }
     .store-modal {
       width: 100vw;
