@@ -13213,7 +13213,7 @@ document.addEventListener('selectionchange', () => {
 });
 let _notesDragDepth = 0;
 function _notesSetDropActive(active) {
-  const shell = document.querySelector('.notes-modal-shell');
+  const shell = document.querySelector('#notes-editor-frame');
   const hint = document.getElementById('notes-drop-hint');
   shell?.classList.toggle('drop-active', !!active);
   if (hint) hint.textContent = active ? 'Drop images to attach them here.' : 'Drag images here, or paste screenshots directly into the note.';
