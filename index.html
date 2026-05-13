@@ -830,21 +830,6 @@
 <div class="modal-overlay" id="notes-editor-modal" onclick="if(event.target===this)closeNotesEditorModal()">
   <div class="modal notes-modal-shell" onclick="event.stopPropagation()">
     <div class="notes-modal-header">
-      <div class="notes-modal-header-copy note-card notes-editor-header-card">
-        <div class="notes-modal-header-top">
-          <div class="notes-modal-kicker">Quick capture</div>
-          <div id="notes-editor-save-state" class="notes-editor-save-state"></div>
-        </div>
-        <div class="notes-modal-title-row">
-          <div class="notes-modal-title" id="notes-editor-title">New Note</div>
-          <div class="notes-modal-context" id="notes-modal-context">Plant-wide</div>
-        </div>
-        <div class="notes-modal-subtitle" id="notes-modal-subtitle">Quick capture, mobile first, and saved as you type.</div>
-        <div class="notes-modal-meta-row">
-          <div id="notes-editor-updated" class="notes-editor-updated"></div>
-          <div class="notes-modal-sync-note">Cmd+S saves, Esc closes</div>
-        </div>
-      </div>
       <div class="notes-modal-header-actions">
         <div class="notes-menu-wrap">
           <button class="btn btn-ghost notes-menu-trigger" id="notes-template-btn" type="button" aria-expanded="false" aria-haspopup="menu">Templates</button>
@@ -870,6 +855,21 @@
     </div>
 
     <div class="notes-editor-panel">
+      <div class="notes-modal-header-copy note-card notes-editor-header-card">
+        <div class="notes-modal-header-top">
+          <div class="notes-modal-kicker">Quick capture</div>
+          <div id="notes-editor-save-state" class="notes-editor-save-state"></div>
+        </div>
+        <div class="notes-modal-title-row">
+          <div class="notes-modal-title" id="notes-editor-title">New Note</div>
+          <div class="notes-modal-context" id="notes-modal-context">Plant-wide</div>
+        </div>
+        <div class="notes-modal-subtitle" id="notes-modal-subtitle">Quick capture, mobile first, and saved as you type.</div>
+        <div class="notes-modal-meta-row">
+          <div id="notes-editor-updated" class="notes-editor-updated"></div>
+          <div class="notes-modal-sync-note">Cmd+S saves, Esc closes</div>
+        </div>
+      </div>
       <div class="notes-editor-head">
         <button class="btn btn-ghost notes-back-btn" id="notes-back-btn" type="button">← Notes</button>
         <div class="notes-editor-actions">

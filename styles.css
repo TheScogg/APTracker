@@ -2381,7 +2381,7 @@
     align-items: flex-start;
     justify-content: space-between;
     gap: 10px;
-    padding: 6px 12px 8px;
+    padding: 4px 12px 6px;
     border-bottom: 1px solid var(--border);
     background: var(--bg2);
     position: relative;
@@ -2808,6 +2808,11 @@
     flex-direction: column;
     gap: 6px;
   }
+  #notes-template-menu {
+    left: 0;
+    right: auto;
+    max-width: calc(100vw - 24px);
+  }
   .notes-menu.visible { display: flex; }
   .notes-menu button {
     width: 100%;
@@ -3006,12 +3011,11 @@
       max-height: min(780px, calc(100dvh - 12px));
     }
     .notes-modal-header {
-      padding: 8px 8px 6px;
+      padding: 6px 8px 4px;
       flex-direction: column;
       align-items: stretch;
       gap: 6px;
     }
-    .notes-modal-header-copy { margin-right: 0; padding: 7px 10px; gap: 2px; }
     .notes-modal-subtitle { display: none; }
     .notes-modal-meta-row { display: none; }
     .notes-modal-header-actions {
@@ -3033,6 +3037,9 @@
     }
     .notes-editor-panel {
       padding: 12px 12px 14px;
+    }
+    .notes-editor-panel > .notes-editor-header-card {
+      margin-bottom: 2px;
     }
     .notes-title,
     .notes-tags,
@@ -3113,7 +3120,7 @@
       border-bottom: none;
     }
     #notes-modal .notes-modal-header {
-      padding: 7px 8px 5px;
+      padding: 5px 8px 4px;
     }
     #notes-modal .notes-modal-kicker,
     #notes-modal .notes-modal-context {
@@ -3133,6 +3140,7 @@
       justify-content: center;
     }
     .notes-editor-panel {
+      padding-top: 10px;
       padding-bottom: 18px;
     }
     .notes-editor-card-main {
