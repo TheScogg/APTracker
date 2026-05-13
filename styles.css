@@ -2990,19 +2990,24 @@
       max-height: min(780px, calc(100dvh - 12px));
     }
     .notes-modal-header {
-      padding: 12px 12px 10px;
+      padding: 8px 8px 6px;
       flex-direction: column;
       align-items: stretch;
-      gap: 10px;
+      gap: 6px;
     }
-    .notes-modal-header-copy { margin-right: 0; padding: 10px 12px; }
+    .notes-modal-header-copy { margin-right: 0; padding: 7px 10px; gap: 2px; }
     .notes-modal-subtitle { display: none; }
+    .notes-modal-meta-row { display: none; }
     .notes-modal-header-actions {
       width: 100%;
-      justify-content: flex-end;
-      flex-wrap: wrap;
+      justify-content: flex-start;
+      flex-wrap: nowrap;
+      overflow-x: auto;
       padding-top: 0;
+      padding-bottom: 2px;
+      scrollbar-width: none;
     }
+    .notes-modal-header-actions::-webkit-scrollbar { display: none; }
     .notes-mobile-actions-wrap { display: inline-flex; }
     .notes-editor-actions { display: none; }
     .notes-modal-body { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr); }
@@ -3058,6 +3063,24 @@
     .notes-editor-card {
       gap: 8px;
     }
+    .notes-modal-kicker { font-size: 9px; }
+    .notes-modal-title { font-size: 22px; }
+    .notes-modal-context { font-size: 9px; }
+    .notes-modal-header-actions .btn,
+    .notes-modal-close {
+      min-height: 34px;
+      height: 34px;
+    }
+    #notes-new-btn {
+      min-height: 34px;
+      padding: 0 12px;
+      font-size: 12px;
+    }
+    .notes-menu-trigger {
+      padding-left: 10px;
+      padding-right: 10px;
+      font-size: 12px;
+    }
     .notes-editor-card-main .notes-body,
     .notes-body-preview {
       min-height: 300px;
@@ -3075,13 +3098,13 @@
       border-bottom: none;
     }
     #notes-modal .notes-modal-header {
-      padding: 10px 12px 8px;
+      padding: 7px 8px 5px;
     }
     #notes-modal .notes-modal-title {
-      font-size: 24px;
+      font-size: 20px;
     }
     #notes-modal .notes-modal-context { font-size: 9px; }
-    #notes-modal .notes-modal-header-actions { gap: 8px; }
+    #notes-modal .notes-modal-header-actions { gap: 6px; }
     #notes-modal #notes-new-btn {
       flex: 1;
       min-width: 0;
