@@ -944,26 +944,26 @@
 
 <!-- MESSAGING MODAL -->
 <div class="msg-overlay" id="messaging-modal">
-  <div class="msg-modal">
-    <div class="msg-modal-handle" aria-hidden="true"></div>
-    <div class="msg-header">
-      <div class="msg-header-left">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 2h10a1 1 0 011 1v8a1 1 0 01-1 1H5l-3 2V3a1 1 0 011-1z" fill="var(--ios-blue)" opacity="0.9"/></svg>
-        <span class="msg-header-title">Messages</span>
+  <div class="msg-modal notes-modal-shell">
+    <div class="notes-drag-handle" aria-hidden="true"></div>
+    <div class="notes-modal-header">
+      <div class="notes-modal-header-copy note-card notes-editor-header-card">
+        <div class="notes-modal-header-top">
+          <div class="notes-modal-kicker">Communication</div>
+        </div>
+        <div class="notes-modal-title-row">
+          <div class="notes-modal-title">Messages</div>
+        </div>
+        <div class="msg-header-tabs" id="messaging-tabs" style="margin-top: 8px;">
+          <button class="msg-tab active" data-tab="all" type="button">All <span class="msg-tab-badge" id="messaging-tab-all-badge" style="display:none;">0</span></button>
+          <button class="msg-tab" data-tab="dms" type="button">DMs</button>
+          <button class="msg-tab" data-tab="groups" type="button">Groups</button>
+        </div>
       </div>
-      <div class="msg-header-tabs" id="messaging-tabs">
-        <button class="msg-tab active" data-tab="all" type="button">All <span class="msg-tab-badge" id="messaging-tab-all-badge" style="display:none;">0</span></button>
-        <button class="msg-tab" data-tab="dms" type="button">DMs</button>
-        <button class="msg-tab" data-tab="groups" type="button">Groups</button>
-      </div>
-      <div class="msg-header-actions">
-        <button class="msg-icon-btn" title="Enable Alerts" onclick="enableMessagingNotifications()">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 14a2 2 0 0 0 2-2H6a2 2 0 0 0 2 2Zm5-4H3l1.2-1.7V6a3.8 3.8 0 0 1 7.6 0v2.3L13 10Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
-        </button>
-        <button class="msg-icon-btn" title="New DM" onclick="showMessagingNewDm()">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-        </button>
-        <button class="msg-close-btn" onclick="closeMessagingModal()">×</button>
+      <div class="notes-modal-header-actions">
+        <button class="btn btn-ghost" title="Enable Alerts" onclick="enableMessagingNotifications()">Alerts</button>
+        <button class="btn btn-primary" title="New DM" onclick="showMessagingNewDm()">New DM</button>
+        <button class="notes-modal-close" onclick="closeMessagingModal()">✕</button>
       </div>
     </div>
 
@@ -1171,23 +1171,21 @@
 
 <div class="role-alerts-modal" id="role-alerts-modal" aria-hidden="true">
   <div class="role-alerts-backdrop" data-role-alert-action="close" aria-hidden="true"></div>
-  <section class="role-alerts-sheet" role="dialog" aria-modal="true" aria-labelledby="role-alerts-title">
-    <div class="role-alerts-shell-header">
-      <div class="role-alerts-shell-title">
-        <div class="role-alerts-shell-kicker">Alerts</div>
-        <h3 id="role-alerts-title">Your Alerts</h3>
-        <div id="role-alerts-footer" class="role-alerts-footer-text"></div>
+  <section class="role-alerts-sheet notes-modal-shell" role="dialog" aria-modal="true" aria-labelledby="role-alerts-title">
+    <div class="notes-drag-handle" id="role-alerts-drag-handle"></div>
+    <div class="notes-modal-header">
+      <div class="notes-modal-header-copy note-card notes-editor-header-card">
+        <div class="notes-modal-header-top">
+          <div class="notes-modal-kicker">Notification Center</div>
+        </div>
+        <div class="notes-modal-title-row">
+          <div class="notes-modal-title" id="role-alerts-title">Your Alerts</div>
+        </div>
+        <div class="notes-modal-subtitle" id="role-alerts-footer"></div>
       </div>
-      <div class="role-alerts-header-actions">
-        <button class="role-alerts-retry-fab" type="button" data-role-alert-action="retry" aria-label="Retry loading alerts" title="Retry loading alerts">
-          <svg class="role-alerts-retry-icon" viewBox="0 0 487.23 487.23" aria-hidden="true" focusable="false">
-            <g fill="currentColor">
-              <path d="M55.323,203.641c15.664,0,29.813-9.405,35.872-23.854c25.017-59.604,83.842-101.61,152.42-101.61c37.797,0,72.449,12.955,100.23,34.442l-21.775,3.371c-7.438,1.153-13.224,7.054-14.232,14.512c-1.01,7.454,3.008,14.686,9.867,17.768l119.746,53.872c5.249,2.357,11.33,1.904,16.168-1.205c4.83-3.114,7.764-8.458,7.796-14.208l0.621-131.943c0.042-7.506-4.851-14.144-12.024-16.332c-7.185-2.188-14.947,0.589-19.104,6.837l-16.505,24.805C370.398,26.778,310.1,0,243.615,0C142.806,0,56.133,61.562,19.167,149.06c-5.134,12.128-3.84,26.015,3.429,36.987C29.865,197.023,42.152,203.641,55.323,203.641z"/>
-              <path d="M464.635,301.184c-7.27-10.977-19.558-17.594-32.728-17.594c-15.664,0-29.813,9.405-35.872,23.854c-25.018,59.604-83.843,101.61-152.42,101.61c-37.798,0-72.45-12.955-100.232-34.442l21.776-3.369c7.437-1.153,13.223-7.055,14.233-14.514c1.009-7.453-3.008-14.686-9.867-17.768L49.779,285.089c-5.25-2.356-11.33-1.905-16.169,1.205c-4.829,3.114-7.764,8.458-7.795,14.207l-0.622,131.943c-0.042,7.506,4.85,14.144,12.024,16.332c7.185,2.188,14.948-0.59,19.104-6.839l16.505-24.805c44.004,43.32,104.303,70.098,170.788,70.098c100.811,0,187.481-61.561,224.446-149.059C473.197,326.043,471.903,312.157,464.635,301.184z"/>
-            </g>
-          </svg>
-        </button>
-        <button class="btn btn-ghost role-alerts-close" type="button" data-role-alert-action="close">Close</button>
+      <div class="notes-modal-header-actions">
+        <button class="btn btn-ghost role-alerts-retry-fab" type="button" data-role-alert-action="retry" title="Retry loading alerts">Retry</button>
+        <button class="notes-modal-close" type="button" data-role-alert-action="close">✕</button>
       </div>
     </div>
     <div class="role-alerts-toolbar">
