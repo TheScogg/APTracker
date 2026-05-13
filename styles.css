@@ -2359,12 +2359,16 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
-    width: min(1120px, 96vw);
-    height: min(90vh, 880px);
-    max-height: min(90vh, 880px);
+    width: 375px;
+    height: 700px;
+    max-width: calc(100vw - 24px);
+    max-height: calc(100vh - 24px);
     overflow: hidden;
     padding: 0;
-    background: linear-gradient(180deg, color-mix(in srgb, var(--bg2) 94%, var(--yellow) 6%), var(--bg2));
+    background: var(--bg);
+    border-radius: 44px;
+    border: 1px solid var(--border);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
   }
 
   .notes-modal-shell {
@@ -2377,16 +2381,26 @@
     align-items: flex-start;
     justify-content: space-between;
     gap: 12px;
-    padding: 16px 16px 12px;
+    padding: 8px 16px 12px;
     border-bottom: 1px solid var(--border);
-    background: linear-gradient(180deg, color-mix(in srgb, var(--yellow) 12%, var(--bg2)), var(--bg2));
+    background: var(--bg2);
   }
   .notes-modal-header-copy { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
   .notes-modal-kicker { font-family: 'Share Tech Mono', monospace; font-size: 10px; letter-spacing: .18em; text-transform: uppercase; color: var(--yellow); }
   .notes-modal-title-row { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-  .notes-modal-title { font-family: 'Rajdhani', sans-serif; font-size: 22px; font-weight: 700; letter-spacing: .6px; line-height: 1.1; }
-  .notes-modal-context { font-family: 'Share Tech Mono', monospace; font-size: 10px; color: var(--text3); letter-spacing: .08em; text-transform: uppercase; }
-  .notes-modal-subtitle { font-family: 'Nunito', sans-serif; font-size: 12px; color: var(--text2); line-height: 1.45; }
+  .notes-modal-title {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    line-height: 1;
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .notes-modal-context { font-family: 'Share Tech Mono', monospace; font-size: 10px; color: var(--text2); letter-spacing: .08em; text-transform: uppercase; }
+  .notes-modal-subtitle { font-family: 'Share Tech Mono', monospace; font-size: 11px; color: var(--text2); line-height: 1.45; }
   .notes-modal-header-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
   #notes-new-btn {
     min-height: 40px;
@@ -2485,7 +2499,7 @@
   .notes-list-badge.pinned { border-color: color-mix(in srgb, var(--yellow) 45%, var(--border)); color: var(--yellow); }
   .notes-list-badge.linked { border-color: color-mix(in srgb, var(--teal) 45%, var(--border)); color: var(--teal); }
   .notes-list-badge.archived { border-color: color-mix(in srgb, var(--text3) 45%, var(--border)); color: var(--text3); }
-  .notes-editor-panel { min-height: 0; display: flex; flex-direction: column; gap: 10px; overflow: auto; padding: 16px; background: linear-gradient(180deg, color-mix(in srgb, var(--bg2) 90%, white 2%), var(--bg2)); }
+  .notes-editor-panel { min-height: 0; display: flex; flex-direction: column; gap: 10px; overflow: auto; padding: 12px 16px 18px; background: var(--bg); }
   .notes-editor-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
   .notes-editor-meta { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
   .notes-back-btn { display: none; align-self: flex-start; min-height: 36px; padding: 0 12px; border-radius: 999px; }
@@ -2502,7 +2516,7 @@
     background: var(--notes-chip-bg);
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
   }
-  .notes-context-box { border: 1px solid color-mix(in srgb, var(--border) 74%, var(--accent) 26%); border-radius: 14px; background: linear-gradient(180deg, color-mix(in srgb, var(--bg3) 84%, white 2%), color-mix(in srgb, var(--bg3) 96%, transparent)); padding: 10px 12px; }
+  .notes-context-box { border: 1px solid var(--border); border-radius: 14px; background: var(--bg2); padding: 10px 12px; }
   .notes-context-label { font-family: 'Share Tech Mono', monospace; font-size: 9px; letter-spacing: .18em; text-transform: uppercase; color: var(--text3); margin-bottom: 8px; }
   .notes-context-chips { display: flex; gap: 8px; flex-wrap: wrap; }
   .notes-context-chip {
@@ -2534,6 +2548,28 @@
     flex-wrap: wrap;
     margin-top: 10px;
   }
+  .notes-editor-card {
+    margin-bottom: 0;
+    cursor: default;
+    animation: none;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .notes-editor-card:hover {
+    transform: none;
+    border-color: var(--border);
+  }
+  .notes-editor-card label {
+    display: block;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text2);
+    font-family: 'Share Tech Mono', monospace;
+    margin-bottom: -2px;
+  }
   .notes-editor-panel > label {
     font-family: 'Share Tech Mono', monospace;
     font-size: 9px;
@@ -2553,6 +2589,16 @@
   }
   .notes-title { font-family: 'Rajdhani', sans-serif; font-size: 20px; font-weight: 700; }
   .notes-tags { font-family: 'Share Tech Mono', monospace; font-size: 11px; letter-spacing: .05em; }
+  .notes-editor-card-main .notes-title {
+    font-size: 24px;
+    letter-spacing: .6px;
+    min-height: 52px;
+    background: color-mix(in srgb, var(--bg2) 84%, white 2%);
+  }
+  .notes-editor-card-main .notes-body {
+    min-height: 170px;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--bg2) 90%, white 2%), var(--bg2));
+  }
   .notes-title::placeholder,
   .notes-tags::placeholder { color: var(--text3); }
   .notes-toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-start; }
@@ -2560,14 +2606,15 @@
     border: 1px solid var(--notes-chip-border);
     background: var(--notes-chip-bg);
     color: var(--text2);
-    border-radius: 12px;
-    padding: 8px 11px;
-    min-height: 40px;
+    border-radius: 20px;
+    padding: 6px 12px;
+    min-height: 30px;
     cursor: pointer;
-    font-family: 'Nunito', sans-serif;
-    font-size: 12px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
     font-weight: 700;
-    letter-spacing: -0.01em;
+    letter-spacing: .08em;
+    text-transform: uppercase;
     transition: border-color .15s, color .15s, background .15s, transform .1s;
   }
   .notes-toolbar-btn:hover { border-color: color-mix(in srgb, var(--accent) 56%, var(--border)); color: var(--text); background: var(--notes-chip-hover-bg); }
@@ -2721,9 +2768,9 @@
   .notes-editor-panel .btn { min-height: 40px; }
   @media (max-width: 860px) {
     .notes-modal-shell {
-      width: 98vw;
-      height: 92vh;
-      max-height: 92vh;
+      width: min(375px, calc(100vw - 12px));
+      height: min(700px, calc(100vh - 12px));
+      max-height: min(700px, calc(100vh - 12px));
     }
     .notes-modal-header {
       padding: 12px 12px 10px;
@@ -2763,14 +2810,9 @@
     .notes-editor-head { display: contents; }
     .notes-editor-meta { order: 0; }
     .notes-context-box { order: 1; }
-    .notes-title { order: 2; }
-    .notes-tags { order: 3; }
-    .notes-toolbar { order: 4; }
-    .notes-body { order: 5; }
-    .notes-section-head { order: 6; }
-    .notes-checklist { order: 7; }
-    .notes-add-checklist-row { order: 8; }
-    .notes-attachments { order: 10; }
+    .notes-editor-card-main { order: 2; }
+    .notes-editor-card-checklist { order: 3; }
+    .notes-editor-card-attachments { order: 4; }
     .notes-editor-actions {
       order: 11;
       position: sticky;
@@ -2792,6 +2834,9 @@
       min-height: 42px;
       padding: 8px 9px;
     }
+    .notes-editor-card {
+      gap: 8px;
+    }
   }
   @media (max-width: 520px) {
     #notes-modal > .notes-modal-shell {
@@ -2808,7 +2853,7 @@
       padding: 10px 12px 8px;
     }
     #notes-modal .notes-modal-title {
-      font-size: 18px;
+      font-size: 26px;
     }
     #notes-modal .notes-modal-context { font-size: 9px; }
     #notes-modal .notes-modal-header-actions { gap: 8px; }
@@ -2822,6 +2867,9 @@
     .notes-editor-actions { gap: 6px; padding: 7px; }
     .notes-editor-actions .btn,
     .notes-toolbar-btn { min-height: 44px; }
+    .notes-editor-card {
+      padding: 14px;
+    }
     .notes-body {
       min-height: 160px;
     }
