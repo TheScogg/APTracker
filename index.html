@@ -831,17 +831,40 @@
   <div class="modal notes-modal-shell" onclick="event.stopPropagation()">
     <div class="notes-modal-header">
       <div class="notes-modal-header-copy note-card notes-editor-header-card">
-        <div class="notes-modal-kicker">Quick capture</div>
+        <div class="notes-modal-header-top">
+          <div class="notes-modal-kicker">Quick capture</div>
+          <div id="notes-editor-save-state" class="notes-editor-save-state"></div>
+        </div>
         <div class="notes-modal-title-row">
           <div class="notes-modal-title" id="notes-editor-title">New Note</div>
           <div class="notes-modal-context" id="notes-modal-context">Plant-wide</div>
         </div>
         <div class="notes-modal-subtitle" id="notes-modal-subtitle">Quick capture, mobile first, and saved as you type.</div>
-        <div id="notes-editor-save-state" class="notes-editor-save-state"></div>
-        <div id="notes-editor-updated" class="notes-editor-updated"></div>
+        <div class="notes-modal-meta-row">
+          <div id="notes-editor-updated" class="notes-editor-updated"></div>
+          <div class="notes-modal-sync-note">Cmd+S saves, Esc closes</div>
+        </div>
       </div>
       <div class="notes-modal-header-actions">
+        <div class="notes-menu-wrap">
+          <button class="btn btn-ghost notes-menu-trigger" id="notes-template-btn" type="button" aria-expanded="false" aria-haspopup="menu">Templates</button>
+          <div class="notes-menu" id="notes-template-menu" role="menu" aria-label="Note templates">
+            <button type="button" data-note-template="blank" role="menuitem">Blank Note</button>
+            <button type="button" data-note-template="follow_up" role="menuitem">Follow-up</button>
+            <button type="button" data-note-template="parts_needed" role="menuitem">Parts Needed</button>
+            <button type="button" data-note-template="shift_handoff" role="menuitem">Shift Handoff</button>
+            <button type="button" data-note-template="issue_summary" role="menuitem">Issue Summary</button>
+          </div>
+        </div>
         <button class="btn btn-primary" id="notes-new-btn" type="button">+ New Note</button>
+        <div class="notes-menu-wrap notes-mobile-actions-wrap">
+          <button class="btn btn-ghost notes-menu-trigger" id="notes-actions-menu-btn" type="button" aria-expanded="false" aria-haspopup="menu">More</button>
+          <div class="notes-menu" id="notes-actions-menu" role="menu" aria-label="Note actions">
+            <button type="button" id="notes-actions-pin-btn" role="menuitem">Pin</button>
+            <button type="button" id="notes-actions-archive-btn" role="menuitem">Archive</button>
+            <button type="button" id="notes-actions-delete-btn" role="menuitem" class="danger">Delete</button>
+          </div>
+        </div>
         <button class="notes-modal-close" id="notes-editor-close-btn" type="button" onclick="closeNotesEditorModal()" aria-label="Close notes editor">✕</button>
       </div>
     </div>
@@ -856,8 +879,9 @@
         </div>
       </div>
 
-      <div class="notes-context-box">
+      <div class="notes-context-box notes-editor-card note-card notes-context-card">
         <div class="notes-context-label">Linked Context</div>
+        <div class="notes-context-summary" id="notes-context-summary">Plant-wide note</div>
         <div id="notes-context-chips" class="notes-context-chips"></div>
         <div class="notes-context-actions">
           <button class="notes-toolbar-btn" id="notes-link-press-btn" type="button">Link Press</button>
@@ -871,9 +895,12 @@
 
         <label for="notes-tags">Tags</label>
         <input type="text" id="notes-tags" class="notes-tags" placeholder="Tags (comma separated)">
+        <div id="notes-tag-chips" class="notes-tag-chips"></div>
+        <div id="notes-tag-suggestions" class="notes-tag-suggestions" aria-label="Tag suggestions"></div>
 
         <label for="notes-body">Content</label>
         <div id="notes-body" class="notes-body" contenteditable="true" data-placeholder="Write something useful... Use #hashtags for tags"></div>
+        <div id="notes-body-preview" class="notes-body-preview" aria-hidden="true"></div>
         <div class="tag-hint">💡 Type # anywhere to add a tag</div>
 
         <div class="notes-toolbar">
@@ -882,6 +909,7 @@
           <button class="notes-toolbar-btn" id="notes-underline-btn" type="button">Underline</button>
           <button class="notes-toolbar-btn" id="notes-bullet-btn" type="button">Bullets</button>
           <button class="notes-toolbar-btn" id="notes-checklist-btn" type="button">☑ Checklist</button>
+          <button class="notes-toolbar-btn" id="notes-preview-btn" type="button" aria-pressed="false">Preview</button>
           <button class="notes-toolbar-btn" id="notes-photo-btn" type="button">📷 Attach</button>
         </div>
       </div>
@@ -903,6 +931,7 @@
           <div class="notes-section-title">Attachments</div>
           <div class="notes-editor-updated">Drop photos here or tap Attach</div>
         </div>
+        <div id="notes-drop-hint" class="notes-drop-hint">Drag images here, or paste screenshots directly into the note.</div>
         <div id="notes-attachments" class="notes-attachments"></div>
       </div>
       <input type="file" id="notes-photo-input" accept="image/*" multiple hidden>

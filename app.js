@@ -10362,6 +10362,7 @@ const _notesState = {
   draftChecklistId: 1,
   dirty: false,
   creating: false,
+  previewMode: false,
   lockContext: false,
   error: '',
   currentNote: null
@@ -11839,6 +11840,253 @@ function _notesContextLabelForModal() {
   return _notesContextTitle(_notesContext);
 }
 
+function _notesSplitTags(value = '') {
+  return Array.from(new Set(
+    String(value || '')
+      .split(',')
+      .map(tag => tag.trim().replace(/^#/, ''))
+      .filter(Boolean)
+  ));
+}
+
+function _notesKnownTags() {
+  const tags = new Set();
+  (_notesState.notes || []).forEach(note => {
+    (note?.tags || []).forEach(tag => {
+      const clean = String(tag || '').trim().replace(/^#/, '');
+      if (clean) tags.add(clean);
+    });
+  });
+  (_notesState.currentNote?.tags || []).forEach(tag => {
+    const clean = String(tag || '').trim().replace(/^#/, '');
+    if (clean) tags.add(clean);
+  });
+  return Array.from(tags).sort((a, b) => a.localeCompare(b));
+}
+
+function _notesTagQuery() {
+  const tagsEl = document.getElementById('notes-tags');
+  if (!tagsEl) return '';
+  const raw = String(tagsEl.value || '');
+  const parts = raw.split(',');
+  return String(parts[parts.length - 1] || '').trim().replace(/^#/, '');
+}
+
+function _notesRenderTagChips(note = _notesState.currentNote) {
+  const wrap = document.getElementById('notes-tag-chips');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  const tags = Array.isArray(note?.tags) ? note.tags : [];
+  if (!tags.length) {
+    const empty = document.createElement('div');
+    empty.className = 'notes-tag-empty';
+    empty.textContent = 'No tags yet. Add one below or type # in the note body.';
+    wrap.appendChild(empty);
+    return;
+  }
+  tags.forEach(tag => {
+    const chip = document.createElement('span');
+    chip.className = 'notes-tag-chip';
+    const label = document.createElement('span');
+    label.textContent = `#${tag}`;
+    chip.appendChild(label);
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.textContent = '✕';
+    remove.title = `Remove ${tag}`;
+    remove.addEventListener('click', () => {
+      if (!_notesState.currentNote) return;
+      const tagsEl = document.getElementById('notes-tags');
+      const current = _notesSplitTags(tagsEl?.value || '');
+      const next = current.filter(item => item.toLowerCase() !== String(tag).toLowerCase());
+      _notesState.currentNote.tags = next;
+      if (tagsEl) tagsEl.value = next.map(t => `#${t}`).join(', ');
+      _notesRenderTagChips(_notesState.currentNote);
+      _notesRenderTagSuggestions(_notesState.currentNote);
+      _notesState.dirty = true;
+      _notesQueueAutosave();
+      _notesRenderList();
+    });
+    chip.appendChild(remove);
+    wrap.appendChild(chip);
+  });
+}
+
+function _notesRenderTagSuggestions(note = _notesState.currentNote) {
+  const wrap = document.getElementById('notes-tag-suggestions');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  const currentTags = new Set((note?.tags || []).map(tag => String(tag || '').trim().replace(/^#/, '')).filter(Boolean).map(tag => tag.toLowerCase()));
+  const query = _notesTagQuery().toLowerCase();
+  const known = _notesKnownTags().filter(tag => !currentTags.has(tag.toLowerCase()));
+  const filtered = query
+    ? known.filter(tag => tag.toLowerCase().includes(query))
+    : known.slice(0, 6);
+  if (!filtered.length) {
+    const hint = document.createElement('div');
+    hint.className = 'notes-tag-empty';
+    hint.textContent = query ? 'No matching tags.' : 'Suggested tags will appear here as you use them.';
+    wrap.appendChild(hint);
+    return;
+  }
+  filtered.slice(0, 8).forEach(tag => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'notes-tag-suggestion';
+    btn.textContent = `#${tag}`;
+    btn.addEventListener('click', () => {
+      if (!_notesState.currentNote) return;
+      const tagsEl = document.getElementById('notes-tags');
+      if (!tagsEl) return;
+      const existing = _notesSplitTags(tagsEl.value);
+      if (!existing.includes(tag)) existing.push(tag);
+      tagsEl.value = existing.map(t => `#${t}`).join(', ');
+      _notesState.currentNote.tags = existing;
+      _notesRenderTagChips(_notesState.currentNote);
+      _notesRenderTagSuggestions(_notesState.currentNote);
+      _notesState.dirty = true;
+      _notesQueueAutosave();
+      _notesRenderList();
+    });
+    wrap.appendChild(btn);
+  });
+}
+
+function _notesTemplateData(templateKey = 'blank') {
+  switch (templateKey) {
+    case 'follow_up':
+      return {
+        title: 'Follow-up',
+        bodyHtml: '<p>Follow up on the open item after the next run.</p>',
+        tags: ['follow-up'],
+        checklistItems: [
+          { id: `chk_${Date.now()}_a`, text: 'Confirm next check-in', done: false }
+        ]
+      };
+    case 'parts_needed':
+      return {
+        title: 'Parts Needed',
+        bodyHtml: '<p>List the parts, consumables, or approvals needed before this can move.</p>',
+        tags: ['parts', 'materials'],
+        checklistItems: [
+          { id: `chk_${Date.now()}_b`, text: 'Confirm part number', done: false },
+          { id: `chk_${Date.now()}_c`, text: 'Check availability', done: false }
+        ]
+      };
+    case 'shift_handoff':
+      return {
+        title: 'Shift Handoff',
+        bodyHtml: '<p>Summarize status, blockers, and the next shift action.</p>',
+        tags: ['handoff', 'shift'],
+        checklistItems: [
+          { id: `chk_${Date.now()}_d`, text: 'Leave status for the next shift', done: false }
+        ]
+      };
+    case 'issue_summary':
+      return {
+        title: 'Issue Summary',
+        bodyHtml: '<p>Summarize the issue, impact, and next step.</p>',
+        tags: ['summary', 'issue'],
+        checklistItems: [
+          { id: `chk_${Date.now()}_e`, text: 'Capture current impact', done: false },
+          { id: `chk_${Date.now()}_f`, text: 'Capture next action', done: false }
+        ]
+      };
+    default:
+      return { title: '', bodyHtml: '', tags: [], checklistItems: [] };
+  }
+}
+
+function _notesSetMenuOpen(menuId, open) {
+  const menu = document.getElementById(menuId);
+  const btn = document.getElementById(menuId === 'notes-template-menu' ? 'notes-template-btn' : 'notes-actions-menu-btn');
+  if (!menu || !btn) return;
+  menu.classList.toggle('visible', !!open);
+  btn.classList.toggle('open', !!open);
+  btn.setAttribute('aria-expanded', String(!!open));
+}
+
+function _notesCloseMenus(exceptMenuId = null) {
+  if (exceptMenuId !== 'notes-template-menu') _notesSetMenuOpen('notes-template-menu', false);
+  if (exceptMenuId !== 'notes-actions-menu') _notesSetMenuOpen('notes-actions-menu', false);
+}
+
+function _notesSetPreviewMode(on) {
+  _notesState.previewMode = !!on;
+  const card = document.querySelector('.notes-editor-card-main');
+  const btn = document.getElementById('notes-preview-btn');
+  const body = document.getElementById('notes-body');
+  const preview = document.getElementById('notes-body-preview');
+  if (card) card.classList.toggle('previewing', _notesState.previewMode);
+  if (btn) {
+    btn.classList.toggle('active', _notesState.previewMode);
+    btn.setAttribute('aria-pressed', String(_notesState.previewMode));
+  }
+  if (body) body.hidden = _notesState.previewMode;
+  if (preview) preview.hidden = !_notesState.previewMode;
+}
+
+function _notesRenderBodyPreview(note = _notesState.currentNote) {
+  const wrap = document.getElementById('notes-body-preview');
+  if (!wrap) return;
+  const html = sanitizeNoteHtml(note?.bodyHtml || '');
+  const text = _noteTextFromHtml(html);
+  wrap.innerHTML = html || '<div class="notes-body-preview-empty">Preview appears here when enabled.</div>';
+  wrap.classList.toggle('empty', !text);
+}
+
+function _notesRenderContextSummary(note = _notesState.currentNote) {
+  const summaryEl = document.getElementById('notes-context-summary');
+  if (!summaryEl) return;
+  if (note?.issueId) {
+    const issue = issues.find(i => i.id === note.issueId);
+    summaryEl.textContent = `Linked to issue ${issue?.machine || note.issueId}`;
+    return;
+  }
+  if (note?.pressId) {
+    summaryEl.textContent = `Linked to press ${note.machineCode || note.pressId}`;
+    return;
+  }
+  if (_notesContext.pressId || _notesContext.issueId) {
+    summaryEl.textContent = `${_notesContextTitle(_notesContext)} note`;
+    return;
+  }
+  summaryEl.textContent = 'Plant-wide note';
+}
+
+function _notesApplyTemplate(templateKey = 'blank') {
+  if (!_notesState.currentNote) return;
+  const template = _notesTemplateData(templateKey);
+  const titleEl = document.getElementById('notes-title');
+  const tagsEl = document.getElementById('notes-tags');
+  const bodyEl = document.getElementById('notes-body');
+  const currentTitle = String(titleEl?.value || '').trim();
+  const currentBody = String(bodyEl?.innerHTML || '').trim();
+  if (titleEl && (!currentTitle || templateKey !== 'blank')) titleEl.value = template.title || currentTitle;
+  if (tagsEl) {
+    const tags = _notesSplitTags(tagsEl.value);
+    template.tags.forEach(tag => { if (!tags.includes(tag)) tags.push(tag); });
+    tagsEl.value = tags.map(tag => `#${tag}`).join(', ');
+    _notesState.currentNote.tags = tags;
+  }
+  if (bodyEl && (!currentBody || templateKey !== 'blank')) bodyEl.innerHTML = template.bodyHtml || '';
+  if (_notesState.currentNote) {
+    _notesState.currentNote.title = titleEl?.value || _notesState.currentNote.title;
+    _notesState.currentNote.bodyHtml = sanitizeNoteHtml(bodyEl?.innerHTML || '');
+    _notesState.currentNote.bodyText = _noteTextFromHtml(_notesState.currentNote.bodyHtml);
+    _notesState.currentNote.checklistItems = template.checklistItems.length
+      ? template.checklistItems.map(item => ({ ...item }))
+      : normalizeChecklistItems(_notesState.currentNote.checklistItems);
+  }
+  _notesRenderTagChips(_notesState.currentNote);
+  _notesRenderTagSuggestions(_notesState.currentNote);
+  _notesRenderChecklist(_notesState.currentNote);
+  _notesRenderBodyPreview(_notesState.currentNote);
+  _notesState.dirty = true;
+  _notesQueueAutosave();
+  _notesRenderList();
+}
+
 function _notesRenderList() {
   const listEl = document.getElementById('notes-list');
   if (!listEl) return;
@@ -11931,6 +12179,14 @@ function _notesSetStatus(message, updatedMessage = '') {
   const updatedEl = document.getElementById('notes-editor-updated');
   if (statusEl) statusEl.textContent = message || '';
   if (updatedEl) updatedEl.textContent = updatedMessage || '';
+  if (statusEl) {
+    const isSaving = /saving/i.test(message || '');
+    const isError = /could not|failed|unavailable/i.test(message || '');
+    const isOffline = !navigator.onLine && !isSaving && !isError;
+    statusEl.classList.toggle('is-saving', isSaving);
+    statusEl.classList.toggle('is-error', isError);
+    statusEl.classList.toggle('is-offline', isOffline);
+  }
 }
 
 function _notesRenderContextChips(note = _notesState.currentNote) {
@@ -12086,6 +12342,7 @@ function _notesRenderEditor(note = null) {
   const titleEl = document.getElementById('notes-title');
   const tagsEl = document.getElementById('notes-tags');
   const bodyEl = document.getElementById('notes-body');
+  const previewEl = document.getElementById('notes-body-preview');
   const pinBtn = document.getElementById('notes-pin-btn');
   const archiveBtn = document.getElementById('notes-archive-btn');
   const deleteBtn = document.getElementById('notes-delete-btn');
@@ -12101,6 +12358,7 @@ function _notesRenderEditor(note = null) {
 
   _notesState.currentNote = note ? { ...note, checklistItems: normalizeChecklistItems(note.checklistItems) } : null;
   if (!note) _notesAttachmentsCache = [];
+  if (!sameActiveNote) _notesState.previewMode = false;
   _notesState.dirty = false;
   _notesSetStatus(note ? 'Saved' : 'Select a note to begin.', note ? `Updated ${_notesDisplayTime(note.updatedAt)}` : '');
 
@@ -12112,6 +12370,7 @@ function _notesRenderEditor(note = null) {
   if (!sameActiveNote || !tagsFocused) tagsEl.value = nextTags;
   if (!sameActiveNote || !bodyFocused) bodyEl.innerHTML = nextBodyHtml;
   bodyEl.classList.toggle('empty', !note?.bodyHtml);
+  if (previewEl) previewEl.hidden = !_notesState.previewMode;
   pinBtn.textContent = note?.isPinned ? 'Unpin' : 'Pin';
   archiveBtn.textContent = note?.isArchived ? 'Unarchive' : 'Archive';
   deleteBtn.disabled = !note?.id;
@@ -12127,9 +12386,14 @@ function _notesRenderEditor(note = null) {
   document.getElementById('notes-photo-btn')?.toggleAttribute('disabled', !note?.id);
   document.getElementById('notes-link-press-btn')?.toggleAttribute('disabled', !note?.id || !_notesContext.pressId);
   document.getElementById('notes-link-issue-btn')?.toggleAttribute('disabled', !note?.id || !_notesContext.issueId);
+  _notesRenderTagChips(note);
+  _notesRenderTagSuggestions(note);
   _notesRenderContextChips(note);
+  _notesRenderContextSummary(note);
   _notesRenderChecklist(note);
   _notesRenderAttachments();
+  _notesRenderBodyPreview(note);
+  _notesSetPreviewMode(_notesState.previewMode && !!note?.id);
   _notesSyncLayout();
 }
 
@@ -12257,7 +12521,7 @@ function _notesBuildPayload(note, { persistCreatedAt = false } = {}) {
   const title = String(titleEl?.value || note?.title || '').trim() || 'Untitled Note';
   const bodyHtml = sanitizeNoteHtml(String(bodyEl?.innerHTML || note?.bodyHtml || ''));
   const bodyText = _noteTextFromHtml(bodyHtml);
-  const tags = String(tagsEl?.value || '').split(',').map(tag => tag.trim()).filter(Boolean);
+  const tags = _notesSplitTags(tagsEl?.value || '');
   const checklistItems = normalizeChecklistItems(note?.checklistItems || []);
   const actor = currentActor();
   const searchText = [
@@ -12344,23 +12608,32 @@ async function _notesToggleArchive() {
   _notesRenderEditor(_notesState.currentNote);
 }
 
-async function _notesCreateNewNote() {
+async function _notesCreateNewNote(templateKey = 'blank') {
   if (!currentPlantId || !_notesState.notes) return;
   const ref = doc(notesCol());
   const pressId = _notesContext.pressId || '';
   const issueId = _notesContext.issueId || '';
   const issue = issueId ? issues.find(i => i.id === issueId) : null;
   const machineCode = issue?.machine || _notesContext.label?.replace(/^Press\s+/i, '') || '';
-  const title = _notesContext.issueId
+  const template = _notesTemplateData(templateKey);
+  const contextLabel = _notesContext.issueId
     ? `Issue ${machineCode || issueId}`
-    : (_notesContext.pressId ? `Press ${machineCode || pressId}` : 'New Note');
+    : (_notesContext.pressId ? `Press ${machineCode || pressId}` : '');
+  const title = contextLabel
+    ? (template.title ? `${template.title} · ${contextLabel}` : contextLabel)
+    : (template.title || 'New Note');
+  const tags = Array.from(new Set([
+    ...(template.tags || []),
+    ...(pressId ? ['press'] : []),
+    ...(issueId ? ['issue'] : [])
+  ]));
   const draft = {
     id: ref.id,
     title,
-    bodyHtml: '',
-    bodyText: '',
-    checklistItems: [],
-    tags: [],
+    bodyHtml: template.bodyHtml || '',
+    bodyText: _noteTextFromHtml(template.bodyHtml || ''),
+    checklistItems: normalizeChecklistItems(template.checklistItems || []),
+    tags,
     pressId,
     machineCode,
     issueId,
@@ -12512,6 +12785,11 @@ function _notesSetVisible(isVisible) {
   if (!modal) return;
   modal.classList.toggle('visible', !!isVisible);
   document.body.classList.toggle('notes-open', !!isVisible);
+  if (!isVisible) {
+    _notesCloseMenus();
+    _notesSetDropActive(false);
+    _notesDragDepth = 0;
+  }
   if (isVisible) _notesSyncLayout();
 }
 
@@ -12528,7 +12806,11 @@ function _notesResetState() {
   _notesState.dirty = false;
   _notesState.currentNote = null;
   _notesState.creating = false;
+  _notesState.previewMode = false;
   _notesState.error = '';
+  _notesCloseMenus();
+  _notesSetDropActive(false);
+  _notesDragDepth = 0;
   _notesSyncLayout();
 }
 
@@ -12604,7 +12886,11 @@ window.openNotesModal = async function(context = {}) {
   _notesState.view = 'list';
   _notesState.currentNote = null;
   _notesState.error = '';
+  _notesState.previewMode = false;
   _notesAttachmentsCache = [];
+  _notesCloseMenus();
+  _notesSetDropActive(false);
+  _notesDragDepth = 0;
   _notesSetVisible(true);
   _notesSyncLayout();
   _notesSetStatus('Loading notes…', _notesContextTitle(_notesContext));
@@ -12673,8 +12959,9 @@ document.getElementById('notes-title')?.addEventListener('keydown', e => {
 });
 document.getElementById('notes-tags')?.addEventListener('input', () => {
   if (_notesState.currentNote) {
-    _notesState.currentNote.tags = String(document.getElementById('notes-tags')?.value || '')
-      .split(',').map(tag => tag.trim()).filter(Boolean);
+    _notesState.currentNote.tags = _notesSplitTags(document.getElementById('notes-tags')?.value || '');
+    _notesRenderTagChips(_notesState.currentNote);
+    _notesRenderTagSuggestions(_notesState.currentNote);
     _notesQueueAutosave();
     _notesRenderList();
   }
@@ -12683,7 +12970,20 @@ document.getElementById('notes-body')?.addEventListener('input', () => {
   if (_notesState.currentNote) {
     _notesState.currentNote.bodyHtml = sanitizeNoteHtml(document.getElementById('notes-body')?.innerHTML || '');
     _notesState.currentNote.bodyText = _noteTextFromHtml(_notesState.currentNote.bodyHtml);
+    const tagMatches = Array.from(new Set(
+      (String(_notesState.currentNote.bodyText || '').match(/#[a-z0-9][a-z0-9_-]*/gi) || [])
+        .map(tag => tag.slice(1))
+    ));
+    if (tagMatches.length) {
+      const tagsEl = document.getElementById('notes-tags');
+      const merged = Array.from(new Set([...( _notesState.currentNote.tags || [] ), ...tagMatches]));
+      _notesState.currentNote.tags = merged;
+      if (tagsEl) tagsEl.value = merged.map(tag => `#${tag}`).join(', ');
+      _notesRenderTagChips(_notesState.currentNote);
+      _notesRenderTagSuggestions(_notesState.currentNote);
+    }
     _notesSyncFormatButtons();
+    _notesRenderBodyPreview(_notesState.currentNote);
     _notesQueueAutosave();
     _notesRenderList();
   }
@@ -12708,10 +13008,49 @@ document.getElementById('notes-body')?.addEventListener('keydown', e => {
   } else if (key === 'u') {
     e.preventDefault();
     _notesToolbarCommand('underline');
+  } else if (e.key === 'Tab' && !e.shiftKey) {
+    e.preventDefault();
+    document.getElementById('notes-checklist-input')?.focus();
   }
 });
 document.getElementById('notes-new-btn')?.addEventListener('click', () => {
   void _notesCreateNewNote();
+});
+document.getElementById('notes-template-btn')?.addEventListener('click', e => {
+  e.stopPropagation();
+  const menu = document.getElementById('notes-template-menu');
+  const isOpen = menu?.classList.contains('visible');
+  _notesCloseMenus(isOpen ? null : 'notes-template-menu');
+  _notesSetMenuOpen('notes-template-menu', !isOpen);
+});
+document.getElementById('notes-actions-menu-btn')?.addEventListener('click', e => {
+  e.stopPropagation();
+  const menu = document.getElementById('notes-actions-menu');
+  const isOpen = menu?.classList.contains('visible');
+  _notesCloseMenus(isOpen ? null : 'notes-actions-menu');
+  _notesSetMenuOpen('notes-actions-menu', !isOpen);
+});
+document.getElementById('notes-template-menu')?.querySelectorAll('[data-note-template]')?.forEach(btn => {
+  btn.addEventListener('click', e => {
+    e.stopPropagation();
+    _notesCloseMenus();
+    const templateKey = btn.getAttribute('data-note-template') || 'blank';
+    if (templateKey === 'blank' && _notesState.currentNote?.id) return;
+    if (_notesState.currentNote?.id) {
+      _notesApplyTemplate(templateKey);
+    } else {
+      void _notesCreateNewNote(templateKey);
+    }
+  });
+});
+document.getElementById('notes-actions-menu')?.querySelectorAll('button[role="menuitem"]')?.forEach(btn => {
+  btn.addEventListener('click', e => {
+    e.stopPropagation();
+    _notesCloseMenus();
+    if (btn.id === 'notes-actions-pin-btn') void _notesTogglePin();
+    if (btn.id === 'notes-actions-archive-btn') void _notesToggleArchive();
+    if (btn.id === 'notes-actions-delete-btn') void _notesDeleteActiveNote();
+  });
 });
 document.getElementById('notes-back-btn')?.addEventListener('click', () => {
   _notesSetView('list');
@@ -12774,6 +13113,11 @@ document.getElementById('notes-link-issue-btn')?.addEventListener('click', () =>
   if (!_notesContext.issueId) return;
   void _notesSetContextLink('issue');
 });
+document.getElementById('notes-preview-btn')?.addEventListener('click', () => {
+  if (!_notesState.currentNote?.id) return;
+  _notesSetPreviewMode(!_notesState.previewMode);
+  _notesRenderBodyPreview(_notesState.currentNote);
+});
 document.getElementById('notes-filter-all')?.addEventListener('click', () => {
   _notesState.filter = 'all';
   _notesSyncFilterButtons();
@@ -12799,11 +13143,88 @@ document.querySelectorAll('.notes-toolbar-btn').forEach(btn => {
     e.preventDefault();
   });
 });
+document.addEventListener('click', e => {
+  if (!document.getElementById('notes-modal')?.classList.contains('visible')) return;
+  const templateWrap = document.getElementById('notes-template-btn')?.parentElement;
+  const actionsWrap = document.getElementById('notes-actions-menu-btn')?.parentElement;
+  if (templateWrap && !templateWrap.contains(e.target)) _notesSetMenuOpen('notes-template-menu', false);
+  if (actionsWrap && !actionsWrap.contains(e.target)) _notesSetMenuOpen('notes-actions-menu', false);
+});
+document.addEventListener('keydown', e => {
+  if (!document.getElementById('notes-modal')?.classList.contains('visible')) return;
+  const cmd = e.metaKey || e.ctrlKey;
+  const key = String(e.key || '').toLowerCase();
+  if (e.key === 'Escape') {
+    if (document.getElementById('notes-template-menu')?.classList.contains('visible') || document.getElementById('notes-actions-menu')?.classList.contains('visible')) {
+      _notesCloseMenus();
+      return;
+    }
+    closeNotesModal();
+    return;
+  }
+  if (cmd && key === 's') {
+    e.preventDefault();
+    void _notesSaveActiveNote({ immediate: true });
+    return;
+  }
+  if (cmd && key === 'enter') {
+    e.preventDefault();
+    void _notesSaveActiveNote({ immediate: true });
+  }
+});
 document.getElementById('notes-body')?.addEventListener('mouseup', _notesSyncFormatButtons);
 document.getElementById('notes-body')?.addEventListener('keyup', _notesSyncFormatButtons);
 document.addEventListener('selectionchange', () => {
   if (!document.getElementById('notes-modal')?.classList.contains('visible')) return;
   _notesSyncFormatButtons();
+});
+let _notesDragDepth = 0;
+function _notesSetDropActive(active) {
+  const shell = document.querySelector('.notes-modal-shell');
+  const hint = document.getElementById('notes-drop-hint');
+  shell?.classList.toggle('drop-active', !!active);
+  if (hint) hint.textContent = active ? 'Drop images to attach them here.' : 'Drag images here, or paste screenshots directly into the note.';
+}
+document.addEventListener('dragenter', e => {
+  if (!document.getElementById('notes-modal')?.classList.contains('visible')) return;
+  const hasFiles = Array.from(e.dataTransfer?.items || []).some(item => item.kind === 'file' && item.type.startsWith('image/'));
+  if (!hasFiles) return;
+  e.preventDefault();
+  _notesDragDepth += 1;
+  _notesSetDropActive(true);
+});
+document.addEventListener('dragover', e => {
+  if (!document.getElementById('notes-modal')?.classList.contains('visible')) return;
+  const hasFiles = Array.from(e.dataTransfer?.items || []).some(item => item.kind === 'file');
+  if (!hasFiles) return;
+  e.preventDefault();
+  _notesSetDropActive(true);
+});
+document.addEventListener('dragleave', e => {
+  if (!document.getElementById('notes-modal')?.classList.contains('visible')) return;
+  const hasFiles = Array.from(e.dataTransfer?.items || []).some(item => item.kind === 'file');
+  if (!hasFiles) return;
+  _notesDragDepth = Math.max(0, _notesDragDepth - 1);
+  if (_notesDragDepth === 0) _notesSetDropActive(false);
+});
+document.addEventListener('drop', async e => {
+  if (!document.getElementById('notes-modal')?.classList.contains('visible')) return;
+  const files = Array.from(e.dataTransfer?.files || []).filter(file => file.type.startsWith('image/'));
+  if (!files.length) return;
+  e.preventDefault();
+  _notesDragDepth = 0;
+  _notesSetDropActive(false);
+  await _notesUploadAttachments(files);
+});
+document.addEventListener('paste', e => {
+  if (!document.getElementById('notes-modal')?.classList.contains('visible')) return;
+  const files = Array.from(e.clipboardData?.items || [])
+    .filter(item => item.kind === 'file' && item.type.startsWith('image/'))
+    .map(item => item.getAsFile())
+    .filter(Boolean);
+  if (!files.length) return;
+  e.preventDefault();
+  void _notesUploadAttachments(files);
 });
 window.addEventListener('resize', () => {
   if (document.getElementById('notes-modal')?.classList.contains('visible')) {

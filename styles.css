@@ -2380,8 +2380,8 @@
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 12px;
-    padding: 8px 16px 12px;
+    gap: 10px;
+    padding: 6px 12px 8px;
     border-bottom: 1px solid var(--border);
     background: var(--bg2);
   }
@@ -2389,13 +2389,13 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 3px;
     flex: 1 1 auto;
-    padding: 12px 14px;
+    padding: 9px 12px;
     margin-right: 0;
   }
   .notes-editor-header-card {
-    border-radius: 18px;
+    border-radius: 16px;
     background: var(--bg2);
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
   }
@@ -2407,7 +2407,7 @@
   .notes-modal-title-row { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
   .notes-modal-title {
     font-family: 'Rajdhani', sans-serif;
-    font-size: 28px;
+    font-size: 24px;
     font-weight: 700;
     letter-spacing: 1px;
     line-height: 1;
@@ -2417,8 +2417,49 @@
     color: transparent;
   }
   .notes-modal-context { font-family: 'Share Tech Mono', monospace; font-size: 10px; color: var(--text2); letter-spacing: .08em; text-transform: uppercase; }
-  .notes-modal-subtitle { font-family: 'Share Tech Mono', monospace; font-size: 11px; color: var(--text2); line-height: 1.45; }
-  .notes-modal-header-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; align-self: flex-start; padding-top: 12px; }
+  .notes-modal-subtitle { font-family: 'Share Tech Mono', monospace; font-size: 10px; color: var(--text2); line-height: 1.35; max-width: 100%; }
+  .notes-modal-header-top,
+  .notes-modal-meta-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+  .notes-modal-meta-row { justify-content: space-between; }
+  .notes-modal-sync-note {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--bg3) 86%, white 2%);
+    color: var(--text3);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 9px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+  .notes-editor-save-state {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--notes-chip-border);
+    background: var(--notes-chip-bg);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 9px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--yellow);
+    white-space: nowrap;
+  }
+  .notes-editor-save-state.is-saving { color: var(--yellow); }
+  .notes-editor-save-state.is-error { color: var(--red); border-color: color-mix(in srgb, var(--red) 40%, var(--border)); }
+  .notes-editor-save-state.is-offline { color: var(--text3); border-color: color-mix(in srgb, var(--text3) 38%, var(--border)); }
+  .notes-modal-header-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; align-self: flex-start; padding-top: 8px; }
   #notes-new-btn {
     min-height: 40px;
     padding: 0 16px;
@@ -2534,7 +2575,15 @@
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
   }
   .notes-context-box { border: 1px solid var(--border); border-radius: 14px; background: var(--bg2); padding: 10px 12px; }
+  .notes-context-card { gap: 8px; }
   .notes-context-label { font-family: 'Share Tech Mono', monospace; font-size: 9px; letter-spacing: .18em; text-transform: uppercase; color: var(--text3); margin-bottom: 8px; }
+  .notes-context-summary {
+    font-family: 'Nunito', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1.35;
+  }
   .notes-context-chips { display: flex; gap: 8px; flex-wrap: wrap; }
   .notes-context-chip {
     display: inline-flex;
@@ -2616,8 +2665,78 @@
     min-height: 170px;
     background: linear-gradient(180deg, color-mix(in srgb, var(--bg2) 90%, white 2%), var(--bg2));
   }
+  .notes-editor-card-main.previewing .notes-body { display: none; }
+  .notes-body-preview {
+    min-height: 170px;
+    display: none;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: var(--bg2);
+    color: var(--text);
+    padding: 14px 14px 18px;
+    line-height: 1.55;
+    font-family: 'Nunito', sans-serif;
+    font-size: 14px;
+    overflow: auto;
+  }
+  .notes-editor-card-main.previewing .notes-body-preview { display: block; }
+  .notes-body-preview.empty,
+  .notes-body-preview-empty { color: var(--text3); }
+  .notes-body-preview p { margin: 0 0 10px; }
+  .notes-body-preview ul,
+  .notes-body-preview ol { margin: 0 0 10px 20px; padding-left: 20px; }
+  .notes-body-preview li { margin: 2px 0; }
+  .notes-body-preview h1,
+  .notes-body-preview h2,
+  .notes-body-preview h3 { margin: 12px 0 8px; line-height: 1.2; }
+  .notes-body-preview a { color: var(--blue); }
   .notes-title::placeholder,
   .notes-tags::placeholder { color: var(--text3); }
+  .notes-tag-chips,
+  .notes-tag-suggestions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .notes-tag-empty {
+    color: var(--text3);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 9px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    line-height: 1.4;
+  }
+  .notes-tag-chip,
+  .notes-tag-suggestion {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 999px;
+    border: 1px solid var(--notes-chip-border);
+    background: var(--notes-chip-bg);
+    color: var(--text2);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+  .notes-tag-chip { padding: 5px 8px 5px 10px; }
+  .notes-tag-suggestion {
+    padding: 5px 10px;
+    cursor: pointer;
+    transition: border-color .15s, color .15s, background .15s, transform .1s;
+  }
+  .notes-tag-suggestion:hover { border-color: var(--yellow); color: var(--text); background: color-mix(in srgb, var(--yellow) 10%, var(--bg2)); transform: translateY(-1px); }
+  .notes-tag-chip button {
+    border: none;
+    background: none;
+    color: var(--text3);
+    cursor: pointer;
+    padding: 0;
+    font-size: 11px;
+    line-height: 1;
+  }
+  .notes-tag-chip button:hover { color: var(--text); }
   .notes-toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-start; }
   .notes-toolbar-btn {
     border: 1px solid var(--notes-chip-border);
@@ -2643,6 +2762,54 @@
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.14);
   }
   .notes-toolbar-btn:active { transform: scale(.98); }
+  .notes-menu-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+  }
+  .notes-menu-trigger.open {
+    border-color: var(--yellow);
+    color: var(--text);
+    background: color-mix(in srgb, var(--yellow) 8%, var(--bg2));
+  }
+  .notes-menu {
+    display: none;
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    z-index: 20;
+    min-width: 190px;
+    padding: 8px;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--bg2) 88%, white 2%), color-mix(in srgb, var(--bg2) 96%, transparent));
+    box-shadow: 0 18px 32px rgba(0, 0, 0, 0.28);
+    flex-direction: column;
+    gap: 6px;
+  }
+  .notes-menu.visible { display: flex; }
+  .notes-menu button {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 10px;
+    border: none;
+    border-radius: 12px;
+    background: transparent;
+    color: var(--text2);
+    cursor: pointer;
+    text-align: left;
+    font-family: 'Nunito', sans-serif;
+    font-size: 12.5px;
+    font-weight: 700;
+    transition: background .15s, color .15s, transform .15s;
+  }
+  .notes-menu button:hover { background: rgba(255,255,255,0.04); color: var(--text); transform: translateY(-1px); }
+  .notes-menu button.danger { color: var(--text2); }
+  .notes-menu button.danger:hover { background: var(--red-dim); color: var(--red); }
+  .notes-mobile-actions-wrap { display: none; }
   .notes-toolbar-more {
     position: relative;
     display: inline-flex;
@@ -2782,6 +2949,22 @@
     cursor: pointer;
     align-self: flex-start;
   }
+  .notes-modal-shell.drop-active .notes-editor-card-attachments {
+    border-color: color-mix(in srgb, var(--teal) 55%, var(--border));
+    background: color-mix(in srgb, var(--bg2) 80%, var(--teal) 20%);
+  }
+  .notes-drop-hint {
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1px dashed var(--border);
+    background: color-mix(in srgb, var(--bg2) 84%, transparent);
+    color: var(--text3);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 9px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    line-height: 1.5;
+  }
   .notes-editor-panel .btn { min-height: 40px; }
   @media (max-width: 860px) {
     .notes-modal-shell {
@@ -2803,6 +2986,8 @@
       flex-wrap: wrap;
       padding-top: 0;
     }
+    .notes-mobile-actions-wrap { display: inline-flex; }
+    .notes-editor-actions { display: none; }
     .notes-modal-body { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr); }
     .notes-list-panel {
       border-right: none;
@@ -2872,7 +3057,7 @@
       padding: 10px 12px 8px;
     }
     #notes-modal .notes-modal-title {
-      font-size: 26px;
+      font-size: 24px;
     }
     #notes-modal .notes-modal-context { font-size: 9px; }
     #notes-modal .notes-modal-header-actions { gap: 8px; }
