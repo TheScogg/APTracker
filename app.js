@@ -10370,15 +10370,17 @@ function _notesIsMobileLayout() {
 }
 
 function _notesSyncLayout() {
-  const modal = document.getElementById('notes-modal');
-  if (!modal) return;
-  const mobile = _notesIsMobileLayout();
-  const listMode = mobile && _notesState.view !== 'editor';
-  const editorMode = mobile && _notesState.view === 'editor' && !!_notesState.currentNote?.id;
-  modal.classList.toggle('notes-mobile', mobile);
-  modal.classList.toggle('notes-mobile-list', listMode);
-  modal.classList.toggle('notes-mobile-editor', editorMode);
+  const editorModal = document.getElementById('notes-editor-modal');
+  if (!editorModal) return;
+  const isEditor = _notesState.view === 'editor' && !!_notesState.currentNote?.id;
+  editorModal.classList.toggle('visible', isEditor);
 }
+
+window.closeNotesEditorModal = function() {
+  _notesSetView('list');
+  _notesRenderEditor(null);
+  _notesRenderList();
+};
 
 function _notesSetView(view) {
   _notesState.view = view === 'editor' ? 'editor' : 'list';
@@ -11855,49 +11857,69 @@ function _notesRenderList() {
   }
   listEl.innerHTML = '';
   visibleNotes.forEach(note => {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = `notes-list-item ${note.id === _notesState.activeNoteId ? 'active' : ''}`;
+    const btn = document.createElement('div');
+    btn.className = `note-card ${note.id === _notesState.activeNoteId ? 'active' : ''}`;
     btn.addEventListener('click', () => {
       void _notesSelectNote(note.id);
     });
+
     const top = document.createElement('div');
-    top.className = 'notes-list-item-top';
-    const title = document.createElement('div');
-    title.className = 'notes-list-item-title';
-    title.textContent = note.title || 'Untitled Note';
-    const time = document.createElement('div');
-    time.className = 'notes-list-item-time';
-    time.textContent = _notesDisplayTime(note.updatedAt);
-    top.appendChild(title);
-    top.appendChild(time);
+    top.className = 'note-title';
+    
+    const titleSpan = document.createElement('span');
+    titleSpan.textContent = note.title || 'Untitled Note';
+    top.appendChild(titleSpan);
+
+    if (note.isPinned) {
+      const pinIcon = document.createElement('span');
+      pinIcon.className = 'pin-icon';
+      pinIcon.textContent = '📌';
+      top.appendChild(pinIcon);
+    }
+
     const preview = document.createElement('div');
-    preview.className = 'notes-list-item-preview';
+    preview.className = 'note-preview';
     const bodyPreview = note.bodyText || note.checklistItems.map(item => item.text).filter(Boolean).join(' • ');
     preview.textContent = bodyPreview || 'No content yet.';
-    const badges = document.createElement('div');
-    badges.className = 'notes-list-item-badges';
-    if (note.isPinned) {
-      const pinned = document.createElement('span');
-      pinned.className = 'notes-list-badge pinned';
-      pinned.textContent = 'Pinned';
-      badges.appendChild(pinned);
-    }
+
+    const meta = document.createElement('div');
+    meta.className = 'note-meta';
+
+    const tagsDiv = document.createElement('div');
+    tagsDiv.className = 'tags';
+    
+    // Add context/badge tags to the tags list as well
     if (note.pressId || note.issueId) {
-      const linked = document.createElement('span');
-      linked.className = 'notes-list-badge linked';
-      linked.textContent = note.issueId ? 'Issue' : 'Press';
-      badges.appendChild(linked);
+      const linkedTag = document.createElement('span');
+      linkedTag.className = 'tag';
+      linkedTag.textContent = note.issueId ? '#issue' : '#press';
+      tagsDiv.appendChild(linkedTag);
     }
     if (note.isArchived) {
-      const archived = document.createElement('span');
-      archived.className = 'notes-list-badge archived';
-      archived.textContent = 'Archived';
-      badges.appendChild(archived);
+      const archTag = document.createElement('span');
+      archTag.className = 'tag';
+      archTag.textContent = '#archived';
+      tagsDiv.appendChild(archTag);
     }
+    if (Array.isArray(note.tags)) {
+      note.tags.forEach(t => {
+        const tagSpan = document.createElement('span');
+        tagSpan.className = 'tag';
+        tagSpan.textContent = `#${t}`;
+        tagsDiv.appendChild(tagSpan);
+      });
+    }
+
+    const time = document.createElement('div');
+    time.className = 'timestamp';
+    time.textContent = _notesDisplayTime(note.updatedAt);
+
+    meta.appendChild(tagsDiv);
+    meta.appendChild(time);
+
     btn.appendChild(top);
     btn.appendChild(preview);
-    if (badges.childElementCount) btn.appendChild(badges);
+    btn.appendChild(meta);
     listEl.appendChild(btn);
   });
 }
