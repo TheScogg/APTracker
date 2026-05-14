@@ -695,7 +695,10 @@
   <div class="modal press-wiki-modal-shell" style="max-width:620px;">
     <div class="press-wiki-drag-handle" aria-hidden="true"></div>
     <div class="press-wiki-scroll-content">
-      <div class="modal-header-row press-wiki-header-row" style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
+      <div class="modal-header-row press-wiki-header-row tool-modal-nav-shell" style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
+        <button class="tool-modal-nav-btn tool-modal-nav-prev" type="button" data-shell-action="cycle-tool-modal" data-shell-value="prev" aria-label="Previous tool" title="Previous tool">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M9.5 3.5L5 8l4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
         <div style="min-width:0;flex:1;">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:8px;">
             <div style="display:inline-flex;gap:3px;padding:3px;background:var(--bg3);border:1px solid var(--line);border-radius:999px;">
@@ -749,6 +752,9 @@
           </div>
           <div id="press-wiki-meta" style="font-size:12px;color:var(--text3);margin-top:3px;"></div>
         </div>
+        <button class="tool-modal-nav-btn tool-modal-nav-next" type="button" data-shell-action="cycle-tool-modal" data-shell-value="next" aria-label="Next tool" title="Next tool">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6.5 3.5L11 8l-4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
       </div>
       <div id="press-wiki-new-page-row" style="margin-top:6px;display:none;gap:8px;align-items:center;">
         <input id="press-wiki-new-page-id" class="input" type="text" placeholder="new-page-id" style="flex:1;">
@@ -799,8 +805,14 @@
     </div>
 
     <div class="app-container" id="notes-app-container">
-      <div class="header">
+      <div class="header notes-list-header tool-modal-nav-shell">
+        <button class="tool-modal-nav-btn tool-modal-nav-prev" type="button" data-shell-action="cycle-tool-modal" data-shell-value="prev" aria-label="Previous tool" title="Previous tool">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M9.5 3.5L5 8l4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
         <div class="greeting">Notes</div>
+        <button class="tool-modal-nav-btn tool-modal-nav-next" type="button" data-shell-action="cycle-tool-modal" data-shell-value="next" aria-label="Next tool" title="Next tool">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6.5 3.5L11 8l-4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
       </div>
 
       <div class="search-wrap">
@@ -833,7 +845,10 @@
     </div>
 
     <div class="app-container" id="notes-editor-app-container" style="padding:0;display:flex;flex-direction:column;overflow:hidden;">
-      <div class="notes-modal-header" style="flex-shrink:0;">
+      <div class="notes-modal-header tool-modal-nav-shell" style="flex-shrink:0;">
+        <button class="tool-modal-nav-btn tool-modal-nav-prev" type="button" data-shell-action="cycle-tool-modal" data-shell-value="prev" aria-label="Previous tool" title="Previous tool">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M9.5 3.5L5 8l4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
         <div class="notes-modal-header-actions">
           <div class="notes-menu-wrap">
             <button class="btn btn-ghost notes-menu-trigger" id="notes-template-btn" type="button" aria-expanded="false" aria-haspopup="menu">Templates</button>
@@ -856,6 +871,9 @@
           </div>
           <button class="notes-modal-close" id="notes-editor-close-btn" type="button" onclick="closeNotesEditorModal()" aria-label="Close notes editor">✕</button>
         </div>
+        <button class="tool-modal-nav-btn tool-modal-nav-next" type="button" data-shell-action="cycle-tool-modal" data-shell-value="next" aria-label="Next tool" title="Next tool">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6.5 3.5L11 8l-4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
       </div>
 
     <div class="notes-editor-panel">
@@ -951,7 +969,10 @@
 <div class="msg-overlay" id="messaging-modal">
   <div class="msg-modal notes-modal-shell">
     <div class="notes-drag-handle" aria-hidden="true"></div>
-    <div class="notes-modal-header">
+    <div class="notes-modal-header tool-modal-nav-shell">
+      <button class="tool-modal-nav-btn tool-modal-nav-prev" type="button" data-shell-action="cycle-tool-modal" data-shell-value="prev" aria-label="Previous tool" title="Previous tool">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M9.5 3.5L5 8l4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
       <div class="notes-modal-header-copy note-card notes-editor-header-card">
         <div class="notes-modal-header-top">
           <div class="notes-modal-kicker">Communication</div>
@@ -970,6 +991,9 @@
         <button class="btn btn-primary" title="New DM" onclick="showMessagingNewDm()">New DM</button>
         <button class="notes-modal-close" onclick="closeMessagingModal()">✕</button>
       </div>
+      <button class="tool-modal-nav-btn tool-modal-nav-next" type="button" data-shell-action="cycle-tool-modal" data-shell-value="next" aria-label="Next tool" title="Next tool">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6.5 3.5L11 8l-4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
     </div>
 
     <div class="msg-body">
@@ -1178,7 +1202,10 @@
   <div class="role-alerts-backdrop" data-role-alert-action="close" aria-hidden="true"></div>
   <section class="role-alerts-sheet notes-modal-shell" role="dialog" aria-modal="true" aria-labelledby="role-alerts-title">
     <div class="notes-drag-handle" id="role-alerts-drag-handle"></div>
-    <div class="notes-modal-header">
+    <div class="notes-modal-header tool-modal-nav-shell">
+      <button class="tool-modal-nav-btn tool-modal-nav-prev" type="button" data-shell-action="cycle-tool-modal" data-shell-value="prev" aria-label="Previous tool" title="Previous tool">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M9.5 3.5L5 8l4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
       <div class="notes-modal-header-copy note-card notes-editor-header-card">
         <div class="notes-modal-header-top">
           <div class="notes-modal-kicker">Notification Center</div>
@@ -1192,6 +1219,9 @@
         <button class="btn btn-ghost role-alerts-retry-fab" type="button" data-role-alert-action="retry" title="Retry loading alerts">Retry</button>
         <button class="notes-modal-close" type="button" data-role-alert-action="close">✕</button>
       </div>
+      <button class="tool-modal-nav-btn tool-modal-nav-next" type="button" data-shell-action="cycle-tool-modal" data-shell-value="next" aria-label="Next tool" title="Next tool">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6.5 3.5L11 8l-4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
     </div>
     <div class="role-alerts-toolbar">
       <div class="role-alerts-toggle scope-toggle" role="group" aria-label="Accepted alerts visibility">

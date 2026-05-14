@@ -656,8 +656,8 @@ async function _openRoleAlertInboxModalInternal({ resetToggle = true } = {}) {
   })();
 }
 
-window.openRoleAlertInboxModal = async function() {
-  await _openRoleAlertInboxModalInternal({ resetToggle: true });
+window.openRoleAlertInboxModal = async function(options = {}) {
+  await _openRoleAlertInboxModalInternal({ resetToggle: !options.preserveState });
 };
 
 window.retryRoleAlertInboxModal = async function() {
@@ -7989,6 +7989,149 @@ function closeUserMenus() {
   document.getElementById('theme-select-toggle')?.setAttribute('aria-expanded', 'false');
 }
 
+const TOOL_MODAL_ORDER = ['wiki', 'notes', 'messages', 'alerts'];
+const _toolModalScrollState = {
+  wiki: { shellTop: 0 },
+  notes: { listTop: 0, editorTop: 0 },
+  messages: { listTop: 0, threadTop: 0 },
+  alerts: { listTop: 0 }
+};
+
+function _toolModalCurrentKey() {
+  if (document.getElementById('role-alerts-modal')?.classList.contains('visible')) return 'alerts';
+  if (document.getElementById('messaging-modal')?.classList.contains('visible')) return 'messages';
+  if (document.getElementById('press-wiki-modal')?.classList.contains('visible')) return 'wiki';
+  if (document.getElementById('notes-editor-modal')?.classList.contains('visible') || document.getElementById('notes-modal')?.classList.contains('visible')) return 'notes';
+  return null;
+}
+
+function _toolModalHasState(key) {
+  switch (key) {
+    case 'wiki':
+      return Boolean(_pressWikiModalPressId || _pressWikiSelectedPageId || _pressWikiExpandedPageIds?.size || _pressWikiKnownTreeNodeIds?.size);
+    case 'notes':
+      return Boolean(_notesState.notes.length || _notesState.currentNote?.id || _notesState.activeNoteId || _notesState.view === 'editor' || _notesState.search || _notesState.filter !== 'all' || _notesState.previewMode);
+    case 'messages':
+      return Boolean(_messagingState.conversations.length || _messagingState.activeConversationId || _messagingState.selectedPhoto || _messagingState.selectedDmUid || _messagingState.selectedGroupMembers?.size);
+    case 'alerts':
+      return Boolean(
+        _roleAlertsCache.length ||
+        _roleAlertsLoadToken > 0 ||
+        document.getElementById('role-alerts-modal')?.classList.contains('visible')
+      );
+    default:
+      return false;
+  }
+}
+
+function _toolModalCaptureScrollState(key) {
+  switch (key) {
+    case 'wiki':
+      _toolModalScrollState.wiki.shellTop = document.querySelector('#press-wiki-modal .press-wiki-modal-shell')?.scrollTop || 0;
+      break;
+    case 'notes':
+      _toolModalScrollState.notes.listTop = document.querySelector('#notes-list')?.scrollTop || 0;
+      _toolModalScrollState.notes.editorTop = document.querySelector('#notes-editor-modal .notes-editor-panel')?.scrollTop || 0;
+      break;
+    case 'messages':
+      _toolModalScrollState.messages.listTop = document.querySelector('#messaging-conversations-list')?.scrollTop || 0;
+      _toolModalScrollState.messages.threadTop = document.querySelector('#messaging-thread-messages')?.scrollTop || 0;
+      break;
+    case 'alerts':
+      _toolModalScrollState.alerts.listTop = document.querySelector('#role-alerts-list')?.scrollTop || 0;
+      break;
+  }
+}
+
+function _toolModalRestoreScrollState(key) {
+  const apply = () => {
+    switch (key) {
+      case 'wiki': {
+        const shell = document.querySelector('#press-wiki-modal .press-wiki-modal-shell');
+        if (shell) shell.scrollTop = _toolModalScrollState.wiki.shellTop || 0;
+        break;
+      }
+      case 'notes': {
+        const list = document.querySelector('#notes-list');
+        const editor = document.querySelector('#notes-editor-modal .notes-editor-panel');
+        if (list) list.scrollTop = _toolModalScrollState.notes.listTop || 0;
+        if (editor) editor.scrollTop = _toolModalScrollState.notes.editorTop || 0;
+        break;
+      }
+      case 'messages': {
+        const list = document.querySelector('#messaging-conversations-list');
+        const thread = document.querySelector('#messaging-thread-messages');
+        if (list) list.scrollTop = _toolModalScrollState.messages.listTop || 0;
+        if (thread) thread.scrollTop = _toolModalScrollState.messages.threadTop || 0;
+        break;
+      }
+      case 'alerts': {
+        const list = document.querySelector('#role-alerts-list');
+        if (list) list.scrollTop = _toolModalScrollState.alerts.listTop || 0;
+        break;
+      }
+    }
+  };
+  requestAnimationFrame(() => requestAnimationFrame(apply));
+  setTimeout(apply, 80);
+}
+
+async function _closeToolModalByKey(key) {
+  switch (key) {
+    case 'wiki':
+      window.closePressWikiModal?.({ preserveState: true });
+      break;
+    case 'notes':
+      window.closeNotesModal?.({ preserveState: true });
+      break;
+    case 'messages':
+      window.closeMessagingModal?.({ preserveState: true });
+      break;
+    case 'alerts':
+      window.closeRoleAlertInboxModal?.();
+      break;
+  }
+}
+
+async function _openToolModalByKey(key) {
+  const preserveState = _toolModalHasState(key);
+  switch (key) {
+    case 'wiki':
+      await (preserveState
+        ? window.openSharedLibraryWiki?.({ preserveState: true })
+        : window.openSharedLibraryWiki?.());
+      break;
+    case 'notes':
+      await (preserveState
+        ? window.openNotesModal?.({}, { preserveState: true })
+        : window.openNotesModal?.());
+      break;
+    case 'messages':
+      preserveState
+        ? window.openMessagingModal?.({ preserveState: true })
+        : window.openMessagingModal?.();
+      break;
+    case 'alerts':
+      await (preserveState
+        ? window.openRoleAlertInboxModal?.({ preserveState: true })
+        : window.openRoleAlertInboxModal?.());
+      break;
+  }
+}
+
+async function _cycleToolModal(direction) {
+  const currentKey = _toolModalCurrentKey();
+  if (!currentKey) return;
+  const currentIndex = TOOL_MODAL_ORDER.indexOf(currentKey);
+  if (currentIndex < 0) return;
+  const nextKey = TOOL_MODAL_ORDER[(currentIndex + direction + TOOL_MODAL_ORDER.length) % TOOL_MODAL_ORDER.length];
+  if (!nextKey || nextKey === currentKey) return;
+  _toolModalCaptureScrollState(currentKey);
+  await _closeToolModalByKey(currentKey);
+  await _openToolModalByKey(nextKey);
+  _toolModalRestoreScrollState(nextKey);
+}
+
 function closeUserDropdownOnly() {
   document.getElementById('user-dropdown')?.classList.remove('visible');
   document.getElementById('user-pill')?.classList.remove('open');
@@ -8084,6 +8227,9 @@ function handleShellAction(action, value, trigger, event) {
       break;
     case 'toggle-header-quick-menu':
       toggleHeaderQuickMenu();
+      break;
+    case 'cycle-tool-modal':
+      void _cycleToolModal(String(value || '').toLowerCase() === 'prev' ? -1 : 1);
       break;
     case 'toggle-export-dropdown':
       window.toggleExportDropdown?.();
@@ -10086,19 +10232,22 @@ async function _messagingSelectableMembers() {
     .sort((a, b) => String(_messagingUserLabel(a)).localeCompare(String(_messagingUserLabel(b))));
 }
 
-async function _messagingLoadMemberSelectors() {
+async function _messagingLoadMemberSelectors({ preserveSelection = false } = {}) {
   _messagingState.selectableMembers = await _messagingSelectableMembers();
-  _messagingState.selectedDmUid = null;
-  _messagingState.selectedGroupMembers = new Set();
+  if (!preserveSelection) {
+    _messagingState.selectedDmUid = null;
+    _messagingState.selectedGroupMembers = new Set();
+  }
   _renderMessagingMemberPicks();
 }
 
-window.openMessagingModal = () => {
+window.openMessagingModal = (options = {}) => {
+  const preserveState = !!options.preserveState;
   const modal = document.getElementById('messaging-modal');
   if (modal) modal.classList.add('visible');
   document.body.classList.add('messaging-open');
   _messagingSetError('');
-  _messagingSetPhotoPreview(null);
+  if (!preserveState) _messagingSetPhotoPreview(null);
   document.getElementById('msg-list-panel')?.classList.remove('hidden');
   if (NO_AUTH_MODE || !currentPlantId || !currentUser?.uid) {
     _messagingState.conversations = [];
@@ -10111,7 +10260,7 @@ window.openMessagingModal = () => {
     _messagingSetError('Messaging is disabled in no-auth mode.');
     return;
   }
-  _messagingLoadMemberSelectors().catch(err => {
+  _messagingLoadMemberSelectors({ preserveSelection: preserveState }).catch(err => {
     console.warn('messaging member load failed', err);
     _messagingSetError(`Could not load members: ${err?.message || 'permission denied'}`);
   });
@@ -10137,11 +10286,13 @@ window.openMessagingModal = () => {
   });
 };
 
-window.closeMessagingModal = () => {
+window.closeMessagingModal = (options = {}) => {
   document.getElementById('messaging-modal')?.classList.remove('visible');
   document.body.classList.remove('messaging-open');
   hideMessagingSheets();
-  _messagingSetPhotoPreview(null);
+  if (!options.preserveState) {
+    _messagingSetPhotoPreview(null);
+  }
   closeConversation();
   closeConversationList();
 };
@@ -11116,16 +11267,25 @@ function _relativeTime(ts) {
 
 async function openPressWikiModal(pressId, machineCode, options = {}) {
   if (!currentPlantId) return;
-  const initialScope = options.scope === WIKI_SCOPE_SHARED ? WIKI_SCOPE_SHARED : WIKI_SCOPE_PRESS;
+  const preserveState = !!options.preserveState && Boolean(_pressWikiModalPressId || _pressWikiSelectedPageId || _pressWikiScope);
+  const initialScope = preserveState
+    ? _pressWikiScope
+    : (options.scope === WIKI_SCOPE_SHARED ? WIKI_SCOPE_SHARED : WIKI_SCOPE_PRESS);
   const initialTitle = String(options.title || '').trim() || _pressWikiBaseTitle(initialScope);
-  const knownPressId = _pressWikiIsKnownPressId(pressId) ? String(pressId).trim() : null;
-  const initialPageId = String(options.pageId || '').trim() || (initialScope === WIKI_SCOPE_SHARED ? PRESS_WIKI_SHARED_INDEX_PAGE_ID : null);
-  _pressWikiModalPressId = initialScope === WIKI_SCOPE_SHARED ? 'shared-library' : (knownPressId || null);
-  _pressWikiSelectedPressId = initialScope === WIKI_SCOPE_PRESS ? knownPressId : null;
-  _pressWikiSelectedPageId = initialPageId;
-  _pressWikiMachineCode = initialScope === WIKI_SCOPE_PRESS ? String(machineCode || '').trim() : '';
-  _pressWikiExpandedPageIds = new Set();
-  _pressWikiKnownTreeNodeIds = new Set();
+  const knownPressId = preserveState
+    ? (_pressWikiScope === WIKI_SCOPE_PRESS ? (_pressWikiIsKnownPressId(_pressWikiModalPressId) ? String(_pressWikiModalPressId).trim() : null) : null)
+    : (_pressWikiIsKnownPressId(pressId) ? String(pressId).trim() : null);
+  const initialPageId = preserveState
+    ? (_pressWikiSelectedPageId || (initialScope === WIKI_SCOPE_SHARED ? PRESS_WIKI_SHARED_INDEX_PAGE_ID : null))
+    : (String(options.pageId || '').trim() || (initialScope === WIKI_SCOPE_SHARED ? PRESS_WIKI_SHARED_INDEX_PAGE_ID : null));
+  if (!preserveState) {
+    _pressWikiModalPressId = initialScope === WIKI_SCOPE_SHARED ? 'shared-library' : (knownPressId || null);
+    _pressWikiSelectedPressId = initialScope === WIKI_SCOPE_PRESS ? knownPressId : null;
+    _pressWikiSelectedPageId = initialPageId;
+    _pressWikiMachineCode = initialScope === WIKI_SCOPE_PRESS ? String(machineCode || '').trim() : '';
+    _pressWikiExpandedPageIds = new Set();
+    _pressWikiKnownTreeNodeIds = new Set();
+  }
   _pressWikiSetScope(initialScope, { reload: false });
   const modal = document.getElementById('press-wiki-modal');
   const titleEl = document.getElementById('press-wiki-title');
@@ -11135,8 +11295,10 @@ async function openPressWikiModal(pressId, machineCode, options = {}) {
   const attachmentsEl = document.getElementById('press-wiki-attachments');
   if (!modal || !titleEl || !metaEl || !bodyEl || !revisionsEl || !attachmentsEl) return;
   _pressWikiCanEdit = (currentUserRole === 'admin' || currentUserRole === 'editor');
-  togglePressWikiEditor(false);
-  togglePressWikiCreateRow(false);
+  if (!preserveState) {
+    togglePressWikiEditor(false);
+    togglePressWikiCreateRow(false);
+  }
   closePressWikiActionsMenu();
   const editBtn = document.getElementById('press-wiki-edit-btn');
   const newBtn = document.getElementById('press-wiki-new-page-btn');
@@ -11147,12 +11309,14 @@ async function openPressWikiModal(pressId, machineCode, options = {}) {
   const actionsWrap = document.getElementById('press-wiki-actions-wrap');
   if (actionsWrap) actionsWrap.style.display = _pressWikiCanEdit ? 'inline-flex' : 'none';
   _setPressWikiError('');
-  titleEl.textContent = initialTitle;
-  metaEl.textContent = initialScope === WIKI_SCOPE_SHARED
-    ? 'Plant-wide shared knowledge surface'
-    : (_pressWikiPressInfo(_pressWikiActivePressId())?.machineCode
-      ? `Press ${_pressWikiPressInfo(_pressWikiActivePressId()).machineCode} · ${_pressWikiScopeLabel()}`
-      : 'Choose a press to view its wiki pages.');
+  if (!preserveState) {
+    titleEl.textContent = initialTitle;
+    metaEl.textContent = initialScope === WIKI_SCOPE_SHARED
+      ? 'Plant-wide shared knowledge surface'
+      : (_pressWikiPressInfo(_pressWikiActivePressId())?.machineCode
+        ? `Press ${_pressWikiPressInfo(_pressWikiActivePressId()).machineCode} · ${_pressWikiScopeLabel()}`
+        : 'Choose a press to view its wiki pages.');
+  }
   _pressWikiSyncScopeBadge();
   _pressWikiSetScope(_pressWikiScope, { reload: false });
   _pressWikiSetPickerOpen(false);
@@ -11337,13 +11501,14 @@ window.insertMarkdown = function(textareaId, prefix, suffix) {
   ta.setSelectionRange(newPos, newPos);
 };
 
-window.closePressWikiModal = () => {
+window.closePressWikiModal = (options = {}) => {
   _setPressWikiModalVisible(false);
-  _pressWikiModalPressId = null;
-  _pressWikiSelectedPressId = null;
   _pressWikiSetPickerOpen(false);
   _pressWikiSetPressPickerOpen(false);
   closePressWikiActionsMenu();
+  if (options.preserveState) return;
+  _pressWikiModalPressId = null;
+  _pressWikiSelectedPressId = null;
 };
 
 async function savePressWikiRevision() {
@@ -11701,7 +11866,7 @@ document.getElementById('press-wiki-cms-btn')?.addEventListener('click', () => {
   window.location.href = url;
 });
 
-window.openSharedLibraryWiki = async function() {
+window.openSharedLibraryWiki = async function(options = {}) {
   if (!currentPlantId) return;
   closeUserMenus();
   closeSortDropdown();
@@ -11709,7 +11874,8 @@ window.openSharedLibraryWiki = async function() {
   await openPressWikiModal('shared-library', '', {
     scope: WIKI_SCOPE_SHARED,
     title: 'Shared Library',
-    pageId: PRESS_WIKI_SHARED_INDEX_PAGE_ID
+    pageId: PRESS_WIKI_SHARED_INDEX_PAGE_ID,
+    preserveState: !!options.preserveState
   });
 };
 
@@ -12813,10 +12979,12 @@ function _notesEnsureActiveSelection() {
 
 function _notesSetVisible(isVisible) {
   const modal = document.getElementById('notes-modal');
+  const editorModal = document.getElementById('notes-editor-modal');
   if (!modal) return;
   modal.classList.toggle('visible', !!isVisible);
   document.body.classList.toggle('notes-open', !!isVisible);
   if (!isVisible) {
+    editorModal?.classList.remove('visible');
     _notesCloseMenus();
     _notesSetDropActive(false);
     _notesDragDepth = 0;
@@ -12882,17 +13050,25 @@ async function _notesStartListener() {
   });
 }
 
-window.closeNotesModal = () => {
+window.closeNotesModal = async (options = {}) => {
   if (_notesUnsubscribe) {
     _notesUnsubscribe();
     _notesUnsubscribe = null;
+  }
+  if (options.preserveState) {
+    if (_notesState.currentNote?.id && _notesState.dirty) {
+      await _notesSaveActiveNote({ immediate: true });
+    }
+    _notesSetVisible(false);
+    return;
   }
   _notesResetState();
   _notesSetVisible(false);
 };
 
-window.openNotesModal = async function(context = {}) {
+window.openNotesModal = async function(context = {}, options = {}) {
   if (!currentPlantId) return;
+  const preserveState = !!options.preserveState;
   closeUserMenus();
   closeSortDropdown();
   window.closeExportDropdown?.();
@@ -12902,35 +13078,39 @@ window.openNotesModal = async function(context = {}) {
     _notesUnsubscribe();
     _notesUnsubscribe = null;
   }
-  const pressId = String(context.pressId || '').trim();
-  const issueId = String(context.issueId || '').trim();
-  const issue = issueId ? issues.find(i => i.id === issueId) : null;
-  const machineCode = String(context.machineCode || issue?.machine || '').trim();
-  const linkedPressId = pressId || (issue?.pressId ? String(issue.pressId).trim() : '') || (machineCode ? toPressId(machineCode) : '');
-  const label = String(context.label || '').trim() || (issueId
-    ? `Issue · ${machineCode || issueId}`
-    : (linkedPressId ? `Press · ${machineCode || linkedPressId}` : 'Plant-wide'));
-  _notesContext = { pressId: linkedPressId, issueId, machineCode, label };
-  _notesState.filter = context.filter || (linkedPressId || issueId ? 'linked' : 'all');
-  _notesState.search = '';
-  _notesState.activeNoteId = null;
-  _notesState.view = 'list';
-  _notesState.currentNote = null;
-  _notesState.error = '';
-  _notesState.previewMode = false;
-  _notesAttachmentsCache = [];
+  if (!preserveState) {
+    const pressId = String(context.pressId || '').trim();
+    const issueId = String(context.issueId || '').trim();
+    const issue = issueId ? issues.find(i => i.id === issueId) : null;
+    const machineCode = String(context.machineCode || issue?.machine || '').trim();
+    const linkedPressId = pressId || (issue?.pressId ? String(issue.pressId).trim() : '') || (machineCode ? toPressId(machineCode) : '');
+    const label = String(context.label || '').trim() || (issueId
+      ? `Issue · ${machineCode || issueId}`
+      : (linkedPressId ? `Press · ${machineCode || linkedPressId}` : 'Plant-wide'));
+    _notesContext = { pressId: linkedPressId, issueId, machineCode, label };
+    _notesState.filter = context.filter || (linkedPressId || issueId ? 'linked' : 'all');
+    _notesState.search = '';
+    _notesState.activeNoteId = null;
+    _notesState.view = 'list';
+    _notesState.currentNote = null;
+    _notesState.error = '';
+    _notesState.previewMode = false;
+    _notesAttachmentsCache = [];
+  }
   _notesCloseMenus();
   _notesSetDropActive(false);
   _notesDragDepth = 0;
   _notesSetVisible(true);
   _notesSyncLayout();
-  _notesSetStatus('Loading notes…', _notesContextTitle(_notesContext));
-  const contextEl = document.getElementById('notes-modal-context');
-  if (contextEl) contextEl.textContent = _notesContextTitle(_notesContext);
-  const subtitleEl = document.getElementById('notes-modal-subtitle');
-  if (subtitleEl) subtitleEl.textContent = linkedPressId || issueId
-    ? 'Linked notes stay separate from the wiki, but open straight from the floor.'
-    : 'Quick capture, mobile first, Apple Notes inspired.';
+  if (!preserveState) {
+    _notesSetStatus('Loading notes…', _notesContextTitle(_notesContext));
+    const contextEl = document.getElementById('notes-modal-context');
+    if (contextEl) contextEl.textContent = _notesContextTitle(_notesContext);
+    const subtitleEl = document.getElementById('notes-modal-subtitle');
+    if (subtitleEl) subtitleEl.textContent = _notesContext.pressId || _notesContext.issueId
+      ? 'Linked notes stay separate from the wiki, but open straight from the floor.'
+      : 'Quick capture, mobile first, Apple Notes inspired.';
+  }
   _notesSyncFilterButtons();
   await _notesStartListener();
   _notesRenderList();
