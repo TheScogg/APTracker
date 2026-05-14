@@ -1343,7 +1343,9 @@ async function uploadIssuePhotosToStorage(issueId, photos) {
       storageBucket: sRef.bucket,
       contentType: meta.contentType,
       sizeBytes: meta.sizeBytes,
-      source: 'storage'
+      source: 'storage',
+      takenAt: p.takenAt || p.timestamp || '',
+      uploadedAt: new Date().toISOString()
     });
   }
   return out;
@@ -1361,9 +1363,10 @@ function queueAttachmentDocs(batch, issueId, photos = []) {
       storageBucket: p.storageBucket || '',
       thumbnailPath: null,
       uploadedBy: currentActor(),
-      uploadedAt: serverTimestamp(),
       sizeBytes: Number(p.sizeBytes || 0),
       source: p.source || 'storage',
+      takenAt: p.takenAt || p.timestamp || null,
+      uploadedAt: p.uploadedAt || serverTimestamp(),
       schemaVersion: 2
     }, { merge: true });
   });
@@ -1395,7 +1398,9 @@ async function fetchAttachmentPhotos(issueId) {
         storagePath: a.storagePath,
         storageBucket: a.storageBucket || '',
         contentType: a.contentType || '',
-        sizeBytes: Number(a.sizeBytes || 0)
+        sizeBytes: Number(a.sizeBytes || 0),
+        takenAt: a.takenAt || '',
+        uploadedAt: a.uploadedAt || ''
       });
     } catch (_) {
       // Ignore broken attachment references and keep going.
