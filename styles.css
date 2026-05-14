@@ -2806,11 +2806,6 @@
     flex-direction: column;
     gap: 6px;
   }
-  #notes-template-menu {
-    left: 0;
-    right: auto;
-    max-width: calc(100vw - 24px);
-  }
   .notes-menu.visible { display: flex; }
   .notes-menu button {
     width: 100%;
@@ -2832,6 +2827,12 @@
   .notes-menu button:hover { background: rgba(255,255,255,0.04); color: var(--text); transform: translateY(-1px); }
   .notes-menu button.danger { color: var(--text2); }
   .notes-menu button.danger:hover { background: var(--red-dim); color: var(--red); }
+  .notes-menu-divider {
+    width: 100%;
+    height: 1px;
+    margin: 4px 0;
+    background: color-mix(in srgb, var(--line) 80%, transparent);
+  }
   .notes-mobile-actions-wrap { display: none; }
   .notes-toolbar-more {
     position: relative;

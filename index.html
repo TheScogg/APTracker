@@ -826,7 +826,7 @@
       <div id="notes-list"></div>
     </div>
 
-    <div class="fab" id="notes-new-btn">+</div>
+    <button class="fab" id="notes-new-btn" type="button" aria-label="New note">+</button>
   </div>
 </div>
 
@@ -842,20 +842,16 @@
         </button>
         <div class="notes-modal-header-actions">
           <button class="notes-modal-close" id="notes-editor-close-btn" type="button" onclick="closeNotesEditorModal()" aria-label="Close notes editor">✕</button>
-          <div class="notes-menu-wrap">
-            <button class="btn btn-ghost notes-menu-trigger" id="notes-template-btn" type="button" aria-expanded="false" aria-haspopup="menu">Templates</button>
-            <div class="notes-menu" id="notes-template-menu" role="menu" aria-label="Note templates">
+          <button class="btn btn-primary" id="notes-create-btn" type="button">+ New Note</button>
+          <div class="notes-menu-wrap notes-mobile-actions-wrap">
+            <button class="btn btn-ghost notes-menu-trigger" id="notes-actions-menu-btn" type="button" aria-expanded="false" aria-haspopup="menu">More</button>
+            <div class="notes-menu" id="notes-actions-menu" role="menu" aria-label="Note actions and templates">
               <button type="button" data-note-template="blank" role="menuitem">Blank Note</button>
               <button type="button" data-note-template="follow_up" role="menuitem">Follow-up</button>
               <button type="button" data-note-template="parts_needed" role="menuitem">Parts Needed</button>
               <button type="button" data-note-template="shift_handoff" role="menuitem">Shift Handoff</button>
               <button type="button" data-note-template="issue_summary" role="menuitem">Issue Summary</button>
-            </div>
-          </div>
-          <button class="btn btn-primary" id="notes-create-btn" type="button">+ New Note</button>
-          <div class="notes-menu-wrap notes-mobile-actions-wrap">
-            <button class="btn btn-ghost notes-menu-trigger" id="notes-actions-menu-btn" type="button" aria-expanded="false" aria-haspopup="menu">More</button>
-            <div class="notes-menu" id="notes-actions-menu" role="menu" aria-label="Note actions">
+              <div class="notes-menu-divider" aria-hidden="true"></div>
               <button type="button" id="notes-actions-pin-btn" role="menuitem">Pin</button>
               <button type="button" id="notes-actions-archive-btn" role="menuitem">Archive</button>
               <button type="button" id="notes-actions-delete-btn" role="menuitem" class="danger">Delete</button>

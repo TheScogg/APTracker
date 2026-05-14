@@ -12224,7 +12224,7 @@ function _notesTemplateData(templateKey = 'blank') {
 
 function _notesSetMenuOpen(menuId, open) {
   const menu = document.getElementById(menuId);
-  const btn = document.getElementById(menuId === 'notes-template-menu' ? 'notes-template-btn' : 'notes-actions-menu-btn');
+  const btn = document.getElementById('notes-actions-menu-btn');
   if (!menu || !btn) return;
   menu.classList.toggle('visible', !!open);
   btn.classList.toggle('open', !!open);
@@ -12232,7 +12232,6 @@ function _notesSetMenuOpen(menuId, open) {
 }
 
 function _notesCloseMenus(exceptMenuId = null) {
-  if (exceptMenuId !== 'notes-template-menu') _notesSetMenuOpen('notes-template-menu', false);
   if (exceptMenuId !== 'notes-actions-menu') _notesSetMenuOpen('notes-actions-menu', false);
 }
 
@@ -13289,12 +13288,9 @@ document.getElementById('notes-body')?.addEventListener('keydown', e => {
 document.getElementById('notes-create-btn')?.addEventListener('click', () => {
   void _notesCreateNewNote();
 });
-document.getElementById('notes-template-btn')?.addEventListener('click', e => {
-  e.stopPropagation();
-  const menu = document.getElementById('notes-template-menu');
-  const isOpen = menu?.classList.contains('visible');
-  _notesCloseMenus(isOpen ? null : 'notes-template-menu');
-  _notesSetMenuOpen('notes-template-menu', !isOpen);
+document.getElementById('notes-new-btn')?.addEventListener('click', e => {
+  e.preventDefault();
+  void _notesCreateNewNote();
 });
 document.getElementById('notes-actions-menu-btn')?.addEventListener('click', e => {
   e.stopPropagation();
@@ -13303,7 +13299,7 @@ document.getElementById('notes-actions-menu-btn')?.addEventListener('click', e =
   _notesCloseMenus(isOpen ? null : 'notes-actions-menu');
   _notesSetMenuOpen('notes-actions-menu', !isOpen);
 });
-document.getElementById('notes-template-menu')?.querySelectorAll('[data-note-template]')?.forEach(btn => {
+document.getElementById('notes-actions-menu')?.querySelectorAll('[data-note-template]')?.forEach(btn => {
   btn.addEventListener('click', e => {
     e.stopPropagation();
     _notesCloseMenus();
@@ -13418,9 +13414,7 @@ document.querySelectorAll('.notes-toolbar-btn').forEach(btn => {
 });
 document.addEventListener('click', e => {
   if (!document.getElementById('notes-modal')?.classList.contains('visible')) return;
-  const templateWrap = document.getElementById('notes-template-btn')?.parentElement;
   const actionsWrap = document.getElementById('notes-actions-menu-btn')?.parentElement;
-  if (templateWrap && !templateWrap.contains(e.target)) _notesSetMenuOpen('notes-template-menu', false);
   if (actionsWrap && !actionsWrap.contains(e.target)) _notesSetMenuOpen('notes-actions-menu', false);
 });
 document.addEventListener('keydown', e => {
@@ -13428,7 +13422,7 @@ document.addEventListener('keydown', e => {
   const cmd = e.metaKey || e.ctrlKey;
   const key = String(e.key || '').toLowerCase();
   if (e.key === 'Escape') {
-    if (document.getElementById('notes-template-menu')?.classList.contains('visible') || document.getElementById('notes-actions-menu')?.classList.contains('visible')) {
+    if (document.getElementById('notes-actions-menu')?.classList.contains('visible')) {
       _notesCloseMenus();
       return;
     }
