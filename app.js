@@ -11902,6 +11902,29 @@ document.getElementById('press-wiki-cms-btn')?.addEventListener('click', () => {
   window.location.href = url;
 });
 
+function _bindPressWikiToolNavButtons() {
+  const prevBtn = document.getElementById('press-wiki-prev-tool-btn');
+  const nextBtn = document.getElementById('press-wiki-next-tool-btn');
+  if (prevBtn && prevBtn.dataset.toolNavBound !== '1') {
+    prevBtn.dataset.toolNavBound = '1';
+    prevBtn.addEventListener('click', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      void _cycleToolModal(-1);
+    });
+  }
+  if (nextBtn && nextBtn.dataset.toolNavBound !== '1') {
+    nextBtn.dataset.toolNavBound = '1';
+    nextBtn.addEventListener('click', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      void _cycleToolModal(1);
+    });
+  }
+}
+
+_bindPressWikiToolNavButtons();
+
 window.openSharedLibraryWiki = async function(options = {}) {
   if (!currentPlantId) return;
   closeUserMenus();
