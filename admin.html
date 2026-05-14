@@ -325,6 +325,34 @@
             <textarea id="schedule-json-text" placeholder="Paste schedule JSON here" style="margin-top:10px;min-height:180px;"></textarea>
             <div id="schedule-import-feedback" class="feedback"></div>
           </div>
+          <!-- OCR + GPT section -->
+          <div class="card" style="margin-top:12px;">
+            <h2>OCR from PDF Scan</h2>
+            <p class="muted" style="margin-bottom:8px;">Upload a scanned PDF (2-page schedule) to extract text via OCR, then convert to schedule JSON.</p>
+            <div class="json-actions">
+              <input id="schedule-pdf-file" type="file" accept="application/pdf" style="max-width:320px;padding:6px 8px;" />
+              <button class="btn" id="ocr-pdf-btn" style="max-width:180px;">OCR PDF → Text</button>
+            </div>
+            <div id="ocr-progress" class="feedback" style="margin-top:6px;"></div>
+            <div class="divider" style="margin:12px 0;"></div>
+            <h2>Generate JSON from Text</h2>
+            <p class="muted" style="margin-bottom:6px;">Review OCR output (or paste text manually), then generate canonical JSON.</p>
+            <textarea id="schedule-gpt-source" placeholder="OCR text or pasted schedule text will appear here..." style="margin-top:6px;min-height:200px;"></textarea>
+            <div class="json-actions" style="margin-top:8px;">
+              <select id="schedule-gpt-shift-override" style="max-width:180px;">
+                <option value="">Auto-detect shift</option>
+                <option value="1">Shift 1</option>
+                <option value="2">Shift 2</option>
+                <option value="3">Shift 3</option>
+              </select>
+              <select id="schedule-gpt-strict-validation" style="max-width:160px;">
+                <option value="true">Strict validation</option>
+                <option value="false">Lenient</option>
+              </select>
+              <button class="btn btn-primary" id="generate-schedule-json-btn" style="max-width:200px;">Generate JSON</button>
+            </div>
+            <div id="schedule-gpt-feedback" class="feedback"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -441,6 +469,8 @@
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut as fbSignOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
@@ -1913,6 +1943,49 @@ async function generateScheduleJsonFromDailyScheduleGPT() {
   }
 }
 
+async function ocrPdfToText() {
+  const fileInput = document.getElementById('schedule-pdf-file');
+  const file = fileInput?.files?.[0];
+  if (!file) {
+    feedback('ocr-progress', 'error', 'Choose a PDF file first.');
+    return;
+  }
+  const btn = document.getElementById('ocr-pdf-btn');
+  const progressEl = document.getElementById('ocr-progress');
+  btn.disabled = true;
+  btn.textContent = 'OCR Running…';
+  feedback('ocr-progress', '', 'Initializing OCR libraries…');
+  try {
+    self.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await self.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    let fullText = '';
+    for (let i = 1; i <= pdf.numPages; i++) {
+      feedback('ocr-progress', '', `Processing page ${i}/${pdf.numPages} (rendering + OCR)…`);
+      const page = await pdf.getPage(i);
+      const scale = 2.0;
+      const viewport = page.getViewport({ scale });
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      const ctx = canvas.getContext('2d');
+      await page.render({ canvasContext: ctx, viewport }).promise;
+      const { data: { text } } = await self.Tesseract.recognize(canvas.toDataURL('image/png'), 'eng');
+      fullText += text + '\n--- Page ' + i + ' ---\n\n';
+    }
+    const sourceTa = document.getElementById('schedule-gpt-source');
+    sourceTa.value = fullText.trim();
+    feedback('ocr-progress', 'ok', `OCR complete: ${pdf.numPages} page(s). Review text, adjust, then click Generate JSON.`);
+    sourceTa.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  } catch (e) {
+    console.error(e);
+    feedback('ocr-progress', 'error', e.message || 'OCR processing failed.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'OCR PDF → Text';
+  }
+}
+
 window.addMember = async function(plantId) {
   const userEl = document.getElementById(`add-user-${plantId}`);
   const roleEl = document.getElementById(`add-role-${plantId}`);
@@ -2819,6 +2892,8 @@ document.getElementById('signout-btn').addEventListener('click', doSignOut);
 document.getElementById('create-plant-btn').addEventListener('click', createPlant);
 document.getElementById('load-schedule-file-btn').addEventListener('click', loadScheduleJsonFromFile);
 document.getElementById('import-schedule-btn').addEventListener('click', importDailySchedule);
+document.getElementById('ocr-pdf-btn').addEventListener('click', ocrPdfToText);
+document.getElementById('generate-schedule-json-btn').addEventListener('click', generateScheduleJsonFromDailyScheduleGPT);
 </script>
 </body>
 </html>
