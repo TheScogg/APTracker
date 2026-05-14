@@ -614,6 +614,7 @@ async function _openRoleAlertInboxModalInternal({ resetToggle = true } = {}) {
   const modal = document.getElementById('role-alerts-modal');
   const list = document.getElementById('role-alerts-list');
   if (!modal || !list) return;
+  _bindToolModalShellNavigation();
   const loadToken = ++_roleAlertsLoadToken;
   _bindRoleAlertModalActions();
   _setRoleAlertsModalVisible(true);
@@ -8132,6 +8133,37 @@ async function _cycleToolModal(direction) {
   _toolModalRestoreScrollState(nextKey);
 }
 
+function _handleToolModalShellClick(event) {
+  const trigger = event?.target?.closest?.('[data-shell-action="cycle-tool-modal"]');
+  if (!trigger) return false;
+  event.preventDefault();
+  event.stopPropagation();
+  void _cycleToolModal(String(trigger.dataset.shellValue || '').toLowerCase() === 'prev' ? -1 : 1);
+  return true;
+}
+
+function _bindToolModalShellNavigation() {
+  const bindings = [
+    ['press-wiki-modal'],
+    ['notes-phone-frame'],
+    ['notes-editor-frame'],
+    ['messaging-modal'],
+    ['role-alerts-modal']
+  ];
+  bindings.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el || el.dataset.toolModalShellBound === '1') return;
+    el.dataset.toolModalShellBound = '1';
+    el.addEventListener('click', _handleToolModalShellClick);
+  });
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', _bindToolModalShellNavigation, { once: true });
+} else {
+  _bindToolModalShellNavigation();
+}
+
 function closeUserDropdownOnly() {
   document.getElementById('user-dropdown')?.classList.remove('visible');
   document.getElementById('user-pill')?.classList.remove('open');
@@ -10243,6 +10275,7 @@ async function _messagingLoadMemberSelectors({ preserveSelection = false } = {})
 
 window.openMessagingModal = (options = {}) => {
   const preserveState = !!options.preserveState;
+  _bindToolModalShellNavigation();
   const modal = document.getElementById('messaging-modal');
   if (modal) modal.classList.add('visible');
   document.body.classList.add('messaging-open');
@@ -11267,6 +11300,7 @@ function _relativeTime(ts) {
 
 async function openPressWikiModal(pressId, machineCode, options = {}) {
   if (!currentPlantId) return;
+  _bindToolModalShellNavigation();
   const preserveState = !!options.preserveState && Boolean(_pressWikiModalPressId || _pressWikiSelectedPageId || _pressWikiScope);
   const initialScope = preserveState
     ? _pressWikiScope
@@ -13068,6 +13102,7 @@ window.closeNotesModal = async (options = {}) => {
 
 window.openNotesModal = async function(context = {}, options = {}) {
   if (!currentPlantId) return;
+  _bindToolModalShellNavigation();
   const preserveState = !!options.preserveState;
   closeUserMenus();
   closeSortDropdown();

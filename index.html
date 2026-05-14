@@ -696,7 +696,7 @@
     <div class="press-wiki-drag-handle" aria-hidden="true"></div>
     <div class="press-wiki-scroll-content">
       <div class="modal-header-row press-wiki-header-row tool-modal-nav-shell" style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
-        <button class="tool-modal-nav-btn tool-modal-nav-prev" type="button" data-shell-action="cycle-tool-modal" data-shell-value="prev" aria-label="Previous tool" title="Previous tool">
+        <button class="tool-modal-nav-btn tool-modal-nav-prev" type="button" onclick="event.stopPropagation();handleShellAction('cycle-tool-modal','prev',this,event)" data-shell-action="cycle-tool-modal" data-shell-value="prev" aria-label="Previous tool" title="Previous tool">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M9.5 3.5L5 8l4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
         <div style="min-width:0;flex:1;">
@@ -752,7 +752,7 @@
           </div>
           <div id="press-wiki-meta" style="font-size:12px;color:var(--text3);margin-top:3px;"></div>
         </div>
-        <button class="tool-modal-nav-btn tool-modal-nav-next" type="button" data-shell-action="cycle-tool-modal" data-shell-value="next" aria-label="Next tool" title="Next tool">
+        <button class="tool-modal-nav-btn tool-modal-nav-next" type="button" onclick="event.stopPropagation();handleShellAction('cycle-tool-modal','next',this,event)" data-shell-action="cycle-tool-modal" data-shell-value="next" aria-label="Next tool" title="Next tool">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6.5 3.5L11 8l-4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
       </div>
@@ -801,10 +801,10 @@
 
     <div class="app-container" id="notes-app-container">
       <div class="header notes-list-header tool-modal-nav-shell">
-        <button class="tool-modal-nav-btn tool-modal-nav-prev" type="button" data-shell-action="cycle-tool-modal" data-shell-value="prev" aria-label="Previous tool" title="Previous tool">
+        <button class="tool-modal-nav-btn tool-modal-nav-prev" type="button" onclick="event.stopPropagation();handleShellAction('cycle-tool-modal','prev',this,event)" data-shell-action="cycle-tool-modal" data-shell-value="prev" aria-label="Previous tool" title="Previous tool">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M9.5 3.5L5 8l4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
-        <button class="tool-modal-nav-btn tool-modal-nav-next" type="button" data-shell-action="cycle-tool-modal" data-shell-value="next" aria-label="Next tool" title="Next tool">
+        <button class="tool-modal-nav-btn tool-modal-nav-next" type="button" onclick="event.stopPropagation();handleShellAction('cycle-tool-modal','next',this,event)" data-shell-action="cycle-tool-modal" data-shell-value="next" aria-label="Next tool" title="Next tool">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6.5 3.5L11 8l-4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
       </div>
@@ -959,7 +959,7 @@
   <div class="msg-modal notes-modal-shell">
     <div class="notes-drag-handle" aria-hidden="true"></div>
     <div class="notes-modal-header tool-modal-nav-shell">
-      <button class="tool-modal-nav-btn tool-modal-nav-prev" type="button" data-shell-action="cycle-tool-modal" data-shell-value="prev" aria-label="Previous tool" title="Previous tool">
+      <button class="tool-modal-nav-btn tool-modal-nav-prev" type="button" onclick="event.stopPropagation();handleShellAction('cycle-tool-modal','prev',this,event)" data-shell-action="cycle-tool-modal" data-shell-value="prev" aria-label="Previous tool" title="Previous tool">
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M9.5 3.5L5 8l4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
       <div class="notes-modal-header-copy note-card notes-editor-header-card">
@@ -980,7 +980,7 @@
         <button class="btn btn-primary" title="New DM" onclick="showMessagingNewDm()">New DM</button>
         <button class="notes-modal-close" onclick="closeMessagingModal()">✕</button>
       </div>
-      <button class="tool-modal-nav-btn tool-modal-nav-next" type="button" data-shell-action="cycle-tool-modal" data-shell-value="next" aria-label="Next tool" title="Next tool">
+      <button class="tool-modal-nav-btn tool-modal-nav-next" type="button" onclick="event.stopPropagation();handleShellAction('cycle-tool-modal','next',this,event)" data-shell-action="cycle-tool-modal" data-shell-value="next" aria-label="Next tool" title="Next tool">
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6.5 3.5L11 8l-4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
     </div>
@@ -1192,7 +1192,7 @@
   <section class="role-alerts-sheet notes-modal-shell" role="dialog" aria-modal="true" aria-labelledby="role-alerts-title">
     <div class="notes-drag-handle" id="role-alerts-drag-handle"></div>
     <div class="notes-modal-header tool-modal-nav-shell">
-      <button class="tool-modal-nav-btn tool-modal-nav-prev" type="button" data-shell-action="cycle-tool-modal" data-shell-value="prev" aria-label="Previous tool" title="Previous tool">
+      <button class="tool-modal-nav-btn tool-modal-nav-prev" type="button" onclick="event.stopPropagation();handleShellAction('cycle-tool-modal','prev',this,event)" data-shell-action="cycle-tool-modal" data-shell-value="prev" aria-label="Previous tool" title="Previous tool">
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M9.5 3.5L5 8l4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
       <div class="notes-modal-header-copy note-card notes-editor-header-card">
@@ -1208,7 +1208,7 @@
         <button class="btn btn-ghost role-alerts-retry-fab" type="button" data-role-alert-action="retry" title="Retry loading alerts">Retry</button>
         <button class="notes-modal-close" type="button" data-role-alert-action="close">✕</button>
       </div>
-      <button class="tool-modal-nav-btn tool-modal-nav-next" type="button" data-shell-action="cycle-tool-modal" data-shell-value="next" aria-label="Next tool" title="Next tool">
+      <button class="tool-modal-nav-btn tool-modal-nav-next" type="button" onclick="event.stopPropagation();handleShellAction('cycle-tool-modal','next',this,event)" data-shell-action="cycle-tool-modal" data-shell-value="next" aria-label="Next tool" title="Next tool">
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6.5 3.5L11 8l-4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
     </div>
