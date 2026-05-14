@@ -2362,16 +2362,20 @@
 
   /* NOTES MODAL */
   body.notes-open { overflow: hidden; overscroll-behavior: none; }
-  .notes-modal-header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
+  .notes-modal-header,
+  .press-wiki-header-row,
+  .notes-list-header,
+  .tool-modal-nav-shell {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
     gap: 10px;
-    padding: 4px 12px 6px;
+    padding: 8px 12px 6px;
     border-bottom: 1px solid var(--border);
     background: var(--bg2);
     position: relative;
     z-index: 5;
+    overflow: visible;
   }
   .notes-modal-header-copy {
     min-width: 0;
@@ -2447,18 +2451,47 @@
   .notes-editor-save-state.is-saving { color: var(--yellow); }
   .notes-editor-save-state.is-error { color: var(--red); border-color: color-mix(in srgb, var(--red) 40%, var(--border)); }
   .notes-editor-save-state.is-offline { color: var(--text3); border-color: color-mix(in srgb, var(--text3) 38%, var(--border)); }
-  .notes-modal-header-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; align-self: flex-start; padding-top: 8px; position: relative; z-index: 6; }
-  #notes-editor-modal .notes-modal-header-actions {
-    flex: 1 1 auto;
+  .notes-modal-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
     justify-content: center;
     flex-wrap: nowrap;
     min-width: 0;
-  }
-  .notes-modal-header.tool-modal-nav-shell,
-  .press-wiki-header-row.tool-modal-nav-shell {
+    width: 100%;
+    padding: 8px 12px 4px;
     position: relative;
-    padding-left: 46px;
-    padding-right: 46px;
+    z-index: 6;
+  }
+  .tool-modal-nav-shell .tool-modal-nav-btn,
+  .notes-modal-header .tool-modal-nav-btn,
+  .press-wiki-header-row .tool-modal-nav-btn,
+  .notes-list-header .tool-modal-nav-btn {
+    position: static;
+    top: auto;
+    transform: none;
+    flex: 0 0 auto;
+  }
+  .tool-modal-nav-title {
+    min-width: 0;
+    text-align: center;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+    text-transform: uppercase;
+    line-height: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .press-wiki-header-content {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 0 12px 10px;
   }
   #notes-new-btn,
   #notes-create-btn {
@@ -3004,29 +3037,24 @@
     }
   }
   @media (max-width: 860px) {
-    .tool-modal-nav-shell {
-      padding-left: 38px;
-      padding-right: 38px;
-    }
     .tool-modal-nav-btn {
       width: 30px;
       height: 30px;
     }
     .notes-modal-header {
-      padding: 6px 8px 4px;
-      flex-direction: column;
-      align-items: stretch;
-      gap: 6px;
+      padding: 6px 10px 5px;
+      gap: 8px;
+    }
+    .tool-modal-nav-title {
+      font-size: 18px;
     }
     .notes-modal-subtitle { display: none; }
     .notes-modal-meta-row { display: none; }
     .notes-modal-header-actions {
-      width: 100%;
       justify-content: center;
       flex-wrap: nowrap;
       overflow: visible;
-      padding-top: 0;
-      padding-bottom: 2px;
+      padding: 6px 10px 2px;
     }
     .notes-mobile-actions-wrap { display: inline-flex; }
     .notes-editor-actions { display: none; }
@@ -3089,6 +3117,7 @@
     .notes-modal-kicker { font-size: 9px; }
     .notes-modal-title { font-size: 22px; }
     .notes-modal-context { font-size: 9px; }
+    .press-wiki-header-content { padding-left: 10px; padding-right: 10px; }
     .notes-modal-header-actions .btn,
     .notes-modal-close {
       min-height: 34px;
@@ -3111,13 +3140,19 @@
     }
   }
   @media (max-width: 520px) {
-    .tool-modal-nav-shell {
-      padding-left: 34px;
-      padding-right: 34px;
-    }
     .tool-modal-nav-btn {
       width: 28px;
       height: 28px;
+    }
+    .notes-modal-header,
+    .press-wiki-header-row,
+    .notes-list-header,
+    .tool-modal-nav-shell {
+      padding-left: 8px;
+      padding-right: 8px;
+    }
+    .tool-modal-nav-title {
+      font-size: 17px;
     }
     #notes-modal #notes-new-btn,
     #notes-modal #notes-create-btn {
@@ -5184,15 +5219,7 @@
   margin-bottom: 20px;
   padding-top: 8px;
 }
-.tool-modal-nav-shell {
-  position: relative;
-  padding-left: 46px;
-  padding-right: 46px;
-  overflow: visible;
-}
 .tool-modal-nav-btn {
-  position: absolute;
-  top: 50%;
   width: 34px;
   height: 34px;
   display: inline-flex;
@@ -5205,7 +5232,6 @@
   cursor: pointer;
   z-index: 8;
   box-shadow: 0 8px 18px rgba(0,0,0,0.18);
-  transform: translateY(-50%);
   transition: border-color 0.15s, color 0.15s, background 0.15s, transform 0.15s, box-shadow 0.15s;
 }
 .tool-modal-nav-btn:hover {
@@ -5213,17 +5239,15 @@
   color: var(--text);
   background: color-mix(in srgb, var(--bg3) 80%, white 6%);
   box-shadow: 0 10px 22px rgba(0,0,0,0.22);
-  transform: translateY(-50%) translateY(-1px);
+  transform: translateY(-1px);
 }
 .tool-modal-nav-btn:active {
-  transform: translateY(-50%) scale(0.96);
+  transform: scale(0.96);
 }
 .tool-modal-nav-btn svg {
   display: block;
   flex-shrink: 0;
 }
-.tool-modal-nav-prev { left: 8px; }
-.tool-modal-nav-next { right: 8px; }
 .greeting {
   font-family: 'Rajdhani', sans-serif;
   font-size: 28px;

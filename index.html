@@ -695,29 +695,34 @@
   <div class="phone" id="press-wiki-frame">
     <div class="notes-drag-handle"></div>
     <div class="app-container" id="press-wiki-app-container" style="padding:0;display:flex;flex-direction:column;overflow:hidden;">
-      <div class="modal-header-row press-wiki-header-row tool-modal-nav-shell" style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-shrink:0;">
+      <div class="modal-header-row press-wiki-header-row tool-modal-nav-shell" style="flex-shrink:0;">
         <button class="tool-modal-nav-btn tool-modal-nav-prev" id="press-wiki-prev-tool-btn" type="button" data-shell-action="cycle-tool-modal" data-shell-value="prev" aria-label="Previous tool" title="Previous tool">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M9.5 3.5L5 8l4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
-        <div style="min-width:0;flex:1;">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:8px;">
-            <div style="display:inline-flex;gap:3px;padding:3px;background:var(--bg3);border:1px solid var(--line);border-radius:999px;">
-              <button id="press-wiki-scope-press" class="btn btn-ghost" type="button" aria-haspopup="dialog" aria-expanded="false" style="padding:4px 10px;border-radius:999px;font-size:12px;">This Press</button>
-              <button id="press-wiki-scope-shared" class="btn btn-ghost" type="button" style="padding:4px 10px;border-radius:999px;font-size:12px;">Shared Library</button>
-            </div>
-            <div id="press-wiki-actions-wrap" class="press-wiki-actions-wrap" style="display:none;margin-left:auto;">
-              <button id="press-wiki-actions-btn" class="sort-dropdown-btn press-wiki-actions-btn" type="button" aria-haspopup="true" aria-expanded="false">
-                Actions
-                <svg class="sort-chevron" width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              </button>
-              <div id="press-wiki-actions-menu" class="sort-dropdown press-wiki-actions-menu">
-                <button id="press-wiki-new-page-btn" class="sort-opt press-wiki-action-item" type="button">Create Entry</button>
-                <button id="press-wiki-edit-btn" class="sort-opt press-wiki-action-item" type="button">Quick Edit</button>
-                <button id="press-wiki-cms-btn" class="sort-opt press-wiki-action-item" type="button">Edit in CMS</button>
-              </div>
+        <div class="tool-modal-nav-title">Wiki</div>
+        <button class="tool-modal-nav-btn tool-modal-nav-next" id="press-wiki-next-tool-btn" type="button" data-shell-action="cycle-tool-modal" data-shell-value="next" aria-label="Next tool" title="Next tool">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6.5 3.5L11 8l-4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+      <div class="press-wiki-header-content">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:8px;">
+          <div style="display:inline-flex;gap:3px;padding:3px;background:var(--bg3);border:1px solid var(--line);border-radius:999px;">
+            <button id="press-wiki-scope-press" class="btn btn-ghost" type="button" aria-haspopup="dialog" aria-expanded="false" style="padding:4px 10px;border-radius:999px;font-size:12px;">This Press</button>
+            <button id="press-wiki-scope-shared" class="btn btn-ghost" type="button" style="padding:4px 10px;border-radius:999px;font-size:12px;">Shared Library</button>
+          </div>
+          <div id="press-wiki-actions-wrap" class="press-wiki-actions-wrap" style="display:none;margin-left:auto;">
+            <button id="press-wiki-actions-btn" class="sort-dropdown-btn press-wiki-actions-btn" type="button" aria-haspopup="true" aria-expanded="false">
+              Actions
+              <svg class="sort-chevron" width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <div id="press-wiki-actions-menu" class="sort-dropdown press-wiki-actions-menu">
+              <button id="press-wiki-new-page-btn" class="sort-opt press-wiki-action-item" type="button">Create Entry</button>
+              <button id="press-wiki-edit-btn" class="sort-opt press-wiki-action-item" type="button">Quick Edit</button>
+              <button id="press-wiki-cms-btn" class="sort-opt press-wiki-action-item" type="button">Edit in CMS</button>
             </div>
           </div>
-          <div class="press-wiki-press-picker-wrap" style="margin-top:8px;display:none;">
+        </div>
+        <div class="press-wiki-press-picker-wrap" style="margin-top:8px;display:none;">
             <div class="press-wiki-press-picker-panel-head">
               <div>
                 <div class="press-wiki-press-picker-panel-kicker">Press Deck</div>
@@ -726,35 +731,31 @@
               <button id="press-wiki-press-picker-close" class="btn btn-ghost" type="button" style="padding:4px 10px;border-radius:999px;font-size:12px;">Close</button>
             </div>
             <div id="press-wiki-press-picker-tree" class="press-wiki-press-picker-tree"></div>
-          </div>
-          <div class="press-wiki-picker-wrap" style="margin-top:8px;">
-            <label for="press-wiki-picker-btn" style="display:block;font-size:12px;color:var(--text3);white-space:nowrap;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px;">Select Page</label>
-            <button id="press-wiki-picker-btn" class="press-wiki-picker-btn" type="button" aria-haspopup="tree" aria-expanded="false">
-              <span class="press-wiki-picker-copy">
-                <span id="press-wiki-picker-title" class="press-wiki-picker-title">No page selected</span>
-                <span id="press-wiki-picker-path" class="press-wiki-picker-path">This Press</span>
-              </span>
-              <span class="press-wiki-picker-meta">
-                <span id="press-wiki-picker-count" class="press-wiki-picker-count">0 pages</span>
-                <svg class="press-wiki-picker-caret" width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              </span>
-            </button>
-            <div id="press-wiki-picker-panel" class="press-wiki-picker-panel" aria-hidden="true">
-              <div class="press-wiki-picker-panel-head">
-                <div class="press-wiki-picker-panel-kicker">Hierarchy</div>
-                <div id="press-wiki-picker-panel-copy" class="press-wiki-picker-panel-copy">Choose a page to read or edit.</div>
-              </div>
-              <div id="press-wiki-picker-tree" class="press-wiki-picker-tree"></div>
-            </div>
-          </div>
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px;">
-            <div id="press-wiki-title" style="display:none;font-size:18px;font-weight:700;line-height:1.1;">No page selected</div>
-          </div>
-          <div id="press-wiki-meta" style="font-size:12px;color:var(--text3);margin-top:3px;"></div>
         </div>
-        <button class="tool-modal-nav-btn tool-modal-nav-next" id="press-wiki-next-tool-btn" type="button" data-shell-action="cycle-tool-modal" data-shell-value="next" aria-label="Next tool" title="Next tool">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6.5 3.5L11 8l-4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
+        <div class="press-wiki-picker-wrap" style="margin-top:8px;">
+          <label for="press-wiki-picker-btn" style="display:block;font-size:12px;color:var(--text3);white-space:nowrap;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px;">Select Page</label>
+          <button id="press-wiki-picker-btn" class="press-wiki-picker-btn" type="button" aria-haspopup="tree" aria-expanded="false">
+            <span class="press-wiki-picker-copy">
+              <span id="press-wiki-picker-title" class="press-wiki-picker-title">No page selected</span>
+              <span id="press-wiki-picker-path" class="press-wiki-picker-path">This Press</span>
+            </span>
+            <span class="press-wiki-picker-meta">
+              <span id="press-wiki-picker-count" class="press-wiki-picker-count">0 pages</span>
+              <svg class="press-wiki-picker-caret" width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </span>
+          </button>
+          <div id="press-wiki-picker-panel" class="press-wiki-picker-panel" aria-hidden="true">
+            <div class="press-wiki-picker-panel-head">
+              <div class="press-wiki-picker-panel-kicker">Hierarchy</div>
+              <div id="press-wiki-picker-panel-copy" class="press-wiki-picker-panel-copy">Choose a page to read or edit.</div>
+            </div>
+            <div id="press-wiki-picker-tree" class="press-wiki-picker-tree"></div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px;">
+          <div id="press-wiki-title" style="display:none;font-size:18px;font-weight:700;line-height:1.1;">No page selected</div>
+        </div>
+        <div id="press-wiki-meta" style="font-size:12px;color:var(--text3);margin-top:3px;"></div>
       </div>
       <div class="notes-editor-panel" style="flex:1;overflow-y:auto;padding:8px 12px 12px;">
         <div id="press-wiki-new-page-row" style="margin-top:0;display:none;gap:8px;align-items:center;">
@@ -806,6 +807,7 @@
         <button class="tool-modal-nav-btn tool-modal-nav-prev" type="button" data-shell-action="cycle-tool-modal" data-shell-value="prev" aria-label="Previous tool" title="Previous tool">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M9.5 3.5L5 8l4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
+        <div class="tool-modal-nav-title">Notes</div>
         <button class="tool-modal-nav-btn tool-modal-nav-next" type="button" data-shell-action="cycle-tool-modal" data-shell-value="next" aria-label="Next tool" title="Next tool">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6.5 3.5L11 8l-4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
@@ -840,27 +842,28 @@
         <button class="tool-modal-nav-btn tool-modal-nav-prev" type="button" data-shell-action="cycle-tool-modal" data-shell-value="prev" aria-label="Previous tool" title="Previous tool">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M9.5 3.5L5 8l4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
-        <div class="notes-modal-header-actions">
-          <button class="notes-modal-close" id="notes-editor-close-btn" type="button" onclick="closeNotesEditorModal()" aria-label="Close notes editor">✕</button>
-          <button class="btn btn-primary" id="notes-create-btn" type="button">+ New Note</button>
-          <div class="notes-menu-wrap notes-mobile-actions-wrap">
-            <button class="btn btn-ghost notes-menu-trigger" id="notes-actions-menu-btn" type="button" aria-expanded="false" aria-haspopup="menu">More</button>
-            <div class="notes-menu" id="notes-actions-menu" role="menu" aria-label="Note actions and templates">
-              <button type="button" data-note-template="blank" role="menuitem">Blank Note</button>
-              <button type="button" data-note-template="follow_up" role="menuitem">Follow-up</button>
-              <button type="button" data-note-template="parts_needed" role="menuitem">Parts Needed</button>
-              <button type="button" data-note-template="shift_handoff" role="menuitem">Shift Handoff</button>
-              <button type="button" data-note-template="issue_summary" role="menuitem">Issue Summary</button>
-              <div class="notes-menu-divider" aria-hidden="true"></div>
-              <button type="button" id="notes-actions-pin-btn" role="menuitem">Pin</button>
-              <button type="button" id="notes-actions-archive-btn" role="menuitem">Archive</button>
-              <button type="button" id="notes-actions-delete-btn" role="menuitem" class="danger">Delete</button>
-            </div>
-          </div>
-        </div>
+        <div class="tool-modal-nav-title">Notes</div>
         <button class="tool-modal-nav-btn tool-modal-nav-next" type="button" data-shell-action="cycle-tool-modal" data-shell-value="next" aria-label="Next tool" title="Next tool">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6.5 3.5L11 8l-4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
+      </div>
+      <div class="notes-modal-header-actions">
+        <button class="notes-modal-close" id="notes-editor-close-btn" type="button" onclick="closeNotesEditorModal()" aria-label="Close notes editor">✕</button>
+        <button class="btn btn-primary" id="notes-create-btn" type="button">+ New Note</button>
+        <div class="notes-menu-wrap notes-mobile-actions-wrap">
+          <button class="btn btn-ghost notes-menu-trigger" id="notes-actions-menu-btn" type="button" aria-expanded="false" aria-haspopup="menu">More</button>
+          <div class="notes-menu" id="notes-actions-menu" role="menu" aria-label="Note actions and templates">
+            <button type="button" data-note-template="blank" role="menuitem">Blank Note</button>
+            <button type="button" data-note-template="follow_up" role="menuitem">Follow-up</button>
+            <button type="button" data-note-template="parts_needed" role="menuitem">Parts Needed</button>
+            <button type="button" data-note-template="shift_handoff" role="menuitem">Shift Handoff</button>
+            <button type="button" data-note-template="issue_summary" role="menuitem">Issue Summary</button>
+            <div class="notes-menu-divider" aria-hidden="true"></div>
+            <button type="button" id="notes-actions-pin-btn" role="menuitem">Pin</button>
+            <button type="button" id="notes-actions-archive-btn" role="menuitem">Archive</button>
+            <button type="button" id="notes-actions-delete-btn" role="menuitem" class="danger">Delete</button>
+          </div>
+        </div>
       </div>
 
     <div class="notes-editor-panel">
@@ -961,7 +964,12 @@
         <button class="tool-modal-nav-btn tool-modal-nav-prev" type="button" data-shell-action="cycle-tool-modal" data-shell-value="prev" aria-label="Previous tool" title="Previous tool">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M9.5 3.5L5 8l4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
-        <div class="notes-modal-header-copy note-card notes-editor-header-card">
+        <div class="tool-modal-nav-title">Messages</div>
+        <button class="tool-modal-nav-btn tool-modal-nav-next" type="button" data-shell-action="cycle-tool-modal" data-shell-value="next" aria-label="Next tool" title="Next tool">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6.5 3.5L11 8l-4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+      <div class="notes-modal-header-copy note-card notes-editor-header-card">
           <div class="notes-modal-header-top">
             <div class="notes-modal-kicker">Communication</div>
           </div>
@@ -979,10 +987,6 @@
           <button class="btn btn-primary" title="New DM" onclick="showMessagingNewDm()">New DM</button>
           <button class="notes-modal-close" onclick="closeMessagingModal()">✕</button>
         </div>
-        <button class="tool-modal-nav-btn tool-modal-nav-next" type="button" data-shell-action="cycle-tool-modal" data-shell-value="next" aria-label="Next tool" title="Next tool">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6.5 3.5L11 8l-4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
-      </div>
 
       <div class="msg-body" style="flex:1;min-height:0;">
         <div class="msg-list-panel" id="msg-list-panel">
@@ -1195,7 +1199,12 @@
         <button class="tool-modal-nav-btn tool-modal-nav-prev" type="button" data-shell-action="cycle-tool-modal" data-shell-value="prev" aria-label="Previous tool" title="Previous tool">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M9.5 3.5L5 8l4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
-        <div class="notes-modal-header-copy note-card notes-editor-header-card">
+        <div class="tool-modal-nav-title">Alerts</div>
+        <button class="tool-modal-nav-btn tool-modal-nav-next" type="button" data-shell-action="cycle-tool-modal" data-shell-value="next" aria-label="Next tool" title="Next tool">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6.5 3.5L11 8l-4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+      <div class="notes-modal-header-copy note-card notes-editor-header-card">
           <div class="notes-modal-header-top">
             <div class="notes-modal-kicker">Notification Center</div>
           </div>
@@ -1208,10 +1217,6 @@
           <button class="btn btn-ghost role-alerts-retry-fab" type="button" data-role-alert-action="retry" title="Retry loading alerts">Retry</button>
           <button class="notes-modal-close" type="button" data-role-alert-action="close">✕</button>
         </div>
-        <button class="tool-modal-nav-btn tool-modal-nav-next" type="button" data-shell-action="cycle-tool-modal" data-shell-value="next" aria-label="Next tool" title="Next tool">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6.5 3.5L11 8l-4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
-      </div>
       <div class="role-alerts-toolbar" style="padding:8px 12px;flex-shrink:0;">
         <div class="role-alerts-toggle scope-toggle" role="group" aria-label="Accepted alerts visibility">
           <button class="scope-btn" id="role-alerts-hide-accepted-btn" type="button" data-role-alert-action="hide-accepted">Hide accepted</button>
