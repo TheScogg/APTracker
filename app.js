@@ -12659,22 +12659,15 @@ function _notesRenderEditor(note = null) {
 function _notesFocusBody() {
   const bodyEl = document.getElementById('notes-body');
   if (!bodyEl) return;
-  const selection = window.getSelection();
-  const hasBodySelection = Boolean(
-    selection &&
-    selection.rangeCount > 0 &&
-    bodyEl.contains(selection.anchorNode)
-  );
+  const sel = window.getSelection();
+  const hasBodySelection = Boolean(sel && sel.rangeCount > 0 && bodyEl.contains(sel.anchorNode));
   bodyEl.focus();
   if (hasBodySelection) return;
-  try {
-    const range = document.createRange();
-    range.selectNodeContents(bodyEl);
-    range.collapse(false);
-    const sel = window.getSelection();
-    sel.removeAllRanges();
-    sel.addRange(range);
-  } catch (_) {}
+  const range = document.createRange();
+  range.selectNodeContents(bodyEl);
+  range.collapse(false);
+  sel.removeAllRanges();
+  sel.addRange(range);
 }
 
 function _notesFocusTitle() {
@@ -12684,47 +12677,162 @@ function _notesFocusTitle() {
   titleEl.select?.();
 }
 
+function _notesDetectFormats() {
+  const sel = window.getSelection();
+  const fmts = { bold: false, italic: false, underline: false, bullet: false };
+  if (!sel || !sel.rangeCount) return fmts;
+  function walk(node) {
+    while (node && node.nodeType === Node.ELEMENT_NODE) {
+      const t = node.tagName;
+      if (t === 'B' || t === 'STRONG') fmts.bold = true;
+      if (t === 'I' || t === 'EM') fmts.italic = true;
+      if (t === 'U') fmts.underline = true;
+      if (t === 'UL' || t === 'OL') fmts.bullet = true;
+      if (t === 'BODY') break;
+      node = node.parentElement;
+    }
+  }
+  for (let i = 0; i < sel.rangeCount; i++) {
+    const r = sel.getRangeAt(i);
+    if (r.collapsed) { walk(r.startContainer); }
+    else { walk(r.startContainer); walk(r.endContainer); }
+  }
+  return fmts;
+}
+
+function _notesIsInTag(tagName) {
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) return false;
+  const tag = tagName.toUpperCase();
+  for (let i = 0; i < sel.rangeCount; i++) {
+    const r = sel.getRangeAt(i);
+    const check = node => {
+      while (node && node.nodeType === Node.ELEMENT_NODE) {
+        if (node.tagName === tag) return true;
+        if (node.tagName === 'BODY') break;
+        node = node.parentElement;
+      }
+      return false;
+    };
+    if (r.collapsed) { if (check(r.startContainer)) return true; }
+    else { if (check(r.startContainer) || check(r.endContainer)) return true; }
+  }
+  return false;
+}
+
+function _notesWrapFormat(tagName) {
+  const sel = window.getSelection();
+  if (!sel.rangeCount) return;
+  const range = sel.getRangeAt(0);
+  if (range.collapsed) return;
+  const frag = range.extractContents();
+  const wrapper = document.createElement(tagName);
+  wrapper.appendChild(frag);
+  range.insertNode(wrapper);
+  sel.removeAllRanges();
+  const nr = document.createRange();
+  nr.selectNodeContents(wrapper);
+  sel.addRange(nr);
+}
+
+function _notesUnwrapFormat(tagName) {
+  const sel = window.getSelection();
+  if (!sel.rangeCount) return;
+  const range = sel.getRangeAt(0);
+  if (range.collapsed) return;
+  const bodyEl = document.getElementById('notes-body');
+  if (!bodyEl) return;
+  const frag = range.extractContents();
+  function stripTag(node, tag) {
+    if (!node || node.nodeType !== Node.ELEMENT_NODE) return node;
+    if (node.tagName === tag) {
+      const df = document.createDocumentFragment();
+      Array.from(node.childNodes).forEach(c => df.appendChild(stripTag(c, tag)));
+      return df;
+    }
+    const clone = node.cloneNode(false);
+    Array.from(node.childNodes).forEach(c => clone.appendChild(stripTag(c, tag)));
+    return clone;
+  }
+  const cleaned = stripTag(frag, tagName.toUpperCase());
+  range.insertNode(cleaned);
+  _notesCleanupEmptyTags(bodyEl);
+  sel.removeAllRanges();
+  bodyEl.focus();
+}
+
+function _notesCleanupEmptyTags(root) {
+  if (!root) return;
+  root.querySelectorAll('b, i, u, strong, em').forEach(el => {
+    if (!el.textContent.trim() && !el.children.length) {
+      el.parentNode?.removeChild(el);
+    }
+  });
+}
+
+function _notesApplyInlineFormat(tagName) {
+  const bodyEl = document.getElementById('notes-body');
+  const sel = window.getSelection();
+  if (!bodyEl || !sel || !sel.rangeCount) return;
+  const range = sel.getRangeAt(0);
+  if (!bodyEl.contains(range.commonAncestorContainer)) return;
+  if (range.collapsed) {
+    const cmdMap = { B: 'bold', I: 'italic', U: 'underline' };
+    try { document.execCommand('styleWithCSS', false, false); } catch (_) {}
+    document.execCommand(cmdMap[tagName] || 'bold', false, null);
+    return;
+  }
+  if (_notesIsInTag(tagName)) {
+    _notesUnwrapFormat(tagName);
+  } else {
+    _notesWrapFormat(tagName);
+  }
+}
+
 function _notesToolbarCommand(command) {
-  _notesFocusBody();
-  try { document.execCommand('styleWithCSS', false, false); } catch (_) {}
-  document.execCommand(command, false, null);
+  const bodyEl = document.getElementById('notes-body');
+  if (!bodyEl) return;
+  bodyEl.focus();
+  const inlineTags = { bold: 'B', italic: 'I', underline: 'U' };
+  const tag = inlineTags[command];
+  if (tag) {
+    _notesApplyInlineFormat(tag);
+  } else {
+    try { document.execCommand('styleWithCSS', false, false); } catch (_) {}
+    document.execCommand(command, false, null);
+  }
   _notesSyncFormatButtons();
   _notesState.dirty = true;
   _notesQueueAutosave();
 }
 
 function _notesSyncFormatButtons() {
-  const bodyEl = document.getElementById('notes-body');
   const boldBtn = document.getElementById('notes-bold-btn');
   const italicBtn = document.getElementById('notes-italic-btn');
   const underlineBtn = document.getElementById('notes-underline-btn');
   const bulletBtn = document.getElementById('notes-bullet-btn');
-  if (!bodyEl || !boldBtn || !italicBtn) return;
-  const selection = window.getSelection();
-  const inBody = Boolean(selection && selection.rangeCount > 0 && bodyEl.contains(selection.anchorNode));
+  if (!boldBtn || !italicBtn) return;
+  const bodyEl = document.getElementById('notes-body');
+  const sel = window.getSelection();
+  const inBody = Boolean(sel && sel.rangeCount > 0 && bodyEl && bodyEl.contains(sel.anchorNode));
   if (!inBody) {
-    boldBtn.classList.remove('active');
-    italicBtn.classList.remove('active');
-    underlineBtn?.classList.remove('active');
-    bulletBtn?.classList.remove('active');
-    boldBtn.setAttribute('aria-pressed', 'false');
-    italicBtn.setAttribute('aria-pressed', 'false');
-    underlineBtn?.setAttribute('aria-pressed', 'false');
-    bulletBtn?.setAttribute('aria-pressed', 'false');
+    [boldBtn, italicBtn, underlineBtn, bulletBtn].forEach(b => {
+      if (!b) return;
+      b.classList.remove('active');
+      b.setAttribute('aria-pressed', 'false');
+    });
     return;
   }
-  const boldOn = !!document.queryCommandState('bold');
-  const italicOn = !!document.queryCommandState('italic');
-  const underlineOn = !!document.queryCommandState('underline');
-  const bulletOn = !!document.queryCommandState('insertUnorderedList');
-  boldBtn.classList.toggle('active', boldOn);
-  italicBtn.classList.toggle('active', italicOn);
-  underlineBtn?.classList.toggle('active', underlineOn);
-  bulletBtn?.classList.toggle('active', bulletOn);
-  boldBtn.setAttribute('aria-pressed', String(boldOn));
-  italicBtn.setAttribute('aria-pressed', String(italicOn));
-  underlineBtn?.setAttribute('aria-pressed', String(underlineOn));
-  bulletBtn?.setAttribute('aria-pressed', String(bulletOn));
+  const fmts = _notesDetectFormats();
+  const sync = (btn, val) => {
+    if (!btn) return;
+    btn.classList.toggle('active', val);
+    btn.setAttribute('aria-pressed', String(val));
+  };
+  sync(boldBtn, fmts.bold);
+  sync(italicBtn, fmts.italic);
+  sync(underlineBtn, fmts.underline);
+  sync(bulletBtn, fmts.bullet);
 }
 
 async function _notesLoadAttachments(noteId) {
@@ -13445,10 +13553,23 @@ document.addEventListener('keydown', e => {
 });
 document.getElementById('notes-body')?.addEventListener('mouseup', _notesSyncFormatButtons);
 document.getElementById('notes-body')?.addEventListener('keyup', _notesSyncFormatButtons);
+let _notesSelChangeRaf = null;
 document.addEventListener('selectionchange', () => {
-  if (!document.getElementById('notes-modal')?.classList.contains('visible')) return;
-  _notesSyncFormatButtons();
+  if (!document.getElementById('notes-editor-modal')?.classList.contains('visible')) return;
+  if (_notesSelChangeRaf) cancelAnimationFrame(_notesSelChangeRaf);
+  _notesSelChangeRaf = requestAnimationFrame(_notesSyncFormatButtons);
 });
+let _notesBodyObserver = null;
+function _notesInitBodyObserver() {
+  const bodyEl = document.getElementById('notes-body');
+  if (!bodyEl || _notesBodyObserver) return;
+  _notesBodyObserver = new MutationObserver(() => {
+    if (!document.getElementById('notes-editor-modal')?.classList.contains('visible')) return;
+    _notesSyncFormatButtons();
+  });
+  _notesBodyObserver.observe(bodyEl, { childList: true, subtree: true, characterData: true });
+}
+_notesInitBodyObserver();
 let _notesDragDepth = 0;
 function _notesSetDropActive(active) {
   const shell = document.querySelector('#notes-editor-frame');
