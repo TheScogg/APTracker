@@ -235,13 +235,9 @@
     background:
       radial-gradient(circle at 16% 14%, rgba(255,159,28,0.11), transparent 32%),
       radial-gradient(circle at 82% 12%, rgba(255,209,102,0.10), transparent 36%),
-      linear-gradient(30deg, rgba(255,209,102,0.22) 12%, transparent 12.5%, transparent 87%, rgba(255,209,102,0.22) 87.5%, rgba(255,209,102,0.22)),
-      linear-gradient(150deg, rgba(255,209,102,0.22) 12%, transparent 12.5%, transparent 87%, rgba(255,209,102,0.22) 87.5%, rgba(255,209,102,0.22)),
-      linear-gradient(30deg, rgba(255,209,102,0.22) 12%, transparent 12.5%, transparent 87%, rgba(255,209,102,0.22) 87.5%, rgba(255,209,102,0.22)),
-      linear-gradient(150deg, rgba(255,209,102,0.22) 12%, transparent 12.5%, transparent 87%, rgba(255,209,102,0.22) 87.5%, rgba(255,209,102,0.22)),
-      linear-gradient(90deg, rgba(255,209,102,0.22) 2%, transparent 2.5%, transparent 97%, rgba(255,209,102,0.22) 97.5%, rgba(255,209,102,0.22));
-    background-size: auto, auto, 52px 90px, 52px 90px, 52px 90px, 52px 90px, 52px 90px;
-    background-position: center top, center top, 0 0, 0 0, 26px 45px, 26px 45px, 0 0;
+      linear-gradient(to right, rgba(255, 209, 102, 0.15) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255, 209, 102, 0.15) 1px, transparent 1px);
+    background-size: 100% 100%, 100% 100%, 32px 32px, 32px 32px;
   }
   body.theme-starforge .row-panel,
   body.theme-starforge .issue-card,
