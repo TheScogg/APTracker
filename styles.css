@@ -1733,9 +1733,10 @@
   }
   .press-wiki-actions-menu {
     min-width: 172px;
-    left: 0;
-    right: auto;
+    left: auto;
+    right: 0;
     top: calc(100% + 4px);
+    transform-origin: top right;
   }
   .press-wiki-actions-menu .press-wiki-action-item {
     display: flex;
@@ -2409,6 +2410,17 @@
     margin-left: 12px;
     margin-right: 12px;
     width: auto;
+  }
+  #role-alerts-app-container {
+    position: relative;
+  }
+  .role-alerts-close-fab {
+    position: absolute;
+    right: 12px;
+    bottom: 12px;
+    width: 42px;
+    height: 42px;
+    z-index: 6;
   }
   .notes-modal-kicker { font-family: 'Share Tech Mono', monospace; font-size: 10px; letter-spacing: .18em; text-transform: uppercase; color: var(--yellow); }
   .notes-modal-title-row { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
@@ -3240,6 +3252,7 @@
     filter: drop-shadow(0 1px 1px rgba(0,0,0,0.25));
   }
   .role-alerts-close { white-space: nowrap; }
+  .role-alerts-retry-fab { display: none; }
   .role-alerts-list {
     display:flex;
     flex-direction:column;
@@ -4241,8 +4254,7 @@
     .role-alert-empty-sub { font-size: 10px; }
     .role-alert-empty-actions { gap: 6px; }
     .role-alert-empty-hint { display: none; }
-    .role-alerts-close { display: none; }
-    .role-alerts-retry-fab { width: 46px; height: 46px; }
+    .role-alerts-close-fab { width: 46px; height: 46px; right: 10px; bottom: 10px; }
   }
 
   /* ── MASCOT ANIMATIONS ── */
