@@ -3904,6 +3904,19 @@
   transition: transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.22s ease;
 }
 .lightbox.visible .lightbox-counter { opacity: 1; transform: translateX(-50%) translateY(0); }
+.lightbox-meta {
+  position: absolute;
+  bottom: 44px;
+  left: 50%;
+  transform: translateX(-50%) translateY(8px);
+  color: rgba(255,255,255,0.88);
+  font-family: 'Nunito', sans-serif;
+  font-size: 12px;
+  pointer-events: none;
+  opacity: 0;
+  transition: transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.22s ease;
+}
+.lightbox.visible .lightbox-meta { opacity: 1; transform: translateX(-50%) translateY(0); }
 
 @media (prefers-reduced-motion: reduce) {
   .modal-overlay,
