@@ -9365,9 +9365,13 @@ const MOBILE_MODAL_SWIPE_CLOSES = {
   'subcategory-sheet-overlay': () => window.closeSubcategorySheet?.(),
   'notes-modal-a': () => window.closeNotesModal?.(),
   'notes-modal-b': () => window.closeNotesModal?.(),
+  'notes-editor-frame': () => window.closeNotesEditorModal?.(),
   'store-modal': () => window.closeStoreModal?.(),
   'purchase-confirm-modal': () => window.closePurchaseConfirm?.(),
-  'messaging-modal': () => window.closeMessagingModal?.()
+  'messaging-modal': () => window.closeMessagingModal?.(),
+  'messaging-frame': () => window.closeMessagingModal?.(),
+  'press-wiki-frame': () => window.closePressWikiModal?.(),
+  'role-alerts-frame': () => window.closeRoleAlertInboxModal?.()
 };
 
 const MOBILE_MODAL_SWIPE_BLOCKERS = [
