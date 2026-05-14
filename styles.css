@@ -4037,9 +4037,9 @@
       height: 18px;
     }
     .msg-header-tabs {
-      flex: 1 1 100%;
+      flex: 0 0 auto;
       order: 3;
-      margin-top: 2px;
+      margin-top: 4px;
     }
     .msg-header-actions {
       order: 2;
@@ -5116,7 +5116,8 @@
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 4px;
-    margin-top: 4px;
+    margin-top: 0;
+    flex: 0 0 auto;
   }
   #messaging-modal .msg-header-tabs .msg-tab {
     padding: 7px 6px 8px;
