@@ -1723,7 +1723,14 @@
   .sort-dropdown.visible { display: block; }
   .export-dropdown { min-width: 120px; }
   .press-wiki-actions-wrap { position: relative; }
-  .press-wiki-actions-btn { min-width: 96px; justify-content: space-between; padding: 4px 10px; font-size: 11px; }
+  .press-wiki-actions-btn {
+    min-width: 40px;
+    padding: 0 14px;
+    font-size: 18px;
+    line-height: 1;
+    font-family: 'Rajdhani', sans-serif;
+    font-weight: 800;
+  }
   .press-wiki-actions-menu {
     min-width: 172px;
     left: 0;
