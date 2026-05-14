@@ -839,6 +839,7 @@
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M9.5 3.5L5 8l4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
         <div class="notes-modal-header-actions">
+          <button class="notes-modal-close" id="notes-editor-close-btn" type="button" onclick="closeNotesEditorModal()" aria-label="Close notes editor">✕</button>
           <div class="notes-menu-wrap">
             <button class="btn btn-ghost notes-menu-trigger" id="notes-template-btn" type="button" aria-expanded="false" aria-haspopup="menu">Templates</button>
             <div class="notes-menu" id="notes-template-menu" role="menu" aria-label="Note templates">
@@ -858,7 +859,6 @@
               <button type="button" id="notes-actions-delete-btn" role="menuitem" class="danger">Delete</button>
             </div>
           </div>
-          <button class="notes-modal-close" id="notes-editor-close-btn" type="button" onclick="closeNotesEditorModal()" aria-label="Close notes editor">✕</button>
         </div>
         <button class="tool-modal-nav-btn tool-modal-nav-next" type="button" onclick="event.stopPropagation();handleShellAction('cycle-tool-modal','next',this,event)" data-shell-action="cycle-tool-modal" data-shell-value="next" aria-label="Next tool" title="Next tool">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6.5 3.5L11 8l-4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>

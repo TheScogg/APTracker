@@ -2489,6 +2489,12 @@
   .notes-editor-save-state.is-error { color: var(--red); border-color: color-mix(in srgb, var(--red) 40%, var(--border)); }
   .notes-editor-save-state.is-offline { color: var(--text3); border-color: color-mix(in srgb, var(--text3) 38%, var(--border)); }
   .notes-modal-header-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; align-self: flex-start; padding-top: 8px; position: relative; z-index: 6; }
+  #notes-editor-modal .notes-modal-header-actions {
+    flex: 1 1 auto;
+    justify-content: center;
+    flex-wrap: nowrap;
+    min-width: 0;
+  }
   .notes-modal-header.tool-modal-nav-shell,
   .press-wiki-header-row.tool-modal-nav-shell,
   .messaging-modal-header.tool-modal-nav-shell,
@@ -3064,7 +3070,7 @@
     .notes-modal-meta-row { display: none; }
     .notes-modal-header-actions {
       width: 100%;
-      justify-content: flex-start;
+      justify-content: center;
       flex-wrap: nowrap;
       overflow: visible;
       padding-top: 0;
