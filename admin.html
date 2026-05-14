@@ -330,8 +330,12 @@
             <h2>OCR from PDF Scan</h2>
             <p class="muted" style="margin-bottom:8px;">Upload a scanned PDF (2-page schedule) to extract text via OCR, then convert to schedule JSON.</p>
             <div class="json-actions">
-              <input id="schedule-pdf-file" type="file" accept="application/pdf" style="max-width:320px;padding:6px 8px;" />
-              <button class="btn" id="ocr-pdf-btn" style="max-width:180px;">OCR PDF → Text</button>
+              <select id="ocr-engine-select" style="max-width:160px;">
+                <option value="azure">Azure (Cloud)</option>
+                <option value="tesseract">Tesseract (Browser)</option>
+              </select>
+              <input id="schedule-pdf-file" type="file" accept="application/pdf" style="max-width:250px;padding:6px 8px;" />
+              <button class="btn" id="ocr-pdf-btn" style="max-width:140px;">OCR PDF → Text</button>
             </div>
             <div id="ocr-progress" class="feedback" style="margin-top:6px;"></div>
             <div class="divider" style="margin:12px 0;"></div>
@@ -1995,47 +1999,47 @@ async function ocrPdfToText() {
     return;
   }
   const btn = document.getElementById('ocr-pdf-btn');
+  const engine = document.getElementById('ocr-engine-select')?.value || 'azure';
   btn.disabled = true;
   btn.textContent = 'OCR Running…';
-  feedback('ocr-progress', '', 'Initializing OCR (loading language data: eng)…');
+  feedback('ocr-progress', '', engine === 'azure' ? 'Uploading to Azure Document Intelligence…' : 'Initializing Tesseract (loading language data)…');
   try {
-    self.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-    const arrayBuffer = await file.arrayBuffer();
-    const pdf = await self.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-
-    // Use worker API for finer control (PSM, etc.)
-    const worker = await self.Tesseract.createWorker('eng');
-    await worker.setParameters({
-      tessedit_pageseg_mode: '6'  // Treat page as single uniform block (best for tables/schedules)
-    });
-
-    let fullText = '';
-    for (let i = 1; i <= pdf.numPages; i++) {
-      feedback('ocr-progress', '', `Rendering + preprocessing page ${i}/${pdf.numPages}…`);
-      const page = await pdf.getPage(i);
-      const scale = 2.5;
-      const viewport = page.getViewport({ scale });
-      const canvas = document.createElement('canvas');
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
-      const ctx = canvas.getContext('2d');
-      ctx.fillStyle = '#fff';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      await page.render({ canvasContext: ctx, viewport }).promise;
-
-      // Preprocess: grayscale + Otsu binarization for clean input
-      preprocessCanvasForOcr(canvas);
-
-      const { data: { text } } = await worker.recognize(canvas);
-      fullText += text + '\n\n';
-      feedback('ocr-progress', 'ok', `Page ${i}/${pdf.numPages} done (${text.length} chars).`);
+    let fullText;
+    if (engine === 'azure') {
+      // Cloudflare Worker proxy → Azure Document Intelligence
+      const res = await fetch('/api/ocr', { method: 'POST', body: file });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.details || data.error || 'Azure OCR failed');
+      fullText = data.text;
+      feedback('ocr-progress', 'ok', `Azure OCR complete: ${data.pageCount} page(s).`);
+    } else {
+      // Client-side Tesseract.js (always available as fallback)
+      self.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await self.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const worker = await self.Tesseract.createWorker('eng');
+      await worker.setParameters({ tessedit_pageseg_mode: '6' });
+      fullText = '';
+      for (let i = 1; i <= pdf.numPages; i++) {
+        feedback('ocr-progress', '', `Rendering page ${i}/${pdf.numPages}…`);
+        const page = await pdf.getPage(i);
+        const viewport = page.getViewport({ scale: 2.5 });
+        const canvas = document.createElement('canvas');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        preprocessCanvasForOcr(canvas);
+        const { data: { text } } = await worker.recognize(canvas);
+        fullText += text + '\n\n';
+      }
+      await worker.terminate();
     }
-
-    await worker.terminate();
-
     const sourceTa = document.getElementById('schedule-gpt-source');
     sourceTa.value = fullText.trim();
-    feedback('ocr-progress', 'ok', `OCR complete: ${pdf.numPages} page(s). Review text, adjust, then click Generate JSON.`);
+    feedback('ocr-progress', 'ok', `OCR complete. Review text, adjust, then click Generate JSON.`);
     sourceTa.scrollIntoView({ behavior: 'smooth', block: 'center' });
   } catch (e) {
     console.error(e);
