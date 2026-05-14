@@ -968,24 +968,16 @@
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6.5 3.5L11 8l-4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
       </div>
-      <div class="notes-modal-header-copy note-card notes-editor-header-card">
-          <div class="notes-modal-header-top">
-            <div class="notes-modal-kicker">Communication</div>
-          </div>
-          <div class="notes-modal-title-row">
-            <div class="notes-modal-title">Messages</div>
-          </div>
-          <div class="msg-header-tabs" id="messaging-tabs" style="margin-top: 8px;">
-            <button class="msg-tab active" data-tab="all" type="button">All <span class="msg-tab-badge" id="messaging-tab-all-badge" style="display:none;">0</span></button>
-            <button class="msg-tab" data-tab="dms" type="button">DMs</button>
-            <button class="msg-tab" data-tab="groups" type="button">Groups</button>
-          </div>
-        </div>
         <div class="notes-modal-header-actions">
           <button class="btn btn-ghost" title="Enable Alerts" onclick="enableMessagingNotifications()">Alerts</button>
           <button class="btn btn-primary" title="New DM" onclick="showMessagingNewDm()">New DM</button>
           <button class="notes-modal-close" onclick="closeMessagingModal()">✕</button>
         </div>
+      <div class="msg-header-tabs" id="messaging-tabs" style="padding: 0 12px 8px;">
+        <button class="msg-tab active" data-tab="all" type="button">All <span class="msg-tab-badge" id="messaging-tab-all-badge" style="display:none;">0</span></button>
+        <button class="msg-tab" data-tab="dms" type="button">DMs</button>
+        <button class="msg-tab" data-tab="groups" type="button">Groups</button>
+      </div>
 
       <div class="msg-body" style="flex:1;min-height:0;">
         <div class="msg-list-panel" id="msg-list-panel">
@@ -1203,14 +1195,6 @@
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6.5 3.5L11 8l-4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
       </div>
-      <div class="notes-modal-header-copy note-card notes-editor-header-card alerts-header-card">
-          <div class="notes-modal-header-top">
-            <div class="notes-modal-kicker">Notification Center</div>
-          </div>
-          <div class="notes-modal-title-row">
-            <div class="notes-modal-title" id="role-alerts-title">Your Alerts</div>
-          </div>
-        </div>
       <div class="role-alerts-toolbar" style="padding:8px 12px;flex-shrink:0;">
         <div class="role-alerts-toggle scope-toggle" role="group" aria-label="Accepted alerts visibility">
           <button class="scope-btn" id="role-alerts-hide-accepted-btn" type="button" data-role-alert-action="hide-accepted">Hide accepted</button>
