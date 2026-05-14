@@ -8028,7 +8028,7 @@ function _toolModalHasState(key) {
 function _toolModalCaptureScrollState(key) {
   switch (key) {
     case 'wiki':
-      _toolModalScrollState.wiki.shellTop = document.querySelector('#press-wiki-modal .press-wiki-modal-shell')?.scrollTop || 0;
+      _toolModalScrollState.wiki.shellTop = document.querySelector('#press-wiki-modal .notes-editor-panel')?.scrollTop || 0;
       break;
     case 'notes':
       _toolModalScrollState.notes.listTop = document.querySelector('#notes-list')?.scrollTop || 0;
@@ -8048,7 +8048,7 @@ function _toolModalRestoreScrollState(key) {
   const apply = () => {
     switch (key) {
       case 'wiki': {
-        const shell = document.querySelector('#press-wiki-modal .press-wiki-modal-shell');
+        const shell = document.querySelector('#press-wiki-modal .notes-editor-panel');
         if (shell) shell.scrollTop = _toolModalScrollState.wiki.shellTop || 0;
         break;
       }
@@ -9457,7 +9457,7 @@ function _mobileModalSwipeCloseFor(modal) {
 function _mobileModalSwipeCanStart(target) {
   if (!target || !target.closest) return null;
   if (target.closest(MOBILE_MODAL_SWIPE_BLOCKERS)) return null;
-  return target.closest('.modal, .subcategory-sheet, .role-alerts-sheet, .store-modal, .msg-modal, .phone');
+  return target.closest('.modal, .subcategory-sheet, .store-modal, .phone');
 }
 
 function _mobileModalSwipeStart(event) {
@@ -9558,7 +9558,7 @@ function _bindMobileModalSwipe(modal) {
   modal.addEventListener('pointerdown', _mobileModalSwipeStart, true);
 }
 
-document.querySelectorAll('.modal, .subcategory-sheet, .role-alerts-sheet, .store-modal, .msg-modal, .phone').forEach(_bindMobileModalSwipe);
+document.querySelectorAll('.modal, .subcategory-sheet, .store-modal, .phone').forEach(_bindMobileModalSwipe);
 document.addEventListener('pointermove', _mobileModalSwipeMove, true);
 document.addEventListener('pointerup', _mobileModalSwipeEnd, true);
 document.addEventListener('pointercancel', _mobileModalSwipeEnd, true);
