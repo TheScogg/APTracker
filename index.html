@@ -799,17 +799,11 @@
   <div class="phone" id="notes-phone-frame" onclick="event.stopPropagation()">
     <div class="notes-drag-handle" id="notes-drag-handle"></div>
 
-    <div class="sync-banner">
-      <div class="sync-dot" id="notes-sync-dot"></div>
-      <span id="notes-sync-text">Ready</span>
-    </div>
-
     <div class="app-container" id="notes-app-container">
       <div class="header notes-list-header tool-modal-nav-shell">
         <button class="tool-modal-nav-btn tool-modal-nav-prev" type="button" data-shell-action="cycle-tool-modal" data-shell-value="prev" aria-label="Previous tool" title="Previous tool">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M9.5 3.5L5 8l4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
-        <div class="greeting">Notes</div>
         <button class="tool-modal-nav-btn tool-modal-nav-next" type="button" data-shell-action="cycle-tool-modal" data-shell-value="next" aria-label="Next tool" title="Next tool">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6.5 3.5L11 8l-4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
@@ -838,11 +832,6 @@
 <div class="modal-overlay" id="notes-editor-modal" onclick="if(event.target===this)closeNotesEditorModal()">
   <div class="phone" id="notes-editor-frame" onclick="event.stopPropagation()">
     <div class="notes-drag-handle" id="notes-editor-drag-handle"></div>
-
-    <div class="sync-banner">
-      <div class="sync-dot" id="notes-editor-sync-dot"></div>
-      <span id="notes-editor-sync-text">Ready</span>
-    </div>
 
     <div class="app-container" id="notes-editor-app-container" style="padding:0;display:flex;flex-direction:column;overflow:hidden;">
       <div class="notes-modal-header tool-modal-nav-shell" style="flex-shrink:0;">
