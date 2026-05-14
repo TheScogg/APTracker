@@ -7010,7 +7010,8 @@ function renderIssues() {
     catInner.className = 'swipe-category-inner';
 
     // Build status tiles for ALL statuses (including open/resolved)
-    toColumnMajorOrder(statusOrder, 5).forEach(key => {
+    // Keep true alphabetic left-to-right order in the swipe category slider.
+    statusOrder.forEach(key => {
       const st = getStatusDef(key);
       const tile = document.createElement('div');
       tile.className = 'swipe-status-tile' + (currentStatusKey(issue) === key ? ' current' : '');
@@ -7116,8 +7117,9 @@ function renderIssues() {
           
     const activeColor = getStatusColor(statusKey);
 
-          // Sub chips
-          getStatusSubs(statusKey).forEach(sub => {
+          // Sub chips (alphabetized for consistent scan order)
+          const sortedSubs = [...getStatusSubs(statusKey)].sort((a, b) => String(a || '').localeCompare(String(b || ''), undefined, { sensitivity: 'base' }));
+          sortedSubs.forEach(sub => {
             const item = document.createElement('button');
             item.type = 'button';
             item.className = 'subcategory-item swipe-sub-action';
