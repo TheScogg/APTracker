@@ -1,10 +1,17 @@
 {
   "scripts": {
     "prebuild": "node scripts/write-build-version.mjs",
-    "build": "node -e \"console.log('build-info generated')\""
+    "build": "node -e \"console.log('build-info generated')\"",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:ui": "playwright test --ui",
+    "test:multiuser": "playwright test tests/multi-user.spec.js"
   },
   "dependencies": {
     "firebase": "^12.12.1",
     "firebase-admin": "^13.8.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.54.0"
   }
 }
