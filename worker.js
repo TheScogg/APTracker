@@ -69,6 +69,40 @@ async function handleOcr(request, env) {
   }
 }
 
+async function handleOcrGoogle(request, env) {
+  if (request.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'POST required' }), { status: 405, headers: { 'Content-Type': 'application/json' } });
+  }
+  const apiKey = env.GOOGLE_VISION_API_KEY;
+  if (!apiKey) {
+    return new Response(JSON.stringify({ error: 'Google Cloud Vision not configured (set GOOGLE_VISION_API_KEY secret)' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+  }
+  try {
+    const { images } = await request.json();
+    if (!Array.isArray(images) || images.length === 0) {
+      return new Response(JSON.stringify({ error: 'Expected { images: [base64, ...] }' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+    }
+    const texts = [];
+    for (const [i, image] of images.entries()) {
+      const res = await fetch('https://vision.googleapis.com/v1/images:annotate?key=' + apiKey, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requests: [{ image: { content: image }, features: [{ type: 'DOCUMENT_TEXT_DETECTION', maxResults: 1 }] }]
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error((data.error && data.error.message) || 'Google Vision API error');
+      texts.push(data.responses?.[0]?.fullTextAnnotation?.text || '');
+    }
+    return new Response(JSON.stringify({ text: texts.join('\n\n'), pageCount: texts.length }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (e) {
+    return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+  }
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -81,6 +115,9 @@ export default {
 
     if (url.pathname === '/api/ocr') {
       return handleOcr(request, env);
+    }
+    if (url.pathname === '/api/ocr/google') {
+      return handleOcrGoogle(request, env);
     }
 
     return env.ASSETS.fetch(request);
