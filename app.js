@@ -8287,6 +8287,8 @@ function handleShellAction(action, value, trigger, event) {
   return true;
 }
 
+window.handleShellAction = handleShellAction;
+
 document.addEventListener('click', e => {
   const trigger = e.target.closest?.('[data-shell-action]');
   if (!trigger) return;
