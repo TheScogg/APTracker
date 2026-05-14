@@ -1343,7 +1343,9 @@ async function uploadIssuePhotosToStorage(issueId, photos) {
       storageBucket: sRef.bucket,
       contentType: meta.contentType,
       sizeBytes: meta.sizeBytes,
-      source: 'storage'
+      source: 'storage',
+      takenAt: p.takenAt || p.timestamp || '',
+      uploadedAt: new Date().toISOString()
     });
   }
   return out;
@@ -1361,9 +1363,10 @@ function queueAttachmentDocs(batch, issueId, photos = []) {
       storageBucket: p.storageBucket || '',
       thumbnailPath: null,
       uploadedBy: currentActor(),
-      uploadedAt: serverTimestamp(),
       sizeBytes: Number(p.sizeBytes || 0),
       source: p.source || 'storage',
+      takenAt: p.takenAt || p.timestamp || null,
+      uploadedAt: p.uploadedAt || serverTimestamp(),
       schemaVersion: 2
     }, { merge: true });
   });
@@ -1395,7 +1398,9 @@ async function fetchAttachmentPhotos(issueId) {
         storagePath: a.storagePath,
         storageBucket: a.storageBucket || '',
         contentType: a.contentType || '',
-        sizeBytes: Number(a.sizeBytes || 0)
+        sizeBytes: Number(a.sizeBytes || 0),
+        takenAt: a.takenAt || '',
+        uploadedAt: a.uploadedAt || ''
       });
     } catch (_) {
       // Ignore broken attachment references and keep going.
@@ -6677,11 +6682,16 @@ function renderIssues() {
     const card=document.createElement('div');
     card.className='issue-card'+(issueIsResolvedV2(issue)?' resolved':'')+(issue.highPriority?' high-priority':'')+(isAlertFocus?' alert-focus-card':'');
 
-    const _photoList = (issue.photos||[]).map(p => p.dataUrl);
+    const _photoList = (issue.photos || []).map(p => ({
+      url: p.dataUrl || p.downloadURL || p.url || '',
+      takenAt: p.takenAt || p.timestamp || '',
+      uploadedAt: p.uploadedAt || p.createdAt || '',
+      name: p.name || ''
+    })).filter(p => p.url);
     if (_photoList.length) window._issuePhotos = window._issuePhotos || {};
     if (_photoList.length) window._issuePhotos[issue.id] = _photoList;
     const photosHtml=_photoList.length
-      ? `<div class="issue-photos">${_photoList.map((url,i)=>`<img class="issue-photo-thumb" src="${url}" loading="lazy" onclick="openLightbox(${i},'${issue.id}')">`).join('')}</div>` : '';
+      ? `<div class="issue-photos">${_photoList.map((photo,i)=>`<img class="issue-photo-thumb" src="${photo.url}" loading="lazy" onclick="openLightbox(${i},'${issue.id}')">`).join('')}</div>` : '';
 
     // Authoritative current status from issue.currentStatus (v2) or lifecycle fallback
     const currentKey = currentStatusKey(issue);
@@ -6786,7 +6796,7 @@ function renderIssues() {
           </div>
           <div class="tl-time">${entry.dateTime||''}${entry.by?' — '+esc(entry.by):''}</div>
           ${entry.note?`<div class="tl-note-text">"${esc(entry.note)}"</div>`:''}
-          ${Array.isArray(entry.photos) && entry.photos.length ? `<div class="issue-photos" style="margin-top:6px;">${entry.photos.map((p,i)=>`<img class="issue-photo-thumb" src="${esc(p.downloadURL || p.dataUrl || '')}" loading="lazy" alt="${esc(p.name || `Status photo ${i+1}`)}" onclick="openLightbox(${i}, [${entry.photos.map(sp => `'${esc(sp.downloadURL || sp.dataUrl || '')}'`).join(',')}])">`).join('')}</div>` : ''}
+          ${Array.isArray(entry.photos) && entry.photos.length ? `<div class="issue-photos" style="margin-top:6px;">${entry.photos.map((p,i)=>`<img class="issue-photo-thumb" src="${esc(p.downloadURL || p.dataUrl || '')}" loading="lazy" alt="${esc(p.name || `Status photo ${i+1}`)}" onclick="openLightbox(${i}, [${entry.photos.map(sp => `{url:'${esc(sp.downloadURL || sp.dataUrl || '')}',takenAt:'${esc(sp.takenAt || sp.timestamp || '')}',uploadedAt:'${esc(sp.uploadedAt || sp.createdAt || '')}'}`).join(',')}])">`).join('')}</div>` : ''}
           ${currentUserPermissions.canEditIssue ? `<div style="display:flex;gap:5px;margin-top:6px;">
             ${!isResolvedEntry && !isCurrent ? `<button class="tl-edit-btn" onclick="setStatusCurrentFromHistory('${issue.id}',${trueIdx})">Set current</button>` : ''}
             ${!isResolvedEntry && entryWorkflowState === 'finished' ? `<button class="tl-edit-btn" onclick="setWorkflowStateForStatus('${issue.id}','${entry.status}','called')">Un-finish</button>` : ''}
@@ -6806,7 +6816,7 @@ function renderIssues() {
       ? `<div class="tl-add-row">
           <select class="tl-mini-select" onchange="setPendingStatus('${issue.id}','status',this.value)">
             <option value="">Status…</option>
-            ${Object.entries(STATUS_CONFIG).map(([k,v])=>`<option value="${k}"${k===pend.status?' selected':''}>${v.icon} ${v.label}</option>`).join('')}
+            ${getAlphabetizedStatusKeys().map(k=>`<option value="${k}"${k===pend.status?' selected':''}>${STATUS_CONFIG[k].icon} ${STATUS_CONFIG[k].label}</option>`).join('')}
           </select>
           ${pendSubs.length?`<select class="tl-mini-select" id="pending-sub-${issue.id}"><option value="">Sub-status…</option>${pendSubs.map(s=>`<option value="${s}"${s===pend.subStatus?' selected':''}>${s}</option>`).join('')}</select>`:''}
           <input class="tl-mini-input" id="pending-note-${issue.id}" placeholder="Note (optional)…">
@@ -7840,13 +7850,27 @@ function _positionSpotlight(step) {
 // ── LIGHTBOX ──
 let _lbPhotos = [], _lbIndex = 0;
 
+function _formatLightboxPhotoMeta(photo) {
+  if (!photo || typeof photo !== 'object') return '';
+  const raw = photo.takenAt || photo.uploadedAt || photo.createdAt || photo.timestamp || '';
+  if (!raw) return '';
+  const d = raw?.toDate ? raw.toDate() : new Date(raw);
+  if (Number.isNaN(d.getTime())) return '';
+  const label = photo.takenAt ? 'Taken' : 'Uploaded';
+  return `${label}: ${d.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}`;
+}
+
 function _lbShow(idx) {
   _lbIndex = (idx % _lbPhotos.length + _lbPhotos.length) % _lbPhotos.length;
-  document.getElementById('lightbox-img').src = _lbPhotos[_lbIndex];
+  const current = _lbPhotos[_lbIndex] || {};
+  const src = typeof current === 'string' ? current : (current.url || current.downloadURL || current.dataUrl || '');
+  document.getElementById('lightbox-img').src = src;
   const multi = _lbPhotos.length > 1;
   document.getElementById('lightbox-prev').style.display = multi ? '' : 'none';
   document.getElementById('lightbox-next').style.display = multi ? '' : 'none';
   document.getElementById('lightbox-counter').textContent = multi ? `${_lbIndex + 1} / ${_lbPhotos.length}` : '';
+  const meta = document.getElementById('lightbox-meta');
+  if (meta) meta.textContent = _formatLightboxPhotoMeta(current);
 }
 
 window.openLightbox = (indexOrSrc, issueIdOrPhotos) => {
@@ -7856,11 +7880,11 @@ window.openLightbox = (indexOrSrc, issueIdOrPhotos) => {
     _lbIndex = indexOrSrc;
   } else if (Array.isArray(issueIdOrPhotos)) {
     // Legacy array call
-    _lbPhotos = issueIdOrPhotos;
+    _lbPhotos = issueIdOrPhotos.map(item => typeof item === 'string' ? ({ url: item }) : item).filter(Boolean);
     _lbIndex = indexOrSrc;
   } else {
     // Legacy single-src call
-    _lbPhotos = [indexOrSrc];
+    _lbPhotos = [{ url: indexOrSrc }];
     _lbIndex = 0;
   }
   _lbShow(_lbIndex);
@@ -12577,8 +12601,11 @@ function _notesRenderAttachments() {
     img.src = att.url || att.downloadURL || '';
     img.alt = att.fileName || `Attachment ${idx + 1}`;
     img.addEventListener('click', () => {
-      const urls = _notesAttachmentsCache.map(a => a.url || a.downloadURL).filter(Boolean);
-      openLightbox(idx, urls);
+      const photos = _notesAttachmentsCache.map(a => ({
+        url: a.url || a.downloadURL || '',
+        uploadedAt: a.uploadedAt || a.createdAt || ''
+      })).filter(a => a.url);
+      openLightbox(idx, photos);
     });
     const label = document.createElement('div');
     label.className = 'notes-attachment-label';
