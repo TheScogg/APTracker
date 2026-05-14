@@ -69,7 +69,19 @@ service firebase.storage {
                    && (request.resource == null || isValidImageUpload());
     }
 
+    match /plants/{plantId}/notes/{noteId}/attachments/{fileName} {
+      allow read: if isPlantMember(plantId);
+      allow write: if isPlantMember(plantId)
+                   && (request.resource == null || isValidImageUpload());
+    }
+
     match /plants/{plantId}/presses/{pressId}/wikiPages/{pageId}/attachments/{fileName} {
+      allow read: if isPlantMember(plantId);
+      allow write: if isEditorOrAbove(plantId)
+                   && (request.resource == null || isValidImageUpload());
+    }
+
+    match /plants/{plantId}/wikiPages/{pageId}/attachments/{fileName} {
       allow read: if isPlantMember(plantId);
       allow write: if isEditorOrAbove(plantId)
                    && (request.resource == null || isValidImageUpload());

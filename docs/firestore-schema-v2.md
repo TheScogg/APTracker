@@ -36,6 +36,8 @@ plants/{plantId}/issues/{issueId}/attachments/{attachmentId}
 plants/{plantId}/presses/{pressId}/wikiPages/{pageId}
 plants/{plantId}/presses/{pressId}/wikiPages/{pageId}/revisions/{revisionId}
 plants/{plantId}/presses/{pressId}/wikiPages/{pageId}/attachments/{attachmentId}
+plants/{plantId}/notes/{noteId}
+plants/{plantId}/notes/{noteId}/attachments/{attachmentId}
 plants/{plantId}/pressNotes/{noteId}
 plants/{plantId}/pressStats/{pressId}
 plants/{plantId}/dailyStats/{dateKey}
@@ -680,13 +682,66 @@ function hasPermission(plantId, perm) {
 
 ---
 
-## 8. Press notes
+## 8. Plant notes
+
+### `plants/{plantId}/notes/{noteId}`
+
+This is the mobile-first notebook surface. Use it for fast capture, rich formatting, checklists, and optionally linking a note back to a press or issue.
+
+```json
+{
+  "title": "Startup checklist",
+  "bodyHtml": "<p>Remember to verify heaters and air pressure.</p>",
+  "bodyText": "Remember to verify heaters and air pressure.",
+  "checklistItems": [
+    { "id": "chk_1", "text": "Check heaters", "done": false },
+    { "id": "chk_2", "text": "Confirm air pressure", "done": true }
+  ],
+  "tags": ["startup", "quality"],
+  "pressId": "press_5_10",
+  "machineCode": "5.10",
+  "issueId": "issue_123",
+  "isPinned": true,
+  "isArchived": false,
+  "photoCount": 2,
+  "searchText": "startup checklist check heaters confirm air pressure",
+  "createdBy": "uid_123",
+  "createdAt": "serverTimestamp",
+  "updatedBy": "uid_789",
+  "updatedAt": "serverTimestamp",
+  "schemaVersion": 1
+}
+```
+
+### `attachments/{attachmentId}`
+
+```json
+{
+  "storagePath": "plants/{plantId}/notes/{noteId}/attachments/img_01.jpg",
+  "storageBucket": "press-tracker-9d9c9.firebasestorage.app",
+  "fileName": "img_01.jpg",
+  "contentType": "image/jpeg",
+  "sizeBytes": 183442,
+  "url": "https://...",
+  "uploadedBy": "uid_789",
+  "uploadedAt": "serverTimestamp",
+  "schemaVersion": 1
+}
+```
+
+### Notes
+
+- Keep notes separate from the wiki so the notebook stays fast and mobile-friendly.
+- Prefer append-only thinking for attachments, but allow note edits and checklist updates in place.
+- If a note is linked to a press or issue, preserve those IDs for fast filtering and shell entry points.
+
+## 9. Press notes
 
 ### `plants/{plantId}/pressNotes/{noteId}`
 
 Press notes stay lightweight and append-only after creation. Photo attachments are resized client-side, stored in Firebase Storage, and referenced by metadata on the note document.
 Storage rules should allow authenticated plant members to read note photos and plant editors/admins to upload them under `plants/{plantId}/pressNotes/{noteId}/photos/{fileName}`.
-Wiki page attachment uploads should use the same permission model under `plants/{plantId}/presses/{pressId}/wikiPages/{pageId}/attachments/{fileName}`.
+Wiki page attachment uploads should use the same permission model under both `plants/{plantId}/presses/{pressId}/wikiPages/{pageId}/attachments/{fileName}` and `plants/{plantId}/wikiPages/{pageId}/attachments/{fileName}` for the shared library.
 
 These docs are the event-note layer in the press wiki split. They capture the fast, time-based observations that should not overwrite the canonical wiki page.
 
@@ -725,7 +780,7 @@ These docs are the event-note layer in the press wiki split. They capture the fa
 
 ---
 
-## 9. Press wiki pages
+## 10. Press wiki pages
 
 ### `plants/{plantId}/presses/{pressId}/wikiPages/{pageId}`
 
