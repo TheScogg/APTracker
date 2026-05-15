@@ -205,8 +205,8 @@ Rules:
     try {
       parsed = JSON.parse(cleaned);
     } catch (e) {
-      // If still failing, return the raw response for debugging
-      return new Response(JSON.stringify({ error: 'DeepSeek returned invalid JSON. First 500 chars: ' + cleaned.slice(0, 500) }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+      // If still failing, return the tail for debugging (errors at the end)
+      return new Response(JSON.stringify({ error: 'DeepSeek returned invalid JSON', length: cleaned.length, tail: cleaned.slice(-600) }), { status: 500, headers: { 'Content-Type': 'application/json' } });
     }
     return new Response(JSON.stringify(parsed), {
       headers: { 'Content-Type': 'application/json' }
