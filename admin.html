@@ -323,6 +323,10 @@
               <button class="btn btn-primary" id="import-schedule-btn" style="max-width:240px;">Import Daily Schedule</button>
             </div>
             <textarea id="schedule-json-text" placeholder="Paste schedule JSON here" style="margin-top:10px;min-height:180px;"></textarea>
+            <details style="margin-top:6px;">
+              <summary id="schedule-preview-summary" style="cursor:pointer;font-size:12px;color:var(--text2);">Preview schedule data</summary>
+              <div id="schedule-preview-container" style="margin-top:6px;overflow-x:auto;"></div>
+            </details>
             <div id="schedule-import-feedback" class="feedback"></div>
           </div>
           <!-- OCR + GPT section -->
@@ -1818,6 +1822,7 @@ async function loadScheduleJsonFromFile() {
   try {
     const text = await file.text();
     textArea.value = text;
+    renderSchedulePreview();
     feedback('schedule-import-feedback', 'ok', `Loaded ${file.name}. Review and click Import Daily Schedule.`);
   } catch (e) {
     console.error(e);
@@ -1941,6 +1946,7 @@ async function generateScheduleJsonFromDailyScheduleGPT() {
     if (strictValidation) normalizeSchedulePayload(adaptedPayload);
 
     jsonInput.value = JSON.stringify(adaptedPayload, null, 2);
+    renderSchedulePreview();
     if (sourceNameInput && !String(sourceNameInput.value || '').trim()) {
       sourceNameInput.value = `DailyScheduleGPT_${adaptedPayload.schedule_info.date}.txt`;
     }
@@ -1987,6 +1993,7 @@ async function convertWithDeepSeek() {
     if (!res.ok) {
       if (data.content) {
         jsonInput.value = data.content;
+        renderSchedulePreview();
         throw new Error('DeepSeek returned invalid JSON. The raw output is in the JSON textarea above — you can manually fix it or check for errors.');
       }
       throw new Error(data.error || 'DeepSeek conversion failed');
@@ -2003,6 +2010,7 @@ async function convertWithDeepSeek() {
 
     // Optionally validate using existing normalizeSchedulePayload
     jsonInput.value = JSON.stringify(adaptedPayload, null, 2);
+    renderSchedulePreview();
     if (sourceNameInput && !String(sourceNameInput.value || '').trim()) {
       sourceNameInput.value = `DeepSeek_${(adaptedPayload.schedule_info?.date || 'schedule')}.json`;
     }
@@ -2013,6 +2021,50 @@ async function convertWithDeepSeek() {
   } finally {
     btn.disabled = false;
     btn.textContent = 'Convert with DeepSeek';
+  }
+}
+
+function renderSchedulePreview() {
+  const container = document.getElementById('schedule-preview-container');
+  const textarea = document.getElementById('schedule-json-text');
+  const summary = document.getElementById('schedule-preview-summary');
+  if (!container || !textarea) return;
+  const raw = textarea.value.trim();
+  if (!raw) { container.innerHTML = ''; return; }
+  try {
+    const payload = extractSchedulePayload(parseScheduleJsonInput(raw, 'Preview'));
+    const sections = [
+      { label: 'Page 1', key: 'page1', rows: payload.page_1 || payload.page1 || [] },
+      { label: 'Page 2', key: 'page2', rows: payload.page_2 || payload.page2 || [] },
+      { label: 'North Bay Changes', key: 'northBayChanges', rows: payload.north_bay_changes || payload.northBayChanges || [] },
+      { label: 'South Bay Changes', key: 'southBayChanges', rows: payload.south_bay_changes || payload.southBayChanges || [] }
+    ];
+    let totalRows = 0;
+    let html = '';
+    for (const sec of sections) {
+      if (!sec.rows.length) continue;
+      totalRows += sec.rows.length;
+      html += `<div style="margin-bottom:10px;"><strong style="font-size:11px;color:var(--text2);">${sec.label} (${sec.rows.length})</strong>`;
+      html += `<table style="width:100%;font-size:11px;margin-top:4px;"><tr style="color:var(--text2);font-family:'Share Tech Mono',monospace;font-size:10px;">`;
+      const cols = ['Press','Part #','Description','Cavity','DOH','Labels/Shift','MC','Location','Notes'];
+      const fields = ['press','part_number','description','cavity','doh','labels_per_shift','mc','part_storage_location','notes'];
+      for (const c of cols) html += `<th style="padding:4px 5px;white-space:nowrap;">${c}</th>`;
+      html += '</tr>';
+      for (const row of sec.rows) {
+        html += '<tr>';
+        for (const f of fields) {
+          let v = row[f];
+          if (f === 'part_storage_location') v = Array.isArray(v) ? v.join(', ') : '';
+          html += `<td style="padding:3px 5px;border-top:1px solid var(--border);white-space:nowrap;">${esc(String(v ?? ''))}</td>`;
+        }
+        html += '</tr>';
+      }
+      html += '</table></div>';
+    }
+    container.innerHTML = html || '<span class="muted">No rows found.</span>';
+    if (summary) summary.textContent = `Preview schedule data (${totalRows} rows)`;
+  } catch (e) {
+    container.innerHTML = `<span style="color:var(--text2);font-size:11px;">Preview unavailable — JSON not parseable yet.</span>`;
   }
 }
 
@@ -3054,6 +3106,10 @@ document.getElementById('import-schedule-btn').addEventListener('click', importD
 document.getElementById('ocr-pdf-btn').addEventListener('click', ocrPdfToText);
 document.getElementById('generate-schedule-json-btn').addEventListener('click', generateScheduleJsonFromDailyScheduleGPT);
 document.getElementById('deepseek-convert-btn').addEventListener('click', convertWithDeepSeek);
+
+// Schedule JSON preview
+document.getElementById('schedule-json-text').addEventListener('input', renderSchedulePreview);
+document.getElementById('json-preview-toggle')?.addEventListener('toggle', () => renderSchedulePreview());
 
 // Auto-save extra system prompt to localStorage
 (function() {
