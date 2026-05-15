@@ -325,6 +325,45 @@
             <textarea id="schedule-json-text" placeholder="Paste schedule JSON here" style="margin-top:10px;min-height:180px;"></textarea>
             <div id="schedule-import-feedback" class="feedback"></div>
           </div>
+          <!-- OCR + GPT section -->
+          <div class="card" style="margin-top:12px;">
+            <h2>OCR from PDF Scan</h2>
+            <p class="muted" style="margin-bottom:8px;">Upload a scanned PDF (2-page schedule) to extract text via OCR, then convert to schedule JSON.</p>
+            <div class="json-actions">
+              <select id="ocr-engine-select" style="max-width:180px;">
+                <option value="azure">Azure Doc AI (Cloud)</option>
+                <option value="google">Google Vision (Cloud)</option>
+                <option value="tesseract">Tesseract (Browser)</option>
+              </select>
+              <input id="schedule-pdf-file" type="file" accept="application/pdf" style="max-width:250px;padding:6px 8px;" />
+              <button class="btn" id="ocr-pdf-btn" style="max-width:140px;">OCR PDF → Text</button>
+            </div>
+            <div id="ocr-progress" class="feedback" style="margin-top:6px;"></div>
+            <div class="divider" style="margin:12px 0;"></div>
+            <h2>Generate JSON from Text</h2>
+            <p class="muted" style="margin-bottom:6px;">Review OCR output (or paste text manually), then generate canonical JSON.</p>
+            <textarea id="schedule-gpt-source" placeholder="OCR text or pasted schedule text will appear here..." style="margin-top:6px;min-height:200px;"></textarea>
+            <div class="json-actions" style="margin-top:8px;">
+              <select id="schedule-gpt-shift-override" style="max-width:180px;">
+                <option value="">Auto-detect shift</option>
+                <option value="1">Shift 1</option>
+                <option value="2">Shift 2</option>
+                <option value="3">Shift 3</option>
+              </select>
+              <select id="schedule-gpt-strict-validation" style="max-width:160px;">
+                <option value="true">Strict validation</option>
+                <option value="false">Lenient</option>
+              </select>
+              <button class="btn btn-primary" id="generate-schedule-json-btn" style="max-width:200px;">Generate JSON</button>
+              <button class="btn" id="deepseek-convert-btn" style="max-width:200px;">Convert with DeepSeek</button>
+            </div>
+            <textarea id="deepseek-instructions" placeholder="Optional: custom instructions for DeepSeek (e.g. 'Press 7 is down, mark all its rows as notes')" style="margin-top:6px;min-height:60px;font-size:12px;"></textarea>
+            <details style="margin-top:6px;">
+              <summary style="cursor:pointer;font-size:12px;color:var(--text2);">Extra system prompt context (appended to base prompt)</summary>
+              <textarea id="deepseek-system-prompt" placeholder="This text gets appended to the base system prompt. Useful for persistent context like plant-specific naming conventions." style="margin-top:4px;min-height:120px;font-size:12px;"></textarea>
+            </details>
+            <div id="schedule-gpt-feedback" class="feedback"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -441,6 +480,8 @@
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut as fbSignOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
@@ -1913,6 +1954,197 @@ async function generateScheduleJsonFromDailyScheduleGPT() {
   }
 }
 
+async function convertWithDeepSeek() {
+  const btn = document.getElementById('deepseek-convert-btn');
+  const sourceInput = document.getElementById('schedule-gpt-source');
+  const shiftInput = document.getElementById('schedule-gpt-shift-override');
+  const dateInput = document.getElementById('schedule-date');
+  const sourceNameInput = document.getElementById('schedule-source-name');
+  const jsonInput = document.getElementById('schedule-json-text');
+  const instructionsInput = document.getElementById('deepseek-instructions');
+  const sourceText = String(sourceInput?.value || '').trim();
+
+  if (!sourceText) {
+    feedback('schedule-gpt-feedback', 'error', 'Paste schedule text or PDF metadata before converting.');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Calling DeepSeek…';
+  feedback('schedule-gpt-feedback', '', '');
+
+  try {
+    const shiftOverride = String(shiftInput?.value || '').trim();
+    const instructions = String(instructionsInput?.value || '').trim();
+    const systemPromptInput = document.getElementById('deepseek-system-prompt');
+    const systemPrompt = String(systemPromptInput?.value || '').trim();
+    const res = await fetch('/api/ai/convert', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: sourceText, shiftOverride: shiftOverride || undefined, instructions: instructions || undefined, systemPrompt: systemPrompt || undefined })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      if (data.content) {
+        jsonInput.value = data.content;
+        throw new Error('DeepSeek returned invalid JSON. The raw output is in the JSON textarea above — you can manually fix it or check for errors.');
+      }
+      throw new Error(data.error || 'DeepSeek conversion failed');
+    }
+
+    // DeepSeek returns the adaptedPayload directly
+    let adaptedPayload = data;
+
+    // Apply date override if set
+    if (dateInput?.value) {
+      if (!adaptedPayload.schedule_info) adaptedPayload.schedule_info = {};
+      adaptedPayload.schedule_info.date = String(dateInput.value).trim();
+    }
+
+    // Optionally validate using existing normalizeSchedulePayload
+    jsonInput.value = JSON.stringify(adaptedPayload, null, 2);
+    if (sourceNameInput && !String(sourceNameInput.value || '').trim()) {
+      sourceNameInput.value = `DeepSeek_${(adaptedPayload.schedule_info?.date || 'schedule')}.json`;
+    }
+    feedback('schedule-gpt-feedback', 'ok', 'JSON generated via DeepSeek. Review, then click Import Daily Schedule.');
+  } catch (e) {
+    console.error(e);
+    feedback('schedule-gpt-feedback', 'error', e.message || 'DeepSeek conversion failed.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Convert with DeepSeek';
+  }
+}
+
+function preprocessCanvasForOcr(canvas) {
+  const ctx = canvas.getContext('2d');
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const data = imageData.data;
+  const len = data.length;
+  const numPixels = len / 4;
+
+  // Step 1: Grayscale + collect luminance for threshold analysis
+  const pixels = new Uint8ClampedArray(numPixels);
+  for (let i = 0, j = 0; i < len; i += 4, j++) {
+    const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+    data[i] = data[i + 1] = data[i + 2] = gray;
+    pixels[j] = Math.round(gray);
+  }
+
+  // Step 2: Otsu's threshold — automatically finds optimal cutoff between ink and paper
+  const hist = new Uint32Array(256);
+  for (let i = 0; i < numPixels; i++) hist[pixels[i]]++;
+  let sumTotal = 0;
+  for (let t = 0; t < 256; t++) sumTotal += t * hist[t];
+  let sumB = 0, wB = 0, maxVariance = 0, threshold = 128;
+  for (let t = 0; t < 256; t++) {
+    wB += hist[t];
+    if (wB === 0) continue;
+    const wF = numPixels - wB;
+    if (wF === 0) break;
+    sumB += t * hist[t];
+    const mB = sumB / wB;
+    const mF = (sumTotal - sumB) / wF;
+    const diff = mB - mF;
+    const variance = wB * wF * diff * diff;
+    if (variance > maxVariance) { maxVariance = variance; threshold = t; }
+  }
+
+  // Step 3: Binarize — pure black text on pure white background
+  for (let i = 0; i < len; i += 4) {
+    const val = data[i] < threshold ? 0 : 255;
+    data[i] = data[i + 1] = data[i + 2] = val;
+    data[i + 3] = 255;
+  }
+
+  ctx.putImageData(imageData, 0, 0);
+}
+
+async function ocrPdfToText() {
+  const fileInput = document.getElementById('schedule-pdf-file');
+  const file = fileInput?.files?.[0];
+  if (!file) {
+    feedback('ocr-progress', 'error', 'Choose a PDF file first.');
+    return;
+  }
+  const btn = document.getElementById('ocr-pdf-btn');
+  const engine = document.getElementById('ocr-engine-select')?.value || 'azure';
+  btn.disabled = true;
+  btn.textContent = 'OCR Running…';
+  feedback('ocr-progress', '', engine === 'azure' ? 'Uploading to Azure Document Intelligence…' : engine === 'google' ? 'Rendering pages for Google Vision…' : 'Initializing Tesseract…');
+  try {
+    let fullText;
+    if (engine === 'azure') {
+      const res = await fetch('/api/ocr', { method: 'POST', body: file });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.details || data.error || 'Azure OCR failed');
+      fullText = data.text;
+      feedback('ocr-progress', 'ok', `Azure OCR complete: ${data.pageCount} page(s).`);
+    } else if (engine === 'google') {
+      self.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await self.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const images = [];
+      for (let i = 1; i <= pdf.numPages; i++) {
+        feedback('ocr-progress', '', `Rendering page ${i}/${pdf.numPages}…`);
+        const page = await pdf.getPage(i);
+        const viewport = page.getViewport({ scale: 2 });
+        const canvas = document.createElement('canvas');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        images.push(canvas.toDataURL('image/png').split(',')[1]);
+      }
+      feedback('ocr-progress', '', `Sending ${images.length} page(s) to Google Vision…`);
+      const res = await fetch('/api/ocr/google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ images })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Google Vision failed');
+      fullText = data.text;
+      feedback('ocr-progress', 'ok', `Google Vision complete: ${data.pageCount} page(s).`);
+    } else {
+      self.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await self.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const worker = await self.Tesseract.createWorker('eng');
+      await worker.setParameters({ tessedit_pageseg_mode: '6' });
+      fullText = '';
+      for (let i = 1; i <= pdf.numPages; i++) {
+        feedback('ocr-progress', '', `Rendering page ${i}/${pdf.numPages}…`);
+        const page = await pdf.getPage(i);
+        const viewport = page.getViewport({ scale: 2.5 });
+        const canvas = document.createElement('canvas');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        preprocessCanvasForOcr(canvas);
+        const { data: { text } } = await worker.recognize(canvas);
+        fullText += text + '\n\n';
+      }
+      await worker.terminate();
+    }
+    const sourceTa = document.getElementById('schedule-gpt-source');
+    sourceTa.value = fullText.trim();
+    feedback('ocr-progress', 'ok', `OCR complete. Review text, adjust, then click Generate JSON.`);
+    sourceTa.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  } catch (e) {
+    console.error(e);
+    feedback('ocr-progress', 'error', e.message || 'OCR processing failed.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'OCR PDF → Text';
+  }
+}
+
 window.addMember = async function(plantId) {
   const userEl = document.getElementById(`add-user-${plantId}`);
   const roleEl = document.getElementById(`add-role-${plantId}`);
@@ -2819,6 +3051,21 @@ document.getElementById('signout-btn').addEventListener('click', doSignOut);
 document.getElementById('create-plant-btn').addEventListener('click', createPlant);
 document.getElementById('load-schedule-file-btn').addEventListener('click', loadScheduleJsonFromFile);
 document.getElementById('import-schedule-btn').addEventListener('click', importDailySchedule);
+document.getElementById('ocr-pdf-btn').addEventListener('click', ocrPdfToText);
+document.getElementById('generate-schedule-json-btn').addEventListener('click', generateScheduleJsonFromDailyScheduleGPT);
+document.getElementById('deepseek-convert-btn').addEventListener('click', convertWithDeepSeek);
+
+// Auto-save extra system prompt to localStorage
+(function() {
+  const el = document.getElementById('deepseek-system-prompt');
+  if (el) {
+    const saved = localStorage.getItem('ap:deepseek-extra-prompt');
+    if (saved) el.value = saved;
+    el.addEventListener('input', () => {
+      localStorage.setItem('ap:deepseek-extra-prompt', el.value);
+    });
+  }
+})();
 </script>
 </body>
 </html>

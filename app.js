@@ -1343,7 +1343,9 @@ async function uploadIssuePhotosToStorage(issueId, photos) {
       storageBucket: sRef.bucket,
       contentType: meta.contentType,
       sizeBytes: meta.sizeBytes,
-      source: 'storage'
+      source: 'storage',
+      takenAt: p.takenAt || p.timestamp || '',
+      uploadedAt: new Date().toISOString()
     });
   }
   return out;
@@ -1361,9 +1363,10 @@ function queueAttachmentDocs(batch, issueId, photos = []) {
       storageBucket: p.storageBucket || '',
       thumbnailPath: null,
       uploadedBy: currentActor(),
-      uploadedAt: serverTimestamp(),
       sizeBytes: Number(p.sizeBytes || 0),
       source: p.source || 'storage',
+      takenAt: p.takenAt || p.timestamp || null,
+      uploadedAt: p.uploadedAt || serverTimestamp(),
       schemaVersion: 2
     }, { merge: true });
   });
@@ -1395,7 +1398,9 @@ async function fetchAttachmentPhotos(issueId) {
         storagePath: a.storagePath,
         storageBucket: a.storageBucket || '',
         contentType: a.contentType || '',
-        sizeBytes: Number(a.sizeBytes || 0)
+        sizeBytes: Number(a.sizeBytes || 0),
+        takenAt: a.takenAt || '',
+        uploadedAt: a.uploadedAt || ''
       });
     } catch (_) {
       // Ignore broken attachment references and keep going.
@@ -6677,11 +6682,16 @@ function renderIssues() {
     const card=document.createElement('div');
     card.className='issue-card'+(issueIsResolvedV2(issue)?' resolved':'')+(issue.highPriority?' high-priority':'')+(isAlertFocus?' alert-focus-card':'');
 
-    const _photoList = (issue.photos||[]).map(p => p.dataUrl);
+    const _photoList = (issue.photos || []).map(p => ({
+      url: p.dataUrl || p.downloadURL || p.url || '',
+      takenAt: p.takenAt || p.timestamp || '',
+      uploadedAt: p.uploadedAt || p.createdAt || '',
+      name: p.name || ''
+    })).filter(p => p.url);
     if (_photoList.length) window._issuePhotos = window._issuePhotos || {};
     if (_photoList.length) window._issuePhotos[issue.id] = _photoList;
     const photosHtml=_photoList.length
-      ? `<div class="issue-photos">${_photoList.map((url,i)=>`<img class="issue-photo-thumb" src="${url}" loading="lazy" onclick="openLightbox(${i},'${issue.id}')">`).join('')}</div>` : '';
+      ? `<div class="issue-photos">${_photoList.map((photo,i)=>`<img class="issue-photo-thumb" src="${photo.url}" loading="lazy" onclick="openLightbox(${i},'${issue.id}')">`).join('')}</div>` : '';
 
     // Authoritative current status from issue.currentStatus (v2) or lifecycle fallback
     const currentKey = currentStatusKey(issue);
@@ -6786,7 +6796,7 @@ function renderIssues() {
           </div>
           <div class="tl-time">${entry.dateTime||''}${entry.by?' — '+esc(entry.by):''}</div>
           ${entry.note?`<div class="tl-note-text">"${esc(entry.note)}"</div>`:''}
-          ${Array.isArray(entry.photos) && entry.photos.length ? `<div class="issue-photos" style="margin-top:6px;">${entry.photos.map((p,i)=>`<img class="issue-photo-thumb" src="${esc(p.downloadURL || p.dataUrl || '')}" loading="lazy" alt="${esc(p.name || `Status photo ${i+1}`)}" onclick="openLightbox(${i}, [${entry.photos.map(sp => `'${esc(sp.downloadURL || sp.dataUrl || '')}'`).join(',')}])">`).join('')}</div>` : ''}
+          ${Array.isArray(entry.photos) && entry.photos.length ? `<div class="issue-photos" style="margin-top:6px;">${entry.photos.map((p,i)=>`<img class="issue-photo-thumb" src="${esc(p.downloadURL || p.dataUrl || '')}" loading="lazy" alt="${esc(p.name || `Status photo ${i+1}`)}" onclick="openLightbox(${i}, [${entry.photos.map(sp => `{url:'${esc(sp.downloadURL || sp.dataUrl || '')}',takenAt:'${esc(sp.takenAt || sp.timestamp || '')}',uploadedAt:'${esc(sp.uploadedAt || sp.createdAt || '')}'}`).join(',')}])">`).join('')}</div>` : ''}
           ${currentUserPermissions.canEditIssue ? `<div style="display:flex;gap:5px;margin-top:6px;">
             ${!isResolvedEntry && !isCurrent ? `<button class="tl-edit-btn" onclick="setStatusCurrentFromHistory('${issue.id}',${trueIdx})">Set current</button>` : ''}
             ${!isResolvedEntry && entryWorkflowState === 'finished' ? `<button class="tl-edit-btn" onclick="setWorkflowStateForStatus('${issue.id}','${entry.status}','called')">Un-finish</button>` : ''}
@@ -6806,7 +6816,7 @@ function renderIssues() {
       ? `<div class="tl-add-row">
           <select class="tl-mini-select" onchange="setPendingStatus('${issue.id}','status',this.value)">
             <option value="">Status…</option>
-            ${Object.entries(STATUS_CONFIG).map(([k,v])=>`<option value="${k}"${k===pend.status?' selected':''}>${v.icon} ${v.label}</option>`).join('')}
+            ${getAlphabetizedStatusKeys().map(k=>`<option value="${k}"${k===pend.status?' selected':''}>${STATUS_CONFIG[k].icon} ${STATUS_CONFIG[k].label}</option>`).join('')}
           </select>
           ${pendSubs.length?`<select class="tl-mini-select" id="pending-sub-${issue.id}"><option value="">Sub-status…</option>${pendSubs.map(s=>`<option value="${s}"${s===pend.subStatus?' selected':''}>${s}</option>`).join('')}</select>`:''}
           <input class="tl-mini-input" id="pending-note-${issue.id}" placeholder="Note (optional)…">
@@ -7000,7 +7010,8 @@ function renderIssues() {
     catInner.className = 'swipe-category-inner';
 
     // Build status tiles for ALL statuses (including open/resolved)
-    toColumnMajorOrder(statusOrder, 5).forEach(key => {
+    // Keep true alphabetic left-to-right order in the swipe category slider.
+    statusOrder.forEach(key => {
       const st = getStatusDef(key);
       const tile = document.createElement('div');
       tile.className = 'swipe-status-tile' + (currentStatusKey(issue) === key ? ' current' : '');
@@ -7106,8 +7117,9 @@ function renderIssues() {
           
     const activeColor = getStatusColor(statusKey);
 
-          // Sub chips
-          getStatusSubs(statusKey).forEach(sub => {
+          // Sub chips (alphabetized for consistent scan order)
+          const sortedSubs = [...getStatusSubs(statusKey)].sort((a, b) => String(a || '').localeCompare(String(b || ''), undefined, { sensitivity: 'base' }));
+          sortedSubs.forEach(sub => {
             const item = document.createElement('button');
             item.type = 'button';
             item.className = 'subcategory-item swipe-sub-action';
@@ -7840,13 +7852,27 @@ function _positionSpotlight(step) {
 // ── LIGHTBOX ──
 let _lbPhotos = [], _lbIndex = 0;
 
+function _formatLightboxPhotoMeta(photo) {
+  if (!photo || typeof photo !== 'object') return '';
+  const raw = photo.takenAt || photo.uploadedAt || photo.createdAt || photo.timestamp || '';
+  if (!raw) return '';
+  const d = raw?.toDate ? raw.toDate() : new Date(raw);
+  if (Number.isNaN(d.getTime())) return '';
+  const label = photo.takenAt ? 'Taken' : 'Uploaded';
+  return `${label}: ${d.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}`;
+}
+
 function _lbShow(idx) {
   _lbIndex = (idx % _lbPhotos.length + _lbPhotos.length) % _lbPhotos.length;
-  document.getElementById('lightbox-img').src = _lbPhotos[_lbIndex];
+  const current = _lbPhotos[_lbIndex] || {};
+  const src = typeof current === 'string' ? current : (current.url || current.downloadURL || current.dataUrl || '');
+  document.getElementById('lightbox-img').src = src;
   const multi = _lbPhotos.length > 1;
   document.getElementById('lightbox-prev').style.display = multi ? '' : 'none';
   document.getElementById('lightbox-next').style.display = multi ? '' : 'none';
   document.getElementById('lightbox-counter').textContent = multi ? `${_lbIndex + 1} / ${_lbPhotos.length}` : '';
+  const meta = document.getElementById('lightbox-meta');
+  if (meta) meta.textContent = _formatLightboxPhotoMeta(current);
 }
 
 window.openLightbox = (indexOrSrc, issueIdOrPhotos) => {
@@ -7856,11 +7882,11 @@ window.openLightbox = (indexOrSrc, issueIdOrPhotos) => {
     _lbIndex = indexOrSrc;
   } else if (Array.isArray(issueIdOrPhotos)) {
     // Legacy array call
-    _lbPhotos = issueIdOrPhotos;
+    _lbPhotos = issueIdOrPhotos.map(item => typeof item === 'string' ? ({ url: item }) : item).filter(Boolean);
     _lbIndex = indexOrSrc;
   } else {
     // Legacy single-src call
-    _lbPhotos = [indexOrSrc];
+    _lbPhotos = [{ url: indexOrSrc }];
     _lbIndex = 0;
   }
   _lbShow(_lbIndex);
@@ -12577,8 +12603,11 @@ function _notesRenderAttachments() {
     img.src = att.url || att.downloadURL || '';
     img.alt = att.fileName || `Attachment ${idx + 1}`;
     img.addEventListener('click', () => {
-      const urls = _notesAttachmentsCache.map(a => a.url || a.downloadURL).filter(Boolean);
-      openLightbox(idx, urls);
+      const photos = _notesAttachmentsCache.map(a => ({
+        url: a.url || a.downloadURL || '',
+        uploadedAt: a.uploadedAt || a.createdAt || ''
+      })).filter(a => a.url);
+      openLightbox(idx, photos);
     });
     const label = document.createElement('div');
     label.className = 'notes-attachment-label';
@@ -12659,22 +12688,15 @@ function _notesRenderEditor(note = null) {
 function _notesFocusBody() {
   const bodyEl = document.getElementById('notes-body');
   if (!bodyEl) return;
-  const selection = window.getSelection();
-  const hasBodySelection = Boolean(
-    selection &&
-    selection.rangeCount > 0 &&
-    bodyEl.contains(selection.anchorNode)
-  );
+  const sel = window.getSelection();
+  const hasBodySelection = Boolean(sel && sel.rangeCount > 0 && bodyEl.contains(sel.anchorNode));
   bodyEl.focus();
   if (hasBodySelection) return;
-  try {
-    const range = document.createRange();
-    range.selectNodeContents(bodyEl);
-    range.collapse(false);
-    const sel = window.getSelection();
-    sel.removeAllRanges();
-    sel.addRange(range);
-  } catch (_) {}
+  const range = document.createRange();
+  range.selectNodeContents(bodyEl);
+  range.collapse(false);
+  sel.removeAllRanges();
+  sel.addRange(range);
 }
 
 function _notesFocusTitle() {
@@ -12684,47 +12706,162 @@ function _notesFocusTitle() {
   titleEl.select?.();
 }
 
+function _notesDetectFormats() {
+  const sel = window.getSelection();
+  const fmts = { bold: false, italic: false, underline: false, bullet: false };
+  if (!sel || !sel.rangeCount) return fmts;
+  function walk(node) {
+    while (node && node.nodeType === Node.ELEMENT_NODE) {
+      const t = node.tagName;
+      if (t === 'B' || t === 'STRONG') fmts.bold = true;
+      if (t === 'I' || t === 'EM') fmts.italic = true;
+      if (t === 'U') fmts.underline = true;
+      if (t === 'UL' || t === 'OL') fmts.bullet = true;
+      if (t === 'BODY') break;
+      node = node.parentElement;
+    }
+  }
+  for (let i = 0; i < sel.rangeCount; i++) {
+    const r = sel.getRangeAt(i);
+    if (r.collapsed) { walk(r.startContainer); }
+    else { walk(r.startContainer); walk(r.endContainer); }
+  }
+  return fmts;
+}
+
+function _notesIsInTag(tagName) {
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) return false;
+  const tag = tagName.toUpperCase();
+  for (let i = 0; i < sel.rangeCount; i++) {
+    const r = sel.getRangeAt(i);
+    const check = node => {
+      while (node && node.nodeType === Node.ELEMENT_NODE) {
+        if (node.tagName === tag) return true;
+        if (node.tagName === 'BODY') break;
+        node = node.parentElement;
+      }
+      return false;
+    };
+    if (r.collapsed) { if (check(r.startContainer)) return true; }
+    else { if (check(r.startContainer) || check(r.endContainer)) return true; }
+  }
+  return false;
+}
+
+function _notesWrapFormat(tagName) {
+  const sel = window.getSelection();
+  if (!sel.rangeCount) return;
+  const range = sel.getRangeAt(0);
+  if (range.collapsed) return;
+  const frag = range.extractContents();
+  const wrapper = document.createElement(tagName);
+  wrapper.appendChild(frag);
+  range.insertNode(wrapper);
+  sel.removeAllRanges();
+  const nr = document.createRange();
+  nr.selectNodeContents(wrapper);
+  sel.addRange(nr);
+}
+
+function _notesUnwrapFormat(tagName) {
+  const sel = window.getSelection();
+  if (!sel.rangeCount) return;
+  const range = sel.getRangeAt(0);
+  if (range.collapsed) return;
+  const bodyEl = document.getElementById('notes-body');
+  if (!bodyEl) return;
+  const frag = range.extractContents();
+  function stripTag(node, tag) {
+    if (!node || node.nodeType !== Node.ELEMENT_NODE) return node;
+    if (node.tagName === tag) {
+      const df = document.createDocumentFragment();
+      Array.from(node.childNodes).forEach(c => df.appendChild(stripTag(c, tag)));
+      return df;
+    }
+    const clone = node.cloneNode(false);
+    Array.from(node.childNodes).forEach(c => clone.appendChild(stripTag(c, tag)));
+    return clone;
+  }
+  const cleaned = stripTag(frag, tagName.toUpperCase());
+  range.insertNode(cleaned);
+  _notesCleanupEmptyTags(bodyEl);
+  sel.removeAllRanges();
+  bodyEl.focus();
+}
+
+function _notesCleanupEmptyTags(root) {
+  if (!root) return;
+  root.querySelectorAll('b, i, u, strong, em').forEach(el => {
+    if (!el.textContent.trim() && !el.children.length) {
+      el.parentNode?.removeChild(el);
+    }
+  });
+}
+
+function _notesApplyInlineFormat(tagName) {
+  const bodyEl = document.getElementById('notes-body');
+  const sel = window.getSelection();
+  if (!bodyEl || !sel || !sel.rangeCount) return;
+  const range = sel.getRangeAt(0);
+  if (!bodyEl.contains(range.commonAncestorContainer)) return;
+  if (range.collapsed) {
+    const cmdMap = { B: 'bold', I: 'italic', U: 'underline' };
+    try { document.execCommand('styleWithCSS', false, false); } catch (_) {}
+    document.execCommand(cmdMap[tagName] || 'bold', false, null);
+    return;
+  }
+  if (_notesIsInTag(tagName)) {
+    _notesUnwrapFormat(tagName);
+  } else {
+    _notesWrapFormat(tagName);
+  }
+}
+
 function _notesToolbarCommand(command) {
-  _notesFocusBody();
-  try { document.execCommand('styleWithCSS', false, false); } catch (_) {}
-  document.execCommand(command, false, null);
+  const bodyEl = document.getElementById('notes-body');
+  if (!bodyEl) return;
+  bodyEl.focus();
+  const inlineTags = { bold: 'B', italic: 'I', underline: 'U' };
+  const tag = inlineTags[command];
+  if (tag) {
+    _notesApplyInlineFormat(tag);
+  } else {
+    try { document.execCommand('styleWithCSS', false, false); } catch (_) {}
+    document.execCommand(command, false, null);
+  }
   _notesSyncFormatButtons();
   _notesState.dirty = true;
   _notesQueueAutosave();
 }
 
 function _notesSyncFormatButtons() {
-  const bodyEl = document.getElementById('notes-body');
   const boldBtn = document.getElementById('notes-bold-btn');
   const italicBtn = document.getElementById('notes-italic-btn');
   const underlineBtn = document.getElementById('notes-underline-btn');
   const bulletBtn = document.getElementById('notes-bullet-btn');
-  if (!bodyEl || !boldBtn || !italicBtn) return;
-  const selection = window.getSelection();
-  const inBody = Boolean(selection && selection.rangeCount > 0 && bodyEl.contains(selection.anchorNode));
+  if (!boldBtn || !italicBtn) return;
+  const bodyEl = document.getElementById('notes-body');
+  const sel = window.getSelection();
+  const inBody = Boolean(sel && sel.rangeCount > 0 && bodyEl && bodyEl.contains(sel.anchorNode));
   if (!inBody) {
-    boldBtn.classList.remove('active');
-    italicBtn.classList.remove('active');
-    underlineBtn?.classList.remove('active');
-    bulletBtn?.classList.remove('active');
-    boldBtn.setAttribute('aria-pressed', 'false');
-    italicBtn.setAttribute('aria-pressed', 'false');
-    underlineBtn?.setAttribute('aria-pressed', 'false');
-    bulletBtn?.setAttribute('aria-pressed', 'false');
+    [boldBtn, italicBtn, underlineBtn, bulletBtn].forEach(b => {
+      if (!b) return;
+      b.classList.remove('active');
+      b.setAttribute('aria-pressed', 'false');
+    });
     return;
   }
-  const boldOn = !!document.queryCommandState('bold');
-  const italicOn = !!document.queryCommandState('italic');
-  const underlineOn = !!document.queryCommandState('underline');
-  const bulletOn = !!document.queryCommandState('insertUnorderedList');
-  boldBtn.classList.toggle('active', boldOn);
-  italicBtn.classList.toggle('active', italicOn);
-  underlineBtn?.classList.toggle('active', underlineOn);
-  bulletBtn?.classList.toggle('active', bulletOn);
-  boldBtn.setAttribute('aria-pressed', String(boldOn));
-  italicBtn.setAttribute('aria-pressed', String(italicOn));
-  underlineBtn?.setAttribute('aria-pressed', String(underlineOn));
-  bulletBtn?.setAttribute('aria-pressed', String(bulletOn));
+  const fmts = _notesDetectFormats();
+  const sync = (btn, val) => {
+    if (!btn) return;
+    btn.classList.toggle('active', val);
+    btn.setAttribute('aria-pressed', String(val));
+  };
+  sync(boldBtn, fmts.bold);
+  sync(italicBtn, fmts.italic);
+  sync(underlineBtn, fmts.underline);
+  sync(bulletBtn, fmts.bullet);
 }
 
 async function _notesLoadAttachments(noteId) {
@@ -13445,10 +13582,23 @@ document.addEventListener('keydown', e => {
 });
 document.getElementById('notes-body')?.addEventListener('mouseup', _notesSyncFormatButtons);
 document.getElementById('notes-body')?.addEventListener('keyup', _notesSyncFormatButtons);
+let _notesSelChangeRaf = null;
 document.addEventListener('selectionchange', () => {
-  if (!document.getElementById('notes-modal')?.classList.contains('visible')) return;
-  _notesSyncFormatButtons();
+  if (!document.getElementById('notes-editor-modal')?.classList.contains('visible')) return;
+  if (_notesSelChangeRaf) cancelAnimationFrame(_notesSelChangeRaf);
+  _notesSelChangeRaf = requestAnimationFrame(_notesSyncFormatButtons);
 });
+let _notesBodyObserver = null;
+function _notesInitBodyObserver() {
+  const bodyEl = document.getElementById('notes-body');
+  if (!bodyEl || _notesBodyObserver) return;
+  _notesBodyObserver = new MutationObserver(() => {
+    if (!document.getElementById('notes-editor-modal')?.classList.contains('visible')) return;
+    _notesSyncFormatButtons();
+  });
+  _notesBodyObserver.observe(bodyEl, { childList: true, subtree: true, characterData: true });
+}
+_notesInitBodyObserver();
 let _notesDragDepth = 0;
 function _notesSetDropActive(active) {
   const shell = document.querySelector('#notes-editor-frame');
