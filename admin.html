@@ -1984,7 +1984,10 @@ async function convertWithDeepSeek() {
       body: JSON.stringify({ text: sourceText, shiftOverride: shiftOverride || undefined, instructions: instructions || undefined, systemPrompt: systemPrompt || undefined })
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'DeepSeek conversion failed');
+    if (!res.ok) {
+      const detail = data.tail ? ` (length ${data.length}, tail: ${data.tail})` : '';
+      throw new Error((data.error || 'DeepSeek conversion failed') + detail);
+    }
 
     // DeepSeek returns the adaptedPayload directly
     let adaptedPayload = data;
