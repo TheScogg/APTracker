@@ -254,6 +254,9 @@
     .press-add-row { display:flex; gap:6px; align-items:center; margin-top:6px; flex-wrap:wrap; }
     .press-add-row input { max-width:200px; flex:1; }
     .press-count { font-size:11px; color:var(--text2); margin-bottom:6px; }
+    /* Editable preview cells */
+    #schedule-preview-container td:hover { background:rgba(249,115,22,0.08); border-radius:4px; }
+    #schedule-preview-container td input:focus { outline:1px solid var(--accent); border-radius:3px; background:var(--bg3); }
   </style>
 </head>
 <body>
@@ -2087,40 +2090,82 @@ function renderSchedulePreview() {
   if (!raw) { container.innerHTML = ''; return; }
   try {
     const payload = extractSchedulePayload(parseScheduleJsonInput(raw, 'Preview'));
-    const sections = [
-      { label: 'Page 1', key: 'page1', rows: payload.page_1 || payload.page1 || [] },
-      { label: 'Page 2', key: 'page2', rows: payload.page_2 || payload.page2 || [] },
-      { label: 'North Bay Changes', key: 'northBayChanges', rows: payload.north_bay_changes || payload.northBayChanges || [] },
-      { label: 'South Bay Changes', key: 'southBayChanges', rows: payload.south_bay_changes || payload.southBayChanges || [] }
+    const sectionKeys = [
+      { label: 'Page 1', key: 'page_1', altKey: 'page1' },
+      { label: 'Page 2', key: 'page_2', altKey: 'page2' },
+      { label: 'North Bay Changes', key: 'north_bay_changes', altKey: 'northBayChanges' },
+      { label: 'South Bay Changes', key: 'south_bay_changes', altKey: 'southBayChanges' }
     ];
+    const cols = ['Press','Part #','Description','Cavity','DOH','Labels/Shift','MC','Location','Notes'];
+    const fields = ['press','part_number','description','cavity','doh','labels_per_shift','mc','part_storage_location','notes'];
     let totalRows = 0;
     let html = '';
-    for (const sec of sections) {
-      if (!sec.rows.length) continue;
-      totalRows += sec.rows.length;
-      html += `<div style="margin-bottom:10px;"><strong style="font-size:11px;color:var(--text2);">${sec.label} (${sec.rows.length})</strong>`;
+    for (const sk of sectionKeys) {
+      const rows = payload[sk.key] || payload[sk.altKey] || [];
+      if (!rows.length) continue;
+      totalRows += rows.length;
+      html += `<div style="margin-bottom:10px;"><strong style="font-size:11px;color:var(--text2);">${sk.label} (${rows.length})</strong>`;
       html += `<table style="width:100%;font-size:11px;margin-top:4px;"><tr style="color:var(--text2);font-family:'Share Tech Mono',monospace;font-size:10px;">`;
-      const cols = ['Press','Part #','Description','Cavity','DOH','Labels/Shift','MC','Location','Notes'];
-      const fields = ['press','part_number','description','cavity','doh','labels_per_shift','mc','part_storage_location','notes'];
       for (const c of cols) html += `<th style="padding:4px 5px;white-space:nowrap;">${c}</th>`;
       html += '</tr>';
-      for (const row of sec.rows) {
+      for (let ri = 0; ri < rows.length; ri++) {
         html += '<tr>';
-        for (const f of fields) {
-          let v = row[f];
-          if (f === 'part_storage_location') v = Array.isArray(v) ? v.join(', ') : '';
-          html += `<td style="padding:3px 5px;border-top:1px solid var(--border);white-space:nowrap;">${esc(String(v ?? ''))}</td>`;
+        for (let fi = 0; fi < fields.length; fi++) {
+          const f = fields[fi];
+          let v = rows[ri][f];
+          if (f === 'part_storage_location') v = Array.isArray(v) ? v.join(', ') : String(v ?? '');
+          const val = esc(String(v ?? ''));
+          html += `<td style="padding:2px 4px;border-top:1px solid var(--border);">
+            <input type="text" value="${val}"
+                   data-section="${sk.key}" data-row="${ri}" data-field="${f}"
+                   style="width:100%;border:none;background:transparent;color:var(--text);font-size:11px;padding:2px;font-family:inherit;box-sizing:border-box;"
+                   onchange="window.handlePreviewEdit(this)" />
+          </td>`;
         }
         html += '</tr>';
       }
       html += '</table></div>';
     }
     container.innerHTML = html || '<span class="muted">No rows found.</span>';
-    if (summary) summary.textContent = `Preview schedule data (${totalRows} rows)`;
+    if (summary) summary.textContent = `Preview schedule data (${totalRows} rows) — click a cell to edit`;
   } catch (e) {
     container.innerHTML = `<span style="color:var(--text2);font-size:11px;">Preview unavailable — JSON not parseable yet.</span>`;
   }
 }
+
+window.handlePreviewEdit = function(input) {
+  const textarea = document.getElementById('schedule-json-text');
+  if (!textarea) return;
+  try {
+    const section = input.dataset.section;
+    const rowIdx = parseInt(input.dataset.row, 10);
+    const field = input.dataset.field;
+    const raw = textarea.value.trim();
+    const parsed = parseScheduleJsonInput(raw, 'Preview edit');
+    // Work with the full parsed object (may have schedule_info wrapper)
+    const obj = parsed && typeof parsed === 'object' ? parsed : {};
+    // Determine the target array — could be at top level or inside schedule_info
+    let targetArr = obj[section];
+    // Also check alt keys
+    if (!targetArr) {
+      const altMap = { page_1: 'page1', page_2: 'page2', north_bay_changes: 'northBayChanges', south_bay_changes: 'southBayChanges' };
+      targetArr = obj[altMap[section]];
+    }
+    if (targetArr && Array.isArray(targetArr) && targetArr[rowIdx] !== undefined) {
+      let val = input.value.trim();
+      if (field === 'part_storage_location') {
+        val = val.split(',').map(s => s.trim()).filter(Boolean);
+      } else if (field === 'doh' || field === 'labels_per_shift') {
+        val = val ? (isNaN(Number(val)) ? val : Number(val)) : '';
+      }
+      targetArr[rowIdx][field] = val;
+      textarea.value = JSON.stringify(obj, null, 2);
+      renderSchedulePreview();
+    }
+  } catch (_) {
+    // If editing breaks JSON, silently ignore — preview error state handles it
+  }
+};
 
 function preprocessCanvasForOcr(canvas) {
   const ctx = canvas.getContext('2d');
