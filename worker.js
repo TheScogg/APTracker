@@ -186,8 +186,12 @@ Rules:
     const data = await res.json();
     if (!res.ok) throw new Error((data.error && data.error.message) || 'DeepSeek API error: ' + res.status);
 
-    const content = data.choices?.[0]?.message?.content;
+    let content = data.choices?.[0]?.message?.content;
     if (!content) throw new Error('DeepSeek returned empty response');
+
+    // Strip markdown code fences if present
+    const fenceMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    if (fenceMatch) content = fenceMatch[1].trim();
 
     const parsed = JSON.parse(content);
     return new Response(JSON.stringify(parsed), {
