@@ -117,12 +117,12 @@ async function handleAiConvert(request, env) {
     }), { status: 500, headers: { 'Content-Type': 'application/json' } });
   }
   try {
-    const { text: rawText, shiftOverride } = await request.json();
+    const { text: rawText, shiftOverride, instructions } = await request.json();
     if (!rawText) {
       return new Response(JSON.stringify({ error: 'Expected { text: string }' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
     }
 
-    const systemPrompt = `You convert daily production schedule OCR text into structured JSON. Output ONLY valid JSON matching this schema:
+    let systemPrompt = `You convert daily production schedule OCR text into structured JSON. Output ONLY valid JSON matching this schema:
 
 {
   "schedule_info": {
@@ -163,7 +163,7 @@ Rules:
 - If text is unclear or a field is missing, use empty string or empty array. Do NOT make up data.
 - Return ONLY the JSON object, no markdown or explanation.`;
 
-    const userMessage = `Schedule OCR text:\n\n${rawText}${shiftOverride ? `\n\nShift override: ${shiftOverride}` : ''}`;
+    const userMessage = `Schedule OCR text:\n\n${rawText}${shiftOverride ? `\n\nShift override: ${shiftOverride}` : ''}${instructions ? `\n\nAdditional instructions: ${instructions}` : ''}`;
 
     const res = await fetch('https://api.deepseek.com/chat/completions', {
       method: 'POST',

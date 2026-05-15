@@ -357,6 +357,7 @@
               <button class="btn btn-primary" id="generate-schedule-json-btn" style="max-width:200px;">Generate JSON</button>
               <button class="btn" id="deepseek-convert-btn" style="max-width:200px;">Convert with DeepSeek</button>
             </div>
+            <textarea id="deepseek-instructions" placeholder="Optional: custom instructions for DeepSeek (e.g. 'Press 7 is down, mark all its rows as notes')" style="margin-top:6px;min-height:60px;font-size:12px;"></textarea>
             <div id="schedule-gpt-feedback" class="feedback"></div>
           </div>
         </div>
@@ -1956,6 +1957,7 @@ async function convertWithDeepSeek() {
   const dateInput = document.getElementById('schedule-date');
   const sourceNameInput = document.getElementById('schedule-source-name');
   const jsonInput = document.getElementById('schedule-json-text');
+  const instructionsInput = document.getElementById('deepseek-instructions');
   const sourceText = String(sourceInput?.value || '').trim();
 
   if (!sourceText) {
@@ -1969,10 +1971,11 @@ async function convertWithDeepSeek() {
 
   try {
     const shiftOverride = String(shiftInput?.value || '').trim();
+    const instructions = String(instructionsInput?.value || '').trim();
     const res = await fetch('/api/ai/convert', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: sourceText, shiftOverride: shiftOverride || undefined })
+      body: JSON.stringify({ text: sourceText, shiftOverride: shiftOverride || undefined, instructions: instructions || undefined })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'DeepSeek conversion failed');
