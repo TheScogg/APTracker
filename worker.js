@@ -78,18 +78,22 @@ async function handleOcrGoogle(request, env) {
     return new Response(JSON.stringify({ error: 'Google Cloud Vision not configured', keys: Object.keys(env).join(',') }), { status: 500, headers: { 'Content-Type': 'application/json' } });
   }
   try {
-    const { images } = await request.json();
+    const { images, languageHints, featureType, model, maxResults } = await request.json();
     if (!Array.isArray(images) || images.length === 0) {
       return new Response(JSON.stringify({ error: 'Expected { images: [base64, ...] }' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
     }
     const texts = [];
     for (const [i, image] of images.entries()) {
+      const feature = { type: featureType || 'DOCUMENT_TEXT_DETECTION', maxResults: Math.max(1, Math.min(10, Number(maxResults) || 1)) };
+      if (model) feature.model = model;
+      const requestBody = { requests: [{ image: { content: image }, features: [feature] }] };
+      if (Array.isArray(languageHints) && languageHints.length) {
+        requestBody.requests[0].imageContext = { languageHints };
+      }
       const res = await fetch('https://vision.googleapis.com/v1/images:annotate?key=' + apiKey, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          requests: [{ image: { content: image }, features: [{ type: 'DOCUMENT_TEXT_DETECTION', maxResults: 1 }] }]
-        })
+        body: JSON.stringify(requestBody)
       });
       const data = await res.json();
       if (!res.ok) throw new Error((data.error && data.error.message) || 'Google Vision API error');

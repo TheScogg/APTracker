@@ -354,6 +354,30 @@
               <button class="btn" id="ocr-pdf-btn" style="max-width:140px;">OCR PDF → Text</button>
             </div>
             <div id="ocr-progress" class="feedback" style="margin-top:6px;"></div>
+            <details style="margin-top:6px;">
+              <summary style="cursor:pointer;font-size:12px;color:var(--text2);">Cloud OCR settings (optional)</summary>
+              <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;">
+                <label style="font-size:11px;color:var(--text2);flex:1;min-width:140px;">Language hints
+                  <input id="vision-language-hints" type="text" placeholder="en (default)" style="margin-top:2px;font-size:12px;" />
+                </label>
+                <label style="font-size:11px;color:var(--text2);flex:0 0 160px;">Feature type
+                  <select id="vision-feature-type" style="margin-top:2px;font-size:12px;">
+                    <option value="DOCUMENT_TEXT_DETECTION">Document Text (dense)</option>
+                    <option value="TEXT_DETECTION">General Text</option>
+                  </select>
+                </label>
+                <label style="font-size:11px;color:var(--text2);flex:0 0 140px;">Model
+                  <select id="vision-model" style="margin-top:2px;font-size:12px;">
+                    <option value="">Default</option>
+                    <option value="builtin/latest">Latest</option>
+                    <option value="builtin/stable">Stable</option>
+                  </select>
+                </label>
+                <label style="font-size:11px;color:var(--text2);flex:0 0 100px;">Max results
+                  <input id="vision-max-results" type="number" value="1" min="1" max="10" style="margin-top:2px;font-size:12px;" />
+                </label>
+              </div>
+            </details>
             <div class="divider" style="margin:12px 0;"></div>
             <h2>Generate JSON from Text</h2>
             <p class="muted" style="margin-bottom:6px;">Review OCR output (or paste text manually), then generate canonical JSON.</p>
@@ -2250,10 +2274,21 @@ async function ocrPdfToText() {
         images.push(canvas.toDataURL('image/png').split(',')[1]);
       }
       feedback('ocr-progress', '', `Sending ${images.length} page(s) to Google Vision…`);
+      const languageHints = (document.getElementById('vision-language-hints')?.value || '')
+        .split(',').map(s => s.trim()).filter(Boolean);
+      const featureType = document.getElementById('vision-feature-type')?.value || 'DOCUMENT_TEXT_DETECTION';
+      const model = document.getElementById('vision-model')?.value || '';
+      const maxResults = parseInt(document.getElementById('vision-max-results')?.value || '1', 10) || 1;
       const res = await fetch('/api/ocr/google', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ images })
+        body: JSON.stringify({
+          images,
+          languageHints: languageHints.length ? languageHints : undefined,
+          featureType,
+          model: model || undefined,
+          maxResults
+        })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Google Vision failed');
