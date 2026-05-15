@@ -246,6 +246,14 @@
     .stb-preview-pill { font-size:8.5px; font-weight:700; border-radius:999px; padding:2px 6px; border:1px solid; }
     .stb-preview-meta { font-size:10px; color:var(--text3); }
     @media (max-width:900px) { .stb-main { grid-template-columns:1fr; } }
+    /* ── Press Editor ──────────────────────────────── */
+    .press-row { display:flex; gap:6px; align-items:center; margin-bottom:6px; padding:6px 8px; background:var(--bg); border:1px solid var(--border); border-radius:8px; }
+    .press-row input[type=text] { flex:1; min-width:0; }
+    .press-row .press-row-name { max-width:140px; flex:0 0 140px; }
+    .press-row .press-row-presses { flex:1; }
+    .press-add-row { display:flex; gap:6px; align-items:center; margin-top:6px; flex-wrap:wrap; }
+    .press-add-row input { max-width:200px; flex:1; }
+    .press-count { font-size:11px; color:var(--text2); margin-bottom:6px; }
   </style>
 </head>
 <body>
@@ -742,6 +750,7 @@ let statusDraftByPlant = new Map();
 let gameDraftByPlant = new Map();
 let badgeDraftByPlant = new Map();
 let missionDraftByPlant = new Map();
+let pressDraftByPlant = new Map();
 let globalStoreDraft = [];
 let storeThemeEditorDraft = null;
 let storeThemeEditorIndex = -1;
@@ -1099,12 +1108,14 @@ async function loadMembersAndStatusesForAdminPlants() {
   statusDraftByPlant.clear();
   gameDraftByPlant.clear();
   missionDraftByPlant.clear();
+  pressDraftByPlant.clear();
   for (const plantId of adminPlantIds) {
-    const [membersSnap, statusesSnap, gameConfigSnap, missionsSnap] = await Promise.all([
+    const [membersSnap, statusesSnap, gameConfigSnap, missionsSnap, pressesSnap] = await Promise.all([
       getDocs(collection(db, 'plants', plantId, 'members')),
       getDoc(doc(db, 'plants', plantId, 'config', 'statuses')),
       getDoc(doc(db, 'plants', plantId, 'gamificationConfig', 'main')),
       getDocs(collection(db, 'plants', plantId, 'missions')),
+      getDoc(doc(db, 'plants', plantId, 'config', 'presses')),
     ]);
 
     membersByPlant.set(plantId, membersSnap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -1127,6 +1138,11 @@ async function loadMembersAndStatusesForAdminPlants() {
     // Load badge definitions (stored in gamificationConfig/main.badges)
     const storedBadges = Array.isArray(gameConfig.badges) ? gameConfig.badges : null;
     badgeDraftByPlant.set(plantId, storedBadges ? storedBadges.map(b => ({ ...b })) : deepCopy(DEFAULT_BADGE_DEFS));
+    // Load press definitions
+    const rawPresses = pressesSnap.exists() && pressesSnap.data()?.presses
+      ? pressesSnap.data().presses
+      : deepCopy(DEFAULT_PRESSES);
+    pressDraftByPlant.set(plantId, deepCopy(rawPresses));
   }
 }
 
@@ -1452,6 +1468,38 @@ function renderGamificationEditor(plantId, plantName) {
   `;
 }
 
+function renderPressEditor(plantId, plantName) {
+  const presses = pressDraftByPlant.get(plantId) || deepCopy(DEFAULT_PRESSES);
+  const rowNames = Object.keys(presses);
+  const totalPresses = rowNames.reduce((sum, r) => sum + presses[r].length, 0);
+
+  const rows = rowNames.map(rowName => `
+    <div class="press-row">
+      <input class="press-row-name" type="text" id="press-name-${esc(rowName)}" value="${esc(rowName)}"
+             onchange="window.patchPressRow('${plantId}','${esc(rowName)}')" />
+      <input class="press-row-presses" type="text" id="press-ids-${esc(rowName)}" value="${esc(presses[rowName].join(', '))}"
+             placeholder="e.g. 1.01, 1.02, 1.03"
+             onchange="window.patchPressRow('${plantId}','${esc(rowName)}')" />
+      <button class="small-btn danger" onclick="window.removePressRow('${plantId}','${esc(rowName)}')">✕</button>
+    </div>
+  `).join('');
+
+  return `
+    <div class="press-count">${totalPresses} presses across ${rowNames.length} rows</div>
+    <div id="press-list-${plantId}">${rows || '<div class="muted">No rows defined.</div>'}</div>
+    <div class="press-add-row">
+      <input id="new-press-row-name-${plantId}" placeholder="Row name (e.g. Row 7)" />
+      <input id="new-press-ids-${plantId}" placeholder="Press IDs (e.g. 7.01, 7.02, 7.03)" />
+      <button class="small-btn" onclick="window.addPressRow('${plantId}')">+ Add Row</button>
+    </div>
+    <div class="status-toolbar" style="margin-top:10px;">
+      <button class="small-btn" style="border-color:var(--accent);color:var(--accent);"
+              onclick="window.savePresses('${plantId}')">💾 Save Presses</button>
+    </div>
+    <div id="press-fb-${plantId}" class="feedback"></div>
+  `;
+}
+
 function renderStoreEditor() {
   const items = (globalStoreDraft || []).slice().sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
   globalStoreDraft = items;
@@ -1673,6 +1721,8 @@ function renderPlantsUsers() {
                   onclick="window.switchPlantTab('${plant.id}','statuses',this)">Statuses</button>
           <button class="plant-tab-btn ${activeTab === 'gamification' ? 'active' : ''}"
                   onclick="window.switchPlantTab('${plant.id}','gamification',this)">Gamification</button>
+          <button class="plant-tab-btn ${activeTab === 'presses' ? 'active' : ''}"
+                  onclick="window.switchPlantTab('${plant.id}','presses',this)">Presses</button>
         </div>
 
         <div class="plant-tab-pane ${activeTab === 'members' ? 'active' : ''}" id="ptab-members-${plant.id}">
@@ -1705,6 +1755,10 @@ function renderPlantsUsers() {
 
         <div class="plant-tab-pane ${activeTab === 'gamification' ? 'active' : ''}" id="ptab-gamification-${plant.id}">
           ${renderGamificationEditor(plant.id, plant.name)}
+        </div>
+
+        <div class="plant-tab-pane ${activeTab === 'presses' ? 'active' : ''}" id="ptab-presses-${plant.id}">
+          ${renderPressEditor(plant.id, plant.name)}
         </div>
       </div>
     `;
@@ -2542,6 +2596,85 @@ window.saveGamification = async function(plantId) {
   } catch (e) {
     console.error(e);
     feedback(`game-fb-${plantId}`, 'error', e.message || 'Failed to save gamification settings.');
+  }
+};
+
+// ── Press Editor ────────────────────────────────────────────────────────────────
+window.patchPressRow = function(plantId, renderedRowName) {
+  // Read current DOM values directly (avoids stale closures)
+  const nameEl = document.getElementById(`press-name-${esc(renderedRowName)}`);
+  const idsEl = document.getElementById(`press-ids-${esc(renderedRowName)}`);
+  if (!nameEl || !idsEl) return;
+  const newName = nameEl.value.trim();
+  const idsStr = idsEl.value.trim();
+  const presses = deepCopy(pressDraftByPlant.get(plantId) || {});
+  // Remove old key (may have been renamed on a previous call)
+  delete presses[renderedRowName];
+  if (newName) presses[newName] = idsStr.split(',').map(s => s.trim()).filter(Boolean);
+  pressDraftByPlant.set(plantId, presses);
+};
+
+window.addPressRow = function(plantId) {
+  const nameEl = document.getElementById(`new-press-row-name-${plantId}`);
+  const idsEl = document.getElementById(`new-press-ids-${plantId}`);
+  const rowName = String(nameEl?.value || '').trim();
+  if (!rowName) { feedback(`press-fb-${plantId}`, 'error', 'Enter a row name.'); return; }
+  const presses = deepCopy(pressDraftByPlant.get(plantId) || {});
+  if (presses[rowName]) { feedback(`press-fb-${plantId}`, 'error', `Row "${rowName}" already exists.`); return; }
+  presses[rowName] = String(idsEl?.value || '').split(',').map(s => s.trim()).filter(Boolean);
+  pressDraftByPlant.set(plantId, presses);
+  nameEl.value = '';
+  idsEl.value = '';
+  feedback(`press-fb-${plantId}`, 'ok', `Added row "${rowName}".`);
+  window.renderSinglePlantPresses(plantId);
+};
+
+window.removePressRow = function(plantId, rowName) {
+  if (!confirm(`Remove row "${rowName}" and all its presses?`)) return;
+  const presses = deepCopy(pressDraftByPlant.get(plantId) || {});
+  delete presses[rowName];
+  pressDraftByPlant.set(plantId, presses);
+  feedback(`press-fb-${plantId}`, 'ok', `Removed row "${rowName}".`);
+  window.renderSinglePlantPresses(plantId);
+};
+
+window.renderSinglePlantPresses = function(plantId) {
+  const container = document.getElementById(`press-list-${plantId}`);
+  const countEl = container?.parentElement?.querySelector('.press-count');
+  const presses = pressDraftByPlant.get(plantId) || {};
+  const rowNames = Object.keys(presses);
+  const totalPresses = rowNames.reduce((sum, r) => sum + presses[r].length, 0);
+  if (countEl) countEl.textContent = `${totalPresses} presses across ${rowNames.length} rows`;
+  if (!container) return;
+  if (!rowNames.length) { container.innerHTML = '<div class="muted">No rows defined.</div>'; return; }
+  container.innerHTML = rowNames.map(rowName => `
+    <div class="press-row">
+      <input class="press-row-name" type="text" id="press-name-${esc(rowName)}" value="${esc(rowName)}"
+             onchange="window.patchPressRow('${plantId}','${esc(rowName)}')" />
+      <input class="press-row-presses" type="text" id="press-ids-${esc(rowName)}" value="${esc(presses[rowName].join(', '))}"
+             placeholder="e.g. 1.01, 1.02, 1.03"
+             onchange="window.patchPressRow('${plantId}','${esc(rowName)}')" />
+      <button class="small-btn danger" onclick="window.removePressRow('${plantId}','${esc(rowName)}')">✕</button>
+    </div>
+  `).join('');
+};
+
+window.savePresses = async function(plantId) {
+  const btn = document.querySelector(`#ptab-presses-${plantId} .status-toolbar .small-btn`);
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  try {
+    const presses = pressDraftByPlant.get(plantId) || {};
+    await setDoc(doc(db, 'plants', plantId, 'config', 'presses'), {
+      presses,
+      updatedAt: serverTimestamp(),
+      updatedBy: { uid: currentUser.uid, name: currentUser.displayName || currentUser.email || '' }
+    }, { merge: true });
+    feedback(`press-fb-${plantId}`, 'ok', 'Press configuration saved.');
+  } catch (e) {
+    console.error(e);
+    feedback(`press-fb-${plantId}`, 'error', e.message || 'Failed to save press configuration.');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '💾 Save Presses'; }
   }
 };
 
