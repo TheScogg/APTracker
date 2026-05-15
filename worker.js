@@ -210,7 +210,7 @@ Rules:
       try {
         parsed = JSON.parse(fixed);
       } catch (_2) {
-        return new Response(JSON.stringify({ error: 'DeepSeek returned invalid JSON', length: cleaned.length, tail: cleaned.slice(-2000) }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+        return new Response(JSON.stringify({ error: 'DeepSeek returned invalid JSON', content: content }), { status: 500, headers: { 'Content-Type': 'application/json' } });
       }
     }
     return new Response(JSON.stringify(parsed), {

@@ -1985,8 +1985,11 @@ async function convertWithDeepSeek() {
     });
     const data = await res.json();
     if (!res.ok) {
-      const detail = data.tail ? ` (length ${data.length}, tail: ${data.tail})` : '';
-      throw new Error((data.error || 'DeepSeek conversion failed') + detail);
+      if (data.content) {
+        jsonInput.value = data.content;
+        throw new Error('DeepSeek returned invalid JSON. The raw output is in the JSON textarea above — you can manually fix it or check for errors.');
+      }
+      throw new Error(data.error || 'DeepSeek conversion failed');
     }
 
     // DeepSeek returns the adaptedPayload directly
