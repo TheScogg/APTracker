@@ -109,7 +109,12 @@ async function handleAiConvert(request, env) {
   }
   const apiKey = env.DEEPSEEK_API_KEY;
   if (!apiKey) {
-    return new Response(JSON.stringify({ error: 'DeepSeek not configured (set DEEPSEEK_API_KEY secret)' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({
+      error: 'DeepSeek key missing',
+      typeofKey: typeof apiKey,
+      keyLength: typeof apiKey === 'string' ? apiKey.length : 'N/A',
+      allKeys: Object.keys(env).join(',')
+    }), { status: 500, headers: { 'Content-Type': 'application/json' } });
   }
   try {
     const { text: rawText, shiftOverride } = await request.json();
@@ -211,6 +216,14 @@ export default {
     }
     if (url.pathname === '/api/ai/convert') {
       return handleAiConvert(request, env);
+    }
+    if (url.pathname === '/api/debug') {
+      const info = {};
+      for (const key of Object.keys(env)) {
+        const val = env[key];
+        info[key] = typeof val === 'string' ? `string length ${val.length} (starts with ${val.slice(0, 6)}...)` : typeof val;
+      }
+      return new Response(JSON.stringify(info, null, 2), { headers: { 'Content-Type': 'application/json' } });
     }
 
     return env.ASSETS.fetch(request);
