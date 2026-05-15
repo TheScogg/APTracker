@@ -122,7 +122,7 @@ async function handleAiConvert(request, env) {
       return new Response(JSON.stringify({ error: 'Expected { text: string }' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
     }
 
-    let systemPrompt = `You convert daily production schedule OCR text into structured JSON. Output ONLY valid JSON matching this schema:
+    let systemPrompt = `You convert daily production schedule OCR text into structured JSON. Output ONLY valid JSON matching this schema. CRITICAL: Escape all double quotes inside string values with backslash. For example, "27" Basket" must be written as "27\" Basket". Never use unescaped quotes inside strings. Output ONLY the JSON object, no markdown, no explanation.
 
 {
   "schedule_info": {
@@ -193,7 +193,19 @@ Rules:
     const fenceMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/i);
     if (fenceMatch) content = fenceMatch[1].trim();
 
-    const parsed = JSON.parse(content);
+    // Sanitize before parsing — fix inch-mark quotes and normalize smart quotes
+    let cleaned = content
+      .replace(/[\u2018\u2019]/g, "'")
+      .replace(/[\u201C\u201D]/g, '"')
+      .replace(/(\d)"(?!\s*[,\}\]\:])/g, '$1\\"');
+
+    let parsed;
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch (e) {
+      // If still failing, return the raw response for debugging
+      return new Response(JSON.stringify({ error: 'DeepSeek returned invalid JSON. First 500 chars: ' + cleaned.slice(0, 500) }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+    }
     return new Response(JSON.stringify(parsed), {
       headers: { 'Content-Type': 'application/json' }
     });
