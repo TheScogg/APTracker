@@ -358,6 +358,10 @@
               <button class="btn" id="deepseek-convert-btn" style="max-width:200px;">Convert with DeepSeek</button>
             </div>
             <textarea id="deepseek-instructions" placeholder="Optional: custom instructions for DeepSeek (e.g. 'Press 7 is down, mark all its rows as notes')" style="margin-top:6px;min-height:60px;font-size:12px;"></textarea>
+            <details style="margin-top:6px;">
+              <summary style="cursor:pointer;font-size:12px;color:var(--text2);">Edit system prompt (advanced)</summary>
+              <textarea id="deepseek-system-prompt" style="margin-top:4px;min-height:300px;font-size:11px;font-family:'Share Tech Mono',monospace;">Edit prompt here — it will be saved to your browser's local storage.</textarea>
+            </details>
             <div id="schedule-gpt-feedback" class="feedback"></div>
           </div>
         </div>
@@ -1972,10 +1976,12 @@ async function convertWithDeepSeek() {
   try {
     const shiftOverride = String(shiftInput?.value || '').trim();
     const instructions = String(instructionsInput?.value || '').trim();
+    const systemPromptInput = document.getElementById('deepseek-system-prompt');
+    const systemPrompt = String(systemPromptInput?.value || '').trim();
     const res = await fetch('/api/ai/convert', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: sourceText, shiftOverride: shiftOverride || undefined, instructions: instructions || undefined })
+      body: JSON.stringify({ text: sourceText, shiftOverride: shiftOverride || undefined, instructions: instructions || undefined, systemPrompt: systemPrompt || undefined })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'DeepSeek conversion failed');
@@ -3042,6 +3048,59 @@ document.getElementById('import-schedule-btn').addEventListener('click', importD
 document.getElementById('ocr-pdf-btn').addEventListener('click', ocrPdfToText);
 document.getElementById('generate-schedule-json-btn').addEventListener('click', generateScheduleJsonFromDailyScheduleGPT);
 document.getElementById('deepseek-convert-btn').addEventListener('click', convertWithDeepSeek);
+
+// Initialize system prompt editor
+(function() {
+  const DEFAULT_SYSTEM_PROMPT = `You convert daily production schedule OCR text into structured JSON. Output ONLY valid JSON matching this schema. CRITICAL: Escape all double quotes inside string values with backslash. For example, "27" Basket" must be written as "27\\" Basket". Never use unescaped quotes inside strings. Output ONLY the JSON object, no markdown, no explanation.
+
+{
+  "schedule_info": {
+    "date": "YYYY-MM-DD",
+    "shift": "1",
+    "line_speed": "",
+    "total_planned_pcs": "",
+    "note": ""
+  },
+  "page_1": [
+    {
+      "press": "",
+      "part_storage_location": [],
+      "part_number": "",
+      "description": "",
+      "cavity": "",
+      "doh": "",
+      "labels_per_shift": "",
+      "mc": "",
+      "notes": ""
+    }
+  ],
+  "page_2": [],
+  "north_bay_changes": [],
+  "south_bay_changes": []
+}
+
+Rules:
+- Extract date from the text if present (use YYYY-MM-DD format).
+- Each row in page_1 or page_2 represents one press/cavity entry from the schedule.
+- "doh" is Days on Hand (numeric).
+- "labels_per_shift" is numeric.
+- "mc" is mold code.
+- part_storage_location is an array of string location codes (can be empty).
+- "cavity" is a string (e.g. "4").
+- north_bay_changes and south_bay_changes are for change-over rows (same fields).
+- If shiftOverride is provided, use it instead of auto-detecting.
+- If text is unclear or a field is missing, use empty string or empty array. Do NOT make up data.
+- Return ONLY the JSON object, no markdown or explanation.`;
+
+  const el = document.getElementById('deepseek-system-prompt');
+  if (el) {
+    const saved = localStorage.getItem('ap:deepseek-system-prompt');
+    el.value = saved || DEFAULT_SYSTEM_PROMPT;
+    el.addEventListener('input', () => {
+      localStorage.setItem('ap:deepseek-system-prompt', el.value);
+    });
+  }
+})();
 </script>
 </body>
 </html>

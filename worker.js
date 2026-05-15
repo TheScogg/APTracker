@@ -117,12 +117,12 @@ async function handleAiConvert(request, env) {
     }), { status: 500, headers: { 'Content-Type': 'application/json' } });
   }
   try {
-    const { text: rawText, shiftOverride, instructions } = await request.json();
+    const { text: rawText, shiftOverride, instructions, systemPrompt: customPrompt } = await request.json();
     if (!rawText) {
       return new Response(JSON.stringify({ error: 'Expected { text: string }' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
     }
 
-    let systemPrompt = `You convert daily production schedule OCR text into structured JSON. Output ONLY valid JSON matching this schema. CRITICAL: Escape all double quotes inside string values with backslash. For example, "27" Basket" must be written as "27\" Basket". Never use unescaped quotes inside strings. Output ONLY the JSON object, no markdown, no explanation.
+    let systemPrompt = customPrompt || `You convert daily production schedule OCR text into structured JSON. Output ONLY valid JSON matching this schema. CRITICAL: Escape all double quotes inside string values with backslash. For example, "27" Basket" must be written as "27\" Basket". Never use unescaped quotes inside strings. Output ONLY the JSON object, no markdown, no explanation.
 
 {
   "schedule_info": {
