@@ -103,6 +103,96 @@ async function handleOcrGoogle(request, env) {
   }
 }
 
+async function handleAiConvert(request, env) {
+  if (request.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'POST required' }), { status: 405, headers: { 'Content-Type': 'application/json' } });
+  }
+  const apiKey = env.DEEPSEEK_API_KEY;
+  if (!apiKey) {
+    return new Response(JSON.stringify({ error: 'DeepSeek not configured (set DEEPSEEK_API_KEY secret)' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+  }
+  try {
+    const { text: rawText, shiftOverride } = await request.json();
+    if (!rawText) {
+      return new Response(JSON.stringify({ error: 'Expected { text: string }' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    const systemPrompt = `You convert daily production schedule OCR text into structured JSON. Output ONLY valid JSON matching this schema:
+
+{
+  "schedule_info": {
+    "date": "YYYY-MM-DD",
+    "shift": "1",
+    "line_speed": "",
+    "total_planned_pcs": "",
+    "note": ""
+  },
+  "page_1": [
+    {
+      "press": "",
+      "part_storage_location": [],
+      "part_number": "",
+      "description": "",
+      "cavity": "",
+      "doh": "",
+      "labels_per_shift": "",
+      "mc": "",
+      "notes": ""
+    }
+  ],
+  "page_2": [],
+  "north_bay_changes": [],
+  "south_bay_changes": []
+}
+
+Rules:
+- Extract date from the text if present (use YYYY-MM-DD format).
+- Each row in page_1 / page_2 represents one press/cavity entry from the schedule.
+- "doh" is Days on Hand (numeric).
+- "labels_per_shift" is numeric.
+- "mc" is mold code.
+- part_storage_location is an array of string location codes (can be empty).
+- "cavity" is a string (e.g. "4").
+- north_bay_changes and south_bay_changes are for change-over rows (same fields).
+- If shiftOverride is provided, use it instead of auto-detecting.
+- If text is unclear or a field is missing, use empty string or empty array. Do NOT make up data.
+- Return ONLY the JSON object, no markdown or explanation.`;
+
+    const userMessage = `Schedule OCR text:\n\n${rawText}${shiftOverride ? `\n\nShift override: ${shiftOverride}` : ''}`;
+
+    const res = await fetch('https://api.deepseek.com/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + apiKey
+      },
+      body: JSON.stringify({
+        model: 'deepseek-chat',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userMessage }
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.1,
+        max_tokens: 4096
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error((data.error && data.error.message) || 'DeepSeek API error: ' + res.status);
+
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) throw new Error('DeepSeek returned empty response');
+
+    const parsed = JSON.parse(content);
+    return new Response(JSON.stringify(parsed), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (e) {
+    return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+  }
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -118,6 +208,9 @@ export default {
     }
     if (url.pathname === '/api/ocr/google') {
       return handleOcrGoogle(request, env);
+    }
+    if (url.pathname === '/api/ai/convert') {
+      return handleAiConvert(request, env);
     }
 
     return env.ASSETS.fetch(request);

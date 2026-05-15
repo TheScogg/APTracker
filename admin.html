@@ -355,6 +355,7 @@
                 <option value="false">Lenient</option>
               </select>
               <button class="btn btn-primary" id="generate-schedule-json-btn" style="max-width:200px;">Generate JSON</button>
+              <button class="btn" id="deepseek-convert-btn" style="max-width:200px;">Convert with DeepSeek</button>
             </div>
             <div id="schedule-gpt-feedback" class="feedback"></div>
           </div>
@@ -1948,6 +1949,58 @@ async function generateScheduleJsonFromDailyScheduleGPT() {
   }
 }
 
+async function convertWithDeepSeek() {
+  const btn = document.getElementById('deepseek-convert-btn');
+  const sourceInput = document.getElementById('schedule-gpt-source');
+  const shiftInput = document.getElementById('schedule-gpt-shift-override');
+  const dateInput = document.getElementById('schedule-date');
+  const sourceNameInput = document.getElementById('schedule-source-name');
+  const jsonInput = document.getElementById('schedule-json-text');
+  const sourceText = String(sourceInput?.value || '').trim();
+
+  if (!sourceText) {
+    feedback('schedule-gpt-feedback', 'error', 'Paste schedule text or PDF metadata before converting.');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Calling DeepSeek…';
+  feedback('schedule-gpt-feedback', '', '');
+
+  try {
+    const shiftOverride = String(shiftInput?.value || '').trim();
+    const res = await fetch('/api/ai/convert', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: sourceText, shiftOverride: shiftOverride || undefined })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'DeepSeek conversion failed');
+
+    // DeepSeek returns the adaptedPayload directly
+    let adaptedPayload = data;
+
+    // Apply date override if set
+    if (dateInput?.value) {
+      if (!adaptedPayload.schedule_info) adaptedPayload.schedule_info = {};
+      adaptedPayload.schedule_info.date = String(dateInput.value).trim();
+    }
+
+    // Optionally validate using existing normalizeSchedulePayload
+    jsonInput.value = JSON.stringify(adaptedPayload, null, 2);
+    if (sourceNameInput && !String(sourceNameInput.value || '').trim()) {
+      sourceNameInput.value = `DeepSeek_${(adaptedPayload.schedule_info?.date || 'schedule')}.json`;
+    }
+    feedback('schedule-gpt-feedback', 'ok', 'JSON generated via DeepSeek. Review, then click Import Daily Schedule.');
+  } catch (e) {
+    console.error(e);
+    feedback('schedule-gpt-feedback', 'error', e.message || 'DeepSeek conversion failed.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Convert with DeepSeek';
+  }
+}
+
 function preprocessCanvasForOcr(canvas) {
   const ctx = canvas.getContext('2d');
   const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -2985,6 +3038,7 @@ document.getElementById('load-schedule-file-btn').addEventListener('click', load
 document.getElementById('import-schedule-btn').addEventListener('click', importDailySchedule);
 document.getElementById('ocr-pdf-btn').addEventListener('click', ocrPdfToText);
 document.getElementById('generate-schedule-json-btn').addEventListener('click', generateScheduleJsonFromDailyScheduleGPT);
+document.getElementById('deepseek-convert-btn').addEventListener('click', convertWithDeepSeek);
 </script>
 </body>
 </html>
