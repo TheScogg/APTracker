@@ -75,7 +75,7 @@ async function handleOcrGoogle(request, env) {
   }
   const apiKey = env.GOOGLE_VISION_API_KEY;
   if (!apiKey) {
-    return new Response(JSON.stringify({ error: 'Google Cloud Vision not configured (set GOOGLE_VISION_API_KEY secret)' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ error: 'Google Cloud Vision not configured', keys: Object.keys(env).join(',') }), { status: 500, headers: { 'Content-Type': 'application/json' } });
   }
   try {
     const { images } = await request.json();
