@@ -204,9 +204,14 @@ Rules:
     let parsed;
     try {
       parsed = JSON.parse(cleaned);
-    } catch (e) {
-      // If still failing, return the tail for debugging (errors at the end)
-      return new Response(JSON.stringify({ error: 'DeepSeek returned invalid JSON', length: cleaned.length, tail: cleaned.slice(-600) }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+    } catch (_) {
+      // Try removing trailing commas (most common LLM JSON issue)
+      const fixed = cleaned.replace(/,\s*([\]}])/g, '$1');
+      try {
+        parsed = JSON.parse(fixed);
+      } catch (_2) {
+        return new Response(JSON.stringify({ error: 'DeepSeek returned invalid JSON', length: cleaned.length, tail: cleaned.slice(-2000) }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+      }
     }
     return new Response(JSON.stringify(parsed), {
       headers: { 'Content-Type': 'application/json' }
