@@ -206,22 +206,21 @@ async function handleOcrDocumentAi(request, env) {
       });
       const retryData = await retryRes.json();
       if (!retryRes.ok) throw new Error((retryData.error && retryData.error.message) || 'Document AI API error: ' + retryRes.status);
+      const retryText = retryData.document?.text || '';
       const retryPages = retryData.document?.pages || [];
-      const retryFullText = retryPages.map(p =>
-        (p.paragraphs || []).map(pg => (pg.words || []).map(w => (w.symbols || []).map(s => s.text || '').join('')).join(' ')).join('\n')
-      ).filter(Boolean).join('\n\n');
-      const retryText = retryFullText || retryData.document?.text || '';
       return new Response(JSON.stringify({ text: retryText.trim(), pageCount: retryPages.length || 1 }), {
         headers: { 'Content-Type': 'application/json' }
       });
     }
     if (!res.ok) throw new Error((data.error && data.error.message) || 'Document AI API error: ' + res.status);
 
+    const text = data.document?.text || '';
     const pages = data.document?.pages || [];
-    const fullText = pages.map(p =>
-      (p.paragraphs || []).map(pg => (pg.words || []).map(w => (w.symbols || []).map(s => s.text || '').join('')).join(' ')).join('\n')
-    ).filter(Boolean).join('\n\n');
-    const text = fullText || data.document?.text || '';
+    if (!text && !pages.length) {
+      // Diagnostic: return part of the response so we can see the structure
+      const snippet = JSON.stringify(data).slice(0, 1000);
+      return new Response(JSON.stringify({ error: 'Document AI returned no text. Response preview: ' + snippet }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+    }
 
     return new Response(JSON.stringify({ text: text.trim(), pageCount: pages.length || 1 }), {
       headers: { 'Content-Type': 'application/json' }
