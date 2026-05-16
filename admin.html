@@ -421,12 +421,9 @@
           <div class="card" style="margin-top:12px;">
             <h2><span class="step-num">V</span>View / Edit Schedule</h2>
             <p class="muted" style="margin-bottom:8px;">Load an existing schedule from Firestore. Edit inline, then click <strong>Import Daily Schedule</strong> (Step 3) to save changes.</p>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;">
-              <label style="font-size:11px;color:var(--text2);flex:0 0 140px;">Date
-                <input id="view-date" type="date" style="margin-top:2px;font-size:12px;" />
-              </label>
-              <button class="btn" id="view-schedule-btn" style="max-width:160px;">Load Schedule</button>
-            </div>
+            <label style="font-size:11px;color:var(--text2);flex:0 0 140px;">Date
+              <input id="view-date" type="date" style="margin-top:2px;font-size:12px;" />
+            </label>
             <div id="view-schedule-feedback" class="feedback" style="margin-top:6px;"></div>
             <details style="margin-top:6px;">
               <summary id="schedule-preview-summary" style="cursor:pointer;font-size:12px;color:var(--text2);">Preview schedule data</summary>
@@ -2254,10 +2251,6 @@ async function viewSchedule() {
   if (!date) { feedback('view-schedule-feedback', 'error', 'Select a date.'); return; }
   if (!plantId) { feedback('view-schedule-feedback', 'error', 'Select a plant in Step 3.'); return; }
 
-  const btn = document.getElementById('view-schedule-btn');
-  btn.disabled = true;
-  btn.textContent = 'Loading…';
-
   try {
     const dailyRef = doc(db, 'plants', plantId, 'dailySchedules', date);
     const dailySnap = await getDoc(dailyRef);
@@ -2310,9 +2303,6 @@ async function viewSchedule() {
   } catch (e) {
     console.error(e);
     feedback('view-schedule-feedback', 'error', e.message || 'Failed to load schedule.');
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Load Schedule';
   }
 }
 
@@ -3613,7 +3603,7 @@ document.getElementById('import-schedule-btn').addEventListener('click', importD
 document.getElementById('ocr-pdf-btn').addEventListener('click', ocrPdfToText);
 document.getElementById('deepseek-convert-btn').addEventListener('click', convertWithDeepSeek);
 document.getElementById('batch-start-btn').addEventListener('click', batchImportSchedules);
-document.getElementById('view-schedule-btn').addEventListener('click', viewSchedule);
+document.getElementById('view-date').addEventListener('change', viewSchedule);
 
 // Schedule JSON preview
 document.getElementById('schedule-json-text').addEventListener('input', renderSchedulePreview);
