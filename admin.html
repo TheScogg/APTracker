@@ -421,6 +421,26 @@
             </details>
             <div id="schedule-import-feedback" class="feedback"></div>
           </div>
+          <!-- Batch Import -->
+          <div class="card" style="margin-top:12px;">
+            <h2><span class="step-num">B</span>Batch Import</h2>
+            <p class="muted" style="margin-bottom:8px;">Select multiple schedule PDFs to process them all at once.</p>
+            <div class="json-actions" style="gap:8px;">
+              <input id="batch-pdf-files" type="file" accept=".pdf" multiple style="flex:1;padding:6px 8px;" />
+              <button class="btn btn-primary" id="batch-start-btn" style="max-width:140px;">Start Batch</button>
+              <button class="btn" id="batch-stop-btn" style="max-width:80px;display:none;">Stop</button>
+            </div>
+            <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;">
+              <label style="font-size:11px;color:var(--text2);flex:0 0 140px;">From date
+                <input id="batch-from-date" type="date" style="margin-top:2px;font-size:12px;" />
+              </label>
+              <label style="font-size:11px;color:var(--text2);flex:0 0 140px;">To date
+                <input id="batch-to-date" type="date" style="margin-top:2px;font-size:12px;" />
+              </label>
+            </div>
+            <div id="batch-feedback" class="feedback" style="margin-top:6px;"></div>
+            <div id="batch-progress" style="margin-top:8px;overflow-x:auto;"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -2016,6 +2036,202 @@ async function importDailySchedule() {
   }
 }
 
+async function batchImportSchedules() {
+  const fileInput = document.getElementById('batch-pdf-files');
+  const files = fileInput?.files;
+  if (!files || !files.length) { feedback('batch-feedback', 'error', 'Select one or more PDF files first.'); return; }
+
+  const plantId = String(document.getElementById('schedule-plant-id')?.value || '').trim();
+  if (!plantId) { feedback('batch-feedback', 'error', 'Select a plant in Step 3 first.'); return; }
+
+  const startBtn = document.getElementById('batch-start-btn');
+  const stopBtn = document.getElementById('batch-stop-btn');
+  const fromDate = document.getElementById('batch-from-date')?.value || '';
+  const toDate = document.getElementById('batch-to-date')?.value || '';
+  const engine = document.getElementById('ocr-engine-select')?.value || 'azure';
+  const docaiProject = String(document.getElementById('docai-project-id')?.value || '').trim();
+  const docaiProcessor = String(document.getElementById('docai-processor-id')?.value || '').trim();
+  const docaiLocation = document.getElementById('docai-location')?.value || 'us';
+  const deepseekInstructions = String(document.getElementById('deepseek-instructions')?.value || '').trim();
+  const deepseekSystemPrompt = String(document.getElementById('deepseek-system-prompt')?.value || '').trim();
+  let cancelled = false;
+
+  startBtn.disabled = true;
+  startBtn.textContent = 'Processing…';
+  stopBtn.style.display = '';
+  stopBtn.onclick = () => { cancelled = true; stopBtn.disabled = true; stopBtn.textContent = 'Stopping…'; };
+
+  feedback('batch-feedback', '', `Processing ${files.length} file(s)…`);
+
+  const monthNames = {
+    jan:1,january:1,feb:2,february:2,mar:3,march:3,
+    apr:4,april:4,may:5,jun:6,june:6,
+    jul:7,july:7,aug:8,august:8,sep:9,september:9,
+    oct:10,october:10,nov:11,november:11,dec:12,december:12,
+  };
+
+  function extractDate(name) {
+    let m = name.match(/(\d{4})-(\d{2})-(\d{2})/);
+    if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+    const mp = '(?:january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)';
+    m = name.match(new RegExp(`(${mp})\\s+(\\d{1,2})\\s*,?\\s*(\\d{4})`, 'i'));
+    if (m) return `${m[3]}-${String(monthNames[m[1].toLowerCase()]).padStart(2,'0')}-${String(parseInt(m[2])).padStart(2,'0')}`;
+    m = name.match(/(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/);
+    if (m) { const a=parseInt(m[1]),b=parseInt(m[2]); return a>12?`${m[3]}-${String(b).padStart(2,'0')}-${String(a).padStart(2,'0')}`:`${m[3]}-${String(a).padStart(2,'0')}-${String(b).padStart(2,'0')}`; }
+    m = name.match(/(\d{4})(\d{2})(\d{2})/);
+    if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+    return null;
+  }
+
+  function normalizeDeepSeekKeys(raw) {
+    if (!raw || typeof raw !== 'object') return raw;
+    const sectionMap = { page1:'page_1', page2:'page_2', northBayChanges:'north_bay_changes', southBayChanges:'south_bay_changes', north_bay_change:'north_bay_changes', south_bay_change:'south_bay_changes' };
+    const r = { ...raw };
+    for (const [alt,canon] of Object.entries(sectionMap)) { if (r[alt]!==undefined && r[canon]===undefined) { r[canon]=r[alt]; delete r[alt]; } }
+    if (r.schedule_info && typeof r.schedule_info === 'object') {
+      const info = { ...r.schedule_info };
+      if (info.date===undefined && info.scheduleDate!==undefined) info.date = info.scheduleDate;
+      if (info.line_speed===undefined && info.lineSpeed!==undefined) info.line_speed = info.lineSpeed;
+      r.schedule_info = info;
+    }
+    if (!r.schedule_info && (r.date || r.shift)) {
+      r.schedule_info = { date: r.date||'', shift: r.shift||'', line_speed:'', total_planned_pcs:'', note:'' };
+    }
+    return r;
+  }
+
+  const progressEl = document.getElementById('batch-progress');
+  const rows = [];
+  let successCount = 0, skipCount = 0, failCount = 0;
+  const fileArr = Array.from(files).sort((a,b) => a.name.localeCompare(b.name));
+
+  for (let i = 0; i < fileArr.length; i++) {
+    if (cancelled) break;
+    const file = fileArr[i];
+    const nameNoExt = file.name.replace(/\.[^.]+$/, '');
+    const date = extractDate(nameNoExt);
+    let icon = '⏳', statusText = 'Processing…', rowCount = 0, detail = '';
+
+    try {
+      if (fromDate && date && date < fromDate) { icon='⏭️'; statusText='Skipped'; detail='Before From date'; skipCount++; }
+      else if (toDate && date && date > toDate) { icon='⏭️'; statusText='Skipped'; detail='After To date'; skipCount++; }
+      else if (!date) { icon='⏭️'; statusText='Skipped'; detail='No date in filename'; skipCount++; }
+      else {
+        feedback('batch-feedback', '', `[${i+1}/${fileArr.length}] OCR: ${file.name}`);
+        const pdfBytes = await file.arrayBuffer();
+        let ocrText;
+
+        if (engine === 'azure') {
+          const res = await fetch('/api/ocr', { method:'POST', body:pdfBytes });
+          const d = await res.json();
+          if (!res.ok) throw new Error(d.details||d.error||'Azure OCR failed');
+          ocrText = d.text;
+        } else if (engine === 'google') {
+          self.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+          const pdf = await self.pdfjsLib.getDocument({ data:pdfBytes }).promise;
+          const images = [];
+          for (let p = 1; p <= pdf.numPages; p++) {
+            const page = await pdf.getPage(p);
+            const vp = page.getViewport({ scale:2 });
+            const c = document.createElement('canvas');
+            c.width = vp.width; c.height = vp.height;
+            const ctx = c.getContext('2d');
+            ctx.fillStyle = '#fff'; ctx.fillRect(0,0,c.width,c.height);
+            await page.render({ canvasContext:ctx, viewport:vp }).promise;
+            images.push(c.toDataURL('image/png').split(',')[1]);
+          }
+          const res = await fetch('/api/ocr/google', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ images, featureType:'DOCUMENT_TEXT_DETECTION', maxResults:1 }) });
+          const d = await res.json();
+          if (!res.ok) throw new Error(d.error||'Google Vision failed');
+          ocrText = d.text;
+        } else {
+          if (!docaiProject||!docaiProcessor) throw new Error('Document AI requires Project ID and Processor ID');
+          const params = new URLSearchParams({ projectId:docaiProject, processorId:docaiProcessor, location:docaiLocation });
+          const res = await fetch('/api/ocr/document-ai?'+params, { method:'POST', body:pdfBytes });
+          const d = await res.json();
+          if (!res.ok) throw new Error(d.error||'Document AI failed');
+          ocrText = d.text.trim();
+        }
+
+        if (!ocrText||!ocrText.trim()) throw new Error('OCR returned empty text');
+
+        feedback('batch-feedback', '', `[${i+1}/${fileArr.length}] DeepSeek: ${file.name}`);
+        const aiRes = await fetch('/api/ai/convert', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ text:ocrText, instructions:deepseekInstructions||undefined, systemPrompt:deepseekSystemPrompt||undefined }) });
+        const aiData = await aiRes.json();
+        if (!aiRes.ok) throw new Error(aiData.error||aiData.content||'DeepSeek conversion failed');
+
+        const canon = normalizeDeepSeekKeys(aiData);
+        const payload = extractSchedulePayload(canon);
+        const norm = normalizeSchedulePayload(payload);
+        norm.scheduleDate = date;
+        for (const cfg of SCHEDULE_SECTIONS) { for (const row of (norm.sections[cfg.section]||[])) row.scheduleDate = date; }
+
+        feedback('batch-feedback', '', `[${i+1}/${fileArr.length}] Importing: ${date}`);
+        const dailyRef = doc(db, 'plants', plantId, 'dailySchedules', date);
+        const deleteOps = [];
+        for (const cfg of SCHEDULE_SECTIONS) {
+          const snap = await getDocs(collection(db, 'plants', plantId, 'dailySchedules', date, cfg.section));
+          snap.forEach(d => deleteOps.push({ type:'delete', ref:d.ref }));
+        }
+        await commitInChunks(deleteOps);
+
+        const setOps = [{ type:'set', ref:dailyRef, data:{
+          scheduleDate:date, plantId, shift:norm.shift,
+          lineSpeed:norm.lineSpeed, totalPlannedPcs:norm.totalPlannedPcs,
+          sourceFileName:file.name, sourceFileType:'application/pdf',
+          status:'imported', notes:norm.notes,
+          page1Count:norm.sections.page1.length, page2Count:norm.sections.page2.length,
+          northBayChangesCount:norm.sections.northBayChanges.length, southBayChangesCount:norm.sections.southBayChanges.length,
+          updatedAt:serverTimestamp(), createdAt:serverTimestamp(),
+        }}];
+
+        for (const cfg of SCHEDULE_SECTIONS) {
+          for (const row of (norm.sections[cfg.section]||[])) {
+            setOps.push({ type:'set', ref:doc(db, 'plants', plantId, 'dailySchedules', date, cfg.section, row.rowId), data:{ ...row, scheduleDate:date, plantId, shift:norm.shift, createdAt:serverTimestamp(), updatedAt:serverTimestamp() }});
+          }
+        }
+        await commitInChunks(setOps);
+
+        rowCount = Object.values(norm.sections).reduce((s,r)=>s+r.length, 0);
+        icon = '✅'; statusText = 'Imported'; detail = `${rowCount} rows`;
+        successCount++;
+      }
+    } catch (err) {
+      console.error(err);
+      icon = '❌'; statusText = 'Failed'; detail = err.message||'Unknown error';
+      failCount++;
+    }
+
+    rows.push({ date:date||'??', file:file.name, icon, statusText, rows:rowCount, detail });
+    let html = `<table style="width:100%;font-size:11px;border-collapse:collapse;">
+      <tr style="color:var(--text2);font-family:'Share Tech Mono',monospace;font-size:10px;">
+        <th style="padding:4px;text-align:left;">Date</th>
+        <th style="padding:4px;text-align:left;">File</th>
+        <th style="padding:4px;text-align:center;">Status</th>
+        <th style="padding:4px;text-align:right;">Rows</th>
+        <th style="padding:4px;text-align:left;">Details</th>
+      </tr>`;
+    for (const r of rows) {
+      html += `<tr style="border-top:1px solid var(--border);">
+        <td style="padding:3px 4px;font-family:'Share Tech Mono',monospace;">${esc(r.date)}</td>
+        <td style="padding:3px 4px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.file)}</td>
+        <td style="padding:3px 4px;text-align:center;">${r.icon}</td>
+        <td style="padding:3px 4px;text-align:right;">${r.rows||'-'}</td>
+        <td style="padding:3px 4px;font-size:10px;color:var(--text2);max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.detail)}</td>
+      </tr>`;
+    }
+    html += '</table>';
+    progressEl.innerHTML = html;
+  }
+
+  feedback('batch-feedback', 'ok', `Batch complete: ${successCount} imported, ${skipCount} skipped, ${failCount} failed.`);
+  startBtn.disabled = false;
+  startBtn.textContent = 'Start Batch';
+  stopBtn.style.display = 'none';
+  stopBtn.disabled = false;
+  stopBtn.textContent = 'Stop';
+}
+
 async function convertWithDeepSeek() {
   const btn = document.getElementById('deepseek-convert-btn');
   const sourceInput = document.getElementById('schedule-gpt-source');
@@ -3312,6 +3528,7 @@ document.getElementById('load-schedule-file-btn').addEventListener('click', load
 document.getElementById('import-schedule-btn').addEventListener('click', importDailySchedule);
 document.getElementById('ocr-pdf-btn').addEventListener('click', ocrPdfToText);
 document.getElementById('deepseek-convert-btn').addEventListener('click', convertWithDeepSeek);
+document.getElementById('batch-start-btn').addEventListener('click', batchImportSchedules);
 
 // Schedule JSON preview
 document.getElementById('schedule-json-text').addEventListener('input', renderSchedulePreview);
