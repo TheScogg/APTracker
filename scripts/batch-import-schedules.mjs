@@ -79,6 +79,8 @@ function parseArgs() {
     dateRegex: val('--date-regex'),
     concurrency: Math.max(1, parseInt(val('--concurrency') || val('-c') || '1', 10) || 1),
     delay: Math.max(0, parseInt(val('--delay') || '500', 10) || 500),
+    deepseekInstructions: val('--deepseek-instructions') || '',
+    deepseekSystemPrompt: val('--deepseek-system-prompt') || '',
     dryRun: has('--dry-run'),
     resume: has('--resume') || !has('--overwrite'),
     overwrite: has('--overwrite'),
@@ -108,9 +110,11 @@ ENVIRONMENT:
   GOOGLE_APPLICATION_CREDENTIALS  Path to Firebase service account JSON
 
 OPTIONS:
-  --engine, -e <engine>   OCR engine: document-ai, azure, google (default: document-ai)
+  --engine, -e <engine>     OCR engine: document-ai, azure, google (default: document-ai)
   --from-date <YYYY-MM-DD>  Earliest date to import (inclusive)
   --to-date <YYYY-MM-DD>    Latest date to import (inclusive)
+  --deepseek-instructions   Custom instructions for DeepSeek (e.g. 'Press 7 is down')
+  --deepseek-system-prompt  Extra system prompt context appended to base prompt
   --concurrency, -c <n>     Files to process in parallel (default: 1)
   --delay <ms>              Pause before each file (default: 500)
   --dry-run                 Skip Firestore writes, only test pipeline
@@ -357,12 +361,15 @@ async function callGoogleOcr(base, pdfBytes) {
   return (data.text || '').trim();
 }
 
-async function callDeepSeek(workerUrl, ocrText) {
+async function callDeepSeek(workerUrl, ocrText, opts) {
   const url = `${workerUrl.replace(/\/+$/, '')}/api/ai/convert`;
+  const body = { text: ocrText };
+  if (opts.deepseekInstructions) body.instructions = opts.deepseekInstructions;
+  if (opts.deepseekSystemPrompt) body.systemPrompt = opts.deepseekSystemPrompt;
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text: ocrText }),
+    body: JSON.stringify(body),
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || data.content || `DeepSeek failed (${res.status})`);
@@ -444,7 +451,7 @@ async function processFile(db, opts, filePath) {
     if (!ocrText) throw new Error('OCR returned empty text');
 
     if (opts.verbose) console.log(`  → DeepSeek: ${filename}`);
-    const dsResult = await callDeepSeek(opts.workerUrl, ocrText);
+    const dsResult = await callDeepSeek(opts.workerUrl, ocrText, opts);
 
     // Validate & normalize
     const canonical = canonicalizeKeys(dsResult);
