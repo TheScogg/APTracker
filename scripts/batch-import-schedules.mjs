@@ -67,6 +67,8 @@ function parseArgs() {
     docaiProject: val('--docai-project'),
     docaiProcessor: val('--docai-processor'),
     docaiLocation: val('--docai-location') || 'us',
+    fromDate: val('--from-date'),
+    toDate: val('--to-date'),
     dateRegex: val('--date-regex'),
     concurrency: Math.max(1, parseInt(val('--concurrency') || val('-c') || '1', 10) || 1),
     delay: Math.max(0, parseInt(val('--delay') || '500', 10) || 500),
@@ -99,15 +101,17 @@ ENVIRONMENT:
   GOOGLE_APPLICATION_CREDENTIALS  Path to Firebase service account JSON
 
 OPTIONS:
-  --concurrency, -c <n>   Files to process in parallel (default: 1)
-  --delay <ms>            Pause before each file (default: 500)
-  --dry-run               Skip Firestore writes, only test pipeline
-  --resume                Skip dates already in Firestore (default: on)
-  --overwrite             Re-import even if date exists
-  --date-regex <regex>    Custom regex with capture group for date in filename
-  --log <file>            Results output file (default: batch-import-results.json)
-  --verbose, -v           Detailed per-file progress
-  --help, -h              Show this help
+  --from-date <YYYY-MM-DD>  Earliest date to import (inclusive)
+  --to-date <YYYY-MM-DD>    Latest date to import (inclusive)
+  --concurrency, -c <n>     Files to process in parallel (default: 1)
+  --delay <ms>              Pause before each file (default: 500)
+  --dry-run                 Skip Firestore writes, only test pipeline
+  --resume                  Skip dates already in Firestore (default: on)
+  --overwrite               Re-import even if date exists
+  --date-regex <regex>      Custom regex with capture group for date in filename
+  --log <file>              Results output file (default: batch-import-results.json)
+  --verbose, -v             Detailed per-file progress
+  --help, -h                Show this help
 `);
 }
 
@@ -415,20 +419,50 @@ async function main() {
   const dir = opts.dir.startsWith('~') ? join(homedir(), opts.dir.slice(1)) : resolve(opts.dir);
   if (!existsSync(dir)) die(`Directory not found: ${dir}`);
 
-  const files = readdirSync(dir)
+  // Validate date range args
+  const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+  if (opts.fromDate && !dateRe.test(opts.fromDate)) die(`--from-date must be YYYY-MM-DD, got: ${opts.fromDate}`);
+  if (opts.toDate && !dateRe.test(opts.toDate)) die(`--to-date must be YYYY-MM-DD, got: ${opts.toDate}`);
+  if (opts.fromDate && opts.toDate && opts.fromDate > opts.toDate) die(`--from-date (${opts.fromDate}) is after --to-date (${opts.toDate})`);
+
+  const allFiles = readdirSync(dir)
     .filter(f => extname(f).toLowerCase() === '.pdf')
     .map(f => join(dir, f))
     .sort((a, b) => a.localeCompare(b));
 
-  if (!files.length) die(`No PDF files found in: ${dir}`);
+  if (!allFiles.length) die(`No PDF files found in: ${dir}`);
+
+  // Pre-scan dates from filenames to apply range filter
+  const fileEntries = allFiles.map(f => ({
+    path: f,
+    name: parse(f).base,
+    date: extractDateFromFilename(parse(f).base, opts),
+  }));
+
+  const toProcess = fileEntries.filter(e => {
+    if (!e.date) return true; // let processFile report the error
+    if (opts.fromDate && e.date < opts.fromDate) return false;
+    if (opts.toDate && e.date > opts.toDate) return false;
+    return true;
+  });
+
+  const skippedRange = allFiles.length - toProcess.length;
+  const files = toProcess.map(e => e.path);
+
+  if (!files.length) die(`No PDF files match the date range. Total: ${allFiles.length}, filtered out: ${skippedRange}`);
 
   const db = initFirebase();
+
+  const rangeStr = opts.fromDate || opts.toDate
+    ? `  Date range: ${opts.fromDate || '…'} → ${opts.toDate || '…'}`
+    : '';
 
   console.log(`\nBatch Schedule Import`);
   console.log(`  Directory:  ${dir}`);
   console.log(`  Plant:      ${opts.plant}`);
   console.log(`  Worker:     ${opts.workerUrl}`);
-  console.log(`  Files:      ${files.length} PDF(s)`);
+  if (rangeStr) console.log(rangeStr);
+  console.log(`  Files:      ${files.length} PDF(s)${skippedRange ? ` (${skippedRange} outside range)` : ''}`);
   console.log(`  Mode:       ${opts.dryRun ? 'DRY RUN (no Firestore writes)' : 'LIVE'}`);
   console.log(`  Resume:     ${opts.resume ? 'Skip existing' : 'Overwrite'}`);
   console.log(`  Concurrency: ${opts.concurrency}`);
@@ -468,15 +502,16 @@ async function main() {
   const failed = results.filter(r => r.status === 'failed').length;
 
   console.log(`\nSummary`);
-  console.log(`  Total:    ${total}`);
-  console.log(`  Imported: ${imported}`);
-  console.log(`  Skipped:  ${skipped}`);
-  console.log(`  Failed:   ${failed}`);
+  console.log(`  Total:            ${total}`);
+  console.log(`  Imported:         ${imported}`);
+  console.log(`  Skipped:          ${skipped}`);
+  console.log(`  Outside range:    ${skippedRange}`);
+  console.log(`  Failed:           ${failed}`);
 
   const logData = {
     timestamp: new Date().toISOString(),
-    opts: { dir: opts.dir, plant: opts.plant, dryRun: opts.dryRun, resume: opts.resume },
-    summary: { total, imported, skipped, failed },
+    opts: { dir: opts.dir, plant: opts.plant, fromDate: opts.fromDate, toDate: opts.toDate, dryRun: opts.dryRun, resume: opts.resume },
+    summary: { total, imported, skipped, skippedRange, failed },
     results,
   };
   writeFileSync(opts.logFile, JSON.stringify(logData, null, 2));
