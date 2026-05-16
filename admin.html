@@ -415,10 +415,6 @@
               <button class="btn btn-primary" id="import-schedule-btn" style="max-width:240px;">Import Daily Schedule</button>
             </div>
             <textarea id="schedule-json-text" placeholder="Paste schedule JSON here" style="margin-top:10px;min-height:180px;"></textarea>
-            <details style="margin-top:6px;">
-              <summary id="schedule-preview-summary" style="cursor:pointer;font-size:12px;color:var(--text2);">Preview schedule data</summary>
-              <div id="schedule-preview-container" style="margin-top:6px;overflow-x:auto;"></div>
-            </details>
             <div id="schedule-import-feedback" class="feedback"></div>
           </div>
           <!-- View / Edit Schedule -->
@@ -432,6 +428,10 @@
               <button class="btn" id="view-schedule-btn" style="max-width:160px;">Load Schedule</button>
             </div>
             <div id="view-schedule-feedback" class="feedback" style="margin-top:6px;"></div>
+            <details style="margin-top:6px;">
+              <summary id="schedule-preview-summary" style="cursor:pointer;font-size:12px;color:var(--text2);">Preview schedule data</summary>
+              <div id="schedule-preview-container" style="margin-top:6px;overflow-x:auto;"></div>
+            </details>
           </div>
           <!-- Batch Import -->
           <div class="card" style="margin-top:12px;">
