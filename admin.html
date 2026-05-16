@@ -421,6 +421,18 @@
             </details>
             <div id="schedule-import-feedback" class="feedback"></div>
           </div>
+          <!-- View / Edit Schedule -->
+          <div class="card" style="margin-top:12px;">
+            <h2><span class="step-num">V</span>View / Edit Schedule</h2>
+            <p class="muted" style="margin-bottom:8px;">Load an existing schedule from Firestore. Edit inline, then click <strong>Import Daily Schedule</strong> (Step 3) to save changes.</p>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;">
+              <label style="font-size:11px;color:var(--text2);flex:0 0 140px;">Date
+                <input id="view-date" type="date" style="margin-top:2px;font-size:12px;" />
+              </label>
+              <button class="btn" id="view-schedule-btn" style="max-width:160px;">Load Schedule</button>
+            </div>
+            <div id="view-schedule-feedback" class="feedback" style="margin-top:6px;"></div>
+          </div>
           <!-- Batch Import -->
           <div class="card" style="margin-top:12px;">
             <h2><span class="step-num">B</span>Batch Import</h2>
@@ -2236,6 +2248,74 @@ async function batchImportSchedules() {
   stopBtn.textContent = 'Stop';
 }
 
+async function viewSchedule() {
+  const date = document.getElementById('view-date')?.value;
+  const plantId = String(document.getElementById('schedule-plant-id')?.value || '').trim();
+  if (!date) { feedback('view-schedule-feedback', 'error', 'Select a date.'); return; }
+  if (!plantId) { feedback('view-schedule-feedback', 'error', 'Select a plant in Step 3.'); return; }
+
+  const btn = document.getElementById('view-schedule-btn');
+  btn.disabled = true;
+  btn.textContent = 'Loading…';
+
+  try {
+    const dailyRef = doc(db, 'plants', plantId, 'dailySchedules', date);
+    const dailySnap = await getDoc(dailyRef);
+    if (!dailySnap.exists()) throw new Error(`No schedule found for ${date} in plant ${plantId}.`);
+
+    const data = dailySnap.data();
+    const result = {
+      schedule_info: {
+        date: data.scheduleDate || date,
+        shift: String(data.shift || ''),
+        line_speed: data.lineSpeed != null ? String(data.lineSpeed) : '',
+        total_planned_pcs: data.totalPlannedPcs != null ? String(data.totalPlannedPcs) : '',
+        note: data.notes || '',
+      }
+    };
+
+    const sectionMap = [
+      { fbKey: 'page1', jsonKey: 'page_1' },
+      { fbKey: 'page2', jsonKey: 'page_2' },
+      { fbKey: 'northBayChanges', jsonKey: 'north_bay_changes' },
+      { fbKey: 'southBayChanges', jsonKey: 'south_bay_changes' },
+    ];
+
+    for (const { fbKey, jsonKey } of sectionMap) {
+      const snap = await getDocs(collection(db, 'plants', plantId, 'dailySchedules', date, fbKey));
+      result[jsonKey] = snap.docs.map(d => {
+        const r = d.data();
+        return {
+          press: r.press || '',
+          part_storage_location: Array.isArray(r.partStorageLocation) ? r.partStorageLocation : [],
+          part_number: r.partNumber || '',
+          description: r.description || '',
+          cavity: r.cavity || '',
+          doh: r.doh != null ? String(r.doh) : '',
+          labels_per_shift: r.labelsPerShift != null ? String(r.labelsPerShift) : '',
+          mc: r.mc || '',
+          notes: r.notes || '',
+        };
+      });
+    }
+
+    document.getElementById('schedule-json-text').value = JSON.stringify(result, null, 2);
+    document.getElementById('schedule-date').value = date;
+
+    renderSchedulePreview();
+
+    const rowKeys = ['page_1', 'page_2', 'north_bay_changes', 'south_bay_changes'];
+    const totalRows = rowKeys.reduce((s, k) => s + (result[k] || []).length, 0);
+    feedback('view-schedule-feedback', 'ok', `Loaded ${date}: ${totalRows} rows. Edit in the preview table, then click Import Daily Schedule to save.`);
+  } catch (e) {
+    console.error(e);
+    feedback('view-schedule-feedback', 'error', e.message || 'Failed to load schedule.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Load Schedule';
+  }
+}
+
 async function convertWithDeepSeek() {
   const btn = document.getElementById('deepseek-convert-btn');
   const sourceInput = document.getElementById('schedule-gpt-source');
@@ -3533,6 +3613,7 @@ document.getElementById('import-schedule-btn').addEventListener('click', importD
 document.getElementById('ocr-pdf-btn').addEventListener('click', ocrPdfToText);
 document.getElementById('deepseek-convert-btn').addEventListener('click', convertWithDeepSeek);
 document.getElementById('batch-start-btn').addEventListener('click', batchImportSchedules);
+document.getElementById('view-schedule-btn').addEventListener('click', viewSchedule);
 
 // Schedule JSON preview
 document.getElementById('schedule-json-text').addEventListener('input', renderSchedulePreview);
