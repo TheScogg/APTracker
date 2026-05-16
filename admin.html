@@ -2054,6 +2054,10 @@ async function batchImportSchedules() {
   const docaiLocation = document.getElementById('docai-location')?.value || 'us';
   const deepseekInstructions = String(document.getElementById('deepseek-instructions')?.value || '').trim();
   const deepseekSystemPrompt = String(document.getElementById('deepseek-system-prompt')?.value || '').trim();
+  const visionLanguageHints = (document.getElementById('vision-language-hints')?.value || '').split(',').map(s=>s.trim()).filter(Boolean);
+  const visionFeatureType = document.getElementById('vision-feature-type')?.value || 'DOCUMENT_TEXT_DETECTION';
+  const visionModel = document.getElementById('vision-model')?.value || '';
+  const visionMaxResults = Math.max(1, Math.min(10, parseInt(document.getElementById('vision-max-results')?.value || '1', 10) || 1));
   let cancelled = false;
 
   startBtn.disabled = true;
@@ -2140,7 +2144,7 @@ async function batchImportSchedules() {
             await page.render({ canvasContext:ctx, viewport:vp }).promise;
             images.push(c.toDataURL('image/png').split(',')[1]);
           }
-          const res = await fetch('/api/ocr/google', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ images, featureType:'DOCUMENT_TEXT_DETECTION', maxResults:1 }) });
+          const res = await fetch('/api/ocr/google', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ images, languageHints: visionLanguageHints.length ? visionLanguageHints : undefined, featureType: visionFeatureType, model: visionModel || undefined, maxResults: visionMaxResults }) });
           const d = await res.json();
           if (!res.ok) throw new Error(d.error||'Google Vision failed');
           ocrText = d.text;
