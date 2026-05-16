@@ -1,7 +1,61 @@
 const FIREBASE_AUTH_ORIGIN = 'https://press-tracker-9d9c9.firebaseapp.com';
 
+let _cachedToken = null;
+let _tokenExpiresAt = 0;
+
 function isAuthHelperRequest(pathname) {
   return pathname === '/__/auth' || pathname.startsWith('/__/auth/');
+}
+
+function base64url(str) {
+  return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function base64urlDecode(str) {
+  return atob(str.replace(/-/g, '+').replace(/_/g, '/'));
+}
+
+async function getGoogleOAuthToken(env) {
+  if (_cachedToken && Date.now() < _tokenExpiresAt - 60) {
+    return _cachedToken;
+  }
+  const saJson = env.GOOGLE_SERVICE_ACCOUNT;
+  if (!saJson) throw new Error('GOOGLE_SERVICE_ACCOUNT secret not configured');
+  const sa = JSON.parse(saJson);
+  const header = { alg: 'RS256', typ: 'JWT' };
+  const now = Math.floor(Date.now() / 1000);
+  const claim = {
+    iss: sa.client_email,
+    scope: 'https://www.googleapis.com/auth/cloud-platform',
+    aud: 'https://oauth2.googleapis.com/token',
+    exp: now + 3600,
+    iat: now
+  };
+  const enc = new TextEncoder();
+  const jwtB64 = base64url(JSON.stringify(header)) + '.' + base64url(JSON.stringify(claim));
+
+  // Import the private key and sign
+  const pem = sa.private_key;
+  const pemBody = pem.replace(/-----BEGIN PRIVATE KEY-----/, '').replace(/-----END PRIVATE KEY-----/, '').replace(/\s+/g, '');
+  const rawKey = Uint8Array.from(atob(pemBody), c => c.charCodeAt(0));
+  const privateKey = await crypto.subtle.importKey(
+    'pkcs8', rawKey,
+    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+    false, ['sign']
+  );
+  const sig = await crypto.subtle.sign({ name: 'RSASSA-PKCS1-v1_5' }, privateKey, enc.encode(jwtB64));
+  const jwt = jwtB64 + '.' + base64url(String.fromCharCode(...new Uint8Array(sig)));
+
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: 'grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=' + encodeURIComponent(jwt)
+  });
+  const data = await res.json();
+  if (!res.ok || !data.access_token) throw new Error(data.error_description || data.error || 'Failed to get OAuth token');
+  _cachedToken = data.access_token;
+  _tokenExpiresAt = now + (data.expires_in || 3600);
+  return _cachedToken;
 }
 
 async function handleOcr(request, env) {
@@ -111,11 +165,8 @@ async function handleOcrDocumentAi(request, env) {
   if (request.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'POST required' }), { status: 405, headers: { 'Content-Type': 'application/json' } });
   }
-  const apiKey = env.GOOGLE_VISION_API_KEY;
-  if (!apiKey) {
-    return new Response(JSON.stringify({ error: 'Google API key not configured (set GOOGLE_VISION_API_KEY secret)' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
-  }
   try {
+    const accessToken = await getGoogleOAuthToken(env);
     const url = new URL(request.url);
     const projectId = url.searchParams.get('projectId');
     const processorId = url.searchParams.get('processorId');
@@ -130,10 +181,10 @@ async function handleOcrDocumentAi(request, env) {
       return btoa(binary);
     });
 
-    const docAiUrl = `https://${loc}-documentai.googleapis.com/v1/projects/${projectId}/locations/${loc}/processors/${processorId}:process?key=${apiKey}`;
+    const docAiUrl = `https://${loc}-documentai.googleapis.com/v1/projects/${projectId}/locations/${loc}/processors/${processorId}:process`;
     const res = await fetch(docAiUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + accessToken },
       body: JSON.stringify({
         rawDocument: { content: pdfBase64, mimeType: 'application/pdf' },
         skipHumanReview: true
@@ -141,15 +192,35 @@ async function handleOcrDocumentAi(request, env) {
     });
 
     const data = await res.json();
+    if (res.status === 401) {
+      // Token may have expired — force refresh and retry once
+      _cachedToken = null;
+      const newToken = await getGoogleOAuthToken(env);
+      const retryRes = await fetch(docAiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + newToken },
+        body: JSON.stringify({
+          rawDocument: { content: pdfBase64, mimeType: 'application/pdf' },
+          skipHumanReview: true
+        })
+      });
+      const retryData = await retryRes.json();
+      if (!retryRes.ok) throw new Error((retryData.error && retryData.error.message) || 'Document AI API error: ' + retryRes.status);
+      const retryPages = retryData.document?.pages || [];
+      const retryFullText = retryPages.map(p =>
+        (p.paragraphs || []).map(pg => (pg.words || []).map(w => (w.symbols || []).map(s => s.text || '').join('')).join(' ')).join('\n')
+      ).filter(Boolean).join('\n\n');
+      const retryText = retryFullText || retryData.document?.text || '';
+      return new Response(JSON.stringify({ text: retryText.trim(), pageCount: retryPages.length || 1 }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
     if (!res.ok) throw new Error((data.error && data.error.message) || 'Document AI API error: ' + res.status);
 
-    // Extract text from all pages, preserving page boundaries
     const pages = data.document?.pages || [];
-    const fullText = pages.map((page, idx) =>
-      (page.paragraphs || []).map(p => (p.words || []).map(w => (w.symbols || []).map(s => s.text || '').join('')).join(' ')).join('\n')
+    const fullText = pages.map(p =>
+      (p.paragraphs || []).map(pg => (pg.words || []).map(w => (w.symbols || []).map(s => s.text || '').join('')).join(' ')).join('\n')
     ).filter(Boolean).join('\n\n');
-
-    // Fallback: if paragraphs are empty, try document.text
     const text = fullText || data.document?.text || '';
 
     return new Response(JSON.stringify({ text: text.trim(), pageCount: pages.length || 1 }), {
