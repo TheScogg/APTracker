@@ -316,32 +316,8 @@
 
         <!-- Schedule Import tab -->
         <div class="page-tab-pane" id="page-tab-schedule">
-          <div class="card">
-            <h2>Daily Schedule Import</h2>
-            <p class="muted" style="margin-bottom:10px;">Upload or paste schedule JSON to import daily schedules into Firestore.</p>
-            <div class="grid-2">
-              <input id="schedule-date" class="mono-input" type="date" />
-              <input id="schedule-source-name" placeholder="Source file name (optional, e.g. Apr 10, 2026.pdf)" />
-            </div>
-            <div style="margin-top:8px;">
-              <select id="schedule-plant-id">
-                <option value="">Select plant…</option>
-              </select>
-            </div>
-            <div class="json-actions">
-              <input id="schedule-json-file" type="file" accept="application/json,.json" style="max-width:320px;padding:6px 8px;" />
-              <button class="btn" id="load-schedule-file-btn" style="max-width:220px;">Load JSON from file</button>
-              <button class="btn btn-primary" id="import-schedule-btn" style="max-width:240px;">Import Daily Schedule</button>
-            </div>
-            <textarea id="schedule-json-text" placeholder="Paste schedule JSON here" style="margin-top:10px;min-height:180px;"></textarea>
-            <details style="margin-top:6px;">
-              <summary id="schedule-preview-summary" style="cursor:pointer;font-size:12px;color:var(--text2);">Preview schedule data</summary>
-              <div id="schedule-preview-container" style="margin-top:6px;overflow-x:auto;"></div>
-            </details>
-            <div id="schedule-import-feedback" class="feedback"></div>
-          </div>
           <!-- OCR + GPT section -->
-          <div class="card" style="margin-top:12px;">
+          <div class="card">
             <h2>OCR from PDF Scan</h2>
             <p class="muted" style="margin-bottom:8px;">Upload a scanned PDF (2-page schedule) to extract text via OCR, then convert to schedule JSON.</p>
             <div class="json-actions">
@@ -410,8 +386,7 @@
                 <option value="true">Strict validation</option>
                 <option value="false">Lenient</option>
               </select>
-              <button class="btn btn-primary" id="generate-schedule-json-btn" style="max-width:200px;">Generate JSON</button>
-              <button class="btn" id="deepseek-convert-btn" style="max-width:200px;">Convert with DeepSeek</button>
+              <button class="btn" id="deepseek-convert-btn" style="max-width:200px;">Generate JSON with Deepseek</button>
             </div>
             <textarea id="deepseek-instructions" placeholder="Optional: custom instructions for DeepSeek (e.g. 'Press 7 is down, mark all its rows as notes')" style="margin-top:6px;min-height:60px;font-size:12px;"></textarea>
             <details style="margin-top:6px;">
@@ -419,6 +394,31 @@
               <textarea id="deepseek-system-prompt" placeholder="This text gets appended to the base system prompt. Useful for persistent context like plant-specific naming conventions." style="margin-top:4px;min-height:120px;font-size:12px;"></textarea>
             </details>
             <div id="schedule-gpt-feedback" class="feedback"></div>
+          </div>
+          <!-- Daily Schedule Import -->
+          <div class="card" style="margin-top:12px;">
+            <h2>Daily Schedule Import</h2>
+            <p class="muted" style="margin-bottom:10px;">Upload or paste schedule JSON to import daily schedules into Firestore.</p>
+            <div class="grid-2">
+              <input id="schedule-date" class="mono-input" type="date" />
+              <input id="schedule-source-name" placeholder="Source file name (optional, e.g. Apr 10, 2026.pdf)" />
+            </div>
+            <div style="margin-top:8px;">
+              <select id="schedule-plant-id">
+                <option value="">Select plant…</option>
+              </select>
+            </div>
+            <div class="json-actions">
+              <input id="schedule-json-file" type="file" accept="application/json,.json" style="max-width:320px;padding:6px 8px;" />
+              <button class="btn" id="load-schedule-file-btn" style="max-width:220px;">Load JSON from file</button>
+              <button class="btn btn-primary" id="import-schedule-btn" style="max-width:240px;">Import Daily Schedule</button>
+            </div>
+            <textarea id="schedule-json-text" placeholder="Paste schedule JSON here" style="margin-top:10px;min-height:180px;"></textarea>
+            <details style="margin-top:6px;">
+              <summary id="schedule-preview-summary" style="cursor:pointer;font-size:12px;color:var(--text2);">Preview schedule data</summary>
+              <div id="schedule-preview-container" style="margin-top:6px;overflow-x:auto;"></div>
+            </details>
+            <div id="schedule-import-feedback" class="feedback"></div>
           </div>
         </div>
       </div>
@@ -2015,49 +2015,6 @@ async function importDailySchedule() {
   }
 }
 
-async function generateScheduleJsonFromDailyScheduleGPT() {
-  const generateBtn = document.getElementById('generate-schedule-json-btn');
-  const sourceInput = document.getElementById('schedule-gpt-source');
-  const shiftInput = document.getElementById('schedule-gpt-shift-override');
-  const modelPresetInput = document.getElementById('schedule-gpt-model-preset');
-  const strictValidationInput = document.getElementById('schedule-gpt-strict-validation');
-  const dateInput = document.getElementById('schedule-date');
-  const sourceNameInput = document.getElementById('schedule-source-name');
-  const jsonInput = document.getElementById('schedule-json-text');
-  const sourceText = String(sourceInput?.value || '').trim();
-
-  if (!sourceText) {
-    feedback('schedule-gpt-feedback', 'error', 'Paste schedule text or PDF metadata before generating.');
-    return;
-  }
-
-  generateBtn.disabled = true;
-  generateBtn.textContent = 'Generating…';
-  feedback('schedule-gpt-feedback', '', '');
-
-  try {
-    const strictValidation = String(strictValidationInput?.value || 'true') === 'true';
-    const shiftOverride = String(shiftInput?.value || '').trim();
-    const { adaptedPayload, normalized } = adaptDailyScheduleGptOutput(sourceText);
-    if (shiftOverride) adaptedPayload.schedule_info.shift = shiftOverride;
-    if (dateInput?.value) adaptedPayload.schedule_info.date = String(dateInput.value).trim();
-    if (strictValidation) normalizeSchedulePayload(adaptedPayload);
-
-    jsonInput.value = JSON.stringify(adaptedPayload, null, 2);
-    renderSchedulePreview();
-    if (sourceNameInput && !String(sourceNameInput.value || '').trim()) {
-      sourceNameInput.value = `DailyScheduleGPT_${adaptedPayload.schedule_info.date}.txt`;
-    }
-    feedback('schedule-gpt-feedback', 'ok', `Generated canonical JSON draft (${normalized.sections.page1.length + normalized.sections.page2.length + normalized.sections.northBayChanges.length + normalized.sections.southBayChanges.length} rows). Review and click Import Daily Schedule when ready.`);
-  } catch (e) {
-    console.error(e);
-    feedback('schedule-gpt-feedback', 'error', e.message || 'Failed to generate schedule JSON.');
-  } finally {
-    generateBtn.disabled = false;
-    generateBtn.textContent = 'Generate JSON';
-  }
-}
-
 async function convertWithDeepSeek() {
   const btn = document.getElementById('deepseek-convert-btn');
   const sourceInput = document.getElementById('schedule-gpt-source');
@@ -2069,12 +2026,12 @@ async function convertWithDeepSeek() {
   const sourceText = String(sourceInput?.value || '').trim();
 
   if (!sourceText) {
-    feedback('schedule-gpt-feedback', 'error', 'Paste schedule text or PDF metadata before converting.');
+    feedback('schedule-gpt-feedback', 'error', 'Paste schedule text or PDF metadata before generating.');
     return;
   }
 
   btn.disabled = true;
-  btn.textContent = 'Calling DeepSeek…';
+  btn.textContent = 'Generating JSON with Deepseek…';
   feedback('schedule-gpt-feedback', '', '');
 
   try {
@@ -2118,7 +2075,7 @@ async function convertWithDeepSeek() {
     feedback('schedule-gpt-feedback', 'error', e.message || 'DeepSeek conversion failed.');
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Convert with DeepSeek';
+    btn.textContent = 'Generate JSON with Deepseek';
   }
 }
 
@@ -2147,7 +2104,13 @@ function renderSchedulePreview() {
       totalRows += rows.length;
       html += `<div style="margin-bottom:10px;"><strong style="font-size:11px;color:var(--text2);">${sk.label} (${rows.length})</strong>`;
       html += `<table style="width:100%;font-size:11px;margin-top:4px;"><tr style="color:var(--text2);font-family:'Share Tech Mono',monospace;font-size:10px;">`;
-      for (const c of cols) html += `<th style="padding:4px 5px;white-space:nowrap;">${c}</th>`;
+      for (const c of cols) {
+        let extra = '';
+        if (c === 'Cavity' || c === 'DOH') extra = 'width:60px;';
+        else if (c === 'Labels/Shift') extra = 'width:80px;';
+        else if (c === 'Description') extra = 'min-width:200px;';
+        html += `<th style="padding:4px 5px;white-space:nowrap;${extra}">${c}</th>`;
+      }
       html += '</tr>';
       for (let ri = 0; ri < rows.length; ri++) {
         html += '<tr>';
@@ -3345,7 +3308,6 @@ document.getElementById('create-plant-btn').addEventListener('click', createPlan
 document.getElementById('load-schedule-file-btn').addEventListener('click', loadScheduleJsonFromFile);
 document.getElementById('import-schedule-btn').addEventListener('click', importDailySchedule);
 document.getElementById('ocr-pdf-btn').addEventListener('click', ocrPdfToText);
-document.getElementById('generate-schedule-json-btn').addEventListener('click', generateScheduleJsonFromDailyScheduleGPT);
 document.getElementById('deepseek-convert-btn').addEventListener('click', convertWithDeepSeek);
 
 // Schedule JSON preview

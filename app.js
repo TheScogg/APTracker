@@ -3115,6 +3115,7 @@ let pressContributionPlantId = null;
 let pressContributionLoading = null;
 let issuePeriod = 'today';
 let unsubscribe = null;
+let pageHidden = false;
 let statusConfigUnsubscribe = null;
 let statusConfigLoadSerial = 0;
 let issueLogLayoutMode = 'masonic'; // 'masonic' | 'grid'
@@ -3425,6 +3426,19 @@ onAuthStateChanged(auth, async user => {
   }
 });
 
+// Pause issues listener when the page is hidden (another tab open) to avoid
+// cross-tab persistence contention causing spurious permission-denied errors.
+document.addEventListener('visibilitychange', () => {
+  pageHidden = document.hidden;
+  if (pageHidden) {
+    if (unsubscribe) { unsubscribe(); unsubscribe = null; }
+    if (retryTimeout) { clearTimeout(retryTimeout); retryTimeout = null; }
+    if (issueBootstrapTimeout) { clearTimeout(issueBootstrapTimeout); issueBootstrapTimeout = null; }
+  } else if (currentPlantId && currentUser) {
+    startListener();
+  }
+});
+
 let retryTimeout = null;
 let retryCount = 0;
 let issueBootstrapTimeout = null;
@@ -3470,6 +3484,7 @@ async function loadIssueHistoryPage() {
 }
 
 function startListener() {
+  if (pageHidden) return;
   if (unsubscribe) unsubscribe();
   if (retryTimeout) { clearTimeout(retryTimeout); retryTimeout = null; }
   if (issueBootstrapTimeout) { clearTimeout(issueBootstrapTimeout); issueBootstrapTimeout = null; }
@@ -3503,6 +3518,11 @@ function startListener() {
     setSyncStatus('ok', 'Live — synced across all devices');
   }, err => {
     console.error('Snapshot error:', err);
+    const isPermissionError = err?.code === 'permission-denied';
+    if (isPermissionError) {
+      setSyncStatus('err', 'Access denied. Reload the page if this persists.');
+      return;
+    }
     retryCount++;
     const delay = Math.min(2000 * retryCount, 15000); // 2s, 4s, 6s… up to 15s
     setSyncStatus('err', `Connection lost. Retrying in ${Math.round(delay/1000)}s…`);
