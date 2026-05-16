@@ -377,6 +377,13 @@ export default {
         const val = env[key];
         info[key] = typeof val === 'string' ? `string length ${val.length} (starts with ${val.slice(0, 6)}...)` : typeof val;
       }
+      // Also test the OAuth flow
+      try {
+        const token = await getGoogleOAuthToken(env);
+        info['OAuth_TEST'] = 'SUCCESS - token starts with ' + token.slice(0, 10) + '...';
+      } catch (e) {
+        info['OAuth_TEST'] = 'FAILED - ' + e.message;
+      }
       return new Response(JSON.stringify(info, null, 2), { headers: { 'Content-Type': 'application/json' } });
     }
 
