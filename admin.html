@@ -2104,12 +2104,14 @@ function renderSchedulePreview() {
       totalRows += rows.length;
       html += `<div style="margin-bottom:10px;"><strong style="font-size:11px;color:var(--text2);">${sk.label} (${rows.length})</strong>`;
       html += `<table style="width:100%;font-size:11px;margin-top:4px;"><tr style="color:var(--text2);font-family:'Share Tech Mono',monospace;font-size:10px;">`;
-      for (const c of cols) {
+      for (let ci = 0; ci < cols.length; ci++) {
+        const c = cols[ci];
         let extra = '';
         if (c === 'Cavity' || c === 'DOH') extra = 'width:60px;';
         else if (c === 'Labels/Shift') extra = 'width:80px;';
         else if (c === 'Description') extra = 'min-width:200px;';
-        html += `<th style="padding:4px 5px;white-space:nowrap;${extra}">${c}</th>`;
+        else if (c === 'Press' || c === 'MC') extra = 'width:70px;';
+        html += `<th style="padding:4px 5px;white-space:nowrap;${extra}${ci % 2 === 0 ? 'background:rgba(255,255,255,0.02);' : ''}">${c}</th>`;
       }
       html += '</tr>';
       for (let ri = 0; ri < rows.length; ri++) {
@@ -2119,7 +2121,7 @@ function renderSchedulePreview() {
           let v = rows[ri][f];
           if (f === 'part_storage_location') v = Array.isArray(v) ? v.join(', ') : String(v ?? '');
           const val = esc(String(v ?? ''));
-          html += `<td style="padding:2px 4px;border-top:1px solid var(--border);">
+          html += `<td style="padding:2px 4px;border-top:1px solid var(--border);${fi % 2 === 0 ? 'background:rgba(255,255,255,0.02);' : ''}">
             <input type="text" value="${val}"
                    data-section="${sk.key}" data-row="${ri}" data-field="${f}"
                    style="width:100%;border:none;background:transparent;color:var(--text);font-size:11px;padding:2px;font-family:inherit;box-sizing:border-box;"
