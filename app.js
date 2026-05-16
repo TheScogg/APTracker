@@ -1099,6 +1099,23 @@ function renderScheduleSection(container, lookupDoc, scheduleDate) {
   labels.className = 'mc-schedule-pill';
   labels.textContent = `Labels/Shift: ${lookupDoc.mainRow?.labelsPerShift ?? '—'}`;
   meta.appendChild(labels);
+  const doh = document.createElement('span');
+  doh.className = 'mc-schedule-pill';
+  const dohVal = lookupDoc.mainRow?.doh;
+  if (dohVal !== null && dohVal !== undefined && dohVal !== '') {
+    const num = Number(dohVal);
+    if (!isNaN(num)) {
+      let bg, text;
+      if (num < 1) { bg = 'rgba(239,68,68,0.25)'; text = '#ef4444'; }
+      else if (num < 2) { bg = 'rgba(234,179,8,0.25)'; text = '#eab308'; }
+      else { bg = 'rgba(34,197,94,0.25)'; text = '#22c55e'; }
+      doh.style.background = bg;
+      doh.style.color = text;
+      doh.style.borderColor = text;
+    }
+  }
+  doh.textContent = `DOH: ${dohVal ?? '—'}`;
+  meta.appendChild(doh);
   if (lookupDoc.hasChanges) {
     const changes = document.createElement('span');
     changes.className = 'mc-schedule-pill';
@@ -1107,6 +1124,13 @@ function renderScheduleSection(container, lookupDoc, scheduleDate) {
     meta.appendChild(changes);
   }
   block.appendChild(meta);
+
+  if (lookupDoc.mainRow?.notes) {
+    const notes = document.createElement('div');
+    notes.className = 'mc-schedule-notes';
+    notes.textContent = lookupDoc.mainRow.notes;
+    block.appendChild(notes);
+  }
 
   (lookupDoc.changes || []).forEach(ch => {
     const change = document.createElement('div');
