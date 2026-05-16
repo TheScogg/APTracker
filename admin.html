@@ -257,6 +257,7 @@
     /* Editable preview cells */
     #schedule-preview-container td:hover { background:rgba(249,115,22,0.08); border-radius:4px; }
     #schedule-preview-container td input:focus { outline:1px solid var(--accent); border-radius:3px; background:var(--bg3); }
+    .step-num { display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--accent);color:#fff;font-size:11px;font-weight:700;margin-right:7px;vertical-align:middle; }
   </style>
 </head>
 <body>
@@ -318,7 +319,7 @@
         <div class="page-tab-pane" id="page-tab-schedule">
           <!-- OCR + GPT section -->
           <div class="card">
-            <h2>OCR from PDF Scan</h2>
+            <h2><span class="step-num">1</span>OCR from PDF Scan</h2>
             <p class="muted" style="margin-bottom:8px;">Upload a scanned PDF (2-page schedule) to extract text via OCR, then convert to schedule JSON.</p>
             <div class="json-actions">
               <select id="ocr-engine-select" style="max-width:200px;">
@@ -328,7 +329,7 @@
                 <option value="tesseract">Tesseract (Browser)</option>
               </select>
               <input id="schedule-pdf-file" type="file" accept="application/pdf" style="max-width:250px;padding:6px 8px;" />
-              <button class="btn" id="ocr-pdf-btn" style="max-width:140px;">OCR PDF → Text</button>
+              <button class="btn btn-primary" id="ocr-pdf-btn" style="max-width:140px;">OCR PDF → Text</button>
             </div>
             <div id="ocr-progress" class="feedback" style="margin-top:6px;"></div>
             <details style="margin-top:6px;">
@@ -372,7 +373,7 @@
               </div>
             </details>
             <div class="divider" style="margin:12px 0;"></div>
-            <h2>Generate JSON from Text</h2>
+            <h2><span class="step-num">2</span>Generate JSON from Text</h2>
             <p class="muted" style="margin-bottom:6px;">Review OCR output (or paste text manually), then generate canonical JSON.</p>
             <textarea id="schedule-gpt-source" placeholder="OCR text or pasted schedule text will appear here..." style="margin-top:6px;min-height:200px;"></textarea>
             <div class="json-actions" style="margin-top:8px;">
@@ -386,7 +387,7 @@
                 <option value="true">Strict validation</option>
                 <option value="false">Lenient</option>
               </select>
-              <button class="btn" id="deepseek-convert-btn" style="max-width:200px;">Generate JSON with Deepseek</button>
+              <button class="btn btn-primary" id="deepseek-convert-btn" style="max-width:200px;">Generate JSON with Deepseek</button>
             </div>
             <textarea id="deepseek-instructions" placeholder="Optional: custom instructions for DeepSeek (e.g. 'Press 7 is down, mark all its rows as notes')" style="margin-top:6px;min-height:60px;font-size:12px;"></textarea>
             <details style="margin-top:6px;">
@@ -397,7 +398,7 @@
           </div>
           <!-- Daily Schedule Import -->
           <div class="card" style="margin-top:12px;">
-            <h2>Daily Schedule Import</h2>
+            <h2><span class="step-num">3</span>Daily Schedule Import</h2>
             <p class="muted" style="margin-bottom:10px;">Upload or paste schedule JSON to import daily schedules into Firestore.</p>
             <div class="grid-2">
               <input id="schedule-date" class="mono-input" type="date" />
