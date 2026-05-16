@@ -161,6 +161,53 @@ async function handleOcrGoogle(request, env) {
   }
 }
 
+function extractDocAiTextFromLayout(doc) {
+  const blocks = doc?.documentLayout?.blocks;
+  if (!blocks?.length) return '';
+  const fullText = doc?.text || '';
+  const parts = [];
+
+  function walk(blockList) {
+    for (const block of blockList) {
+      if (block.textBlock) {
+        if (block.textBlock.text) {
+          parts.push(block.textBlock.text);
+        } else if (fullText && block.textAnchor?.textSegments) {
+          for (const seg of block.textAnchor.textSegments) {
+            const start = parseInt(seg.startIndex || '0');
+            const end = seg.endIndex !== undefined ? parseInt(seg.endIndex) : fullText.length;
+            if (end > start && start >= 0 && end <= fullText.length) {
+              parts.push(fullText.slice(start, end));
+            }
+          }
+        }
+      }
+      if (block.tableBlock) {
+        for (const row of [...(block.tableBlock.headerRows || []), ...(block.tableBlock.bodyRows || [])]) {
+          for (const cell of row.cells || []) {
+            walk(cell.blocks || []);
+            parts.push('\t');
+          }
+          parts.push('\n');
+        }
+      }
+    }
+  }
+
+  walk(blocks);
+  return parts.join('').replace(/\t+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+function getDocAiText(doc) {
+  if (doc?.text?.trim()) return doc.text.trim();
+  const fromLayout = extractDocAiTextFromLayout(doc);
+  if (fromLayout) return fromLayout;
+  if (doc?.entities?.length) {
+    return doc.entities.map(e => e.mention || e.text || '').filter(Boolean).join('\n');
+  }
+  return '';
+}
+
 async function handleOcrDocumentAi(request, env) {
   if (request.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'POST required' }), { status: 405, headers: { 'Content-Type': 'application/json' } });
@@ -193,7 +240,6 @@ async function handleOcrDocumentAi(request, env) {
 
     const data = await res.json();
     if (res.status === 401) {
-      // Token may have expired — force refresh and retry once
       _cachedToken = null;
       const newToken = await getGoogleOAuthToken(env);
       const retryRes = await fetch(docAiUrl, {
@@ -206,23 +252,23 @@ async function handleOcrDocumentAi(request, env) {
       });
       const retryData = await retryRes.json();
       if (!retryRes.ok) throw new Error((retryData.error && retryData.error.message) || 'Document AI API error: ' + retryRes.status);
-      const retryText = retryData.document?.text || '';
+      const retryText = getDocAiText(retryData.document);
       const retryPages = retryData.document?.pages || [];
-      return new Response(JSON.stringify({ text: retryText.trim(), pageCount: retryPages.length || 1 }), {
+      return new Response(JSON.stringify({ text: retryText, pageCount: retryPages.length || 1 }), {
         headers: { 'Content-Type': 'application/json' }
       });
     }
     if (!res.ok) throw new Error((data.error && data.error.message) || 'Document AI API error: ' + res.status);
 
-    const text = data.document?.text || '';
     const pages = data.document?.pages || [];
+    const text = getDocAiText(data.document);
+
     if (!text && !pages.length) {
-      // Diagnostic: return part of the response so we can see the structure
-      const snippet = JSON.stringify(data).slice(0, 1000);
+      const snippet = JSON.stringify(data).slice(0, 2000);
       return new Response(JSON.stringify({ error: 'Document AI returned no text. Response preview: ' + snippet }), { status: 500, headers: { 'Content-Type': 'application/json' } });
     }
 
-    return new Response(JSON.stringify({ text: text.trim(), pageCount: pages.length || 1 }), {
+    return new Response(JSON.stringify({ text, pageCount: pages.length || 1 }), {
       headers: { 'Content-Type': 'application/json' }
     });
   } catch (e) {
