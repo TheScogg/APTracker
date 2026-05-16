@@ -371,6 +371,38 @@
                   </select>
                 </label>
               </div>
+              <div class="divider" style="margin:8px 0;"></div>
+              <div style="font-size:12px;color:var(--text2);margin-bottom:6px;font-weight:700;">Tesseract (Browser)</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <label style="font-size:11px;color:var(--text2);flex:0 0 100px;">Language
+                  <input id="tesseract-language" type="text" value="eng" placeholder="eng" style="margin-top:2px;font-size:12px;" />
+                </label>
+                <label style="font-size:11px;color:var(--text2);flex:0 0 100px;">PSM
+                  <select id="tesseract-psm" style="margin-top:2px;font-size:12px;">
+                    <option value="6" selected>6 — Uniform block</option>
+                    <option value="3">3 — Auto page seg</option>
+                    <option value="4">4 — Single column</option>
+                    <option value="1">1 — Auto + OSD</option>
+                    <option value="7">7 — Single line</option>
+                    <option value="11">11 — Sparse text</option>
+                    <option value="13">13 — Raw line</option>
+                  </select>
+                </label>
+                <label style="font-size:11px;color:var(--text2);flex:0 0 100px;">OEM
+                  <select id="tesseract-oem" style="margin-top:2px;font-size:12px;">
+                    <option value="3" selected>3 — Default</option>
+                    <option value="1">1 — LSTM only</option>
+                    <option value="2">2 — Legacy + LSTM</option>
+                    <option value="0">0 — Legacy only</option>
+                  </select>
+                </label>
+                <label style="font-size:11px;color:var(--text2);flex:0 0 160px;">Char whitelist
+                  <input id="tesseract-whitelist" type="text" placeholder="e.g. 0123456789ABCDEF" style="margin-top:2px;font-size:12px;" />
+                </label>
+                <label style="font-size:11px;color:var(--text2);flex:0 0 80px;">Scale
+                  <input id="tesseract-scale" type="number" value="2.5" min="0.5" max="5" step="0.5" style="margin-top:2px;font-size:12px;" />
+                </label>
+              </div>
             </details>
             <div class="divider" style="margin:12px 0;"></div>
             <h2><span class="step-num">2</span>Generate JSON from Text</h2>
@@ -2158,6 +2190,35 @@ async function batchImportSchedules() {
           const d = await res.json();
           if (!res.ok) throw new Error(d.error||'Google Vision failed');
           ocrText = d.text;
+        } else if (engine === 'tesseract') {
+          const lang = document.getElementById('tesseract-language')?.value || 'eng';
+          const psm = String(document.getElementById('tesseract-psm')?.value || '6');
+          const oem = document.getElementById('tesseract-oem')?.value || '';
+          const whitelist = (document.getElementById('tesseract-whitelist')?.value || '').trim();
+          const tesseractScale = parseFloat(document.getElementById('tesseract-scale')?.value) || 2.5;
+
+          self.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+          const pdf = await self.pdfjsLib.getDocument({ data:pdfBytes }).promise;
+          const worker = await self.Tesseract.createWorker(lang);
+          const tesseractParams = { tessedit_pageseg_mode: psm };
+          if (oem && oem !== '3') tesseractParams.tessedit_ocr_engine_mode = oem;
+          if (whitelist) tesseractParams.tessedit_char_whitelist = whitelist;
+          await worker.setParameters(tesseractParams);
+          ocrText = '';
+          for (let p = 1; p <= pdf.numPages; p++) {
+            feedback('batch-feedback', '', `[${i+1}/${fileArr.length}] Tesseract page ${p}/${pdf.numPages}: ${file.name}`);
+            const page = await pdf.getPage(p);
+            const vp = page.getViewport({ scale: tesseractScale });
+            const c = document.createElement('canvas');
+            c.width = vp.width; c.height = vp.height;
+            const ctx = c.getContext('2d');
+            ctx.fillStyle = '#fff'; ctx.fillRect(0,0,c.width,c.height);
+            await page.render({ canvasContext:ctx, viewport:vp }).promise;
+            preprocessCanvasForOcr(c);
+            const { data: { text } } = await worker.recognize(c);
+            ocrText += text + '\n\n';
+          }
+          await worker.terminate();
         } else {
           if (!docaiProject||!docaiProcessor) throw new Error('Document AI requires Project ID and Processor ID');
           const params = new URLSearchParams({ projectId:docaiProject, processorId:docaiProcessor, location:docaiLocation });
@@ -2581,15 +2642,24 @@ async function ocrPdfToText() {
       feedback('ocr-progress', 'ok', `Document AI complete: ${data.pageCount} page(s).`);
     } else {
       self.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      const lang = document.getElementById('tesseract-language')?.value || 'eng';
+      const psm = String(document.getElementById('tesseract-psm')?.value || '6');
+      const oem = document.getElementById('tesseract-oem')?.value || '';
+      const whitelist = (document.getElementById('tesseract-whitelist')?.value || '').trim();
+      const tesseractScale = parseFloat(document.getElementById('tesseract-scale')?.value) || 2.5;
+
       const arrayBuffer = await file.arrayBuffer();
       const pdf = await self.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-      const worker = await self.Tesseract.createWorker('eng');
-      await worker.setParameters({ tessedit_pageseg_mode: '6' });
+      const worker = await self.Tesseract.createWorker(lang);
+      const tesseractParams = { tessedit_pageseg_mode: psm };
+      if (oem && oem !== '3') tesseractParams.tessedit_ocr_engine_mode = oem;
+      if (whitelist) tesseractParams.tessedit_char_whitelist = whitelist;
+      await worker.setParameters(tesseractParams);
       fullText = '';
       for (let i = 1; i <= pdf.numPages; i++) {
         feedback('ocr-progress', '', `Rendering page ${i}/${pdf.numPages}…`);
         const page = await pdf.getPage(i);
-        const viewport = page.getViewport({ scale: 2.5 });
+        const viewport = page.getViewport({ scale: tesseractScale });
         const canvas = document.createElement('canvas');
         canvas.width = viewport.width;
         canvas.height = viewport.height;
@@ -3631,7 +3701,12 @@ document.getElementById('json-preview-toggle')?.addEventListener('toggle', () =>
     'vision-max-results',
     'docai-project-id',
     'docai-processor-id',
-    'docai-location'
+    'docai-location',
+    'tesseract-language',
+    'tesseract-psm',
+    'tesseract-oem',
+    'tesseract-whitelist',
+    'tesseract-scale'
   ];
   for (const id of fields) {
     const el = document.getElementById(id);
