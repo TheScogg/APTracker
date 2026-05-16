@@ -107,6 +107,59 @@ async function handleOcrGoogle(request, env) {
   }
 }
 
+async function handleOcrDocumentAi(request, env) {
+  if (request.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'POST required' }), { status: 405, headers: { 'Content-Type': 'application/json' } });
+  }
+  const apiKey = env.GOOGLE_VISION_API_KEY;
+  if (!apiKey) {
+    return new Response(JSON.stringify({ error: 'Google API key not configured (set GOOGLE_VISION_API_KEY secret)' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+  }
+  try {
+    const url = new URL(request.url);
+    const projectId = url.searchParams.get('projectId');
+    const processorId = url.searchParams.get('processorId');
+    const loc = url.searchParams.get('location') || 'us';
+    if (!projectId || !processorId) {
+      return new Response(JSON.stringify({ error: 'Project ID and Processor ID are required.' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+    }
+    const pdfBase64 = await request.arrayBuffer().then(b => {
+      const bytes = new Uint8Array(b);
+      let binary = '';
+      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+      return btoa(binary);
+    });
+
+    const docAiUrl = `https://${loc}-documentai.googleapis.com/v1/projects/${projectId}/locations/${loc}/processors/${processorId}:process?key=${apiKey}`;
+    const res = await fetch(docAiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        rawDocument: { content: pdfBase64, mimeType: 'application/pdf' },
+        skipHumanReview: true
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error((data.error && data.error.message) || 'Document AI API error: ' + res.status);
+
+    // Extract text from all pages, preserving page boundaries
+    const pages = data.document?.pages || [];
+    const fullText = pages.map((page, idx) =>
+      (page.paragraphs || []).map(p => (p.words || []).map(w => (w.symbols || []).map(s => s.text || '').join('')).join(' ')).join('\n')
+    ).filter(Boolean).join('\n\n');
+
+    // Fallback: if paragraphs are empty, try document.text
+    const text = fullText || data.document?.text || '';
+
+    return new Response(JSON.stringify({ text: text.trim(), pageCount: pages.length || 1 }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (e) {
+    return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+  }
+}
+
 async function handleAiConvert(request, env) {
   if (request.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'POST required' }), { status: 405, headers: { 'Content-Type': 'application/json' } });
@@ -240,6 +293,9 @@ export default {
     }
     if (url.pathname === '/api/ocr/google') {
       return handleOcrGoogle(request, env);
+    }
+    if (url.pathname === '/api/ocr/document-ai') {
+      return handleOcrDocumentAi(request, env);
     }
     if (url.pathname === '/api/ai/convert') {
       return handleAiConvert(request, env);

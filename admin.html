@@ -345,9 +345,10 @@
             <h2>OCR from PDF Scan</h2>
             <p class="muted" style="margin-bottom:8px;">Upload a scanned PDF (2-page schedule) to extract text via OCR, then convert to schedule JSON.</p>
             <div class="json-actions">
-              <select id="ocr-engine-select" style="max-width:180px;">
+              <select id="ocr-engine-select" style="max-width:200px;">
                 <option value="azure">Azure Doc AI (Cloud)</option>
                 <option value="google">Google Vision (Cloud)</option>
+                <option value="document-ai">Google Doc AI (Cloud)</option>
                 <option value="tesseract">Tesseract (Browser)</option>
               </select>
               <input id="schedule-pdf-file" type="file" accept="application/pdf" style="max-width:250px;padding:6px 8px;" />
@@ -375,6 +376,22 @@
                 </label>
                 <label style="font-size:11px;color:var(--text2);flex:0 0 100px;">Max results
                   <input id="vision-max-results" type="number" value="1" min="1" max="10" style="margin-top:2px;font-size:12px;" />
+                </label>
+              </div>
+              <div class="divider" style="margin:8px 0;"></div>
+              <div style="font-size:12px;color:var(--text2);margin-bottom:6px;font-weight:700;">Google Document AI</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <label style="font-size:11px;color:var(--text2);flex:1;min-width:160px;">Project ID
+                  <input id="docai-project-id" type="text" placeholder="gcp-project-id" style="margin-top:2px;font-size:12px;" />
+                </label>
+                <label style="font-size:11px;color:var(--text2);flex:2;min-width:200px;">Processor ID
+                  <input id="docai-processor-id" type="text" placeholder="processor-uuid" style="margin-top:2px;font-size:12px;" />
+                </label>
+                <label style="font-size:11px;color:var(--text2);flex:0 0 100px;">Location
+                  <select id="docai-location" style="margin-top:2px;font-size:12px;">
+                    <option value="us">us</option>
+                    <option value="eu">eu</option>
+                  </select>
                 </label>
               </div>
             </details>
@@ -2246,7 +2263,7 @@ async function ocrPdfToText() {
   const engine = document.getElementById('ocr-engine-select')?.value || 'azure';
   btn.disabled = true;
   btn.textContent = 'OCR Running…';
-  feedback('ocr-progress', '', engine === 'azure' ? 'Uploading to Azure Document Intelligence…' : engine === 'google' ? 'Rendering pages for Google Vision…' : 'Initializing Tesseract…');
+  feedback('ocr-progress', '', engine === 'azure' ? 'Uploading to Azure Document Intelligence…' : engine === 'google' ? 'Rendering pages for Google Vision…' : engine === 'document-ai' ? 'Sending to Google Document AI…' : 'Initializing Tesseract…');
   try {
     let fullText;
     if (engine === 'azure') {
@@ -2294,6 +2311,17 @@ async function ocrPdfToText() {
       if (!res.ok) throw new Error(data.error || 'Google Vision failed');
       fullText = data.text;
       feedback('ocr-progress', 'ok', `Google Vision complete: ${data.pageCount} page(s).`);
+    } else if (engine === 'document-ai') {
+      const projectId = String(document.getElementById('docai-project-id')?.value || '').trim();
+      const processorId = String(document.getElementById('docai-processor-id')?.value || '').trim();
+      const location = document.getElementById('docai-location')?.value || 'us';
+      if (!projectId || !processorId) throw new Error('Google Document AI requires Project ID and Processor ID. Configure them in Cloud OCR settings.');
+      const params = new URLSearchParams({ projectId, processorId, location });
+      const res = await fetch('/api/ocr/document-ai?' + params, { method: 'POST', body: file });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Document AI failed');
+      fullText = data.text.trim();
+      feedback('ocr-progress', 'ok', `Document AI complete: ${data.pageCount} page(s).`);
     } else {
       self.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
       const arrayBuffer = await file.arrayBuffer();
