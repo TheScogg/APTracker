@@ -14,3 +14,5 @@ chrome-window.png
 press-tracker-9d9c9-ca167801e5f1.json
 batchScheduleImporter.rtf
 batch-import-results.json
+schedule-ocr.py
+.venv/
