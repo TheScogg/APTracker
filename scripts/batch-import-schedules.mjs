@@ -29,6 +29,8 @@ import process from 'node:process';
 import { initializeApp, cert } from 'firebase-admin/app';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 
+let pdfjsLib;
+
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const SCHEDULE_SECTIONS = [
@@ -60,7 +62,12 @@ function parseArgs() {
   const val = flag => { const i = args.indexOf(flag); return i !== -1 && i + 1 < args.length ? args[i + 1] : null; };
   const has = flag => args.includes(flag);
 
+  const engine = (val('--engine') || val('-e') || 'document-ai').toLowerCase();
+  const validEngines = ['document-ai', 'azure', 'google'];
+  if (!validEngines.includes(engine)) die(`Invalid --engine: ${engine}. Valid: ${validEngines.join(', ')}`);
+
   return {
+    engine,
     dir: val('--dir') || val('-d'),
     plant: val('--plant') || val('-p'),
     workerUrl: val('--worker-url') || val('-w') || process.env.WORKER_URL,
@@ -92,7 +99,7 @@ REQUIRED:
   --plant, -p <id>        Target Firestore plant ID
   --worker-url, -w <url>  Cloudflare Worker base URL (or WORKER_URL env var)
 
-DOC AI SETTINGS (for document-ai OCR):
+DOC AI SETTINGS (for document-ai OCR engine):
   --docai-project <id>    GCP project ID
   --docai-processor <id>  Document AI processor ID
   --docai-location <loc>  Processor location (default: us)
@@ -101,6 +108,7 @@ ENVIRONMENT:
   GOOGLE_APPLICATION_CREDENTIALS  Path to Firebase service account JSON
 
 OPTIONS:
+  --engine, -e <engine>   OCR engine: document-ai, azure, google (default: document-ai)
   --from-date <YYYY-MM-DD>  Earliest date to import (inclusive)
   --to-date <YYYY-MM-DD>    Latest date to import (inclusive)
   --concurrency, -c <n>     Files to process in parallel (default: 1)
@@ -282,13 +290,70 @@ function canonicalizeKeys(raw) {
 // ─── API calls through Cloudflare Worker ──────────────────────────────────
 
 async function callOcr(workerUrl, pdfBytes, opts) {
+  const base = workerUrl.replace(/\/+$/, '');
+  switch (opts.engine) {
+    case 'azure':
+      return callAzureOcr(base, pdfBytes);
+    case 'google':
+      return callGoogleOcr(base, pdfBytes);
+    default:
+      return callDocumentAiOcr(base, pdfBytes, opts);
+  }
+}
+
+async function callDocumentAiOcr(base, pdfBytes, opts) {
   const params = new URLSearchParams({
     projectId: opts.docaiProject, processorId: opts.docaiProcessor, location: opts.docaiLocation,
   });
-  const url = `${workerUrl.replace(/\/+$/, '')}/api/ocr/document-ai?${params}`;
-  const res = await fetch(url, { method: 'POST', body: pdfBytes });
+  const res = await fetch(`${base}/api/ocr/document-ai?${params}`, { method: 'POST', body: pdfBytes });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || `OCR failed (${res.status})`);
+  if (!res.ok) throw new Error(data.error || `Document AI OCR failed (${res.status})`);
+  return (data.text || '').trim();
+}
+
+async function callAzureOcr(base, pdfBytes) {
+  const res = await fetch(`${base}/api/ocr`, { method: 'POST', body: pdfBytes });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.details || data.error || `Azure OCR failed (${res.status})`);
+  return (data.text || '').trim();
+}
+
+async function callGoogleOcr(base, pdfBytes) {
+  if (!pdfjsLib) {
+    try {
+      pdfjsLib = await import('pdfjs-dist');
+      pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+    } catch {
+      throw new Error('pdfjs-dist not installed. Run: npm install pdfjs-dist');
+    }
+  }
+
+  const doc = await pdfjsLib.getDocument({ data: pdfBytes.buffer ? new Uint8Array(pdfBytes) : pdfBytes }).promise;
+  const images = [];
+  for (let i = 1; i <= doc.numPages; i++) {
+    const page = await doc.getPage(i);
+    const viewport = page.getViewport({ scale: 2 });
+    const canvas = new OffscreenCanvas(viewport.width, viewport.height);
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, viewport.width, viewport.height);
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    const blob = await canvas.convertToBlob({ type: 'image/png' });
+    const buffer = Buffer.from(await blob.arrayBuffer());
+    images.push(buffer.toString('base64'));
+  }
+
+  const res = await fetch(`${base}/api/ocr/google`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      images,
+      featureType: 'DOCUMENT_TEXT_DETECTION',
+      maxResults: 1,
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || `Google Vision OCR failed (${res.status})`);
   return (data.text || '').trim();
 }
 
@@ -414,6 +479,10 @@ async function main() {
   if (!opts.dir) missing.push('--dir');
   if (!opts.plant) missing.push('--plant');
   if (!opts.workerUrl) missing.push('--worker-url');
+  if (opts.engine === 'document-ai') {
+    if (!opts.docaiProject) missing.push('--docai-project');
+    if (!opts.docaiProcessor) missing.push('--docai-processor');
+  }
   if (missing.length) die(`Missing required arguments: ${missing.join(', ')}`);
 
   const dir = opts.dir.startsWith('~') ? join(homedir(), opts.dir.slice(1)) : resolve(opts.dir);
@@ -461,6 +530,7 @@ async function main() {
   console.log(`  Directory:  ${dir}`);
   console.log(`  Plant:      ${opts.plant}`);
   console.log(`  Worker:     ${opts.workerUrl}`);
+  console.log(`  OCR engine: ${opts.engine}`);
   if (rangeStr) console.log(rangeStr);
   console.log(`  Files:      ${files.length} PDF(s)${skippedRange ? ` (${skippedRange} outside range)` : ''}`);
   console.log(`  Mode:       ${opts.dryRun ? 'DRY RUN (no Firestore writes)' : 'LIVE'}`);

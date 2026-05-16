@@ -1,0 +1,34 @@
+{
+  "timestamp": "2026-05-16T17:13:10.443Z",
+  "opts": {
+    "dir": "/Users/chris/Library/Mobile Documents/com~apple~CloudDocs/GE COE/Daily Schedules",
+    "plant": "ap4_mnc7kecn",
+    "fromDate": "2025-06-02",
+    "toDate": "2025-06-03",
+    "dryRun": false,
+    "resume": true
+  },
+  "summary": {
+    "total": 2,
+    "imported": 2,
+    "skipped": 0,
+    "skippedRange": 212,
+    "failed": 0
+  },
+  "results": [
+    {
+      "file": "Jun 2, 2025.pdf",
+      "date": "2025-06-02",
+      "status": "imported",
+      "error": null,
+      "rows": 78
+    },
+    {
+      "file": "Jun 3, 2025.pdf",
+      "date": "2025-06-03",
+      "status": "imported",
+      "error": null,
+      "rows": 81
+    }
+  ]
+}
