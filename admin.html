@@ -3363,6 +3363,30 @@ document.getElementById('json-preview-toggle')?.addEventListener('toggle', () =>
     });
   }
 })();
+
+// Auto-save Cloud OCR settings
+(function() {
+  const fields = [
+    'vision-language-hints',
+    'vision-feature-type',
+    'vision-model',
+    'vision-max-results',
+    'docai-project-id',
+    'docai-processor-id',
+    'docai-location'
+  ];
+  for (const id of fields) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    const saved = localStorage.getItem('ap:' + id);
+    if (saved !== null) {
+      if (el.tagName === 'SELECT') el.value = saved;
+      else el.value = saved;
+    }
+    el.addEventListener('input', () => localStorage.setItem('ap:' + id, el.value));
+    el.addEventListener('change', () => localStorage.setItem('ap:' + id, el.value));
+  }
+})();
 </script>
 </body>
 </html>
