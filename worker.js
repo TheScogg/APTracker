@@ -844,6 +844,41 @@ Rules:
   }
 }
 
+// ── Debug endpoint: echo image metadata ──────────────────────────────
+
+async function handleDebugImage(request, env) {
+  if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405 });
+
+  const contentType = request.headers.get('Content-Type') || '';
+  const debug = { received: true, contentType };
+
+  try {
+    if (contentType.includes('application/json')) {
+      const bodyJson = await request.json();
+      let rawImages = bodyJson.images || bodyJson.image || Object.values(bodyJson)[0];
+      if (typeof rawImages === 'string') rawImages = [rawImages];
+      if (!Array.isArray(rawImages)) rawImages = [String(rawImages)];
+      debug.images = rawImages.map((b64, i) => ({
+        index: i,
+        length: b64.length,
+        validBase64: /^[A-Za-z0-9+/]*={0,2}$/.test(b64.replace(/[\s\r\n]/g, '')),
+        startsWith: b64.substring(0, 40),
+        endsWith: b64.substring(b64.length - 20)
+      }));
+    } else {
+      const arrayBuffer = await request.arrayBuffer();
+      debug.rawLength = arrayBuffer.byteLength;
+      debug.rawType = contentType || 'unknown';
+    }
+  } catch (e) {
+    debug.error = e.message;
+  }
+
+  return new Response(JSON.stringify(debug, null, 2), {
+    headers: { 'Content-Type': 'application/json' }
+  });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
