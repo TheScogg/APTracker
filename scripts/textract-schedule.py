@@ -35,11 +35,11 @@ except ImportError:
     sys.exit(1)
 
 
-def pdf_page_to_bytes(pdf_path, page_num, dpi=300):
+def pdf_page_to_bytes(pdf_path, page_num, dpi=150):
     doc = fitz.open(pdf_path)
     page = doc[page_num]
     pix = page.get_pixmap(dpi=dpi)
-    img_bytes = pix.tobytes("png")
+    img_bytes = pix.tobytes("jpg")
     doc.close()
     return img_bytes
 
@@ -102,7 +102,7 @@ def main():
     parser = argparse.ArgumentParser(description='OCR schedule PDFs with Amazon Textract (no S3)')
     parser.add_argument('input', help='PDF file to process')
     parser.add_argument('--region', default=os.environ.get('AWS_REGION', 'us-west-2'))
-    parser.add_argument('--dpi', type=int, default=300, help='PDF render DPI (default: 300)')
+    parser.add_argument('--dpi', type=int, default=150, help='PDF render DPI (default: 150)')
     parser.add_argument('-o', '--output', help='Write to file instead of stdout')
     parser.add_argument('--profile', help='AWS profile name (from ~/.aws/credentials)')
     args = parser.parse_args()
