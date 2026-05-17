@@ -914,6 +914,15 @@ async function handleDebugImage(request, env) {
 
 // ── Import schedule JSON to Firestore ─────────────────────────────────
 
+function firestoreValue(val) {
+  if (val === null || val === undefined) return { nullValue: null };
+  if (typeof val === 'number') {
+    return Number.isInteger(val) ? { integerValue: String(val) } : { doubleValue: val };
+  }
+  if (typeof val === 'boolean') return { booleanValue: val };
+  return { stringValue: String(val) };
+}
+
 async function handleImportSchedule(request, env) {
   if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405 });
 
@@ -946,29 +955,27 @@ async function handleImportSchedule(request, env) {
     const writes = [];
 
     // Main doc
-    const mainDoc = {
-      update: {
-        name: basePath,
-        fields: {
-          scheduleDate: { stringValue: scheduleDate },
-          plantId: { stringValue: plantId },
-          shift: { stringValue: scheduleJson.schedule_info.shift || '' },
-          lineSpeed: { stringValue: scheduleJson.schedule_info.line_speed || '' },
-          totalPlannedPcs: { stringValue: scheduleJson.schedule_info.total_planned_pcs || '' },
-          sourceFileName: { stringValue: 'iOS Shortcut' },
-          sourceFileType: { stringValue: 'image/jpeg' },
-          status: { stringValue: 'imported' },
-          notes: { stringValue: scheduleJson.schedule_info.note || '' },
-          page1Count: { integerValue: String((scheduleJson.page_1 || []).length) },
-          page2Count: { integerValue: String((scheduleJson.page_2 || []).length) },
-          northBayChangesCount: { integerValue: String((scheduleJson.north_bay_changes || []).length) },
-          southBayChangesCount: { integerValue: String((scheduleJson.south_bay_changes || []).length) },
-          updatedAt: { timestampValue: now.toISOString() },
-          createdAt: { timestampValue: now.toISOString() }
-        }
-      }
-    };
-    writes.push(mainDoc);
+    const mainFields = {};
+    const mainPairs = [
+      ['scheduleDate', scheduleDate],
+      ['plantId', plantId],
+      ['shift', scheduleJson.schedule_info.shift],
+      ['lineSpeed', scheduleJson.schedule_info.line_speed],
+      ['totalPlannedPcs', scheduleJson.schedule_info.total_planned_pcs],
+      ['sourceFileName', 'iOS Shortcut'],
+      ['sourceFileType', 'image/jpeg'],
+      ['status', 'imported'],
+      ['notes', scheduleJson.schedule_info.note],
+      ['page1Count', (scheduleJson.page_1 || []).length],
+      ['page2Count', (scheduleJson.page_2 || []).length],
+      ['northBayChangesCount', (scheduleJson.north_bay_changes || []).length],
+      ['southBayChangesCount', (scheduleJson.south_bay_changes || []).length]
+    ];
+    for (const [k, v] of mainPairs) mainFields[k] = firestoreValue(v);
+    mainFields.updatedAt = { timestampValue: now.toISOString() };
+    mainFields.createdAt = { timestampValue: now.toISOString() };
+
+    writes.push({ update: { name: basePath, fields: mainFields } });
 
     // Section rows
     const sections = [
@@ -986,28 +993,27 @@ async function handleImportSchedule(request, env) {
           ? row.part_storage_location.join(', ')
           : (row.part_storage_location || '');
 
-        writes.push({
-          update: {
-            name: `${basePath}/${section.name}/${rowId}`,
-            fields: {
-              rowId: { stringValue: rowId },
-              press: { stringValue: row.press || '' },
-              partStorageLocation: { stringValue: psl },
-              partNumber: { stringValue: row.part_number || '' },
-              description: { stringValue: row.description || '' },
-              cavity: { stringValue: row.cavity || '' },
-              doh: { stringValue: row.doh || '' },
-              labelsPerShift: { stringValue: row.labels_per_shift || '' },
-              mc: { stringValue: row.mc || '' },
-              notes: { stringValue: row.notes || '' },
-              scheduleDate: { stringValue: scheduleDate },
-              plantId: { stringValue: plantId },
-              shift: { stringValue: scheduleJson.schedule_info.shift || '' },
-              updatedAt: { timestampValue: now.toISOString() },
-              createdAt: { timestampValue: now.toISOString() }
-            }
-          }
-        });
+        const rowFields = {};
+        const rPairs = [
+          ['rowId', rowId],
+          ['press', row.press],
+          ['partStorageLocation', psl],
+          ['partNumber', row.part_number],
+          ['description', row.description],
+          ['cavity', row.cavity],
+          ['doh', row.doh],
+          ['labelsPerShift', row.labels_per_shift],
+          ['mc', row.mc],
+          ['notes', row.notes],
+          ['scheduleDate', scheduleDate],
+          ['plantId', plantId],
+          ['shift', scheduleJson.schedule_info.shift]
+        ];
+        for (const [k, v] of rPairs) rowFields[k] = firestoreValue(v);
+        rowFields.updatedAt = { timestampValue: now.toISOString() };
+        rowFields.createdAt = { timestampValue: now.toISOString() };
+
+        writes.push({ update: { name: `${basePath}/${section.name}/${rowId}`, fields: rowFields } });
       }
     }
 
