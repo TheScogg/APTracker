@@ -842,8 +842,9 @@ Rules:
     const scanUrl = new URL(request.url);
     const plantId = scanUrl.searchParams.get('plant');
     let saved = false;
-    let saveError = null;
+    let saveError = 'not_attempted';
     if (plantId) {
+      saveError = 'pending';
       try {
         const importReq = new Request(request.url, {
           method: 'POST',
@@ -853,11 +854,13 @@ Rules:
         const importRes = await handleImportSchedule(importReq, env);
         saved = importRes.ok;
         if (!saved) {
-          const body = await importRes.json();
-          saveError = body.error || `HTTP ${importRes.status}`;
+          const body = await importRes.json().catch(() => ({}));
+          saveError = body.error || `HTTP_${importRes.status}`;
+        } else {
+          saveError = null;
         }
       } catch (importErr) {
-        saveError = importErr.message;
+        saveError = 'EXCEPTION: ' + importErr.message;
       }
     }
 
