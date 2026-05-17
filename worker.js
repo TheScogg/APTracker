@@ -608,13 +608,49 @@ async function handleScheduleScan(request, env) {
   }
 
   try {
-    // Step 1: Read image from request body
+    // Step 1: Read one or two images from request body
     const contentType = request.headers.get('Content-Type') || '';
-    let imageBytes;
-    if (contentType.includes('application/json')) {
-      const { image } = await request.json();
-      if (!image) throw new Error('Missing "image" field (base64)');
-      imageBytes = image; // already base64
+    let imagesToProcess = [];
+
+    if (contentType.includes('application/x-www-form-urlencoded')) {
+      const formText = await request.text();
+      const params = new URLSearchParams(formText);
+      const imagesParam = params.get('images');
+      if (imagesParam) {
+        try {
+          imagesToProcess = JSON.parse(imagesParam);
+          if (!Array.isArray(imagesToProcess)) imagesToProcess = [imagesParam];
+        } catch {
+          imagesToProcess = [imagesParam];
+        }
+      } else {
+        throw new Error('Form body must include "images" field');
+      }
+    } else if (contentType.includes('application/json')) {
+      const bodyJson = await request.json();
+      // Shortcuts may send images as array, stringified array, or single value
+      let rawImages = bodyJson.images;
+      if (rawImages === undefined) rawImages = bodyJson.image;
+      if (rawImages === undefined) {
+        // Try the entire body as a single image value
+        const keys = Object.keys(bodyJson);
+        if (keys.length === 1) rawImages = bodyJson[keys[0]];
+      }
+      if (rawImages === undefined) {
+        throw new Error('Expected "image" (base64) or "images" (array of base64)');
+      }
+      if (Array.isArray(rawImages)) {
+        imagesToProcess = rawImages;
+      } else if (typeof rawImages === 'string') {
+        try {
+          const parsed = JSON.parse(rawImages);
+          imagesToProcess = Array.isArray(parsed) ? parsed : [parsed];
+        } catch {
+          imagesToProcess = [rawImages];
+        }
+      } else {
+        imagesToProcess = [String(rawImages)];
+      }
     } else {
       const arrayBuffer = await request.arrayBuffer();
       const uint8 = new Uint8Array(arrayBuffer);
@@ -622,81 +658,87 @@ async function handleScheduleScan(request, env) {
       for (let i = 0; i < uint8.length; i += 65536) {
         binary += String.fromCharCode(...uint8.subarray(i, i + 65536));
       }
-      imageBytes = btoa(binary);
+      imagesToProcess = [btoa(binary)]; // single raw image
     }
 
-    // Step 2: Textract OCR
+    // Step 2: Textract OCR for each image
     const service = 'textract';
     const host = `textract.${region}.amazonaws.com`;
     const textractUrl = `https://${host}/`;
-    const body = JSON.stringify({
-      Document: { Bytes: imageBytes },
-      FeatureTypes: ['TABLES']
-    });
 
-    const headers = await signAwsRequest(region, service, 'POST', host, '/', '', body, accessKeyId, secretAccessKey);
-    const trRes = await fetch(textractUrl, { method: 'POST', headers, body });
-    if (!trRes.ok) {
-      const errText = await trRes.text();
-      throw new Error(`Textract error: ${trRes.status} ${errText}`);
-    }
-    const trData = await trRes.json();
-    const blocks = trData.Blocks || [];
+    let allOcrTexts = [];
 
-    // Extract table cells as markdown
-    const blockMap = {};
-    for (const b of blocks) blockMap[b.Id] = b;
+    for (let pageIdx = 0; pageIdx < imagesToProcess.length; pageIdx++) {
+      const imageBytes = imagesToProcess[pageIdx];
+      const body = JSON.stringify({
+        Document: { Bytes: imageBytes },
+        FeatureTypes: ['TABLES']
+      });
 
-    let ocrText = '';
-    for (const b of blocks) {
-      if (b.BlockType === 'TABLE') {
-        const rows = [];
-        for (const rel of (b.Relationships || [])) {
-          if (rel.Type === 'CHILD') {
-            for (const cid of rel.Ids) {
-              const cell = blockMap[cid];
-              if (cell && cell.BlockType === 'CELL') {
-                const r = (cell.RowIndex || 1) - 1;
-                const c = (cell.ColumnIndex || 1) - 1;
-                if (!rows[r]) rows[r] = [];
-                let text = cell.Text || '';
-                if (!text && cell.Relationships) {
-                  const words = [];
-                  for (const cr of cell.Relationships) {
-                    if (cr.Type === 'CHILD') {
-                      for (const wid of cr.Ids) {
-                        const word = blockMap[wid];
-                        if (word && word.BlockType === 'WORD') words.push(word.Text || '');
+      const headers = await signAwsRequest(region, service, 'POST', host, '/', '', body, accessKeyId, secretAccessKey);
+      const trRes = await fetch(textractUrl, { method: 'POST', headers, body });
+      if (!trRes.ok) {
+        const errText = await trRes.text();
+        throw new Error(`Textract error on image ${pageIdx + 1}: ${trRes.status} ${errText}`);
+      }
+      const trData = await trRes.json();
+      const blocks = trData.Blocks || [];
+
+      const blockMap = {};
+      for (const b of blocks) blockMap[b.Id] = b;
+
+      let ocrText = '';
+      for (const b of blocks) {
+        if (b.BlockType === 'TABLE') {
+          const rows = [];
+          for (const rel of (b.Relationships || [])) {
+            if (rel.Type === 'CHILD') {
+              for (const cid of rel.Ids) {
+                const cell = blockMap[cid];
+                if (cell && cell.BlockType === 'CELL') {
+                  const r = (cell.RowIndex || 1) - 1;
+                  const c = (cell.ColumnIndex || 1) - 1;
+                  if (!rows[r]) rows[r] = [];
+                  let text = cell.Text || '';
+                  if (!text && cell.Relationships) {
+                    const words = [];
+                    for (const cr of cell.Relationships) {
+                      if (cr.Type === 'CHILD') {
+                        for (const wid of cr.Ids) {
+                          const word = blockMap[wid];
+                          if (word && word.BlockType === 'WORD') words.push(word.Text || '');
+                        }
                       }
                     }
+                    text = words.join(' ');
                   }
-                  text = words.join(' ');
+                  rows[r][c] = text.replace(/\n/g, ' ');
                 }
-                rows[r][c] = text.replace(/\n/g, ' ');
               }
             }
           }
-        }
-        if (rows.length) {
-          const maxCols = Math.max(...rows.map(r => (r || []).length));
-          for (let r = 0; r < rows.length; r++) {
-            if (!rows[r]) rows[r] = [];
-            for (let c = 0; c < maxCols; c++) {
-              if (!rows[r][c]) rows[r][c] = '';
+          if (rows.length) {
+            const maxCols = Math.max(...rows.map(r => (r || []).length));
+            for (let r = 0; r < rows.length; r++) {
+              if (!rows[r]) rows[r] = [];
+              for (let c = 0; c < maxCols; c++) {
+                if (!rows[r][c]) rows[r][c] = '';
+              }
+              ocrText += '| ' + rows[r].join(' | ') + ' |\n';
+              if (r === 0) {
+                ocrText += '|-' + Array(maxCols).fill('-').join('|-') + '|\n';
+              }
             }
-            ocrText += '| ' + rows[r].join(' | ') + ' |\n';
-            if (r === 0) {
-              ocrText += '|-' + Array(maxCols).fill('-').join('|-') + '|\n';
-            }
+            ocrText += '\n';
           }
-          ocrText += '\n';
         }
       }
+      if (!ocrText) {
+        ocrText = blocks.filter(b => b.BlockType === 'LINE').map(b => b.Text).join('\n');
+      }
+      if (!ocrText.trim()) throw new Error(`No text detected in image ${pageIdx + 1}`);
+      allOcrTexts.push(ocrText);
     }
-    if (!ocrText) {
-      ocrText = blocks.filter(b => b.BlockType === 'LINE').map(b => b.Text).join('\n');
-    }
-    if (!ocrText.trim()) throw new Error('No text detected in image');
 
     // Step 3: DeepSeek → JSON
     const basePrompt = `You convert daily production schedule OCR text into structured JSON. Output ONLY valid JSON matching this schema. CRITICAL: Escape all double quotes inside string values with backslash. For example, "27" Basket" must be written as "27\\" Basket". Never use unescaped quotes inside strings. Output ONLY the JSON object, no markdown, no explanation.
@@ -750,7 +792,7 @@ Rules:
         model: 'deepseek-chat',
         messages: [
           { role: 'system', content: basePrompt },
-          { role: 'user', content: `Schedule OCR text:\n\n${ocrText}` }
+          { role: 'user', content: `Schedule OCR text:\n\n${allOcrTexts.join('\n\n--- Page ---\n\n')}` }
         ],
         response_format: { type: 'json_object' },
         temperature: 0.1,
@@ -829,6 +871,9 @@ export default {
     }
     if (url.pathname === '/api/schedule-scan') {
       return handleScheduleScan(request, env);
+    }
+    if (url.pathname === '/api/debug-image') {
+      return handleDebugImage(request, env);
     }
     if (url.pathname === '/api/debug') {
       const info = {};
