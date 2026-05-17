@@ -3430,18 +3430,17 @@ async function bootstrapDemoSession(user) {
   if (fullNameEl) fullNameEl.textContent = 'AP Tracker Demo';
   if (emailEl) emailEl.textContent = 'Simulating 10 virtual team members…';
 
-  {
+  const DEMO_SETUP_KEY = 'ap:demo:bootstrap';
+  if (!localStorage.getItem(DEMO_SETUP_KEY)) {
     const memRef = doc(db, 'plants', DEMO_PLANT_ID, 'members', currentUser.uid);
-    await setDoc(memRef, {
+    try { await setDoc(memRef, {
       userId: currentUser.uid, displayName: 'Demo Session', email: '', photoURL: '',
       role: 'admin', isActive: true, addedAt: serverTimestamp(), permissions: { ...DEFAULT_PERMISSIONS }
-    }, { merge: true });
-    const plantRef = doc(db, 'plants', DEMO_PLANT_ID);
-    try { await setDoc(plantRef, { name: 'Demo Plant', location: 'Demo Location', createdAt: serverTimestamp(), isActive: true }); } catch (_) {}
-    const configRef = doc(db, 'plants', DEMO_PLANT_ID, 'config', 'presses');
-    try { await setDoc(configRef, { presses: DEFAULT_PRESSES }); } catch (_) {}
-    const userRef = doc(db, 'users', currentUser.uid);
-    await setDoc(userRef, { plantIds: [DEMO_PLANT_ID], lastPlant: DEMO_PLANT_ID }, { merge: true });
+    }, { merge: true }); } catch (_) {}
+    try { await setDoc(doc(db, 'plants', DEMO_PLANT_ID), { name: 'Demo Plant', location: 'Demo Location', createdAt: serverTimestamp(), isActive: true }); } catch (_) {}
+    try { await setDoc(doc(db, 'plants', DEMO_PLANT_ID, 'config', 'presses'), { presses: DEFAULT_PRESSES }); } catch (_) {}
+    try { await setDoc(doc(db, 'users', currentUser.uid), { plantIds: [DEMO_PLANT_ID], lastPlant: DEMO_PLANT_ID }, { merge: true }); } catch (_) {}
+    localStorage.setItem(DEMO_SETUP_KEY, '1');
   }
 
   currentPlantId = 'plant_demo';
