@@ -41,7 +41,7 @@ const DEMO_USER = {
 };
 const DEMO_PLANT_ID = 'plant_demo';
 let _demoSim = null;
-let _bootstrapDemoPlant, buildDemoControls, startDemoEngine, stopDemoEngine, resetDemo;
+let buildDemoControls, startDemoEngine, stopDemoEngine, resetDemo;
 
 const firestoreIoStats = { reads: 0, writes: 0 };
 const APP_VERSION = window.__APP_VERSION__ || 'dev';
@@ -3421,7 +3421,6 @@ async function bootstrapSignedInSession(user) {
 }
 
 async function bootstrapDemoSession(user) {
-  await Promise.resolve();
   currentUser = user;
   document.getElementById('login-screen').classList.remove('visible');
   document.getElementById('app').classList.add('visible');
@@ -3431,7 +3430,24 @@ async function bootstrapDemoSession(user) {
   if (fullNameEl) fullNameEl.textContent = 'AP Tracker Demo';
   if (emailEl) emailEl.textContent = 'Simulating 10 virtual team members…';
 
-  await _bootstrapDemoPlant();
+  {
+    const plantRef = doc(db, 'plants', DEMO_PLANT_ID);
+    const snap = await getDoc(plantRef);
+    if (!snap.exists()) {
+      const batch1 = writeBatch(db);
+      batch1.set(plantRef, { name: 'Demo Plant', location: 'Demo Location', createdAt: serverTimestamp(), isActive: true });
+      batch1.set(doc(db, 'plants', DEMO_PLANT_ID, 'members', currentUser.uid), {
+        userId: currentUser.uid, displayName: 'Demo Session', email: '', photoURL: '',
+        role: 'admin', isActive: true, addedAt: serverTimestamp(), permissions: { ...DEFAULT_PERMISSIONS }
+      });
+      batch1.set(doc(db, 'users', currentUser.uid), { plantIds: [DEMO_PLANT_ID], lastPlant: DEMO_PLANT_ID }, { merge: true });
+      await batch1.commit();
+      const batch2 = writeBatch(db);
+      batch2.set(doc(db, 'plants', DEMO_PLANT_ID, 'config', 'presses'), { presses: DEFAULT_PRESSES });
+      await batch2.commit();
+    }
+  }
+
   currentPlantId = 'plant_demo';
   currentPlantName = 'Demo Plant';
   userPlants = [{ id: 'plant_demo', name: 'Demo Plant', location: '' }];
@@ -14541,23 +14557,6 @@ setInterval(() => {
 }, 1000);
 
 // ── DEMO MODE ENGINE ──
-
-_bootstrapDemoPlant = async function() {
-  const plantRef = doc(db, 'plants', DEMO_PLANT_ID);
-  const snap = await getDoc(plantRef);
-  if (snap.exists()) return;
-  const batch1 = writeBatch(db);
-  batch1.set(plantRef, { name: 'Demo Plant', location: 'Demo Location', createdAt: serverTimestamp(), isActive: true });
-  batch1.set(doc(db, 'plants', DEMO_PLANT_ID, 'members', currentUser.uid), {
-    userId: currentUser.uid, displayName: 'Demo Session', email: '', photoURL: '',
-    role: 'admin', isActive: true, addedAt: serverTimestamp(), permissions: { ...DEFAULT_PERMISSIONS }
-  });
-  batch1.set(doc(db, 'users', currentUser.uid), { plantIds: [DEMO_PLANT_ID], lastPlant: DEMO_PLANT_ID }, { merge: true });
-  await batch1.commit();
-  const batch2 = writeBatch(db);
-  batch2.set(doc(db, 'plants', DEMO_PLANT_ID, 'config', 'presses'), { presses: DEFAULT_PRESSES });
-  await batch2.commit();
-}
 
 const DEMO_AGENTS = [
   { uid: 'demo_sarah',   displayName: 'Sarah Chen',       email: 'sarah@demo.local',   role: 'processengineer', rows: ['Row 1','Row 2'],                              preferredStatuses: ['processengineer','quality'],       createWeight: 8,  statusWeight: 6 },
