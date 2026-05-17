@@ -590,6 +590,359 @@ Rules:
   }
 }
 
+// ── Full pipeline: image → Textract → DeepSeek → JSON ─────────────────
+
+async function handleScheduleScan(request, env) {
+  if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405 });
+
+  const accessKeyId = env.AWS_ACCESS_KEY_ID;
+  const secretAccessKey = env.AWS_SECRET_ACCESS_KEY;
+  const region = env.AWS_REGION || 'us-west-2';
+  const deepseekKey = env.DEEPSEEK_API_KEY;
+
+  if (!accessKeyId || !secretAccessKey) {
+    return new Response(JSON.stringify({ error: 'AWS credentials not configured' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+  }
+  if (!deepseekKey) {
+    return new Response(JSON.stringify({ error: 'DeepSeek API key not configured' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  try {
+    // Step 1: Read image from request body
+    const contentType = request.headers.get('Content-Type') || '';
+    let imageBytes;
+    if (contentType.includes('application/json')) {
+      const { image } = await request.json();
+      if (!image) throw new Error('Missing "image" field (base64)');
+      imageBytes = image; // already base64
+    } else {
+      const arrayBuffer = await request.arrayBuffer();
+      imageBytes = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+    }
+
+    // Step 2: Textract OCR
+    const service = 'textract';
+    const host = `textract.${region}.amazonaws.com`;
+    const textractUrl = `https://${host}/`;
+    const body = JSON.stringify({
+      Document: { Bytes: imageBytes },
+      FeatureTypes: ['TABLES']
+    });
+
+    const headers = await signAwsRequest(region, service, 'POST', host, '/', '', body, accessKeyId, secretAccessKey);
+    const trRes = await fetch(textractUrl, { method: 'POST', headers, body });
+    if (!trRes.ok) {
+      const errText = await trRes.text();
+      throw new Error(`Textract error: ${trRes.status} ${errText}`);
+    }
+    const trData = await trRes.json();
+    const blocks = trData.Blocks || [];
+
+    // Extract table cells as markdown
+    const blockMap = {};
+    for (const b of blocks) blockMap[b.Id] = b;
+
+    let ocrText = '';
+    for (const b of blocks) {
+      if (b.BlockType === 'TABLE') {
+        const rows = [];
+        for (const rel of (b.Relationships || [])) {
+          if (rel.Type === 'CHILD') {
+            for (const cid of rel.Ids) {
+              const cell = blockMap[cid];
+              if (cell && cell.BlockType === 'CELL') {
+                const r = (cell.RowIndex || 1) - 1;
+                const c = (cell.ColumnIndex || 1) - 1;
+                if (!rows[r]) rows[r] = [];
+                let text = cell.Text || '';
+                if (!text && cell.Relationships) {
+                  const words = [];
+                  for (const cr of cell.Relationships) {
+                    if (cr.Type === 'CHILD') {
+                      for (const wid of cr.Ids) {
+                        const word = blockMap[wid];
+                        if (word && word.BlockType === 'WORD') words.push(word.Text || '');
+                      }
+                    }
+                  }
+                  text = words.join(' ');
+                }
+                rows[r][c] = text.replace(/\n/g, ' ');
+              }
+            }
+          }
+        }
+        if (rows.length) {
+          const maxCols = Math.max(...rows.map(r => (r || []).length));
+          for (let r = 0; r < rows.length; r++) {
+            if (!rows[r]) rows[r] = [];
+            for (let c = 0; c < maxCols; c++) {
+              if (!rows[r][c]) rows[r][c] = '';
+            }
+            ocrText += '| ' + rows[r].join(' | ') + ' |\n';
+            if (r === 0) {
+              ocrText += '|-' + Array(maxCols).fill('-').join('|-') + '|\n';
+            }
+          }
+          ocrText += '\n';
+        }
+      }
+    }
+    if (!ocrText) {
+      ocrText = blocks.filter(b => b.BlockType === 'LINE').map(b => b.Text).join('\n');
+    }
+    if (!ocrText.trim()) throw new Error('No text detected in image');
+
+    // Step 3: DeepSeek → JSON
+    const basePrompt = `You convert daily production schedule OCR text into structured JSON. Output ONLY valid JSON matching this schema. CRITICAL: Escape all double quotes inside string values with backslash. For example, "27" Basket" must be written as "27\\" Basket". Never use unescaped quotes inside strings. Output ONLY the JSON object, no markdown, no explanation.
+
+{
+  "schedule_info": {
+    "date": "YYYY-MM-DD",
+    "shift": "1",
+    "line_speed": "",
+    "total_planned_pcs": "",
+    "note": ""
+  },
+  "page_1": [
+    {
+      "row_id": "5.01",
+      "press": "",
+      "part_storage_location": [],
+      "part_number": "",
+      "description": "",
+      "cavity": "",
+      "doh": "",
+      "labels_per_shift": "",
+      "mc": "",
+      "notes": ""
+    }
+  ],
+  "page_2": [],
+  "north_bay_changes": [],
+  "south_bay_changes": []
+}
+
+Rules:
+- Auto-detect shift (1, 2, or 3) from the schedule header or text.
+- part_storage_location is an ARRAY of location strings (up to 3 values).
+- cavity is a string (e.g. "4" or "9-16").
+- doh is numeric.
+- labels_per_shift is numeric.
+- mc is mold code string.
+- page_1 and page_2 contain the main press rows.
+- north_bay_changes and south_bay_changes are for change-over rows.
+- If text is unclear or a field is missing, use empty string or empty array. Do NOT make up data.
+- Return ONLY the JSON, no markdown or explanation.`;
+
+    const dsRes = await fetch('https://api.deepseek.com/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + deepseekKey
+      },
+      body: JSON.stringify({
+        model: 'deepseek-chat',
+        messages: [
+          { role: 'system', content: basePrompt },
+          { role: 'user', content: `Schedule OCR text:\n\n${ocrText}` }
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.1,
+        max_tokens: 16384
+      })
+    });
+
+    if (!dsRes.ok) {
+      const dsErr = await dsRes.text();
+      throw new Error(`DeepSeek error: ${dsRes.status} ${dsErr}`);
+    }
+
+    const dsData = await dsRes.json();
+    let content = dsData.choices?.[0]?.message?.content;
+    if (!content) throw new Error('DeepSeek returned empty response');
+
+    const fenceMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    if (fenceMatch) content = fenceMatch[1].trim();
+
+    let cleaned = content
+      .replace(/[\u2018\u2019]/g, "'")
+      .replace(/[\u201C\u201D]/g, '"')
+      .replace(/(\d)"(?!\s*[,\}\]\:])/g, '$1\\"');
+
+    let parsed;
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch (_) {
+      const fixed = cleaned.replace(/,\s*([\]}])/g, '$1');
+      try {
+        parsed = JSON.parse(fixed);
+      } catch (_2) {
+        return new Response(JSON.stringify({ error: 'DeepSeek returned invalid JSON', content: content.substring(0, 500) }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
+    // Step 4: If ?plant= is provided, write to Firestore
+    const url = new URL(request.url);
+    const plantId = url.searchParams.get('plant');
+    let saved = false;
+    if (plantId) {
+      try {
+        await writeScheduleToFirestore(plantId, parsed, env);
+        saved = true;
+      } catch (fsErr) {
+        console.error('Firestore write failed:', fsErr.message);
+      }
+    }
+
+    return new Response(JSON.stringify({ ...parsed, saved }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+  } catch (e) {
+    return new Response(JSON.stringify({ error: e.message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+// ── Firestore helpers ─────────────────────────────────────────────────
+
+function objToFields(obj) {
+  const fields = {};
+  for (const [key, val] of Object.entries(obj)) {
+    if (val === null || val === undefined) {
+      fields[key] = { nullValue: null };
+    } else if (typeof val === 'string') {
+      fields[key] = { stringValue: val };
+    } else if (typeof val === 'number') {
+      fields[key] = Number.isInteger(val) ? { integerValue: String(val) } : { doubleValue: val };
+    } else if (typeof val === 'boolean') {
+      fields[key] = { booleanValue: val };
+    } else if (Array.isArray(val)) {
+      fields[key] = { arrayValue: { values: val.map(v => objToFieldValue(v)) } };
+    } else if (typeof val === 'object') {
+      fields[key] = { mapValue: { fields: objToFields(val) } };
+    }
+  }
+  return fields;
+}
+
+function objToFieldValue(val) {
+  if (val === null || val === undefined) return { nullValue: null };
+  if (typeof val === 'string') return { stringValue: val };
+  if (typeof val === 'number') return Number.isInteger(val) ? { integerValue: String(val) } : { doubleValue: val };
+  if (typeof val === 'boolean') return { booleanValue: val };
+  if (Array.isArray(val)) return { arrayValue: { values: val.map(v => objToFieldValue(v)) } };
+  if (typeof val === 'object') return { mapValue: { fields: objToFields(val) } };
+  return { nullValue: null };
+}
+
+async function writeScheduleToFirestore(plantId, scheduleJson, env) {
+  const token = await getGoogleOAuthToken(env);
+  const sa = JSON.parse(env.GOOGLE_SERVICE_ACCOUNT);
+  const projectId = sa.project_id;
+  const baseUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)`;
+
+  const scheduleDate = scheduleJson.schedule_info?.date || '';
+  if (!scheduleDate || !/^\d{4}-\d{2}-\d{2}$/.test(scheduleDate)) {
+    throw new Error(`Invalid schedule date: ${scheduleDate}`);
+  }
+
+  const mainDocPath = `plants/${plantId}/dailySchedules/${scheduleDate}`;
+  const sections = [
+    { key: 'page_1', name: 'page1' },
+    { key: 'page_2', name: 'page2' },
+    { key: 'north_bay_changes', name: 'northBayChanges' },
+    { key: 'south_bay_changes', name: 'southBayChanges' }
+  ];
+
+  // Delete existing subcollection documents for this schedule date
+  const now = new Date();
+  for (const section of sections) {
+    const subColPath = `${mainDocPath}/${section.name}`;
+    const listRes = await fetch(`${baseUrl}/documents/${subColPath}`, {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    if (listRes.ok) {
+      const listData = await listRes.json();
+      for (const doc of (listData.documents || [])) {
+        // doc.name is the full resource name like projects/{pid}/databases/(default)/documents/plants/...
+        await fetch(`https://firestore.googleapis.com/v1/${doc.name}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+      }
+    }
+  }
+
+  // Write main document
+  const schedInfo = scheduleJson.schedule_info || {};
+  const mainFields = objToFields({
+    scheduleDate,
+    plantId,
+    shift: schedInfo.shift || '',
+    lineSpeed: schedInfo.line_speed || '',
+    totalPlannedPcs: schedInfo.total_planned_pcs || '',
+    sourceFileName: 'iOS Shortcut',
+    sourceFileType: 'image/jpeg',
+    status: 'imported',
+    notes: schedInfo.note || '',
+    page1Count: (scheduleJson.page_1 || []).length,
+    page2Count: (scheduleJson.page_2 || []).length,
+    northBayChangesCount: (scheduleJson.north_bay_changes || []).length,
+    southBayChangesCount: (scheduleJson.south_bay_changes || []).length
+  });
+  mainFields.updatedAt = { timestampValue: now.toISOString() };
+  mainFields.createdAt = { timestampValue: now.toISOString() };
+
+  await fetch(`${baseUrl}/documents/${mainDocPath}?allowMissing=true`, {
+    method: 'PATCH',
+    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fields: mainFields })
+  });
+
+  // Write each row into the appropriate section subcollection
+  for (const section of sections) {
+    const rows = scheduleJson[section.key] || [];
+    for (const row of rows) {
+      const rowId = row.row_id || row.press || `row-${Math.random().toString(36).slice(2, 8)}`;
+      const rowPath = `${mainDocPath}/${section.name}/${rowId}`;
+      const psl = Array.isArray(row.part_storage_location) ? row.part_storage_location.join(', ') : (row.part_storage_location || '');
+
+      const rowFields = objToFields({
+        rowId,
+        press: row.press || '',
+        partStorageLocation: psl,
+        partNumber: row.part_number || '',
+        description: row.description || '',
+        cavity: row.cavity || '',
+        doh: row.doh || '',
+        labelsPerShift: row.labels_per_shift || '',
+        mc: row.mc || '',
+        notes: row.notes || '',
+        scheduleDate,
+        plantId,
+        shift: schedInfo.shift || ''
+      });
+      rowFields.updatedAt = { timestampValue: now.toISOString() };
+      rowFields.createdAt = { timestampValue: now.toISOString() };
+
+      // Encode full path to avoid issues with special chars
+      const fullDocName = `${baseUrl}/documents/${rowPath}`;
+      await fetch(`${fullDocName}?allowMissing=true`, {
+        method: 'PATCH',
+        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields: rowFields })
+      });
+    }
+  }
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -614,6 +967,9 @@ export default {
     }
     if (url.pathname === '/api/ai/convert') {
       return handleAiConvert(request, env);
+    }
+    if (url.pathname === '/api/schedule-scan') {
+      return handleScheduleScan(request, env);
     }
     if (url.pathname === '/api/debug') {
       const info = {};
