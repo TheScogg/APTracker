@@ -842,6 +842,7 @@ Rules:
     const scanUrl = new URL(request.url);
     const plantId = scanUrl.searchParams.get('plant');
     let saved = false;
+    let saveError = null;
     if (plantId) {
       try {
         const importReq = new Request(request.url, {
@@ -851,12 +852,16 @@ Rules:
         });
         const importRes = await handleImportSchedule(importReq, env);
         saved = importRes.ok;
+        if (!saved) {
+          const body = await importRes.json();
+          saveError = body.error || `HTTP ${importRes.status}`;
+        }
       } catch (importErr) {
-        console.error('Firestore import failed:', importErr.message);
+        saveError = importErr.message;
       }
     }
 
-    return new Response(JSON.stringify({ ...parsed, saved }), {
+    return new Response(JSON.stringify({ ...parsed, saved, saveError }), {
       headers: { 'Content-Type': 'application/json' }
     });
 
