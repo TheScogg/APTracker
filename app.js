@@ -3431,21 +3431,17 @@ async function bootstrapDemoSession(user) {
   if (emailEl) emailEl.textContent = 'Simulating 10 virtual team members…';
 
   {
+    const memRef = doc(db, 'plants', DEMO_PLANT_ID, 'members', currentUser.uid);
+    await setDoc(memRef, {
+      userId: currentUser.uid, displayName: 'Demo Session', email: '', photoURL: '',
+      role: 'admin', isActive: true, addedAt: serverTimestamp(), permissions: { ...DEFAULT_PERMISSIONS }
+    }, { merge: true });
     const plantRef = doc(db, 'plants', DEMO_PLANT_ID);
-    const snap = await getDoc(plantRef);
-    if (!snap.exists()) {
-      const batch1 = writeBatch(db);
-      batch1.set(plantRef, { name: 'Demo Plant', location: 'Demo Location', createdAt: serverTimestamp(), isActive: true });
-      batch1.set(doc(db, 'plants', DEMO_PLANT_ID, 'members', currentUser.uid), {
-        userId: currentUser.uid, displayName: 'Demo Session', email: '', photoURL: '',
-        role: 'admin', isActive: true, addedAt: serverTimestamp(), permissions: { ...DEFAULT_PERMISSIONS }
-      });
-      batch1.set(doc(db, 'users', currentUser.uid), { plantIds: [DEMO_PLANT_ID], lastPlant: DEMO_PLANT_ID }, { merge: true });
-      await batch1.commit();
-      const batch2 = writeBatch(db);
-      batch2.set(doc(db, 'plants', DEMO_PLANT_ID, 'config', 'presses'), { presses: DEFAULT_PRESSES });
-      await batch2.commit();
-    }
+    try { await setDoc(plantRef, { name: 'Demo Plant', location: 'Demo Location', createdAt: serverTimestamp(), isActive: true }); } catch (_) {}
+    const configRef = doc(db, 'plants', DEMO_PLANT_ID, 'config', 'presses');
+    try { await setDoc(configRef, { presses: DEFAULT_PRESSES }); } catch (_) {}
+    const userRef = doc(db, 'users', currentUser.uid);
+    await setDoc(userRef, { plantIds: [DEMO_PLANT_ID], lastPlant: DEMO_PLANT_ID }, { merge: true });
   }
 
   currentPlantId = 'plant_demo';
