@@ -879,7 +879,8 @@ async function handleDebugImage(request, env) {
   if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405 });
 
   const contentType = request.headers.get('Content-Type') || '';
-  const debug = { received: true, contentType };
+  const url = new URL(request.url);
+  const debug = { received: true, contentType, plantParam: url.searchParams.get('plant') };
 
   try {
     if (contentType.includes('application/json')) {
