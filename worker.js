@@ -611,6 +611,8 @@ async function handleScheduleScan(request, env) {
     // Step 1: Read one or two images from request body
     const contentType = request.headers.get('Content-Type') || '';
     let imagesToProcess = [];
+    let customInstructions = '';
+    let customSysPrompt = '';
 
     if (contentType.includes('application/x-www-form-urlencoded')) {
       const formText = await request.text();
@@ -651,6 +653,9 @@ async function handleScheduleScan(request, env) {
       } else {
         imagesToProcess = [String(rawImages)];
       }
+      // Optional custom instructions / system prompt from the Shortcut body
+      customInstructions = bodyJson.instructions || '';
+      customSysPrompt = bodyJson.systemPrompt || '';
     } else {
       const arrayBuffer = await request.arrayBuffer();
       const uint8 = new Uint8Array(arrayBuffer);
@@ -791,8 +796,8 @@ Rules:
       body: JSON.stringify({
         model: 'deepseek-chat',
         messages: [
-          { role: 'system', content: basePrompt },
-          { role: 'user', content: `Schedule OCR text:\n\n${allOcrTexts.join('\n\n--- Page ---\n\n')}` }
+          { role: 'system', content: customSysPrompt ? basePrompt + `\n\nAdditional context from schedule admin:\n${customSysPrompt}` : basePrompt },
+          { role: 'user', content: `Schedule OCR text:\n\n${allOcrTexts.join('\n\n--- Page ---\n\n')}${customInstructions ? `\n\nAdditional instructions: ${customInstructions}` : ''}` }
         ],
         response_format: { type: 'json_object' },
         temperature: 0.1,
