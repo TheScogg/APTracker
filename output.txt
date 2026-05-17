@@ -1,0 +1,98 @@
+
+=== schedule.pdf (page 1) ===
+Total Planned Pcs
+41.3 | 177960
+Shift | Date
+ScheduLEs Are budJecT To CHANOE | Moton
+5/15/2026
+Press | Part Storage L ocatlon | Part # | Description | Cavity | DOH | Labels / Shift | mlc
+5,01 | SB Dock | SB Dock | SB Dock | 290013476003 | Tall Basket Bottom | 14
+5.02 | SB Dock | SB Dock | SB Dock | 29001347G003 | Tall Basket Bottom | 14
+5,03 | SB Dock | SB Dock | SB Dock | 290013476003 | Tall Basket Bottom | 14
+5.04 | SB Dock | SB Dock | SB Dock | 290027106002 | 27" Hybrid Basket Bottom | 15
+5.05 | SB Dock | SB Dock | SB Dock | 29002710G002 | 27" Hybrld Basket Bottom | 15
+5,06 | SB Dock | SB Dock | SB Dock | 29002710G002 | 27" Hybrid Basket Bottom | 15
+5,07 | SB Dock | SB Dock | SB Dock | 290027106002 | 27" Hybrid Basket Bottom | 15
+5.08 | SB Dock | SB Dock | SB Dock | 29005007G003 | TL 28' Basket Bottom | 1,8 | 15
+5,402 | SB Dock | SB Dock | SB Dock | 29301707P002 | Shroud OD Fan | New | 2.2 | 82
+5.12 | APS SM | Area | Area | 23905772G005 | DRAWER LOWER ASM FD (5837) White | 14 | 31
+6,01 | Sump Area | Sump Cart | Sump Cart | 26503484G003 | 2 Shot Sump - Group 3 | 0. | 33
+6.02 | Sump Area | Sump Cart | Sump Cart | 26503484G003 | 2 Shot Sump - Group 3 | 33
+6.03 | Sump Area | Sump Cart | Sump Cart | 265034846003 | 2 Shot Sump - Group 3 | 33
+6.05 | Sump Arca | Sump Cart | Sump Cart | 265034846003 | 2 Shot Sump - Group 3 | 33
+6.06 | Sump Area | Sump Cart | Sump Cart | 265034846003 | 2 Shot Sump - Group 3 | 33
+6.07 | Sump Area | Sump Cart | Sump Cart | 26503484G003 | 2 Shot Sump - Group 3 | 07 | 33
+Auto Cell | 16-44 | 265014796006 | Plastlc Bracket (1481 | 3 Stud) | 1.1 | 411
+CLIP-2 | 93-100 | 26504086G001 | SF STUD ROLLER ASM UPPER | 0,9 | 65
+CLIP3 | 93-100 | 26504086G001 | SF STUD ROLLER ASM UPPER | 0,9 | 65
+IC CELL | APS SM | Cart | Cart | 239023606002 | Ice Crusher ASM | 1.8 | 34
+SA-1 | B | 45-92 | 265039746003 | SF MID SPRAY ARM - SSG | 43 | 136
+SA-2 | 45-92 | 265039746003 | SF MID SPRAY ARM | SSG | 43 | 136
+SA-3 | B | 109-160 | 26503970G003 | SF LOWER SPRAY ARM | SSG | 43 | 136
+NorthBay Changes
+414 | APS SM | Cart | Cart | 23904437P001 | Divider Basket Upper | 2 | 3.7 | 125.0 | Set Mold
+215 | C | 103-106 | 26501377P003 | Spray Arm Hub - DDG | 9-16 | 38.0 | Pull Mold to TRD for PM
+
+=== schedule.pdf (page 2) ===
+Total Planned Pcs
+41,3 | 177960
+Shift | Date
+5/15/2026 | schedulEs Are budJeCT To CHANOE | Hotaa
+Press | Part Storage Location | Pant # | Description | Cavity | doH | Labols | Shlft | mlc
+1,02 | 66-84 | 26501385P002 | Conduit Mid Static Single - pAlp2 | 3 4 | 1,6 | 91
+1.03 | 102 | 26501378P002 | Bearing SIA Singlc | SSG | 916 | 4
+1.04 | B | Flow Racks | 26501512P006 | Roller Lower Rack - pIlpzlp3 | New | 1-16 | 3. | 55
+1.05 | 14-65 | 2650.3220P005 | Integrated Carrier (DDG) | 14 | 3,2 | Bank Bulld/Store OverFlow | TWP Area
+54
+1.06 | 150-156 | 26503220P005 | Integrated Carrier (DDG) | 2 | Bank BulldiStore OverFlow | TWP Area
+1
+1.09 | 150-156 | 26502025P002 | Middle Lid - SSG | 1.6 | 114
+1.10 | Dock 3 | Dock Racks | Dock Racks | 29002077P042 | Hinge Bushing Lid RH | 1-8 | 3.9 | 17
+111 | 39 | 153-156 | 26501386P001 | Plate Lead Mid Conduit Stalic Single - pIlp2 | 1-8 | 2,5 | 99
+1.14 | Press | 1-16 | 26501482P003 | SF Rack Roller | 17-32 | 16,0
+1.17 | Dock | Svc Area | Svc Area | 26501481P4O4 | Plastic Bracket (1481 | 3 stud) - pIlp2 | RAW | 17-24 | 15
+54
+2.02 | Dock 3 | 29001335P001 | Ball Joint | 17-32 | 15
+2.03 | SA | Rack | 26501483P001 | Clip | Bracket - pIlp2 | 1.16 | 3.0 | 25
+2.07 | 63-65 | 26504226P001 | SF Clip Bridge Upper | 1-8 | 1.6 | 78
+2.09 | 103-106 | 26503353P003 | Sump Latch | 17.32 | 2,1
+87
+2105 | 157-160 | 26502026P002 | End Lid | Shark Skin Gray | 5-12 | 1.9
+213 | 145-146 | 26504799P001 | Plate Lead Adjust | Artemls | 2.8 | 86
+2.20 | Eng Hold SM | Eng | Hold SM | Eng Hold SM | 26503933P002 | SF Hotpoint Control Panel White | 1.0 | 204
+221 | Eng Hold SM | Eng Hold SM | Eng | Hold SM | 26503920P001 | SF SW BASKET | 1.8 | 96
+2.22 | Eng Hold SM | Eng | Hold SM | Eng Hold SM | 26503920P001 | SF SW BASKET | 1.8 | 96
+3.01 | Dock 3 | Dock | Dock | 290D5040POO1 | Belt Protector | 0,8 | 24
+3.02 | Dock 3 | Dock | Dock | 290D5040P001 | Belt Protector | 0.8 | 24
+1
+3.04 | 23904132P002 | FZ Slide Holder LHIRH | 6 | 78
+3.07 | 128-144 | 26503951P002 | SF Fill Funnel | 1.0 | 87
+3.10 | 6-15 | 26501967P002 | Conduit Mid Adj Single | pIlp2 | 1.7 | 91
+3.12 | Dock 3 | Dock | Dock | 29005035G001 | Agitator Base Hybrid (5035) ASM | 2.8 | 30
+3.13 | Dock 3 | Dock | Dock | 29005061G001 | Hybrid Impeller (5061) | 1. | 30 | DTR #10131
+3.14 | Dock 3 | Dock | Dock | 29005035G001 | Agitator Base Hybrid (5035) ASM | 2,8 | 30
+3.15 | Across | Press | 1-42 | 265032386003 | Single Pc Basket (3234) | MicroBan Blue | 3 | 12 | 108
+316 | 46-59 | 26504301P004 | Console Bracket - New | 65
+3.17 | 46-59 | 2650430IP0O4 | Console Bracket | New | % | 65
+:
+118 | Eng Hold SM | Eng | Hold SM | Eng | Hold SM | 26503936P003 | SF GE Control Panel Dorian Gray | 204
+4.01 | Press | 41 | Storage | 29005258P001 | 28" Console | 04 | 36
+402 | Dock 3 | FIGIH | FIGIH | 26503238G001 | Single Pc Basket (3234) - pIlpzlp3 | 13 | 108
+4.03 | Dock 3 | FIGIH | FIGIH | 26503238G001 | Single Pc Basket (3234) - pIlp2lp3 | 13 | 108
+798-*TUT | 26503975PUU4
+405 | SF Mid SA | Top | & Bottom | DDG | " | 44 | 47
+"83-809 | 2658397SP083
+4.09 | SF Mid SA Top & Bottom | SSG | 1,5
+82-87 | 26583976P083 | 4
+410 | SF Mid SA Top & Bottom | SSG | 5-6 | 1,5
+1333 | 26583976P083
+411 | SF Lower SA Top & Bottom | SSG | 5-6 | 2.2 | 47
+4SA | 265030.72P043
+412 | 14-65 | 26503220P005 | Carrier Roller (DDG) | 9-12 | 3.2 | Bank BuildStore OverFlow @ TWP Area
+72973 | 72650397 1PUU3 | 41
+413 | ALsR | 26503912P003 | SF Lower SA Top & Bottom | SSG | 22
+1
+414 | 41-64 | 239046286001 | Support Side RHILH 29 (2501/05) | 6.1 | 101 | mlc
+415 | AP5 SM | Forklift | Cart | 23904586P002 | Cover Valve and Tank | 2.0 | 16
+4.16 | Dock 3 | Dock | Dock | 29005004G001 | Balance Ring | (5005/6) | 2 | 1.8 | 15
+4.17 | Dock 3 | Dock | Dock | 29005004G001 | Balance Ring (5005/6) | 1.8 | 15

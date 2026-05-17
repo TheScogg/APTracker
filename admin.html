@@ -246,6 +246,18 @@
     .stb-preview-pill { font-size:8.5px; font-weight:700; border-radius:999px; padding:2px 6px; border:1px solid; }
     .stb-preview-meta { font-size:10px; color:var(--text3); }
     @media (max-width:900px) { .stb-main { grid-template-columns:1fr; } }
+    /* ── Press Editor ──────────────────────────────── */
+    .press-row { display:flex; gap:6px; align-items:center; margin-bottom:6px; padding:6px 8px; background:var(--bg); border:1px solid var(--border); border-radius:8px; }
+    .press-row input[type=text] { flex:1; min-width:0; }
+    .press-row .press-row-name { max-width:140px; flex:0 0 140px; }
+    .press-row .press-row-presses { flex:1; }
+    .press-add-row { display:flex; gap:6px; align-items:center; margin-top:6px; flex-wrap:wrap; }
+    .press-add-row input { max-width:200px; flex:1; }
+    .press-count { font-size:11px; color:var(--text2); margin-bottom:6px; }
+    /* Editable preview cells */
+    #schedule-preview-container td:hover { background:rgba(249,115,22,0.08); border-radius:4px; }
+    #schedule-preview-container td input:focus { outline:1px solid var(--accent); border-radius:3px; background:var(--bg3); }
+    .step-num { display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--accent);color:#fff;font-size:11px;font-weight:700;margin-right:7px;vertical-align:middle; }
   </style>
 </head>
 <body>
@@ -305,8 +317,132 @@
 
         <!-- Schedule Import tab -->
         <div class="page-tab-pane" id="page-tab-schedule">
+          <!-- OCR + GPT section -->
           <div class="card">
-            <h2>Daily Schedule Import</h2>
+            <h2><span class="step-num">1</span>OCR from PDF Scan</h2>
+            <p class="muted" style="margin-bottom:8px;">Upload a scanned PDF (2-page schedule) to extract text via OCR, then convert to schedule JSON.</p>
+            <div class="json-actions">
+              <select id="ocr-engine-select" style="max-width:200px;">
+                <option value="azure">Azure Doc AI (Cloud)</option>
+                <option value="google">Google Vision (Cloud)</option>
+                <option value="document-ai">Google Doc AI (Cloud)</option>
+                <option value="textract">Amazon Textract (Cloud)</option>
+                <option value="tesseract">Tesseract (Browser)</option>
+              </select>
+              <input id="schedule-pdf-file" type="file" accept="application/pdf" style="max-width:250px;padding:6px 8px;" />
+              <button class="btn btn-primary" id="ocr-pdf-btn" style="max-width:140px;">OCR PDF → Text</button>
+            </div>
+            <div id="ocr-progress" class="feedback" style="margin-top:6px;"></div>
+            <details style="margin-top:6px;">
+              <summary style="cursor:pointer;font-size:12px;color:var(--text2);">Cloud OCR settings (optional)</summary>
+              <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;">
+                <label style="font-size:11px;color:var(--text2);flex:1;min-width:140px;">Language hints
+                  <input id="vision-language-hints" type="text" placeholder="en (default)" style="margin-top:2px;font-size:12px;" />
+                </label>
+                <label style="font-size:11px;color:var(--text2);flex:0 0 160px;">Feature type
+                  <select id="vision-feature-type" style="margin-top:2px;font-size:12px;">
+                    <option value="DOCUMENT_TEXT_DETECTION">Document Text (dense)</option>
+                    <option value="TEXT_DETECTION">General Text</option>
+                  </select>
+                </label>
+                <label style="font-size:11px;color:var(--text2);flex:0 0 140px;">Model
+                  <select id="vision-model" style="margin-top:2px;font-size:12px;">
+                    <option value="">Default</option>
+                    <option value="builtin/latest">Latest</option>
+                    <option value="builtin/stable">Stable</option>
+                  </select>
+                </label>
+                <label style="font-size:11px;color:var(--text2);flex:0 0 100px;">Max results
+                  <input id="vision-max-results" type="number" value="1" min="1" max="10" style="margin-top:2px;font-size:12px;" />
+                </label>
+              </div>
+              <div class="divider" style="margin:8px 0;"></div>
+              <div style="font-size:12px;color:var(--text2);margin-bottom:6px;font-weight:700;">Google Document AI</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <label style="font-size:11px;color:var(--text2);flex:1;min-width:160px;">Project ID
+                  <input id="docai-project-id" type="text" placeholder="gcp-project-id" style="margin-top:2px;font-size:12px;" />
+                </label>
+                <label style="font-size:11px;color:var(--text2);flex:2;min-width:200px;">Processor ID
+                  <input id="docai-processor-id" type="text" placeholder="processor-uuid" style="margin-top:2px;font-size:12px;" />
+                </label>
+                <label style="font-size:11px;color:var(--text2);flex:0 0 100px;">Location
+                  <select id="docai-location" style="margin-top:2px;font-size:12px;">
+                    <option value="us">us</option>
+                    <option value="eu">eu</option>
+                  </select>
+                </label>
+              </div>
+              <div class="divider" style="margin:8px 0;"></div>
+              <div style="font-size:12px;color:var(--text2);margin-bottom:6px;font-weight:700;">Amazon Textract</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <label style="font-size:11px;color:var(--text2);flex:1;min-width:160px;">Region
+                  <select id="textract-region" style="margin-top:2px;font-size:12px;">
+                    <option value="us-east-1">us-east-1</option>
+                    <option value="us-east-2">us-east-2</option>
+                    <option value="us-west-2" selected>us-west-2</option>
+                  </select>
+                </label>
+              </div>
+              <div class="divider" style="margin:8px 0;"></div>
+              <div style="font-size:12px;color:var(--text2);margin-bottom:6px;font-weight:700;">Tesseract (Browser)</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <label style="font-size:11px;color:var(--text2);flex:0 0 100px;">Language
+                  <input id="tesseract-language" type="text" value="eng" placeholder="eng" style="margin-top:2px;font-size:12px;" />
+                </label>
+                <label style="font-size:11px;color:var(--text2);flex:0 0 100px;">PSM
+                  <select id="tesseract-psm" style="margin-top:2px;font-size:12px;">
+                    <option value="6" selected>6 — Uniform block</option>
+                    <option value="3">3 — Auto page seg</option>
+                    <option value="4">4 — Single column</option>
+                    <option value="1">1 — Auto + OSD</option>
+                    <option value="7">7 — Single line</option>
+                    <option value="11">11 — Sparse text</option>
+                    <option value="13">13 — Raw line</option>
+                  </select>
+                </label>
+                <label style="font-size:11px;color:var(--text2);flex:0 0 100px;">OEM
+                  <select id="tesseract-oem" style="margin-top:2px;font-size:12px;">
+                    <option value="3" selected>3 — Default</option>
+                    <option value="1">1 — LSTM only</option>
+                    <option value="2">2 — Legacy + LSTM</option>
+                    <option value="0">0 — Legacy only</option>
+                  </select>
+                </label>
+                <label style="font-size:11px;color:var(--text2);flex:0 0 160px;">Char whitelist
+                  <input id="tesseract-whitelist" type="text" placeholder="e.g. 0123456789ABCDEF" style="margin-top:2px;font-size:12px;" />
+                </label>
+                <label style="font-size:11px;color:var(--text2);flex:0 0 80px;">Scale
+                  <input id="tesseract-scale" type="number" value="2.5" min="0.5" max="5" step="0.5" style="margin-top:2px;font-size:12px;" />
+                </label>
+              </div>
+            </details>
+            <div class="divider" style="margin:12px 0;"></div>
+            <h2><span class="step-num">2</span>Generate JSON from Text</h2>
+            <p class="muted" style="margin-bottom:6px;">Review OCR output (or paste text manually), then generate canonical JSON.</p>
+            <textarea id="schedule-gpt-source" placeholder="OCR text or pasted schedule text will appear here..." style="margin-top:6px;min-height:200px;"></textarea>
+            <div class="json-actions" style="margin-top:8px;">
+              <select id="schedule-gpt-shift-override" style="max-width:180px;">
+                <option value="">Auto-detect shift</option>
+                <option value="1">Shift 1</option>
+                <option value="2">Shift 2</option>
+                <option value="3">Shift 3</option>
+              </select>
+              <select id="schedule-gpt-strict-validation" style="max-width:160px;">
+                <option value="true">Strict validation</option>
+                <option value="false">Lenient</option>
+              </select>
+              <button class="btn btn-primary" id="deepseek-convert-btn" style="max-width:200px;">Generate JSON with Deepseek</button>
+            </div>
+            <textarea id="deepseek-instructions" placeholder="Optional: custom instructions for DeepSeek (e.g. 'Press 7 is down, mark all its rows as notes')" style="margin-top:6px;min-height:60px;font-size:12px;"></textarea>
+            <details style="margin-top:6px;">
+              <summary style="cursor:pointer;font-size:12px;color:var(--text2);">Extra system prompt context (appended to base prompt)</summary>
+              <textarea id="deepseek-system-prompt" placeholder="This text gets appended to the base system prompt. Useful for persistent context like plant-specific naming conventions." style="margin-top:4px;min-height:120px;font-size:12px;"></textarea>
+            </details>
+            <div id="schedule-gpt-feedback" class="feedback"></div>
+          </div>
+          <!-- Daily Schedule Import -->
+          <div class="card" style="margin-top:12px;">
+            <h2><span class="step-num">3</span>Daily Schedule Import</h2>
             <p class="muted" style="margin-bottom:10px;">Upload or paste schedule JSON to import daily schedules into Firestore.</p>
             <div class="grid-2">
               <input id="schedule-date" class="mono-input" type="date" />
@@ -325,44 +461,38 @@
             <textarea id="schedule-json-text" placeholder="Paste schedule JSON here" style="margin-top:10px;min-height:180px;"></textarea>
             <div id="schedule-import-feedback" class="feedback"></div>
           </div>
-          <!-- OCR + GPT section -->
+          <!-- View / Edit Schedule -->
           <div class="card" style="margin-top:12px;">
-            <h2>OCR from PDF Scan</h2>
-            <p class="muted" style="margin-bottom:8px;">Upload a scanned PDF (2-page schedule) to extract text via OCR, then convert to schedule JSON.</p>
-            <div class="json-actions">
-              <select id="ocr-engine-select" style="max-width:180px;">
-                <option value="azure">Azure Doc AI (Cloud)</option>
-                <option value="google">Google Vision (Cloud)</option>
-                <option value="tesseract">Tesseract (Browser)</option>
-              </select>
-              <input id="schedule-pdf-file" type="file" accept="application/pdf" style="max-width:250px;padding:6px 8px;" />
-              <button class="btn" id="ocr-pdf-btn" style="max-width:140px;">OCR PDF → Text</button>
-            </div>
-            <div id="ocr-progress" class="feedback" style="margin-top:6px;"></div>
-            <div class="divider" style="margin:12px 0;"></div>
-            <h2>Generate JSON from Text</h2>
-            <p class="muted" style="margin-bottom:6px;">Review OCR output (or paste text manually), then generate canonical JSON.</p>
-            <textarea id="schedule-gpt-source" placeholder="OCR text or pasted schedule text will appear here..." style="margin-top:6px;min-height:200px;"></textarea>
-            <div class="json-actions" style="margin-top:8px;">
-              <select id="schedule-gpt-shift-override" style="max-width:180px;">
-                <option value="">Auto-detect shift</option>
-                <option value="1">Shift 1</option>
-                <option value="2">Shift 2</option>
-                <option value="3">Shift 3</option>
-              </select>
-              <select id="schedule-gpt-strict-validation" style="max-width:160px;">
-                <option value="true">Strict validation</option>
-                <option value="false">Lenient</option>
-              </select>
-              <button class="btn btn-primary" id="generate-schedule-json-btn" style="max-width:200px;">Generate JSON</button>
-              <button class="btn" id="deepseek-convert-btn" style="max-width:200px;">Convert with DeepSeek</button>
-            </div>
-            <textarea id="deepseek-instructions" placeholder="Optional: custom instructions for DeepSeek (e.g. 'Press 7 is down, mark all its rows as notes')" style="margin-top:6px;min-height:60px;font-size:12px;"></textarea>
+            <h2><span class="step-num">V</span>View / Edit Schedule</h2>
+            <p class="muted" style="margin-bottom:8px;">Load an existing schedule from Firestore. Edit inline, then click <strong>Import Daily Schedule</strong> (Step 3) to save changes.</p>
+            <label style="font-size:11px;color:var(--text2);flex:0 0 140px;">Date
+              <input id="view-date" type="date" style="margin-top:2px;font-size:12px;" />
+            </label>
+            <div id="view-schedule-feedback" class="feedback" style="margin-top:6px;"></div>
             <details style="margin-top:6px;">
-              <summary style="cursor:pointer;font-size:12px;color:var(--text2);">Extra system prompt context (appended to base prompt)</summary>
-              <textarea id="deepseek-system-prompt" placeholder="This text gets appended to the base system prompt. Useful for persistent context like plant-specific naming conventions." style="margin-top:4px;min-height:120px;font-size:12px;"></textarea>
+              <summary id="schedule-preview-summary" style="cursor:pointer;font-size:12px;color:var(--text2);">Preview schedule data</summary>
+              <div id="schedule-preview-container" style="margin-top:6px;overflow-x:auto;"></div>
             </details>
-            <div id="schedule-gpt-feedback" class="feedback"></div>
+          </div>
+          <!-- Batch Import -->
+          <div class="card" style="margin-top:12px;">
+            <h2><span class="step-num">B</span>Batch Import</h2>
+            <p class="muted" style="margin-bottom:8px;">Select multiple schedule PDFs to process them all at once.</p>
+            <div class="json-actions" style="gap:8px;">
+              <input id="batch-pdf-files" type="file" accept=".pdf" multiple style="flex:1;padding:6px 8px;" />
+              <button class="btn btn-primary" id="batch-start-btn" style="max-width:140px;">Start Batch</button>
+              <button class="btn" id="batch-stop-btn" style="max-width:80px;display:none;">Stop</button>
+            </div>
+            <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;">
+              <label style="font-size:11px;color:var(--text2);flex:0 0 140px;">From date
+                <input id="batch-from-date" type="date" style="margin-top:2px;font-size:12px;" />
+              </label>
+              <label style="font-size:11px;color:var(--text2);flex:0 0 140px;">To date
+                <input id="batch-to-date" type="date" style="margin-top:2px;font-size:12px;" />
+              </label>
+            </div>
+            <div id="batch-feedback" class="feedback" style="margin-top:6px;"></div>
+            <div id="batch-progress" style="margin-top:8px;overflow-x:auto;"></div>
           </div>
         </div>
       </div>
@@ -484,7 +614,7 @@
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut as fbSignOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getAuth, setPersistence, browserLocalPersistence, GoogleAuthProvider, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut as fbSignOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -726,6 +856,7 @@ function validateThemeItemCandidate(candidate, fallbackOrder = 0) {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
+setPersistence(auth, browserLocalPersistence).catch(() => {});
 const provider = new GoogleAuthProvider();
 provider.setCustomParameters({ prompt: 'select_account' });
 
@@ -738,6 +869,7 @@ let statusDraftByPlant = new Map();
 let gameDraftByPlant = new Map();
 let badgeDraftByPlant = new Map();
 let missionDraftByPlant = new Map();
+let pressDraftByPlant = new Map();
 let globalStoreDraft = [];
 let storeThemeEditorDraft = null;
 let storeThemeEditorIndex = -1;
@@ -1095,12 +1227,14 @@ async function loadMembersAndStatusesForAdminPlants() {
   statusDraftByPlant.clear();
   gameDraftByPlant.clear();
   missionDraftByPlant.clear();
+  pressDraftByPlant.clear();
   for (const plantId of adminPlantIds) {
-    const [membersSnap, statusesSnap, gameConfigSnap, missionsSnap] = await Promise.all([
+    const [membersSnap, statusesSnap, gameConfigSnap, missionsSnap, pressesSnap] = await Promise.all([
       getDocs(collection(db, 'plants', plantId, 'members')),
       getDoc(doc(db, 'plants', plantId, 'config', 'statuses')),
       getDoc(doc(db, 'plants', plantId, 'gamificationConfig', 'main')),
       getDocs(collection(db, 'plants', plantId, 'missions')),
+      getDoc(doc(db, 'plants', plantId, 'config', 'presses')),
     ]);
 
     membersByPlant.set(plantId, membersSnap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -1123,6 +1257,11 @@ async function loadMembersAndStatusesForAdminPlants() {
     // Load badge definitions (stored in gamificationConfig/main.badges)
     const storedBadges = Array.isArray(gameConfig.badges) ? gameConfig.badges : null;
     badgeDraftByPlant.set(plantId, storedBadges ? storedBadges.map(b => ({ ...b })) : deepCopy(DEFAULT_BADGE_DEFS));
+    // Load press definitions
+    const rawPresses = pressesSnap.exists() && pressesSnap.data()?.presses
+      ? pressesSnap.data().presses
+      : deepCopy(DEFAULT_PRESSES);
+    pressDraftByPlant.set(plantId, deepCopy(rawPresses));
   }
 }
 
@@ -1448,6 +1587,38 @@ function renderGamificationEditor(plantId, plantName) {
   `;
 }
 
+function renderPressEditor(plantId, plantName) {
+  const presses = pressDraftByPlant.get(plantId) || deepCopy(DEFAULT_PRESSES);
+  const rowNames = Object.keys(presses);
+  const totalPresses = rowNames.reduce((sum, r) => sum + presses[r].length, 0);
+
+  const rows = rowNames.map(rowName => `
+    <div class="press-row">
+      <input class="press-row-name" type="text" id="press-name-${esc(rowName)}" value="${esc(rowName)}"
+             onchange="window.patchPressRow('${plantId}','${esc(rowName)}')" />
+      <input class="press-row-presses" type="text" id="press-ids-${esc(rowName)}" value="${esc(presses[rowName].join(', '))}"
+             placeholder="e.g. 1.01, 1.02, 1.03"
+             onchange="window.patchPressRow('${plantId}','${esc(rowName)}')" />
+      <button class="small-btn danger" onclick="window.removePressRow('${plantId}','${esc(rowName)}')">✕</button>
+    </div>
+  `).join('');
+
+  return `
+    <div class="press-count">${totalPresses} presses across ${rowNames.length} rows</div>
+    <div id="press-list-${plantId}">${rows || '<div class="muted">No rows defined.</div>'}</div>
+    <div class="press-add-row">
+      <input id="new-press-row-name-${plantId}" placeholder="Row name (e.g. Row 7)" />
+      <input id="new-press-ids-${plantId}" placeholder="Press IDs (e.g. 7.01, 7.02, 7.03)" />
+      <button class="small-btn" onclick="window.addPressRow('${plantId}')">+ Add Row</button>
+    </div>
+    <div class="status-toolbar" style="margin-top:10px;">
+      <button class="small-btn" style="border-color:var(--accent);color:var(--accent);"
+              onclick="window.savePresses('${plantId}')">💾 Save Presses</button>
+    </div>
+    <div id="press-fb-${plantId}" class="feedback"></div>
+  `;
+}
+
 function renderStoreEditor() {
   const items = (globalStoreDraft || []).slice().sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
   globalStoreDraft = items;
@@ -1669,6 +1840,8 @@ function renderPlantsUsers() {
                   onclick="window.switchPlantTab('${plant.id}','statuses',this)">Statuses</button>
           <button class="plant-tab-btn ${activeTab === 'gamification' ? 'active' : ''}"
                   onclick="window.switchPlantTab('${plant.id}','gamification',this)">Gamification</button>
+          <button class="plant-tab-btn ${activeTab === 'presses' ? 'active' : ''}"
+                  onclick="window.switchPlantTab('${plant.id}','presses',this)">Presses</button>
         </div>
 
         <div class="plant-tab-pane ${activeTab === 'members' ? 'active' : ''}" id="ptab-members-${plant.id}">
@@ -1701,6 +1874,10 @@ function renderPlantsUsers() {
 
         <div class="plant-tab-pane ${activeTab === 'gamification' ? 'active' : ''}" id="ptab-gamification-${plant.id}">
           ${renderGamificationEditor(plant.id, plant.name)}
+        </div>
+
+        <div class="plant-tab-pane ${activeTab === 'presses' ? 'active' : ''}" id="ptab-presses-${plant.id}">
+          ${renderPressEditor(plant.id, plant.name)}
         </div>
       </div>
     `;
@@ -1818,6 +1995,7 @@ async function loadScheduleJsonFromFile() {
   try {
     const text = await file.text();
     textArea.value = text;
+    renderSchedulePreview();
     feedback('schedule-import-feedback', 'ok', `Loaded ${file.name}. Review and click Import Daily Schedule.`);
   } catch (e) {
     console.error(e);
@@ -1912,45 +2090,293 @@ async function importDailySchedule() {
   }
 }
 
-async function generateScheduleJsonFromDailyScheduleGPT() {
-  const generateBtn = document.getElementById('generate-schedule-json-btn');
-  const sourceInput = document.getElementById('schedule-gpt-source');
-  const shiftInput = document.getElementById('schedule-gpt-shift-override');
-  const modelPresetInput = document.getElementById('schedule-gpt-model-preset');
-  const strictValidationInput = document.getElementById('schedule-gpt-strict-validation');
-  const dateInput = document.getElementById('schedule-date');
-  const sourceNameInput = document.getElementById('schedule-source-name');
-  const jsonInput = document.getElementById('schedule-json-text');
-  const sourceText = String(sourceInput?.value || '').trim();
+async function batchImportSchedules() {
+  const fileInput = document.getElementById('batch-pdf-files');
+  const files = fileInput?.files;
+  if (!files || !files.length) { feedback('batch-feedback', 'error', 'Select one or more PDF files first.'); return; }
 
-  if (!sourceText) {
-    feedback('schedule-gpt-feedback', 'error', 'Paste schedule text or PDF metadata before generating.');
-    return;
+  const plantId = String(document.getElementById('schedule-plant-id')?.value || '').trim();
+  if (!plantId) { feedback('batch-feedback', 'error', 'Select a plant in Step 3 first.'); return; }
+
+  const startBtn = document.getElementById('batch-start-btn');
+  const stopBtn = document.getElementById('batch-stop-btn');
+  const fromDate = document.getElementById('batch-from-date')?.value || '';
+  const toDate = document.getElementById('batch-to-date')?.value || '';
+  const engine = document.getElementById('ocr-engine-select')?.value || 'azure';
+  const docaiProject = String(document.getElementById('docai-project-id')?.value || '').trim();
+  const docaiProcessor = String(document.getElementById('docai-processor-id')?.value || '').trim();
+  const docaiLocation = document.getElementById('docai-location')?.value || 'us';
+  const deepseekInstructions = String(document.getElementById('deepseek-instructions')?.value || '').trim();
+  const deepseekSystemPrompt = String(document.getElementById('deepseek-system-prompt')?.value || '').trim();
+  const visionLanguageHints = (document.getElementById('vision-language-hints')?.value || '').split(',').map(s=>s.trim()).filter(Boolean);
+  const visionFeatureType = document.getElementById('vision-feature-type')?.value || 'DOCUMENT_TEXT_DETECTION';
+  const visionModel = document.getElementById('vision-model')?.value || '';
+  const visionMaxResults = Math.max(1, Math.min(10, parseInt(document.getElementById('vision-max-results')?.value || '1', 10) || 1));
+  let cancelled = false;
+
+  startBtn.disabled = true;
+  startBtn.textContent = 'Processing…';
+  stopBtn.style.display = '';
+  stopBtn.onclick = () => { cancelled = true; stopBtn.disabled = true; stopBtn.textContent = 'Stopping…'; };
+
+  feedback('batch-feedback', '', `Processing ${files.length} file(s)…`);
+
+  const monthNames = {
+    jan:1,january:1,feb:2,february:2,mar:3,march:3,
+    apr:4,april:4,may:5,jun:6,june:6,
+    jul:7,july:7,aug:8,august:8,sep:9,september:9,
+    oct:10,october:10,nov:11,november:11,dec:12,december:12,
+  };
+
+  function extractDate(name) {
+    let m = name.match(/(\d{4})-(\d{2})-(\d{2})/);
+    if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+    const mp = '(?:january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)';
+    m = name.match(new RegExp(`(${mp})\\s+(\\d{1,2})\\s*,?\\s*(\\d{4})`, 'i'));
+    if (m) return `${m[3]}-${String(monthNames[m[1].toLowerCase()]).padStart(2,'0')}-${String(parseInt(m[2])).padStart(2,'0')}`;
+    m = name.match(/(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/);
+    if (m) { const a=parseInt(m[1]),b=parseInt(m[2]); return a>12?`${m[3]}-${String(b).padStart(2,'0')}-${String(a).padStart(2,'0')}`:`${m[3]}-${String(a).padStart(2,'0')}-${String(b).padStart(2,'0')}`; }
+    m = name.match(/(\d{4})(\d{2})(\d{2})/);
+    if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+    return null;
   }
 
-  generateBtn.disabled = true;
-  generateBtn.textContent = 'Generating…';
-  feedback('schedule-gpt-feedback', '', '');
+  function normalizeDeepSeekKeys(raw) {
+    if (!raw || typeof raw !== 'object') return raw;
+    const sectionMap = { page1:'page_1', page2:'page_2', northBayChanges:'north_bay_changes', southBayChanges:'south_bay_changes', north_bay_change:'north_bay_changes', south_bay_change:'south_bay_changes' };
+    const r = { ...raw };
+    for (const [alt,canon] of Object.entries(sectionMap)) { if (r[alt]!==undefined && r[canon]===undefined) { r[canon]=r[alt]; delete r[alt]; } }
+    if (r.schedule_info && typeof r.schedule_info === 'object') {
+      const info = { ...r.schedule_info };
+      if (info.date===undefined && info.scheduleDate!==undefined) info.date = info.scheduleDate;
+      if (info.line_speed===undefined && info.lineSpeed!==undefined) info.line_speed = info.lineSpeed;
+      r.schedule_info = info;
+    }
+    if (!r.schedule_info && (r.date || r.shift)) {
+      r.schedule_info = { date: r.date||'', shift: r.shift||'', line_speed:'', total_planned_pcs:'', note:'' };
+    }
+    return r;
+  }
+
+  const progressEl = document.getElementById('batch-progress');
+  const rows = [];
+  let successCount = 0, skipCount = 0, failCount = 0;
+  const fileArr = Array.from(files).sort((a,b) => a.name.localeCompare(b.name));
+
+  for (let i = 0; i < fileArr.length; i++) {
+    if (cancelled) break;
+    const file = fileArr[i];
+    const nameNoExt = file.name.replace(/\.[^.]+$/, '');
+    const date = extractDate(nameNoExt);
+    let icon = '⏳', statusText = 'Processing…', rowCount = 0, detail = '';
+
+    try {
+      if (fromDate && date && date < fromDate) { icon='⏭️'; statusText='Skipped'; detail='Before From date'; skipCount++; }
+      else if (toDate && date && date > toDate) { icon='⏭️'; statusText='Skipped'; detail='After To date'; skipCount++; }
+      else if (!date) { icon='⏭️'; statusText='Skipped'; detail='No date in filename'; skipCount++; }
+      else {
+        feedback('batch-feedback', '', `[${i+1}/${fileArr.length}] OCR: ${file.name}`);
+        const pdfBytes = await file.arrayBuffer();
+        let ocrText;
+
+        if (engine === 'azure') {
+          const res = await fetch('/api/ocr', { method:'POST', body:pdfBytes });
+          const d = await res.json();
+          if (!res.ok) throw new Error(d.details||d.error||'Azure OCR failed');
+          ocrText = d.text;
+        } else if (engine === 'google') {
+          self.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+          const pdf = await self.pdfjsLib.getDocument({ data:pdfBytes }).promise;
+          const images = [];
+          for (let p = 1; p <= pdf.numPages; p++) {
+            const page = await pdf.getPage(p);
+            const vp = page.getViewport({ scale:2 });
+            const c = document.createElement('canvas');
+            c.width = vp.width; c.height = vp.height;
+            const ctx = c.getContext('2d');
+            ctx.fillStyle = '#fff'; ctx.fillRect(0,0,c.width,c.height);
+            await page.render({ canvasContext:ctx, viewport:vp }).promise;
+            images.push(c.toDataURL('image/png').split(',')[1]);
+          }
+          const res = await fetch('/api/ocr/google', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ images, languageHints: visionLanguageHints.length ? visionLanguageHints : undefined, featureType: visionFeatureType, model: visionModel || undefined, maxResults: visionMaxResults }) });
+          const d = await res.json();
+          if (!res.ok) throw new Error(d.error||'Google Vision failed');
+          ocrText = d.text;
+        } else if (engine === 'tesseract') {
+          const lang = document.getElementById('tesseract-language')?.value || 'eng';
+          const psm = String(document.getElementById('tesseract-psm')?.value || '6');
+          const oem = document.getElementById('tesseract-oem')?.value || '';
+          const whitelist = (document.getElementById('tesseract-whitelist')?.value || '').trim();
+          const tesseractScale = parseFloat(document.getElementById('tesseract-scale')?.value) || 2.5;
+
+          self.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+          const pdf = await self.pdfjsLib.getDocument({ data:pdfBytes }).promise;
+          const worker = await self.Tesseract.createWorker(lang);
+          const tesseractParams = { tessedit_pageseg_mode: psm };
+          if (oem && oem !== '3') tesseractParams.tessedit_ocr_engine_mode = oem;
+          if (whitelist) tesseractParams.tessedit_char_whitelist = whitelist;
+          await worker.setParameters(tesseractParams);
+          ocrText = '';
+          for (let p = 1; p <= pdf.numPages; p++) {
+            feedback('batch-feedback', '', `[${i+1}/${fileArr.length}] Tesseract page ${p}/${pdf.numPages}: ${file.name}`);
+            const page = await pdf.getPage(p);
+            const vp = page.getViewport({ scale: tesseractScale });
+            const c = document.createElement('canvas');
+            c.width = vp.width; c.height = vp.height;
+            const ctx = c.getContext('2d');
+            ctx.fillStyle = '#fff'; ctx.fillRect(0,0,c.width,c.height);
+            await page.render({ canvasContext:ctx, viewport:vp }).promise;
+            preprocessCanvasForOcr(c);
+            const { data: { text } } = await worker.recognize(c);
+            ocrText += text + '\n\n';
+          }
+          await worker.terminate();
+        } else {
+          if (!docaiProject||!docaiProcessor) throw new Error('Document AI requires Project ID and Processor ID');
+          const params = new URLSearchParams({ projectId:docaiProject, processorId:docaiProcessor, location:docaiLocation });
+          const res = await fetch('/api/ocr/document-ai?'+params, { method:'POST', body:pdfBytes });
+          const d = await res.json();
+          if (!res.ok) throw new Error(d.error||'Document AI failed');
+          ocrText = d.text.trim();
+        }
+
+        if (!ocrText||!ocrText.trim()) throw new Error('OCR returned empty text');
+
+        feedback('batch-feedback', '', `[${i+1}/${fileArr.length}] DeepSeek: ${file.name}`);
+        const aiRes = await fetch('/api/ai/convert', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ text:ocrText, instructions:deepseekInstructions||undefined, systemPrompt:deepseekSystemPrompt||undefined }) });
+        const aiData = await aiRes.json();
+        if (!aiRes.ok) throw new Error(aiData.error||aiData.content||'DeepSeek conversion failed');
+
+        const canon = normalizeDeepSeekKeys(aiData);
+        const payload = extractSchedulePayload(canon);
+        const norm = normalizeSchedulePayload(payload);
+        norm.scheduleDate = date;
+        for (const cfg of SCHEDULE_SECTIONS) { for (const row of (norm.sections[cfg.section]||[])) row.scheduleDate = date; }
+
+        feedback('batch-feedback', '', `[${i+1}/${fileArr.length}] Importing: ${date}`);
+        const dailyRef = doc(db, 'plants', plantId, 'dailySchedules', date);
+        const deleteOps = [];
+        for (const cfg of SCHEDULE_SECTIONS) {
+          const snap = await getDocs(collection(db, 'plants', plantId, 'dailySchedules', date, cfg.section));
+          snap.forEach(d => deleteOps.push({ type:'delete', ref:d.ref }));
+        }
+        await commitInChunks(deleteOps);
+
+        const setOps = [{ type:'set', ref:dailyRef, data:{
+          scheduleDate:date, plantId, shift:norm.shift,
+          lineSpeed:norm.lineSpeed, totalPlannedPcs:norm.totalPlannedPcs,
+          sourceFileName:file.name, sourceFileType:'application/pdf',
+          status:'imported', notes:norm.notes,
+          page1Count:norm.sections.page1.length, page2Count:norm.sections.page2.length,
+          northBayChangesCount:norm.sections.northBayChanges.length, southBayChangesCount:norm.sections.southBayChanges.length,
+          updatedAt:serverTimestamp(), createdAt:serverTimestamp(),
+        }}];
+
+        for (const cfg of SCHEDULE_SECTIONS) {
+          for (const row of (norm.sections[cfg.section]||[])) {
+            setOps.push({ type:'set', ref:doc(db, 'plants', plantId, 'dailySchedules', date, cfg.section, row.rowId), data:{ ...row, scheduleDate:date, plantId, shift:norm.shift, createdAt:serverTimestamp(), updatedAt:serverTimestamp() }});
+          }
+        }
+        await commitInChunks(setOps);
+
+        rowCount = Object.values(norm.sections).reduce((s,r)=>s+r.length, 0);
+        icon = '✅'; statusText = 'Imported'; detail = `${rowCount} rows`;
+        successCount++;
+      }
+    } catch (err) {
+      console.error(err);
+      icon = '❌'; statusText = 'Failed'; detail = err.message||'Unknown error';
+      failCount++;
+    }
+
+    rows.push({ date:date||'??', file:file.name, icon, statusText, rows:rowCount, detail });
+    let html = `<table style="width:100%;font-size:11px;border-collapse:collapse;">
+      <tr style="color:var(--text2);font-family:'Share Tech Mono',monospace;font-size:10px;">
+        <th style="padding:4px;text-align:left;">Date</th>
+        <th style="padding:4px;text-align:left;">File</th>
+        <th style="padding:4px;text-align:center;">Status</th>
+        <th style="padding:4px;text-align:right;">Rows</th>
+        <th style="padding:4px;text-align:left;">Details</th>
+      </tr>`;
+    for (const r of rows) {
+      html += `<tr style="border-top:1px solid var(--border);">
+        <td style="padding:3px 4px;font-family:'Share Tech Mono',monospace;">${esc(r.date)}</td>
+        <td style="padding:3px 4px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.file)}</td>
+        <td style="padding:3px 4px;text-align:center;">${r.icon}</td>
+        <td style="padding:3px 4px;text-align:right;">${r.rows||'-'}</td>
+        <td style="padding:3px 4px;font-size:10px;color:var(--text2);max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.detail)}</td>
+      </tr>`;
+    }
+    html += '</table>';
+    progressEl.innerHTML = html;
+  }
+
+  feedback('batch-feedback', 'ok', `Batch complete: ${successCount} imported, ${skipCount} skipped, ${failCount} failed.`);
+  startBtn.disabled = false;
+  startBtn.textContent = 'Start Batch';
+  stopBtn.style.display = 'none';
+  stopBtn.disabled = false;
+  stopBtn.textContent = 'Stop';
+}
+
+async function viewSchedule() {
+  const date = document.getElementById('view-date')?.value;
+  const plantId = String(document.getElementById('schedule-plant-id')?.value || '').trim();
+  if (!date) { feedback('view-schedule-feedback', 'error', 'Select a date.'); return; }
+  if (!plantId) { feedback('view-schedule-feedback', 'error', 'Select a plant in Step 3.'); return; }
 
   try {
-    const strictValidation = String(strictValidationInput?.value || 'true') === 'true';
-    const shiftOverride = String(shiftInput?.value || '').trim();
-    const { adaptedPayload, normalized } = adaptDailyScheduleGptOutput(sourceText);
-    if (shiftOverride) adaptedPayload.schedule_info.shift = shiftOverride;
-    if (dateInput?.value) adaptedPayload.schedule_info.date = String(dateInput.value).trim();
-    if (strictValidation) normalizeSchedulePayload(adaptedPayload);
+    const dailyRef = doc(db, 'plants', plantId, 'dailySchedules', date);
+    const dailySnap = await getDoc(dailyRef);
+    if (!dailySnap.exists()) throw new Error(`No schedule found for ${date} in plant ${plantId}.`);
 
-    jsonInput.value = JSON.stringify(adaptedPayload, null, 2);
-    if (sourceNameInput && !String(sourceNameInput.value || '').trim()) {
-      sourceNameInput.value = `DailyScheduleGPT_${adaptedPayload.schedule_info.date}.txt`;
+    const data = dailySnap.data();
+    const result = {
+      schedule_info: {
+        date: data.scheduleDate || date,
+        shift: String(data.shift || ''),
+        line_speed: data.lineSpeed != null ? String(data.lineSpeed) : '',
+        total_planned_pcs: data.totalPlannedPcs != null ? String(data.totalPlannedPcs) : '',
+        note: data.notes || '',
+      }
+    };
+
+    const sectionMap = [
+      { fbKey: 'page1', jsonKey: 'page_1' },
+      { fbKey: 'page2', jsonKey: 'page_2' },
+      { fbKey: 'northBayChanges', jsonKey: 'north_bay_changes' },
+      { fbKey: 'southBayChanges', jsonKey: 'south_bay_changes' },
+    ];
+
+    for (const { fbKey, jsonKey } of sectionMap) {
+      const snap = await getDocs(collection(db, 'plants', plantId, 'dailySchedules', date, fbKey));
+      result[jsonKey] = snap.docs.map(d => {
+        const r = d.data();
+        return {
+          press: r.press || '',
+          part_storage_location: Array.isArray(r.partStorageLocation) ? r.partStorageLocation : [],
+          part_number: r.partNumber || '',
+          description: r.description || '',
+          cavity: r.cavity || '',
+          doh: r.doh != null ? String(r.doh) : '',
+          labels_per_shift: r.labelsPerShift != null ? String(r.labelsPerShift) : '',
+          mc: r.mc || '',
+          notes: r.notes || '',
+        };
+      });
     }
-    feedback('schedule-gpt-feedback', 'ok', `Generated canonical JSON draft (${normalized.sections.page1.length + normalized.sections.page2.length + normalized.sections.northBayChanges.length + normalized.sections.southBayChanges.length} rows). Review and click Import Daily Schedule when ready.`);
+
+    document.getElementById('schedule-json-text').value = JSON.stringify(result, null, 2);
+    document.getElementById('schedule-date').value = date;
+
+    renderSchedulePreview();
+
+    const rowKeys = ['page_1', 'page_2', 'north_bay_changes', 'south_bay_changes'];
+    const totalRows = rowKeys.reduce((s, k) => s + (result[k] || []).length, 0);
+    feedback('view-schedule-feedback', 'ok', `Loaded ${date}: ${totalRows} rows. Edit in the preview table, then click Import Daily Schedule to save.`);
   } catch (e) {
     console.error(e);
-    feedback('schedule-gpt-feedback', 'error', e.message || 'Failed to generate schedule JSON.');
-  } finally {
-    generateBtn.disabled = false;
-    generateBtn.textContent = 'Generate JSON';
+    feedback('view-schedule-feedback', 'error', e.message || 'Failed to load schedule.');
   }
 }
 
@@ -1965,12 +2391,12 @@ async function convertWithDeepSeek() {
   const sourceText = String(sourceInput?.value || '').trim();
 
   if (!sourceText) {
-    feedback('schedule-gpt-feedback', 'error', 'Paste schedule text or PDF metadata before converting.');
+    feedback('schedule-gpt-feedback', 'error', 'Paste schedule text or PDF metadata before generating.');
     return;
   }
 
   btn.disabled = true;
-  btn.textContent = 'Calling DeepSeek…';
+  btn.textContent = 'Generating JSON with Deepseek…';
   feedback('schedule-gpt-feedback', '', '');
 
   try {
@@ -1987,6 +2413,7 @@ async function convertWithDeepSeek() {
     if (!res.ok) {
       if (data.content) {
         jsonInput.value = data.content;
+        renderSchedulePreview();
         throw new Error('DeepSeek returned invalid JSON. The raw output is in the JSON textarea above — you can manually fix it or check for errors.');
       }
       throw new Error(data.error || 'DeepSeek conversion failed');
@@ -2003,6 +2430,7 @@ async function convertWithDeepSeek() {
 
     // Optionally validate using existing normalizeSchedulePayload
     jsonInput.value = JSON.stringify(adaptedPayload, null, 2);
+    renderSchedulePreview();
     if (sourceNameInput && !String(sourceNameInput.value || '').trim()) {
       sourceNameInput.value = `DeepSeek_${(adaptedPayload.schedule_info?.date || 'schedule')}.json`;
     }
@@ -2012,9 +2440,103 @@ async function convertWithDeepSeek() {
     feedback('schedule-gpt-feedback', 'error', e.message || 'DeepSeek conversion failed.');
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Convert with DeepSeek';
+    btn.textContent = 'Generate JSON with Deepseek';
   }
 }
+
+function renderSchedulePreview() {
+  const container = document.getElementById('schedule-preview-container');
+  const textarea = document.getElementById('schedule-json-text');
+  const summary = document.getElementById('schedule-preview-summary');
+  if (!container || !textarea) return;
+  const raw = textarea.value.trim();
+  if (!raw) { container.innerHTML = ''; return; }
+  try {
+    const payload = extractSchedulePayload(parseScheduleJsonInput(raw, 'Preview'));
+    const sectionKeys = [
+      { label: 'Page 1', key: 'page_1', altKey: 'page1' },
+      { label: 'Page 2', key: 'page_2', altKey: 'page2' },
+      { label: 'North Bay Changes', key: 'north_bay_changes', altKey: 'northBayChanges' },
+      { label: 'South Bay Changes', key: 'south_bay_changes', altKey: 'southBayChanges' }
+    ];
+    const cols = ['Press','Part #','Description','Cavity','DOH','Labels/Shift','MC','Location','Notes'];
+    const fields = ['press','part_number','description','cavity','doh','labels_per_shift','mc','part_storage_location','notes'];
+    let totalRows = 0;
+    let html = '';
+    for (const sk of sectionKeys) {
+      const rows = payload[sk.key] || payload[sk.altKey] || [];
+      if (!rows.length) continue;
+      totalRows += rows.length;
+      html += `<div style="margin-bottom:10px;"><strong style="font-size:11px;color:var(--text2);">${sk.label} (${rows.length})</strong>`;
+      html += `<table style="width:100%;font-size:11px;margin-top:4px;"><tr style="color:var(--text2);font-family:'Share Tech Mono',monospace;font-size:10px;">`;
+      for (let ci = 0; ci < cols.length; ci++) {
+        const c = cols[ci];
+        let extra = '';
+        if (c === 'Cavity' || c === 'DOH') extra = 'width:60px;';
+        else if (c === 'Labels/Shift') extra = 'width:80px;';
+        else if (c === 'Description') extra = 'min-width:200px;';
+        else if (c === 'Press' || c === 'MC') extra = 'width:70px;';
+        html += `<th style="padding:4px 5px;white-space:nowrap;${extra}${ci % 2 === 0 ? 'background:rgba(255,255,255,0.02);' : ''}">${c}</th>`;
+      }
+      html += '</tr>';
+      for (let ri = 0; ri < rows.length; ri++) {
+        html += '<tr>';
+        for (let fi = 0; fi < fields.length; fi++) {
+          const f = fields[fi];
+          let v = rows[ri][f];
+          if (f === 'part_storage_location') v = Array.isArray(v) ? v.join(', ') : String(v ?? '');
+          const val = esc(String(v ?? ''));
+          html += `<td style="padding:2px 4px;border-top:1px solid var(--border);${fi % 2 === 0 ? 'background:rgba(255,255,255,0.02);' : ''}">
+            <input type="text" value="${val}"
+                   data-section="${sk.key}" data-row="${ri}" data-field="${f}"
+                   style="width:100%;border:none;background:transparent;color:var(--text);font-size:11px;padding:2px;font-family:inherit;box-sizing:border-box;"
+                   onchange="window.handlePreviewEdit(this)" />
+          </td>`;
+        }
+        html += '</tr>';
+      }
+      html += '</table></div>';
+    }
+    container.innerHTML = html || '<span class="muted">No rows found.</span>';
+    if (summary) summary.textContent = `Preview schedule data (${totalRows} rows) — click a cell to edit`;
+  } catch (e) {
+    container.innerHTML = `<span style="color:var(--text2);font-size:11px;">Preview unavailable — JSON not parseable yet.</span>`;
+  }
+}
+
+window.handlePreviewEdit = function(input) {
+  const textarea = document.getElementById('schedule-json-text');
+  if (!textarea) return;
+  try {
+    const section = input.dataset.section;
+    const rowIdx = parseInt(input.dataset.row, 10);
+    const field = input.dataset.field;
+    const raw = textarea.value.trim();
+    const parsed = parseScheduleJsonInput(raw, 'Preview edit');
+    // Work with the full parsed object (may have schedule_info wrapper)
+    const obj = parsed && typeof parsed === 'object' ? parsed : {};
+    // Determine the target array — could be at top level or inside schedule_info
+    let targetArr = obj[section];
+    // Also check alt keys
+    if (!targetArr) {
+      const altMap = { page_1: 'page1', page_2: 'page2', north_bay_changes: 'northBayChanges', south_bay_changes: 'southBayChanges' };
+      targetArr = obj[altMap[section]];
+    }
+    if (targetArr && Array.isArray(targetArr) && targetArr[rowIdx] !== undefined) {
+      let val = input.value.trim();
+      if (field === 'part_storage_location') {
+        val = val.split(',').map(s => s.trim()).filter(Boolean);
+      } else if (field === 'doh' || field === 'labels_per_shift') {
+        val = val ? (isNaN(Number(val)) ? val : Number(val)) : '';
+      }
+      targetArr[rowIdx][field] = val;
+      textarea.value = JSON.stringify(obj, null, 2);
+      renderSchedulePreview();
+    }
+  } catch (_) {
+    // If editing breaks JSON, silently ignore — preview error state handles it
+  }
+};
 
 function preprocessCanvasForOcr(canvas) {
   const ctx = canvas.getContext('2d');
@@ -2071,7 +2593,7 @@ async function ocrPdfToText() {
   const engine = document.getElementById('ocr-engine-select')?.value || 'azure';
   btn.disabled = true;
   btn.textContent = 'OCR Running…';
-  feedback('ocr-progress', '', engine === 'azure' ? 'Uploading to Azure Document Intelligence…' : engine === 'google' ? 'Rendering pages for Google Vision…' : 'Initializing Tesseract…');
+  feedback('ocr-progress', '', engine === 'azure' ? 'Uploading to Azure Document Intelligence…' : engine === 'google' ? 'Rendering pages for Google Vision…' : engine === 'document-ai' ? 'Sending to Google Document AI…' : engine === 'textract' ? 'Rendering pages for Amazon Textract…' : 'Initializing Tesseract…');
   try {
     let fullText;
     if (engine === 'azure') {
@@ -2099,26 +2621,85 @@ async function ocrPdfToText() {
         images.push(canvas.toDataURL('image/png').split(',')[1]);
       }
       feedback('ocr-progress', '', `Sending ${images.length} page(s) to Google Vision…`);
+      const languageHints = (document.getElementById('vision-language-hints')?.value || '')
+        .split(',').map(s => s.trim()).filter(Boolean);
+      const featureType = document.getElementById('vision-feature-type')?.value || 'DOCUMENT_TEXT_DETECTION';
+      const model = document.getElementById('vision-model')?.value || '';
+      const maxResults = parseInt(document.getElementById('vision-max-results')?.value || '1', 10) || 1;
       const res = await fetch('/api/ocr/google', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ images })
+        body: JSON.stringify({
+          images,
+          languageHints: languageHints.length ? languageHints : undefined,
+          featureType,
+          model: model || undefined,
+          maxResults
+        })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Google Vision failed');
       fullText = data.text;
       feedback('ocr-progress', 'ok', `Google Vision complete: ${data.pageCount} page(s).`);
-    } else {
+    } else if (engine === 'document-ai') {
+      const projectId = String(document.getElementById('docai-project-id')?.value || '').trim();
+      const processorId = String(document.getElementById('docai-processor-id')?.value || '').trim();
+      const location = document.getElementById('docai-location')?.value || 'us';
+      if (!projectId || !processorId) throw new Error('Google Document AI requires Project ID and Processor ID. Configure them in Cloud OCR settings.');
+      const params = new URLSearchParams({ projectId, processorId, location });
+      const res = await fetch('/api/ocr/document-ai?' + params, { method: 'POST', body: file });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Document AI failed');
+      fullText = data.text.trim();
+      feedback('ocr-progress', 'ok', `Document AI complete: ${data.pageCount} page(s).`);
+    } else if (engine === 'textract') {
       self.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
       const arrayBuffer = await file.arrayBuffer();
       const pdf = await self.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-      const worker = await self.Tesseract.createWorker('eng');
-      await worker.setParameters({ tessedit_pageseg_mode: '6' });
+      const images = [];
+      for (let i = 1; i <= pdf.numPages; i++) {
+        feedback('ocr-progress', '', `Rendering page ${i}/${pdf.numPages}…`);
+        const page = await pdf.getPage(i);
+        const viewport = page.getViewport({ scale: 2.0 });
+        const canvas = document.createElement('canvas');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        images.push(canvas.toDataURL('image/jpeg', 0.8).split(',')[1]);
+      }
+      feedback('ocr-progress', '', `Sending ${images.length} page(s) to Amazon Textract…`);
+      const res = await fetch('/api/ocr/textract', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ images })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Textract failed');
+      fullText = data.text;
+      feedback('ocr-progress', 'ok', `Textract complete: ${data.pageCount} page(s).`);
+    } else {
+      self.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      const lang = document.getElementById('tesseract-language')?.value || 'eng';
+      const psm = String(document.getElementById('tesseract-psm')?.value || '6');
+      const oem = document.getElementById('tesseract-oem')?.value || '';
+      const whitelist = (document.getElementById('tesseract-whitelist')?.value || '').trim();
+      const tesseractScale = parseFloat(document.getElementById('tesseract-scale')?.value) || 2.5;
+
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await self.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const worker = await self.Tesseract.createWorker(lang);
+      const tesseractParams = { tessedit_pageseg_mode: psm };
+      if (oem && oem !== '3') tesseractParams.tessedit_ocr_engine_mode = oem;
+      if (whitelist) tesseractParams.tessedit_char_whitelist = whitelist;
+      await worker.setParameters(tesseractParams);
       fullText = '';
       for (let i = 1; i <= pdf.numPages; i++) {
         feedback('ocr-progress', '', `Rendering page ${i}/${pdf.numPages}…`);
         const page = await pdf.getPage(i);
-        const viewport = page.getViewport({ scale: 2.5 });
+        const viewport = page.getViewport({ scale: tesseractScale });
         const canvas = document.createElement('canvas');
         canvas.width = viewport.width;
         canvas.height = viewport.height;
@@ -2490,6 +3071,85 @@ window.saveGamification = async function(plantId) {
   } catch (e) {
     console.error(e);
     feedback(`game-fb-${plantId}`, 'error', e.message || 'Failed to save gamification settings.');
+  }
+};
+
+// ── Press Editor ────────────────────────────────────────────────────────────────
+window.patchPressRow = function(plantId, renderedRowName) {
+  // Read current DOM values directly (avoids stale closures)
+  const nameEl = document.getElementById(`press-name-${esc(renderedRowName)}`);
+  const idsEl = document.getElementById(`press-ids-${esc(renderedRowName)}`);
+  if (!nameEl || !idsEl) return;
+  const newName = nameEl.value.trim();
+  const idsStr = idsEl.value.trim();
+  const presses = deepCopy(pressDraftByPlant.get(plantId) || {});
+  // Remove old key (may have been renamed on a previous call)
+  delete presses[renderedRowName];
+  if (newName) presses[newName] = idsStr.split(',').map(s => s.trim()).filter(Boolean);
+  pressDraftByPlant.set(plantId, presses);
+};
+
+window.addPressRow = function(plantId) {
+  const nameEl = document.getElementById(`new-press-row-name-${plantId}`);
+  const idsEl = document.getElementById(`new-press-ids-${plantId}`);
+  const rowName = String(nameEl?.value || '').trim();
+  if (!rowName) { feedback(`press-fb-${plantId}`, 'error', 'Enter a row name.'); return; }
+  const presses = deepCopy(pressDraftByPlant.get(plantId) || {});
+  if (presses[rowName]) { feedback(`press-fb-${plantId}`, 'error', `Row "${rowName}" already exists.`); return; }
+  presses[rowName] = String(idsEl?.value || '').split(',').map(s => s.trim()).filter(Boolean);
+  pressDraftByPlant.set(plantId, presses);
+  nameEl.value = '';
+  idsEl.value = '';
+  feedback(`press-fb-${plantId}`, 'ok', `Added row "${rowName}".`);
+  window.renderSinglePlantPresses(plantId);
+};
+
+window.removePressRow = function(plantId, rowName) {
+  if (!confirm(`Remove row "${rowName}" and all its presses?`)) return;
+  const presses = deepCopy(pressDraftByPlant.get(plantId) || {});
+  delete presses[rowName];
+  pressDraftByPlant.set(plantId, presses);
+  feedback(`press-fb-${plantId}`, 'ok', `Removed row "${rowName}".`);
+  window.renderSinglePlantPresses(plantId);
+};
+
+window.renderSinglePlantPresses = function(plantId) {
+  const container = document.getElementById(`press-list-${plantId}`);
+  const countEl = container?.parentElement?.querySelector('.press-count');
+  const presses = pressDraftByPlant.get(plantId) || {};
+  const rowNames = Object.keys(presses);
+  const totalPresses = rowNames.reduce((sum, r) => sum + presses[r].length, 0);
+  if (countEl) countEl.textContent = `${totalPresses} presses across ${rowNames.length} rows`;
+  if (!container) return;
+  if (!rowNames.length) { container.innerHTML = '<div class="muted">No rows defined.</div>'; return; }
+  container.innerHTML = rowNames.map(rowName => `
+    <div class="press-row">
+      <input class="press-row-name" type="text" id="press-name-${esc(rowName)}" value="${esc(rowName)}"
+             onchange="window.patchPressRow('${plantId}','${esc(rowName)}')" />
+      <input class="press-row-presses" type="text" id="press-ids-${esc(rowName)}" value="${esc(presses[rowName].join(', '))}"
+             placeholder="e.g. 1.01, 1.02, 1.03"
+             onchange="window.patchPressRow('${plantId}','${esc(rowName)}')" />
+      <button class="small-btn danger" onclick="window.removePressRow('${plantId}','${esc(rowName)}')">✕</button>
+    </div>
+  `).join('');
+};
+
+window.savePresses = async function(plantId) {
+  const btn = document.querySelector(`#ptab-presses-${plantId} .status-toolbar .small-btn`);
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  try {
+    const presses = pressDraftByPlant.get(plantId) || {};
+    await setDoc(doc(db, 'plants', plantId, 'config', 'presses'), {
+      presses,
+      updatedAt: serverTimestamp(),
+      updatedBy: { uid: currentUser.uid, name: currentUser.displayName || currentUser.email || '' }
+    }, { merge: true });
+    feedback(`press-fb-${plantId}`, 'ok', 'Press configuration saved.');
+  } catch (e) {
+    console.error(e);
+    feedback(`press-fb-${plantId}`, 'error', e.message || 'Failed to save press configuration.');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '💾 Save Presses'; }
   }
 };
 
@@ -3052,8 +3712,13 @@ document.getElementById('create-plant-btn').addEventListener('click', createPlan
 document.getElementById('load-schedule-file-btn').addEventListener('click', loadScheduleJsonFromFile);
 document.getElementById('import-schedule-btn').addEventListener('click', importDailySchedule);
 document.getElementById('ocr-pdf-btn').addEventListener('click', ocrPdfToText);
-document.getElementById('generate-schedule-json-btn').addEventListener('click', generateScheduleJsonFromDailyScheduleGPT);
 document.getElementById('deepseek-convert-btn').addEventListener('click', convertWithDeepSeek);
+document.getElementById('batch-start-btn').addEventListener('click', batchImportSchedules);
+document.getElementById('view-date').addEventListener('change', viewSchedule);
+
+// Schedule JSON preview
+document.getElementById('schedule-json-text').addEventListener('input', renderSchedulePreview);
+document.getElementById('json-preview-toggle')?.addEventListener('toggle', () => renderSchedulePreview());
 
 // Auto-save extra system prompt to localStorage
 (function() {
@@ -3066,6 +3731,36 @@ document.getElementById('deepseek-convert-btn').addEventListener('click', conver
     });
   }
 })();
+
+// Auto-save Cloud OCR settings
+(function() {
+  const fields = [
+    'vision-language-hints',
+    'vision-feature-type',
+    'vision-model',
+    'vision-max-results',
+    'docai-project-id',
+    'docai-processor-id',
+    'docai-location',
+    'tesseract-language',
+    'tesseract-psm',
+    'tesseract-oem',
+    'tesseract-whitelist',
+    'tesseract-scale'
+  ];
+  for (const id of fields) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    const saved = localStorage.getItem('ap:' + id);
+    if (saved !== null) {
+      if (el.tagName === 'SELECT') el.value = saved;
+      else el.value = saved;
+    }
+    el.addEventListener('input', () => localStorage.setItem('ap:' + id, el.value));
+    el.addEventListener('change', () => localStorage.setItem('ap:' + id, el.value));
+  }
+})();
 </script>
 </body>
 </html>
+ 
