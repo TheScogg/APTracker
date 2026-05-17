@@ -2668,7 +2668,7 @@ async function ocrPdfToText() {
         ctx.fillStyle = '#fff';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         await page.render({ canvasContext: ctx, viewport }).promise;
-        images.push(canvas.toDataURL('image/png').split(',')[1]);
+        images.push(canvas.toDataURL('image/jpeg', 0.95).split(',')[1]);
       }
       feedback('ocr-progress', '', `Sending ${images.length} page(s) to Amazon Textract…`);
       const res = await fetch('/api/ocr/textract', {

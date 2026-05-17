@@ -322,6 +322,9 @@ async function handleOcrTextract(request, env) {
 
       if (!res.ok) {
         const errText = await res.text();
+        console.error(`Textract page ${i + 1} error: ${errText}`);
+        console.error(`Request X-Amz-Target: ${headers['X-Amz-Target']}`);
+        console.error(`Request body length: ${body.length}`);
         throw new Error(`Textract API error on page ${i + 1}: ${res.status} ${errText}`);
       }
 
