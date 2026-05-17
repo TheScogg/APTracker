@@ -782,6 +782,7 @@ Rules:
 - labels_per_shift is numeric.
 - mc is mold code string.
 - press is the press number from the schedule grid (e.g. "5.01").
+- When a press row shows TWO part numbers or TWO descriptions (space or pipe separated), create TWO rows in the JSON with the same press number but different part_number, description, cavity, etc.
 - page_1 and page_2 contain the main press rows.
 - north_bay_changes and south_bay_changes are for change-over rows.
 - If text is unclear or a field is missing, use empty string or empty array. Do NOT make up data.
