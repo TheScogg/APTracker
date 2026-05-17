@@ -838,6 +838,8 @@ Rules:
       }
     }
 
+    const rawOcrText = allOcrTexts.join('\n\n--- Page ---\n\n');
+
     // Step 4: If ?plant= is provided, write to Firestore
     const scanUrl = new URL(request.url);
     const plantId = scanUrl.searchParams.get('plant');
@@ -864,7 +866,7 @@ Rules:
       }
     }
 
-    return new Response(JSON.stringify({ ...parsed, saved, saveError }), {
+    return new Response(JSON.stringify({ ...parsed, saved, saveError, rawOcrText: rawOcrText.substring(0, 2000) }), {
       headers: { 'Content-Type': 'application/json' }
     });
 
