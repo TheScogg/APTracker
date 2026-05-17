@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, collection, updateDoc as rawUpdateDoc, deleteDoc as rawDeleteDoc, doc, getDoc as rawGetDoc, getDocs as rawGetDocs, setDoc as rawSetDoc, addDoc as rawAddDoc, onSnapshot as rawOnSnapshot, serverTimestamp, query, orderBy, where, writeBatch as rawWriteBatch, arrayUnion, arrayRemove, increment, limit, runTransaction as rawRunTransaction, startAfter } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { getAuth, setPersistence, browserLocalPersistence, GoogleAuthProvider, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut as fbSignOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getAuth, setPersistence, browserLocalPersistence, GoogleAuthProvider, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut as fbSignOut, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getStorage, ref as storageRef, uploadString, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
 const firebaseConfig = {
@@ -28,6 +28,14 @@ const NO_AUTH_MODE = location.pathname.endsWith('/noauth.html');
 const NO_AUTH_USER = {
   uid: 'noauth-local',
   displayName: 'No Auth Guest',
+  email: '',
+  photoURL: ''
+};
+
+const DEMO_MODE = location.search.includes('demo=1');
+const DEMO_USER = {
+  uid: 'demo-anon',
+  displayName: 'Demo Session',
   email: '',
   photoURL: ''
 };
@@ -237,6 +245,7 @@ async function resolveRoleAlertRoute(statusKey, subStatus) {
 }
 
 async function queueRoleFeedAlert(issue, { statusKey, subStatus, note = '' } = {}) {
+  if (DEMO_MODE) return;
   if (!currentPlantId || !issue?.id || !statusKey) return;
   const normalizedStatus = String(statusKey || '').trim().toLowerCase();
   if (!normalizedStatus || normalizedStatus === 'open' || normalizedStatus === 'resolved') return;
@@ -2526,6 +2535,7 @@ async function updateMissionProgress(reason) {
 }
 
 async function awardGamification(reason, context = {}) {
+  if (DEMO_MODE) return;
   if (!currentPlantId || !currentUser?.uid) return;
   try {
     if (!gameConfig) {
@@ -3260,7 +3270,7 @@ let redirectResultPromise = null;
 
 // ── AUTH ──
 function resetGoogleSignInButton() {
-  if (NO_AUTH_MODE) return;
+  if (NO_AUTH_MODE || DEMO_MODE) return;
   const btn = document.getElementById('google-signin-btn');
   if (!btn) return;
   btn.disabled = false;
@@ -3268,7 +3278,7 @@ function resetGoogleSignInButton() {
 }
 
 async function finalizeRedirectSignIn() {
-  if (NO_AUTH_MODE) return;
+  if (NO_AUTH_MODE || DEMO_MODE) return;
   if (redirectResultPromise) return redirectResultPromise;
   const hadPendingRedirect = sessionStorage.getItem('ap:auth:redirectPending') === '1';
   if (!hadPendingRedirect) return;
@@ -3287,7 +3297,7 @@ async function finalizeRedirectSignIn() {
 }
 
 async function signInWithGoogle() {
-  if (NO_AUTH_MODE) return;
+  if (NO_AUTH_MODE || DEMO_MODE) return;
   const btn = document.getElementById('google-signin-btn');
   if (!btn) return;
   btn.disabled = true; btn.textContent = 'Signing in…';
@@ -3310,6 +3320,7 @@ if (googleSignInBtn) {
 redirectResultPromise = finalizeRedirectSignIn();
 
 async function doSignOut() {
+  if (DEMO_MODE) { window.location.reload(); return; }
   if (NO_AUTH_MODE) {
     await bootstrapNoAuthSession();
     return;
@@ -3406,7 +3417,40 @@ async function bootstrapSignedInSession(user) {
   if (!localStorage.getItem(TUTORIAL_KEY)) setTimeout(() => window.openTutorial(), 900);
 }
 
+async function bootstrapDemoSession(user) {
+  currentUser = user;
+  document.getElementById('login-screen').classList.remove('visible');
+  document.getElementById('app').classList.add('visible');
+  document.getElementById('user-name-display').textContent = 'Demo Mode';
+  const fullNameEl = document.getElementById('dropdown-full-name');
+  const emailEl = document.getElementById('dropdown-email');
+  if (fullNameEl) fullNameEl.textContent = 'AP Tracker Demo';
+  if (emailEl) emailEl.textContent = 'Simulating 10 virtual team members…';
+
+  await _bootstrapDemoPlant();
+  currentPlantId = 'plant_demo';
+  currentPlantName = 'Demo Plant';
+  userPlants = [{ id: 'plant_demo', name: 'Demo Plant', location: '' }];
+  buildPlantDropdown();
+  document.getElementById('plant-name-display').textContent = currentPlantName;
+  await Promise.all([loadPlantPresses(), loadCurrentMember(currentPlantId), loadStoreConfig()]);
+  buildFloorMap();
+  await loadConfig();
+  startListener();
+  setTodayDate();
+  buildDemoControls();
+  startDemoEngine();
+}
+
 onAuthStateChanged(auth, async user => {
+  if (DEMO_MODE) {
+    if (!user) {
+      try { await signInAnonymously(auth); } catch (e) { console.error('Demo anon sign-in failed:', e); }
+      return;
+    }
+    await bootstrapDemoSession(user);
+    return;
+  }
   if (NO_AUTH_MODE) {
     await bootstrapNoAuthSession();
     return;
@@ -14491,3 +14535,516 @@ setInterval(() => {
   if (document.hidden) return;
   refreshReminderClocksInDom();
 }, 1000);
+
+// ── DEMO MODE ENGINE ──
+
+const DEMO_PLANT_ID = 'plant_demo';
+
+async function _bootstrapDemoPlant() {
+  const plantRef = doc(db, 'plants', DEMO_PLANT_ID);
+  const snap = await getDoc(plantRef);
+  if (snap.exists()) return;
+  const batch1 = writeBatch(db);
+  batch1.set(plantRef, { name: 'Demo Plant', location: 'Demo Location', createdAt: serverTimestamp(), isActive: true });
+  batch1.set(doc(db, 'plants', DEMO_PLANT_ID, 'members', currentUser.uid), {
+    userId: currentUser.uid, displayName: 'Demo Session', email: '', photoURL: '',
+    role: 'admin', isActive: true, addedAt: serverTimestamp(), permissions: { ...DEFAULT_PERMISSIONS }
+  });
+  batch1.set(doc(db, 'users', currentUser.uid), { plantIds: [DEMO_PLANT_ID], lastPlant: DEMO_PLANT_ID }, { merge: true });
+  await batch1.commit();
+  const batch2 = writeBatch(db);
+  batch2.set(doc(db, 'plants', DEMO_PLANT_ID, 'config', 'presses'), { presses: DEFAULT_PRESSES });
+  await batch2.commit();
+}
+
+const DEMO_AGENTS = [
+  { uid: 'demo_sarah',   displayName: 'Sarah Chen',       email: 'sarah@demo.local',   role: 'processengineer', rows: ['Row 1','Row 2'],                              preferredStatuses: ['processengineer','quality'],       createWeight: 8,  statusWeight: 6 },
+  { uid: 'demo_marcus',  displayName: 'Marcus Johnson',    email: 'marcus@demo.local',  role: 'maintenance',     rows: ['Row 3','Row 4'],                              preferredStatuses: ['maintenance'],                    createWeight: 6,  statusWeight: 8 },
+  { uid: 'demo_emily',   displayName: 'Emily Rodriguez',   email: 'emily@demo.local',   role: 'quality',         rows: ['Row 5','Row 6'],                              preferredStatuses: ['quality'],                       createWeight: 5,  statusWeight: 7 },
+  { uid: 'demo_james',   displayName: 'James Kim',          email: 'james@demo.local',   role: 'admin',           rows: ['Row 1','Row 2','Row 3','Row 4','Row 5','Row 6'], preferredStatuses: ['open','resolved'],               createWeight: 4,  statusWeight: 5 },
+  { uid: 'demo_lisa',    displayName: 'Lisa Thompson',      email: 'lisa@demo.local',    role: 'operator',        rows: ['Row 1'],                                      preferredStatuses: ['alert','maintenance','materials'], createWeight: 10, statusWeight: 4 },
+  { uid: 'demo_david',   displayName: 'David Wilson',       email: 'david@demo.local',   role: 'tooldie',         rows: ['Row 2','Row 3'],                              preferredStatuses: ['tooldie','maintenance'],          createWeight: 5,  statusWeight: 7 },
+  { uid: 'demo_ana',     displayName: 'Ana Martinez',       email: 'ana@demo.local',     role: 'materials',       rows: ['Row 4'],                                      preferredStatuses: ['materials','startup'],            createWeight: 6,  statusWeight: 6 },
+  { uid: 'demo_tom',     displayName: 'Tom Baker',          email: 'tom@demo.local',     role: 'controlman',      rows: ['Row 5'],                                      preferredStatuses: ['controlman','maintenance'],        createWeight: 4,  statusWeight: 8 },
+  { uid: 'demo_rachel',  displayName: 'Rachel Green',       email: 'rachel@demo.local',  role: 'startup',         rows: ['Row 6'],                                      preferredStatuses: ['startup','quality'],              createWeight: 6,  statusWeight: 6 },
+  { uid: 'demo_mike',    displayName: 'Mike Davis',         email: 'mike@demo.local',    role: 'general',         rows: ['Row 1','Row 2','Row 3','Row 4','Row 5','Row 6'], preferredStatuses: [],                               createWeight: 7,  statusWeight: 5 }
+];
+
+const DEMO_NOTE_POOLS = {
+  general: [
+    'Press {machine} - {issue}',
+    '{machine} needs attention - {issue}',
+    'Issue on {machine}: {issue}',
+    '{machine} - {issue}',
+    'Checking {machine}, found {issue}',
+    '{issue} at {machine}',
+    'Routine check on {machine} - {issue}',
+    '{machine} reported with {issue}'
+  ],
+  issues: [
+    'unusual noise during cycle',
+    'part quality deviation detected',
+    'misfeed on transfer mechanism',
+    'sensor fault in safety circuit',
+    'scratched part surface',
+    'hydraulic pressure fluctuation',
+    'tonnage reading out of spec',
+    'slow cycle time',
+    'limit switch not triggering',
+    'coolant leak detected',
+    'die alignment issue',
+    'part dimension out of tolerance',
+    'slide lubrication low',
+    'air pressure drop in system',
+    'guard door switch intermittent',
+    'part stuck in die',
+    'operator control panel unresponsive',
+    'conveyor jam at discharge',
+    'strip feed error',
+    'counter reading mismatch'
+  ]
+};
+
+function _demoPick(list) { return list[Math.floor(Math.random() * list.length)]; }
+
+function _demoRandomNote(machine) {
+  const issue = _demoPick(DEMO_NOTE_POOLS.issues);
+  const tmpl = _demoPick(DEMO_NOTE_POOLS.general);
+  return tmpl.replace('{machine}', machine).replace('{issue}', issue);
+}
+
+function _demoMachineForAgent(agent) {
+  const machines = [];
+  for (const row of agent.rows) {
+    const rowMachines = PRESSES[row];
+    if (rowMachines) machines.push(...rowMachines);
+  }
+  if (machines.length === 0) return '1.01';
+  return _demoPick(machines);
+}
+
+function _demoPickAgent(weightKey) {
+  const total = DEMO_AGENTS.reduce((s, a) => s + a[weightKey], 0);
+  let r = Math.random() * total;
+  for (const agent of DEMO_AGENTS) {
+    r -= agent[weightKey];
+    if (r <= 0) return agent;
+  }
+  return DEMO_AGENTS[0];
+}
+
+function _demoBuildIssuePayload(issueId, machine, note, statusKey, subStatus, simTime) {
+  const d = new Date();
+  d.setHours(6, 0, 0, 0);
+  d.setSeconds(d.getSeconds() + simTime);
+  const dateTime = fmtDate(d);
+  const dateKey = localDateStr(d);
+  const timestamp = d.getTime();
+  const isUrgent = Math.random() < 0.08;
+  return {
+    machine, note,
+    dateTime, dateKey, timestamp,
+    shift: 'first',
+    timer: { minutes: 0, endAt: 0, isRunning: false, alerted: false },
+    userId: currentUser.uid, userName: currentUser.displayName || currentUser.email,
+    photoCount: 0,
+    createdAt: serverTimestamp(),
+    createdBy: currentActor(),
+    ...(isUrgent ? { highPriority: true, priority: 'critical' } : {}),
+    schemaVersion: 2,
+    plantId: DEMO_PLANT_ID,
+    pressId: toPressId(machine),
+    machineCode: machine,
+    rowId: toRowId(findRowNameForMachine(machine)),
+    currentStatus: {
+      statusKey: statusKey || 'open',
+      subStatusKey: subStatus || '',
+      label: (getStatusDef(statusKey) || {}).label || statusKey || 'Open',
+      subLabel: subStatus || '',
+      color: getStatusColor(statusKey || 'open'),
+      enteredAt: serverTimestamp(),
+      enteredDateTime: dateTime,
+      enteredBy: currentActor(),
+      notePreview: note || ''
+    },
+    lifecycle: {
+      isOpen: statusKey !== 'resolved',
+      isResolved: statusKey === 'resolved',
+      openedAt: serverTimestamp(),
+      resolvedAt: statusKey === 'resolved' ? serverTimestamp() : null,
+      closedAt: statusKey === 'resolved' ? serverTimestamp() : null,
+      reopenedCount: 0
+    },
+    updatedAt: serverTimestamp(),
+    updatedBy: currentActor()
+  };
+}
+
+function _demoRunAs(agent, fn) {
+  const prev = currentUser;
+  currentUser = { ...prev, uid: agent.uid, displayName: agent.displayName, email: agent.email, photoURL: '' };
+  try { return fn(); }
+  finally { currentUser = prev; }
+}
+
+async function demoCreateIssue(agent, simTime) {
+  const machine = _demoMachineForAgent(agent);
+  const note = _demoRandomNote(machine);
+  const isResolved = Math.random() < 0.05;
+  const statusKey = isResolved ? 'resolved' : (agent.preferredStatuses.length > 0 && Math.random() < 0.6 ? _demoPick(agent.preferredStatuses) : 'open');
+  const subStatus = '';
+  return _demoRunAs(agent, async () => {
+    const issueRef = doc(plantCol('issues'));
+    const batch = writeBatch(db);
+    batch.set(issueRef, _demoBuildIssuePayload(issueRef.id, machine, note, statusKey, subStatus, simTime));
+    batch.set(doc(issueEventsCol(issueRef.id)), {
+      type: 'issue_created', eventAt: serverTimestamp(), actor: currentActor(), schemaVersion: 2,
+      payload: { machineCode: machine, note, initialStatusKey: statusKey, initialSubStatusKey: subStatus, urgent: false }
+    });
+    batch.set(doc(issueEventsCol(issueRef.id)), {
+      type: 'status_changed', eventAt: serverTimestamp(), actor: currentActor(), schemaVersion: 2,
+      payload: { fromStatusKey: null, fromSubStatusKey: null, toStatusKey: statusKey, toSubStatusKey: subStatus, note: '' }
+    });
+    await batch.commit();
+    return { issueId: issueRef.id, machine, statusKey };
+  });
+}
+
+async function demoChangeStatus(agent, issueId, currentStatusObj, note) {
+  const validNext = STATUS_FLOW[currentStatusObj.status || 'open'] || ['resolved'];
+  const preferredRanked = validNext.filter(s => agent.preferredStatuses.includes(s));
+  const nextStatus = preferredRanked.length > 0 ? _demoPick(preferredRanked) : _demoPick(validNext);
+  return _demoRunAs(agent, () => window.addStatusEntry(issueId, nextStatus, '', note || ''));
+}
+
+async function demoResolveIssue(agent, issueId, note) {
+  return _demoRunAs(agent, () => window.addStatusEntry(issueId, 'resolved', '', note || 'Resolved - issue completed'));
+}
+
+async function demoReopenIssue(agent, issueId, note) {
+  return _demoRunAs(agent, () => window.addStatusEntry(issueId, 'open', '', note || 'Reopened - issue resurfaced'));
+}
+
+const STATUS_FLOW = {
+  open: ['alert','controlman','maintenance','materials','quality','processengineer','startup','tooldie'],
+  alert: ['maintenance','controlman','tooldie'],
+  maintenance: ['quality','startup','resolved'],
+  materials: ['startup','resolved'],
+  quality: ['resolved'],
+  processengineer: ['maintenance','tooldie','resolved'],
+  controlman: ['maintenance','resolved'],
+  startup: ['quality','resolved'],
+  tooldie: ['maintenance','quality','resolved'],
+  resolved: ['open']
+};
+
+// ── Simulation engine ──
+
+const DEMO_SHIFT_SECONDS = 6 * 3600;
+let _demoSim = null;
+
+function startDemoEngine() {
+  if (_demoSim) return;
+  _demoSim = {
+    simTime: 0,
+    speed: 60,
+    running: true,
+    actions: [],
+    createdIssues: [],
+    tickCount: 0,
+    paused: false
+  };
+  _generateDemoActions();
+  _demoSim.interval = setInterval(_demoTick, 500);
+}
+
+function stopDemoEngine() {
+  if (!_demoSim) return;
+  _demoSim.running = false;
+  clearInterval(_demoSim.interval);
+  _demoSim = null;
+}
+
+function _generateDemoActions() {
+  const actions = [];
+  for (let i = 0; i < 55; i++) {
+    const t = Math.round(300 + Math.random() * (DEMO_SHIFT_SECONDS - 600));
+    const agent = _demoPickAgent('createWeight');
+    actions.push({ type: 'create', t, agent: { ...agent } });
+  }
+  actions.sort((a, b) => a.t - b.t);
+  _demoSim.actions = actions;
+}
+
+function _demoTick() {
+  if (!_demoSim || _demoSim.paused) return;
+  _demoSim.tickCount++;
+  _demoSim.simTime += _demoSim.speed * 0.5;
+  const sim = _demoSim;
+
+  while (sim.actions.length > 0 && sim.actions[0].t <= sim.simTime) {
+    const action = sim.actions.shift();
+    _demoExecuteAction(action).catch(e => console.warn('Demo action failed:', e));
+  }
+
+  if (sim.simTime >= DEMO_SHIFT_SECONDS) {
+    _demoSimComplete();
+    return;
+  }
+
+  if (sim.tickCount % 8 === 0 && sim.createdIssues.length > 0 && Math.random() < 0.3) {
+    const openIssues = [];
+    for (const ci of sim.createdIssues) {
+      const issue = issuesById.get(ci.issueId);
+      if (issue && !issue.lifecycle?.isResolved) {
+        const cs = currentStatus(issue);
+        if (cs && cs.status !== 'resolved') openIssues.push(ci);
+      }
+    }
+    if (openIssues.length > 0) {
+      const target = _demoPick(openIssues);
+      const followTime = sim.simTime + 60 + Math.random() * 600;
+      const agent = _demoPickAgent('statusWeight');
+      sim.actions.push({ type: 'status', t: followTime, agent: { ...agent }, issueId: target.issueId, issueMachine: target.machine });
+      sim.actions.sort((a, b) => a.t - b.t);
+    }
+  }
+
+  if (sim.simTime > DEMO_SHIFT_SECONDS * 0.5 && sim.tickCount % 12 === 0) {
+    const resolvable = [];
+    for (const ci of sim.createdIssues) {
+      const issue = issuesById.get(ci.issueId);
+      if (issue && !issue.lifecycle?.isResolved) resolvable.push(ci);
+    }
+    if (resolvable.length > 0 && Math.random() < 0.25) {
+      const target = _demoPick(resolvable);
+      const followTime = sim.simTime + 30 + Math.random() * 300;
+      const agent = _demoPickAgent('statusWeight');
+      sim.actions.push({ type: 'resolve', t: followTime, agent: { ...agent }, issueId: target.issueId, issueMachine: target.machine });
+      sim.actions.sort((a, b) => a.t - b.t);
+    }
+  }
+
+  if (sim.simTime > DEMO_SHIFT_SECONDS * 0.3 && sim.tickCount % 30 === 0 && Math.random() < 0.1) {
+    const resolved = [];
+    for (const ci of sim.createdIssues) {
+      const issue = issuesById.get(ci.issueId);
+      if (issue && issue.lifecycle?.isResolved) resolved.push(ci);
+    }
+    if (resolved.length > 0) {
+      const target = _demoPick(resolved);
+      const followTime = sim.simTime + 30;
+      const agent = _demoPickAgent('createWeight');
+      sim.actions.push({ type: 'reopen', t: followTime, agent: { ...agent }, issueId: target.issueId, issueMachine: target.machine });
+      sim.actions.sort((a, b) => a.t - b.t);
+    }
+  }
+
+  _demoUpdateUI();
+}
+
+async function _demoExecuteAction(action) {
+  const agent = DEMO_AGENTS.find(a => a.uid === action.agent.uid) || DEMO_AGENTS[0];
+  const issue = action.issueId ? issuesById.get(action.issueId) : null;
+
+  switch (action.type) {
+    case 'create': {
+      const result = await demoCreateIssue(agent, action.t);
+      if (result) _demoSim.createdIssues.push(result);
+      _demoLog(`${agent.displayName} logged issue on Press ${result.machine}`);
+      break;
+    }
+    case 'status': {
+      if (!issue) return;
+      const cs = currentStatus(issue);
+      const note = _demoRandomNote(action.issueMachine || issue.machine || '');
+      await demoChangeStatus(agent, action.issueId, cs, note);
+      _demoLog(`${agent.displayName} updated Press ${issue.machine || action.issueMachine}`);
+      break;
+    }
+    case 'resolve': {
+      if (!issue) return;
+      await demoResolveIssue(agent, action.issueId);
+      _demoLog(`${agent.displayName} resolved Press ${issue.machine || action.issueMachine}`);
+      break;
+    }
+    case 'reopen': {
+      if (!issue) return;
+      await demoReopenIssue(agent, action.issueId);
+      _demoLog(`${agent.displayName} reopened Press ${issue.machine || action.issueMachine}`);
+      break;
+    }
+  }
+}
+
+function _demoSimComplete() {
+  stopDemoEngine();
+  _demoLog('✅ Shift complete! Demo simulation finished.');
+  const btn = document.getElementById('demo-play-btn');
+  if (btn) btn.textContent = '✅';
+}
+
+function _demoLog(msg) {
+  const feed = document.getElementById('demo-feed');
+  if (!feed) return;
+  const t = _demoSim ? _demoFormatTime(_demoSim.simTime) : '--:--';
+  const el = document.createElement('div');
+  el.className = 'demo-feed-item';
+  el.textContent = `[${t}] ${msg}`;
+  feed.insertBefore(el, feed.firstChild);
+  while (feed.children.length > 50) feed.removeChild(feed.lastChild);
+}
+
+function _demoFormatTime(s) {
+  const h = Math.floor(s / 3600) + 6;
+  const m = Math.floor((s % 3600) / 60);
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+function _demoUpdateUI() {
+  if (!_demoSim) return;
+  const timeEl = document.getElementById('demo-time');
+  const barEl = document.getElementById('demo-progress');
+  const speedEl = document.getElementById('demo-speed-label');
+  if (timeEl) timeEl.textContent = _demoFormatTime(_demoSim.simTime);
+  if (barEl) barEl.style.width = Math.min(100, (_demoSim.simTime / DEMO_SHIFT_SECONDS) * 100) + '%';
+  if (speedEl) speedEl.textContent = _demoSim.speed + '\u00d7';
+}
+
+// ── Demo controls UI ──
+
+function buildDemoControls() {
+  const existing = document.getElementById('demo-controls');
+  if (existing) existing.remove();
+
+  const style = document.createElement('style');
+  style.textContent = `
+    #demo-controls { position:fixed; bottom:12px; left:50%; transform:translateX(-50%); z-index:9999; background:rgba(0,0,0,0.88); backdrop-filter:blur(8px); border:1px solid rgba(255,255,255,0.12); border-radius:12px; padding:10px 16px; display:flex; align-items:center; gap:12px; font-family:Nunito,sans-serif; font-size:12px; color:#fff; box-shadow:0 4px 24px rgba(0,0,0,0.5); user-select:none; min-width:480px; justify-content:center; flex-wrap:wrap; }
+    #demo-controls .demo-btn { background:rgba(255,255,255,0.1); border:none; color:#fff; width:32px; height:32px; border-radius:8px; cursor:pointer; font-size:14px; display:flex; align-items:center; justify-content:center; transition:background 0.15s; }
+    #demo-controls .demo-btn:hover { background:rgba(255,255,255,0.2); }
+    #demo-controls .demo-btn:disabled { opacity:0.3; cursor:default; }
+    #demo-controls .demo-label { color:rgba(255,255,255,0.6); font-size:11px; }
+    #demo-controls .demo-value { color:#fff; font-weight:600; }
+    #demo-controls .demo-time-display { font-family:Share Tech Mono,monospace; font-size:14px; color:#4ade80; min-width:60px; text-align:center; }
+    #demo-controls .demo-progress-track { width:100px; height:4px; background:rgba(255,255,255,0.15); border-radius:2px; overflow:hidden; }
+    #demo-controls .demo-progress-fill { height:100%; background:#4ade80; border-radius:2px; transition:width 0.3s; width:0%; }
+    #demo-controls .demo-speed-slider { width:80px; accent-color:#4ade80; cursor:pointer; }
+    #demo-controls .demo-sep { width:1px; height:24px; background:rgba(255,255,255,0.12); }
+    #demo-feed { position:fixed; bottom:68px; left:50%; transform:translateX(-50%); z-index:9998; max-height:160px; width:520px; overflow-y:auto; background:rgba(0,0,0,0.75); backdrop-filter:blur(4px); border-radius:10px; padding:8px 12px; font-family:Nunito,sans-serif; font-size:11px; color:rgba(255,255,255,0.8); pointer-events:none; }
+    #demo-feed .demo-feed-item { padding:2px 0; border-bottom:1px solid rgba(255,255,255,0.05); }
+    #demo-controls .demo-created-count { font-size:11px; color:rgba(255,255,255,0.5); }
+  `;
+  document.head.appendChild(style);
+
+  const panel = document.createElement('div');
+  panel.id = 'demo-controls';
+
+  const playBtn = document.createElement('button');
+  playBtn.id = 'demo-play-btn';
+  playBtn.className = 'demo-btn';
+  playBtn.textContent = '\u23f8';
+  playBtn.title = 'Pause simulation';
+  playBtn.addEventListener('click', () => {
+    if (!_demoSim) return;
+    _demoSim.paused = !_demoSim.paused;
+    playBtn.textContent = _demoSim.paused ? '\u25b6' : '\u23f8';
+    playBtn.title = _demoSim.paused ? 'Resume simulation' : 'Pause simulation';
+  });
+  panel.appendChild(playBtn);
+
+  const resetBtn = document.createElement('button');
+  resetBtn.className = 'demo-btn';
+  resetBtn.textContent = '\u27f3';
+  resetBtn.title = 'Reset demo';
+  resetBtn.addEventListener('click', resetDemo);
+  panel.appendChild(resetBtn);
+
+  const sep1 = document.createElement('div');
+  sep1.className = 'demo-sep';
+  panel.appendChild(sep1);
+
+  const timeLabel = document.createElement('span');
+  timeLabel.className = 'demo-label';
+  timeLabel.textContent = 'Shift: ';
+  panel.appendChild(timeLabel);
+  const timeVal = document.createElement('span');
+  timeVal.id = 'demo-time';
+  timeVal.className = 'demo-time-display';
+  timeVal.textContent = '06:00';
+  panel.appendChild(timeVal);
+
+  const sep2 = document.createElement('div');
+  sep2.className = 'demo-sep';
+  panel.appendChild(sep2);
+
+  const progressTrack = document.createElement('div');
+  progressTrack.className = 'demo-progress-track';
+  const progressFill = document.createElement('div');
+  progressFill.id = 'demo-progress';
+  progressFill.className = 'demo-progress-fill';
+  progressTrack.appendChild(progressFill);
+  panel.appendChild(progressTrack);
+
+  const sep3 = document.createElement('div');
+  sep3.className = 'demo-sep';
+  panel.appendChild(sep3);
+
+  const speedLabel = document.createElement('span');
+  speedLabel.className = 'demo-label';
+  speedLabel.textContent = 'Speed: ';
+  panel.appendChild(speedLabel);
+  const speedVal = document.createElement('span');
+  speedVal.id = 'demo-speed-label';
+  speedVal.className = 'demo-value';
+  speedVal.textContent = '60\u00d7';
+  panel.appendChild(speedVal);
+  const speedSlider = document.createElement('input');
+  speedSlider.type = 'range';
+  speedSlider.className = 'demo-speed-slider';
+  speedSlider.min = '10';
+  speedSlider.max = '200';
+  speedSlider.value = '60';
+  speedSlider.step = '10';
+  speedSlider.addEventListener('input', () => {
+    if (_demoSim) _demoSim.speed = parseInt(speedSlider.value);
+    speedVal.textContent = speedSlider.value + '\u00d7';
+  });
+  panel.appendChild(speedSlider);
+
+  const sep4 = document.createElement('div');
+  sep4.className = 'demo-sep';
+  panel.appendChild(sep4);
+  const countSpan = document.createElement('span');
+  countSpan.id = 'demo-count';
+  countSpan.className = 'demo-created-count';
+  countSpan.textContent = '0 issues';
+  panel.appendChild(countSpan);
+
+  document.body.appendChild(panel);
+
+  const feed = document.createElement('div');
+  feed.id = 'demo-feed';
+  feed.innerHTML = '<div class="demo-feed-item" style="color:rgba(255,255,255,0.4);">Demo simulation ready. Starting shift\u2026</div>';
+  document.body.appendChild(feed);
+
+  setInterval(() => {
+    const el = document.getElementById('demo-count');
+    if (el && _demoSim) el.textContent = _demoSim.createdIssues.length + ' issues';
+  }, 1000);
+}
+
+async function resetDemo() {
+  stopDemoEngine();
+  try {
+    const issuesSnap = await getDocs(collection(db, 'plants', DEMO_PLANT_ID, 'issues'));
+    const issueRefs = issuesSnap.docs.map(d => doc(db, 'plants', DEMO_PLANT_ID, 'issues', d.id));
+    for (const ref of issueRefs) {
+      const eventsSnap = await getDocs(collection(ref, 'events'));
+      const batch = writeBatch(db);
+      eventsSnap.docs.forEach(evt => batch.delete(evt.ref));
+      batch.delete(ref);
+      await batch.commit();
+    }
+  } catch (e) { console.warn('Demo reset cleanup error:', e); }
+  window.location.reload();
+}

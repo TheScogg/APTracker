@@ -991,7 +991,8 @@ async function handleImportSchedule(request, env) {
     for (const section of sections) {
       const rows = scheduleJson[section.key] || [];
       for (const row of rows) {
-        const rowId = row.row_id || row.press || `row-${Math.random().toString(36).slice(2, 8)}`;
+        const baseId = row.row_id || row.press || `row-${Math.random().toString(36).slice(2, 8)}`;
+        const rowId = row.part_number ? `${baseId}_${row.part_number.replace(/[^a-zA-Z0-9]/g, '_')}` : baseId;
         const pslArray = Array.isArray(row.part_storage_location)
           ? row.part_storage_location
           : (row.part_storage_location ? [String(row.part_storage_location)] : []);
