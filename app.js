@@ -5,7 +5,7 @@ import { getStorage, ref as storageRef, uploadString, getDownloadURL, deleteObje
 
 const firebaseConfig = {
   apiKey: "AIzaSyABjasNBbJnsqq4M_UxKruKrN6-O2FXCwc",
-  authDomain: window.location.hostname || "press-tracker-9d9c9.firebaseapp.com",
+  authDomain: "press-tracker-9d9c9.firebaseapp.com",
   projectId: "press-tracker-9d9c9",
   storageBucket: "press-tracker-9d9c9.firebasestorage.app",
   messagingSenderId: "943200266003",
@@ -14742,7 +14742,6 @@ const STATUS_FLOW = {
 // ── Simulation engine ──
 
 const DEMO_SHIFT_SECONDS = 6 * 3600;
-let _demoSim = null;
 
 startDemoEngine = function() {
   if (_demoSim) return;
