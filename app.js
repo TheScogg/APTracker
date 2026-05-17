@@ -14742,7 +14742,6 @@ const STATUS_FLOW = {
 // ── Simulation engine ──
 
 const DEMO_SHIFT_SECONDS = 6 * 3600;
-let _demoSim = null;
 
 startDemoEngine = function() {
   if (_demoSim) return;
