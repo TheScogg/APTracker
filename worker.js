@@ -866,7 +866,7 @@ Rules:
       }
     }
 
-    return new Response(JSON.stringify({ ...parsed, saved, saveError, rawOcrText: rawOcrText.substring(0, 2000) }), {
+    return new Response(JSON.stringify({ ...parsed, saved, saveError, rawOcrText: rawOcrText.substring(0, 8000) }), {
       headers: { 'Content-Type': 'application/json' }
     });
 
