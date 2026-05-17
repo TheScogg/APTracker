@@ -617,7 +617,12 @@ async function handleScheduleScan(request, env) {
       imageBytes = image; // already base64
     } else {
       const arrayBuffer = await request.arrayBuffer();
-      imageBytes = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+      const uint8 = new Uint8Array(arrayBuffer);
+      let binary = '';
+      for (let i = 0; i < uint8.length; i += 65536) {
+        binary += String.fromCharCode(...uint8.subarray(i, i + 65536));
+      }
+      imageBytes = btoa(binary);
     }
 
     // Step 2: Textract OCR
