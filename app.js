@@ -39,6 +39,9 @@ const DEMO_USER = {
   email: '',
   photoURL: ''
 };
+const DEMO_PLANT_ID = 'plant_demo';
+let _demoSim = null;
+let _bootstrapDemoPlant, buildDemoControls, startDemoEngine, stopDemoEngine, resetDemo;
 
 const firestoreIoStats = { reads: 0, writes: 0 };
 const APP_VERSION = window.__APP_VERSION__ || 'dev';
@@ -3418,6 +3421,7 @@ async function bootstrapSignedInSession(user) {
 }
 
 async function bootstrapDemoSession(user) {
+  await Promise.resolve();
   currentUser = user;
   document.getElementById('login-screen').classList.remove('visible');
   document.getElementById('app').classList.add('visible');
@@ -14538,9 +14542,7 @@ setInterval(() => {
 
 // ── DEMO MODE ENGINE ──
 
-const DEMO_PLANT_ID = 'plant_demo';
-
-async function _bootstrapDemoPlant() {
+_bootstrapDemoPlant = async function() {
   const plantRef = doc(db, 'plants', DEMO_PLANT_ID);
   const snap = await getDoc(plantRef);
   if (snap.exists()) return;
@@ -14743,7 +14745,7 @@ const STATUS_FLOW = {
 const DEMO_SHIFT_SECONDS = 6 * 3600;
 let _demoSim = null;
 
-function startDemoEngine() {
+startDemoEngine = function() {
   if (_demoSim) return;
   _demoSim = {
     simTime: 0,
@@ -14758,7 +14760,7 @@ function startDemoEngine() {
   _demoSim.interval = setInterval(_demoTick, 500);
 }
 
-function stopDemoEngine() {
+stopDemoEngine = function() {
   if (!_demoSim) return;
   _demoSim.running = false;
   clearInterval(_demoSim.interval);
@@ -14913,7 +14915,7 @@ function _demoUpdateUI() {
 
 // ── Demo controls UI ──
 
-function buildDemoControls() {
+buildDemoControls = function() {
   const existing = document.getElementById('demo-controls');
   if (existing) existing.remove();
 
@@ -15033,7 +15035,7 @@ function buildDemoControls() {
   }, 1000);
 }
 
-async function resetDemo() {
+resetDemo = async function() {
   stopDemoEngine();
   try {
     const issuesSnap = await getDocs(collection(db, 'plants', DEMO_PLANT_ID, 'issues'));
