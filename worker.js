@@ -920,6 +920,7 @@ function firestoreValue(val) {
     return Number.isInteger(val) ? { integerValue: String(val) } : { doubleValue: val };
   }
   if (typeof val === 'boolean') return { booleanValue: val };
+  if (Array.isArray(val)) return { arrayValue: { values: val.map(v => firestoreValue(v)) } };
   return { stringValue: String(val) };
 }
 
@@ -989,15 +990,15 @@ async function handleImportSchedule(request, env) {
       const rows = scheduleJson[section.key] || [];
       for (const row of rows) {
         const rowId = row.row_id || row.press || `row-${Math.random().toString(36).slice(2, 8)}`;
-        const psl = Array.isArray(row.part_storage_location)
-          ? row.part_storage_location.join(', ')
-          : (row.part_storage_location || '');
+        const pslArray = Array.isArray(row.part_storage_location)
+          ? row.part_storage_location
+          : (row.part_storage_location ? [String(row.part_storage_location)] : []);
 
         const rowFields = {};
         const rPairs = [
           ['rowId', rowId],
           ['press', row.press],
-          ['partStorageLocation', psl],
+          ['partStorageLocation', pslArray],
           ['partNumber', row.part_number],
           ['description', row.description],
           ['cavity', row.cavity],
