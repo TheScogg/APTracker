@@ -15032,14 +15032,11 @@ resetDemo = async function() {
   stopDemoEngine();
   try {
     const issuesSnap = await getDocs(collection(db, 'plants', DEMO_PLANT_ID, 'issues'));
-    const issueRefs = issuesSnap.docs.map(d => doc(db, 'plants', DEMO_PLANT_ID, 'issues', d.id));
-    for (const ref of issueRefs) {
-      const eventsSnap = await getDocs(collection(ref, 'events'));
-      const batch = writeBatch(db);
-      eventsSnap.docs.forEach(evt => batch.delete(evt.ref));
-      batch.delete(ref);
-      await batch.commit();
+    const ids = issuesSnap.docs.map(d => d.id);
+    for (const id of ids) {
+      await deleteDoc(doc(db, 'plants', DEMO_PLANT_ID, 'issues', id));
     }
   } catch (e) { console.warn('Demo reset cleanup error:', e); }
+  await new Promise(r => setTimeout(r, 300));
   window.location.reload();
 }
