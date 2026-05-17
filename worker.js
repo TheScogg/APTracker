@@ -838,7 +838,25 @@ Rules:
       }
     }
 
-    return new Response(JSON.stringify(parsed), {
+    // Step 4: If ?plant= is provided, write to Firestore
+    const scanUrl = new URL(request.url);
+    const plantId = scanUrl.searchParams.get('plant');
+    let saved = false;
+    if (plantId) {
+      try {
+        const importReq = new Request(request.url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(parsed)
+        });
+        const importRes = await handleImportSchedule(importReq, env);
+        saved = importRes.ok;
+      } catch (importErr) {
+        console.error('Firestore import failed:', importErr.message);
+      }
+    }
+
+    return new Response(JSON.stringify({ ...parsed, saved }), {
       headers: { 'Content-Type': 'application/json' }
     });
 
@@ -885,6 +903,137 @@ async function handleDebugImage(request, env) {
   });
 }
 
+// ── Import schedule JSON to Firestore ─────────────────────────────────
+
+async function handleImportSchedule(request, env) {
+  if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405 });
+
+  let plantId;
+  try {
+    const url = new URL(request.url);
+    plantId = url.searchParams.get('plant');
+    if (!plantId) throw new Error('Missing ?plant= parameter');
+  } catch (e) {
+    return new Response(JSON.stringify({ error: e.message }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  try {
+    const scheduleJson = await request.json();
+    if (!scheduleJson || !scheduleJson.schedule_info || !scheduleJson.schedule_info.date) {
+      return new Response(JSON.stringify({ error: 'Invalid schedule JSON — missing schedule_info.date' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    const saJson = env.GOOGLE_SERVICE_ACCOUNT;
+    if (!saJson) throw new Error('GOOGLE_SERVICE_ACCOUNT not configured');
+    const sa = JSON.parse(saJson);
+    const projectId = sa.project_id;
+    const token = await getGoogleOAuthToken(env);
+
+    const scheduleDate = scheduleJson.schedule_info.date;
+    const basePath = `projects/${projectId}/databases/(default)/documents/plants/${plantId}/dailySchedules/${scheduleDate}`;
+    const now = new Date();
+
+    // Build writes array
+    const writes = [];
+
+    // Main doc
+    const mainDoc = {
+      update: {
+        name: basePath,
+        fields: {
+          scheduleDate: { stringValue: scheduleDate },
+          plantId: { stringValue: plantId },
+          shift: { stringValue: scheduleJson.schedule_info.shift || '' },
+          lineSpeed: { stringValue: scheduleJson.schedule_info.line_speed || '' },
+          totalPlannedPcs: { stringValue: scheduleJson.schedule_info.total_planned_pcs || '' },
+          sourceFileName: { stringValue: 'iOS Shortcut' },
+          sourceFileType: { stringValue: 'image/jpeg' },
+          status: { stringValue: 'imported' },
+          notes: { stringValue: scheduleJson.schedule_info.note || '' },
+          page1Count: { integerValue: String((scheduleJson.page_1 || []).length) },
+          page2Count: { integerValue: String((scheduleJson.page_2 || []).length) },
+          northBayChangesCount: { integerValue: String((scheduleJson.north_bay_changes || []).length) },
+          southBayChangesCount: { integerValue: String((scheduleJson.south_bay_changes || []).length) },
+          updatedAt: { timestampValue: now.toISOString() },
+          createdAt: { timestampValue: now.toISOString() }
+        }
+      }
+    };
+    writes.push(mainDoc);
+
+    // Section rows
+    const sections = [
+      { key: 'page_1', name: 'page1' },
+      { key: 'page_2', name: 'page2' },
+      { key: 'north_bay_changes', name: 'northBayChanges' },
+      { key: 'south_bay_changes', name: 'southBayChanges' }
+    ];
+
+    for (const section of sections) {
+      const rows = scheduleJson[section.key] || [];
+      for (const row of rows) {
+        const rowId = row.row_id || row.press || `row-${Math.random().toString(36).slice(2, 8)}`;
+        const psl = Array.isArray(row.part_storage_location)
+          ? row.part_storage_location.join(', ')
+          : (row.part_storage_location || '');
+
+        writes.push({
+          update: {
+            name: `${basePath}/${section.name}/${rowId}`,
+            fields: {
+              rowId: { stringValue: rowId },
+              press: { stringValue: row.press || '' },
+              partStorageLocation: { stringValue: psl },
+              partNumber: { stringValue: row.part_number || '' },
+              description: { stringValue: row.description || '' },
+              cavity: { stringValue: row.cavity || '' },
+              doh: { stringValue: row.doh || '' },
+              labelsPerShift: { stringValue: row.labels_per_shift || '' },
+              mc: { stringValue: row.mc || '' },
+              notes: { stringValue: row.notes || '' },
+              scheduleDate: { stringValue: scheduleDate },
+              plantId: { stringValue: plantId },
+              shift: { stringValue: scheduleJson.schedule_info.shift || '' },
+              updatedAt: { timestampValue: now.toISOString() },
+              createdAt: { timestampValue: now.toISOString() }
+            }
+          }
+        });
+      }
+    }
+
+    // Commit in batches of 500 (Firestore limit)
+    const commitUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents:commit`;
+    const headers = { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' };
+
+    for (let i = 0; i < writes.length; i += 500) {
+      const batch = writes.slice(i, i + 500);
+      const res = await fetch(commitUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ writes: batch })
+      });
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`Firestore commit error (batch ${i / 500}): ${res.status} ${err}`);
+      }
+    }
+
+    return new Response(JSON.stringify({
+      success: true,
+      plantId,
+      date: scheduleDate,
+      totalRows: scheduleJson.page_1.length + scheduleJson.page_2.length + scheduleJson.north_bay_changes.length + scheduleJson.south_bay_changes.length
+    }), { headers: { 'Content-Type': 'application/json' } });
+
+  } catch (e) {
+    return new Response(JSON.stringify({ success: false, error: e.message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -915,6 +1064,9 @@ export default {
     }
     if (url.pathname === '/api/debug-image') {
       return handleDebugImage(request, env);
+    }
+    if (url.pathname === '/api/import-schedule') {
+      return handleImportSchedule(request, env);
     }
     if (url.pathname === '/api/debug') {
       const info = {};
