@@ -331,16 +331,14 @@ async function handleOcrTextract(request, env) {
       const data = await res.json();
       const blocks = data.Blocks || [];
 
-      const lines = [];
       const blockMap = {};
       for (const b of blocks) {
         blockMap[b.Id] = b;
       }
 
+      let pageText = '';
       for (const b of blocks) {
-        if (b.BlockType === 'LINE') {
-          lines.push(b.Text);
-        } else if (b.BlockType === 'TABLE') {
+        if (b.BlockType === 'TABLE') {
           const rows = [];
           for (const rel of (b.Relationships || [])) {
             if (rel.Type === 'CHILD') {
@@ -350,19 +348,32 @@ async function handleOcrTextract(request, env) {
                   const r = (cell.RowIndex || 1) - 1;
                   const c = (cell.ColumnIndex || 1) - 1;
                   if (!rows[r]) rows[r] = [];
-                  rows[r][c] = cell.Text || '';
+                  const text = (cell.Text || '').replace(/\n/g, ' ');
+                  rows[r][c] = text;
                 }
               }
             }
           }
-          const rowTexts = rows.map(row =>
-            (row || []).join(' | ')
-          );
-          lines.push(...rowTexts);
+          if (rows.length) {
+            const maxCols = Math.max(...rows.map(r => (r || []).length));
+            for (let r = 0; r < rows.length; r++) {
+              if (!rows[r]) rows[r] = [];
+              for (let c = 0; c < maxCols; c++) {
+                if (!rows[r][c]) rows[r][c] = '';
+              }
+              pageText += '| ' + rows[r].join(' | ') + ' |\n';
+              if (r === 0) {
+                pageText += '|-' + Array(maxCols).fill('-').join('|-') + '|\n';
+              }
+            }
+            pageText += '\n';
+          }
         }
       }
-
-      const pageText = lines.join('\n');
+      if (!pageText) {
+        const lines = blocks.filter(b => b.BlockType === 'LINE').map(b => b.Text);
+        pageText = lines.join('\n');
+      }
       pageTexts.push(pageText);
     }
 
