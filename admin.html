@@ -326,6 +326,7 @@
                 <option value="azure">Azure Doc AI (Cloud)</option>
                 <option value="google">Google Vision (Cloud)</option>
                 <option value="document-ai">Google Doc AI (Cloud)</option>
+                <option value="textract">Amazon Textract (Cloud)</option>
                 <option value="tesseract">Tesseract (Browser)</option>
               </select>
               <input id="schedule-pdf-file" type="file" accept="application/pdf" style="max-width:250px;padding:6px 8px;" />
@@ -368,6 +369,17 @@
                   <select id="docai-location" style="margin-top:2px;font-size:12px;">
                     <option value="us">us</option>
                     <option value="eu">eu</option>
+                  </select>
+                </label>
+              </div>
+              <div class="divider" style="margin:8px 0;"></div>
+              <div style="font-size:12px;color:var(--text2);margin-bottom:6px;font-weight:700;">Amazon Textract</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <label style="font-size:11px;color:var(--text2);flex:1;min-width:160px;">Region
+                  <select id="textract-region" style="margin-top:2px;font-size:12px;">
+                    <option value="us-east-1">us-east-1</option>
+                    <option value="us-east-2">us-east-2</option>
+                    <option value="us-west-2" selected>us-west-2</option>
                   </select>
                 </label>
               </div>
@@ -2581,7 +2593,7 @@ async function ocrPdfToText() {
   const engine = document.getElementById('ocr-engine-select')?.value || 'azure';
   btn.disabled = true;
   btn.textContent = 'OCR Running…';
-  feedback('ocr-progress', '', engine === 'azure' ? 'Uploading to Azure Document Intelligence…' : engine === 'google' ? 'Rendering pages for Google Vision…' : engine === 'document-ai' ? 'Sending to Google Document AI…' : 'Initializing Tesseract…');
+  feedback('ocr-progress', '', engine === 'azure' ? 'Uploading to Azure Document Intelligence…' : engine === 'google' ? 'Rendering pages for Google Vision…' : engine === 'document-ai' ? 'Sending to Google Document AI…' : engine === 'textract' ? 'Rendering pages for Amazon Textract…' : 'Initializing Tesseract…');
   try {
     let fullText;
     if (engine === 'azure') {
@@ -2640,6 +2652,34 @@ async function ocrPdfToText() {
       if (!res.ok) throw new Error(data.error || 'Document AI failed');
       fullText = data.text.trim();
       feedback('ocr-progress', 'ok', `Document AI complete: ${data.pageCount} page(s).`);
+    } else if (engine === 'textract') {
+      self.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await self.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const images = [];
+      for (let i = 1; i <= pdf.numPages; i++) {
+        feedback('ocr-progress', '', `Rendering page ${i}/${pdf.numPages}…`);
+        const page = await pdf.getPage(i);
+        const viewport = page.getViewport({ scale: 2 });
+        const canvas = document.createElement('canvas');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        images.push(canvas.toDataURL('image/png').split(',')[1]);
+      }
+      feedback('ocr-progress', '', `Sending ${images.length} page(s) to Amazon Textract…`);
+      const res = await fetch('/api/ocr/textract', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ images })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Textract failed');
+      fullText = data.text;
+      feedback('ocr-progress', 'ok', `Textract complete: ${data.pageCount} page(s).`);
     } else {
       self.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
       const lang = document.getElementById('tesseract-language')?.value || 'eng';

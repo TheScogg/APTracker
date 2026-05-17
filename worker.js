@@ -208,6 +208,174 @@ function getDocAiText(doc) {
   return '';
 }
 
+// ── AWS Signature V4 helpers ──────────────────────────────────────────
+
+async function hmac(key, msg) {
+  const enc = new TextEncoder();
+  const cryptoKey = await crypto.subtle.importKey('raw', typeof key === 'string' ? enc.encode(key) : key, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sig = await crypto.subtle.sign('HMAC', cryptoKey, enc.encode(msg));
+  return new Uint8Array(sig);
+}
+
+async function sha256Hex(msg) {
+  const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(msg));
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function byteArrayToHex(arr) {
+  return Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Sign an AWS API request.
+ * Returns the headers that must be included in the fetch call.
+ */
+async function signAwsRequest(region, service, method, host, path, query, body, accessKeyId, secretAccessKey) {
+  const now = new Date();
+  const amzDate = now.toISOString().replace(/[:-]/g, '').replace(/\.\d{3}/, '');
+  const dateStamp = amzDate.slice(0, 8);
+
+  const payloadHash = await sha256Hex(body || '');
+
+  const canonicalHeaders = `content-type:application/x-amz-json-1.1\nhost:${host}\nx-amz-date:${amzDate}\nx-amz-target:Textract.AnalyzeDocument\n`;
+  const signedHeaders = 'content-type;host;x-amz-date;x-amz-target';
+
+  const canonicalRequest = [
+    method,
+    path || '/',
+    query || '',
+    canonicalHeaders,
+    signedHeaders,
+    payloadHash
+  ].join('\n');
+
+  const algorithm = 'AWS4-HMAC-SHA256';
+  const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`;
+  const stringToSign = [
+    algorithm,
+    amzDate,
+    credentialScope,
+    await sha256Hex(canonicalRequest)
+  ].join('\n');
+
+  const kDate = await hmac('AWS4' + secretAccessKey, dateStamp);
+  const kRegion = await hmac(kDate, region);
+  const kService = await hmac(kRegion, service);
+  const kSigning = await hmac(kService, 'aws4_request');
+  const signature = byteArrayToHex(await hmac(kSigning, stringToSign));
+
+  const authorization = `${algorithm} Credential=${accessKeyId}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+  return {
+    'Content-Type': 'application/x-amz-json-1.1',
+    'Host': host,
+    'X-Amz-Date': amzDate,
+    'X-Amz-Target': 'Textract.AnalyzeDocument',
+    'Authorization': authorization
+  };
+}
+
+// ── Amazon Textract handler ───────────────────────────────────────────
+
+async function handleOcrTextract(request, env) {
+  if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405 });
+
+  const accessKeyId = env.AWS_ACCESS_KEY_ID;
+  const secretAccessKey = env.AWS_SECRET_ACCESS_KEY;
+  const region = env.AWS_REGION || 'us-west-2';
+
+  if (!accessKeyId || !secretAccessKey) {
+    return new Response(JSON.stringify({ error: 'AWS credentials not configured in secrets' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
+  try {
+    const { images } = await request.json();
+    if (!images || !images.length) {
+      return new Response(JSON.stringify({ error: 'No images provided' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    const service = 'textract';
+    const host = `textract.${region}.amazonaws.com`;
+    const url = `https://${host}/`;
+
+    const pageTexts = [];
+
+    for (let i = 0; i < images.length; i++) {
+      const base64Image = images[i];
+      const body = JSON.stringify({
+        Document: { Bytes: base64Image },
+        FeatureTypes: ['TABLES']
+      });
+
+      const headers = await signAwsRequest(
+        region, service, 'POST', host, '/', '', body,
+        accessKeyId, secretAccessKey
+      );
+
+      const res = await fetch(url, { method: 'POST', headers, body });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Textract API error on page ${i + 1}: ${res.status} ${errText}`);
+      }
+
+      const data = await res.json();
+      const blocks = data.Blocks || [];
+
+      const lines = [];
+      const blockMap = {};
+      for (const b of blocks) {
+        blockMap[b.Id] = b;
+      }
+
+      for (const b of blocks) {
+        if (b.BlockType === 'LINE') {
+          lines.push(b.Text);
+        } else if (b.BlockType === 'TABLE') {
+          const rows = [];
+          for (const rel of (b.Relationships || [])) {
+            if (rel.Type === 'CHILD') {
+              for (const cid of rel.Ids) {
+                const cell = blockMap[cid];
+                if (cell && cell.BlockType === 'CELL') {
+                  const r = (cell.RowIndex || 1) - 1;
+                  const c = (cell.ColumnIndex || 1) - 1;
+                  if (!rows[r]) rows[r] = [];
+                  rows[r][c] = cell.Text || '';
+                }
+              }
+            }
+          }
+          const rowTexts = rows.map(row =>
+            (row || []).join(' | ')
+          );
+          lines.push(...rowTexts);
+        }
+      }
+
+      const pageText = lines.join('\n');
+      pageTexts.push(pageText);
+    }
+
+    const fullText = pageTexts.join('\n\n');
+    return new Response(JSON.stringify({ text: fullText, pageCount: images.length }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+  } catch (e) {
+    return new Response(JSON.stringify({ error: e.message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+}
+
 async function handleOcrDocumentAi(request, env) {
   if (request.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'POST required' }), { status: 405, headers: { 'Content-Type': 'application/json' } });
@@ -412,6 +580,9 @@ export default {
     }
     if (url.pathname === '/api/ocr/document-ai') {
       return handleOcrDocumentAi(request, env);
+    }
+    if (url.pathname === '/api/ocr/textract') {
+      return handleOcrTextract(request, env);
     }
     if (url.pathname === '/api/ai/convert') {
       return handleAiConvert(request, env);
