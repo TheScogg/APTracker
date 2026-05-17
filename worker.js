@@ -758,8 +758,7 @@ async function handleScheduleScan(request, env) {
   },
   "page_1": [
     {
-      "row_id": "5.01",
-      "press": "",
+      "press": "5.01",
       "part_storage_location": [],
       "part_number": "",
       "description": "",
@@ -782,6 +781,7 @@ Rules:
 - doh is numeric.
 - labels_per_shift is numeric.
 - mc is mold code string.
+- press is the press number from the schedule grid (e.g. "5.01").
 - page_1 and page_2 contain the main press rows.
 - north_bay_changes and south_bay_changes are for change-over rows.
 - If text is unclear or a field is missing, use empty string or empty array. Do NOT make up data.
