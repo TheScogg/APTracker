@@ -348,8 +348,22 @@ async function handleOcrTextract(request, env) {
                   const r = (cell.RowIndex || 1) - 1;
                   const c = (cell.ColumnIndex || 1) - 1;
                   if (!rows[r]) rows[r] = [];
-                  const text = (cell.Text || '').replace(/\n/g, ' ');
-                  rows[r][c] = text;
+                  let text = cell.Text || '';
+                  if (!text && cell.Relationships) {
+                    const words = [];
+                    for (const cr of cell.Relationships) {
+                      if (cr.Type === 'CHILD') {
+                        for (const wid of cr.Ids) {
+                          const word = blockMap[wid];
+                          if (word && word.BlockType === 'WORD') {
+                            words.push(word.Text || '');
+                          }
+                        }
+                      }
+                    }
+                    text = words.join(' ');
+                  }
+                  rows[r][c] = text.replace(/\n/g, ' ');
                 }
               }
             }
