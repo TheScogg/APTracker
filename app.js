@@ -3409,27 +3409,33 @@ async function bootstrapSignedInSession(user) {
   await loadUserPlants();
   // Recovery: if the user's plantIds was corrupted to only "plant_demo" by a
   // prior demo mode session, find the user's real plants via member docs.
-  if (!DEMO_MODE && userPlants.length === 1 && userPlants[0].id === DEMO_PLANT_ID) {
+  const hasOnlyDemo = userPlants.length === 1 && userPlants[0]?.id === DEMO_PLANT_ID;
+  if (!DEMO_MODE && (hasOnlyDemo || userPlants.some(p => p.id === DEMO_PLANT_ID))) {
     try {
       const allPlants = await getDocs(collection(db, 'plants'));
+      console.log('Plant recovery: found', allPlants.size, 'plants, hasOnlyDemo:', hasOnlyDemo);
       const realPlantIds = [];
       await Promise.all(allPlants.docs.map(async p => {
         if (p.id === DEMO_PLANT_ID) return;
         const memberSnap = await getDoc(doc(db, 'plants', p.id, 'members', currentUser.uid));
         if (memberSnap.exists()) realPlantIds.push(p.id);
       }));
+      console.log('Plant recovery: real plants found:', realPlantIds);
+      if (!hasOnlyDemo) realPlantIds.push(DEMO_PLANT_ID);
       if (realPlantIds.length) {
-        await rawSetDoc(doc(db, 'users', currentUser.uid), { plantIds: realPlantIds, lastPlant: realPlantIds[0] }, { merge: true });
-        userPlants = realPlantIds.map(id => {
-          const p = allPlants.docs.find(d => d.id === id);
-          return p ? { id: p.id, name: p.data().name || p.id, location: p.data().location || '' } : null;
-        }).filter(Boolean);
-        currentPlantId = realPlantIds[0];
-        currentPlantName = userPlants[0]?.name || realPlantIds[0];
+        const seen = new Set();
+        const deduped = realPlantIds.filter(id => { const k = seen.has(id); seen.add(id); return !k; });
+        await rawSetDoc(doc(db, 'users', currentUser.uid), { plantIds: deduped, lastPlant: deduped.filter(id => id !== DEMO_PLANT_ID)[0] || deduped[0] }, { merge: true });
+        const plantDocs = await Promise.all(deduped.map(id => getDoc(doc(db, 'plants', id))));
+        userPlants = plantDocs.filter(s => s.exists()).map(s => ({ id: s.id, name: s.data().name || s.id, location: s.data().location || '' }));
+        currentPlantId = deduped.filter(id => id !== DEMO_PLANT_ID)[0] || deduped[0];
+        currentPlantName = userPlants.find(p => p.id === currentPlantId)?.name || currentPlantId;
         document.getElementById('plant-name-display').textContent = currentPlantName;
         buildPlantDropdown();
       }
-    } catch (_) {}
+    } catch (e) {
+      console.error('Plant recovery error:', e);
+    }
   }
   await hydrateCurrentPlantView();
   gameConfig = null;
