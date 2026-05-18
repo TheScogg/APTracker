@@ -8111,11 +8111,11 @@ function toggleUserDropdown() {
 const _pillWrap = document.getElementById('user-pill-wrap');
 if (_pillWrap) {
   _pillWrap.addEventListener('pointerdown', function(e) {
-    if (e.target.closest('#user-pill')) toggleUserDropdown();
-    e.stopPropagation();
+    if (e.target.closest('#user-pill')) {
+      toggleUserDropdown();
+      e.stopPropagation();
+    }
   });
-  _pillWrap.addEventListener('click', function(e) { e.stopPropagation(); });
-  _pillWrap.addEventListener('auxclick', function(e) { e.stopPropagation(); });
 }
 
 function toggleHeaderQuickMenu() {
