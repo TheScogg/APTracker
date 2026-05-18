@@ -3407,31 +3407,41 @@ async function bootstrapSignedInSession(user) {
   // then hydrate with plant-specific config and rebuild.
   buildFloorMap();
   await loadUserPlants();
-  // Recovery: if the user's plantIds was corrupted to only "plant_demo" by a
-  // prior demo mode session, find the user's real plants via member docs.
-  const hasOnlyDemo = userPlants.length === 1 && userPlants[0]?.id === DEMO_PLANT_ID;
-  if (!DEMO_MODE && (hasOnlyDemo || userPlants.some(p => p.id === DEMO_PLANT_ID))) {
+  // Recovery: find real plants from alternative sources
+  if (!DEMO_MODE && userPlants.some(p => p.id === DEMO_PLANT_ID)) {
     try {
-      const allPlants = await getDocs(collection(db, 'plants'));
-      console.log('Plant recovery: found', allPlants.size, 'plants, hasOnlyDemo:', hasOnlyDemo);
-      const realPlantIds = [];
-      await Promise.all(allPlants.docs.map(async p => {
-        if (p.id === DEMO_PLANT_ID) return;
-        const memberSnap = await getDoc(doc(db, 'plants', p.id, 'members', currentUser.uid));
-        if (memberSnap.exists()) realPlantIds.push(p.id);
-      }));
-      console.log('Plant recovery: real plants found:', realPlantIds);
-      if (!hasOnlyDemo) realPlantIds.push(DEMO_PLANT_ID);
+      // Try user's own doc which we already have
+      const userSnap2 = await rawGetDoc(doc(db, 'users', currentUser.uid));
+      const userData2 = userSnap2.exists() ? userSnap2.data() : {};
+      let realPlantIds = [];
+      // Check old "plants" field (may contain real plants)
+      if (Array.isArray(userData2.plants)) {
+        realPlantIds = userData2.plants
+          .map(p => typeof p === 'string' ? p : (p.id || ''))
+          .filter(Boolean)
+          .filter(id => id !== DEMO_PLANT_ID);
+      }
+      // Search member docs wherever Firebase cached them
+      if (!realPlantIds.length) {
+        const q = query(collectionGroup(db, 'members'), where('userId', '==', currentUser.uid));
+        const memberSnap = await getDocs(q);
+        memberSnap.forEach(d => {
+          const plantId = d.ref.parent.parent?.id;
+          if (plantId && plantId !== DEMO_PLANT_ID) realPlantIds.push(plantId);
+        });
+      }
       if (realPlantIds.length) {
         const seen = new Set();
         const deduped = realPlantIds.filter(id => { const k = seen.has(id); seen.add(id); return !k; });
-        await rawSetDoc(doc(db, 'users', currentUser.uid), { plantIds: deduped, lastPlant: deduped.filter(id => id !== DEMO_PLANT_ID)[0] || deduped[0] }, { merge: true });
-        const plantDocs = await Promise.all(deduped.map(id => getDoc(doc(db, 'plants', id))));
+        await rawSetDoc(doc(db, 'users', currentUser.uid), { plantIds: deduped, lastPlant: deduped[0] }, { merge: true });
+        const plantDocs = await Promise.all(deduped.map(id => rawGetDoc(doc(db, 'plants', id))));
         userPlants = plantDocs.filter(s => s.exists()).map(s => ({ id: s.id, name: s.data().name || s.id, location: s.data().location || '' }));
-        currentPlantId = deduped.filter(id => id !== DEMO_PLANT_ID)[0] || deduped[0];
-        currentPlantName = userPlants.find(p => p.id === currentPlantId)?.name || currentPlantId;
+        currentPlantId = deduped[0];
+        currentPlantName = userPlants[0]?.name || deduped[0];
         document.getElementById('plant-name-display').textContent = currentPlantName;
         buildPlantDropdown();
+      } else {
+        console.warn('Recovery: no real plants found via old plants field or member docs');
       }
     } catch (e) {
       console.error('Plant recovery error:', e);
