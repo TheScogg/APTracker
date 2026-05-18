@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, collection, updateDoc as rawUpdateDoc, deleteDoc as rawDeleteDoc, doc, getDoc as rawGetDoc, getDocs as rawGetDocs, setDoc as rawSetDoc, addDoc as rawAddDoc, onSnapshot as rawOnSnapshot, serverTimestamp, query, orderBy, where, writeBatch as rawWriteBatch, arrayUnion, arrayRemove, increment, limit, runTransaction as rawRunTransaction, startAfter } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, collection, collectionGroup, updateDoc as rawUpdateDoc, deleteDoc as rawDeleteDoc, doc, getDoc as rawGetDoc, getDocs as rawGetDocs, setDoc as rawSetDoc, addDoc as rawAddDoc, onSnapshot as rawOnSnapshot, serverTimestamp, query, orderBy, where, writeBatch as rawWriteBatch, arrayUnion, arrayRemove, increment, limit, runTransaction as rawRunTransaction, startAfter } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getAuth, setPersistence, browserLocalPersistence, GoogleAuthProvider, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut as fbSignOut, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getStorage, ref as storageRef, uploadString, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
@@ -3407,6 +3407,30 @@ async function bootstrapSignedInSession(user) {
   // then hydrate with plant-specific config and rebuild.
   buildFloorMap();
   await loadUserPlants();
+  // Recovery: if the user's plantIds was corrupted to only "plant_demo" by a
+  // prior demo mode session, find the user's real plants via member docs.
+  if (!DEMO_MODE && userPlants.length === 1 && userPlants[0].id === DEMO_PLANT_ID) {
+    try {
+      const allPlants = await getDocs(collection(db, 'plants'));
+      const realPlantIds = [];
+      await Promise.all(allPlants.docs.map(async p => {
+        if (p.id === DEMO_PLANT_ID) return;
+        const memberSnap = await getDoc(doc(db, 'plants', p.id, 'members', currentUser.uid));
+        if (memberSnap.exists()) realPlantIds.push(p.id);
+      }));
+      if (realPlantIds.length) {
+        await rawSetDoc(doc(db, 'users', currentUser.uid), { plantIds: realPlantIds, lastPlant: realPlantIds[0] }, { merge: true });
+        userPlants = realPlantIds.map(id => {
+          const p = allPlants.docs.find(d => d.id === id);
+          return p ? { id: p.id, name: p.data().name || p.id, location: p.data().location || '' } : null;
+        }).filter(Boolean);
+        currentPlantId = realPlantIds[0];
+        currentPlantName = userPlants[0]?.name || realPlantIds[0];
+        document.getElementById('plant-name-display').textContent = currentPlantName;
+        buildPlantDropdown();
+      }
+    } catch (_) {}
+  }
   await hydrateCurrentPlantView();
   gameConfig = null;
   await ensureGamificationConfig();
