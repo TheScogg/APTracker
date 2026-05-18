@@ -782,7 +782,7 @@ Rules:
 - labels_per_shift is numeric.
 - mc is mold code string.
 - press is the press number from the schedule grid (e.g. "5.01").
-- When a press row shows TWO part numbers or TWO descriptions (space or pipe separated), create TWO rows in the JSON with the same press number but different part_number, description, cavity, etc.
+- CRITICAL: Some press rows have TWO part numbers (e.g. "23904132P001 23904132P002" or "26503975P004 26503976P004" with a space between them) or TWO part storage location sets. When this happens, you MUST create TWO separate rows in the JSON with the SAME press number. Split the part_number, part_storage_location, cavity, and description values between the two rows. Do NOT put both part numbers in one row's part_number field.
 - page_1 and page_2 contain the main press rows.
 - north_bay_changes and south_bay_changes are for change-over rows.
 - If text is unclear or a field is missing, use empty string or empty array. Do NOT make up data.
@@ -838,6 +838,8 @@ Rules:
       }
     }
 
+    const rawOcrText = allOcrTexts.join('\n\n--- Page ---\n\n');
+
     // Step 4: If ?plant= is provided, write to Firestore
     const scanUrl = new URL(request.url);
     const plantId = scanUrl.searchParams.get('plant');
@@ -864,7 +866,7 @@ Rules:
       }
     }
 
-    return new Response(JSON.stringify({ ...parsed, saved, saveError }), {
+    return new Response(JSON.stringify({ ...parsed, saved, saveError, rawOcrText: rawOcrText.substring(0, 8000) }), {
       headers: { 'Content-Type': 'application/json' }
     });
 
@@ -989,7 +991,8 @@ async function handleImportSchedule(request, env) {
     for (const section of sections) {
       const rows = scheduleJson[section.key] || [];
       for (const row of rows) {
-        const rowId = row.row_id || row.press || `row-${Math.random().toString(36).slice(2, 8)}`;
+        const baseId = row.row_id || row.press || `row-${Math.random().toString(36).slice(2, 8)}`;
+        const rowId = row.part_number ? `${baseId}_${row.part_number.replace(/[^a-zA-Z0-9]/g, '_')}` : baseId;
         const pslArray = Array.isArray(row.part_storage_location)
           ? row.part_storage_location
           : (row.part_storage_location ? [String(row.part_storage_location)] : []);
