@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, collection, collectionGroup, updateDoc as rawUpdateDoc, deleteDoc as rawDeleteDoc, doc, getDoc as rawGetDoc, getDocs as rawGetDocs, setDoc as rawSetDoc, addDoc as rawAddDoc, onSnapshot as rawOnSnapshot, serverTimestamp, query, orderBy, where, writeBatch as rawWriteBatch, arrayUnion, arrayRemove, increment, limit, runTransaction as rawRunTransaction, startAfter } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { getAuth, setPersistence, browserLocalPersistence, GoogleAuthProvider, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut as fbSignOut, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getAuth, setPersistence, browserLocalPersistence, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut as fbSignOut, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getStorage, ref as storageRef, uploadString, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
 const firebaseConfig = {
@@ -3269,7 +3269,6 @@ const issueLogMasonicState = {
 
 const MAX_DIM = 1200;
 const JPEG_QUALITY = 0.82;
-let redirectResultPromise = null;
 
 // ── AUTH ──
 function resetGoogleSignInButton() {
@@ -3280,33 +3279,13 @@ function resetGoogleSignInButton() {
   btn.innerHTML = googleBtnHTML;
 }
 
-async function finalizeRedirectSignIn() {
-  if (NO_AUTH_MODE || DEMO_MODE) return;
-  if (redirectResultPromise) return redirectResultPromise;
-  const hadPendingRedirect = sessionStorage.getItem('ap:auth:redirectPending') === '1';
-  if (!hadPendingRedirect) return;
-  redirectResultPromise = (async () => {
-    try {
-      await getRedirectResult(auth);
-    } catch (e) {
-      console.error('Redirect sign in error:', e.code, e.message);
-      resetGoogleSignInButton();
-    } finally {
-      sessionStorage.removeItem('ap:auth:redirectPending');
-      redirectResultPromise = null;
-    }
-  })();
-  return redirectResultPromise;
-}
-
 async function signInWithGoogle() {
   if (NO_AUTH_MODE || DEMO_MODE) return;
   const btn = document.getElementById('google-signin-btn');
   if (!btn) return;
   btn.disabled = true; btn.textContent = 'Signing in…';
   try { 
-    sessionStorage.setItem('ap:auth:redirectPending', '1');
-    await signInWithRedirect(auth, provider);
+    await signInWithPopup(auth, provider);
   }
   catch(e) {
     console.error('Sign in error:', e.code, e.message);
@@ -3320,7 +3299,7 @@ if (googleSignInBtn) {
   googleSignInBtn.addEventListener('click', signInWithGoogle);
 }
 
-redirectResultPromise = finalizeRedirectSignIn();
+
 
 async function doSignOut() {
   if (DEMO_MODE) { window.location.reload(); return; }
@@ -3516,10 +3495,6 @@ onAuthStateChanged(auth, async user => {
     return;
   }
   let resolvedUser = user;
-  if (!resolvedUser && sessionStorage.getItem('ap:auth:redirectPending') === '1') {
-    await (redirectResultPromise || finalizeRedirectSignIn());
-    resolvedUser = auth.currentUser;
-  }
   if (resolvedUser) {
     try {
       await bootstrapSignedInSession(resolvedUser);
@@ -8133,7 +8108,15 @@ function toggleUserDropdown() {
     document.getElementById('theme-select-toggle')?.setAttribute('aria-expanded', 'false');
   }
 }
-document.getElementById('user-pill').addEventListener('click', toggleUserDropdown);
+const _pillWrap = document.getElementById('user-pill-wrap');
+if (_pillWrap) {
+  _pillWrap.addEventListener('pointerdown', function(e) {
+    if (e.target.closest('#user-pill')) toggleUserDropdown();
+    e.stopPropagation();
+  });
+  _pillWrap.addEventListener('click', function(e) { e.stopPropagation(); });
+  _pillWrap.addEventListener('auxclick', function(e) { e.stopPropagation(); });
+}
 
 function toggleHeaderQuickMenu() {
   const btn = document.getElementById('header-quick-menu-btn');
