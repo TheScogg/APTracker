@@ -3165,6 +3165,7 @@ let pendingPhotos = [];   // for add modal
 let logCatKey = null;
 let logCatSub = null;
 let isSearchMode = false;
+let searchActiveSub = '';
 let editPhotos = [];      // for edit modal (existing + new)
 let editTargetId = null;
 let currentMachine = null;
