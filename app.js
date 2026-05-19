@@ -44,12 +44,20 @@ let _demoSim = null;
 let buildDemoControls, startDemoEngine, stopDemoEngine, resetDemo;
 
 const firestoreIoStats = { reads: 0, writes: 0 };
-const APP_VERSION = window.__APP_VERSION__ || 'dev';
+const APP_BUILD_INFO = window.__APP_BUILD_INFO__ || {};
+const APP_VERSION = APP_BUILD_INFO.shortCommit || APP_BUILD_INFO.version || window.__APP_VERSION__ || 'dev';
 function refreshAppVersionIndicator() {
   const el = document.getElementById('app-version-indicator');
   if (!el) return;
-  el.textContent = `rev: ${APP_VERSION}`;
-  el.title = `Current commit version: ${APP_VERSION}`;
+  const dirtySuffix = APP_BUILD_INFO.dirty ? ' (dirty build)' : '';
+  el.textContent = `rev: ${APP_VERSION}${APP_BUILD_INFO.dirty ? '*' : ''}`;
+  const titleParts = [
+    `Current commit: ${APP_BUILD_INFO.commit || APP_VERSION}`,
+    APP_BUILD_INFO.branch ? `Branch: ${APP_BUILD_INFO.branch}` : '',
+    APP_BUILD_INFO.commitDate ? `Commit date: ${APP_BUILD_INFO.commitDate}` : '',
+    APP_BUILD_INFO.builtAt ? `Built: ${APP_BUILD_INFO.builtAt}` : ''
+  ].filter(Boolean);
+  el.title = `${titleParts.join('\n')}${dirtySuffix}`;
 }
 function refreshFirestoreIoIndicator() {
   const el = document.getElementById('firestore-io-indicator');
