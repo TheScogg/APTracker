@@ -1946,6 +1946,10 @@
     0%, 100% { box-shadow: 0 0 8px currentColor; }
     50%       { box-shadow: 0 0 18px currentColor, 0 0 32px color-mix(in srgb, currentColor 40%, transparent); }
   }
+  @keyframes searchCatPulse {
+    0%, 100% { box-shadow: 0 0 6px currentColor; }
+    50%       { box-shadow: 0 0 16px currentColor, 0 0 28px color-mix(in srgb, currentColor 35%, transparent); }
+  }
   .swipe-category-inner.has-selection .swipe-status-tile.current:not(.selected) {
     background: var(--bg3);
     border-color: transparent;
@@ -3598,6 +3602,8 @@
   .log-cat-btn { width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 9px 4px; border-radius: 12px; border: 2px solid transparent; cursor: pointer; transition: all 0.15s; background: var(--bg3); font-family: 'Nunito', sans-serif; }
   .log-cat-btn:active { transform: scale(0.95); }
   .log-cat-btn.selected { border-color: currentColor; }
+  .log-cat-btn.search-match { animation: searchCatPulse 1.4s ease-in-out infinite; border-color: currentColor; }
+  .swipe-status-tile.search-match { animation: searchCatPulse 1.4s ease-in-out infinite; border-color: currentColor; box-shadow: 0 0 8px currentColor; }
   .log-cat-icon { font-size: 18px; line-height: 1; }
   .log-cat-label { font-size: 9px; font-weight: 800; letter-spacing: 0.2px; white-space: nowrap; }
   .log-cat-selected { display: none; align-items: center; gap: 8px; margin-bottom: 8px; }

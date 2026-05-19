@@ -4807,6 +4807,7 @@ function renderLogCatButtons() {
       if (searchActiveSub && getSubCats(searchActiveSub).includes(key)) {
         btn.style.opacity = '1';
         btn.style.pointerEvents = 'auto';
+        btn.classList.add('search-match');
       } else {
         btn.style.opacity = '0.5';
         btn.style.pointerEvents = 'none';
@@ -7365,7 +7366,7 @@ function renderIssues() {
       sp.classList.remove('visible');
       cp.querySelector('.swipe-category-inner')?.classList.remove('has-selection');
       cp.querySelectorAll('.swipe-status-tile').forEach(t => {
-        t.classList.remove('selected');
+        t.classList.remove('selected', 'search-match');
         t.style.opacity = '';
         t.style.pointerEvents = '';
       });
@@ -7382,10 +7383,11 @@ function renderIssues() {
 
     const dimSwipeTiles = () => {
       catInner.querySelectorAll('.swipe-status-tile').forEach(t => {
-        t.classList.remove('selected', 'current');
+        t.classList.remove('selected', 'current', 'search-match');
         if (t === searchTile) { t.style.opacity = ''; t.style.pointerEvents = ''; return; }
         if (swipeSearchActiveSub && getSubCats(swipeSearchActiveSub).includes(t.dataset.status)) {
           t.style.opacity = '1'; t.style.pointerEvents = 'auto';
+          t.classList.add('search-match');
         } else {
           t.style.opacity = '0.5'; t.style.pointerEvents = 'none';
         }
