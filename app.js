@@ -7457,6 +7457,8 @@ function renderIssues() {
     };
 
     const handleSwipeSearchTileClick = (e) => {
+      if (e && e.__aptrackerHandledSwipeClick) return;
+      if (e) e.__aptrackerHandledSwipeClick = true;
       if (swipeSearchMode) { resetSwipeSearchMode(); return; }
 
       const subInner = subPanel.querySelector('.swipe-sub-inner');
@@ -7494,6 +7496,8 @@ function renderIssues() {
 
     catInner.querySelectorAll('.swipe-status-tile').forEach(tile => {
       const handleTileClick = (e) => {
+        if (e && e.__aptrackerHandledSwipeClick) return;
+        if (e) e.__aptrackerHandledSwipeClick = true;
         const statusKey = tile.dataset.status;
         if (statusKey === '__search__') { handleSwipeSearchTileClick(e); return; }
         if (swipeSearchActiveSub) {
