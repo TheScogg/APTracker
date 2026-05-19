@@ -920,22 +920,24 @@ window.addEventListener('scroll', () => {
 .ic-card.finished-checkered {
   position: relative;
   overflow: hidden;
+  opacity: 1;
   border-color: rgba(34,197,94,.38);
-  box-shadow: 0 4px 22px rgba(34,197,94,.14);
+  box-shadow: 0 8px 28px rgba(0,0,0,.28), 0 0 0 1px rgba(255,255,255,.03);
   background:
-    linear-gradient(180deg, rgba(11, 26, 15, .97), rgba(9, 18, 12, .98)),
-    linear-gradient(45deg, rgba(34,197,94,.24) 25%, transparent 25% 50%, rgba(34,197,94,.16) 50% 75%, transparent 75% 100%),
-    linear-gradient(-45deg, rgba(168,85,247,.20) 25%, transparent 25% 50%, rgba(168,85,247,.12) 50% 75%, transparent 75% 100%);
-  background-size: auto, 26px 26px, 26px 26px;
-  background-position: 0 0, 0 0, 13px 13px;
+    linear-gradient(180deg, rgba(20, 20, 20, .94), rgba(6, 6, 6, .98)),
+    repeating-conic-gradient(from 45deg,
+      rgba(255,255,255,.82) 0 25%,
+      rgba(0,0,0,.92) 0 50%);
+  background-size: auto, 18px 18px;
+  background-position: 0 0, 0 0;
 }
 .ic-card.finished-checkered::before {
   content: '';
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(circle at top right, rgba(34,197,94,.18), transparent 44%),
-    radial-gradient(circle at bottom left, rgba(168,85,247,.14), transparent 40%);
+    radial-gradient(circle at top right, rgba(255,255,255,.2), transparent 38%),
+    linear-gradient(135deg, rgba(255,255,255,.18), transparent 28%, transparent 72%, rgba(255,255,255,.12));
   pointer-events: none;
 }
 .ic-card.finished-checkered > * {
@@ -944,19 +946,22 @@ window.addEventListener('scroll', () => {
 }
 .ic-card.finished-checkered .ic-head { border-bottom-color: rgba(255,255,255,.06); }
 .ic-card.finished-checkered .ic-foot { border-top-color: rgba(255,255,255,.06); }
-.ic-card.finished-checkered .ic-note { color: rgba(235,255,240,.94); }
+.ic-card.finished-checkered .ic-note { color: rgba(255,255,255,.96); }
 .ic-card.finished-checkered .ic-row-label,
 .ic-card.finished-checkered .ic-ts,
-.ic-card.finished-checkered .ic-swipe-hint { color: rgba(208,224,212,.74); }
+.ic-card.finished-checkered .ic-swipe-hint { color: rgba(245,245,245,.92); }
+.ic-card.finished-checkered .ic-row-label,
+.ic-card.finished-checkered .ic-ts { color: rgba(230,230,230,.78); }
+.ic-card.finished-checkered .ic-entry-meta { color: rgba(235,235,235,.78); }
 .ic-card.finished-checkered .wf-pill.wf-finished {
-  background: rgba(34,197,94,.14);
-  color: #7ee787;
-  border-color: rgba(34,197,94,.4);
+  background: rgba(255,255,255,.18);
+  color: #fff;
+  border-color: rgba(255,255,255,.55);
 }
 .ic-card.finished-checkered .ic-status-pill {
-  background: rgba(34,197,94,.14) !important;
-  color: #7ee787 !important;
-  border-color: rgba(34,197,94,.38) !important;
+  background: rgba(255,255,255,.18) !important;
+  color: #fff !important;
+  border-color: rgba(255,255,255,.55) !important;
 }
 
 /* Card header */

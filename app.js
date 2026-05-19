@@ -7081,7 +7081,7 @@ function renderIssues() {
         ? ` <span class="issue-serial-tag" title="Serial Number: ${esc(entrySerialNumber)}">🏷️ ${esc(entrySerialNumber)}</span>`
         : '';
 
-      return `<div class="tl-entry" style="border-left-color:${barColor};${entryBg}">
+      return `<div class="tl-entry${entryWorkflowState === 'finished' ? ' finished-checkered' : ''}" style="border-left-color:${barColor};${entryBg}">
         ${wfBadge}
         <div>
           <div class="tl-header">
@@ -7184,7 +7184,7 @@ function renderIssues() {
           }).join('');
           const sStateLabel = sState ? workflowConfig[sState].label : 'Not Started';
           const sStateClass = sState ? workflowConfig[sState].cssState : '';
-          return `<div class="wf-status-row">
+          return `<div class="wf-status-row${sState === 'finished' ? ' finished-checkered' : ''}">
             <div class="wf-status-row-info">
               <div class="issue-status" style="color:${sColor};border-color:${sColor};background:${alphaColor(sColor,0.12)}">
                 <span class="issue-status-main">${sCfg.icon} ${esc(sCfg.label)}</span>
@@ -7232,7 +7232,7 @@ function renderIssues() {
       return `${subLabel} ${foundSerialNumber}`;
     })();
 
-    const currentWfRowHtml = `<div class="wf-status-row">
+    const currentWfRowHtml = `<div class="wf-status-row${workflowState === 'finished' ? ' finished-checkered' : ''}">
       <div class="wf-status-row-info">
         <div class="issue-status" style="color:${sc.color};border-color:${sc.color};background:${alphaColor(sc.color,0.12)}">
           <span class="issue-status-main">${sc.icon} ${baseLabel}</span>

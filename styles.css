@@ -2135,6 +2135,61 @@
   .wf-status-row { display: flex; align-items: flex-start; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--border); }
   .wf-status-row:last-child { border-bottom: none; }
   .wf-status-row-info { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+  .wf-status-row.finished-checkered,
+  .tl-entry.finished-checkered {
+    position: relative;
+    overflow: hidden;
+    opacity: 1;
+    border-color: rgba(255,255,255,.18);
+    border-left-color: rgba(255,255,255,.88) !important;
+    box-shadow: 0 8px 28px rgba(0,0,0,.26), inset 0 0 0 1px rgba(255,255,255,.03);
+    background:
+      linear-gradient(180deg, rgba(22,22,22,.95), rgba(8,8,8,.98)),
+      repeating-conic-gradient(from 45deg,
+        rgba(255,255,255,.84) 0 25%,
+        rgba(0,0,0,.92) 0 50%);
+    background-size: auto, 18px 18px;
+    background-position: 0 0, 0 0;
+  }
+  .wf-status-row.finished-checkered::before,
+  .tl-entry.finished-checkered::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(circle at top right, rgba(255,255,255,.18), transparent 38%),
+      linear-gradient(135deg, rgba(255,255,255,.14), transparent 30%, transparent 72%, rgba(255,255,255,.1));
+    pointer-events: none;
+  }
+  .wf-status-row.finished-checkered > *,
+  .tl-entry.finished-checkered > * {
+    position: relative;
+    z-index: 1;
+  }
+  .wf-status-row.finished-checkered .issue-status {
+    background: rgba(255,255,255,.16) !important;
+    border-color: rgba(255,255,255,.52) !important;
+    color: #fff !important;
+  }
+  .wf-status-row.finished-checkered .issue-status-main,
+  .wf-status-row.finished-checkered .issue-status-sub,
+  .wf-status-row.finished-checkered .wf-state-label,
+  .wf-status-row.finished-checkered .wf-state-meta {
+    color: rgba(255,255,255,.95) !important;
+  }
+  .wf-status-row.finished-checkered .wf-state-meta,
+  .tl-entry.finished-checkered .tl-time,
+  .tl-entry.finished-checkered .tl-note-text {
+    color: rgba(240,240,240,.84) !important;
+  }
+  .wf-status-row.finished-checkered .wf-step-btn,
+  .tl-entry.finished-checkered .tl-wf-badge {
+    border-color: rgba(255,255,255,.42);
+  }
+  .tl-entry.finished-checkered .tl-status-label {
+    color: #fff !important;
+    text-shadow: 0 1px 0 rgba(0,0,0,.3);
+  }
   .issue-full-note { font-size: 14px; line-height: 1.6; color: var(--text); margin-bottom: 10px; white-space: pre-wrap; word-break: break-word; }
   .issue-photos { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
   .issue-photo-thumb { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); cursor: pointer; transition: transform 0.15s; }
