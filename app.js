@@ -14714,8 +14714,10 @@ function _demoRunAs(agent, fn) {
 async function demoCreateIssue(agent, simTime) {
   const machine = _demoMachineForAgent(agent);
   const note = _demoRandomNote(machine);
-  const isResolved = Math.random() < 0.05;
-  const statusKey = isResolved ? 'resolved' : (agent.preferredStatuses.length > 0 && Math.random() < 0.6 ? _demoPick(agent.preferredStatuses) : 'open');
+  const cfg = _demoSim?.config ?? {};
+  const openChance = cfg.openChance ?? 0.2;
+  const allStatuses = [...new Set(Object.values(STATUS_FLOW).flat())];
+  const statusKey = Math.random() < openChance ? 'open' : _demoPick(allStatuses);
   const subStatus = '';
   return _demoRunAs(agent, async () => {
     const issueRef = doc(plantCol('issues'));
@@ -14736,8 +14738,7 @@ async function demoCreateIssue(agent, simTime) {
 
 async function demoChangeStatus(agent, issueId, currentStatusObj, note) {
   const validNext = STATUS_FLOW[currentStatusObj.status || 'open'] || ['resolved'];
-  const preferredRanked = validNext.filter(s => agent.preferredStatuses.includes(s));
-  const nextStatus = preferredRanked.length > 0 ? _demoPick(preferredRanked) : _demoPick(validNext);
+  const nextStatus = _demoPick(validNext);
   return _demoRunAs(agent, () => window.addStatusEntry(issueId, nextStatus, '', note || ''));
 }
 
@@ -14775,7 +14776,13 @@ startDemoEngine = function() {
     actions: [],
     createdIssues: [],
     tickCount: 0,
-    paused: false
+    paused: false,
+    config: {
+      createCount: 25,
+      openChance: 0.2,
+      updateChance: 0.5,
+      tickInterval: 4
+    }
   };
   _generateDemoActions();
   _demoSim.interval = setInterval(_demoTick, 500);
@@ -14790,7 +14797,8 @@ stopDemoEngine = function() {
 
 function _generateDemoActions() {
   const actions = [];
-  for (let i = 0; i < 55; i++) {
+  const count = _demoSim?.config?.createCount ?? 25;
+  for (let i = 0; i < count; i++) {
     const t = Math.round(300 + Math.random() * (DEMO_SHIFT_SECONDS - 600));
     const agent = _demoPickAgent('createWeight');
     actions.push({ type: 'create', t, agent: { ...agent } });
@@ -14815,7 +14823,10 @@ function _demoTick() {
     return;
   }
 
-  if (sim.tickCount % 8 === 0 && sim.createdIssues.length > 0 && Math.random() < 0.3) {
+  const cfg = sim.config ?? {};
+  const tickInterval = cfg.tickInterval ?? 4;
+  const updateChance = cfg.updateChance ?? 0.5;
+  if (sim.tickCount % tickInterval === 0 && sim.createdIssues.length > 0 && Math.random() < updateChance) {
     const openIssues = [];
     for (const ci of sim.createdIssues) {
       const issue = issuesById.get(ci.issueId);
@@ -14956,6 +14967,15 @@ buildDemoControls = function() {
     #demo-feed { position:fixed; bottom:68px; left:50%; transform:translateX(-50%); z-index:9998; max-height:160px; width:520px; overflow-y:auto; background:rgba(0,0,0,0.75); backdrop-filter:blur(4px); border-radius:10px; padding:8px 12px; font-family:Nunito,sans-serif; font-size:11px; color:rgba(255,255,255,0.8); pointer-events:none; }
     #demo-feed .demo-feed-item { padding:2px 0; border-bottom:1px solid rgba(255,255,255,0.05); }
     #demo-controls .demo-created-count { font-size:11px; color:rgba(255,255,255,0.5); }
+    #demo-settings-toggle { background:rgba(255,255,255,0.1); border:none; color:rgba(255,255,255,0.5); width:28px; height:28px; border-radius:6px; cursor:pointer; font-size:14px; display:flex; align-items:center; justify-content:center; transition:all 0.15s; }
+    #demo-settings-toggle:hover { background:rgba(255,255,255,0.2); color:#fff; }
+    #demo-settings-toggle.open { color:var(--accent,#4ade80); }
+    #demo-settings-panel { display:none; width:100%; padding:10px 4px 4px; border-top:1px solid rgba(255,255,255,0.08); margin-top:6px; }
+    #demo-settings-panel.open { display:flex; flex-wrap:wrap; gap:10px; justify-content:center; }
+    .demo-setting { display:flex; align-items:center; gap:8px; padding:4px 10px; background:rgba(255,255,255,0.04); border-radius:8px; min-width:180px; }
+    .demo-setting-label { font-size:11px; color:rgba(255,255,255,0.5); white-space:nowrap; min-width:50px; }
+    .demo-setting-value { font-size:11px; color:#fff; font-weight:600; min-width:28px; text-align:right; font-family:Share Tech Mono,monospace; }
+    .demo-setting-slider { width:60px; accent-color:#4ade80; cursor:pointer; height:4px; }
   `;
   document.head.appendChild(style);
 
@@ -15043,7 +15063,60 @@ buildDemoControls = function() {
   countSpan.textContent = '0 issues';
   panel.appendChild(countSpan);
 
+  const gearBtn = document.createElement('button');
+  gearBtn.id = 'demo-settings-toggle';
+  gearBtn.textContent = '\u2699';
+  gearBtn.title = 'Simulation settings';
+  gearBtn.addEventListener('click', () => {
+    const sp = document.getElementById('demo-settings-panel');
+    if (!sp) return;
+    const open = !sp.classList.contains('open');
+    sp.classList.toggle('open', open);
+    gearBtn.classList.toggle('open', open);
+  });
+  panel.appendChild(gearBtn);
+
   document.body.appendChild(panel);
+
+  const settingsPanel = document.createElement('div');
+  settingsPanel.id = 'demo-settings-panel';
+  const cfg = _demoSim?.config ?? {};
+  const sliders = [
+    { key: 'createCount', label: 'Creates', min: 5, max: 100, step: 5, def: 25 },
+    { key: 'openChance', label: 'Open %', min: 0, max: 100, step: 5, def: 20, fmt: v => v + '%', parse: v => parseInt(v) / 100 },
+    { key: 'updateChance', label: 'Update %', min: 0, max: 100, step: 5, def: 50, fmt: v => v + '%', parse: v => parseInt(v) / 100 },
+    { key: 'tickInterval', label: 'Tick freq', min: 1, max: 20, step: 1, def: 4 },
+  ];
+  for (const s of sliders) {
+    const wrap = document.createElement('div');
+    wrap.className = 'demo-setting';
+    const lbl = document.createElement('span');
+    lbl.className = 'demo-setting-label';
+    lbl.textContent = s.label;
+    wrap.appendChild(lbl);
+    const val = document.createElement('span');
+    val.className = 'demo-setting-value';
+    val.id = 'demo-cfg-' + s.key;
+    const displayVal = s.fmt ? s.fmt(String(cfg[s.key] ?? s.def)) : String(cfg[s.key] ?? s.def);
+    val.textContent = displayVal;
+    wrap.appendChild(val);
+    const input = document.createElement('input');
+    input.type = 'range';
+    input.className = 'demo-setting-slider';
+    input.min = String(s.min);
+    input.max = String(s.max);
+    input.step = String(s.step);
+    input.value = s.parse ? String(Math.round((cfg[s.key] ?? s.def) * 100)) : String(cfg[s.key] ?? s.def);
+    input.addEventListener('input', () => {
+      const raw = parseInt(input.value);
+      const final = s.parse ? s.parse(raw) : raw;
+      if (_demoSim) _demoSim.config[s.key] = final;
+      val.textContent = s.fmt ? s.fmt(String(raw)) : String(raw);
+    });
+    wrap.appendChild(input);
+    settingsPanel.appendChild(wrap);
+  }
+  document.body.appendChild(settingsPanel);
 
   const feed = document.createElement('div');
   feed.id = 'demo-feed';
@@ -15060,11 +15133,17 @@ resetDemo = async function() {
   stopDemoEngine();
   try {
     const issuesSnap = await getDocs(collection(db, 'plants', DEMO_PLANT_ID, 'issues'));
-    const issueRefs = issuesSnap.docs.map(d => doc(db, 'plants', DEMO_PLANT_ID, 'issues', d.id));
-    for (const ref of issueRefs) {
-      const eventsSnap = await getDocs(collection(ref, 'events'));
-      const batch = writeBatch(db);
-      eventsSnap.docs.forEach(evt => batch.delete(evt.ref));
+    for (const issueDoc of issuesSnap.docs) {
+      const ref = issueDoc.ref;
+      const [eventsSnap, attsSnap] = await Promise.all([
+        getDocs(collection(ref, 'events')),
+        getDocs(collection(ref, 'attachments'))
+      ]);
+      let writes = 0;
+      const doBatch = () => { if (batch) { batch.commit().catch(() => {}); } batch = writeBatch(db); writes = 0; };
+      let batch = writeBatch(db);
+      eventsSnap.docs.forEach(evt => { batch.delete(evt.ref); writes++; if (writes >= 400) doBatch(); });
+      attsSnap.docs.forEach(a => { batch.delete(a.ref); writes++; if (writes >= 400) doBatch(); });
       batch.delete(ref);
       await batch.commit();
     }
