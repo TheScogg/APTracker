@@ -4802,7 +4802,7 @@ function renderLogCatButtons() {
       btn.style.background = alphaColor(col, 0.13);
     }
     if (isSearchMode) {
-      if (searchActiveSub_ && getSubCats(searchActiveSub_).includes(key)) {
+      if (addSearchActiveSub && getSubCats(addSearchActiveSub).includes(key)) {
         btn.style.opacity = '1';
         btn.style.pointerEvents = 'auto';
         btn.classList.add('search-match');
@@ -4832,7 +4832,15 @@ function renderLogCatButtons() {
 
 function renderLogSubChips() {
   const row = document.getElementById('log-sub-row'); if (!row) return;
-  if (isSearchMode) { renderSharedSearchContent(document.getElementById('search-bar-row'), row); return; }
+  if (isSearchMode) {
+    renderSharedSearchContent(
+      document.getElementById('search-bar-row'),
+      row,
+      handleSearchSubPick,
+      addSearchActiveSub
+    );
+    return;
+  }
   row.innerHTML = '';
   if (!logCatKey) {
     row.className = 'log-sub-row';
@@ -4876,7 +4884,7 @@ function renderLogSubChips() {
 // Each surface passes its own callbacks and container references.
 
 let searchFilterText = '';
-let searchActiveSub_ = '';
+let addSearchActiveSub = '';
 
 // Surface-specific hooks — set by openSearch below
 let searchApplySelection = null;  // (catKey, sub) => { ... }
@@ -4888,11 +4896,16 @@ function openSearch(applySelection, exitFn) {
   searchExitFn = exitFn;
   isSearchMode = true;
   searchFilterText = '';
-  searchActiveSub_ = '';
+  addSearchActiveSub = '';
   logCatKey = null;
   logCatSub = null;
   renderLogCatButtons();
-  renderSharedSearchContent(document.getElementById('search-bar-row'), document.getElementById('log-sub-row'));
+  renderSharedSearchContent(
+    document.getElementById('search-bar-row'),
+    document.getElementById('log-sub-row'),
+    handleSearchSubPick,
+    addSearchActiveSub
+  );
   updateLogCatPill();
   closeSubcategorySheet();
 }
@@ -4901,7 +4914,7 @@ function closeSearch() {
   if (!isSearchMode) return;
   isSearchMode = false;
   searchFilterText = '';
-  searchActiveSub_ = '';
+  addSearchActiveSub = '';
   searchApplySelection = null;
   searchExitFn = null;
   document.getElementById('search-bar-row')?.classList.remove('visible');
@@ -4910,9 +4923,10 @@ function closeSearch() {
   updateLogCatPill();
 }
 
-function renderSharedSearchContent(barContainer, gridContainer, onSubPick) {
+function renderSharedSearchContent(barContainer, gridContainer, onSubPick, activeSub = '') {
   if (!barContainer || !gridContainer) return;
   const subPick = onSubPick || handleSearchSubPick;
+  const selectedSub = String(activeSub || '');
 
   const filter = searchFilterText.toLowerCase();
   const allSubs = getAllSubs();
@@ -4931,7 +4945,7 @@ function renderSharedSearchContent(barContainer, gridContainer, onSubPick) {
   input.setAttribute('autocomplete', 'off');
   input.addEventListener('input', () => {
     searchFilterText = input.value;
-    renderSharedSearchContent(barContainer, gridContainer, subPick);
+    renderSharedSearchContent(barContainer, gridContainer, subPick, selectedSub);
   });
   barContainer.appendChild(input);
 
@@ -4962,7 +4976,7 @@ function renderSharedSearchContent(barContainer, gridContainer, onSubPick) {
     const cats = getSubCats(sub);
     const item = document.createElement('button');
     item.type = 'button';
-    item.className = 'search-mode-item' + (sub === searchActiveSub_ ? ' selected' : '');
+    item.className = 'search-mode-item' + (sub === selectedSub ? ' selected' : '');
     item.innerHTML = `<span class="search-mode-item-label">${esc(sub)}</span><span class="search-mode-count">${cats.length}</span>`;
     item.dataset.sub = sub;
     addTapListener(item, () => subPick(sub));
@@ -4988,13 +5002,13 @@ function searchApplyAddModal(key, sub) {
 function handleSearchSubPick(sub) {
   const cats = getSubCats(sub);
   if (!cats.length) return;
-  searchActiveSub_ = sub;
+  addSearchActiveSub = sub;
   renderLogCatButtons();
-  if (searchActiveSub_) {
+  if (addSearchActiveSub) {
     // Re-render with updated activeSub
     const barContainer = document.getElementById('search-bar-row');
     const gridContainer = document.getElementById('log-sub-row');
-    renderSharedSearchContent(barContainer, gridContainer);
+    renderSharedSearchContent(barContainer, gridContainer, handleSearchSubPick, addSearchActiveSub);
   }
 }
 
@@ -5135,7 +5149,7 @@ function scrollAddModalToBottom() {
 
 function logCatSelectStatus(key) {
   if (isSearchMode) {
-    if (searchApplySelection) searchApplySelection(key, searchActiveSub_);
+    if (searchApplySelection) searchApplySelection(key, addSearchActiveSub);
     return;
   }
   const prevKey = logCatKey;
@@ -7429,7 +7443,6 @@ function renderIssues() {
       // Set shared search state
       isSearchMode = true;
       searchFilterText = '';
-      searchActiveSub_ = '';
       searchApplySelection = (key, sub) => {
         closeSwipeCard(card);
         if (sub && requiresSerialNumber(key, sub)) { openSerialModal(issue.id, key, sub); }
@@ -7447,12 +7460,11 @@ function renderIssues() {
 
       const swipeSubPick = (sub) => {
         if (!getSubCats(sub).length) return;
-        searchActiveSub_ = sub;
         swipeSearchActiveSub = sub;
         dimSwipeTiles();
-        renderSharedSearchContent(subInner, subInner, swipeSubPick);
+        renderSharedSearchContent(subInner, subInner, swipeSubPick, swipeSearchActiveSub);
       };
-      renderSharedSearchContent(subInner, subInner, swipeSubPick);
+      renderSharedSearchContent(subInner, subInner, swipeSubPick, swipeSearchActiveSub);
       subPanel.classList.add('visible');
       scheduleIssueLogRelayout();
       scrollPanelBottomIntoView(subPanel);
