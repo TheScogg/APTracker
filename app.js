@@ -7438,8 +7438,26 @@ function renderIssues() {
       });
     };
 
+    const resetSwipeSearchMode = () => {
+      if (isSearchMode) closeSearch();
+      swipeSearchActiveSub = '';
+      swipeSearchMode = false;
+      searchApplySelection = null;
+      searchExitFn = null;
+      searchTile.classList.remove('selected');
+      catInner.classList.remove('has-selection');
+      catPanel.classList.remove('has-subs', 'search-mode');
+      subPanel.classList.remove('visible');
+      catInner.querySelectorAll('.swipe-status-tile').forEach(t => {
+        t.classList.remove('selected', 'search-match');
+        t.style.opacity = '';
+        t.style.pointerEvents = '';
+      });
+      scheduleIssueLogRelayout();
+    };
+
     const handleSwipeSearchTileClick = (e) => {
-      if (swipeSearchMode) { closeSwipeCard(card); return; }
+      if (swipeSearchMode) { resetSwipeSearchMode(); return; }
 
       const subInner = subPanel.querySelector('.swipe-sub-inner');
 
