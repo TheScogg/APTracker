@@ -7372,6 +7372,7 @@ function renderIssues() {
       });
       swipeSearchSub = '';
       swipeSearchActiveSub = '';
+      swipeSearchMode = false;
       if (openSwipeRow?.card === c) openSwipeRow = null;
       scheduleIssueLogRelayout();
     };
@@ -7380,11 +7381,12 @@ function renderIssues() {
     let lastTileTap = null; // { key, stamp } — tracks last tap for double-click/double-tap detection
     let swipeSearchSub = '';
     let swipeSearchActiveSub = '';
+    let swipeSearchMode = false;
 
     const dimSwipeTiles = () => {
       catInner.querySelectorAll('.swipe-status-tile').forEach(t => {
-        t.classList.remove('selected', 'current', 'search-match');
         if (t === searchTile) { t.style.opacity = ''; t.style.pointerEvents = ''; return; }
+        t.classList.remove('selected', 'current', 'search-match');
         if (swipeSearchActiveSub && getSubCats(swipeSearchActiveSub).includes(t.dataset.status)) {
           t.style.opacity = '1'; t.style.pointerEvents = 'auto';
           t.classList.add('search-match');
@@ -7395,11 +7397,12 @@ function renderIssues() {
     };
 
     const handleSwipeSearchTileClick = (e) => {
-      if (searchTile.classList.contains('selected')) { closeSwipeCard(card); return; }
+      if (swipeSearchMode) { closeSwipeCard(card); return; }
       const subInner = subPanel.querySelector('.swipe-sub-inner');
       subInner.innerHTML = '';
       subInner.className = 'swipe-sub-inner';
 
+      swipeSearchMode = true;
       swipeSearchActiveSub = '';
       searchTile.classList.add('selected');
       catInner.classList.add('has-selection');
