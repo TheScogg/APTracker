@@ -917,6 +917,52 @@ window.addEventListener('scroll', () => {
 .ic-card:hover { transform: translateY(-3px); box-shadow: 0 10px 36px rgba(0,0,0,.42); }
 .ic-card.priority { border-color: rgba(239,68,68,.4); box-shadow: 0 4px 22px rgba(239,68,68,.1); }
 .ic-card.resolved { opacity: .72; }
+.ic-card.finished-checkered {
+  position: relative;
+  overflow: hidden;
+  opacity: 1;
+  border-color: rgba(34,197,94,.38);
+  box-shadow: 0 8px 28px rgba(0,0,0,.28), 0 0 0 1px rgba(255,255,255,.03);
+  background:
+    linear-gradient(180deg, rgba(20, 20, 20, .94), rgba(6, 6, 6, .98)),
+    repeating-conic-gradient(from 45deg,
+      rgba(255,255,255,.82) 0 25%,
+      rgba(0,0,0,.92) 0 50%);
+  background-size: auto, 18px 18px;
+  background-position: 0 0, 0 0;
+}
+.ic-card.finished-checkered::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at top right, rgba(255,255,255,.2), transparent 38%),
+    linear-gradient(135deg, rgba(255,255,255,.18), transparent 28%, transparent 72%, rgba(255,255,255,.12));
+  pointer-events: none;
+}
+.ic-card.finished-checkered > * {
+  position: relative;
+  z-index: 1;
+}
+.ic-card.finished-checkered .ic-head { border-bottom-color: rgba(255,255,255,.06); }
+.ic-card.finished-checkered .ic-foot { border-top-color: rgba(255,255,255,.06); }
+.ic-card.finished-checkered .ic-note { color: rgba(255,255,255,.96); }
+.ic-card.finished-checkered .ic-row-label,
+.ic-card.finished-checkered .ic-ts,
+.ic-card.finished-checkered .ic-swipe-hint { color: rgba(245,245,245,.92); }
+.ic-card.finished-checkered .ic-row-label,
+.ic-card.finished-checkered .ic-ts { color: rgba(230,230,230,.78); }
+.ic-card.finished-checkered .ic-entry-meta { color: rgba(235,235,235,.78); }
+.ic-card.finished-checkered .wf-pill.wf-finished {
+  background: rgba(255,255,255,.18);
+  color: #fff;
+  border-color: rgba(255,255,255,.55);
+}
+.ic-card.finished-checkered .ic-status-pill {
+  background: rgba(255,255,255,.18) !important;
+  color: #fff !important;
+  border-color: rgba(255,255,255,.55) !important;
+}
 
 /* Card header */
 .ic-head {
@@ -1093,7 +1139,70 @@ window.addEventListener('scroll', () => {
       </div>
 
       <!-- Card 3: Process Engineer, accepted -->
-      <!-- Card 4: Resolved, finished -->
+      <div class="ic-card reveal d3">
+        <div class="ic-head">
+          <div>
+            <div class="ic-machine">6.05</div>
+            <div class="ic-row-label">ROW 06 · PRESS 05</div>
+          </div>
+          <div class="ic-status-pill" style="background:rgba(34,197,94,.12);color:var(--green);border:1px solid rgba(34,197,94,.3)">👋 ACCEPTED</div>
+        </div>
+        <div class="ic-body">
+          <div class="ic-note">Gate sensor alignment drifted after a tool swap. Process engineering re-checked the offsets and confirmed the gate is holding spec.</div>
+          <div class="ic-photos">
+            <div class="ic-photo"><div class="ic-photo-inner" style="background:linear-gradient(135deg,#0e2513,#12351a)">📐</div></div>
+            <div class="ic-photo"><div class="ic-photo-inner" style="background:linear-gradient(135deg,#10261a,#1a4327)">🧭</div></div>
+          </div>
+          <div class="ic-timeline">
+            <div class="ic-entry">
+              <div class="ic-dot" style="border-color:var(--yellow);background:rgba(234,179,8,.18)"></div>
+              <div><div class="ic-entry-status" style="color:var(--yellow)">CALL — Alignment Drift</div><div class="ic-entry-meta">S. Lee · Apr 12, 2:20 AM</div></div>
+            </div>
+            <div class="ic-entry">
+              <div class="ic-dot" style="border-color:var(--green);background:rgba(34,197,94,.18)"></div>
+              <div><div class="ic-entry-status" style="color:var(--green)">ACCEPTED — Process Eng.</div><div class="ic-entry-meta">A. Patel · Apr 12, 2:28 AM</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="ic-foot">
+          <div class="wf-pill wf-accepted">Accepted</div>
+          <div class="ic-ts">2:28 AM · APR 12</div>
+        </div>
+        <div class="ic-swipe-hint">← swipe for quick actions · <span>2 photos</span> attached →</div>
+      </div>
+
+      <!-- Card 3: Process Engineer, accepted -->
+      <div class="ic-card resolved finished-checkered reveal d4">
+        <div class="ic-head">
+          <div>
+            <div class="ic-machine">4.12</div>
+            <div class="ic-row-label">ROW 04 · PRESS 12</div>
+          </div>
+          <div class="ic-status-pill">✅ FINISHED</div>
+        </div>
+        <div class="ic-body">
+          <div class="ic-note">Calibration complete — belt tension reset, sensor alignment verified, and the press returned to production with no follow-up faults.</div>
+          <div class="ic-photos">
+            <div class="ic-photo"><div class="ic-photo-inner" style="background:linear-gradient(135deg,#0b2212,#10361a)">✅</div></div>
+            <div class="ic-photo"><div class="ic-photo-inner" style="background:linear-gradient(135deg,#0f2d16,#16431f)">🔍</div></div>
+          </div>
+          <div class="ic-timeline">
+            <div class="ic-entry">
+              <div class="ic-dot" style="border-color:var(--red);background:rgba(239,68,68,.18)"></div>
+              <div><div class="ic-entry-status" style="color:var(--red)">OPEN</div><div class="ic-entry-meta">M. Rivera · Apr 12, 8:13 AM</div></div>
+            </div>
+            <div class="ic-entry">
+              <div class="ic-dot" style="border-color:#7ee787;background:rgba(34,197,94,.2)"></div>
+              <div><div class="ic-entry-status" style="color:#7ee787">FINISHED — Verified</div><div class="ic-entry-meta">A. Nguyen · Apr 12, 8:42 AM</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="ic-foot">
+          <div class="wf-pill wf-finished">Finished</div>
+          <div class="ic-ts">8:42 AM · APR 12</div>
+        </div>
+        <div class="ic-swipe-hint">← swipe for quick actions · <span>2 photos</span> attached →</div>
+      </div>
 
     </div>
   </div>
