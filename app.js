@@ -4768,7 +4768,7 @@ function applyIssueLogDefaults() {
 window.openAddModal = m => {
   if (!currentUser) return;
   if (!currentUserPermissions.canCreateIssue) return;
-  if (isSearchMode) { isSearchMode = false; searchFilterText = ''; searchActiveSub = ''; document.getElementById('search-bar-row')?.classList.remove('visible'); }
+  if (isSearchMode) { closeSearch(); }
   closeSubcategorySheet();
   subcategorySheetState = { open: false, statusKey: '', selectedSub: '' };
   currentMachine=m; pendingPhotos=[];
@@ -4828,13 +4828,13 @@ function renderLogCatButtons() {
     searchBtn.style.background = alphaColor(searchCol, 0.13);
   }
   searchBtn.innerHTML = `<span class="log-cat-icon">🔍</span><span class="log-cat-label">Search</span>`;
-  addTapListener(searchBtn, () => enterSearchMode());
+  addTapListener(searchBtn, () => openSearch(searchApplyAddModal, null));
   row.appendChild(searchBtn);
 }
 
 function renderLogSubChips() {
   const row = document.getElementById('log-sub-row'); if (!row) return;
-  if (isSearchMode) { renderSearchSubs(); return; }
+  if (isSearchMode) { renderSharedSearchContent(document.getElementById('search-bar-row'), row); return; }
   row.innerHTML = '';
   if (!logCatKey) {
     row.className = 'log-sub-row';
@@ -4874,41 +4874,57 @@ function renderLogSubChips() {
 }
 
 // ── SEARCH MODE (reverse subcategory lookup) ──
-function enterSearchMode() {
-  if (isSearchMode) { exitSearchMode(); return; }
+// Shared by the add-issue modal and the swipe status panel.
+// Each surface passes its own callbacks and container references.
+
+let searchFilterText = '';
+let searchActiveSub = '';
+
+// Surface-specific hooks — set by openSearch below
+let searchApplySelection = null;  // (catKey, sub) => { ... }
+let searchExitFn = null;          // () => { ... }
+
+function openSearch(applySelection, exitFn) {
+  if (isSearchMode) { closeSearch(); return; }
+  searchApplySelection = applySelection;
+  searchExitFn = exitFn;
   isSearchMode = true;
   searchFilterText = '';
   searchActiveSub = '';
   logCatKey = null;
   logCatSub = null;
   renderLogCatButtons();
-  renderSearchSubs();
+  renderSharedSearchContent(document.getElementById('search-bar-row'), document.getElementById('log-sub-row'));
   updateLogCatPill();
   closeSubcategorySheet();
 }
 
-function exitSearchMode() {
+function closeSearch() {
+  if (!isSearchMode) return;
   isSearchMode = false;
   searchFilterText = '';
   searchActiveSub = '';
+  searchApplySelection = null;
+  searchExitFn = null;
   document.getElementById('search-bar-row')?.classList.remove('visible');
   renderLogCatButtons();
   renderLogSubChips();
   updateLogCatPill();
 }
 
-function renderSearchSubs() {
-  const barRow = document.getElementById('search-bar-row');
-  const subRow = document.getElementById('log-sub-row');
-  if (!barRow || !subRow) return;
+function renderSharedSearchContent(barContainer, gridContainer, onSubPick) {
+  if (!barContainer || !gridContainer) return;
+  const subPick = onSubPick || handleSearchSubPick;
 
   const filter = searchFilterText.toLowerCase();
   const allSubs = getAllSubs();
   const filtered = filter ? allSubs.filter(s => s.toLowerCase().includes(filter)) : allSubs;
 
   // Search input
-  barRow.innerHTML = '';
-  barRow.className = 'search-bar-row visible';
+  barContainer.innerHTML = '';
+  if (barContainer.id === 'search-bar-row') {
+    barContainer.className = 'search-bar-row visible';
+  }
   const input = document.createElement('input');
   input.type = 'text';
   input.className = 'search-input';
@@ -4917,26 +4933,32 @@ function renderSearchSubs() {
   input.setAttribute('autocomplete', 'off');
   input.addEventListener('input', () => {
     searchFilterText = input.value;
-    renderSearchSubs();
+    renderSharedSearchContent(barContainer, gridContainer, subPick);
   });
-  input.addEventListener('keydown', e => { e.stopPropagation(); });
-  barRow.appendChild(input);
+  barContainer.appendChild(input);
 
   // Subcategory grid
-  subRow.innerHTML = '';
-  subRow.className = 'log-sub-row visible search-mode';
-  subRow.style.marginTop = '4px';
-  subRow.style.marginBottom = '8px';
+  gridContainer.innerHTML = '';
+  if (gridContainer.id === 'log-sub-row') {
+    gridContainer.className = 'log-sub-row visible search-mode';
+    gridContainer.style.marginTop = '4px';
+    gridContainer.style.marginBottom = '8px';
+  }
 
   if (!filtered.length) {
     const msg = document.createElement('div');
-    msg.style.gridColumn = '1 / -1';
+    if (gridContainer.id === 'log-sub-row') msg.style.gridColumn = '1 / -1';
     msg.className = 'search-no-match';
     msg.textContent = allSubs.length ? 'No subcategories match "' + searchFilterText + '"' : 'No subcategories are configured.';
-    subRow.appendChild(msg);
+    gridContainer.appendChild(msg);
     requestAnimationFrame(() => input.focus());
     return;
   }
+
+  // Use grid layout for the sub list
+  gridContainer.style.display = 'grid';
+  gridContainer.style.gridTemplateColumns = '1fr 1fr';
+  gridContainer.style.gap = '6px';
 
   filtered.forEach(sub => {
     const cats = getSubCats(sub);
@@ -4945,19 +4967,37 @@ function renderSearchSubs() {
     item.className = 'search-mode-item' + (sub === searchActiveSub ? ' selected' : '');
     item.innerHTML = `<span class="search-mode-item-label">${esc(sub)}</span><span class="search-mode-count">${cats.length}</span>`;
     item.dataset.sub = sub;
-    addTapListener(item, () => onSearchSubClick(sub));
-    subRow.appendChild(item);
+    addTapListener(item, () => subPick(sub));
+    gridContainer.appendChild(item);
   });
 
+  if (gridContainer.id !== 'log-sub-row') {
+    input.style.marginBottom = '8px';
+  }
   requestAnimationFrame(() => input.focus());
 }
 
-function onSearchSubClick(sub) {
+// Add-issue modal callbacks
+function searchApplyAddModal(key, sub) {
+  logCatKey = key;
+  logCatSub = sub;
+  issueLogPrefs.lastStatusKey = key;
+  issueLogPrefs.lastStatusSub = sub;
+  saveIssueLogPrefs();
+  closeSearch();
+}
+
+function handleSearchSubPick(sub) {
   const cats = getSubCats(sub);
   if (!cats.length) return;
   searchActiveSub = sub;
   renderLogCatButtons();
-  renderSearchSubs();
+  if (searchActiveSub) {
+    // Re-render with updated activeSub
+    const barContainer = document.getElementById('search-bar-row');
+    const gridContainer = document.getElementById('log-sub-row');
+    renderSharedSearchContent(barContainer, gridContainer);
+  }
 }
 
 function renderSubcategorySheet(statusKey = subcategorySheetState.statusKey) {
@@ -5097,21 +5137,7 @@ function scrollAddModalToBottom() {
 
 function logCatSelectStatus(key) {
   if (isSearchMode) {
-    isSearchMode = false;
-    searchFilterText = '';
-    searchActiveSub = '';
-    document.getElementById('search-bar-row')?.classList.remove('visible');
-    const sub = searchActiveSub;
-    searchActiveSub = '';
-    logCatKey = key;
-    logCatSub = sub;
-    issueLogPrefs.lastStatusKey = key;
-    issueLogPrefs.lastStatusSub = sub;
-    saveIssueLogPrefs();
-    renderLogCatButtons();
-    renderLogSubChips();
-    updateLogCatPill();
-    scrollAddModalToBottom();
+    if (searchApplySelection) searchApplySelection(key, searchActiveSub);
     return;
   }
   const prevKey = logCatKey;
@@ -5132,7 +5158,7 @@ function logCatSelectStatus(key) {
 
 document.getElementById('log-cat-clear')?.addEventListener('touchend', e=>{
   e.preventDefault();
-  if (isSearchMode) { exitSearchMode(); return; }
+  if (isSearchMode) { closeSearch(); return; }
   closeSubcategorySheet();
   logCatKey=null;logCatSub=null;
   issueLogPrefs.lastStatusKey = '';
@@ -5141,7 +5167,7 @@ document.getElementById('log-cat-clear')?.addEventListener('touchend', e=>{
   renderLogCatButtons();renderLogSubChips();updateLogCatPill();
 },{passive:false});
 document.getElementById('log-cat-clear')?.addEventListener('click', ()=>{
-  if (isSearchMode) { exitSearchMode(); return; }
+  if (isSearchMode) { closeSearch(); return; }
   closeSubcategorySheet();
   logCatKey=null;logCatSub=null;
   issueLogPrefs.lastStatusKey = '';
@@ -5155,7 +5181,7 @@ document.getElementById('log-cat-selected')?.addEventListener('click', e => {
 });
 
 window.closeModal = () => {
-  if (isSearchMode) { isSearchMode = false; searchFilterText = ''; searchActiveSub = ''; document.getElementById('search-bar-row')?.classList.remove('visible'); }
+  if (isSearchMode) { closeSearch(); }
   syncIssueLogPrefsFromModal();
   document.getElementById('add-modal').classList.remove('visible');
   document.getElementById('log-photo-source-row')?.classList.remove('visible');
@@ -7358,6 +7384,7 @@ function renderIssues() {
     };
 
     const closeSwipeCard = (c) => {
+      if (isSearchMode) closeSearch();
       c.classList.remove('swiped');
       const r = c.closest('.issue-row');
       const cp = r.querySelector('.swipe-category-panel');
@@ -7398,10 +7425,21 @@ function renderIssues() {
 
     const handleSwipeSearchTileClick = (e) => {
       if (swipeSearchMode) { closeSwipeCard(card); return; }
-      const subInner = subPanel.querySelector('.swipe-sub-inner');
-      subInner.innerHTML = '';
-      subInner.className = 'swipe-sub-inner';
 
+      const subInner = subPanel.querySelector('.swipe-sub-inner');
+
+      // Set shared search state
+      isSearchMode = true;
+      searchFilterText = '';
+      searchActiveSub = '';
+      searchApplySelection = (key, sub) => {
+        closeSwipeCard(card);
+        if (sub && requiresSerialNumber(key, sub)) { openSerialModal(issue.id, key, sub); }
+        else { addStatusEntry(issue.id, key, sub, ''); }
+      };
+      searchExitFn = null;
+
+      // Swipe-specific state
       swipeSearchMode = true;
       swipeSearchActiveSub = '';
       searchTile.classList.add('selected');
@@ -7409,70 +7447,18 @@ function renderIssues() {
       catPanel.classList.add('has-subs');
       dimSwipeTiles();
 
-      const renderSwipeSearchSubs = () => {
-        subInner.innerHTML = '';
-        const filter = swipeSearchSub.toLowerCase();
-        const allSubs = getAllSubs();
-        const filtered = filter ? allSubs.filter(s => s.toLowerCase().includes(filter)) : allSubs;
-
-        const input = document.createElement('input');
-        input.type = 'text';
-        input.className = 'search-input';
-        input.placeholder = 'Find subcategory…';
-        input.value = swipeSearchSub;
-        input.setAttribute('autocomplete', 'off');
-        input.addEventListener('input', () => {
-          swipeSearchSub = input.value;
-          renderSwipeSearchSubs();
-        });
-        input.addEventListener('mousedown', e => e.stopPropagation());
-        input.addEventListener('touchstart', e => e.stopPropagation(), { passive: true });
-        input.style.marginBottom = '8px';
-        subInner.appendChild(input);
-
-        if (!filtered.length) {
-          const empty = document.createElement('div');
-          empty.className = 'search-no-match';
-          empty.textContent = allSubs.length ? 'No subcategories match.' : 'No subcategories configured.';
-          subInner.appendChild(empty);
-          subPanel.classList.add('visible');
-          scheduleIssueLogRelayout();
-          scrollPanelBottomIntoView(subPanel);
-          setTimeout(() => scrollPanelBottomIntoView(subPanel), 240);
-          return;
-        }
-
-        subInner.style.display = 'grid';
-        subInner.style.gridTemplateColumns = '1fr 1fr';
-        subInner.style.gap = '6px';
-        filtered.forEach(sub => {
-          const item = document.createElement('button');
-          item.type = 'button';
-          item.className = 'search-mode-item' + (sub === swipeSearchActiveSub ? ' selected' : '');
-          item.innerHTML = `<span class="search-mode-item-label">${esc(sub)}</span><span class="search-mode-count">${getSubCats(sub).length}</span>`;
-          item.dataset.sub = sub;
-          addTapListener(item, () => {
-            if (!getSubCats(sub).length) return;
-            swipeSearchActiveSub = sub;
-            dimSwipeTiles();
-            renderSwipeSearchSubs();
-          });
-          item.addEventListener('click', () => {
-            if (!getSubCats(sub).length) return;
-            swipeSearchActiveSub = sub;
-            dimSwipeTiles();
-            renderSwipeSearchSubs();
-          });
-          subInner.appendChild(item);
-        });
-        subPanel.classList.add('visible');
-        scheduleIssueLogRelayout();
-        scrollPanelBottomIntoView(subPanel);
-        setTimeout(() => scrollPanelBottomIntoView(subPanel), 240);
-        requestAnimationFrame(() => input.focus());
+      const swipeSubPick = (sub) => {
+        if (!getSubCats(sub).length) return;
+        searchActiveSub = sub;
+        swipeSearchActiveSub = sub;
+        dimSwipeTiles();
+        renderSharedSearchContent(subInner, subInner, swipeSubPick);
       };
-
-      renderSwipeSearchSubs();
+      renderSharedSearchContent(subInner, subInner, swipeSubPick);
+      subPanel.classList.add('visible');
+      scheduleIssueLogRelayout();
+      scrollPanelBottomIntoView(subPanel);
+      setTimeout(() => scrollPanelBottomIntoView(subPanel), 240);
     };
 
     catInner.querySelectorAll('.swipe-status-tile').forEach(tile => {
@@ -7480,9 +7466,7 @@ function renderIssues() {
         const statusKey = tile.dataset.status;
         if (statusKey === '__search__') { handleSwipeSearchTileClick(e); return; }
         if (swipeSearchActiveSub) {
-          closeSwipeCard(card);
-          if (swipeSearchActiveSub && requiresSerialNumber(statusKey, swipeSearchActiveSub)) { openSerialModal(issue.id, statusKey, swipeSearchActiveSub); }
-          else { addStatusEntry(issue.id, statusKey, swipeSearchActiveSub, ''); }
+          if (searchApplySelection) searchApplySelection(statusKey, swipeSearchActiveSub);
           return;
         }
         const statusDef = getStatusDef(statusKey);
