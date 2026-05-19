@@ -4915,7 +4915,7 @@ function renderSearchSubs() {
   input.addEventListener('keydown', e => { e.stopPropagation(); });
   barRow.appendChild(input);
 
-  // Subcategory list (flexbox)
+  // Subcategory grid
   subRow.innerHTML = '';
   subRow.className = 'log-sub-row visible search-mode';
   subRow.style.marginTop = '4px';
@@ -4923,15 +4923,13 @@ function renderSearchSubs() {
 
   if (!filtered.length) {
     const msg = document.createElement('div');
+    msg.style.gridColumn = '1 / -1';
     msg.className = 'search-no-match';
     msg.textContent = allSubs.length ? 'No subcategories match "' + searchFilterText + '"' : 'No subcategories are configured.';
     subRow.appendChild(msg);
     requestAnimationFrame(() => { input.focus(); scrollAddModalToBottom(); });
     return;
   }
-
-  const list = document.createElement('div');
-  list.className = 'search-mode-list';
 
   filtered.forEach(sub => {
     const cats = getSubCats(sub);
@@ -4941,9 +4939,8 @@ function renderSearchSubs() {
     item.innerHTML = `<span class="search-mode-item-label">${esc(sub)}</span><span class="search-mode-count">${cats.length}</span>`;
     item.dataset.sub = sub;
     addTapListener(item, () => onSearchSubClick(sub));
-    list.appendChild(item);
+    subRow.appendChild(item);
   });
-  subRow.appendChild(list);
 
   requestAnimationFrame(() => {
     input.focus();
@@ -7445,13 +7442,10 @@ function renderIssues() {
         const allSubs = getAllSubs();
         const filtered = filter ? allSubs.filter(s => s.toLowerCase().includes(filter)) : allSubs;
 
-        const inputWrap = document.createElement('div');
-        inputWrap.className = 'search-input-wrap';
-        inputWrap.style.padding = '0 0 8px 0';
         const input = document.createElement('input');
         input.type = 'text';
         input.className = 'search-input';
-        input.placeholder = '🔍 Find subcategory…';
+        input.placeholder = 'Find subcategory…';
         input.value = swipeSearchSub;
         input.setAttribute('autocomplete', 'off');
         input.addEventListener('input', () => {
@@ -7460,8 +7454,8 @@ function renderIssues() {
         });
         input.addEventListener('mousedown', e => e.stopPropagation());
         input.addEventListener('touchstart', e => e.stopPropagation(), { passive: true });
-        inputWrap.appendChild(input);
-        subInner.appendChild(inputWrap);
+        input.style.marginBottom = '8px';
+        subInner.appendChild(input);
 
         if (!filtered.length) {
           const empty = document.createElement('div');
@@ -7475,8 +7469,9 @@ function renderIssues() {
           return;
         }
 
-        const list = document.createElement('div');
-        list.className = 'search-mode-list';
+        subInner.style.display = 'grid';
+        subInner.style.gridTemplateColumns = '1fr 1fr';
+        subInner.style.gap = '6px';
         filtered.forEach(sub => {
           const cats = getSubCats(sub);
           const item = document.createElement('button');
@@ -7488,7 +7483,6 @@ function renderIssues() {
             const matchCats = getSubCats(sub);
             if (!matchCats.length) return;
             if (matchCats.length === 1) {
-              // Auto-select if only one match
               closeSwipeCard(card);
               const key = matchCats[0];
               if (sub && requiresSerialNumber(key, sub)) { openSerialModal(issue.id, key, sub); }
@@ -7497,6 +7491,9 @@ function renderIssues() {
             }
             // Show match categories
             subInner.innerHTML = '';
+            subInner.style.display = '';
+            subInner.style.gridTemplateColumns = '';
+            subInner.style.gap = '';
             const label = document.createElement('div');
             label.className = 'search-match-label';
             label.textContent = `Found "${sub}" in:`;
@@ -7531,9 +7528,8 @@ function renderIssues() {
           };
           addTapListener(item, handleSearchSubClick);
           item.addEventListener('click', handleSearchSubClick);
-          list.appendChild(item);
+          subInner.appendChild(item);
         });
-        subInner.appendChild(list);
         subPanel.classList.add('visible');
         scheduleIssueLogRelayout();
         scrollPanelBottomIntoView(subPanel);

@@ -3552,7 +3552,7 @@
   .log-cat-clear:active { color: var(--text2); }
   .log-sub-row { display: none; flex-wrap: wrap; gap: 5px; margin-bottom: 4px; }
   .log-sub-row.visible { display: flex; }
-  .log-sub-row.visible.search-mode { display: block; }
+  .log-sub-row.visible.search-mode { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
   .search-bar-row { display: none; }
   .search-bar-row.visible { display: block; }
   .log-sub-chip { font-size: 12px; font-weight: 700; padding: 4px 11px; border-radius: 20px; border: 1px solid; cursor: pointer; font-family: 'Nunito', sans-serif; transition: background 0.12s, transform 0.1s; }
@@ -3804,15 +3804,7 @@
   }
   .search-input:focus { border-color: var(--accent); }
   .search-input::placeholder { color: var(--text3); font-weight: 400; }
-  .search-mode-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    width: 100%;
-    box-sizing: border-box;
-  }
   .search-mode-item {
-    flex: 0 0 calc(50% - 3px);
     min-height: 42px;
     border: 1px solid color-mix(in srgb, var(--text2) 25%, transparent);
     border-radius: 10px;
@@ -3827,7 +3819,6 @@
     font-weight: 700;
     font-size: 12px;
     line-height: 1.2;
-    box-sizing: border-box;
     transition: transform 0.1s, border-color 0.15s, background 0.15s;
   }
   .search-mode-item:active { transform: scale(0.97); }
@@ -3842,9 +3833,6 @@
     border-radius: 8px;
     padding: 2px 7px;
     font-family: 'Share Tech Mono', monospace;
-  }
-  @media (min-width: 600px) {
-    .search-mode-item { flex: 0 0 calc(33.33% - 4px); }
   }
   .search-no-match {
     padding: 12px 0;
