@@ -1895,6 +1895,31 @@ function getStatusColor(statusKey) {
   return st.swipeColor || st.cssColor || st.color || STATUS_FALLBACK.swipeColor;
 }
 
+// ── SUBCATEGORY SEARCH INDEX ──
+let subToCats = {};
+
+function buildSubToCats() {
+  subToCats = {};
+  Object.entries(STATUSES).forEach(([key, def]) => {
+    (def.subs || []).forEach(sub => {
+      if (!subToCats[sub]) subToCats[sub] = [];
+      if (!subToCats[sub].includes(key)) subToCats[sub].push(key);
+    });
+  });
+}
+
+function getSubCats(sub) {
+  return subToCats[sub] || [];
+}
+
+function getAllSubs() {
+  const seen = {};
+  Object.values(STATUSES).forEach(def => {
+    (def.subs || []).forEach(sub => { seen[sub] = true; });
+  });
+  return Object.keys(seen).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+}
+
 const __alphaCanvasCtx = document.createElement('canvas').getContext('2d');
 
 function alphaColor(color, alpha = 0.12) {
@@ -2099,6 +2124,7 @@ function rebuildDerivedStatus() {
   window._ALL_STATUSES = getAlphabetizedStatusKeys({ includeOpen: false, includeResolved: false });
   window._STATUS_ORDER = Object.entries(STATUSES).sort((a,b)=>a[1].order-b[1].order).map(([k])=>k);
   buildStatusFilterPills();
+  buildSubToCats();
 
   // Rebuild status filter dropdown
   const sf = document.getElementById('status-filter');
@@ -3138,6 +3164,8 @@ const PAGE_SIZE = 50;
 let pendingPhotos = [];   // for add modal
 let logCatKey = null;
 let logCatSub = null;
+let isSearchMode = false;
+let searchFilterText = '';
 let editPhotos = [];      // for edit modal (existing + new)
 let editTargetId = null;
 let currentMachine = null;
@@ -4739,6 +4767,7 @@ function applyIssueLogDefaults() {
 window.openAddModal = m => {
   if (!currentUser) return;
   if (!currentUserPermissions.canCreateIssue) return;
+  if (isSearchMode) { isSearchMode = false; searchFilterText = ''; document.getElementById('search-match-row')?.classList.remove('visible'); }
   closeSubcategorySheet();
   subcategorySheetState = { open: false, statusKey: '', selectedSub: '' };
   currentMachine=m; pendingPhotos=[];
@@ -4773,14 +4802,32 @@ function renderLogCatButtons() {
       btn.classList.add('selected');
       btn.style.background = alphaColor(col, 0.13);
     }
+    if (isSearchMode) {
+      btn.style.opacity = '0.3';
+      btn.style.pointerEvents = 'none';
+    }
     btn.innerHTML = `<span class="log-cat-icon">${st.icon}</span><span class="log-cat-label">${getStatusLabel(key, 'short')}</span>`;
     addTapListener(btn, ()=>logCatSelectStatus(key));
     row.appendChild(btn);
   });
+
+  // Search button (always last)
+  const searchBtn = document.createElement('button');
+  searchBtn.className = 'log-cat-btn' + (isSearchMode ? ' selected' : '');
+  searchBtn.dataset.key = '__search__';
+  const searchCol = 'var(--text2)';
+  searchBtn.style.color = searchCol;
+  if (isSearchMode) {
+    searchBtn.style.background = alphaColor(searchCol, 0.13);
+  }
+  searchBtn.innerHTML = `<span class="log-cat-icon">🔍</span><span class="log-cat-label">Search</span>`;
+  addTapListener(searchBtn, () => enterSearchMode());
+  row.appendChild(searchBtn);
 }
 
 function renderLogSubChips() {
   const row = document.getElementById('log-sub-row'); if (!row) return;
+  if (isSearchMode) { renderSearchSubs(); return; }
   row.innerHTML = '';
   if (!logCatKey) {
     row.className = 'log-sub-row';
@@ -4817,6 +4864,166 @@ function renderLogSubChips() {
     });
     row.appendChild(item);
   });
+}
+
+// ── SEARCH MODE (reverse subcategory lookup) ──
+function enterSearchMode() {
+  if (isSearchMode) { exitSearchMode(); return; }
+  isSearchMode = true;
+  searchFilterText = '';
+  logCatKey = null;
+  logCatSub = null;
+  renderLogCatButtons();
+  renderSearchSubs();
+  updateLogCatPill();
+  closeSubcategorySheet();
+  document.getElementById('search-match-row')?.classList.remove('visible');
+}
+
+function exitSearchMode() {
+  isSearchMode = false;
+  searchFilterText = '';
+  document.getElementById('search-match-row')?.classList.remove('visible');
+  renderLogCatButtons();
+  renderLogSubChips();
+  updateLogCatPill();
+}
+
+function renderSearchSubs() {
+  const row = document.getElementById('log-sub-row'); if (!row) return;
+  row.innerHTML = '';
+  row.className = 'log-sub-row';
+  row.style.marginTop = '4px';
+  row.style.marginBottom = '8px';
+
+  const filter = searchFilterText.toLowerCase();
+  const allSubs = getAllSubs();
+  const filtered = filter ? allSubs.filter(s => s.toLowerCase().includes(filter)) : allSubs;
+
+  // Search input
+  const inputWrap = document.createElement('div');
+  inputWrap.className = 'search-input-wrap';
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'search-input';
+  input.placeholder = '🔍 Find subcategory…';
+  input.value = searchFilterText;
+  input.setAttribute('autocomplete', 'off');
+  input.addEventListener('input', () => {
+    searchFilterText = input.value;
+    renderSearchSubs();
+  });
+  input.addEventListener('keydown', e => { e.stopPropagation(); });
+  inputWrap.appendChild(input);
+  if (filtered.length === 0 && allSubs.length > 0) {
+    const noMatch = document.createElement('div');
+    noMatch.className = 'search-no-match';
+    noMatch.textContent = 'No subcategories match "' + searchFilterText + '"';
+    inputWrap.appendChild(noMatch);
+  }
+  row.appendChild(inputWrap);
+
+  if (filtered.length === 0) {
+    if (allSubs.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'search-no-match';
+      empty.textContent = 'No subcategories are configured.';
+      row.appendChild(empty);
+    }
+    return;
+  }
+
+  const grid = document.createElement('div');
+  grid.className = 'subcategory-grid search-sub-grid visible';
+  grid.style.marginTop = '10px';
+  const nCols = filtered.length > 12 ? 2 : 2;
+  applyColumnMajorGridLayout(grid, filtered.length, nCols);
+
+  filtered.forEach(sub => {
+    const cats = getSubCats(sub);
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = 'subcategory-item search-sub-item';
+    item.innerHTML = `<span class="subcategory-item-label">${esc(sub)}</span><span class="search-sub-count">${cats.length}</span>`;
+    const neutralColor = 'var(--text2)';
+    item.style.borderColor = alphaColor(neutralColor, 0.25);
+    item.style.color = 'var(--text)';
+    item.style.background = 'linear-gradient(180deg, rgba(255,255,255,0.03), transparent)';
+    item.dataset.sub = sub;
+    addTapListener(item, () => onSearchSubClick(sub));
+    grid.appendChild(item);
+  });
+  row.appendChild(grid);
+
+  requestAnimationFrame(() => {
+    input.focus();
+    scrollAddModalToBottom();
+  });
+}
+
+function onSearchSubClick(sub) {
+  const cats = getSubCats(sub);
+  if (!cats.length) return;
+  if (cats.length === 1) {
+    searchSelectCategory(cats[0], sub);
+    return;
+  }
+  renderSearchMatchCats(sub);
+}
+
+function renderSearchMatchCats(sub) {
+  const row = document.getElementById('search-match-row'); if (!row) return;
+  row.innerHTML = '';
+  row.className = 'search-match-row visible';
+
+  const cats = getSubCats(sub);
+  const label = document.createElement('div');
+  label.className = 'search-match-label';
+  label.textContent = `Found "${sub}" in:`;
+  row.appendChild(label);
+
+  const btnRow = document.createElement('div');
+  btnRow.className = 'search-match-btns';
+
+  cats.forEach(key => {
+    const st = getStatusDef(key);
+    const col = getStatusColor(key);
+    const btn = document.createElement('button');
+    btn.className = 'search-match-btn';
+    btn.style.color = col;
+    btn.style.borderColor = alphaColor(col, 0.4);
+    btn.style.background = alphaColor(col, 0.08);
+    btn.innerHTML = `<span class="search-match-icon">${st.icon}</span><span class="search-match-label-text">${getStatusLabel(key, 'short')}</span>`;
+    addTapListener(btn, () => searchSelectCategory(key, sub));
+    btnRow.appendChild(btn);
+  });
+
+  const backBtn = document.createElement('button');
+  backBtn.className = 'search-match-back';
+  backBtn.textContent = '← Back';
+  backBtn.addEventListener('click', () => {
+    document.getElementById('search-match-row')?.classList.remove('visible');
+    renderSearchSubs();
+  });
+  btnRow.appendChild(backBtn);
+
+  row.appendChild(btnRow);
+  requestAnimationFrame(() => scrollAddModalToBottom());
+}
+
+function searchSelectCategory(key, sub) {
+  logCatKey = key;
+  logCatSub = sub;
+  issueLogPrefs.lastStatusKey = key;
+  issueLogPrefs.lastStatusSub = sub;
+  saveIssueLogPrefs();
+  isSearchMode = false;
+  searchFilterText = '';
+  document.getElementById('search-match-row')?.classList.remove('visible');
+  renderLogCatButtons();
+  renderLogSubChips();
+  updateLogCatPill();
+  scrollAddModalToBottom();
 }
 
 function renderSubcategorySheet(statusKey = subcategorySheetState.statusKey) {
@@ -4934,6 +5141,12 @@ function updateLogCatPill() {
   const sel = document.getElementById('log-cat-selected');
   const pill = document.getElementById('log-cat-pill');
   if (!sel||!pill) return;
+  if (isSearchMode) {
+    sel.classList.add('visible');
+    pill.textContent = '🔍 Searching…';
+    pill.style.color = 'var(--text2)'; pill.style.borderColor = 'var(--border)'; pill.style.background = 'transparent';
+    return;
+  }
   if (!logCatKey) { sel.classList.remove('visible'); return; }
   const st = getStatusDef(logCatKey);
   const col = getStatusColor(logCatKey);
@@ -4949,6 +5162,11 @@ function scrollAddModalToBottom() {
 }
 
 function logCatSelectStatus(key) {
+  if (isSearchMode) {
+    isSearchMode = false;
+    searchFilterText = '';
+    document.getElementById('search-match-row')?.classList.remove('visible');
+  }
   const prevKey = logCatKey;
   const subs = getStatusSubs(key);
   logCatKey = key;
@@ -4967,6 +5185,7 @@ function logCatSelectStatus(key) {
 
 document.getElementById('log-cat-clear')?.addEventListener('touchend', e=>{
   e.preventDefault();
+  if (isSearchMode) { exitSearchMode(); return; }
   closeSubcategorySheet();
   logCatKey=null;logCatSub=null;
   issueLogPrefs.lastStatusKey = '';
@@ -4975,6 +5194,7 @@ document.getElementById('log-cat-clear')?.addEventListener('touchend', e=>{
   renderLogCatButtons();renderLogSubChips();updateLogCatPill();
 },{passive:false});
 document.getElementById('log-cat-clear')?.addEventListener('click', ()=>{
+  if (isSearchMode) { exitSearchMode(); return; }
   closeSubcategorySheet();
   logCatKey=null;logCatSub=null;
   issueLogPrefs.lastStatusKey = '';
@@ -4988,6 +5208,7 @@ document.getElementById('log-cat-selected')?.addEventListener('click', e => {
 });
 
 window.closeModal = () => {
+  if (isSearchMode) { isSearchMode = false; searchFilterText = ''; document.getElementById('search-match-row')?.classList.remove('visible'); }
   syncIssueLogPrefsFromModal();
   document.getElementById('add-modal').classList.remove('visible');
   document.getElementById('log-photo-source-row')?.classList.remove('visible');
@@ -7144,6 +7365,14 @@ function renderIssues() {
       catInner.appendChild(tile);
     });
 
+    // Search tile (always last)
+    const searchTile = document.createElement('div');
+    searchTile.className = 'swipe-status-tile swipe-search-tile';
+    searchTile.style.color = 'var(--text2)';
+    searchTile.dataset.status = '__search__';
+    searchTile.innerHTML = `<span class="swipe-tile-icon">🔍</span><span class="swipe-tile-label">Search</span>`;
+    catInner.appendChild(searchTile);
+
     catPanel.appendChild(catInner);
 
     // Sub-status panel
@@ -7189,16 +7418,149 @@ function renderIssues() {
       cp.classList.remove('visible', 'has-subs');
       sp.classList.remove('visible');
       cp.querySelector('.swipe-category-inner')?.classList.remove('has-selection');
-      cp.querySelectorAll('.swipe-status-tile').forEach(t => t.classList.remove('selected'));
+      cp.querySelectorAll('.swipe-status-tile').forEach(t => {
+        t.classList.remove('selected');
+        t.style.opacity = '';
+        t.style.pointerEvents = '';
+      });
+      swipeSearchSub = '';
       if (openSwipeRow?.card === c) openSwipeRow = null;
       scheduleIssueLogRelayout();
     };
 
     // Tile clicks
     let lastTileTap = null; // { key, stamp } — tracks last tap for double-click/double-tap detection
+    let swipeSearchSub = '';
+    const handleSwipeSearchTileClick = (e) => {
+      const subInner = subPanel.querySelector('.swipe-sub-inner');
+      subInner.innerHTML = '';
+      subInner.className = 'swipe-sub-inner';
+
+      // Highlight search tile, dim others
+      catInner.querySelectorAll('.swipe-status-tile').forEach(t => {
+        t.classList.remove('selected', 'current');
+        if (t !== searchTile) { t.style.opacity = '0.3'; t.style.pointerEvents = 'none'; }
+        else { t.style.opacity = ''; t.style.pointerEvents = ''; }
+      });
+      searchTile.classList.add('selected');
+      catInner.classList.add('has-selection');
+      catPanel.classList.add('has-subs');
+      catPanel.classList.add('has-subs');
+
+      const renderSwipeSearchSubs = () => {
+        subInner.innerHTML = '';
+        const filter = swipeSearchSub.toLowerCase();
+        const allSubs = getAllSubs();
+        const filtered = filter ? allSubs.filter(s => s.toLowerCase().includes(filter)) : allSubs;
+
+        const inputWrap = document.createElement('div');
+        inputWrap.className = 'search-input-wrap';
+        inputWrap.style.padding = '0 0 8px 0';
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'search-input';
+        input.placeholder = '🔍 Find subcategory…';
+        input.value = swipeSearchSub;
+        input.setAttribute('autocomplete', 'off');
+        input.addEventListener('input', () => {
+          swipeSearchSub = input.value;
+          renderSwipeSearchSubs();
+        });
+        input.addEventListener('mousedown', e => e.stopPropagation());
+        input.addEventListener('touchstart', e => e.stopPropagation(), { passive: true });
+        inputWrap.appendChild(input);
+        subInner.appendChild(inputWrap);
+
+        if (!filtered.length) {
+          const empty = document.createElement('div');
+          empty.className = 'search-no-match';
+          empty.textContent = allSubs.length ? 'No subcategories match.' : 'No subcategories configured.';
+          subInner.appendChild(empty);
+          subPanel.classList.add('visible');
+          scheduleIssueLogRelayout();
+          scrollPanelBottomIntoView(subPanel);
+          setTimeout(() => scrollPanelBottomIntoView(subPanel), 240);
+          return;
+        }
+
+        const grid = document.createElement('div');
+        grid.className = 'subcategory-grid search-sub-grid visible';
+        applyColumnMajorGridLayout(grid, filtered.length, 2);
+        filtered.forEach(sub => {
+          const cats = getSubCats(sub);
+          const item = document.createElement('button');
+          item.type = 'button';
+          item.className = 'subcategory-item swipe-sub-action';
+          item.innerHTML = `<span class="subcategory-item-label">${esc(sub)}</span><span class="search-sub-count">${cats.length}</span>`;
+          const neutralColor = 'var(--text2)';
+          item.style.borderColor = alphaColor(neutralColor, 0.25);
+          item.style.color = 'var(--text)';
+          item.style.background = 'linear-gradient(180deg, rgba(255,255,255,0.03), transparent)';
+          item.dataset.sub = sub;
+          const handleSearchSubClick = () => {
+            const matchCats = getSubCats(sub);
+            if (!matchCats.length) return;
+            if (matchCats.length === 1) {
+              // Auto-select if only one match
+              closeSwipeCard(card);
+              const key = matchCats[0];
+              if (sub && requiresSerialNumber(key, sub)) { openSerialModal(issue.id, key, sub); }
+              else { addStatusEntry(issue.id, key, sub, ''); }
+              return;
+            }
+            // Show match categories
+            subInner.innerHTML = '';
+            const label = document.createElement('div');
+            label.className = 'search-match-label';
+            label.textContent = `Found "${sub}" in:`;
+            subInner.appendChild(label);
+            const btnRow = document.createElement('div');
+            btnRow.className = 'search-match-btns';
+            matchCats.forEach(key => {
+              const st = getStatusDef(key);
+              const col = getStatusColor(key);
+              const btn = document.createElement('button');
+              btn.className = 'search-match-btn';
+              btn.style.color = col;
+              btn.style.borderColor = alphaColor(col, 0.4);
+              btn.style.background = alphaColor(col, 0.08);
+              btn.innerHTML = `<span class="search-match-icon">${st.icon}</span><span class="search-match-label-text">${getStatusLabel(key, 'short')}</span>`;
+              addTapListener(btn, () => {
+                closeSwipeCard(card);
+                if (sub && requiresSerialNumber(key, sub)) { openSerialModal(issue.id, key, sub); }
+                else { addStatusEntry(issue.id, key, sub, ''); }
+              });
+              btnRow.appendChild(btn);
+            });
+            const backBtn = document.createElement('button');
+            backBtn.className = 'search-match-back';
+            backBtn.textContent = '← Back';
+            backBtn.addEventListener('click', renderSwipeSearchSubs);
+            btnRow.appendChild(backBtn);
+            subInner.appendChild(btnRow);
+            scheduleIssueLogRelayout();
+            scrollPanelBottomIntoView(subPanel);
+            setTimeout(() => scrollPanelBottomIntoView(subPanel), 240);
+          };
+          addTapListener(item, handleSearchSubClick);
+          item.addEventListener('click', handleSearchSubClick);
+          grid.appendChild(item);
+        });
+        subInner.appendChild(grid);
+        subPanel.classList.add('visible');
+        scheduleIssueLogRelayout();
+        scrollPanelBottomIntoView(subPanel);
+        setTimeout(() => scrollPanelBottomIntoView(subPanel), 240);
+        requestAnimationFrame(() => input.focus());
+      };
+
+      renderSwipeSearchSubs();
+    };
+
     catInner.querySelectorAll('.swipe-status-tile').forEach(tile => {
       const handleTileClick = (e) => {
         const statusKey = tile.dataset.status;
+        if (statusKey === '__search__') { handleSwipeSearchTileClick(e); return; }
         const statusDef = getStatusDef(statusKey);
         const stamp = e ? e.timeStamp : Date.now();
 
@@ -15116,7 +15478,7 @@ buildDemoControls = function() {
     wrap.appendChild(input);
     settingsPanel.appendChild(wrap);
   }
-  document.body.appendChild(settingsPanel);
+  panel.appendChild(settingsPanel);
 
   const feed = document.createElement('div');
   feed.id = 'demo-feed';
@@ -15131,6 +15493,11 @@ buildDemoControls = function() {
 
 resetDemo = async function() {
   stopDemoEngine();
+  // Detach listeners so delete events don't trigger re-renders during cleanup
+  if (unsubscribe) { unsubscribe(); unsubscribe = null; }
+  issues = [];
+  issuesById.clear();
+  const commits = [];
   try {
     const issuesSnap = await getDocs(collection(db, 'plants', DEMO_PLANT_ID, 'issues'));
     for (const issueDoc of issuesSnap.docs) {
@@ -15139,14 +15506,14 @@ resetDemo = async function() {
         getDocs(collection(ref, 'events')),
         getDocs(collection(ref, 'attachments'))
       ]);
-      let writes = 0;
-      const doBatch = () => { if (batch) { batch.commit().catch(() => {}); } batch = writeBatch(db); writes = 0; };
-      let batch = writeBatch(db);
-      eventsSnap.docs.forEach(evt => { batch.delete(evt.ref); writes++; if (writes >= 400) doBatch(); });
-      attsSnap.docs.forEach(a => { batch.delete(a.ref); writes++; if (writes >= 400) doBatch(); });
-      batch.delete(ref);
-      await batch.commit();
+      const allDocs = [...eventsSnap.docs.map(d => d.ref), ...attsSnap.docs.map(d => d.ref), ref];
+      for (let i = 0; i < allDocs.length; i += 400) {
+        const batch = writeBatch(db);
+        allDocs.slice(i, i + 400).forEach(dr => batch.delete(dr));
+        commits.push(batch.commit());
+      }
     }
   } catch (e) { console.warn('Demo reset cleanup error:', e); }
+  await Promise.all(commits);
   window.location.reload();
 }
