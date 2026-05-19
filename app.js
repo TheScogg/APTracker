@@ -4803,7 +4803,7 @@ function renderLogCatButtons() {
       btn.style.background = alphaColor(col, 0.13);
     }
     if (isSearchMode) {
-      btn.style.opacity = '0.3';
+      btn.style.opacity = '0.5';
       btn.style.pointerEvents = 'none';
     }
     btn.innerHTML = `<span class="log-cat-icon">${st.icon}</span><span class="log-cat-label">${getStatusLabel(key, 'short')}</span>`;
@@ -4899,13 +4899,13 @@ function renderSearchSubs() {
   const allSubs = getAllSubs();
   const filtered = filter ? allSubs.filter(s => s.toLowerCase().includes(filter)) : allSubs;
 
-  // Search input row
+  // Search input
   barRow.innerHTML = '';
   barRow.className = 'search-bar-row visible';
   const input = document.createElement('input');
   input.type = 'text';
   input.className = 'search-input';
-  input.placeholder = '🔍 Find subcategory…';
+  input.placeholder = 'Find subcategory…';
   input.value = searchFilterText;
   input.setAttribute('autocomplete', 'off');
   input.addEventListener('input', () => {
@@ -4915,12 +4915,10 @@ function renderSearchSubs() {
   input.addEventListener('keydown', e => { e.stopPropagation(); });
   barRow.appendChild(input);
 
-  // Subcategory grid
+  // Subcategory list (flexbox)
   subRow.innerHTML = '';
   subRow.className = 'log-sub-row visible search-mode';
-  subRow.style.flexWrap = '';
-  subRow.style.gap = '';
-  subRow.style.marginTop = '0';
+  subRow.style.marginTop = '4px';
   subRow.style.marginBottom = '8px';
 
   if (!filtered.length) {
@@ -4932,28 +4930,20 @@ function renderSearchSubs() {
     return;
   }
 
-  const nCols = filtered.length > 12 ? 3 : 2;
-  const grid = document.createElement('div');
-  grid.className = 'subcategory-grid search-sub-grid visible';
-  grid.style.width = '100%';
-  grid.style.gridTemplateColumns = `repeat(${nCols}, 1fr)`;
-  grid.style.gridTemplateRows = '';
+  const list = document.createElement('div');
+  list.className = 'search-mode-list';
 
   filtered.forEach(sub => {
     const cats = getSubCats(sub);
     const item = document.createElement('button');
     item.type = 'button';
-    item.className = 'subcategory-item search-sub-item';
-    item.innerHTML = `<span class="subcategory-item-label">${esc(sub)}</span><span class="search-sub-count">${cats.length}</span>`;
-    const neutralColor = 'var(--text2)';
-    item.style.borderColor = alphaColor(neutralColor, 0.25);
-    item.style.color = 'var(--text)';
-    item.style.background = 'linear-gradient(180deg, rgba(255,255,255,0.03), transparent)';
+    item.className = 'search-mode-item';
+    item.innerHTML = `<span class="search-mode-item-label">${esc(sub)}</span><span class="search-mode-count">${cats.length}</span>`;
     item.dataset.sub = sub;
     addTapListener(item, () => onSearchSubClick(sub));
-    grid.appendChild(item);
+    list.appendChild(item);
   });
-  subRow.appendChild(grid);
+  subRow.appendChild(list);
 
   requestAnimationFrame(() => {
     input.focus();
@@ -7441,7 +7431,7 @@ function renderIssues() {
       // Highlight search tile, dim others
       catInner.querySelectorAll('.swipe-status-tile').forEach(t => {
         t.classList.remove('selected', 'current');
-        if (t !== searchTile) { t.style.opacity = '0.3'; t.style.pointerEvents = 'none'; }
+        if (t !== searchTile) { t.style.opacity = '0.5'; t.style.pointerEvents = 'none'; }
         else { t.style.opacity = ''; t.style.pointerEvents = ''; }
       });
       searchTile.classList.add('selected');
@@ -7485,19 +7475,14 @@ function renderIssues() {
           return;
         }
 
-        const grid = document.createElement('div');
-        grid.className = 'subcategory-grid search-sub-grid visible';
-        applyColumnMajorGridLayout(grid, filtered.length, 2);
+        const list = document.createElement('div');
+        list.className = 'search-mode-list';
         filtered.forEach(sub => {
           const cats = getSubCats(sub);
           const item = document.createElement('button');
           item.type = 'button';
-          item.className = 'subcategory-item swipe-sub-action';
-          item.innerHTML = `<span class="subcategory-item-label">${esc(sub)}</span><span class="search-sub-count">${cats.length}</span>`;
-          const neutralColor = 'var(--text2)';
-          item.style.borderColor = alphaColor(neutralColor, 0.25);
-          item.style.color = 'var(--text)';
-          item.style.background = 'linear-gradient(180deg, rgba(255,255,255,0.03), transparent)';
+          item.className = 'search-mode-item';
+          item.innerHTML = `<span class="search-mode-item-label">${esc(sub)}</span><span class="search-mode-count">${cats.length}</span>`;
           item.dataset.sub = sub;
           const handleSearchSubClick = () => {
             const matchCats = getSubCats(sub);
@@ -7546,9 +7531,9 @@ function renderIssues() {
           };
           addTapListener(item, handleSearchSubClick);
           item.addEventListener('click', handleSearchSubClick);
-          grid.appendChild(item);
+          list.appendChild(item);
         });
-        subInner.appendChild(grid);
+        subInner.appendChild(list);
         subPanel.classList.add('visible');
         scheduleIssueLogRelayout();
         scrollPanelBottomIntoView(subPanel);
