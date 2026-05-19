@@ -4932,10 +4932,12 @@ function renderSearchSubs() {
     return;
   }
 
+  const nCols = filtered.length > 12 ? 3 : 2;
   const grid = document.createElement('div');
   grid.className = 'subcategory-grid search-sub-grid visible';
-  const nCols = filtered.length > 12 ? 3 : 2;
-  applyColumnMajorGridLayout(grid, filtered.length, nCols);
+  grid.style.width = '100%';
+  grid.style.gridTemplateColumns = `repeat(${nCols}, 1fr)`;
+  grid.style.gridTemplateRows = '';
 
   filtered.forEach(sub => {
     const cats = getSubCats(sub);
