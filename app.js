@@ -4933,7 +4933,7 @@ function renderSearchSubs() {
     msg.className = 'search-no-match';
     msg.textContent = allSubs.length ? 'No subcategories match "' + searchFilterText + '"' : 'No subcategories are configured.';
     subRow.appendChild(msg);
-    requestAnimationFrame(() => { input.focus(); scrollAddModalToBottom(); });
+    requestAnimationFrame(() => input.focus());
     return;
   }
 
@@ -4948,10 +4948,7 @@ function renderSearchSubs() {
     subRow.appendChild(item);
   });
 
-  requestAnimationFrame(() => {
-    input.focus();
-    scrollAddModalToBottom();
-  });
+  requestAnimationFrame(() => input.focus());
 }
 
 function onSearchSubClick(sub) {
