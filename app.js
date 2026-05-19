@@ -4979,7 +4979,10 @@ function renderSharedSearchContent(barContainer, gridContainer, onSubPick, activ
     item.className = 'search-mode-item' + (sub === selectedSub ? ' selected' : '');
     item.innerHTML = `<span class="search-mode-item-label">${esc(sub)}</span><span class="search-mode-count">${cats.length}</span>`;
     item.dataset.sub = sub;
-    addTapListener(item, () => subPick(sub));
+    addTapListener(item, evt => {
+      evt?.stopPropagation?.();
+      subPick(sub);
+    });
     gridContainer.appendChild(item);
   });
 
@@ -7771,7 +7774,10 @@ function closeSwipe() {
 }
 
 document.addEventListener('click', e => {
-  if (openSwipeRow && !e.target.closest('.issue-row')) closeSwipe();
+  if (!openSwipeRow) return;
+  const path = typeof e.composedPath === 'function' ? e.composedPath() : [];
+  const clickedInsideIssueRow = path.some(node => node && node.classList && node.classList.contains('issue-row'));
+  if (!clickedInsideIssueRow) closeSwipe();
 });
 
 let _swipeJustHappened = false;
