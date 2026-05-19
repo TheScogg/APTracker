@@ -7457,8 +7457,6 @@ function renderIssues() {
     };
 
     const handleSwipeSearchTileClick = (e) => {
-      if (e && e.__aptrackerHandledSwipeClick) return;
-      if (e) e.__aptrackerHandledSwipeClick = true;
       if (swipeSearchMode) { resetSwipeSearchMode(); return; }
 
       const subInner = subPanel.querySelector('.swipe-sub-inner');
