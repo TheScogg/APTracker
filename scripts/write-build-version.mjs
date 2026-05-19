@@ -11,9 +11,17 @@ let branch = 'unknown';
 let commitDate = '';
 const builtAt = new Date().toISOString();
 try {
-  fullCommit = execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim() || 'dev';
-  version = execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim() || 'dev';
-  branch = execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf8' }).trim() || 'unknown';
+  fullCommit = process.env.WORKERS_CI_COMMIT_SHA
+    || process.env.CF_PAGES_COMMIT_SHA
+    || process.env.GITHUB_SHA
+    || execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim()
+    || 'dev';
+  version = fullCommit === 'dev' ? 'dev' : fullCommit.slice(0, 7);
+  branch = process.env.WORKERS_CI_BRANCH
+    || process.env.CF_PAGES_BRANCH
+    || process.env.GITHUB_REF_NAME
+    || execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf8' }).trim()
+    || 'unknown';
   commitDate = execSync('git log -1 --format=%cI', { encoding: 'utf8' }).trim();
 } catch (_) {
   // Keep the build usable even outside a git checkout.
