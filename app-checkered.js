@@ -44,20 +44,12 @@ let _demoSim = null;
 let buildDemoControls, startDemoEngine, stopDemoEngine, resetDemo;
 
 const firestoreIoStats = { reads: 0, writes: 0 };
-const APP_BUILD_INFO = window.__APP_BUILD_INFO__ || {};
-const APP_VERSION = APP_BUILD_INFO.shortCommit || APP_BUILD_INFO.version || window.__APP_VERSION__ || 'dev';
+const APP_VERSION = window.__APP_VERSION__ || 'dev';
 function refreshAppVersionIndicator() {
   const el = document.getElementById('app-version-indicator');
   if (!el) return;
-  const dirtySuffix = APP_BUILD_INFO.dirty ? ' (dirty build)' : '';
-  el.textContent = `rev: ${APP_VERSION}${APP_BUILD_INFO.dirty ? '*' : ''}`;
-  const titleParts = [
-    `Current commit: ${APP_BUILD_INFO.commit || APP_VERSION}`,
-    APP_BUILD_INFO.branch ? `Branch: ${APP_BUILD_INFO.branch}` : '',
-    APP_BUILD_INFO.commitDate ? `Commit date: ${APP_BUILD_INFO.commitDate}` : '',
-    APP_BUILD_INFO.builtAt ? `Built: ${APP_BUILD_INFO.builtAt}` : ''
-  ].filter(Boolean);
-  el.title = `${titleParts.join('\n')}${dirtySuffix}`;
+  el.textContent = `rev: ${APP_VERSION}`;
+  el.title = `Current commit version: ${APP_VERSION}`;
 }
 function refreshFirestoreIoIndicator() {
   const el = document.getElementById('firestore-io-indicator');
@@ -3173,6 +3165,7 @@ let pendingPhotos = [];   // for add modal
 let logCatKey = null;
 let logCatSub = null;
 let isSearchMode = false;
+let searchActiveSub = '';
 let editPhotos = [];      // for edit modal (existing + new)
 let editTargetId = null;
 let currentMachine = null;
@@ -4810,7 +4803,7 @@ function renderLogCatButtons() {
       btn.style.background = alphaColor(col, 0.13);
     }
     if (isSearchMode) {
-      if (addSearchActiveSub && getSubCats(addSearchActiveSub).includes(key)) {
+      if (searchActiveSub && getSubCats(searchActiveSub).includes(key)) {
         btn.style.opacity = '1';
         btn.style.pointerEvents = 'auto';
         btn.classList.add('search-match');
@@ -4840,15 +4833,7 @@ function renderLogCatButtons() {
 
 function renderLogSubChips() {
   const row = document.getElementById('log-sub-row'); if (!row) return;
-  if (isSearchMode) {
-    renderSharedSearchContent(
-      document.getElementById('search-bar-row'),
-      row,
-      handleSearchSubPick,
-      addSearchActiveSub
-    );
-    return;
-  }
+  if (isSearchMode) { renderSharedSearchContent(document.getElementById('search-bar-row'), row); return; }
   row.innerHTML = '';
   if (!logCatKey) {
     row.className = 'log-sub-row';
@@ -4892,7 +4877,7 @@ function renderLogSubChips() {
 // Each surface passes its own callbacks and container references.
 
 let searchFilterText = '';
-let addSearchActiveSub = '';
+let searchActiveSub = '';
 
 // Surface-specific hooks — set by openSearch below
 let searchApplySelection = null;  // (catKey, sub) => { ... }
@@ -4904,16 +4889,11 @@ function openSearch(applySelection, exitFn) {
   searchExitFn = exitFn;
   isSearchMode = true;
   searchFilterText = '';
-  addSearchActiveSub = '';
+  searchActiveSub = '';
   logCatKey = null;
   logCatSub = null;
   renderLogCatButtons();
-  renderSharedSearchContent(
-    document.getElementById('search-bar-row'),
-    document.getElementById('log-sub-row'),
-    handleSearchSubPick,
-    addSearchActiveSub
-  );
+  renderSharedSearchContent(document.getElementById('search-bar-row'), document.getElementById('log-sub-row'));
   updateLogCatPill();
   closeSubcategorySheet();
 }
@@ -4922,7 +4902,7 @@ function closeSearch() {
   if (!isSearchMode) return;
   isSearchMode = false;
   searchFilterText = '';
-  addSearchActiveSub = '';
+  searchActiveSub = '';
   searchApplySelection = null;
   searchExitFn = null;
   document.getElementById('search-bar-row')?.classList.remove('visible');
@@ -4931,10 +4911,9 @@ function closeSearch() {
   updateLogCatPill();
 }
 
-function renderSharedSearchContent(barContainer, gridContainer, onSubPick, activeSub = '') {
+function renderSharedSearchContent(barContainer, gridContainer, onSubPick) {
   if (!barContainer || !gridContainer) return;
   const subPick = onSubPick || handleSearchSubPick;
-  const selectedSub = String(activeSub || '');
 
   const filter = searchFilterText.toLowerCase();
   const allSubs = getAllSubs();
@@ -4953,7 +4932,7 @@ function renderSharedSearchContent(barContainer, gridContainer, onSubPick, activ
   input.setAttribute('autocomplete', 'off');
   input.addEventListener('input', () => {
     searchFilterText = input.value;
-    renderSharedSearchContent(barContainer, gridContainer, subPick, selectedSub);
+    renderSharedSearchContent(barContainer, gridContainer, subPick);
   });
   barContainer.appendChild(input);
 
@@ -4984,13 +4963,10 @@ function renderSharedSearchContent(barContainer, gridContainer, onSubPick, activ
     const cats = getSubCats(sub);
     const item = document.createElement('button');
     item.type = 'button';
-    item.className = 'search-mode-item' + (sub === selectedSub ? ' selected' : '');
+    item.className = 'search-mode-item' + (sub === searchActiveSub ? ' selected' : '');
     item.innerHTML = `<span class="search-mode-item-label">${esc(sub)}</span><span class="search-mode-count">${cats.length}</span>`;
     item.dataset.sub = sub;
-    addTapListener(item, evt => {
-      evt?.stopPropagation?.();
-      subPick(sub);
-    });
+    addTapListener(item, () => subPick(sub));
     gridContainer.appendChild(item);
   });
 
@@ -5013,13 +4989,13 @@ function searchApplyAddModal(key, sub) {
 function handleSearchSubPick(sub) {
   const cats = getSubCats(sub);
   if (!cats.length) return;
-  addSearchActiveSub = sub;
+  searchActiveSub = sub;
   renderLogCatButtons();
-  if (addSearchActiveSub) {
+  if (searchActiveSub) {
     // Re-render with updated activeSub
     const barContainer = document.getElementById('search-bar-row');
     const gridContainer = document.getElementById('log-sub-row');
-    renderSharedSearchContent(barContainer, gridContainer, handleSearchSubPick, addSearchActiveSub);
+    renderSharedSearchContent(barContainer, gridContainer);
   }
 }
 
@@ -5160,7 +5136,7 @@ function scrollAddModalToBottom() {
 
 function logCatSelectStatus(key) {
   if (isSearchMode) {
-    if (searchApplySelection) searchApplySelection(key, addSearchActiveSub);
+    if (searchApplySelection) searchApplySelection(key, searchActiveSub);
     return;
   }
   const prevKey = logCatKey;
@@ -7412,7 +7388,7 @@ function renderIssues() {
       const r = c.closest('.issue-row');
       const cp = r.querySelector('.swipe-category-panel');
       const sp = r.querySelector('.swipe-sub-panel');
-      cp.classList.remove('visible', 'has-subs', 'search-mode');
+      cp.classList.remove('visible', 'has-subs');
       sp.classList.remove('visible');
       cp.querySelector('.swipe-category-inner')?.classList.remove('has-selection');
       cp.querySelectorAll('.swipe-status-tile').forEach(t => {
@@ -7446,32 +7422,15 @@ function renderIssues() {
       });
     };
 
-    const resetSwipeSearchMode = () => {
-      if (isSearchMode) closeSearch();
-      swipeSearchActiveSub = '';
-      swipeSearchMode = false;
-      searchApplySelection = null;
-      searchExitFn = null;
-      searchTile.classList.remove('selected');
-      catInner.classList.remove('has-selection');
-      catPanel.classList.remove('has-subs', 'search-mode');
-      subPanel.classList.remove('visible');
-      catInner.querySelectorAll('.swipe-status-tile').forEach(t => {
-        t.classList.remove('selected', 'search-match');
-        t.style.opacity = '';
-        t.style.pointerEvents = '';
-      });
-      scheduleIssueLogRelayout();
-    };
-
     const handleSwipeSearchTileClick = (e) => {
-      if (swipeSearchMode) { resetSwipeSearchMode(); return; }
+      if (swipeSearchMode) { closeSwipeCard(card); return; }
 
       const subInner = subPanel.querySelector('.swipe-sub-inner');
 
       // Set shared search state
       isSearchMode = true;
       searchFilterText = '';
+      searchActiveSub = '';
       searchApplySelection = (key, sub) => {
         closeSwipeCard(card);
         if (sub && requiresSerialNumber(key, sub)) { openSerialModal(issue.id, key, sub); }
@@ -7484,16 +7443,17 @@ function renderIssues() {
       swipeSearchActiveSub = '';
       searchTile.classList.add('selected');
       catInner.classList.add('has-selection');
-      catPanel.classList.add('has-subs', 'search-mode');
+      catPanel.classList.add('has-subs');
       dimSwipeTiles();
 
       const swipeSubPick = (sub) => {
         if (!getSubCats(sub).length) return;
+        searchActiveSub = sub;
         swipeSearchActiveSub = sub;
         dimSwipeTiles();
-        renderSharedSearchContent(subInner, subInner, swipeSubPick, swipeSearchActiveSub);
+        renderSharedSearchContent(subInner, subInner, swipeSubPick);
       };
-      renderSharedSearchContent(subInner, subInner, swipeSubPick, swipeSearchActiveSub);
+      renderSharedSearchContent(subInner, subInner, swipeSubPick);
       subPanel.classList.add('visible');
       scheduleIssueLogRelayout();
       scrollPanelBottomIntoView(subPanel);
@@ -7502,8 +7462,6 @@ function renderIssues() {
 
     catInner.querySelectorAll('.swipe-status-tile').forEach(tile => {
       const handleTileClick = (e) => {
-        if (e && e.__aptrackerHandledSwipeClick) return;
-        if (e) e.__aptrackerHandledSwipeClick = true;
         const statusKey = tile.dataset.status;
         if (statusKey === '__search__') { handleSwipeSearchTileClick(e); return; }
         if (swipeSearchActiveSub) {
@@ -7802,10 +7760,7 @@ function closeSwipe() {
 }
 
 document.addEventListener('click', e => {
-  if (!openSwipeRow) return;
-  const path = typeof e.composedPath === 'function' ? e.composedPath() : [];
-  const clickedInsideIssueRow = path.some(node => node && node.classList && node.classList.contains('issue-row'));
-  if (!clickedInsideIssueRow) closeSwipe();
+  if (openSwipeRow && !e.target.closest('.issue-row')) closeSwipe();
 });
 
 let _swipeJustHappened = false;

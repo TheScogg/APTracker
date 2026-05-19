@@ -1942,6 +1942,18 @@
   .swipe-status-tile.selected { opacity: 1; background: #232120; border-color: currentColor; box-shadow: 0 0 10px currentColor; animation: swipeTileSelectedPulse 1.4s ease-in-out infinite; }
   /* Higher specificity to override the nth-child stagger rules when a tile is selected */
   .swipe-category-panel.visible .swipe-status-tile.selected { opacity: 1; animation: swipeTileSelectedPulse 1.4s ease-in-out infinite; }
+  .swipe-category-panel.visible.search-mode .swipe-status-tile {
+    opacity: 0.5 !important;
+    animation: none !important;
+    pointer-events: none;
+    filter: saturate(0.7) brightness(0.8);
+  }
+  .swipe-category-panel.visible.search-mode .swipe-status-tile.search-match {
+    opacity: 1 !important;
+    animation: searchCatPulse 1.4s ease-in-out infinite !important;
+    pointer-events: auto;
+    filter: none;
+  }
   @keyframes swipeTileSelectedPulse {
     0%, 100% { box-shadow: 0 0 8px currentColor; }
     50%       { box-shadow: 0 0 18px currentColor, 0 0 32px color-mix(in srgb, currentColor 40%, transparent); }

@@ -208,6 +208,26 @@ function getDocAiText(doc) {
   return '';
 }
 
+function shouldBypassStaticCache(pathname) {
+  return pathname === '/'
+    || pathname === '/index.html'
+    || pathname === '/app.js'
+    || pathname === '/build-info.js'
+    || pathname === '/styles.css';
+}
+
+function withStaticCacheHeaders(response, pathname) {
+  const headers = new Headers(response.headers);
+  if (shouldBypassStaticCache(pathname)) {
+    headers.set('Cache-Control', 'no-store, max-age=0');
+  }
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers
+  });
+}
+
 // ── AWS Signature V4 helpers ──────────────────────────────────────────
 
 async function hmac(key, msg) {
@@ -1103,6 +1123,7 @@ export default {
       return new Response(JSON.stringify(info, null, 2), { headers: { 'Content-Type': 'application/json' } });
     }
 
-    return env.ASSETS.fetch(request);
+    const assetResponse = await env.ASSETS.fetch(request);
+    return withStaticCacheHeaders(assetResponse, url.pathname);
   }
 };
