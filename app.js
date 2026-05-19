@@ -4892,7 +4892,9 @@ function exitSearchMode() {
 function renderSearchSubs() {
   const row = document.getElementById('log-sub-row'); if (!row) return;
   row.innerHTML = '';
-  row.className = 'log-sub-row';
+  row.className = 'log-sub-row visible search-mode';
+  row.style.flexWrap = '';
+  row.style.gap = '';
   row.style.marginTop = '4px';
   row.style.marginBottom = '8px';
 
@@ -4936,7 +4938,7 @@ function renderSearchSubs() {
   const grid = document.createElement('div');
   grid.className = 'subcategory-grid search-sub-grid visible';
   grid.style.marginTop = '10px';
-  const nCols = filtered.length > 12 ? 2 : 2;
+  const nCols = filtered.length > 12 ? 3 : 2;
   applyColumnMajorGridLayout(grid, filtered.length, nCols);
 
   filtered.forEach(sub => {
