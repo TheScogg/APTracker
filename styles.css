@@ -3552,7 +3552,9 @@
   .log-cat-clear:active { color: var(--text2); }
   .log-sub-row { display: none; flex-wrap: wrap; gap: 5px; margin-bottom: 4px; }
   .log-sub-row.visible { display: flex; }
-  .log-sub-row.visible.search-mode { display: block; }
+  .log-sub-row.visible.search-mode { display: block; width: 100%; }
+  .search-bar-row { display: none; }
+  .search-bar-row.visible { display: block; }
   .log-sub-chip { font-size: 12px; font-weight: 700; padding: 4px 11px; border-radius: 20px; border: 1px solid; cursor: pointer; font-family: 'Nunito', sans-serif; transition: background 0.12s, transform 0.1s; }
   .log-sub-chip:active { transform: scale(0.94); }
   .log-sub-chip.selected { filter: brightness(1.2); }

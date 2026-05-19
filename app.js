@@ -4767,7 +4767,7 @@ function applyIssueLogDefaults() {
 window.openAddModal = m => {
   if (!currentUser) return;
   if (!currentUserPermissions.canCreateIssue) return;
-  if (isSearchMode) { isSearchMode = false; searchFilterText = ''; document.getElementById('search-match-row')?.classList.remove('visible'); }
+  if (isSearchMode) { isSearchMode = false; searchFilterText = ''; document.getElementById('search-bar-row')?.classList.remove('visible'); document.getElementById('search-match-row')?.classList.remove('visible'); }
   closeSubcategorySheet();
   subcategorySheetState = { open: false, statusKey: '', selectedSub: '' };
   currentMachine=m; pendingPhotos=[];
@@ -4883,6 +4883,7 @@ function enterSearchMode() {
 function exitSearchMode() {
   isSearchMode = false;
   searchFilterText = '';
+  document.getElementById('search-bar-row')?.classList.remove('visible');
   document.getElementById('search-match-row')?.classList.remove('visible');
   renderLogCatButtons();
   renderLogSubChips();
@@ -4890,21 +4891,17 @@ function exitSearchMode() {
 }
 
 function renderSearchSubs() {
-  const row = document.getElementById('log-sub-row'); if (!row) return;
-  row.innerHTML = '';
-  row.className = 'log-sub-row visible search-mode';
-  row.style.flexWrap = '';
-  row.style.gap = '';
-  row.style.marginTop = '4px';
-  row.style.marginBottom = '8px';
+  const barRow = document.getElementById('search-bar-row');
+  const subRow = document.getElementById('log-sub-row');
+  if (!barRow || !subRow) return;
 
   const filter = searchFilterText.toLowerCase();
   const allSubs = getAllSubs();
   const filtered = filter ? allSubs.filter(s => s.toLowerCase().includes(filter)) : allSubs;
 
-  // Search input
-  const inputWrap = document.createElement('div');
-  inputWrap.className = 'search-input-wrap';
+  // Search input row
+  barRow.innerHTML = '';
+  barRow.className = 'search-bar-row visible';
   const input = document.createElement('input');
   input.type = 'text';
   input.className = 'search-input';
@@ -4916,28 +4913,27 @@ function renderSearchSubs() {
     renderSearchSubs();
   });
   input.addEventListener('keydown', e => { e.stopPropagation(); });
-  inputWrap.appendChild(input);
-  if (filtered.length === 0 && allSubs.length > 0) {
-    const noMatch = document.createElement('div');
-    noMatch.className = 'search-no-match';
-    noMatch.textContent = 'No subcategories match "' + searchFilterText + '"';
-    inputWrap.appendChild(noMatch);
-  }
-  row.appendChild(inputWrap);
+  barRow.appendChild(input);
 
-  if (filtered.length === 0) {
-    if (allSubs.length === 0) {
-      const empty = document.createElement('div');
-      empty.className = 'search-no-match';
-      empty.textContent = 'No subcategories are configured.';
-      row.appendChild(empty);
-    }
+  // Subcategory grid
+  subRow.innerHTML = '';
+  subRow.className = 'log-sub-row visible search-mode';
+  subRow.style.flexWrap = '';
+  subRow.style.gap = '';
+  subRow.style.marginTop = '0';
+  subRow.style.marginBottom = '8px';
+
+  if (!filtered.length) {
+    const msg = document.createElement('div');
+    msg.className = 'search-no-match';
+    msg.textContent = allSubs.length ? 'No subcategories match "' + searchFilterText + '"' : 'No subcategories are configured.';
+    subRow.appendChild(msg);
+    requestAnimationFrame(() => { input.focus(); scrollAddModalToBottom(); });
     return;
   }
 
   const grid = document.createElement('div');
   grid.className = 'subcategory-grid search-sub-grid visible';
-  grid.style.marginTop = '10px';
   const nCols = filtered.length > 12 ? 3 : 2;
   applyColumnMajorGridLayout(grid, filtered.length, nCols);
 
@@ -4955,7 +4951,7 @@ function renderSearchSubs() {
     addTapListener(item, () => onSearchSubClick(sub));
     grid.appendChild(item);
   });
-  row.appendChild(grid);
+  subRow.appendChild(grid);
 
   requestAnimationFrame(() => {
     input.focus();
@@ -5021,6 +5017,7 @@ function searchSelectCategory(key, sub) {
   saveIssueLogPrefs();
   isSearchMode = false;
   searchFilterText = '';
+  document.getElementById('search-bar-row')?.classList.remove('visible');
   document.getElementById('search-match-row')?.classList.remove('visible');
   renderLogCatButtons();
   renderLogSubChips();
@@ -5167,6 +5164,7 @@ function logCatSelectStatus(key) {
   if (isSearchMode) {
     isSearchMode = false;
     searchFilterText = '';
+    document.getElementById('search-bar-row')?.classList.remove('visible');
     document.getElementById('search-match-row')?.classList.remove('visible');
   }
   const prevKey = logCatKey;
@@ -5210,7 +5208,7 @@ document.getElementById('log-cat-selected')?.addEventListener('click', e => {
 });
 
 window.closeModal = () => {
-  if (isSearchMode) { isSearchMode = false; searchFilterText = ''; document.getElementById('search-match-row')?.classList.remove('visible'); }
+  if (isSearchMode) { isSearchMode = false; searchFilterText = ''; document.getElementById('search-bar-row')?.classList.remove('visible'); document.getElementById('search-match-row')?.classList.remove('visible'); }
   syncIssueLogPrefsFromModal();
   document.getElementById('add-modal').classList.remove('visible');
   document.getElementById('log-photo-source-row')?.classList.remove('visible');
