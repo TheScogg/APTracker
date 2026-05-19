@@ -3603,7 +3603,7 @@
   .log-cat-btn:active { transform: scale(0.95); }
   .log-cat-btn.selected { border-color: currentColor; }
   .log-cat-btn.search-match { animation: searchCatPulse 1.4s ease-in-out infinite; border-color: currentColor; }
-  .swipe-status-tile.search-match { animation: searchCatPulse 1.4s ease-in-out infinite; border-color: currentColor; box-shadow: 0 0 8px currentColor; }
+  .swipe-category-panel.visible .swipe-status-tile.search-match { animation: searchCatPulse 1.4s ease-in-out infinite; border-color: currentColor; box-shadow: 0 0 8px currentColor; }
   .log-cat-icon { font-size: 18px; line-height: 1; }
   .log-cat-label { font-size: 9px; font-weight: 800; letter-spacing: 0.2px; white-space: nowrap; }
   .log-cat-selected { display: none; align-items: center; gap: 8px; margin-bottom: 8px; }
