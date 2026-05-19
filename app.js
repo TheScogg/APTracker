@@ -7395,6 +7395,7 @@ function renderIssues() {
     };
 
     const handleSwipeSearchTileClick = (e) => {
+      if (searchTile.classList.contains('selected')) { closeSwipeCard(card); return; }
       const subInner = subPanel.querySelector('.swipe-sub-inner');
       subInner.innerHTML = '';
       subInner.className = 'swipe-sub-inner';
