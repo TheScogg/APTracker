@@ -3166,6 +3166,7 @@ let logCatKey = null;
 let logCatSub = null;
 let isSearchMode = false;
 let searchFilterText = '';
+let searchActiveSub = '';
 let editPhotos = [];      // for edit modal (existing + new)
 let editTargetId = null;
 let currentMachine = null;
@@ -4767,7 +4768,7 @@ function applyIssueLogDefaults() {
 window.openAddModal = m => {
   if (!currentUser) return;
   if (!currentUserPermissions.canCreateIssue) return;
-  if (isSearchMode) { isSearchMode = false; searchFilterText = ''; document.getElementById('search-bar-row')?.classList.remove('visible'); document.getElementById('search-match-row')?.classList.remove('visible'); }
+  if (isSearchMode) { isSearchMode = false; searchFilterText = ''; searchActiveSub = ''; document.getElementById('search-bar-row')?.classList.remove('visible'); }
   closeSubcategorySheet();
   subcategorySheetState = { open: false, statusKey: '', selectedSub: '' };
   currentMachine=m; pendingPhotos=[];
@@ -4803,8 +4804,13 @@ function renderLogCatButtons() {
       btn.style.background = alphaColor(col, 0.13);
     }
     if (isSearchMode) {
-      btn.style.opacity = '0.5';
-      btn.style.pointerEvents = 'none';
+      if (searchActiveSub && getSubCats(searchActiveSub).includes(key)) {
+        btn.style.opacity = '1';
+        btn.style.pointerEvents = 'auto';
+      } else {
+        btn.style.opacity = '0.5';
+        btn.style.pointerEvents = 'none';
+      }
     }
     btn.innerHTML = `<span class="log-cat-icon">${st.icon}</span><span class="log-cat-label">${getStatusLabel(key, 'short')}</span>`;
     addTapListener(btn, ()=>logCatSelectStatus(key));
@@ -4871,20 +4877,20 @@ function enterSearchMode() {
   if (isSearchMode) { exitSearchMode(); return; }
   isSearchMode = true;
   searchFilterText = '';
+  searchActiveSub = '';
   logCatKey = null;
   logCatSub = null;
   renderLogCatButtons();
   renderSearchSubs();
   updateLogCatPill();
   closeSubcategorySheet();
-  document.getElementById('search-match-row')?.classList.remove('visible');
 }
 
 function exitSearchMode() {
   isSearchMode = false;
   searchFilterText = '';
+  searchActiveSub = '';
   document.getElementById('search-bar-row')?.classList.remove('visible');
-  document.getElementById('search-match-row')?.classList.remove('visible');
   renderLogCatButtons();
   renderLogSubChips();
   updateLogCatPill();
@@ -4935,7 +4941,7 @@ function renderSearchSubs() {
     const cats = getSubCats(sub);
     const item = document.createElement('button');
     item.type = 'button';
-    item.className = 'search-mode-item';
+    item.className = 'search-mode-item' + (sub === searchActiveSub ? ' selected' : '');
     item.innerHTML = `<span class="search-mode-item-label">${esc(sub)}</span><span class="search-mode-count">${cats.length}</span>`;
     item.dataset.sub = sub;
     addTapListener(item, () => onSearchSubClick(sub));
@@ -4951,67 +4957,9 @@ function renderSearchSubs() {
 function onSearchSubClick(sub) {
   const cats = getSubCats(sub);
   if (!cats.length) return;
-  if (cats.length === 1) {
-    searchSelectCategory(cats[0], sub);
-    return;
-  }
-  renderSearchMatchCats(sub);
-}
-
-function renderSearchMatchCats(sub) {
-  const row = document.getElementById('search-match-row'); if (!row) return;
-  row.innerHTML = '';
-  row.className = 'search-match-row visible';
-
-  const cats = getSubCats(sub);
-  const label = document.createElement('div');
-  label.className = 'search-match-label';
-  label.textContent = `Found "${sub}" in:`;
-  row.appendChild(label);
-
-  const btnRow = document.createElement('div');
-  btnRow.className = 'search-match-btns';
-
-  cats.forEach(key => {
-    const st = getStatusDef(key);
-    const col = getStatusColor(key);
-    const btn = document.createElement('button');
-    btn.className = 'search-match-btn';
-    btn.style.color = col;
-    btn.style.borderColor = alphaColor(col, 0.4);
-    btn.style.background = alphaColor(col, 0.08);
-    btn.innerHTML = `<span class="search-match-icon">${st.icon}</span><span class="search-match-label-text">${getStatusLabel(key, 'short')}</span>`;
-    addTapListener(btn, () => searchSelectCategory(key, sub));
-    btnRow.appendChild(btn);
-  });
-
-  const backBtn = document.createElement('button');
-  backBtn.className = 'search-match-back';
-  backBtn.textContent = '← Back';
-  backBtn.addEventListener('click', () => {
-    document.getElementById('search-match-row')?.classList.remove('visible');
-    renderSearchSubs();
-  });
-  btnRow.appendChild(backBtn);
-
-  row.appendChild(btnRow);
-  requestAnimationFrame(() => scrollAddModalToBottom());
-}
-
-function searchSelectCategory(key, sub) {
-  logCatKey = key;
-  logCatSub = sub;
-  issueLogPrefs.lastStatusKey = key;
-  issueLogPrefs.lastStatusSub = sub;
-  saveIssueLogPrefs();
-  isSearchMode = false;
-  searchFilterText = '';
-  document.getElementById('search-bar-row')?.classList.remove('visible');
-  document.getElementById('search-match-row')?.classList.remove('visible');
+  searchActiveSub = sub;
   renderLogCatButtons();
-  renderLogSubChips();
-  updateLogCatPill();
-  scrollAddModalToBottom();
+  renderSearchSubs();
 }
 
 function renderSubcategorySheet(statusKey = subcategorySheetState.statusKey) {
@@ -5153,8 +5101,20 @@ function logCatSelectStatus(key) {
   if (isSearchMode) {
     isSearchMode = false;
     searchFilterText = '';
+    searchActiveSub = '';
     document.getElementById('search-bar-row')?.classList.remove('visible');
-    document.getElementById('search-match-row')?.classList.remove('visible');
+    const sub = searchActiveSub;
+    searchActiveSub = '';
+    logCatKey = key;
+    logCatSub = sub;
+    issueLogPrefs.lastStatusKey = key;
+    issueLogPrefs.lastStatusSub = sub;
+    saveIssueLogPrefs();
+    renderLogCatButtons();
+    renderLogSubChips();
+    updateLogCatPill();
+    scrollAddModalToBottom();
+    return;
   }
   const prevKey = logCatKey;
   const subs = getStatusSubs(key);
@@ -5197,7 +5157,7 @@ document.getElementById('log-cat-selected')?.addEventListener('click', e => {
 });
 
 window.closeModal = () => {
-  if (isSearchMode) { isSearchMode = false; searchFilterText = ''; document.getElementById('search-bar-row')?.classList.remove('visible'); document.getElementById('search-match-row')?.classList.remove('visible'); }
+  if (isSearchMode) { isSearchMode = false; searchFilterText = ''; searchActiveSub = ''; document.getElementById('search-bar-row')?.classList.remove('visible'); }
   syncIssueLogPrefsFromModal();
   document.getElementById('add-modal').classList.remove('visible');
   document.getElementById('log-photo-source-row')?.classList.remove('visible');
@@ -7413,6 +7373,7 @@ function renderIssues() {
         t.style.pointerEvents = '';
       });
       swipeSearchSub = '';
+      swipeSearchActiveSub = '';
       if (openSwipeRow?.card === c) openSwipeRow = null;
       scheduleIssueLogRelayout();
     };
@@ -7420,21 +7381,30 @@ function renderIssues() {
     // Tile clicks
     let lastTileTap = null; // { key, stamp } — tracks last tap for double-click/double-tap detection
     let swipeSearchSub = '';
+    let swipeSearchActiveSub = '';
+
+    const dimSwipeTiles = () => {
+      catInner.querySelectorAll('.swipe-status-tile').forEach(t => {
+        t.classList.remove('selected', 'current');
+        if (t === searchTile) { t.style.opacity = ''; t.style.pointerEvents = ''; return; }
+        if (swipeSearchActiveSub && getSubCats(swipeSearchActiveSub).includes(t.dataset.status)) {
+          t.style.opacity = '1'; t.style.pointerEvents = 'auto';
+        } else {
+          t.style.opacity = '0.5'; t.style.pointerEvents = 'none';
+        }
+      });
+    };
+
     const handleSwipeSearchTileClick = (e) => {
       const subInner = subPanel.querySelector('.swipe-sub-inner');
       subInner.innerHTML = '';
       subInner.className = 'swipe-sub-inner';
 
-      // Highlight search tile, dim others
-      catInner.querySelectorAll('.swipe-status-tile').forEach(t => {
-        t.classList.remove('selected', 'current');
-        if (t !== searchTile) { t.style.opacity = '0.5'; t.style.pointerEvents = 'none'; }
-        else { t.style.opacity = ''; t.style.pointerEvents = ''; }
-      });
+      swipeSearchActiveSub = '';
       searchTile.classList.add('selected');
       catInner.classList.add('has-selection');
       catPanel.classList.add('has-subs');
-      catPanel.classList.add('has-subs');
+      dimSwipeTiles();
 
       const renderSwipeSearchSubs = () => {
         subInner.innerHTML = '';
@@ -7473,61 +7443,23 @@ function renderIssues() {
         subInner.style.gridTemplateColumns = '1fr 1fr';
         subInner.style.gap = '6px';
         filtered.forEach(sub => {
-          const cats = getSubCats(sub);
           const item = document.createElement('button');
           item.type = 'button';
-          item.className = 'search-mode-item';
-          item.innerHTML = `<span class="search-mode-item-label">${esc(sub)}</span><span class="search-mode-count">${cats.length}</span>`;
+          item.className = 'search-mode-item' + (sub === swipeSearchActiveSub ? ' selected' : '');
+          item.innerHTML = `<span class="search-mode-item-label">${esc(sub)}</span><span class="search-mode-count">${getSubCats(sub).length}</span>`;
           item.dataset.sub = sub;
-          const handleSearchSubClick = () => {
-            const matchCats = getSubCats(sub);
-            if (!matchCats.length) return;
-            if (matchCats.length === 1) {
-              closeSwipeCard(card);
-              const key = matchCats[0];
-              if (sub && requiresSerialNumber(key, sub)) { openSerialModal(issue.id, key, sub); }
-              else { addStatusEntry(issue.id, key, sub, ''); }
-              return;
-            }
-            // Show match categories
-            subInner.innerHTML = '';
-            subInner.style.display = '';
-            subInner.style.gridTemplateColumns = '';
-            subInner.style.gap = '';
-            const label = document.createElement('div');
-            label.className = 'search-match-label';
-            label.textContent = `Found "${sub}" in:`;
-            subInner.appendChild(label);
-            const btnRow = document.createElement('div');
-            btnRow.className = 'search-match-btns';
-            matchCats.forEach(key => {
-              const st = getStatusDef(key);
-              const col = getStatusColor(key);
-              const btn = document.createElement('button');
-              btn.className = 'search-match-btn';
-              btn.style.color = col;
-              btn.style.borderColor = alphaColor(col, 0.4);
-              btn.style.background = alphaColor(col, 0.08);
-              btn.innerHTML = `<span class="search-match-icon">${st.icon}</span><span class="search-match-label-text">${getStatusLabel(key, 'short')}</span>`;
-              addTapListener(btn, () => {
-                closeSwipeCard(card);
-                if (sub && requiresSerialNumber(key, sub)) { openSerialModal(issue.id, key, sub); }
-                else { addStatusEntry(issue.id, key, sub, ''); }
-              });
-              btnRow.appendChild(btn);
-            });
-            const backBtn = document.createElement('button');
-            backBtn.className = 'search-match-back';
-            backBtn.textContent = '← Back';
-            backBtn.addEventListener('click', renderSwipeSearchSubs);
-            btnRow.appendChild(backBtn);
-            subInner.appendChild(btnRow);
-            scheduleIssueLogRelayout();
-            scrollPanelBottomIntoView(subPanel);
-            setTimeout(() => scrollPanelBottomIntoView(subPanel), 240);
-          };
-          addTapListener(item, handleSearchSubClick);
-          item.addEventListener('click', handleSearchSubClick);
+          addTapListener(item, () => {
+            if (!getSubCats(sub).length) return;
+            swipeSearchActiveSub = sub;
+            dimSwipeTiles();
+            renderSwipeSearchSubs();
+          });
+          item.addEventListener('click', () => {
+            if (!getSubCats(sub).length) return;
+            swipeSearchActiveSub = sub;
+            dimSwipeTiles();
+            renderSwipeSearchSubs();
+          });
           subInner.appendChild(item);
         });
         subPanel.classList.add('visible');
@@ -7544,6 +7476,12 @@ function renderIssues() {
       const handleTileClick = (e) => {
         const statusKey = tile.dataset.status;
         if (statusKey === '__search__') { handleSwipeSearchTileClick(e); return; }
+        if (swipeSearchActiveSub) {
+          closeSwipeCard(card);
+          if (swipeSearchActiveSub && requiresSerialNumber(statusKey, swipeSearchActiveSub)) { openSerialModal(issue.id, statusKey, swipeSearchActiveSub); }
+          else { addStatusEntry(issue.id, statusKey, swipeSearchActiveSub, ''); }
+          return;
+        }
         const statusDef = getStatusDef(statusKey);
         const stamp = e ? e.timeStamp : Date.now();
 
