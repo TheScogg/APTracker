@@ -7404,7 +7404,7 @@ function renderIssues() {
       const r = c.closest('.issue-row');
       const cp = r.querySelector('.swipe-category-panel');
       const sp = r.querySelector('.swipe-sub-panel');
-      cp.classList.remove('visible', 'has-subs');
+      cp.classList.remove('visible', 'has-subs', 'search-mode');
       sp.classList.remove('visible');
       cp.querySelector('.swipe-category-inner')?.classList.remove('has-selection');
       cp.querySelectorAll('.swipe-status-tile').forEach(t => {
@@ -7458,7 +7458,7 @@ function renderIssues() {
       swipeSearchActiveSub = '';
       searchTile.classList.add('selected');
       catInner.classList.add('has-selection');
-      catPanel.classList.add('has-subs');
+      catPanel.classList.add('has-subs', 'search-mode');
       dimSwipeTiles();
 
       const swipeSubPick = (sub) => {
