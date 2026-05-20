@@ -280,6 +280,33 @@ This prevents historical issues from breaking if a status is retired.
 
 ---
 
+### `plants/{plantId}/config/statuses`
+
+The current single-document runtime config stores status categories and subcategory routing metadata.
+
+```json
+{
+  "statuses": {
+    "controlman": {
+      "label": "Controlman",
+      "subs": ["DO011: EOAT"]
+    }
+  },
+  "subcategoryRoutes": {
+    "do011_eoat": {
+      "label": "DO011: EOAT",
+      "boundStatusKeys": ["controlman", "maintenance", "processengineer"],
+      "isActive": true,
+      "order": 10
+    }
+  }
+}
+```
+
+`statuses.{statusKey}.subs` remains the compatibility/display list and category picker source. `subcategoryRoutes` is the routing source for assigning a subcategory to one or more category roles; bound routes are synced back into each bound category's `subs` list so the app picker reflects the bindings.
+
+---
+
 ## 7. Issues
 
 ### `plants/{plantId}/issues/{issueId}`

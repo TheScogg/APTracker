@@ -2,7 +2,8 @@
   "scripts": {
     "prebuild": "node scripts/write-build-version.mjs",
     "build": "node -e \"console.log('build-info generated')\"",
-    "deploy": "node scripts/write-build-version.mjs && npx wrangler deploy"
+    "deploy": "node scripts/write-build-version.mjs && npx wrangler deploy",
+    "reset:demo": "node scripts/reset-demo-plant.mjs --dry-run"
   },
   "dependencies": {
     "firebase": "^12.12.1",

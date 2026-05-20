@@ -67,12 +67,31 @@
     .status-row-actions { display:flex; gap:6px; align-items:center; }
     .status-row-body { display:none; }
     .status-row-body.visible { display:block; }
+    .status-mode-tabs { display:flex; gap:4px; border-bottom:1px solid var(--border); margin:0 0 12px; overflow-x:auto; }
+    .status-mode-btn { background:none; border:none; border-bottom:2px solid transparent; color:var(--text2); font-weight:800; font-size:12px; padding:8px 12px; cursor:pointer; white-space:nowrap; }
+    .status-mode-btn.active { color:var(--accent); border-bottom-color:var(--accent); }
+    .route-toolbar { display:grid; grid-template-columns:minmax(180px,1fr) auto auto; gap:8px; align-items:center; margin-bottom:10px; }
+    .route-matrix-wrap { overflow:auto; border:1px solid var(--border); border-radius:10px; background:var(--bg3); }
+    .route-matrix { min-width:760px; }
+    .route-row { display:grid; grid-template-columns:minmax(240px,1.4fr) repeat(var(--route-cols), minmax(112px,1fr)) 86px; border-top:1px solid var(--border); align-items:stretch; }
+    .route-row:first-child { border-top:none; }
+    .route-cell { padding:8px; border-left:1px solid var(--border); display:flex; align-items:center; gap:6px; min-height:42px; }
+    .route-cell:first-child { border-left:none; }
+    .route-head { color:var(--text2); font-family:'Share Tech Mono',monospace; font-size:11px; background:var(--bg); position:sticky; top:0; z-index:1; }
+    .route-subcell { flex-direction:column; align-items:flex-start; gap:5px; }
+    .route-subcell input { width:100%; min-width:0; }
+    .route-chipline { display:flex; flex-wrap:wrap; gap:4px; }
+    .route-chip { font-size:10px; border:1px solid var(--border); border-radius:999px; padding:1px 6px; color:var(--text2); }
+    .route-chip.warn { color:var(--yellow); border-color:rgba(234,179,8,0.4); }
+    .route-toggle { justify-content:center; }
+    .route-toggle input { width:auto; transform:scale(1.08); }
     .json-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:8px; }
     .mono-input { font-family:'Share Tech Mono',monospace; }
     @media (max-width:640px) {
       .status-grid { grid-template-columns:1fr; }
       .status-row-top { align-items:flex-start; flex-direction:column; }
       .status-row-actions { width:100%; justify-content:flex-end; }
+      .route-toolbar { grid-template-columns:1fr; }
     }
 
     /* ── Gamification editor ─────────────────────────────── */
@@ -866,6 +885,7 @@ let adminPlantIds = [];
 let membersByPlant = new Map();
 let userDirectory = [];
 let statusDraftByPlant = new Map();
+let subcategoryRouteDraftByPlant = new Map();
 let gameDraftByPlant = new Map();
 let badgeDraftByPlant = new Map();
 let missionDraftByPlant = new Map();
@@ -875,6 +895,8 @@ let storeThemeEditorDraft = null;
 let storeThemeEditorIndex = -1;
 const statusPanelOpen = {};
 const statusRowOpen = {};
+const statusEditorTab = {};
+const routeFilterByPlant = {};
 const gamePanelOpen = {};
 const plantPanelOpen = {};
 const plantTab = {};
@@ -929,6 +951,28 @@ function statusKeyFromLabel(label, statuses) {
     n += 1;
   }
   return key;
+}
+
+function routeKeyFromLabel(label, routes = {}) {
+  const base = String(label || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'subcategory';
+  let key = base;
+  let n = 2;
+  while (routes[key]) {
+    key = `${base}_${n}`;
+    n += 1;
+  }
+  return key;
+}
+
+function assignableStatusKeys(statuses) {
+  return Object.entries(statuses || {})
+    .filter(([key]) => key !== 'open' && key !== 'resolved')
+    .sort((a,b) => (a[1]?.order ?? 999) - (b[1]?.order ?? 999))
+    .map(([key]) => key);
 }
 
 function normalizeStatusRecord(key, item, order) {
@@ -1162,6 +1206,92 @@ function normalizeStatusesForSave(rawStatuses) {
   return normalized;
 }
 
+function normalizeSubcategoryRoutes(rawRoutes, statuses) {
+  const normalized = {};
+  const validStatusKeys = new Set(assignableStatusKeys(statuses));
+  const labelToKey = new Map();
+
+  Object.entries(rawRoutes || {}).forEach(([rawKey, raw], idx) => {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return;
+    const label = String(raw.label || raw.subcategory || rawKey || '').trim();
+    if (!label) return;
+    const key = String(rawKey || '').trim() || routeKeyFromLabel(label, normalized);
+    const boundSource = raw.boundStatusKeys || raw.categoryKeys || raw.statusKeys || [];
+    const boundStatusKeys = Array.isArray(boundSource)
+      ? Array.from(new Set(boundSource.map(v => String(v || '').trim()).filter(v => validStatusKeys.has(v))))
+      : [];
+    normalized[key] = {
+      label,
+      boundStatusKeys,
+      isActive: raw.isActive !== false,
+      order: Number.isFinite(Number(raw.order)) ? Number(raw.order) : idx
+    };
+    labelToKey.set(label.toLowerCase(), key);
+  });
+
+  Object.entries(statuses || {}).forEach(([statusKey, status]) => {
+    if (!validStatusKeys.has(statusKey)) return;
+    (status.subs || []).forEach(sub => {
+      const label = String(sub || '').trim();
+      if (!label) return;
+      const labelKey = label.toLowerCase();
+      const existingKey = labelToKey.get(labelKey);
+      if (existingKey) {
+        const route = normalized[existingKey];
+        if (!route.boundStatusKeys.includes(statusKey)) route.boundStatusKeys.push(statusKey);
+        return;
+      }
+      const key = routeKeyFromLabel(label, normalized);
+      normalized[key] = {
+        label,
+        boundStatusKeys: [statusKey],
+        isActive: true,
+        order: Object.keys(normalized).length
+      };
+      labelToKey.set(labelKey, key);
+    });
+  });
+
+  return Object.fromEntries(Object.entries(normalized).sort((a,b) =>
+    (a[1].order ?? 999) - (b[1].order ?? 999)
+    || a[1].label.localeCompare(b[1].label, undefined, { sensitivity: 'base' })
+  ));
+}
+
+function syncStatusesFromSubcategoryRoutes(statuses, routes) {
+  const synced = deepCopy(statuses || {});
+  const validStatusKeys = assignableStatusKeys(synced);
+  const routeLabels = new Set(Object.values(routes || {})
+    .map(route => String(route?.label || '').trim().toLowerCase())
+    .filter(Boolean));
+  validStatusKeys.forEach(statusKey => {
+    synced[statusKey].subs = Array.isArray(synced[statusKey].subs)
+      ? synced[statusKey].subs.map(v => String(v || '').trim()).filter(Boolean)
+      : [];
+    if (routeLabels.size) {
+      synced[statusKey].subs = synced[statusKey].subs.filter(sub => !routeLabels.has(sub.toLowerCase()));
+    }
+  });
+
+  Object.values(routes || {}).forEach(route => {
+    if (!route || route.isActive === false) return;
+    const label = String(route.label || '').trim();
+    if (!label) return;
+    (route.boundStatusKeys || []).forEach(statusKey => {
+      if (!validStatusKeys.includes(statusKey) || !synced[statusKey]) return;
+      const exists = (synced[statusKey].subs || []).some(sub => sub.toLowerCase() === label.toLowerCase());
+      if (!exists) synced[statusKey].subs.push(label);
+    });
+  });
+
+  validStatusKeys.forEach(statusKey => {
+    synced[statusKey].subs = Array.from(new Map((synced[statusKey].subs || [])
+      .map(sub => [sub.toLowerCase(), sub])).values())
+      .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  });
+  return synced;
+}
+
 async function finalizeRedirectSignIn() {
   if (!sessionStorage.getItem('ap:auth:redirectPending')) return;
   try {
@@ -1225,6 +1355,7 @@ async function loadUserPlants() {
 async function loadMembersAndStatusesForAdminPlants() {
   membersByPlant.clear();
   statusDraftByPlant.clear();
+  subcategoryRouteDraftByPlant.clear();
   gameDraftByPlant.clear();
   missionDraftByPlant.clear();
   pressDraftByPlant.clear();
@@ -1242,7 +1373,10 @@ async function loadMembersAndStatusesForAdminPlants() {
     const rawStatuses = statusesSnap.exists() && statusesSnap.data()?.statuses
       ? statusesSnap.data().statuses
       : deepCopy(DEFAULT_STATUSES);
-    statusDraftByPlant.set(plantId, normalizeStatusesForSave(rawStatuses));
+    const normalizedStatuses = normalizeStatusesForSave(rawStatuses);
+    const normalizedRoutes = normalizeSubcategoryRoutes(statusesSnap.exists() ? statusesSnap.data()?.subcategoryRoutes : null, normalizedStatuses);
+    statusDraftByPlant.set(plantId, syncStatusesFromSubcategoryRoutes(normalizedStatuses, normalizedRoutes));
+    subcategoryRouteDraftByPlant.set(plantId, normalizedRoutes);
 
     const gameConfig = gameConfigSnap.exists() ? gameConfigSnap.data() : deepCopy(DEFAULT_GAME_CONFIG);
     gameDraftByPlant.set(plantId, {
@@ -1335,7 +1469,7 @@ async function loadUserDirectory() {
 
 function renderStatusEditor(plantId, plantName) {
   const statuses = statusDraftByPlant.get(plantId) || deepCopy(DEFAULT_STATUSES);
-  const panelOpen = statusPanelOpen[plantId] ?? false;
+  const activeMode = statusEditorTab[plantId] || 'categories';
   const keys = Object.entries(statuses).sort((a,b) => (a[1].order ?? 999) - (b[1].order ?? 999)).map(([k]) => k);
 
   const rows = keys.map(key => {
@@ -1371,7 +1505,7 @@ function renderStatusEditor(plantId, plantName) {
       </div>`;
   }).join('');
 
-  return `
+  const categoryEditor = `
     ${rows}
 
     <div class="status-row">
@@ -1390,6 +1524,76 @@ function renderStatusEditor(plantId, plantName) {
       <input type="file" id="import-file-${plantId}" accept="application/json" style="max-width:240px;padding:6px 8px;" />
       <button class="small-btn" onclick="window.importStatuses('${plantId}')">Import JSON</button>
       <button class="small-btn" onclick="window.resetStatuses('${plantId}')">Reset Defaults</button>
+      <button class="small-btn" style="border-color:var(--accent);color:var(--accent);" onclick="window.saveStatuses('${plantId}')">Save Statuses</button>
+    </div>
+    <div id="status-fb-${plantId}" class="feedback"></div>
+  `;
+
+  return `
+    <div class="status-mode-tabs">
+      <button class="status-mode-btn ${activeMode === 'categories' ? 'active' : ''}" onclick="window.switchStatusEditorTab('${plantId}','categories')">Categories</button>
+      <button class="status-mode-btn ${activeMode === 'routing' ? 'active' : ''}" onclick="window.switchStatusEditorTab('${plantId}','routing')">Subcategory Routing</button>
+    </div>
+    ${activeMode === 'routing' ? renderSubcategoryRoutingEditor(plantId, statuses) : categoryEditor}
+  `;
+}
+
+function renderSubcategoryRoutingEditor(plantId, statuses) {
+  const assignableKeys = assignableStatusKeys(statuses);
+  const routes = normalizeSubcategoryRoutes(subcategoryRouteDraftByPlant.get(plantId) || {}, statuses);
+  subcategoryRouteDraftByPlant.set(plantId, routes);
+  const filter = String(routeFilterByPlant[plantId] || '').trim().toLowerCase();
+  const routeEntries = Object.entries(routes)
+    .filter(([, route]) => route.isActive !== false)
+    .filter(([, route]) => !filter || route.label.toLowerCase().includes(filter)
+      || route.boundStatusKeys.some(key => String(statuses[key]?.label || key).toLowerCase().includes(filter)));
+
+  const header = `
+    <div class="route-row route-head" style="--route-cols:${assignableKeys.length};">
+      <div class="route-cell">Subcategory</div>
+      ${assignableKeys.map(key => `<div class="route-cell route-toggle">${esc(statuses[key]?.shortLabel || statuses[key]?.label || key)}</div>`).join('')}
+      <div class="route-cell route-toggle">Action</div>
+    </div>`;
+
+  const rows = routeEntries.map(([routeKey, route]) => {
+    const bound = new Set(route.boundStatusKeys || []);
+    const chips = bound.size
+      ? Array.from(bound).map(key => `<span class="route-chip">${esc(statuses[key]?.shortLabel || statuses[key]?.label || key)}</span>`).join('')
+      : '<span class="route-chip warn">No route</span>';
+    return `
+      <div class="route-row" style="--route-cols:${assignableKeys.length};">
+        <div class="route-cell route-subcell">
+          <input value="${esc(route.label)}" onchange="window.patchSubcategoryRouteLabel('${plantId}','${esc(routeKey)}',this.value)">
+          <div class="route-chipline">${chips}</div>
+        </div>
+        ${assignableKeys.map(statusKey => `
+          <label class="route-cell route-toggle" title="Notify ${esc(statuses[statusKey]?.label || statusKey)} for ${esc(route.label)}">
+            <input type="checkbox" ${bound.has(statusKey) ? 'checked' : ''} onchange="window.toggleSubcategoryRouteBinding('${plantId}','${esc(routeKey)}','${esc(statusKey)}',this.checked)">
+          </label>
+        `).join('')}
+        <div class="route-cell route-toggle">
+          <button class="small-btn danger" onclick="window.deleteSubcategoryRoute('${plantId}','${esc(routeKey)}')">Retire</button>
+        </div>
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="route-toolbar">
+      <input id="route-filter-${plantId}" placeholder="Search subcategories or roles" value="${esc(routeFilterByPlant[plantId] || '')}" oninput="window.setSubcategoryRouteFilter('${plantId}',this.value)">
+      <input id="new-route-label-${plantId}" placeholder="New subcategory label">
+      <button class="small-btn" onclick="window.addSubcategoryRoute('${plantId}')">Add Subcategory</button>
+    </div>
+    <div class="muted" style="font-size:12px;margin-bottom:8px;">Bind each subcategory to every category role that should receive alerts when operators pick it.</div>
+    <div class="route-matrix-wrap">
+      <div class="route-matrix">
+        ${header}
+        ${rows || `<div class="route-row" style="--route-cols:${assignableKeys.length};"><div class="route-cell route-subcell" style="grid-column:1 / -1;">No subcategories match this filter.</div></div>`}
+      </div>
+    </div>
+    <div class="status-toolbar">
+      <button class="small-btn" onclick="window.exportStatuses('${plantId}')">Export JSON</button>
+      <input type="file" id="import-file-${plantId}" accept="application/json" style="max-width:240px;padding:6px 8px;" />
+      <button class="small-btn" onclick="window.importStatuses('${plantId}')">Import JSON</button>
       <button class="small-btn" style="border-color:var(--accent);color:var(--accent);" onclick="window.saveStatuses('${plantId}')">Save Statuses</button>
     </div>
     <div id="status-fb-${plantId}" class="feedback"></div>
@@ -1968,7 +2172,10 @@ async function createPlant() {
       permissions: { ...DEFAULT_PERMISSIONS }
     });
     batch.set(doc(db, 'plants', id, 'config', 'presses'), { presses: DEFAULT_PRESSES });
-    batch.set(doc(db, 'plants', id, 'config', 'statuses'), { statuses: deepCopy(DEFAULT_STATUSES) });
+    batch.set(doc(db, 'plants', id, 'config', 'statuses'), {
+      statuses: deepCopy(DEFAULT_STATUSES),
+      subcategoryRoutes: normalizeSubcategoryRoutes({}, DEFAULT_STATUSES)
+    });
     batch.set(doc(db, 'plants', id, 'gamificationConfig', 'main'), { ...deepCopy(DEFAULT_GAME_CONFIG), updatedAt: serverTimestamp() }, { merge: true });
     batch.set(doc(db, 'users', currentUser.uid), { plantIds: arrayUnion(id) }, { merge: true });
     await batch.commit();
@@ -2819,6 +3026,10 @@ window.patchStatus = function(plantId, statusKey, field, value) {
   }
   statuses[statusKey] = item;
   statusDraftByPlant.set(plantId, statuses);
+  subcategoryRouteDraftByPlant.set(
+    plantId,
+    normalizeSubcategoryRoutes(subcategoryRouteDraftByPlant.get(plantId) || {}, statuses)
+  );
   renderPlantsUsers();
 };
 
@@ -2828,6 +3039,10 @@ window.deleteStatus = function(plantId, statusKey) {
   if (statusKey === 'open' || statusKey === 'resolved') return;
   delete statuses[statusKey];
   statusDraftByPlant.set(plantId, statuses);
+  subcategoryRouteDraftByPlant.set(
+    plantId,
+    normalizeSubcategoryRoutes(subcategoryRouteDraftByPlant.get(plantId) || {}, statuses)
+  );
   renderPlantsUsers();
 };
 
@@ -2862,23 +3077,32 @@ window.addStatus = function(plantId) {
   }, maxOrder + 1);
 
   statusDraftByPlant.set(plantId, statuses);
+  subcategoryRouteDraftByPlant.set(
+    plantId,
+    normalizeSubcategoryRoutes(subcategoryRouteDraftByPlant.get(plantId) || {}, statuses)
+  );
   renderPlantsUsers();
   feedback(`status-fb-${plantId}`, 'ok', `Added ${label}.`);
 };
 
 window.resetStatuses = function(plantId) {
   if (!confirm('Reset this plant to default status categories?')) return;
-  statusDraftByPlant.set(plantId, deepCopy(DEFAULT_STATUSES));
+  const defaults = deepCopy(DEFAULT_STATUSES);
+  statusDraftByPlant.set(plantId, defaults);
+  subcategoryRouteDraftByPlant.set(plantId, normalizeSubcategoryRoutes({}, defaults));
   renderPlantsUsers();
   feedback(`status-fb-${plantId}`, 'ok', 'Draft reset to defaults. Click Save Statuses to apply.');
 };
 
 window.exportStatuses = function(plantId) {
   const statuses = normalizeStatusesForSave(statusDraftByPlant.get(plantId) || {});
+  const subcategoryRoutes = normalizeSubcategoryRoutes(subcategoryRouteDraftByPlant.get(plantId) || {}, statuses);
+  const syncedStatuses = normalizeStatusesForSave(syncStatusesFromSubcategoryRoutes(statuses, subcategoryRoutes));
   const payload = {
     plantId,
     exportedAt: new Date().toISOString(),
-    statuses
+    statuses: syncedStatuses,
+    subcategoryRoutes
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -2907,7 +3131,9 @@ window.importStatuses = async function(plantId) {
       throw new Error('Invalid JSON format. Expected { statuses: { ... } } or a statuses object.');
     }
     const normalized = normalizeStatusesForSave(candidate);
-    statusDraftByPlant.set(plantId, normalized);
+    const normalizedRoutes = normalizeSubcategoryRoutes(parsed?.subcategoryRoutes || parsed?.routes || null, normalized);
+    statusDraftByPlant.set(plantId, syncStatusesFromSubcategoryRoutes(normalized, normalizedRoutes));
+    subcategoryRouteDraftByPlant.set(plantId, normalizedRoutes);
     renderPlantsUsers();
     feedback(`status-fb-${plantId}`, 'ok', 'Imported statuses into draft. Click Save Statuses to apply.');
   } catch (e) {
@@ -2918,14 +3144,121 @@ window.importStatuses = async function(plantId) {
 
 window.saveStatuses = async function(plantId) {
   const statuses = normalizeStatusesForSave(statusDraftByPlant.get(plantId) || {});
+  const subcategoryRoutes = normalizeSubcategoryRoutes(subcategoryRouteDraftByPlant.get(plantId) || {}, statuses);
+  const syncedStatuses = normalizeStatusesForSave(syncStatusesFromSubcategoryRoutes(statuses, subcategoryRoutes));
   try {
-    await setDoc(doc(db, 'plants', plantId, 'config', 'statuses'), { statuses });
-    statusDraftByPlant.set(plantId, statuses);
+    await setDoc(doc(db, 'plants', plantId, 'config', 'statuses'), { statuses: syncedStatuses, subcategoryRoutes });
+    statusDraftByPlant.set(plantId, syncedStatuses);
+    subcategoryRouteDraftByPlant.set(plantId, subcategoryRoutes);
     feedback(`status-fb-${plantId}`, 'ok', 'Saved statuses to Firestore.');
   } catch (e) {
     console.error(e);
     feedback(`status-fb-${plantId}`, 'error', e.message || 'Failed to save statuses.');
   }
+};
+
+window.switchStatusEditorTab = function(plantId, tab) {
+  statusEditorTab[plantId] = tab === 'routing' ? 'routing' : 'categories';
+  renderPlantsUsers();
+};
+
+window.setSubcategoryRouteFilter = function(plantId, value) {
+  routeFilterByPlant[plantId] = String(value || '');
+  renderPlantsUsers();
+  const input = document.getElementById(`route-filter-${plantId}`);
+  if (input) {
+    input.focus();
+    const pos = input.value.length;
+    input.setSelectionRange(pos, pos);
+  }
+};
+
+window.patchSubcategoryRouteLabel = function(plantId, routeKey, label) {
+  const statuses = normalizeStatusesForSave(statusDraftByPlant.get(plantId) || {});
+  const routes = normalizeSubcategoryRoutes(subcategoryRouteDraftByPlant.get(plantId) || {}, statuses);
+  if (!routes[routeKey]) return;
+  const oldLabel = routes[routeKey].label;
+  routes[routeKey].label = String(label || '').trim() || routes[routeKey].label;
+  (routes[routeKey].boundStatusKeys || []).forEach(statusKey => {
+    if (!statuses[statusKey]) return;
+    statuses[statusKey].subs = (statuses[statusKey].subs || []).map(sub =>
+      sub.toLowerCase() === String(oldLabel || '').toLowerCase() ? routes[routeKey].label : sub
+    );
+  });
+  const normalizedRoutes = normalizeSubcategoryRoutes(routes, statuses);
+  statusDraftByPlant.set(plantId, syncStatusesFromSubcategoryRoutes(statuses, normalizedRoutes));
+  subcategoryRouteDraftByPlant.set(plantId, normalizedRoutes);
+  renderPlantsUsers();
+};
+
+window.toggleSubcategoryRouteBinding = function(plantId, routeKey, statusKey, checked) {
+  const statuses = normalizeStatusesForSave(statusDraftByPlant.get(plantId) || {});
+  const routes = normalizeSubcategoryRoutes(subcategoryRouteDraftByPlant.get(plantId) || {}, statuses);
+  if (!routes[routeKey]) return;
+  const bound = new Set(routes[routeKey].boundStatusKeys || []);
+  if (checked) bound.add(statusKey);
+  else bound.delete(statusKey);
+  routes[routeKey].boundStatusKeys = Array.from(bound).filter(key => assignableStatusKeys(statuses).includes(key));
+  const routeLabel = String(routes[routeKey].label || '').trim();
+  if (routeLabel && statuses[statusKey]) {
+    const currentSubs = Array.isArray(statuses[statusKey].subs) ? statuses[statusKey].subs : [];
+    if (checked && !currentSubs.some(sub => sub.toLowerCase() === routeLabel.toLowerCase())) {
+      statuses[statusKey].subs = [...currentSubs, routeLabel];
+    } else if (!checked) {
+      statuses[statusKey].subs = currentSubs.filter(sub => sub.toLowerCase() !== routeLabel.toLowerCase());
+    }
+  }
+  statusDraftByPlant.set(plantId, syncStatusesFromSubcategoryRoutes(statuses, routes));
+  subcategoryRouteDraftByPlant.set(plantId, routes);
+  renderPlantsUsers();
+};
+
+window.addSubcategoryRoute = function(plantId) {
+  const input = document.getElementById(`new-route-label-${plantId}`);
+  const label = String(input?.value || '').trim();
+  if (!label) {
+    feedback(`status-fb-${plantId}`, 'error', 'Subcategory label is required.');
+    return;
+  }
+  const statuses = normalizeStatusesForSave(statusDraftByPlant.get(plantId) || {});
+  const routes = normalizeSubcategoryRoutes(subcategoryRouteDraftByPlant.get(plantId) || {}, statuses);
+  const existing = Object.values(routes).some(route => route.label.toLowerCase() === label.toLowerCase());
+  if (existing) {
+    const [existingKey, existingRoute] = Object.entries(routes).find(([, route]) => route.label.toLowerCase() === label.toLowerCase()) || [];
+    if (existingKey && existingRoute?.isActive === false) {
+      routes[existingKey].isActive = true;
+      statusDraftByPlant.set(plantId, syncStatusesFromSubcategoryRoutes(statuses, routes));
+      subcategoryRouteDraftByPlant.set(plantId, routes);
+      renderPlantsUsers();
+      feedback(`status-fb-${plantId}`, 'ok', `Reactivated ${label}.`);
+      return;
+    }
+    feedback(`status-fb-${plantId}`, 'error', 'A subcategory with that label already exists.');
+    return;
+  }
+  const key = routeKeyFromLabel(label, routes);
+  routes[key] = { label, boundStatusKeys: [], isActive: true, order: Object.keys(routes).length };
+  statusDraftByPlant.set(plantId, syncStatusesFromSubcategoryRoutes(statuses, routes));
+  subcategoryRouteDraftByPlant.set(plantId, routes);
+  renderPlantsUsers();
+  feedback(`status-fb-${plantId}`, 'ok', `Added ${label}.`);
+};
+
+window.deleteSubcategoryRoute = function(plantId, routeKey) {
+  if (!confirm('Retire this subcategory route? It will no longer create routed alerts.')) return;
+  const statuses = normalizeStatusesForSave(statusDraftByPlant.get(plantId) || {});
+  const routes = normalizeSubcategoryRoutes(subcategoryRouteDraftByPlant.get(plantId) || {}, statuses);
+  if (!routes[routeKey]) return;
+  const routeLabel = String(routes[routeKey].label || '').trim().toLowerCase();
+  routes[routeKey].isActive = false;
+  if (routeLabel) {
+    assignableStatusKeys(statuses).forEach(statusKey => {
+      statuses[statusKey].subs = (statuses[statusKey].subs || []).filter(sub => sub.toLowerCase() !== routeLabel);
+    });
+  }
+  statusDraftByPlant.set(plantId, syncStatusesFromSubcategoryRoutes(statuses, routes));
+  subcategoryRouteDraftByPlant.set(plantId, routes);
+  renderPlantsUsers();
 };
 
 window.patchGameEnabled = function(plantId, value) {
