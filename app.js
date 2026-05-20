@@ -243,6 +243,40 @@ function normalizeSubcategoryRoutes(rawRoutes, statuses = STATUSES) {
   return normalized;
 }
 
+function syncStatusesFromSubcategoryRoutes(statuses, routes) {
+  const synced = JSON.parse(JSON.stringify(statuses || {}));
+  const validStatusKeys = Object.keys(synced).filter(key => key !== 'open' && key !== 'resolved');
+  const routeLabels = new Set(Object.values(routes || {})
+    .map(route => String(route?.label || '').trim().toLowerCase())
+    .filter(Boolean));
+  validStatusKeys.forEach(statusKey => {
+    synced[statusKey].subs = Array.isArray(synced[statusKey].subs)
+      ? synced[statusKey].subs.map(v => String(v || '').trim()).filter(Boolean)
+      : [];
+    if (routeLabels.size) {
+      synced[statusKey].subs = synced[statusKey].subs.filter(sub => !routeLabels.has(sub.toLowerCase()));
+    }
+  });
+
+  Object.values(routes || {}).forEach(route => {
+    if (!route || route.isActive === false) return;
+    const label = String(route.label || '').trim();
+    if (!label) return;
+    (route.boundStatusKeys || []).forEach(statusKey => {
+      if (!validStatusKeys.includes(statusKey) || !synced[statusKey]) return;
+      const exists = (synced[statusKey].subs || []).some(sub => sub.toLowerCase() === label.toLowerCase());
+      if (!exists) synced[statusKey].subs.push(label);
+    });
+  });
+
+  validStatusKeys.forEach(statusKey => {
+    synced[statusKey].subs = Array.from(new Map((synced[statusKey].subs || [])
+      .map(sub => [sub.toLowerCase(), sub])).values())
+      .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  });
+  return synced;
+}
+
 function resolveConfiguredSubcategoryRoute(subStatus) {
   const sub = String(subStatus || '').trim().toLowerCase();
   if (!sub) return null;
@@ -2118,8 +2152,8 @@ async function loadConfig() {
         }
       }
 
-      STATUSES = migratedStatuses;
-      SUBCATEGORY_ROUTES = normalizeSubcategoryRoutes(data.subcategoryRoutes, STATUSES);
+      SUBCATEGORY_ROUTES = normalizeSubcategoryRoutes(data.subcategoryRoutes, migratedStatuses);
+      STATUSES = syncStatusesFromSubcategoryRoutes(migratedStatuses, SUBCATEGORY_ROUTES);
       
       // Since we just changed the available statuses,
       // we must rebuild the logic that buttons depend on
@@ -2148,8 +2182,9 @@ async function loadConfig() {
       if (!snap2.exists()) return;
       const data2 = snap2.data() || {};
       if (!data2.statuses) return;
-      STATUSES = normalizeLoadedStatuses(data2.statuses);
-      SUBCATEGORY_ROUTES = normalizeSubcategoryRoutes(data2.subcategoryRoutes, STATUSES);
+      const loadedStatuses = normalizeLoadedStatuses(data2.statuses);
+      SUBCATEGORY_ROUTES = normalizeSubcategoryRoutes(data2.subcategoryRoutes, loadedStatuses);
+      STATUSES = syncStatusesFromSubcategoryRoutes(loadedStatuses, SUBCATEGORY_ROUTES);
       rebuildDerivedStatus();
       refreshStatusDependentUI();
     }, err => {
@@ -2176,6 +2211,7 @@ function buildStatusFilterPills() {
 }
 
 async function saveConfig() {
+  STATUSES = syncStatusesFromSubcategoryRoutes(STATUSES, SUBCATEGORY_ROUTES);
   await setDoc(plantDoc('config', 'statuses'), { statuses: STATUSES, subcategoryRoutes: SUBCATEGORY_ROUTES });
 }
 
@@ -14810,6 +14846,7 @@ window.resetToDefaults = async () => {
     tooldie:         { label:'Tool & Die',       shortLabel:'Tool & Die',   icon:'🔩', cssColor:'var(--orange)',   swipeColor:'#f97316', floorCls:'has-tooldie',         cls:'status-tooldie',         subs:['Broken / Bent Ejector Pin','Hot Runner / Gate Issue','Water Leak in Mold','Stuck Part / Sprue','Mold Greasing / PM'], statLabel:'Tool & Die',    order:8 },
     resolved:        { label:'Resolved',         shortLabel:'Resolved',     icon:'✓',  cssColor:'var(--green)',    swipeColor:'#22c55e', floorCls:'all-resolved',        cls:'status-resolved',        subs:['Process Parameter Adjusted','Mold Cleaned / Repaired','Hardware Replaced','Temporary Workaround'],                      statLabel:'Resolved',      order:9 },
   };
+  SUBCATEGORY_ROUTES = {};
   
   // Save to Firestore
   await saveConfig();

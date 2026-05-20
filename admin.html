@@ -1258,6 +1258,40 @@ function normalizeSubcategoryRoutes(rawRoutes, statuses) {
   ));
 }
 
+function syncStatusesFromSubcategoryRoutes(statuses, routes) {
+  const synced = deepCopy(statuses || {});
+  const validStatusKeys = assignableStatusKeys(synced);
+  const routeLabels = new Set(Object.values(routes || {})
+    .map(route => String(route?.label || '').trim().toLowerCase())
+    .filter(Boolean));
+  validStatusKeys.forEach(statusKey => {
+    synced[statusKey].subs = Array.isArray(synced[statusKey].subs)
+      ? synced[statusKey].subs.map(v => String(v || '').trim()).filter(Boolean)
+      : [];
+    if (routeLabels.size) {
+      synced[statusKey].subs = synced[statusKey].subs.filter(sub => !routeLabels.has(sub.toLowerCase()));
+    }
+  });
+
+  Object.values(routes || {}).forEach(route => {
+    if (!route || route.isActive === false) return;
+    const label = String(route.label || '').trim();
+    if (!label) return;
+    (route.boundStatusKeys || []).forEach(statusKey => {
+      if (!validStatusKeys.includes(statusKey) || !synced[statusKey]) return;
+      const exists = (synced[statusKey].subs || []).some(sub => sub.toLowerCase() === label.toLowerCase());
+      if (!exists) synced[statusKey].subs.push(label);
+    });
+  });
+
+  validStatusKeys.forEach(statusKey => {
+    synced[statusKey].subs = Array.from(new Map((synced[statusKey].subs || [])
+      .map(sub => [sub.toLowerCase(), sub])).values())
+      .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  });
+  return synced;
+}
+
 async function finalizeRedirectSignIn() {
   if (!sessionStorage.getItem('ap:auth:redirectPending')) return;
   try {
@@ -1340,11 +1374,9 @@ async function loadMembersAndStatusesForAdminPlants() {
       ? statusesSnap.data().statuses
       : deepCopy(DEFAULT_STATUSES);
     const normalizedStatuses = normalizeStatusesForSave(rawStatuses);
-    statusDraftByPlant.set(plantId, normalizedStatuses);
-    subcategoryRouteDraftByPlant.set(
-      plantId,
-      normalizeSubcategoryRoutes(statusesSnap.exists() ? statusesSnap.data()?.subcategoryRoutes : null, normalizedStatuses)
-    );
+    const normalizedRoutes = normalizeSubcategoryRoutes(statusesSnap.exists() ? statusesSnap.data()?.subcategoryRoutes : null, normalizedStatuses);
+    statusDraftByPlant.set(plantId, syncStatusesFromSubcategoryRoutes(normalizedStatuses, normalizedRoutes));
+    subcategoryRouteDraftByPlant.set(plantId, normalizedRoutes);
 
     const gameConfig = gameConfigSnap.exists() ? gameConfigSnap.data() : deepCopy(DEFAULT_GAME_CONFIG);
     gameDraftByPlant.set(plantId, {
@@ -3065,10 +3097,11 @@ window.resetStatuses = function(plantId) {
 window.exportStatuses = function(plantId) {
   const statuses = normalizeStatusesForSave(statusDraftByPlant.get(plantId) || {});
   const subcategoryRoutes = normalizeSubcategoryRoutes(subcategoryRouteDraftByPlant.get(plantId) || {}, statuses);
+  const syncedStatuses = normalizeStatusesForSave(syncStatusesFromSubcategoryRoutes(statuses, subcategoryRoutes));
   const payload = {
     plantId,
     exportedAt: new Date().toISOString(),
-    statuses,
+    statuses: syncedStatuses,
     subcategoryRoutes
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -3098,11 +3131,9 @@ window.importStatuses = async function(plantId) {
       throw new Error('Invalid JSON format. Expected { statuses: { ... } } or a statuses object.');
     }
     const normalized = normalizeStatusesForSave(candidate);
-    statusDraftByPlant.set(plantId, normalized);
-    subcategoryRouteDraftByPlant.set(
-      plantId,
-      normalizeSubcategoryRoutes(parsed?.subcategoryRoutes || parsed?.routes || null, normalized)
-    );
+    const normalizedRoutes = normalizeSubcategoryRoutes(parsed?.subcategoryRoutes || parsed?.routes || null, normalized);
+    statusDraftByPlant.set(plantId, syncStatusesFromSubcategoryRoutes(normalized, normalizedRoutes));
+    subcategoryRouteDraftByPlant.set(plantId, normalizedRoutes);
     renderPlantsUsers();
     feedback(`status-fb-${plantId}`, 'ok', 'Imported statuses into draft. Click Save Statuses to apply.');
   } catch (e) {
@@ -3114,9 +3145,10 @@ window.importStatuses = async function(plantId) {
 window.saveStatuses = async function(plantId) {
   const statuses = normalizeStatusesForSave(statusDraftByPlant.get(plantId) || {});
   const subcategoryRoutes = normalizeSubcategoryRoutes(subcategoryRouteDraftByPlant.get(plantId) || {}, statuses);
+  const syncedStatuses = normalizeStatusesForSave(syncStatusesFromSubcategoryRoutes(statuses, subcategoryRoutes));
   try {
-    await setDoc(doc(db, 'plants', plantId, 'config', 'statuses'), { statuses, subcategoryRoutes });
-    statusDraftByPlant.set(plantId, statuses);
+    await setDoc(doc(db, 'plants', plantId, 'config', 'statuses'), { statuses: syncedStatuses, subcategoryRoutes });
+    statusDraftByPlant.set(plantId, syncedStatuses);
     subcategoryRouteDraftByPlant.set(plantId, subcategoryRoutes);
     feedback(`status-fb-${plantId}`, 'ok', 'Saved statuses to Firestore.');
   } catch (e) {
@@ -3145,8 +3177,17 @@ window.patchSubcategoryRouteLabel = function(plantId, routeKey, label) {
   const statuses = normalizeStatusesForSave(statusDraftByPlant.get(plantId) || {});
   const routes = normalizeSubcategoryRoutes(subcategoryRouteDraftByPlant.get(plantId) || {}, statuses);
   if (!routes[routeKey]) return;
+  const oldLabel = routes[routeKey].label;
   routes[routeKey].label = String(label || '').trim() || routes[routeKey].label;
-  subcategoryRouteDraftByPlant.set(plantId, normalizeSubcategoryRoutes(routes, statuses));
+  (routes[routeKey].boundStatusKeys || []).forEach(statusKey => {
+    if (!statuses[statusKey]) return;
+    statuses[statusKey].subs = (statuses[statusKey].subs || []).map(sub =>
+      sub.toLowerCase() === String(oldLabel || '').toLowerCase() ? routes[routeKey].label : sub
+    );
+  });
+  const normalizedRoutes = normalizeSubcategoryRoutes(routes, statuses);
+  statusDraftByPlant.set(plantId, syncStatusesFromSubcategoryRoutes(statuses, normalizedRoutes));
+  subcategoryRouteDraftByPlant.set(plantId, normalizedRoutes);
   renderPlantsUsers();
 };
 
@@ -3158,6 +3199,16 @@ window.toggleSubcategoryRouteBinding = function(plantId, routeKey, statusKey, ch
   if (checked) bound.add(statusKey);
   else bound.delete(statusKey);
   routes[routeKey].boundStatusKeys = Array.from(bound).filter(key => assignableStatusKeys(statuses).includes(key));
+  const routeLabel = String(routes[routeKey].label || '').trim();
+  if (routeLabel && statuses[statusKey]) {
+    const currentSubs = Array.isArray(statuses[statusKey].subs) ? statuses[statusKey].subs : [];
+    if (checked && !currentSubs.some(sub => sub.toLowerCase() === routeLabel.toLowerCase())) {
+      statuses[statusKey].subs = [...currentSubs, routeLabel];
+    } else if (!checked) {
+      statuses[statusKey].subs = currentSubs.filter(sub => sub.toLowerCase() !== routeLabel.toLowerCase());
+    }
+  }
+  statusDraftByPlant.set(plantId, syncStatusesFromSubcategoryRoutes(statuses, routes));
   subcategoryRouteDraftByPlant.set(plantId, routes);
   renderPlantsUsers();
 };
@@ -3176,6 +3227,7 @@ window.addSubcategoryRoute = function(plantId) {
     const [existingKey, existingRoute] = Object.entries(routes).find(([, route]) => route.label.toLowerCase() === label.toLowerCase()) || [];
     if (existingKey && existingRoute?.isActive === false) {
       routes[existingKey].isActive = true;
+      statusDraftByPlant.set(plantId, syncStatusesFromSubcategoryRoutes(statuses, routes));
       subcategoryRouteDraftByPlant.set(plantId, routes);
       renderPlantsUsers();
       feedback(`status-fb-${plantId}`, 'ok', `Reactivated ${label}.`);
@@ -3186,6 +3238,7 @@ window.addSubcategoryRoute = function(plantId) {
   }
   const key = routeKeyFromLabel(label, routes);
   routes[key] = { label, boundStatusKeys: [], isActive: true, order: Object.keys(routes).length };
+  statusDraftByPlant.set(plantId, syncStatusesFromSubcategoryRoutes(statuses, routes));
   subcategoryRouteDraftByPlant.set(plantId, routes);
   renderPlantsUsers();
   feedback(`status-fb-${plantId}`, 'ok', `Added ${label}.`);
@@ -3196,7 +3249,14 @@ window.deleteSubcategoryRoute = function(plantId, routeKey) {
   const statuses = normalizeStatusesForSave(statusDraftByPlant.get(plantId) || {});
   const routes = normalizeSubcategoryRoutes(subcategoryRouteDraftByPlant.get(plantId) || {}, statuses);
   if (!routes[routeKey]) return;
+  const routeLabel = String(routes[routeKey].label || '').trim().toLowerCase();
   routes[routeKey].isActive = false;
+  if (routeLabel) {
+    assignableStatusKeys(statuses).forEach(statusKey => {
+      statuses[statusKey].subs = (statuses[statusKey].subs || []).filter(sub => sub.toLowerCase() !== routeLabel);
+    });
+  }
+  statusDraftByPlant.set(plantId, syncStatusesFromSubcategoryRoutes(statuses, routes));
   subcategoryRouteDraftByPlant.set(plantId, routes);
   renderPlantsUsers();
 };

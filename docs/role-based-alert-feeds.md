@@ -23,9 +23,10 @@ This is intended for day-to-day flexibility (for replacement operators and rotat
 When a status/category is selected on an issue:
 1. App first checks `config/statuses.subcategoryRoutes` for an exact selected sub-status/subcategory match.
 2. If a subcategory route exists, the app notifies active members subscribed to any bound category in `boundStatusKeys`.
-3. If no subcategory route exists, the app resolves the category route from the selected status/category.
-4. Legacy role-based matching is still considered as a fallback.
-5. App writes an append-only alert doc to `plants/{plantId}/roleFeedAlerts`.
+3. Bound subcategories are also synced into each category's `statuses.{statusKey}.subs` list, so operators can pick them from every bound category.
+4. If no subcategory route exists, the app resolves the category route from the selected status/category.
+5. Legacy role-based matching is still considered as a fallback.
+6. App writes an append-only alert doc to `plants/{plantId}/roleFeedAlerts`.
 
 Alerts are created both:
 - when logging a new issue with an initial category, and

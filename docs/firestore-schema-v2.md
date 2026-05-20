@@ -303,7 +303,7 @@ The current single-document runtime config stores status categories and subcateg
 }
 ```
 
-`statuses.{statusKey}.subs` remains the compatibility/display list. `subcategoryRoutes` is the routing source for assigning a subcategory to one or more category roles.
+`statuses.{statusKey}.subs` remains the compatibility/display list and category picker source. `subcategoryRoutes` is the routing source for assigning a subcategory to one or more category roles; bound routes are synced back into each bound category's `subs` list so the app picker reflects the bindings.
 
 ---
 
