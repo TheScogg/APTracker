@@ -40,6 +40,7 @@ const DEMO_USER = {
   photoURL: ''
 };
 const DEMO_PLANT_ID = 'plant_demo';
+const DEMO_PLANT_NAME = 'Demo Plant';
 let _demoSim = null;
 let buildDemoControls, startDemoEngine, stopDemoEngine, resetDemo;
 
@@ -153,6 +154,11 @@ let scheduledPressesState = null;
 const DEFAULT_PERMISSIONS = {
   canViewPlant: true, canCreateIssue: true, canEditIssue: true,
   canResolveIssue: true, canManageStatuses: true, canManagePresses: true, canExport: true
+};
+const DEMO_PERMISSIONS = {
+  ...DEFAULT_PERMISSIONS,
+  canManageStatuses: false,
+  canManagePresses: false
 };
 let currentUserRole = 'admin'; // default until member doc loads
 let currentUserPermissions = { ...DEFAULT_PERMISSIONS };
@@ -1787,7 +1793,7 @@ async function loadCurrentMember(plantId) {
 
 // Show/hide UI elements based on current user's permissions
 function applyRoleUI() {
-  const isAdmin = currentUserRole === 'admin';
+  const isAdmin = !DEMO_MODE && currentUserRole === 'admin';
 
   const adminPageBtn = document.getElementById('admin-page-btn');
   if (adminPageBtn) adminPageBtn.style.display = isAdmin ? '' : 'none';
@@ -1796,6 +1802,10 @@ function applyRoleUI() {
   if (exportBtn) exportBtn.style.display = currentUserPermissions.canExport ? '' : 'none';
   const excelBtn = document.getElementById('export-excel-btn');
   if (excelBtn) excelBtn.style.display = currentUserPermissions.canExport ? '' : 'none';
+  const adminPanelBtn = document.getElementById('admin-panel-btn');
+  if (adminPanelBtn) adminPanelBtn.style.display = isAdmin ? '' : 'none';
+  const membersBtn = document.getElementById('members-btn');
+  if (membersBtn) membersBtn.style.display = isAdmin ? '' : 'none';
 }
 
 // Load press layout for current plant
@@ -2162,15 +2172,23 @@ async function loadConfig() {
       renderIssues();
 
       if (addedDefaults) {
-        console.log('🔄 Backfilled missing built-in statuses without overwriting custom categories...');
-        await saveConfig();
-        console.log('✅ Status config merged and saved!');
+        if (DEMO_MODE) {
+          console.log('🔄 Demo status config missing built-ins; using runtime defaults without saving.');
+        } else {
+          console.log('🔄 Backfilled missing built-in statuses without overwriting custom categories...');
+          await saveConfig();
+          console.log('✅ Status config merged and saved!');
+        }
       }
     } else {
-      // No config exists - save the default comprehensive categories
-      console.log('💾 Saving initial comprehensive ticket categories...');
-      await saveConfig();
-      console.log('✅ Initial configuration saved!');
+      // No config exists - save the default comprehensive categories outside demo mode.
+      if (DEMO_MODE) {
+        console.log('💾 Demo status config not found; using bundled defaults without saving.');
+      } else {
+        console.log('💾 Saving initial comprehensive ticket categories...');
+        await saveConfig();
+        console.log('✅ Initial configuration saved!');
+      }
       rebuildDerivedStatus();
       buildStatusFilterPills();
       renderIssues();
@@ -3421,6 +3439,14 @@ if (googleSignInBtn) {
   googleSignInBtn.innerHTML = googleBtnHTML;
   googleSignInBtn.addEventListener('click', signInWithGoogle);
 }
+const demoLoginBtn = document.getElementById('demo-login-btn');
+if (demoLoginBtn) {
+  demoLoginBtn.addEventListener('click', () => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('demo', '1');
+    window.location.href = url.toString();
+  });
+}
 
 
 
@@ -3562,6 +3588,55 @@ async function bootstrapSignedInSession(user) {
   if (!localStorage.getItem(TUTORIAL_KEY)) setTimeout(() => window.openTutorial(), 900);
 }
 
+function applyDemoShell() {
+  document.body.classList.add('demo-mode');
+  const syncBanner = document.getElementById('sync-banner');
+  if (syncBanner && !document.getElementById('demo-mode-pill')) {
+    const pill = document.createElement('span');
+    pill.id = 'demo-mode-pill';
+    pill.className = 'demo-mode-pill';
+    pill.textContent = 'Demo Sandbox';
+    syncBanner.insertBefore(pill, document.getElementById('app-version-indicator') || null);
+  }
+  const adminPageBtn = document.getElementById('admin-page-btn');
+  if (adminPageBtn) adminPageBtn.style.display = 'none';
+}
+
+function demoMemberPayload(role = 'editor') {
+  const isAdmin = role === 'admin';
+  return {
+    userId: currentUser.uid,
+    displayName: 'Demo Session',
+    email: '',
+    photoURL: '',
+    role,
+    isActive: true,
+    addedAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    permissions: isAdmin ? { ...DEFAULT_PERMISSIONS } : { ...DEMO_PERMISSIONS }
+  };
+}
+
+async function ensureDemoPlantAccess() {
+  const plantRef = doc(db, 'plants', DEMO_PLANT_ID);
+  const memberRef = plantMemberDocRef(DEMO_PLANT_ID, currentUser.uid);
+  const userRef = doc(db, 'users', currentUser.uid);
+  await setDoc(memberRef, demoMemberPayload('editor'), { merge: true });
+  await setDoc(userRef, { plantIds: [DEMO_PLANT_ID], lastPlant: DEMO_PLANT_ID, isDemoUser: true }, { merge: true });
+
+  const snap = await getDoc(plantRef);
+
+  if (!snap.exists()) {
+    await setDoc(plantRef, {
+      name: DEMO_PLANT_NAME,
+      location: 'Demo Location',
+      createdAt: serverTimestamp(),
+      isActive: true,
+      isDemo: true
+    });
+  }
+}
+
 async function bootstrapDemoSession(user) {
   currentUser = user;
   document.getElementById('login-screen').classList.remove('visible');
@@ -3572,30 +3647,18 @@ async function bootstrapDemoSession(user) {
   if (fullNameEl) fullNameEl.textContent = 'AP Tracker Demo';
   if (emailEl) emailEl.textContent = 'Simulating 10 virtual team members…';
 
-  {
-    const plantRef = doc(db, 'plants', DEMO_PLANT_ID);
-    const snap = await getDoc(plantRef);
-    if (!snap.exists()) {
-      const batch1 = writeBatch(db);
-      batch1.set(plantRef, { name: 'Demo Plant', location: 'Demo Location', createdAt: serverTimestamp(), isActive: true });
-      batch1.set(doc(db, 'plants', DEMO_PLANT_ID, 'members', currentUser.uid), {
-        userId: currentUser.uid, displayName: 'Demo Session', email: '', photoURL: '',
-        role: 'admin', isActive: true, addedAt: serverTimestamp(), permissions: { ...DEFAULT_PERMISSIONS }
-      });
-      batch1.set(doc(db, 'users', currentUser.uid), { plantIds: [DEMO_PLANT_ID], lastPlant: DEMO_PLANT_ID }, { merge: true });
-      await batch1.commit();
-      const batch2 = writeBatch(db);
-      batch2.set(doc(db, 'plants', DEMO_PLANT_ID, 'config', 'presses'), { presses: DEFAULT_PRESSES });
-      await batch2.commit();
-    }
-  }
+  applyDemoShell();
+  await ensureDemoPlantAccess();
 
-  currentPlantId = 'plant_demo';
-  currentPlantName = 'Demo Plant';
-  userPlants = [{ id: 'plant_demo', name: 'Demo Plant', location: '' }];
+  currentPlantId = DEMO_PLANT_ID;
+  currentPlantName = DEMO_PLANT_NAME;
+  userPlants = [{ id: DEMO_PLANT_ID, name: DEMO_PLANT_NAME, location: 'Demo Location' }];
   buildPlantDropdown();
   document.getElementById('plant-name-display').textContent = currentPlantName;
   await Promise.all([loadPlantPresses(), loadCurrentMember(currentPlantId), loadStoreConfig()]);
+  currentUserRole = 'editor';
+  currentUserPermissions = { ...DEMO_PERMISSIONS };
+  applyRoleUI();
   buildFloorMap();
   await loadConfig();
   startListener();
@@ -3604,10 +3667,37 @@ async function bootstrapDemoSession(user) {
   startDemoEngine();
 }
 
+function showDemoAuthError(error) {
+  const loginScreen = document.getElementById('login-screen');
+  const loginCard = loginScreen?.querySelector('.login-card');
+  if (loginScreen) loginScreen.classList.add('visible');
+  document.getElementById('app')?.classList.remove('visible');
+  if (!loginCard) return;
+  let errorEl = document.getElementById('demo-auth-error');
+  if (!errorEl) {
+    errorEl = document.createElement('div');
+    errorEl.id = 'demo-auth-error';
+    errorEl.className = 'login-error';
+    loginCard.appendChild(errorEl);
+  }
+  const code = error?.code ? ` (${error.code})` : '';
+  errorEl.textContent = `Demo access needs Firebase Anonymous Auth enabled${code}.`;
+}
+
 onAuthStateChanged(auth, async user => {
   if (DEMO_MODE) {
     if (!user) {
-      try { await signInAnonymously(auth); } catch (e) { console.error('Demo anon sign-in failed:', e); }
+      try { await signInAnonymously(auth); } catch (e) { console.error('Demo anon sign-in failed:', e); showDemoAuthError(e); }
+      return;
+    }
+    if (!user.isAnonymous) {
+      try {
+        await fbSignOut(auth);
+        await signInAnonymously(auth);
+      } catch (e) {
+        console.error('Demo anon sign-in failed:', e);
+        showDemoAuthError(e);
+      }
       return;
     }
     await bootstrapDemoSession(user);
@@ -4822,10 +4912,9 @@ function openIssuePhotoSourceMenu(forceOpen) {
 
 function syncIssueLogPrefsFromModal() {
   const timer = document.getElementById('issue-timer-minutes');
-  const urgent = document.getElementById('issue-urgent');
   const shift = document.getElementById('issue-shift');
   issueLogPrefs.timerMinutes = String(timer?.value || '');
-  issueLogPrefs.urgent = Boolean(urgent?.checked);
+  issueLogPrefs.urgent = false;
   issueLogPrefs.advancedOpen = issueAdvancedExpanded;
   if (shift?.dataset?.autoApplied === '1') {
     issueLogPrefs.lastShift = 'auto';
@@ -4844,7 +4933,7 @@ function applyIssueLogDefaults() {
   const issueDate = document.getElementById('issue-date');
   const issueTime = document.getElementById('issue-time-input');
   if (timer) timer.value = issueLogPrefs.timerMinutes || '';
-  if (urgent) urgent.checked = Boolean(issueLogPrefs.urgent);
+  if (urgent) urgent.checked = false;
   if (issueDate && issueTime) resetIssueDateTime();
   if (shift) {
     const d = getIssueDateFromInputs('issue-date', 'issue-time-input');
@@ -5597,7 +5686,7 @@ document.getElementById('subcategory-sheet-overlay')?.addEventListener('click', 
 document.getElementById('subcategory-sheet-close')?.addEventListener('click', () => closeSubcategorySheet());
 
 document.getElementById('issue-urgent')?.addEventListener('change', () => {
-  issueLogPrefs.urgent = Boolean(document.getElementById('issue-urgent')?.checked);
+  issueLogPrefs.urgent = false;
   saveIssueLogPrefs();
 });
 document.getElementById('issue-timer-minutes')?.addEventListener('change', () => {
@@ -5715,7 +5804,7 @@ window.submitIssue = async () => {
     issueLogPrefs.lastStatusKey = initialStatus;
     issueLogPrefs.lastStatusSub = initialSubStatus;
     issueLogPrefs.timerMinutes = String(document.getElementById('issue-timer-minutes')?.value || '');
-    issueLogPrefs.urgent = isUrgent;
+    issueLogPrefs.urgent = false;
     saveIssueLogPrefs();
     await queueRoleFeedAlert({ id: issueRef.id, machine: currentMachine }, {
       statusKey: initialStatus,
@@ -6889,6 +6978,10 @@ window.sendIssueViaSms = async (id, evt) => {
 
 // ── DELETE ──
 window.deleteIssue = async id => {
+  if (DEMO_MODE) {
+    setSyncStatus('err', 'Demo sandbox does not allow deleting shared issues.');
+    return;
+  }
   if (!currentUserPermissions.canEditIssue) return;
   if (!confirm('Delete this issue permanently?')) return;
   try {
@@ -7272,7 +7365,7 @@ function renderIssues() {
       ${canEdit ? `<div class="issue-footer-actions-right">
       <button class="btn btn-ghost" onclick="openNotesModalFromIssue('${issue.id}')">📝 Notes</button>
       <button class="btn btn-edit" onclick="openEditModal('${issue.id}')">✏️ Edit</button>
-      <button class="btn btn-danger" onclick="deleteIssue('${issue.id}')">🗑 Delete</button>
+      ${DEMO_MODE ? '' : `<button class="btn btn-danger" onclick="deleteIssue('${issue.id}')">🗑 Delete</button>`}
       </div>` : ''}
     </div>`;
 
@@ -7300,10 +7393,10 @@ function renderIssues() {
 
     // Per-status workflow rows for expanded card body — derived from status history
     // Shows each department called (unique status keys from history), excluding the
-    // primary status (already in header) and any already marked 'finished'
+    // primary status (already in header). Finished rows stay visible for the checkered treatment.
     const histStatKeys = [...new Set(
       [...displayHistory].reverse().map(e => e.status).filter(k => k && k !== 'open' && k !== 'resolved' && k !== currentKey)
-    )].filter(k => wfByStatus[k] !== 'finished');
+    )];
 
     const wfHistoryRowsHtml = histStatKeys.map(sKey => {
           const sCfg = STATUS_CONFIG_SAFE[sKey];
@@ -15401,7 +15494,7 @@ buildDemoControls = function() {
   const resetBtn = document.createElement('button');
   resetBtn.className = 'demo-btn';
   resetBtn.textContent = '\u27f3';
-  resetBtn.title = 'Reset demo';
+  resetBtn.title = 'Restart local simulation';
   resetBtn.addEventListener('click', resetDemo);
   panel.appendChild(resetBtn);
 
@@ -15534,27 +15627,14 @@ buildDemoControls = function() {
 
 resetDemo = async function() {
   stopDemoEngine();
-  // Detach listeners so delete events don't trigger re-renders during cleanup
-  if (unsubscribe) { unsubscribe(); unsubscribe = null; }
-  issues = [];
-  issuesById.clear();
-  const commits = [];
-  try {
-    const issuesSnap = await getDocs(collection(db, 'plants', DEMO_PLANT_ID, 'issues'));
-    for (const issueDoc of issuesSnap.docs) {
-      const ref = issueDoc.ref;
-      const [eventsSnap, attsSnap] = await Promise.all([
-        getDocs(collection(ref, 'events')),
-        getDocs(collection(ref, 'attachments'))
-      ]);
-      const allDocs = [...eventsSnap.docs.map(d => d.ref), ...attsSnap.docs.map(d => d.ref), ref];
-      for (let i = 0; i < allDocs.length; i += 400) {
-        const batch = writeBatch(db);
-        allDocs.slice(i, i + 400).forEach(dr => batch.delete(dr));
-        commits.push(batch.commit());
-      }
-    }
-  } catch (e) { console.warn('Demo reset cleanup error:', e); }
-  await Promise.all(commits);
-  window.location.reload();
+  const feed = document.getElementById('demo-feed');
+  if (feed) {
+    feed.innerHTML = '<div class="demo-feed-item" style="color:rgba(255,255,255,0.4);">Local simulation restarted. Shared demo data is preserved.</div>';
+  }
+  const playBtn = document.getElementById('demo-play-btn');
+  if (playBtn) {
+    playBtn.textContent = '\u23f8';
+    playBtn.title = 'Pause simulation';
+  }
+  startDemoEngine();
 }

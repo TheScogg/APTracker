@@ -29,6 +29,12 @@ service cloud.firestore {
         && userDoc().data.plantIds.size() > 0;
     }
 
+    function hasNonDemoPlantAccess() {
+      return hasPlantAccess()
+        && (userDoc().data.plantIds.size() > 1
+            || !userDoc().data.plantIds.hasAny(["plant_demo"]));
+    }
+
     function memberPath(plantId) {
       return /databases/$(database)/documents/plants/$(plantId)/members/$(currentUid());
     }
@@ -56,6 +62,25 @@ service cloud.firestore {
     function isEditorOrAbove(plantId) {
       return isPlantMember(plantId)
         && (memberRole(plantId) == "admin" || memberRole(plantId) == "editor");
+    }
+
+    function isDemoPlant(plantId) {
+      return plantId == "plant_demo";
+    }
+
+    function validDemoMember(plantId, userId) {
+      return isDemoPlant(plantId)
+        && isSelf(userId)
+        && request.resource.data.userId == currentUid()
+        && request.resource.data.role == "editor"
+        && request.resource.data.isActive == true
+        && request.resource.data.permissions.canViewPlant == true
+        && request.resource.data.permissions.canCreateIssue == true
+        && request.resource.data.permissions.canEditIssue == true
+        && request.resource.data.permissions.canResolveIssue == true
+        && request.resource.data.permissions.canManageStatuses == false
+        && request.resource.data.permissions.canManagePresses == false
+        && request.resource.data.permissions.canExport == true;
     }
 
     function canEditWiki(plantId) {
@@ -223,6 +248,10 @@ service cloud.firestore {
         allow create: if isSelf(userId)
           && request.resource.data.role == "admin"
           && request.resource.data.isActive == true;
+
+        // Anonymous demo visitors may join only the shared demo plant, and only
+        // with non-admin editor permissions.
+        allow create, update: if validDemoMember(plantId, userId);
 
         // Users can update only their own alert-role preferences.
         allow update: if isSelf(userId)
@@ -477,7 +506,7 @@ service cloud.firestore {
       allow read: if signedIn();
       // Keep writes limited to users that belong to at least one plant.
       // (Admin UI additionally gates this client-side to plant admins.)
-      allow write: if hasPlantAccess();
+      allow write: if hasNonDemoPlantAccess();
     }
 
   }

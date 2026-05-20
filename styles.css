@@ -357,10 +357,42 @@
   .login-title { font-family: 'Rajdhani', sans-serif; font-size: 28px; font-weight: 700; letter-spacing: 1px; margin-bottom: 6px; }
   .login-title span { color: var(--accent); }
   .login-sub { font-size: 13px; color: var(--text2); margin-bottom: 32px; }
+  .login-error { margin-top: 12px; color: var(--red); font-size: 12px; line-height: 1.4; }
   .google-btn { display: flex; align-items: center; justify-content: center; gap: 10px; background: white; color: #1f2937; border: 1px solid var(--border); border-radius: 8px; padding: 12px 24px; font-family: 'Nunito', sans-serif; font-size: 15px; font-weight: 700; cursor: pointer; width: 100%; transition: all 0.15s; }
   .google-btn:hover { background: #f3f4f6; transform: translateY(-1px); box-shadow: 0 4px 16px rgba(0,0,0,0.3); }
   .google-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
   .google-logo { width: 20px; height: 20px; }
+  .demo-login-btn {
+    margin-top: 10px;
+    width: 100%;
+    border: 1px solid var(--border);
+    background: var(--bg3);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 11px 24px;
+    font-family: 'Nunito', sans-serif;
+    font-size: 14px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .demo-login-btn:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-1px); }
+  .demo-mode-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border: 1px solid rgba(74,222,128,0.45);
+    border-radius: 999px;
+    background: rgba(74,222,128,0.10);
+    color: #4ade80;
+    font-family: 'Rajdhani', sans-serif;
+    font-weight: 700;
+    white-space: nowrap;
+  }
 
   /* SYNC BANNER */
   #sync-banner { display: none; align-items: center; gap: 8px; background: var(--bg3); border-bottom: 1px solid var(--border); padding: 7px 28px; font-size: 12px; color: var(--text2); font-family: 'Share Tech Mono', monospace; }
@@ -2164,13 +2196,7 @@
     border-color: rgba(255,255,255,.18);
     border-left-color: rgba(255,255,255,.88) !important;
     box-shadow: 0 8px 28px rgba(0,0,0,.26), inset 0 0 0 1px rgba(255,255,255,.03);
-    background:
-      linear-gradient(180deg, rgba(22,22,22,.95), rgba(8,8,8,.98)),
-      repeating-conic-gradient(from 45deg,
-        rgba(255,255,255,.84) 0 25%,
-        rgba(0,0,0,.92) 0 50%);
-    background-size: auto, 18px 18px;
-    background-position: 0 0, 0 0;
+    background-color: rgba(255,255,255,.025);
   }
   .wf-status-row.finished-checkered::before,
   .tl-entry.finished-checkered::before {
@@ -2178,8 +2204,13 @@
     position: absolute;
     inset: 0;
     background:
-      radial-gradient(circle at top right, rgba(255,255,255,.18), transparent 38%),
-      linear-gradient(135deg, rgba(255,255,255,.14), transparent 30%, transparent 72%, rgba(255,255,255,.1));
+      radial-gradient(circle at top right, rgba(255,255,255,.14), transparent 38%),
+      linear-gradient(135deg, rgba(255,255,255,.09), transparent 30%, transparent 72%, rgba(255,255,255,.08)),
+      repeating-conic-gradient(from 45deg,
+        rgba(255,255,255,.22) 0 25%,
+        rgba(0,0,0,.18) 0 50%);
+    background-size: auto, auto, 18px 18px;
+    background-position: 0 0, 0 0, 0 0;
     pointer-events: none;
   }
   .wf-status-row.finished-checkered > *,
@@ -2188,12 +2219,9 @@
     z-index: 1;
   }
   .wf-status-row.finished-checkered .issue-status {
-    background: rgba(255,255,255,.16) !important;
-    border-color: rgba(255,255,255,.52) !important;
-    color: #fff !important;
+    background: color-mix(in srgb, currentColor 16%, transparent) !important;
+    border-color: currentColor !important;
   }
-  .wf-status-row.finished-checkered .issue-status-main,
-  .wf-status-row.finished-checkered .issue-status-sub,
   .wf-status-row.finished-checkered .wf-state-label,
   .wf-status-row.finished-checkered .wf-state-meta {
     color: rgba(255,255,255,.95) !important;
