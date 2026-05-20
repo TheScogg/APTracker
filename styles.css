@@ -1948,6 +1948,11 @@
     pointer-events: none;
     filter: saturate(0.7) brightness(0.8);
   }
+  .swipe-category-panel.visible.search-mode .swipe-search-tile {
+    opacity: 1 !important;
+    pointer-events: auto;
+    filter: none;
+  }
   .swipe-category-panel.visible.search-mode .swipe-status-tile.search-match {
     opacity: 1 !important;
     animation: searchCatPulse 1.4s ease-in-out infinite !important;
