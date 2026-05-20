@@ -177,6 +177,7 @@ const ROLE_ALERT_ROUTING_RULES_DEFAULT = [
 
 const _roleAlertRulesCache = { plantId: null, fetchedAt: 0, rules: null };
 const ROLE_ALERT_RULES_CACHE_MS = 60 * 1000;
+let SUBCATEGORY_ROUTES = {};
 let _rolePrefsDraft = [];
 let _roleFeedAlertsUnsubscribe = null;
 const _seenRoleFeedAlerts = new Set();
@@ -220,6 +221,47 @@ function _normalizeRoleAlertRules(inputRules) {
     .filter(rule => rule.feedKey && rule.feedLabel && rule.jobRoleKeys.length > 0);
 }
 
+function normalizeSubcategoryRoutes(rawRoutes, statuses = STATUSES) {
+  if (!rawRoutes || typeof rawRoutes !== 'object' || Array.isArray(rawRoutes)) return {};
+  const validStatusKeys = new Set(Object.keys(statuses || {}).filter(key => key !== 'open' && key !== 'resolved'));
+  const normalized = {};
+  Object.entries(rawRoutes).forEach(([rawKey, raw], idx) => {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return;
+    const label = String(raw.label || raw.subcategory || rawKey || '').trim();
+    if (!label) return;
+    const boundSource = raw.boundStatusKeys || raw.categoryKeys || raw.statusKeys || [];
+    const boundStatusKeys = Array.isArray(boundSource)
+      ? Array.from(new Set(boundSource.map(v => String(v || '').trim().toLowerCase()).filter(v => validStatusKeys.has(v))))
+      : [];
+    normalized[String(rawKey || label).trim().toLowerCase()] = {
+      label,
+      boundStatusKeys,
+      isActive: raw.isActive !== false,
+      order: Number.isFinite(Number(raw.order)) ? Number(raw.order) : idx
+    };
+  });
+  return normalized;
+}
+
+function resolveConfiguredSubcategoryRoute(subStatus) {
+  const sub = String(subStatus || '').trim().toLowerCase();
+  if (!sub) return null;
+  const found = Object.entries(SUBCATEGORY_ROUTES || {}).find(([, route]) =>
+    route?.isActive !== false
+    && Array.isArray(route.boundStatusKeys)
+    && route.boundStatusKeys.length > 0
+    && String(route.label || '').trim().toLowerCase() === sub
+  );
+  if (!found) return null;
+  const [routeKey, route] = found;
+  return {
+    feedKey: `subcategory_${routeKey}_alerts`,
+    feedLabel: `${route.label} Alerts`,
+    categoryKeys: route.boundStatusKeys,
+    jobRoleKeys: route.boundStatusKeys
+  };
+}
+
 async function getRoleAlertRoutingRules() {
   if (!currentPlantId) return ROLE_ALERT_ROUTING_RULES_DEFAULT;
   const now = Date.now();
@@ -242,6 +284,9 @@ async function getRoleAlertRoutingRules() {
 }
 
 async function resolveRoleAlertRoute(statusKey, subStatus) {
+  const subcategoryRoute = resolveConfiguredSubcategoryRoute(subStatus);
+  if (subcategoryRoute) return subcategoryRoute;
+
   const statusDef = getStatusDef(statusKey);
   const key = String(statusKey || '').trim().toLowerCase();
   const label = String(statusDef?.label || '').trim().toLowerCase();
@@ -265,12 +310,16 @@ async function queueRoleFeedAlert(issue, { statusKey, subStatus, note = '' } = {
   const effectiveRoute = route || {
     feedKey: `${String(statusKey || '').trim().toLowerCase()}_alerts`,
     feedLabel: `${String(statusDef?.label || statusKey || 'General').trim()} Alerts`,
+    categoryKeys: [String(statusKey || '').trim().toLowerCase()],
     jobRoleKeys: []
   };
   try {
     const membersSnap = await getDocs(collection(db, 'plants', currentPlantId, 'members'));
     const roleKeys = _expandRoleAliases(Array.isArray(effectiveRoute.jobRoleKeys) ? effectiveRoute.jobRoleKeys : []);
     const categoryKey = String(statusKey || '').trim().toLowerCase();
+    const categoryKeys = Array.isArray(effectiveRoute.categoryKeys) && effectiveRoute.categoryKeys.length
+      ? Array.from(new Set(effectiveRoute.categoryKeys.map(v => String(v || '').trim().toLowerCase()).filter(Boolean)))
+      : [categoryKey];
     const recipientUserIds = membersSnap.docs
       .map(d => ({ id: d.id, ...d.data() }))
       .filter(m => m?.isActive !== false)
@@ -280,7 +329,7 @@ async function queueRoleFeedAlert(issue, { statusKey, subStatus, note = '' } = {
           ? m.alertCategorySubscriptions.map(v => String(v || '').trim().toLowerCase()).filter(Boolean)
           : [];
         if (hasExplicitSubscriptions) {
-          return categorySubs.includes(categoryKey);
+          return categoryKeys.some(key => categorySubs.includes(key));
         }
         const normalizedRoleKeys = [
           ...(Array.isArray(m.jobRoleKeys) ? m.jobRoleKeys : []),
@@ -299,6 +348,7 @@ async function queueRoleFeedAlert(issue, { statusKey, subStatus, note = '' } = {
       feedKey: effectiveRoute.feedKey,
       feedLabel: effectiveRoute.feedLabel,
       categoryKey,
+      categoryKeys,
       requiredJobRoleKeys: roleKeys,
       recipientUserIds,
       createdAt: serverTimestamp(),
@@ -2069,6 +2119,7 @@ async function loadConfig() {
       }
 
       STATUSES = migratedStatuses;
+      SUBCATEGORY_ROUTES = normalizeSubcategoryRoutes(data.subcategoryRoutes, STATUSES);
       
       // Since we just changed the available statuses,
       // we must rebuild the logic that buttons depend on
@@ -2098,6 +2149,7 @@ async function loadConfig() {
       const data2 = snap2.data() || {};
       if (!data2.statuses) return;
       STATUSES = normalizeLoadedStatuses(data2.statuses);
+      SUBCATEGORY_ROUTES = normalizeSubcategoryRoutes(data2.subcategoryRoutes, STATUSES);
       rebuildDerivedStatus();
       refreshStatusDependentUI();
     }, err => {
@@ -2124,7 +2176,7 @@ function buildStatusFilterPills() {
 }
 
 async function saveConfig() {
-  await setDoc(plantDoc('config', 'statuses'), { statuses: STATUSES });
+  await setDoc(plantDoc('config', 'statuses'), { statuses: STATUSES, subcategoryRoutes: SUBCATEGORY_ROUTES });
 }
 
 function rebuildDerivedStatus() {

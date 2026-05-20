@@ -21,10 +21,11 @@ This is intended for day-to-day flexibility (for replacement operators and rotat
 ## Routing behavior
 
 When a status/category is selected on an issue:
-1. App resolves the category route.
-2. App notifies active members subscribed to that category via `alertCategorySubscriptions`.
-3. Legacy role-based matching is still considered as a fallback.
-4. App writes an append-only alert doc to `plants/{plantId}/roleFeedAlerts`.
+1. App first checks `config/statuses.subcategoryRoutes` for an exact selected sub-status/subcategory match.
+2. If a subcategory route exists, the app notifies active members subscribed to any bound category in `boundStatusKeys`.
+3. If no subcategory route exists, the app resolves the category route from the selected status/category.
+4. Legacy role-based matching is still considered as a fallback.
+5. App writes an append-only alert doc to `plants/{plantId}/roleFeedAlerts`.
 
 Alerts are created both:
 - when logging a new issue with an initial category, and
@@ -53,6 +54,7 @@ The app now starts a realtime watcher for each signed-in user/plant:
 `plants/{plantId}/roleFeedAlerts/{alertId}` includes:
 - `statusKey`
 - `categoryKey`
+- `categoryKeys`
 - `feedKey`
 - `feedLabel`
 - `recipientUserIds`
