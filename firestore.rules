@@ -212,6 +212,10 @@ service cloud.firestore {
       // Any signed-in user may update another user's plantIds array
       // (needed when an admin adds/removes someone from a plant).
       allow update: if signedIn() && onlyUpdatesPlantIds();
+
+      match /todos/{todoId} {
+        allow read, create, update, delete: if isSelf(userId);
+      }
     }
 
     // ── User lookup index (email → uid mapping, written on sign-in) ──
@@ -291,6 +295,20 @@ service cloud.firestore {
                                 && request.resource.data.uploadedBy.uid == currentUid();
           allow delete: if isPlantMember(plantId);
         }
+      }
+
+      // ── Shared Plant Todos ──
+      match /todos/{todoId} {
+        allow read: if isPlantMember(plantId);
+        allow create: if isPlantMember(plantId)
+                      && request.resource.data.createdBy.uid == currentUid()
+                      && request.resource.data.plantId == plantId;
+        allow update: if isPlantMember(plantId)
+                      && request.resource.data.updatedBy.uid == currentUid()
+                      && request.resource.data.plantId == plantId;
+        allow delete: if isAdmin(plantId)
+                      || (signedIn() && resource.data.ownerUid == currentUid())
+                      || (signedIn() && resource.data.createdBy.uid == currentUid());
       }
 
       // ── Press Wiki ──

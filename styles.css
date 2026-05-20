@@ -5664,6 +5664,121 @@
   transform: scale(0.92);
 }
 
+/* TODOS TOOL */
+#todos-modal .app-container {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.todo-compose {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 12px 12px 8px;
+}
+.todo-compose .input {
+  margin: 0;
+}
+#todos-modal .search-wrap,
+#todos-modal .todo-filter-row {
+  margin-left: 12px;
+  margin-right: 12px;
+}
+#todos-modal .todo-filter-row {
+  margin-bottom: 8px;
+}
+.todos-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px 12px 88px;
+}
+.todo-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+.todo-item.active {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+.todo-item.completed {
+  opacity: 0.68;
+}
+.todo-item.completed .note-title span,
+.todo-item.completed .note-preview {
+  text-decoration: line-through;
+}
+.todo-check {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg3);
+  color: var(--green);
+  font-family: 'Nunito', sans-serif;
+  font-size: 16px;
+  font-weight: 900;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.todo-item-main {
+  min-width: 0;
+  cursor: pointer;
+}
+.notes-list-badge.priority-high {
+  border-color: color-mix(in srgb, var(--red) 52%, var(--border));
+  color: var(--red);
+}
+.notes-list-badge.priority-medium {
+  border-color: color-mix(in srgb, var(--yellow) 52%, var(--border));
+  color: var(--yellow);
+}
+.notes-list-badge.priority-low {
+  border-color: color-mix(in srgb, var(--teal) 52%, var(--border));
+  color: var(--teal);
+}
+.notes-list-badge.overdue {
+  border-color: color-mix(in srgb, var(--red) 52%, var(--border));
+  color: var(--red);
+}
+.todo-editor {
+  margin: 8px 12px 10px;
+  flex-shrink: 0;
+  max-height: 54vh;
+  overflow: auto;
+}
+.todo-editor label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 8px;
+  color: var(--text2);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.todo-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.todo-link-box {
+  margin: 10px 0;
+}
+.todo-editor-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
 /* Editor Modal (AP-Tracker modal style) */
 #editorModal.modal-overlay {
   position: fixed;

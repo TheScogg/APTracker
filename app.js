@@ -1010,6 +1010,10 @@ function notesCol() { return collection(db, 'plants', currentPlantId, 'notes'); 
 function noteDoc(noteId) { return doc(db, 'plants', currentPlantId, 'notes', noteId); }
 function noteAttachmentsCol(noteId) { return collection(db, 'plants', currentPlantId, 'notes', noteId, 'attachments'); }
 function noteStoragePrefix(noteId) { return `plants/${currentPlantId}/notes/${noteId}`; }
+function plantTodosCol() { return collection(db, 'plants', currentPlantId, 'todos'); }
+function plantTodoDoc(todoId) { return doc(db, 'plants', currentPlantId, 'todos', todoId); }
+function userTodosCol() { return collection(db, 'users', currentUser.uid, 'todos'); }
+function userTodoDoc(todoId) { return doc(db, 'users', currentUser.uid, 'todos', todoId); }
 function plantMemberDocRef(plantId, userId) { return doc(db, 'plants', plantId, 'members', userId); }
 function gameConfigDoc() { return doc(db, 'plants', currentPlantId, 'gamificationConfig', 'main'); }
 function gameUserStatsDoc(userId) { return doc(db, 'plants', currentPlantId, 'userGameStats', userId); }
@@ -8642,10 +8646,11 @@ function closeUserMenus() {
   document.getElementById('theme-select-toggle')?.setAttribute('aria-expanded', 'false');
 }
 
-const TOOL_MODAL_ORDER = ['wiki', 'notes', 'messages', 'alerts'];
+const TOOL_MODAL_ORDER = ['wiki', 'notes', 'todos', 'messages', 'alerts'];
 const _toolModalScrollState = {
   wiki: { shellTop: 0 },
   notes: { listTop: 0, editorTop: 0 },
+  todos: { listTop: 0 },
   messages: { listTop: 0, threadTop: 0 },
   alerts: { listTop: 0 }
 };
@@ -8653,6 +8658,7 @@ const _toolModalScrollState = {
 function _toolModalCurrentKey() {
   if (document.getElementById('role-alerts-modal')?.classList.contains('visible')) return 'alerts';
   if (document.getElementById('messaging-modal')?.classList.contains('visible')) return 'messages';
+  if (document.getElementById('todos-modal')?.classList.contains('visible')) return 'todos';
   if (document.getElementById('press-wiki-modal')?.classList.contains('visible')) return 'wiki';
   if (document.getElementById('notes-editor-modal')?.classList.contains('visible') || document.getElementById('notes-modal')?.classList.contains('visible')) return 'notes';
   return null;
@@ -8664,6 +8670,8 @@ function _toolModalHasState(key) {
       return Boolean(_pressWikiModalPressId || _pressWikiSelectedPageId || _pressWikiExpandedPageIds?.size || _pressWikiKnownTreeNodeIds?.size);
     case 'notes':
       return Boolean(_notesState.notes.length || _notesState.currentNote?.id || _notesState.activeNoteId || _notesState.view === 'editor' || _notesState.search || _notesState.filter !== 'all' || _notesState.previewMode);
+    case 'todos':
+      return Boolean(_todoState.todos.length || _todoState.activeKey || _todoState.search || _todoState.scope !== 'all' || _todoState.filter !== 'open');
     case 'messages':
       return Boolean(_messagingState.conversations.length || _messagingState.activeConversationId || _messagingState.selectedPhoto || _messagingState.selectedDmUid || _messagingState.selectedGroupMembers?.size);
     case 'alerts':
@@ -8685,6 +8693,9 @@ function _toolModalCaptureScrollState(key) {
     case 'notes':
       _toolModalScrollState.notes.listTop = document.querySelector('#notes-list')?.scrollTop || 0;
       _toolModalScrollState.notes.editorTop = document.querySelector('#notes-editor-modal .notes-editor-panel')?.scrollTop || 0;
+      break;
+    case 'todos':
+      _toolModalScrollState.todos.listTop = document.querySelector('#todos-list')?.scrollTop || 0;
       break;
     case 'messages':
       _toolModalScrollState.messages.listTop = document.querySelector('#messaging-conversations-list')?.scrollTop || 0;
@@ -8709,6 +8720,11 @@ function _toolModalRestoreScrollState(key) {
         const editor = document.querySelector('#notes-editor-modal .notes-editor-panel');
         if (list) list.scrollTop = _toolModalScrollState.notes.listTop || 0;
         if (editor) editor.scrollTop = _toolModalScrollState.notes.editorTop || 0;
+        break;
+      }
+      case 'todos': {
+        const list = document.querySelector('#todos-list');
+        if (list) list.scrollTop = _toolModalScrollState.todos.listTop || 0;
         break;
       }
       case 'messages': {
@@ -8737,6 +8753,9 @@ async function _closeToolModalByKey(key) {
     case 'notes':
       window.closeNotesModal?.({ preserveState: true });
       break;
+    case 'todos':
+      window.closeTodosModal?.({ preserveState: true });
+      break;
     case 'messages':
       window.closeMessagingModal?.({ preserveState: true });
       break;
@@ -8758,6 +8777,11 @@ async function _openToolModalByKey(key) {
       await (preserveState
         ? window.openNotesModal?.({}, { preserveState: true })
         : window.openNotesModal?.());
+      break;
+    case 'todos':
+      await (preserveState
+        ? window.openTodosModal?.({ preserveState: true })
+        : window.openTodosModal?.());
       break;
     case 'messages':
       preserveState
@@ -8799,6 +8823,7 @@ function _bindToolModalShellNavigation() {
     ['press-wiki-modal'],
     ['notes-phone-frame'],
     ['notes-editor-frame'],
+    ['todos-frame'],
     ['messaging-modal'],
     ['role-alerts-modal']
   ];
@@ -8834,6 +8859,7 @@ function handleShellAction(action, value, trigger, event) {
       window.closeMessagingModal?.();
       window.closePressWikiModal?.();
       window.closeNotesModal?.();
+      window.closeTodosModal?.();
       window.closeExportModal?.();
       window.closeRoleAlertInboxModal?.();
       if (typeof closeMiniCard === 'function') closeMiniCard();
@@ -8856,6 +8882,11 @@ function handleShellAction(action, value, trigger, event) {
       closeHeaderQuickMenu();
       closeUserMenus();
       window.openNotesModal?.();
+      break;
+    case 'open-todos-modal':
+      closeHeaderQuickMenu();
+      closeUserMenus();
+      window.openTodosModal?.();
       break;
     case 'open-role-alerts':
       closeHeaderQuickMenu();
@@ -10009,6 +10040,8 @@ const MOBILE_MODAL_SWIPE_CLOSES = {
   'notes-modal': () => window.closeNotesModal?.(),
   'notes-phone-frame': () => window.closeNotesModal?.(),
   'notes-editor-modal': () => window.closeNotesEditorModal?.(),
+  'todos-modal': () => window.closeTodosModal?.(),
+  'todos-frame': () => window.closeTodosModal?.(),
   'appearance-modal': () => window.closeAppearanceModal?.(),
   'theme-editor-modal': () => window.closeThemeEditor?.(),
   'role-prefs-modal': () => window.closeRolePreferencesModal?.(),
@@ -11187,6 +11220,400 @@ let _pressWikiKnownTreeNodeIds = new Set();
 let _pressWikiPickerOpen = false;
 let _pressWikiPressPickerOpen = false;
 const PRESS_WIKI_SHARED_INDEX_PAGE_ID = 'shared-library-index';
+
+let _todoUnsubPersonal = null;
+let _todoUnsubShared = null;
+const _todoState = {
+  personal: [],
+  shared: [],
+  todos: [],
+  scope: 'all',
+  filter: 'open',
+  search: '',
+  activeKey: null,
+  current: null,
+  listening: false,
+  error: ''
+};
+
+function _todoKey(todo) {
+  return `${todo?.scope || 'personal'}:${todo?.id || ''}`;
+}
+
+function _todoRef(scope, id) {
+  return scope === 'shared' ? plantTodoDoc(id) : userTodoDoc(id);
+}
+
+function _todoTimestampMs(value) {
+  if (!value) return 0;
+  if (typeof value?.toMillis === 'function') return value.toMillis();
+  if (typeof value === 'number') return value;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? 0 : d.getTime();
+}
+
+function _todoDisplayDate(value) {
+  if (!value) return '';
+  const d = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+function _todoNormalize(raw, scope) {
+  return {
+    id: raw?.id || '',
+    scope,
+    title: String(raw?.title || '').trim() || 'Untitled Todo',
+    notes: String(raw?.notes || ''),
+    listName: String(raw?.listName || 'Inbox').trim() || 'Inbox',
+    dueDate: String(raw?.dueDate || ''),
+    priority: ['none', 'low', 'medium', 'high'].includes(raw?.priority) ? raw.priority : 'none',
+    isCompleted: Boolean(raw?.isCompleted),
+    pressId: raw?.pressId || '',
+    machineCode: raw?.machineCode || '',
+    issueId: raw?.issueId || '',
+    ownerUid: raw?.ownerUid || raw?.createdBy?.uid || '',
+    ownerName: raw?.ownerName || raw?.createdBy?.name || '',
+    createdAt: raw?.createdAt || null,
+    updatedAt: raw?.updatedAt || null,
+    completedAt: raw?.completedAt || null
+  };
+}
+
+function _todoCombineAndSort() {
+  _todoState.todos = [
+    ..._todoState.personal.map(t => _todoNormalize(t, 'personal')),
+    ..._todoState.shared.map(t => _todoNormalize(t, 'shared'))
+  ].sort((a, b) => {
+    if (a.isCompleted !== b.isCompleted) return a.isCompleted ? 1 : -1;
+    const aDue = a.dueDate || '9999-12-31';
+    const bDue = b.dueDate || '9999-12-31';
+    if (aDue !== bDue) return aDue.localeCompare(bDue);
+    const rank = { high: 0, medium: 1, low: 2, none: 3 };
+    if (rank[a.priority] !== rank[b.priority]) return rank[a.priority] - rank[b.priority];
+    return _todoTimestampMs(b.updatedAt) - _todoTimestampMs(a.updatedAt);
+  });
+}
+
+function _todoVisibleTodos() {
+  const today = localDateStr(new Date());
+  const q = String(_todoState.search || '').trim().toLowerCase();
+  return _todoState.todos.filter(todo => {
+    if (_todoState.scope === 'mine' && todo.scope !== 'personal') return false;
+    if (_todoState.scope === 'shared' && todo.scope !== 'shared') return false;
+    if (_todoState.filter === 'open' && todo.isCompleted) return false;
+    if (_todoState.filter === 'done' && !todo.isCompleted) return false;
+    if (_todoState.filter === 'today' && (todo.isCompleted || todo.dueDate !== today)) return false;
+    if (!q) return true;
+    return [todo.title, todo.notes, todo.listName, todo.machineCode, todo.issueId].join(' ').toLowerCase().includes(q);
+  });
+}
+
+function _todoSyncFilterButtons() {
+  document.querySelectorAll('[data-todo-scope]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.todoScope === _todoState.scope);
+  });
+  document.querySelectorAll('[data-todo-filter]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.todoFilter === _todoState.filter);
+  });
+}
+
+function _todoContextText(todo) {
+  if (todo?.issueId) return `Issue ${todo.machineCode || todo.issueId}`;
+  if (todo?.machineCode) return `Press ${todo.machineCode}`;
+  return 'Standalone todo';
+}
+
+function _todoRenderList() {
+  _todoCombineAndSort();
+  _todoSyncFilterButtons();
+  const list = document.getElementById('todos-list');
+  if (!list) return;
+  const visible = _todoVisibleTodos();
+  if (_todoState.error) {
+    list.innerHTML = `<div class="empty-state"><div class="empty-state-icon">!</div><div class="empty-state-text">${esc(_todoState.error)}</div></div>`;
+    return;
+  }
+  if (!visible.length) {
+    list.innerHTML = '<div class="empty-state"><div class="empty-state-icon">☑</div><div class="empty-state-text">No todos here.</div></div>';
+    return;
+  }
+  list.innerHTML = visible.map(todo => {
+    const key = _todoKey(todo);
+    const active = key === _todoState.activeKey;
+    const overdue = todo.dueDate && !todo.isCompleted && todo.dueDate < localDateStr(new Date());
+    const badges = [
+      `<span class="notes-list-badge ${todo.scope === 'shared' ? 'linked' : 'pinned'}">${todo.scope === 'shared' ? 'Shared' : 'Mine'}</span>`,
+      todo.priority !== 'none' ? `<span class="notes-list-badge priority-${todo.priority}">${todo.priority}</span>` : '',
+      todo.dueDate ? `<span class="notes-list-badge${overdue ? ' overdue' : ''}">${_todoDisplayDate(todo.dueDate)}</span>` : '',
+      todo.machineCode || todo.issueId ? `<span class="notes-list-badge linked">${esc(_todoContextText(todo))}</span>` : ''
+    ].filter(Boolean).join('');
+    return `<div class="todo-item note-card${active ? ' active' : ''}${todo.isCompleted ? ' completed' : ''}" data-todo-key="${esc(key)}">
+      <button class="todo-check" type="button" data-todo-toggle="${esc(key)}" aria-label="${todo.isCompleted ? 'Mark open' : 'Mark done'}">${todo.isCompleted ? '✓' : ''}</button>
+      <div class="todo-item-main" data-todo-open="${esc(key)}">
+        <div class="note-title"><span>${esc(todo.title)}</span></div>
+        ${todo.notes ? `<div class="note-preview">${esc(todo.notes)}</div>` : ''}
+        <div class="note-meta">
+          <div class="tags">${badges}</div>
+          <span class="timestamp">${esc(todo.listName)}</span>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function _todoSetEditorVisible(visible) {
+  const editor = document.getElementById('todo-editor');
+  if (editor) editor.style.display = visible ? '' : 'none';
+}
+
+function _todoRenderEditor(todo) {
+  _todoState.current = todo ? { ...todo } : null;
+  _todoState.activeKey = todo ? _todoKey(todo) : null;
+  _todoSetEditorVisible(Boolean(todo));
+  if (!todo) {
+    _todoRenderList();
+    return;
+  }
+  document.getElementById('todo-title').value = todo.title || '';
+  document.getElementById('todo-notes').value = todo.notes || '';
+  document.getElementById('todo-list-name').value = todo.listName || 'Inbox';
+  document.getElementById('todo-due-date').value = todo.dueDate || '';
+  document.getElementById('todo-priority').value = todo.priority || 'none';
+  document.getElementById('todo-visibility').value = todo.scope || 'personal';
+  const context = document.getElementById('todo-context-summary');
+  if (context) context.textContent = _todoContextText(todo);
+  const doneBtn = document.getElementById('todo-toggle-complete-btn');
+  if (doneBtn) doneBtn.textContent = todo.isCompleted ? 'Mark Open' : 'Mark Done';
+  _todoRenderList();
+}
+
+function _todoReadEditor() {
+  const todo = _todoState.current || {};
+  return {
+    ...todo,
+    title: String(document.getElementById('todo-title')?.value || '').trim() || 'Untitled Todo',
+    notes: String(document.getElementById('todo-notes')?.value || '').trim(),
+    listName: String(document.getElementById('todo-list-name')?.value || '').trim() || 'Inbox',
+    dueDate: String(document.getElementById('todo-due-date')?.value || ''),
+    priority: String(document.getElementById('todo-priority')?.value || 'none'),
+    scope: String(document.getElementById('todo-visibility')?.value || 'personal') === 'shared' ? 'shared' : 'personal'
+  };
+}
+
+function _todoPayload(todo, { creating = false } = {}) {
+  const actor = currentActor();
+  const searchText = [todo.title, todo.notes, todo.listName, todo.machineCode, todo.issueId].join(' ').toLowerCase();
+  return {
+    title: todo.title,
+    notes: todo.notes || '',
+    listName: todo.listName || 'Inbox',
+    dueDate: todo.dueDate || '',
+    priority: todo.priority || 'none',
+    isCompleted: Boolean(todo.isCompleted),
+    completedAt: todo.isCompleted ? (todo.completedAt || serverTimestamp()) : null,
+    plantId: currentPlantId || '',
+    pressId: todo.pressId || '',
+    machineCode: todo.machineCode || '',
+    issueId: todo.issueId || '',
+    ownerUid: todo.ownerUid || currentUser?.uid || '',
+    ownerName: todo.ownerName || currentUser?.displayName || currentUser?.email || '',
+    searchText,
+    updatedAt: serverTimestamp(),
+    updatedBy: actor,
+    schemaVersion: 1,
+    ...(creating ? { createdAt: serverTimestamp(), createdBy: actor } : {})
+  };
+}
+
+async function _todoSave(todo, { creating = false, oldScope = null } = {}) {
+  if (!currentUser || !currentPlantId) return null;
+  const scope = todo.scope === 'shared' ? 'shared' : 'personal';
+  const id = todo.id || doc(scope === 'shared' ? plantTodosCol() : userTodosCol()).id;
+  const normalized = _todoNormalize({ ...todo, id }, scope);
+  const createsTargetDoc = creating || !todo.id || (oldScope && oldScope !== scope);
+  await setDoc(_todoRef(scope, id), _todoPayload(normalized, { creating: createsTargetDoc }), { merge: true });
+  if (oldScope && oldScope !== scope && todo.id) await deleteDoc(_todoRef(oldScope, todo.id));
+  _todoState.activeKey = `${scope}:${id}`;
+  return { ...normalized, id, scope };
+}
+
+async function _todoCreateFromQuick() {
+  const input = document.getElementById('todo-quick-title');
+  const title = String(input?.value || '').trim();
+  if (!title) return;
+  const scope = _todoState.scope === 'shared' ? 'shared' : 'personal';
+  input.value = '';
+  const saved = await _todoSave({ title, notes: '', listName: 'Inbox', dueDate: '', priority: 'none', isCompleted: false, scope }, { creating: true });
+  if (saved) _todoRenderEditor(saved);
+}
+
+async function _todoSaveFromEditor() {
+  if (!_todoState.current?.id) return;
+  const priorScope = _todoState.current.scope || 'personal';
+  const saved = await _todoSave(_todoReadEditor(), { oldScope: priorScope });
+  if (saved) _todoRenderEditor(saved);
+}
+
+async function _todoToggle(todo) {
+  await updateDoc(_todoRef(todo.scope, todo.id), {
+    isCompleted: !todo.isCompleted,
+    completedAt: !todo.isCompleted ? serverTimestamp() : null,
+    updatedAt: serverTimestamp(),
+    updatedBy: currentActor()
+  });
+  if (_todoState.activeKey === _todoKey(todo)) {
+    _todoRenderEditor({ ...todo, isCompleted: !todo.isCompleted });
+  }
+}
+
+async function _todoDeleteCurrent() {
+  const todo = _todoState.current;
+  if (!todo?.id) return;
+  if (!confirm(`Delete "${todo.title || 'Untitled Todo'}"?`)) return;
+  await deleteDoc(_todoRef(todo.scope, todo.id));
+  _todoRenderEditor(null);
+}
+
+function _todoFindByKey(key) {
+  return _todoState.todos.find(todo => _todoKey(todo) === key) || null;
+}
+
+async function _todoStartListeners() {
+  if (!currentUser || !currentPlantId || _todoState.listening) return;
+  _todoState.listening = true;
+  _todoState.error = '';
+  _todoUnsubPersonal = onSnapshot(query(userTodosCol(), orderBy('updatedAt', 'desc')), snap => {
+    _todoState.personal = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.plantId === currentPlantId);
+    _todoRenderList();
+  }, err => {
+    console.warn('personal todos listener error', err);
+    _todoState.error = `Could not load personal todos: ${err?.message || 'permission denied'}`;
+    _todoRenderList();
+  });
+  _todoUnsubShared = onSnapshot(query(plantTodosCol(), orderBy('updatedAt', 'desc')), snap => {
+    _todoState.shared = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    _todoRenderList();
+  }, err => {
+    console.warn('shared todos listener error', err);
+    _todoState.error = `Could not load shared todos: ${err?.message || 'permission denied'}`;
+    _todoRenderList();
+  });
+}
+
+function _todoStopListeners() {
+  if (_todoUnsubPersonal) _todoUnsubPersonal();
+  if (_todoUnsubShared) _todoUnsubShared();
+  _todoUnsubPersonal = null;
+  _todoUnsubShared = null;
+  _todoState.listening = false;
+}
+
+function _todoResetState() {
+  _todoStopListeners();
+  _todoState.personal = [];
+  _todoState.shared = [];
+  _todoState.todos = [];
+  _todoState.scope = 'all';
+  _todoState.filter = 'open';
+  _todoState.search = '';
+  _todoState.activeKey = null;
+  _todoState.current = null;
+  _todoState.error = '';
+  const search = document.getElementById('todo-search');
+  if (search) search.value = '';
+  _todoSetEditorVisible(false);
+}
+
+function _todoLinkOpenPress() {
+  if (!_todoState.current) return;
+  const machine = document.getElementById('machine-filter')?.value || activeMiniCard?.machine || currentMachine || '';
+  if (!machine) return;
+  _todoState.current.machineCode = machine;
+  _todoState.current.pressId = toPressId(machine);
+  _todoRenderEditor(_todoState.current);
+}
+
+function _todoLinkOpenIssue() {
+  if (!_todoState.current) return;
+  const openBody = document.querySelector('.issue-body.visible');
+  const issueId = openBody?.id?.replace(/^body-/, '') || '';
+  const issue = issueId ? issues.find(i => i.id === issueId) : null;
+  if (!issue) return;
+  _todoState.current.issueId = issue.id;
+  _todoState.current.machineCode = issue.machine || _todoState.current.machineCode || '';
+  _todoState.current.pressId = issue.machine ? toPressId(issue.machine) : (_todoState.current.pressId || '');
+  _todoRenderEditor(_todoState.current);
+}
+
+function _todoClearLinks() {
+  if (!_todoState.current) return;
+  _todoState.current.issueId = '';
+  _todoState.current.machineCode = '';
+  _todoState.current.pressId = '';
+  _todoRenderEditor(_todoState.current);
+}
+
+window.openTodosModal = async function(options = {}) {
+  if (!currentUser || !currentPlantId) return;
+  document.getElementById('todos-modal')?.classList.add('visible');
+  document.body.classList.add('notes-open');
+  await _todoStartListeners();
+  _todoRenderList();
+};
+
+window.closeTodosModal = function(options = {}) {
+  document.getElementById('todos-modal')?.classList.remove('visible');
+  document.body.classList.remove('notes-open');
+  if (!options.preserveState) _todoResetState();
+};
+
+document.getElementById('todo-quick-add-btn')?.addEventListener('click', () => void _todoCreateFromQuick());
+document.getElementById('todo-quick-title')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    void _todoCreateFromQuick();
+  }
+});
+document.getElementById('todo-search')?.addEventListener('input', e => {
+  _todoState.search = String(e.target.value || '');
+  _todoRenderList();
+});
+document.querySelectorAll('[data-todo-scope]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    _todoState.scope = btn.dataset.todoScope || 'all';
+    _todoRenderList();
+  });
+});
+document.querySelectorAll('[data-todo-filter]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    _todoState.filter = btn.dataset.todoFilter || 'open';
+    _todoRenderList();
+  });
+});
+document.getElementById('todos-list')?.addEventListener('click', e => {
+  const toggleKey = e.target.closest?.('[data-todo-toggle]')?.dataset?.todoToggle;
+  if (toggleKey) {
+    const todo = _todoFindByKey(toggleKey);
+    if (todo) void _todoToggle(todo);
+    return;
+  }
+  const openKey = e.target.closest?.('[data-todo-open]')?.dataset?.todoOpen || e.target.closest?.('[data-todo-key]')?.dataset?.todoKey;
+  if (openKey) {
+    const todo = _todoFindByKey(openKey);
+    if (todo) _todoRenderEditor(todo);
+  }
+});
+document.getElementById('todo-save-btn')?.addEventListener('click', () => void _todoSaveFromEditor());
+document.getElementById('todo-delete-btn')?.addEventListener('click', () => void _todoDeleteCurrent());
+document.getElementById('todo-editor-close-btn')?.addEventListener('click', () => _todoRenderEditor(null));
+document.getElementById('todo-toggle-complete-btn')?.addEventListener('click', () => {
+  const todo = _todoState.current;
+  if (todo) void _todoToggle(todo);
+});
+document.getElementById('todo-link-press-btn')?.addEventListener('click', _todoLinkOpenPress);
+document.getElementById('todo-link-issue-btn')?.addEventListener('click', _todoLinkOpenIssue);
+document.getElementById('todo-clear-links-btn')?.addEventListener('click', _todoClearLinks);
 
 let _notesLoadToken = 0;
 let _notesSaveTimer = null;

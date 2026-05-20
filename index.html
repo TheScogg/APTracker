@@ -60,6 +60,9 @@
         <button class="sort-dropdown-btn" id="notes-btn-header" type="button" data-shell-action="open-notes-modal" aria-label="Notes" title="Notes">
           <span class="wiki-btn-icon" aria-hidden="true">N</span>
         </button>
+        <button class="sort-dropdown-btn" id="todos-btn-header" type="button" data-shell-action="open-todos-modal" aria-label="Todos" title="Todos">
+          <span class="wiki-btn-icon" aria-hidden="true">T</span>
+        </button>
 
         <button class="sort-dropdown-btn" id="messages-btn-header" data-messages-trigger="true" data-shell-action="open-messages" style="gap:4px;" aria-label="Messages" title="Messages">
           <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;opacity:0.7;"><path d="M3 2h10a1 1 0 011 1v8a1 1 0 01-1 1H5l-3 2V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
@@ -93,6 +96,13 @@
           <span class="header-quick-item-copy">
             <span class="header-quick-item-title">Notes</span>
             <span class="header-quick-item-sub">Quick capture</span>
+          </span>
+        </button>
+        <button class="header-quick-item" type="button" data-shell-action="open-todos-modal" role="menuitem">
+          <span class="header-quick-item-icon header-quick-item-icon-notes" aria-hidden="true">T</span>
+          <span class="header-quick-item-copy">
+            <span class="header-quick-item-title">Todos</span>
+            <span class="header-quick-item-sub">Tasks and reminders</span>
           </span>
         </button>
         <button class="header-quick-item" type="button" data-shell-action="open-messages" role="menuitem">
@@ -952,6 +962,94 @@
       <input type="file" id="notes-photo-input" accept="image/*" multiple hidden>
     </div>
   </div>
+  </div>
+</div>
+
+<!-- TODOS MODAL -->
+<div class="modal-overlay" id="todos-modal" onclick="if(event.target===this)closeTodosModal()">
+  <div class="phone" id="todos-frame" onclick="event.stopPropagation()">
+    <div class="notes-drag-handle"></div>
+    <div class="app-container" id="todos-app-container">
+      <div class="header notes-list-header tool-modal-nav-shell">
+        <button class="tool-modal-nav-btn tool-modal-nav-prev" type="button" data-shell-action="cycle-tool-modal" data-shell-value="prev" aria-label="Previous tool" title="Previous tool">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M9.5 3.5L5 8l4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="tool-modal-nav-title">Todos</div>
+        <button class="tool-modal-nav-btn tool-modal-nav-next" type="button" data-shell-action="cycle-tool-modal" data-shell-value="next" aria-label="Next tool" title="Next tool">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6.5 3.5L11 8l-4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+
+      <div class="todo-compose">
+        <input type="text" id="todo-quick-title" class="input" placeholder="New todo">
+        <button class="btn btn-primary" id="todo-quick-add-btn" type="button">Add</button>
+      </div>
+
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input type="text" class="search-box" id="todo-search" placeholder="Search todos...">
+      </div>
+
+      <div class="filter-row todo-filter-row">
+        <button class="filter-pill active" data-todo-scope="all" type="button">All</button>
+        <button class="filter-pill" data-todo-scope="mine" type="button">Mine</button>
+        <button class="filter-pill" data-todo-scope="shared" type="button">Shared</button>
+      </div>
+      <div class="filter-row todo-filter-row">
+        <button class="filter-pill active" data-todo-filter="open" type="button">Open</button>
+        <button class="filter-pill" data-todo-filter="today" type="button">Today</button>
+        <button class="filter-pill" data-todo-filter="done" type="button">Done</button>
+      </div>
+
+      <div class="todo-editor note-card" id="todo-editor" style="display:none;">
+        <div class="notes-section-head">
+          <div class="notes-section-title">Task</div>
+          <button class="notes-toolbar-btn" id="todo-editor-close-btn" type="button">Close</button>
+        </div>
+        <label for="todo-title">Title</label>
+        <input type="text" id="todo-title" class="notes-title" placeholder="Task title" maxlength="120">
+        <label for="todo-notes">Notes</label>
+        <textarea id="todo-notes" class="input" rows="3" placeholder="Add details"></textarea>
+        <div class="todo-editor-grid">
+          <label>List
+            <input type="text" id="todo-list-name" class="input" placeholder="Inbox">
+          </label>
+          <label>Due
+            <input type="date" id="todo-due-date" class="input">
+          </label>
+          <label>Priority
+            <select id="todo-priority" class="input">
+              <option value="none">None</option>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+            </select>
+          </label>
+          <label>Visibility
+            <select id="todo-visibility" class="input">
+              <option value="personal">Mine</option>
+              <option value="shared">Shared</option>
+            </select>
+          </label>
+        </div>
+        <div class="notes-context-box todo-link-box">
+          <div class="notes-context-label">Linked Context</div>
+          <div class="notes-context-summary" id="todo-context-summary">Standalone todo</div>
+          <div class="notes-context-actions">
+            <button class="notes-toolbar-btn" id="todo-link-press-btn" type="button">Link Open Press</button>
+            <button class="notes-toolbar-btn" id="todo-link-issue-btn" type="button">Link Open Issue</button>
+            <button class="notes-toolbar-btn" id="todo-clear-links-btn" type="button">Clear Links</button>
+          </div>
+        </div>
+        <div class="todo-editor-actions">
+          <button class="btn btn-ghost" id="todo-toggle-complete-btn" type="button">Mark Done</button>
+          <button class="btn btn-primary" id="todo-save-btn" type="button">Save</button>
+          <button class="btn btn-danger" id="todo-delete-btn" type="button">Delete</button>
+        </div>
+      </div>
+
+      <div id="todos-list" class="todos-list"></div>
+    </div>
   </div>
 </div>
 
