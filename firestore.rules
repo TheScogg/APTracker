@@ -301,10 +301,9 @@ service cloud.firestore {
       match /todos/{todoId} {
         allow read: if isPlantMember(plantId);
         allow create: if isPlantMember(plantId)
-                      && request.resource.data.createdBy.uid == currentUid()
-                      && request.resource.data.plantId == plantId;
+                      && request.resource.data.plantId == plantId
+                      && request.resource.data.ownerUid == currentUid();
         allow update: if isPlantMember(plantId)
-                      && request.resource.data.updatedBy.uid == currentUid()
                       && request.resource.data.plantId == plantId;
         allow delete: if isAdmin(plantId)
                       || (signedIn() && resource.data.ownerUid == currentUid())

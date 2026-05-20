@@ -406,7 +406,8 @@ Personal todos may include private task details, so they live under the user doc
 - active plant members
 
 #### Create / update
-- active plant members, with `createdBy.uid` / `updatedBy.uid` matching the caller
+- create requires active plant membership, matching `plantId`, and `ownerUid` matching the caller
+- update requires active plant membership and matching `plantId`
 
 #### Delete
 - plant admins, the owner, or the creator

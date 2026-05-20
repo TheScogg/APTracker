@@ -11318,6 +11318,12 @@ function _todoSyncFilterButtons() {
   });
 }
 
+function _todoSetError(message, err = null) {
+  _todoState.error = message || '';
+  if (err) console.warn(message, err);
+  _todoRenderList();
+}
+
 function _todoContextText(todo) {
   if (todo?.issueId) return `Issue ${todo.machineCode || todo.issueId}`;
   if (todo?.machineCode) return `Press ${todo.machineCode}`;
@@ -11444,26 +11450,46 @@ async function _todoCreateFromQuick() {
   if (!title) return;
   const scope = _todoState.scope === 'shared' ? 'shared' : 'personal';
   input.value = '';
-  const saved = await _todoSave({ title, notes: '', listName: 'Inbox', dueDate: '', priority: 'none', isCompleted: false, scope }, { creating: true });
-  if (saved) _todoRenderEditor(saved);
+  try {
+    const saved = await _todoSave({ title, notes: '', listName: 'Inbox', dueDate: '', priority: 'none', isCompleted: false, scope }, { creating: true });
+    if (saved) {
+      _todoState.error = '';
+      _todoRenderEditor(saved);
+    }
+  } catch (err) {
+    if (input) input.value = title;
+    _todoSetError(`Could not create ${scope === 'shared' ? 'shared' : 'personal'} todo: ${err?.message || 'permission denied'}`, err);
+  }
 }
 
 async function _todoSaveFromEditor() {
   if (!_todoState.current?.id) return;
   const priorScope = _todoState.current.scope || 'personal';
-  const saved = await _todoSave(_todoReadEditor(), { oldScope: priorScope });
-  if (saved) _todoRenderEditor(saved);
+  try {
+    const saved = await _todoSave(_todoReadEditor(), { oldScope: priorScope });
+    if (saved) {
+      _todoState.error = '';
+      _todoRenderEditor(saved);
+    }
+  } catch (err) {
+    _todoSetError(`Could not save todo: ${err?.message || 'permission denied'}`, err);
+  }
 }
 
 async function _todoToggle(todo) {
-  await updateDoc(_todoRef(todo.scope, todo.id), {
-    isCompleted: !todo.isCompleted,
-    completedAt: !todo.isCompleted ? serverTimestamp() : null,
-    updatedAt: serverTimestamp(),
-    updatedBy: currentActor()
-  });
-  if (_todoState.activeKey === _todoKey(todo)) {
-    _todoRenderEditor({ ...todo, isCompleted: !todo.isCompleted });
+  try {
+    await updateDoc(_todoRef(todo.scope, todo.id), {
+      isCompleted: !todo.isCompleted,
+      completedAt: !todo.isCompleted ? serverTimestamp() : null,
+      updatedAt: serverTimestamp(),
+      updatedBy: currentActor()
+    });
+    _todoState.error = '';
+    if (_todoState.activeKey === _todoKey(todo)) {
+      _todoRenderEditor({ ...todo, isCompleted: !todo.isCompleted });
+    }
+  } catch (err) {
+    _todoSetError(`Could not update todo: ${err?.message || 'permission denied'}`, err);
   }
 }
 
@@ -11471,8 +11497,13 @@ async function _todoDeleteCurrent() {
   const todo = _todoState.current;
   if (!todo?.id) return;
   if (!confirm(`Delete "${todo.title || 'Untitled Todo'}"?`)) return;
-  await deleteDoc(_todoRef(todo.scope, todo.id));
-  _todoRenderEditor(null);
+  try {
+    await deleteDoc(_todoRef(todo.scope, todo.id));
+    _todoState.error = '';
+    _todoRenderEditor(null);
+  } catch (err) {
+    _todoSetError(`Could not delete todo: ${err?.message || 'permission denied'}`, err);
+  }
 }
 
 function _todoFindByKey(key) {
