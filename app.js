@@ -1910,6 +1910,7 @@ document.addEventListener('click', e => {
 let STATUSES = {
   open:            { label:'Open',             shortLabel:'Open',         icon:'●',  cssColor:'var(--red)',      swipeColor:'#ef4444', floorCls:'has-open',            cls:'status-open',            subs:['New Fault / Issue','Pending Triage','Scheduled Mold Change','Re-opened'],                                               statLabel:'Open',          order:0 },
   alert:           { label:'Alert',            shortLabel:'Alert',        icon:'🚨', cssColor:'#dc2626',         swipeColor:'#dc2626', floorCls:'has-alert',           cls:'status-alert',           subs:['Mold Protection Fault','E-Stop / Safety Hazard','Press Down - Critical','Major Oil / Fluid Leak'],                   statLabel:'Alert',         order:1 },
+  attention:       { label:'Attention',        shortLabel:'Attention',    icon:'◇',  cssColor:'#0ea5e9',         swipeColor:'#0ea5e9', floorCls:'has-attention',       cls:'status-attention',       subs:['Watch Item','Needs Follow-up','Housekeeping','PM Opportunity','Operator Note','Check Next Run'],                  statLabel:'Attention',     order:1.5 },
   controlman:      { label:'Controlman',       shortLabel:'Controlman',   icon:'🎛️', cssColor:'var(--babyblue)', swipeColor:'#38bdf8', floorCls:'has-controlman',      cls:'status-controlman',      subs:['Robot / EOAT (End of Arm Tooling) Fault','Vision System / Camera Error','Conveyor / Auxiliary Comm Loss','PLC / HMI Error'], statLabel:'Controlman',    order:2 },
   maintenance:     { label:'Maintenance',      shortLabel:'Maintenance',  icon:'🔧', cssColor:'var(--yellow)',   swipeColor:'#eab308', floorCls:'has-maintenance',     cls:'status-maintenance',     subs:['Hydraulic Leak / Pressure Drop','Heater Band / Thermocouple Failure','Barrel / Screw / Check Ring Issue','Chiller / Thermolator Failure'], statLabel:'Maintenance',   order:3 },
   materials:       { label:'Materials',        shortLabel:'Materials',    icon:'📦', cssColor:'#8b5cf6',         swipeColor:'#8b5cf6', floorCls:'has-materials',       cls:'status-materials',       subs:['Resin Moisture / Drying Issue','Colorant / Masterbatch Ratio Error','Vacuum / Material Loader Blockage','Wrong Resin / Regrind Issue'], statLabel:'Materials',     order:4 },
@@ -1920,6 +1921,9 @@ let STATUSES = {
   resolved:        { label:'Resolved',         shortLabel:'Resolved',     icon:'✓',  cssColor:'var(--green)',    swipeColor:'#22c55e', floorCls:'all-resolved',        cls:'status-resolved',        subs:['Process Parameter Adjusted','Mold Cleaned / Repaired','Hardware Replaced','Temporary Workaround'],                      statLabel:'Resolved',      order:9 },
 };
 const DEFAULT_STATUSES = JSON.parse(JSON.stringify(STATUSES));
+const CANONICAL_OPTIONAL_STATUSES = {
+  attention: JSON.parse(JSON.stringify(STATUSES.attention))
+};
 
 // ── MASCOT CHARACTERS ──
 // Animated SVG characters, one per job role. Appear in status swipe panels and empty states.
@@ -2120,6 +2124,9 @@ function normalizeLoadedStatuses(rawStatuses) {
   // but do not seed any other old in-code defaults into the live config.
   if (!normalized.open) normalized.open = deepCopy(DEFAULT_STATUSES.open);
   if (!normalized.resolved) normalized.resolved = deepCopy(DEFAULT_STATUSES.resolved);
+  Object.entries(CANONICAL_OPTIONAL_STATUSES).forEach(([key, value]) => {
+    if (!normalized[key]) normalized[key] = deepCopy(value);
+  });
   return normalized;
 }
 
@@ -5340,14 +5347,36 @@ function updateLogCatPill() {
     sel.classList.add('visible');
     pill.textContent = '🔍 Searching…';
     pill.style.color = 'var(--text2)'; pill.style.borderColor = 'var(--border)'; pill.style.background = 'transparent';
+    updateAddModalIssueLanguage();
     return;
   }
-  if (!logCatKey) { sel.classList.remove('visible'); return; }
+  if (!logCatKey) {
+    sel.classList.remove('visible');
+    updateAddModalIssueLanguage();
+    return;
+  }
   const st = getStatusDef(logCatKey);
   const col = getStatusColor(logCatKey);
   sel.classList.add('visible');
   pill.textContent = st.icon+' '+getStatusLabel(logCatKey, 'short')+(logCatSub?' › '+logCatSub:'');
   pill.style.color=col; pill.style.borderColor=alphaColor(col,0.53); pill.style.background=alphaColor(col,0.08);
+  updateAddModalIssueLanguage();
+}
+
+function updateAddModalIssueLanguage() {
+  const isAttention = logCatKey === 'attention';
+  const titleAction = document.getElementById('add-modal-title-action');
+  const noteLabel = document.getElementById('issue-note-label');
+  const noteField = document.getElementById('issue-note');
+  if (titleAction) titleAction.textContent = isAttention ? 'Log Attention' : 'Log Issue';
+  if (noteLabel) noteLabel.textContent = isAttention ? 'What needs attention?' : 'What happened?';
+  if (noteField) {
+    noteField.placeholder = isAttention
+      ? 'Example: Watch for drip near guard; check next run'
+      : 'Example: Hydraulic leak at press startup';
+  }
+  const submit = document.getElementById('submit-btn');
+  if (submit && !submit.disabled) submit.innerHTML = isAttention ? '◇ Log Attention' : '⚠ Log Issue';
 }
 
 function scrollAddModalToBottom() {
@@ -5768,7 +5797,9 @@ function renderPreviews(arr, previewId) {
 function setSubmitting(on) {
   document.getElementById('submit-btn').disabled=on;
   document.getElementById('cancel-btn').disabled=on;
-  document.getElementById('submit-btn').innerHTML=on?'<span class="spinner"></span> Saving…':'⚠ Log Issue';
+  document.getElementById('submit-btn').innerHTML=on
+    ? '<span class="spinner"></span> Saving…'
+    : (logCatKey === 'attention' ? '◇ Log Attention' : '⚠ Log Issue');
 }
 
 // ── SUBMIT NEW ──
@@ -15408,6 +15439,7 @@ window.resetToDefaults = async () => {
   STATUSES = {
     open:            { label:'Open',             shortLabel:'Open',         icon:'●',  cssColor:'var(--red)',      swipeColor:'#ef4444', floorCls:'has-open',            cls:'status-open',            subs:['New Fault / Issue','Pending Triage','Scheduled Mold Change','Re-opened'],                                               statLabel:'Open',          order:0 },
     alert:           { label:'Alert',            shortLabel:'Alert',        icon:'🚨', cssColor:'#dc2626',         swipeColor:'#dc2626', floorCls:'has-alert',           cls:'status-alert',           subs:['Mold Protection Fault','E-Stop / Safety Hazard','Press Down - Critical','Major Oil / Fluid Leak'],                   statLabel:'Alert',         order:1 },
+    attention:       { label:'Attention',        shortLabel:'Attention',    icon:'◇',  cssColor:'#0ea5e9',         swipeColor:'#0ea5e9', floorCls:'has-attention',       cls:'status-attention',       subs:['Watch Item','Needs Follow-up','Housekeeping','PM Opportunity','Operator Note','Check Next Run'],                  statLabel:'Attention',     order:1.5 },
     controlman:      { label:'Controlman',       shortLabel:'Controlman',   icon:'🎛️', cssColor:'var(--babyblue)', swipeColor:'#38bdf8', floorCls:'has-controlman',      cls:'status-controlman',      subs:['Robot / EOAT (End of Arm Tooling) Fault','Vision System / Camera Error','Conveyor / Auxiliary Comm Loss','PLC / HMI Error'], statLabel:'Controlman',    order:2 },
     maintenance:     { label:'Maintenance',      shortLabel:'Maintenance',  icon:'🔧', cssColor:'var(--yellow)',   swipeColor:'#eab308', floorCls:'has-maintenance',     cls:'status-maintenance',     subs:['Hydraulic Leak / Pressure Drop','Heater Band / Thermocouple Failure','Barrel / Screw / Check Ring Issue','Chiller / Thermolator Failure'], statLabel:'Maintenance',   order:3 },
     materials:       { label:'Materials',        shortLabel:'Materials',    icon:'📦', cssColor:'#8b5cf6',         swipeColor:'#8b5cf6', floorCls:'has-materials',       cls:'status-materials',       subs:['Resin Moisture / Drying Issue','Colorant / Masterbatch Ratio Error','Vacuum / Material Loader Blockage','Wrong Resin / Regrind Issue'], statLabel:'Materials',     order:4 },

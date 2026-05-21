@@ -385,13 +385,13 @@
 <div class="modal-overlay" id="add-modal">
   <div class="modal add-issue-modal">
     <div class="modal-title" style="display:flex; justify-content:space-between; align-items:flex-start; padding-right:4px;">
-      <div>Log Issue — <span class="modal-machine" id="modal-machine-name"></span></div>
+      <div><span id="add-modal-title-action">Log Issue</span> — <span class="modal-machine" id="modal-machine-name"></span></div>
       <label class="issue-urgent-toggle" for="issue-urgent" title="Mark as Urgent">
         <input id="issue-urgent" type="checkbox">
         <span class="issue-urgent-pill icon-only" title="Urgent">🔥</span>
       </label>
     </div>
-    <label>What happened?</label>
+    <label id="issue-note-label">What happened?</label>
     <textarea id="issue-note" placeholder="Example: Hydraulic leak at press startup" rows="3"></textarea>
     <div class="issue-quick-phrases" id="issue-quick-phrases"></div>
     <label>Photos <span style="color:var(--text3);font-size:9px;letter-spacing:0;text-transform:none;font-family:'Nunito',sans-serif">(optional)</span></label>
@@ -1392,7 +1392,7 @@
   </div>
 </div>
 
-<script type="module" src="./app.js?v=ae083d6"></script>
+<script type="module" src="./app.js?v=attention1"></script>
 
 <!-- MASCOT CHARACTER CARD POPOVER -->
 <div class="mascot-popover-backdrop" id="mascot-popover-backdrop" onclick="if(event.target===this)closeMascotPopover()">
