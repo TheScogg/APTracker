@@ -2213,27 +2213,14 @@
   .wf-status-row.finished-checkered,
   .tl-entry.finished-checkered {
     position: relative;
-    overflow: hidden;
     opacity: 1;
     border-color: rgba(255,255,255,.18);
     border-left-color: rgba(255,255,255,.88) !important;
     box-shadow: 0 8px 28px rgba(0,0,0,.26), inset 0 0 0 1px rgba(255,255,255,.03);
-    background-color: rgba(255,255,255,.025);
   }
   .wf-status-row.finished-checkered::before,
   .tl-entry.finished-checkered::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background:
-      radial-gradient(circle at top right, rgba(255,255,255,.14), transparent 38%),
-      linear-gradient(135deg, rgba(255,255,255,.09), transparent 30%, transparent 72%, rgba(255,255,255,.08)),
-      repeating-conic-gradient(from 45deg,
-        rgba(255,255,255,.22) 0 25%,
-        rgba(0,0,0,.18) 0 50%);
-    background-size: auto, auto, 18px 18px;
-    background-position: 0 0, 0 0, 0 0;
-    pointer-events: none;
+    content: none;
   }
   .wf-status-row.finished-checkered > *,
   .tl-entry.finished-checkered > * {
