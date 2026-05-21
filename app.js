@@ -3762,6 +3762,23 @@ document.addEventListener('visibilitychange', () => {
 let retryTimeout = null;
 let retryCount = 0;
 let issueBootstrapTimeout = null;
+const ISSUE_LISTENER_RETRY_BASE_MS = 500;
+const ISSUE_LISTENER_RETRY_MAX_MS = 10000;
+const ISSUE_LISTENER_RETRY_JITTER = 0.2;
+const ISSUE_LISTENER_BOOTSTRAP_FALLBACK_MS = 3000;
+
+function nextIssueListenerRetryDelay(attempt) {
+  const safeAttempt = Math.max(1, Number(attempt) || 1);
+  const exponentialDelay = ISSUE_LISTENER_RETRY_BASE_MS * (2 ** (safeAttempt - 1));
+  const cappedDelay = Math.min(exponentialDelay, ISSUE_LISTENER_RETRY_MAX_MS);
+  const jitterFactor = 1 - ISSUE_LISTENER_RETRY_JITTER + (Math.random() * ISSUE_LISTENER_RETRY_JITTER * 2);
+  return Math.round(cappedDelay * jitterFactor);
+}
+
+function formatRetryDelay(delayMs) {
+  if (delayMs < 1000) return '<1s';
+  return `${Math.round(delayMs / 1000)}s`;
+}
 
 function buildIssueFromSnapshot(docSnap) {
   const data = docSnap.data() || {};
@@ -3844,8 +3861,8 @@ function startListener() {
       return;
     }
     retryCount++;
-    const delay = Math.min(2000 * retryCount, 15000); // 2s, 4s, 6s… up to 15s
-    setSyncStatus('err', `Connection lost. Retrying in ${Math.round(delay/1000)}s…`);
+    const delay = nextIssueListenerRetryDelay(retryCount);
+    setSyncStatus('err', `Connection lost. Retrying in ${formatRetryDelay(delay)}…`);
     // Show retry button in issue list
     document.getElementById('issues-list').innerHTML = `
       <div class="empty-state">
@@ -3872,7 +3889,7 @@ function startListener() {
     } catch (e) {
       console.warn('Bootstrap issues fallback read failed:', e);
     }
-  }, 6000);
+  }, ISSUE_LISTENER_BOOTSTRAP_FALLBACK_MS);
 }
 
 // ── SYNC ──
@@ -7464,7 +7481,7 @@ function renderIssues() {
       return `${subLabel} ${foundSerialNumber}`;
     })();
 
-    const currentWfRowHtml = workflowState === 'finished' ? '' : `<div class="wf-status-row">
+    const currentWfRowHtml = `<div class="wf-status-row${workflowState === 'finished' ? ' finished-checkered' : ''}">
       <div class="wf-status-row-info">
         <div class="issue-status" style="color:${sc.color};border-color:${sc.color};background:${alphaColor(sc.color,0.12)}">
           <span class="issue-status-main">${sc.icon} ${baseLabel}</span>
