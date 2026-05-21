@@ -375,6 +375,29 @@ This is the main operational document used by the live UI.
   "latestNotePreview": "Robot faulted at mold open",
   "tags": ["robot", "stoppage"],
 
+  "statusHistory": [
+    {
+      "status": "maintenance",
+      "subStatus": "Hydraulic Leak / Pressure Drop",
+      "note": "Maintenance called",
+      "dateTime": "May 21, 2026, 8:15 AM",
+      "by": "James Scoggins",
+      "workflowId": "wf_maintenance_m3r1a2b3_x7k9q2"
+    }
+  ],
+  "workflowState": "accepted",
+  "workflowStateByEntry": {
+    "wf_maintenance_m3r1a2b3_x7k9q2": "accepted"
+  },
+  "workflowStateByEntryHistory": {
+    "wf_maintenance_m3r1a2b3_x7k9q2": {
+      "accepted": {
+        "by": { "uid": "uid_123", "name": "James Scoggins" },
+        "at": "serverTimestamp"
+      }
+    }
+  },
+
   "createdBy": {
     "uid": "uid_123",
     "name": "James Scoggins"
@@ -395,6 +418,8 @@ This is the main operational document used by the live UI.
 - This document should always store the current issue summary state.
 - The UI should not need to scan timeline arrays to figure out the current status.
 - Keep this document optimized for live operational reads.
+- `statusHistory[].workflowId` identifies a specific workflow instance. Repeated entries with the same `status` must use different `workflowId` values so their Called/Accepted/In Progress/Finished state does not bleed across categories.
+- `workflowState` remains the compatibility mirror for the current status entry. New workflow state should be stored in `workflowStateByEntry.{workflowId}` and `workflowStateByEntryHistory.{workflowId}.{state}`.
 
 ---
 
@@ -1002,6 +1027,12 @@ Stop reading:
   "currentStatus": {
     "statusKey": "maintenance",
     "subStatusKey": "in_progress"
+  },
+  "statusHistory": [
+    { "status": "maintenance", "subStatus": "in_progress", "workflowId": "wf_maintenance_m3r1a2b3_x7k9q2" }
+  ],
+  "workflowStateByEntry": {
+    "wf_maintenance_m3r1a2b3_x7k9q2": "called"
   },
   "photoCount": 1,
   "schemaVersion": 2

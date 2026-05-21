@@ -102,6 +102,50 @@ const runTransaction = async (...args) => {
   trackFirestoreWrite(1);
   return out;
 };
+
+const WORKFLOW_STATES = ['called', 'accepted', 'in-progress', 'finished'];
+
+function createWorkflowId(statusKey = 'status') {
+  const cleanStatus = String(statusKey || 'status').toLowerCase().replace(/[^a-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '') || 'status';
+  const rand = Math.random().toString(36).slice(2, 8);
+  return `wf_${cleanStatus}_${Date.now().toString(36)}_${rand}`;
+}
+
+function normalizeWorkflowId(workflowId) {
+  const id = String(workflowId || '').trim();
+  return /^[A-Za-z0-9_-]+$/.test(id) ? id : '';
+}
+
+function getEntryWorkflowId(entry) {
+  return normalizeWorkflowId(entry?.workflowId || entry?.workflowKey || '');
+}
+
+function getWorkflowStateForEntry(issue, entry, isCurrent = false) {
+  const workflowId = getEntryWorkflowId(entry);
+  if (workflowId && issue?.workflowStateByEntry && Object.prototype.hasOwnProperty.call(issue.workflowStateByEntry, workflowId)) {
+    return issue.workflowStateByEntry[workflowId] || null;
+  }
+  const statusKey = String(entry?.status || '').trim().toLowerCase();
+  if (isCurrent && issue?.workflowState) return issue.workflowState || null;
+  if (statusKey && issue?.workflowStateByStatus && Object.prototype.hasOwnProperty.call(issue.workflowStateByStatus, statusKey)) {
+    return issue.workflowStateByStatus[statusKey] || null;
+  }
+  return null;
+}
+
+function getWorkflowActorForEntry(issue, entry, state, isCurrent = false) {
+  if (!state) return null;
+  const workflowId = getEntryWorkflowId(entry);
+  const entryActor = workflowId && issue?.workflowStateByEntryHistory?.[workflowId]?.[state]?.by;
+  if (entryActor) return entryActor;
+  if (isCurrent && issue?.workflowStateHistory?.[state]?.by) return issue.workflowStateHistory[state].by;
+  const statusKey = String(entry?.status || '').trim().toLowerCase();
+  return statusKey ? issue?.workflowStateByStatusHistory?.[statusKey]?.[state]?.by || null : null;
+}
+
+function isCurrentWorkflowEntry(entryIndex, historyLength, entry, issue) {
+  return entryIndex === historyLength - 1 && String(entry?.status || '') === String(currentStatusKey(issue || {}) || '');
+}
 const onSnapshot = (...args) => {
   let seenFirstServerSnapshot = false;
   const wrapSnapshotHandler = (original) => (snapshot) => {
@@ -340,7 +384,7 @@ async function resolveRoleAlertRoute(statusKey, subStatus) {
   }) || null;
 }
 
-async function queueRoleFeedAlert(issue, { statusKey, subStatus, note = '' } = {}) {
+async function queueRoleFeedAlert(issue, { statusKey, subStatus, note = '', workflowId = '' } = {}) {
   if (DEMO_MODE) return;
   if (!currentPlantId || !issue?.id || !statusKey) return;
   const normalizedStatus = String(statusKey || '').trim().toLowerCase();
@@ -384,6 +428,7 @@ async function queueRoleFeedAlert(issue, { statusKey, subStatus, note = '' } = {
       machine: issue.machine || issue.machineCode || '',
       statusKey,
       subStatus: subStatus || '',
+      workflowId: normalizeWorkflowId(workflowId),
       note: note || '',
       feedKey: effectiveRoute.feedKey,
       feedLabel: effectiveRoute.feedLabel,
@@ -429,8 +474,12 @@ function _setActiveRoleAlertCount(count) {
   _updateRoleAlertBadge();
 }
 
-function _getRoleAlertWorkflowState(issue, statusKey) {
+function _getRoleAlertWorkflowState(issue, statusKey, workflowId = '') {
   if (!issue) return null;
+  const normalizedWorkflowId = normalizeWorkflowId(workflowId);
+  if (normalizedWorkflowId && issue.workflowStateByEntry && Object.prototype.hasOwnProperty.call(issue.workflowStateByEntry, normalizedWorkflowId)) {
+    return issue.workflowStateByEntry[normalizedWorkflowId] || null;
+  }
   const normalizedStatusKey = String(statusKey || '').trim().toLowerCase();
   const primaryKey = currentStatusKey(issue);
   if (normalizedStatusKey && normalizedStatusKey === primaryKey) {
@@ -503,7 +552,7 @@ function _renderRoleAlertCard(alert) {
         </div>
       </button>
       <div class="role-alert-card-actions">
-        <button class="role-alert-action-btn role-alert-action-accept" type="button" data-role-alert-action="accept" data-role-alert-issue-id="${esc(alert.issueId)}" data-role-alert-status-key="${esc(alert.statusKey)}" ${isResolved ? 'disabled' : ''}>${isResolved ? 'Resolved' : (isAccepted ? 'Accepted' : 'Accept')}</button>
+        <button class="role-alert-action-btn role-alert-action-accept" type="button" data-role-alert-action="accept" data-role-alert-issue-id="${esc(alert.issueId)}" data-role-alert-status-key="${esc(alert.statusKey)}" data-role-alert-workflow-id="${esc(alert.workflowId || '')}" ${isResolved ? 'disabled' : ''}>${isResolved ? 'Resolved' : (isAccepted ? 'Accepted' : 'Accept')}</button>
         <button class="role-alert-action-btn role-alert-action-delete" type="button" data-role-alert-action="delete" data-role-alert-id="${esc(alert.id)}" data-role-alert-category-key="${esc(alert.categoryKey)}" data-role-alert-status-key="${esc(alert.statusKey)}">Delete</button>
       </div>
     </div>
@@ -603,9 +652,10 @@ async function _loadActiveRoleAlertsForCurrentUser() {
     const issueLifecycle = issue && issue.lifecycle ? issue.lifecycle : null;
     const isResolved = !!(issue && (issue.resolved || (issueLifecycle && issueLifecycle.isResolved)));
     const alertStatusKey = data.statusKey || currentStatusKey(issue || {}) || '';
+    const alertWorkflowId = normalizeWorkflowId(data.workflowId || '');
     const workflowState = isResolved
       ? 'resolved'
-      : (_getRoleAlertWorkflowState(issue || null, alertStatusKey) || data.workflowState || null);
+      : (_getRoleAlertWorkflowState(issue || null, alertStatusKey, alertWorkflowId) || data.workflowState || null);
     const issueMachine = issue && (issue.machine || issue.machineCode) ? (issue.machine || issue.machineCode) : 'Unknown';
     const issueCurrentStatus = issue && issue.currentStatus ? issue.currentStatus : null;
     const issueSubStatus = issueCurrentStatus && issueCurrentStatus.subStatusKey ? issueCurrentStatus.subStatusKey : '';
@@ -616,6 +666,7 @@ async function _loadActiveRoleAlertsForCurrentUser() {
       : '';
     const workflowAcceptedBy = workflowState === 'accepted'
       ? (
+          (alertWorkflowId && issue && issue.workflowStateByEntryHistory && issue.workflowStateByEntryHistory[alertWorkflowId] && issue.workflowStateByEntryHistory[alertWorkflowId].accepted && issue.workflowStateByEntryHistory[alertWorkflowId].accepted.by) ||
           (issue && issue.workflowStateHistory && issue.workflowStateHistory.accepted && issue.workflowStateHistory.accepted.by) ||
           (issue && issue.workflowStateByStatusHistory && issue.workflowStateByStatusHistory[alertStatusKey] && issue.workflowStateByStatusHistory[alertStatusKey].accepted && issue.workflowStateByStatusHistory[alertStatusKey].accepted.by) ||
           null
@@ -627,6 +678,7 @@ async function _loadActiveRoleAlertsForCurrentUser() {
       machine: data.machine || issueMachine,
       feedLabel: data.feedLabel || data.categoryKey || data.statusKey || 'Alert',
       statusKey: alertStatusKey,
+      workflowId: alertWorkflowId,
       subStatus: data.subStatus || issueSubStatus,
       categoryKey: data.categoryKey || data.statusKey || '',
       note: data.note || issueNote,
@@ -662,7 +714,7 @@ function _renderRoleAlertLoadFallback({ title, subtitle }) {
   `;
 }
 
-function _handleRoleAlertModalAction(action, issueId, statusKey, alertId, categoryKey) {
+function _handleRoleAlertModalAction(action, issueId, statusKey, alertId, categoryKey, workflowId = '') {
   if (action === 'retry') {
     const retryBtn = document.querySelector('#role-alerts-modal .role-alerts-retry-fab');
     if (retryBtn) {
@@ -691,7 +743,7 @@ function _handleRoleAlertModalAction(action, issueId, statusKey, alertId, catego
     return;
   }
   if (action === 'accept' && issueId && statusKey) {
-    void acceptRoleAlert(issueId, statusKey);
+    void acceptRoleAlert(issueId, statusKey, workflowId);
     return;
   }
   if (action === 'delete' && alertId) {
@@ -715,7 +767,8 @@ function _bindRoleAlertModalActions() {
       target.dataset.roleAlertIssueId || '',
       target.dataset.roleAlertStatusKey || '',
       target.dataset.roleAlertId || '',
-      target.dataset.roleAlertCategoryKey || ''
+      target.dataset.roleAlertCategoryKey || '',
+      target.dataset.roleAlertWorkflowId || ''
     );
   });
 }
@@ -836,10 +889,13 @@ window.deleteRoleAlert = async function(alertId, categoryKey, statusKey) {
   }
 };
 
-window.acceptRoleAlert = async function(issueId, statusKey) {
+window.acceptRoleAlert = async function(issueId, statusKey, workflowId = '') {
   if (!issueId || !statusKey) return;
   try {
-    await setWorkflowStateForStatus(issueId, statusKey, 'accepted');
+    const updatedWorkflowId = normalizeWorkflowId(workflowId)
+      ? await setWorkflowStateForWorkflowId(issueId, workflowId, 'accepted')
+      : '';
+    if (!updatedWorkflowId) await setWorkflowStateForStatus(issueId, statusKey, 'accepted');
     showGameToast('✅ Workflow accepted');
     _roleAlertsShowAccepted = true;
     if (document.getElementById('role-alerts-modal')?.classList.contains('visible')) {
@@ -851,10 +907,13 @@ window.acceptRoleAlert = async function(issueId, statusKey) {
   }
 };
 
-window.unacceptRoleAlert = async function(issueId, statusKey) {
+window.unacceptRoleAlert = async function(issueId, statusKey, workflowId = '') {
   if (!issueId || !statusKey) return;
   try {
-    await setWorkflowStateForStatus(issueId, statusKey, 'called');
+    const updatedWorkflowId = normalizeWorkflowId(workflowId)
+      ? await setWorkflowStateForWorkflowId(issueId, workflowId, 'called')
+      : '';
+    if (!updatedWorkflowId) await setWorkflowStateForStatus(issueId, statusKey, 'called');
     showGameToast('↩️ Workflow unaccepted');
     if (document.getElementById('role-alerts-modal')?.classList.contains('visible')) {
       await _openRoleAlertInboxModalInternal({ resetToggle: false });
@@ -5811,6 +5870,7 @@ window.submitIssue = async () => {
     const initialStatus = logCatKey || 'open';
     const initialSubStatus = logCatSub || '';
     const note = document.getElementById('issue-note').value.trim() || 'No Description Provided';
+    const initialWorkflowId = createWorkflowId(initialStatus);
     const shiftSel = document.getElementById('issue-shift').value;
     const shift = shiftSel === 'auto' ? getShiftForTime(d, getShiftSchedule(currentPlantId)) : shiftSel;
     const timerMinutes = parseTimerMinutes(document.getElementById('issue-timer-minutes')?.value);
@@ -5826,6 +5886,22 @@ window.submitIssue = async () => {
       photoCount: uploadedPhotos.length,
       createdAt: serverTimestamp(),
       createdBy: currentActor(),
+      statusHistory: [{
+        status: initialStatus,
+        subStatus: initialSubStatus,
+        note: '',
+        dateTime: fmtDate(d),
+        by: currentUser.displayName || currentUser.email,
+        workflowId: initialWorkflowId
+      }],
+      ...(initialStatus === 'resolved'
+        ? {
+            workflowState: 'finished',
+            workflowStateByEntry: { [initialWorkflowId]: 'finished' },
+            workflowStateByEntryHistory: { [initialWorkflowId]: { finished: { by: currentActor(), at: serverTimestamp() } } },
+            workflowStateHistory: { finished: { by: currentActor(), at: serverTimestamp() } }
+          }
+        : { workflowStateByEntry: { [initialWorkflowId]: null } }),
       ...(isUrgent ? { highPriority: true, priority: 'critical' } : {}),
       ...buildIssueV2Compat({
         machineCode: currentMachine,
@@ -5861,7 +5937,8 @@ window.submitIssue = async () => {
     await queueRoleFeedAlert({ id: issueRef.id, machine: currentMachine }, {
       statusKey: initialStatus,
       subStatus: initialSubStatus,
-      note
+      note,
+      workflowId: initialWorkflowId
     });
     if (timerMinutes > 0) setIssueReminder(issueRef.id, timerMinutes);
     attachmentPhotoCache.set(issueRef.id, uploadedPhotos);
@@ -5989,16 +6066,20 @@ window.confirmResolve = async () => {
     const issue = issues.find(i=>i.id===resolveTargetId);
     const last = currentStatus(issue || {});
     const resolvedAtText = fmtDate(new Date());
+    const resolvedWorkflowId = createWorkflowId('resolved');
     const resolvedHistEntry = {
       status: 'resolved', subStatus: '',
       note: note || 'Resolved (no details provided)',
       dateTime: resolvedAtText,
-      by: currentUser.displayName || currentUser.email
+      by: currentUser.displayName || currentUser.email,
+      workflowId: resolvedWorkflowId
     };
     const issuePatch = {
       statusHistory: [...getMutableStatusHistory(issue || {}), resolvedHistEntry],
       workflowState: 'finished',
       'workflowStateHistory.finished': { by: currentActor(), at: serverTimestamp() },
+      [`workflowStateByEntry.${resolvedWorkflowId}`]: 'finished',
+      [`workflowStateByEntryHistory.${resolvedWorkflowId}.finished`]: { by: currentActor(), at: serverTimestamp() },
       secondaryStatuses: [], // clear all secondary tags on resolve
       ...buildIssueV2Compat({
         machineCode: issue?.machine || '',
@@ -6048,12 +6129,15 @@ window.confirmReopen = async () => {
     const reopenStatusKey = last?.status && last.status !== 'resolved' ? last.status : 'open';
     const reopenSubStatus = last?.status && last.status !== 'resolved' ? (last.subStatus || '') : '';
     const reopenDateTime = fmtDate(new Date());
+    const reopenWorkflowId = createWorkflowId(reopenStatusKey);
     const statusHistory = getMutableStatusHistory(issue);
-    statusHistory.push({ status: reopenStatusKey, subStatus: reopenSubStatus, note: note || '', dateTime: reopenDateTime, by: currentUser.displayName || currentUser.email });
+    statusHistory.push({ status: reopenStatusKey, subStatus: reopenSubStatus, note: note || '', dateTime: reopenDateTime, by: currentUser.displayName || currentUser.email, workflowId: reopenWorkflowId });
     const issuePatch = {
       reopenNote:note||'',reopenDateTime,
       reopenedBy:currentUser.displayName||currentUser.email,resolveHistory,
       statusHistory,
+      workflowState: null,
+      [`workflowStateByEntry.${reopenWorkflowId}`]: null,
       ...buildIssueV2Compat({
         machineCode: issue?.machine || '',
         statusKey: reopenStatusKey,
@@ -6127,12 +6211,14 @@ window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
   if (!currentUserPermissions.canEditIssue) return;
   const issue = issues.find(i => i.id === id);
   if (!issue) return;
+  const workflowId = createWorkflowId(status);
   const entry = {
     status,
     subStatus: subStatus || '',
     note: note || '',
     dateTime: dateTime || fmtDate(new Date()),
-    by: currentUser.displayName || currentUser.email
+    by: currentUser.displayName || currentUser.email,
+    workflowId
   };
   let prev = currentStatus(issue);
   try {
@@ -6142,13 +6228,29 @@ window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
       const base = snap.exists() ? { id, ...snap.data() } : issue;
       prev = currentStatus(base || issue);
       const history = getMutableStatusHistory(base || issue);
+      const prevEntry = history[history.length - 1] || null;
+      const prevWorkflowIdBeforePush = getEntryWorkflowId(prevEntry);
+      if (prevEntry && !prevWorkflowIdBeforePush) {
+        prevEntry.workflowId = createWorkflowId(prevEntry.status);
+        history[history.length - 1] = prevEntry;
+      }
       history.push(entry);
       const prevWorkflowState = (base?.workflowState || null);
+      const prevWorkflowId = getEntryWorkflowId(prevEntry);
       const issuePatch = {
         statusHistory: history,
         ...(status === 'resolved'
-          ? { workflowState: 'finished', 'workflowStateHistory.finished': { by: currentActor(), at: serverTimestamp() } }
+          ? {
+              workflowState: 'finished',
+              'workflowStateHistory.finished': { by: currentActor(), at: serverTimestamp() },
+              [`workflowStateByEntry.${workflowId}`]: 'finished',
+              [`workflowStateByEntryHistory.${workflowId}.finished`]: { by: currentActor(), at: serverTimestamp() }
+            }
           : { workflowState: null }),
+        ...(status !== 'resolved' ? { [`workflowStateByEntry.${workflowId}`]: null } : {}),
+        ...(status !== 'resolved' && prevWorkflowId && prevWorkflowState
+          ? { [`workflowStateByEntry.${prevWorkflowId}`]: prevWorkflowState }
+          : {}),
         ...(status !== 'resolved' && prev?.status && prevWorkflowState
           ? { [`workflowStateByStatus.${prev.status}`]: prevWorkflowState }
           : {}),
@@ -6181,7 +6283,8 @@ window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
     await queueRoleFeedAlert(issue, {
       statusKey: status,
       subStatus: subStatus || '',
-      note: note || ''
+      note: note || '',
+      workflowId
     });
     issueEventHistoryCache.delete(id);
     await awardGamification('status_changed_valid', { issueId: id, dedupeSuffix: entry.dateTime || String(Date.now()), tags: ['status:changed', `status:${status}`] });
@@ -6288,18 +6391,22 @@ window.setStatusCurrentFromHistory = async (id, idx) => {
   const source = history[idx];
   if (!source || !source.status) return;
   const prev = currentStatus(issue);
+  const workflowId = createWorkflowId(source.status);
   const nextEntry = {
     status: source.status,
     subStatus: source.subStatus || '',
     note: source.note || '',
     dateTime: fmtDate(new Date()),
-    by: currentUser.displayName || currentUser.email
+    by: currentUser.displayName || currentUser.email,
+    workflowId
   };
   history.push(nextEntry);
   try {
     const patch = {
       statusHistory: history,
       [`workflowStateByStatus.${nextEntry.status}`]: 'called',
+      [`workflowStateByEntry.${workflowId}`]: 'called',
+      [`workflowStateByEntryHistory.${workflowId}.called`]: { by: currentActor(), at: serverTimestamp() },
       ...buildIssueV2Compat({
         machineCode: issue.machine || issue.machineCode || '',
         statusKey: nextEntry.status,
@@ -6542,8 +6649,7 @@ window.setSubStatus = async (id, sub) => {
 
 // ── WORKFLOW STATE ──
 window.setWorkflowState = async (id, state) => {
-  const validStates = ['called', 'accepted', 'in-progress', 'finished'];
-  if (!validStates.includes(state)) return;
+  if (!WORKFLOW_STATES.includes(state)) return;
   const actor = currentActor();
   const issue = issues.find(i => i.id === id);
   if (issue && (issue.workflowState || 'called') === state) return;
@@ -6559,9 +6665,89 @@ window.setWorkflowState = async (id, state) => {
   }
 };
 
+async function setWorkflowStateForEntryLocator(issueId, state, locateEntry) {
+  if (!WORKFLOW_STATES.includes(state)) return '';
+  const actor = currentActor();
+  const issue = issues.find(i => i.id === issueId);
+  let updatedWorkflowId = '';
+  let didWrite = false;
+  try {
+    await runTransaction(db, async tx => {
+      const ref = plantDoc('issues', issueId);
+      const snap = await tx.get(ref);
+      const base = snap.exists() ? { ...(issue || {}), ...snap.data() } : issue;
+      if (!base) return;
+      const history = getMutableStatusHistory(base);
+      let entryIndex = locateEntry(history, base);
+      if (entryIndex < 0) return;
+      if (!history[entryIndex]) {
+        const current = currentStatus(base);
+        history[entryIndex] = {
+          status: current?.status || currentStatusKey(base),
+          subStatus: current?.subStatus || '',
+          note: current?.note || '',
+          dateTime: current?.dateTime || base?.dateTime || fmtDate(new Date()),
+          by: current?.by || base?.userName || ''
+        };
+      }
+      const entry = { ...history[entryIndex] };
+      let workflowId = getEntryWorkflowId(entry);
+      const needsWorkflowId = !workflowId;
+      if (!workflowId) {
+        workflowId = createWorkflowId(entry.status);
+        entry.workflowId = workflowId;
+        history[entryIndex] = entry;
+      }
+      const isCurrentEntry = isCurrentWorkflowEntry(entryIndex, history.length, entry, base);
+      const current = getWorkflowStateForEntry(base, entry, isCurrentEntry);
+      if (current === state && !needsWorkflowId) {
+        updatedWorkflowId = workflowId;
+        return;
+      }
+      const patch = {
+        statusHistory: history,
+        [`workflowStateByEntry.${workflowId}`]: state,
+        [`workflowStateByEntryHistory.${workflowId}.${state}`]: { by: actor, at: serverTimestamp() },
+        updatedAt: serverTimestamp(),
+        updatedBy: actor
+      };
+      if (isCurrentEntry) {
+        patch.workflowState = state;
+        patch[`workflowStateHistory.${state}`] = { by: actor, at: serverTimestamp() };
+        if (entry.status) {
+          patch[`workflowStateByStatus.${entry.status}`] = state;
+          patch[`workflowStateByStatusHistory.${entry.status}.${state}`] = { by: actor, at: serverTimestamp() };
+        }
+      }
+      tx.update(ref, patch);
+      updatedWorkflowId = workflowId;
+      didWrite = true;
+    });
+    if (didWrite && updatedWorkflowId) {
+      await awardGamification('workflow_step_advance', { issueId, dedupeSuffix: `${updatedWorkflowId}:${state}`, tags: ['workflow:advance', `workflow:${state}`] });
+    }
+  } catch (e) {
+    setSyncStatus('err', 'Error updating workflow: ' + e.message);
+  }
+  return updatedWorkflowId;
+}
+
+window.setWorkflowStateForEntry = async (issueId, entryIndex, state) => {
+  const idx = Number(entryIndex);
+  if (!Number.isInteger(idx) || idx < 0) return '';
+  return setWorkflowStateForEntryLocator(issueId, state, history => idx <= history.length ? idx : -1);
+};
+
+window.setWorkflowStateForWorkflowId = async (issueId, workflowId, state) => {
+  const normalizedWorkflowId = normalizeWorkflowId(workflowId);
+  if (!normalizedWorkflowId) return '';
+  return setWorkflowStateForEntryLocator(issueId, state, history =>
+    history.findIndex(entry => getEntryWorkflowId(entry) === normalizedWorkflowId)
+  );
+};
+
 window.setWorkflowStateForStatus = async (issueId, statusKey, state) => {
-  const validStates = ['called', 'accepted', 'in-progress', 'finished'];
-  if (!validStates.includes(state)) return;
+  if (!WORKFLOW_STATES.includes(state)) return;
   const actor = currentActor();
   const issue = issues.find(i => i.id === issueId);
   const primaryKey = issue ? currentStatusKey(issue) : null;
@@ -6598,26 +6784,41 @@ function formatWorkflowActor(actor) {
 }
 
 window.cycleWorkflowStateForStatus = async (issueId, statusKey) => {
-  const states = ['called', 'accepted', 'in-progress', 'finished'];
   const issue = issues.find(i => i.id === issueId);
   if (!issue) return;
   const primaryKey = currentStatusKey(issue);
   const current = statusKey === primaryKey
     ? (issue.workflowState || null)
     : (issue.workflowStateByStatus?.[statusKey] || null);
-  const currentIdx = states.indexOf(current);
-  const next = currentIdx < 0 ? 'called' : states[(currentIdx + 1) % states.length];
+  const currentIdx = WORKFLOW_STATES.indexOf(current);
+  const next = currentIdx < 0 ? 'called' : WORKFLOW_STATES[(currentIdx + 1) % WORKFLOW_STATES.length];
   await setWorkflowStateForStatus(issueId, statusKey, next);
+};
+
+window.cycleWorkflowStateForEntry = async (issueId, entryIndex) => {
+  const issue = issues.find(i => i.id === issueId);
+  if (!issue) return;
+  const history = getMutableStatusHistory(issue);
+  const idx = Number(entryIndex);
+  const entry = history[idx];
+  if (!entry) return;
+  const isCurrentEntry = isCurrentWorkflowEntry(idx, history.length, entry, issue);
+  const matchingStatusCount = history.filter(item => String(item?.status || '') === String(entry.status || '')).length;
+  const current = !getEntryWorkflowId(entry) && !isCurrentEntry && matchingStatusCount > 1
+    ? null
+    : getWorkflowStateForEntry(issue, entry, isCurrentEntry);
+  const currentIdx = WORKFLOW_STATES.indexOf(current);
+  const next = currentIdx < 0 ? 'called' : WORKFLOW_STATES[(currentIdx + 1) % WORKFLOW_STATES.length];
+  await setWorkflowStateForEntry(issueId, idx, next);
 };
 
 window.cycleWorkflowState = async (id) => {
   const issue = issues.find(i => i.id === id);
   if (!issue) return;
-  const states = ['called', 'accepted', 'in-progress', 'finished'];
   const currentState = issue.workflowState || 'called';
-  const currentIndex = states.indexOf(currentState);
-  const nextIndex = (currentIndex + 1) % states.length;
-  const nextState = states[nextIndex];
+  const currentIndex = WORKFLOW_STATES.indexOf(currentState);
+  const nextIndex = (currentIndex + 1) % WORKFLOW_STATES.length;
+  const nextState = WORKFLOW_STATES[nextIndex];
   
   try {
     await updateDoc(plantDoc('issues', id), { workflowState: nextState });
@@ -6628,14 +6829,14 @@ window.cycleWorkflowState = async (id) => {
 };
 
 // Dismiss the prompt arrow then set the workflow state
-window.handleWfStepClick = (evt, issueId, statusKey, state) => {
+window.handleWfStepClick = (evt, issueId, entryIndex, state) => {
   evt.stopPropagation();
   const arrow = document.getElementById(`wf-arrow-${issueId}`);
   if (arrow) {
     arrow.classList.add('wf-arrow-dismissed');
     setTimeout(() => arrow.remove(), 380);
   }
-  setWorkflowStateForStatus(issueId, statusKey, state);
+  setWorkflowStateForEntry(issueId, Number(entryIndex), state);
 };
 
 // ── PRIORITY TOGGLE ──
@@ -7296,6 +7497,21 @@ function renderIssues() {
           _synthetic: true
         }]
       : history;
+    const workflowStatusCounts = displayHistory.reduce((counts, entry) => {
+      const key = String(entry?.status || '');
+      if (key) counts[key] = (counts[key] || 0) + 1;
+      return counts;
+    }, {});
+    const workflowDisplayState = (entry, isCurrent) => {
+      const statusKey = String(entry?.status || '');
+      if (!getEntryWorkflowId(entry) && !isCurrent && workflowStatusCounts[statusKey] > 1) return null;
+      return getWorkflowStateForEntry(issue, entry, isCurrent);
+    };
+    const workflowDisplayActor = (entry, state, isCurrent) => {
+      const statusKey = String(entry?.status || '');
+      if (!getEntryWorkflowId(entry) && !isCurrent && workflowStatusCounts[statusKey] > 1) return null;
+      return getWorkflowActorForEntry(issue, entry, state, isCurrent);
+    };
 
     const lastEntry = displayHistory[displayHistory.length-1];
     const scfg = STATUS_CONFIG_SAFE[currentKey];
@@ -7311,7 +7527,9 @@ function renderIssues() {
     }
 
     // Workflow state configuration
-    const workflowState = issue.workflowState || null;
+    const currentEntryIndex = displayHistory.length - 1;
+    const currentEntry = displayHistory[currentEntryIndex] || {};
+    const workflowState = workflowDisplayState(currentEntry, true);
     const hasNoWorkflowState = !workflowState;
     const workflowConfig = {
       called:      { icon: '🔔', label: 'Called',      cssState: 'called' },
@@ -7322,8 +7540,6 @@ function renderIssues() {
     const wfOrder = ['called', 'accepted', 'in-progress', 'finished'];
     const wfCurrentIdx = workflowState ? wfOrder.indexOf(workflowState) : -1;
     const isCompleted = (state) => workflowState && wfOrder.indexOf(state) < wfCurrentIdx;
-    const wfStateHistory = issue.workflowStateHistory || {};
-    const wfByStatusHistory = issue.workflowStateByStatusHistory || {};
     const wfByStatus = issue.workflowStateByStatus || {};
 
     // Build timeline entries HTML — reversed so newest is on top
@@ -7335,7 +7551,7 @@ function renderIssues() {
       const isResolvedEntry = entry.status === 'resolved';
       const entryWorkflowState = isResolvedEntry
         ? 'finished'
-        : (entry.status === currentKey ? workflowState : (wfByStatus[entry.status] || null));
+        : workflowDisplayState(entry, isCurrent);
       const wfCfg = workflowConfig[entryWorkflowState] || workflowConfig.called;
       const wfColor = !entryWorkflowState ? '#6b7280'
         : entryWorkflowState === 'called' ? '#eab308'
@@ -7354,7 +7570,7 @@ function renderIssues() {
         : `— NOT STARTED${isCurrent ? ' · CURRENT' : ''}`;
       const wfBadge = isResolvedEntry
         ? `<div class="tl-wf-badge no-action" style="color:${cfg.color}">${cfg.icon} RESOLVED${isCurrent ? ' · CURRENT' : ''}</div>`
-        : `<button class="tl-wf-badge" style="color:${wfColor}" onclick="event.stopPropagation(); cycleWorkflowStateForStatus('${issue.id}','${entry.status}')" title="Tap to cycle workflow state">${wfBadgeLabel}</button>`;
+        : `<button class="tl-wf-badge" style="color:${wfColor}" onclick="event.stopPropagation(); cycleWorkflowStateForEntry('${issue.id}',${trueIdx})" title="Tap to cycle workflow state">${wfBadgeLabel}</button>`;
       const entrySerialMatch = String(entry.note || '').match(/S\/N:\s*([A-Za-z0-9]+)/i);
       const entrySerialNumber = entrySerialMatch ? entrySerialMatch[1].toUpperCase() : '';
       const entryMaterialBadge = String(entry.status || '').toLowerCase() === 'materials' && entrySerialNumber
@@ -7372,7 +7588,7 @@ function renderIssues() {
           ${Array.isArray(entry.photos) && entry.photos.length ? `<div class="issue-photos" style="margin-top:6px;">${entry.photos.map((p,i)=>`<img class="issue-photo-thumb" src="${esc(p.downloadURL || p.dataUrl || '')}" loading="lazy" alt="${esc(p.name || `Status photo ${i+1}`)}" onclick="openLightbox(${i}, [${entry.photos.map(sp => `{url:'${esc(sp.downloadURL || sp.dataUrl || '')}',takenAt:'${esc(sp.takenAt || sp.timestamp || '')}',uploadedAt:'${esc(sp.uploadedAt || sp.createdAt || '')}'}`).join(',')}])">`).join('')}</div>` : ''}
           ${currentUserPermissions.canEditIssue ? `<div style="display:flex;gap:5px;margin-top:6px;">
             ${!isResolvedEntry && !isCurrent ? `<button class="tl-edit-btn" onclick="setStatusCurrentFromHistory('${issue.id}',${trueIdx})">Set current</button>` : ''}
-            ${!isResolvedEntry && entryWorkflowState === 'finished' ? `<button class="tl-edit-btn" onclick="setWorkflowStateForStatus('${issue.id}','${entry.status}','called')">Un-finish</button>` : ''}
+            ${!isResolvedEntry && entryWorkflowState === 'finished' ? `<button class="tl-edit-btn" onclick="setWorkflowStateForEntry('${issue.id}',${trueIdx},'called')">Un-finish</button>` : ''}
             <button class="tl-edit-btn" onclick="startEditEntry('${issue.id}',${trueIdx})">✏ Edit</button>
             <button class="tl-remove-btn" onclick="removeStatusEntry('${issue.id}',${trueIdx})" ${isSynthetic||history.length<=1?'disabled':''}>🗑 Delete</button>
           </div>` : ''}
@@ -7429,37 +7645,42 @@ function renderIssues() {
     const secKeys = getSecondaryStatuses(issue).filter(k => k !== 'resolved');
 
     // Build compact 4-step header buttons with state label below
-    const wfActorName = workflowState ? formatWorkflowActorName(wfStateHistory?.[workflowState]?.by?.name || wfStateHistory?.[workflowState]?.by) : '';
+    const wfActor = workflowDisplayActor(currentEntry, workflowState, true);
     const wfHeaderHtml = `<div class="wf-steps-wrap" onclick="event.stopPropagation()">
       <div class="wf-steps-row">
         ${hasNoWorkflowState ? `<div class="wf-prompt-arrow" id="wf-arrow-${issue.id}"></div>` : ''}
         <div class="wf-steps">${wfOrder.map(state => {
           const cfg = workflowConfig[state];
           const cls = state === workflowState ? `active ${cfg.cssState}` : isCompleted(state) ? 'completed' : 'pending';
-          return `<button class="wf-step-btn ${cls}" onclick="handleWfStepClick(event,'${issue.id}','${currentKey}','${state}')" title="${cfg.label}">${cfg.icon}</button>`;
+          return `<button class="wf-step-btn ${cls}" onclick="handleWfStepClick(event,'${issue.id}',${currentEntryIndex},'${state}')" title="${cfg.label}">${cfg.icon}</button>`;
         }).join('')}</div>
       </div>
       <div class="wf-state-label ${workflowState ? workflowConfig[workflowState].cssState : ''}">${workflowState ? workflowConfig[workflowState].label : ''}</div>
-      <div class="wf-state-meta ${workflowState ? workflowConfig[workflowState].cssState : ""}">${formatWorkflowActor(wfStateHistory[workflowState]?.by)}</div>
+      <div class="wf-state-meta ${workflowState ? workflowConfig[workflowState].cssState : ""}">${formatWorkflowActor(wfActor)}</div>
     </div>`;
 
     // Per-status workflow rows for the card header. Finished statuses stay in
     // the status history timeline, but drop out of the top active-work area.
-    const histStatKeys = [...new Set(
-      [...displayHistory].reverse().map(e => e.status).filter(k => k && k !== 'open' && k !== 'resolved' && k !== currentKey)
-    )].filter(k => wfByStatus[k] !== 'finished');
+    const historicalWorkflowEntries = [...displayHistory]
+      .map((entry, idx) => ({ entry, idx }))
+      .reverse()
+      .filter(({ entry, idx }) => {
+        if (!entry?.status || entry.status === 'open' || entry.status === 'resolved' || idx === currentEntryIndex) return false;
+        return workflowDisplayState(entry, false) !== 'finished';
+      });
 
-    const wfHistoryRowsHtml = histStatKeys.map(sKey => {
+    const wfHistoryRowsHtml = historicalWorkflowEntries.map(({ entry, idx }) => {
+          const sKey = entry.status;
           const sCfg = STATUS_CONFIG_SAFE[sKey];
           const sColor = getStatusColor(sKey);
-          const sState = wfByStatus[sKey] || null;
+          const sState = workflowDisplayState(entry, false);
           const sCurrentIdx = sState ? wfOrder.indexOf(sState) : -1;
-          const lastEntry = [...displayHistory].reverse().find(e => e.status === sKey);
-          const sSubLabel = lastEntry?.subStatus || '';
+          const sSubLabel = entry.subStatus || '';
+          const sActor = workflowDisplayActor(entry, sState, false);
           const btnHtml = wfOrder.map(st => {
             const cfg = workflowConfig[st];
             const cls = st === sState ? `active ${cfg.cssState}` : (sState && wfOrder.indexOf(st) < sCurrentIdx) ? 'completed' : 'pending';
-            return `<button class="wf-step-btn ${cls}" onclick="event.stopPropagation(); setWorkflowStateForStatus('${issue.id}','${sKey}','${st}')" title="${cfg.label}">${cfg.icon}</button>`;
+            return `<button class="wf-step-btn ${cls}" onclick="event.stopPropagation(); setWorkflowStateForEntry('${issue.id}',${idx},'${st}')" title="${cfg.label}">${cfg.icon}</button>`;
           }).join('');
           const sStateLabel = sState ? workflowConfig[sState].label : 'Not Started';
           const sStateClass = sState ? workflowConfig[sState].cssState : '';
@@ -7473,7 +7694,7 @@ function renderIssues() {
             <div class="wf-steps-wrap" onclick="event.stopPropagation()">
               <div class="wf-steps">${btnHtml}</div>
               <div class="wf-state-label ${sStateClass}">${sStateLabel}</div>
-              <div class="wf-state-meta ${sStateClass}">${sState ? formatWorkflowActor(wfStateHistory[sState]?.by) : ''}</div>
+              <div class="wf-state-meta ${sStateClass}">${sState ? formatWorkflowActor(sActor) : ''}</div>
             </div>
           </div>`;
         }).join('');
@@ -15671,6 +15892,7 @@ function _demoBuildIssuePayload(issueId, machine, note, statusKey, subStatus, si
   const dateKey = localDateStr(d);
   const timestamp = d.getTime();
   const isUrgent = Math.random() < 0.08;
+  const workflowId = createWorkflowId(statusKey || 'open');
   return {
     machine, note,
     dateTime, dateKey, timestamp,
@@ -15680,6 +15902,22 @@ function _demoBuildIssuePayload(issueId, machine, note, statusKey, subStatus, si
     photoCount: 0,
     createdAt: serverTimestamp(),
     createdBy: currentActor(),
+    statusHistory: [{
+      status: statusKey || 'open',
+      subStatus: subStatus || '',
+      note: '',
+      dateTime,
+      by: currentUser.displayName || currentUser.email,
+      workflowId
+    }],
+    ...(statusKey === 'resolved'
+      ? {
+          workflowState: 'finished',
+          workflowStateByEntry: { [workflowId]: 'finished' },
+          workflowStateByEntryHistory: { [workflowId]: { finished: { by: currentActor(), at: serverTimestamp() } } },
+          workflowStateHistory: { finished: { by: currentActor(), at: serverTimestamp() } }
+        }
+      : { workflowStateByEntry: { [workflowId]: null } }),
     ...(isUrgent ? { highPriority: true, priority: 'critical' } : {}),
     schemaVersion: 2,
     plantId: DEMO_PLANT_ID,
