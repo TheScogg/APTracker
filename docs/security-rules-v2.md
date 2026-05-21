@@ -390,6 +390,33 @@ This is the mobile notebook surface and should stay easy to use without leaving 
 
 ---
 
+### `users/{userId}/todos/{todoId}`
+
+#### Read / create / update / delete
+- only the owning user
+
+#### Reasoning
+Personal todos may include private task details, so they live under the user document instead of relying on client-side hiding inside a plant collection.
+
+---
+
+### `plants/{plantId}/todos/{todoId}`
+
+#### Read
+- active plant members
+
+#### Create / update
+- create requires active plant membership, matching `plantId`, and `ownerUid` matching the caller
+- update requires active plant membership and matching `plantId`
+
+#### Delete
+- plant admins, the owner, or the creator
+
+#### Reasoning
+Shared todos are operational plant tasks. They should be visible to the team while preserving a basic ownership trail for deletes.
+
+---
+
 ## Starter rules file
 
 This is a practical baseline, not the final perfect version.

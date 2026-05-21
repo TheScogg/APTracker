@@ -1629,6 +1629,7 @@
   }
   .header-quick-item-icon-wiki { background: linear-gradient(135deg, #3b82f6, #2563eb); }
   .header-quick-item-icon-notes { background: linear-gradient(135deg, #14b8a6, #0f766e); }
+  .header-quick-item-icon-todos { background: linear-gradient(135deg, #22c55e, #15803d); }
   .header-quick-item-icon-messages { background: linear-gradient(135deg, #22c55e, #16a34a); }
   .header-quick-item-icon-alerts { background: linear-gradient(135deg, #f59e0b, #ea580c); }
   .header-quick-item-copy {
@@ -1739,6 +1740,16 @@
     border-color: color-mix(in srgb, var(--blue) 88%, #000 12%);
     color: #fff;
   }
+  #todos-btn-header {
+    color: var(--green);
+    min-width: 34px;
+    justify-content: center;
+    padding: 4px 0;
+  }
+  #todos-btn-header:hover {
+    border-color: var(--green);
+    color: var(--green);
+  }
   .wiki-btn-icon {
     display: inline-flex;
     align-items: center;
@@ -1746,6 +1757,28 @@
     width: 1em;
     line-height: 1;
     transform: translateY(-0.5px);
+  }
+  .todo-btn-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+  }
+  .todo-btn-icon svg,
+  .header-quick-item-icon-todos svg {
+    display: block;
+    flex-shrink: 0;
+  }
+  .todo-search-wrap {
+    position: relative;
+  }
+  .todo-search-wrap .search-box {
+    padding-left: 40px;
+  }
+  .todo-search-wrap .todo-search-icon {
+    left: 14px;
+    z-index: 1;
+    color: var(--text2);
   }
   .sort-chevron { transition: transform 0.2s; }
   .sort-dropdown { display: none; position: absolute; top: calc(100% + 5px); right: 0; background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; min-width: 180px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); z-index: 200; overflow: hidden; animation: dropIn 0.15s ease; }
@@ -2188,56 +2221,34 @@
   .wf-status-row { display: flex; align-items: flex-start; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--border); }
   .wf-status-row:last-child { border-bottom: none; }
   .wf-status-row-info { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
-  .wf-status-row.finished-checkered,
   .tl-entry.finished-checkered {
     position: relative;
-    overflow: hidden;
     opacity: 1;
-    border-color: rgba(255,255,255,.18);
-    border-left-color: rgba(255,255,255,.88) !important;
-    box-shadow: 0 8px 28px rgba(0,0,0,.26), inset 0 0 0 1px rgba(255,255,255,.03);
-    background-color: rgba(255,255,255,.025);
+    border-color: rgba(34,197,94,.24);
+    border-left-color: rgba(34,197,94,.75) !important;
+    background: linear-gradient(90deg, rgba(34,197,94,.10), color-mix(in srgb, var(--bg2) 92%, rgba(34,197,94,.08))) !important;
+    box-shadow: inset 0 0 0 1px rgba(34,197,94,.08);
   }
-  .wf-status-row.finished-checkered::before,
   .tl-entry.finished-checkered::before {
-    content: '';
+    content: "Done";
     position: absolute;
-    inset: 0;
-    background:
-      radial-gradient(circle at top right, rgba(255,255,255,.14), transparent 38%),
-      linear-gradient(135deg, rgba(255,255,255,.09), transparent 30%, transparent 72%, rgba(255,255,255,.08)),
-      repeating-conic-gradient(from 45deg,
-        rgba(255,255,255,.22) 0 25%,
-        rgba(0,0,0,.18) 0 50%);
-    background-size: auto, auto, 18px 18px;
-    background-position: 0 0, 0 0, 0 0;
-    pointer-events: none;
+    top: 9px;
+    right: 10px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: rgba(34,197,94,.92);
+    border: 1px solid rgba(34,197,94,.24);
+    border-radius: 999px;
+    padding: 2px 7px;
+    background: rgba(34,197,94,.08);
   }
-  .wf-status-row.finished-checkered > *,
-  .tl-entry.finished-checkered > * {
-    position: relative;
-    z-index: 1;
-  }
-  .wf-status-row.finished-checkered .issue-status {
-    background: color-mix(in srgb, currentColor 16%, transparent) !important;
-    border-color: currentColor !important;
-  }
-  .wf-status-row.finished-checkered .wf-state-label,
-  .wf-status-row.finished-checkered .wf-state-meta {
-    color: rgba(255,255,255,.95) !important;
-  }
-  .wf-status-row.finished-checkered .wf-state-meta,
-  .tl-entry.finished-checkered .tl-time,
-  .tl-entry.finished-checkered .tl-note-text {
-    color: rgba(240,240,240,.84) !important;
-  }
-  .wf-status-row.finished-checkered .wf-step-btn,
   .tl-entry.finished-checkered .tl-wf-badge {
-    border-color: rgba(255,255,255,.42);
+    color: #22c55e !important;
   }
   .tl-entry.finished-checkered .tl-status-label {
-    color: #fff !important;
-    text-shadow: 0 1px 0 rgba(0,0,0,.3);
+    padding-right: 54px;
   }
   .issue-full-note { font-size: 14px; line-height: 1.6; color: var(--text); margin-bottom: 10px; white-space: pre-wrap; word-break: break-word; }
   .issue-photos { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
@@ -2702,7 +2713,7 @@
   .notes-list-item-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
   .notes-list-item-title { font-family: 'Nunito', sans-serif; font-size: 15px; font-weight: 800; letter-spacing: -0.01em; color: var(--text); line-height: 1.15; }
   .notes-list-item-time { font-family: 'Share Tech Mono', monospace; font-size: 9px; color: var(--text3); white-space: nowrap; }
-  .notes-list-item-preview { margin-top: 4px; font-family: 'Nunito', sans-serif; font-size: 12px; color: var(--text2); line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .notes-list-item-preview { margin-top: 4px; font-family: 'Nunito', sans-serif; font-size: 12px; color: var(--text2); line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .notes-list-item-badges { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
   .notes-list-badge {
     display: inline-flex;
@@ -5590,6 +5601,7 @@
   overflow: hidden;
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
 }
 .note-meta {
@@ -5662,6 +5674,121 @@
 }
 .fab:active {
   transform: scale(0.92);
+}
+
+/* TODOS TOOL */
+#todos-modal .app-container {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.todo-compose {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 12px 12px 8px;
+}
+.todo-compose .input {
+  margin: 0;
+}
+#todos-modal .search-wrap,
+#todos-modal .todo-filter-row {
+  margin-left: 12px;
+  margin-right: 12px;
+}
+#todos-modal .todo-filter-row {
+  margin-bottom: 8px;
+}
+.todos-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px 12px 88px;
+}
+.todo-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+.todo-item.active {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+.todo-item.completed {
+  opacity: 0.68;
+}
+.todo-item.completed .note-title span,
+.todo-item.completed .note-preview {
+  text-decoration: line-through;
+}
+.todo-check {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg3);
+  color: var(--green);
+  font-family: 'Nunito', sans-serif;
+  font-size: 16px;
+  font-weight: 900;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.todo-item-main {
+  min-width: 0;
+  cursor: pointer;
+}
+.notes-list-badge.priority-high {
+  border-color: color-mix(in srgb, var(--red) 52%, var(--border));
+  color: var(--red);
+}
+.notes-list-badge.priority-medium {
+  border-color: color-mix(in srgb, var(--yellow) 52%, var(--border));
+  color: var(--yellow);
+}
+.notes-list-badge.priority-low {
+  border-color: color-mix(in srgb, var(--teal) 52%, var(--border));
+  color: var(--teal);
+}
+.notes-list-badge.overdue {
+  border-color: color-mix(in srgb, var(--red) 52%, var(--border));
+  color: var(--red);
+}
+.todo-editor {
+  margin: 8px 12px 10px;
+  flex-shrink: 0;
+  max-height: 54vh;
+  overflow: auto;
+}
+.todo-editor label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 8px;
+  color: var(--text2);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.todo-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.todo-link-box {
+  margin: 10px 0;
+}
+.todo-editor-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  margin-top: 10px;
 }
 
 /* Editor Modal (AP-Tracker modal style) */

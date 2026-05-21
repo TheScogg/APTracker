@@ -24,6 +24,7 @@ It also addresses the main weaknesses of the current schema:
 
 ```text
 users/{userId}
+users/{userId}/todos/{todoId}
 
 plants/{plantId}
 plants/{plantId}/members/{userId}
@@ -38,6 +39,7 @@ plants/{plantId}/presses/{pressId}/wikiPages/{pageId}/revisions/{revisionId}
 plants/{plantId}/presses/{pressId}/wikiPages/{pageId}/attachments/{attachmentId}
 plants/{plantId}/notes/{noteId}
 plants/{plantId}/notes/{noteId}/attachments/{attachmentId}
+plants/{plantId}/todos/{todoId}
 plants/{plantId}/pressNotes/{noteId}
 plants/{plantId}/pressStats/{pressId}
 plants/{plantId}/dailyStats/{dateKey}
@@ -709,7 +711,7 @@ function hasPermission(plantId, perm) {
 
 ---
 
-## 8. Plant notes
+## Plant notes
 
 ### `plants/{plantId}/notes/{noteId}`
 
@@ -762,7 +764,43 @@ This is the mobile-first notebook surface. Use it for fast capture, rich formatt
 - Prefer append-only thinking for attachments, but allow note edits and checklist updates in place.
 - If a note is linked to a press or issue, preserve those IDs for fast filtering and shell entry points.
 
-## 9. Press notes
+## Todos
+
+Todos are the focused task/reminder surface. Personal todos live under the user for privacy; shared plant todos live under the plant for team visibility.
+
+### `users/{userId}/todos/{todoId}` and `plants/{plantId}/todos/{todoId}`
+
+```json
+{
+  "title": "Check dryer before shift handoff",
+  "notes": "Verify hopper temp and material level.",
+  "listName": "Inbox",
+  "dueDate": "2026-05-20",
+  "priority": "medium",
+  "isCompleted": false,
+  "completedAt": null,
+  "plantId": "plant_jef",
+  "pressId": "press_5_10",
+  "machineCode": "5.10",
+  "issueId": "issue_123",
+  "ownerUid": "uid_123",
+  "ownerName": "James Scoggins",
+  "searchText": "check dryer before shift handoff hopper temp material level inbox 5.10 issue_123",
+  "createdBy": { "uid": "uid_123", "name": "James Scoggins" },
+  "createdAt": "serverTimestamp",
+  "updatedBy": { "uid": "uid_123", "name": "James Scoggins" },
+  "updatedAt": "serverTimestamp",
+  "schemaVersion": 1
+}
+```
+
+### Notes
+
+- Personal todos are scoped to the authenticated user's `users/{userId}/todos` subcollection and filtered by `plantId` in the client.
+- Shared todos are readable by active plant members and writable by active plant members.
+- Todos may be standalone or linked to a press/issue using `pressId`, `machineCode`, and `issueId`.
+
+## Press notes
 
 ### `plants/{plantId}/pressNotes/{noteId}`
 
@@ -807,7 +845,7 @@ These docs are the event-note layer in the press wiki split. They capture the fa
 
 ---
 
-## 10. Press wiki pages
+## Press wiki pages
 
 ### `plants/{plantId}/presses/{pressId}/wikiPages/{pageId}`
 
