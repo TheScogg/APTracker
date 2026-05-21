@@ -7395,12 +7395,11 @@ function renderIssues() {
       <div class="wf-state-meta ${workflowState ? workflowConfig[workflowState].cssState : ""}">${formatWorkflowActor(wfStateHistory[workflowState]?.by)}</div>
     </div>`;
 
-    // Per-status workflow rows for expanded card body — derived from status history
-    // Shows each department called (unique status keys from history), excluding the
-    // primary status (already in header). Finished rows stay visible for the checkered treatment.
+    // Per-status workflow rows for the card header. Finished statuses stay in
+    // the status history timeline, but drop out of the top active-work area.
     const histStatKeys = [...new Set(
       [...displayHistory].reverse().map(e => e.status).filter(k => k && k !== 'open' && k !== 'resolved' && k !== currentKey)
-    )];
+    )].filter(k => wfByStatus[k] !== 'finished');
 
     const wfHistoryRowsHtml = histStatKeys.map(sKey => {
           const sCfg = STATUS_CONFIG_SAFE[sKey];
@@ -7436,8 +7435,9 @@ function renderIssues() {
     const subLabel = currentSubKey;
 
     // Secondary status dots (shown on the current row)
-    const secDotsHtml = secKeys.length > 0
-      ? `<div class="secondary-status-dots">${secKeys.map(k => {
+    const visibleSecKeys = secKeys.filter(k => wfByStatus[k] !== 'finished');
+    const secDotsHtml = visibleSecKeys.length > 0
+      ? `<div class="secondary-status-dots">${visibleSecKeys.map(k => {
           const cfg = STATUS_CONFIG_SAFE[k];
           const col = getStatusColor(k);
           return `<span class="secondary-dot" style="color:${col};border-color:${col};background:${alphaColor(col,0.12)}">${cfg.icon} ${cfg.label}</span>`;
@@ -7464,7 +7464,7 @@ function renderIssues() {
       return `${subLabel} ${foundSerialNumber}`;
     })();
 
-    const currentWfRowHtml = `<div class="wf-status-row${workflowState === 'finished' ? ' finished-checkered' : ''}">
+    const currentWfRowHtml = workflowState === 'finished' ? '' : `<div class="wf-status-row">
       <div class="wf-status-row-info">
         <div class="issue-status" style="color:${sc.color};border-color:${sc.color};background:${alphaColor(sc.color,0.12)}">
           <span class="issue-status-main">${sc.icon} ${baseLabel}</span>
@@ -7476,10 +7476,13 @@ function renderIssues() {
       ${wfHeaderHtml}
     </div>`;
 
-    const wfStatusRowsHtml = `<div class="wf-status-rows" onclick="event.stopPropagation()">
+    const wfStatusRowsInnerHtml = `${currentWfRowHtml}${wfHistoryRowsHtml}`;
+    const wfStatusRowsHtml = wfStatusRowsInnerHtml.trim()
+      ? `<div class="wf-status-rows" onclick="event.stopPropagation()">
       ${currentWfRowHtml}
       ${wfHistoryRowsHtml}
-    </div>`;
+    </div>`
+      : '';
 
     const _shiftDef = issue.shift ? getShiftSchedule(currentPlantId).find(s => s.key === issue.shift) : null;
     const shiftBadgeHtml = _shiftDef

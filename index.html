@@ -61,7 +61,12 @@
           <span class="wiki-btn-icon" aria-hidden="true">N</span>
         </button>
         <button class="sort-dropdown-btn" id="todos-btn-header" type="button" data-shell-action="open-todos-modal" aria-label="Todos" title="Todos">
-          <span class="wiki-btn-icon" aria-hidden="true">T</span>
+          <span class="todo-btn-icon" aria-hidden="true">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+              <rect x="2.5" y="2.5" width="11" height="11" rx="2" fill="#fff" stroke="var(--green)" stroke-width="1.5"/>
+              <path d="M5.1 8.2 7.1 10.2 11.1 5.8" stroke="var(--green)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </span>
         </button>
 
         <button class="sort-dropdown-btn" id="messages-btn-header" data-messages-trigger="true" data-shell-action="open-messages" style="gap:4px;" aria-label="Messages" title="Messages">
@@ -75,7 +80,7 @@
         </button>
       </div>
 
-      <button class="sort-dropdown-btn header-quick-menu-btn" id="header-quick-menu-btn" type="button" data-shell-action="toggle-header-quick-menu" aria-haspopup="menu" aria-expanded="false" aria-controls="header-quick-menu" aria-label="Quick tools: Wiki, Notes, Messages, Alerts" title="Quick tools: Wiki, Notes, Messages, Alerts">
+      <button class="sort-dropdown-btn header-quick-menu-btn" id="header-quick-menu-btn" type="button" data-shell-action="toggle-header-quick-menu" aria-haspopup="menu" aria-expanded="false" aria-controls="header-quick-menu" aria-label="Quick tools: Wiki, Notes, Todos, Messages, Alerts" title="Quick tools: Wiki, Notes, Todos, Messages, Alerts">
         <svg class="header-quick-menu-icon" width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
           <path d="M9.7 2.1a3.3 3.3 0 0 0-3.9 4.2L2.3 10a1.2 1.2 0 0 0 0 1.7l.9.9a1.2 1.2 0 0 0 1.7 0l3.7-3.7a3.3 3.3 0 0 0 4.2-3.9l-1.6 1.6-1.8-.3-.3-1.8L12.4 3a3.3 3.3 0 0 0-2.7-.9z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
@@ -99,7 +104,12 @@
           </span>
         </button>
         <button class="header-quick-item" type="button" data-shell-action="open-todos-modal" role="menuitem">
-          <span class="header-quick-item-icon header-quick-item-icon-notes" aria-hidden="true">T</span>
+          <span class="header-quick-item-icon header-quick-item-icon-todos" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
+              <rect x="2.5" y="2.5" width="11" height="11" rx="2" fill="#fff" stroke="var(--green)" stroke-width="1.5"/>
+              <path d="M5.1 8.2 7.1 10.2 11.1 5.8" stroke="var(--green)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </span>
           <span class="header-quick-item-copy">
             <span class="header-quick-item-title">Todos</span>
             <span class="header-quick-item-sub">Tasks and reminders</span>

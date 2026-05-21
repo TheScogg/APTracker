@@ -1629,6 +1629,7 @@
   }
   .header-quick-item-icon-wiki { background: linear-gradient(135deg, #3b82f6, #2563eb); }
   .header-quick-item-icon-notes { background: linear-gradient(135deg, #14b8a6, #0f766e); }
+  .header-quick-item-icon-todos { background: linear-gradient(135deg, #22c55e, #15803d); }
   .header-quick-item-icon-messages { background: linear-gradient(135deg, #22c55e, #16a34a); }
   .header-quick-item-icon-alerts { background: linear-gradient(135deg, #f59e0b, #ea580c); }
   .header-quick-item-copy {
@@ -1739,6 +1740,16 @@
     border-color: color-mix(in srgb, var(--blue) 88%, #000 12%);
     color: #fff;
   }
+  #todos-btn-header {
+    color: var(--green);
+    min-width: 34px;
+    justify-content: center;
+    padding: 4px 0;
+  }
+  #todos-btn-header:hover {
+    border-color: var(--green);
+    color: var(--green);
+  }
   .wiki-btn-icon {
     display: inline-flex;
     align-items: center;
@@ -1746,6 +1757,17 @@
     width: 1em;
     line-height: 1;
     transform: translateY(-0.5px);
+  }
+  .todo-btn-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+  }
+  .todo-btn-icon svg,
+  .header-quick-item-icon-todos svg {
+    display: block;
+    flex-shrink: 0;
   }
   .sort-chevron { transition: transform 0.2s; }
   .sort-dropdown { display: none; position: absolute; top: calc(100% + 5px); right: 0; background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; min-width: 180px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); z-index: 200; overflow: hidden; animation: dropIn 0.15s ease; }
