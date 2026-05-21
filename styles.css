@@ -2711,7 +2711,7 @@
   .notes-list-item-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
   .notes-list-item-title { font-family: 'Nunito', sans-serif; font-size: 15px; font-weight: 800; letter-spacing: -0.01em; color: var(--text); line-height: 1.15; }
   .notes-list-item-time { font-family: 'Share Tech Mono', monospace; font-size: 9px; color: var(--text3); white-space: nowrap; }
-  .notes-list-item-preview { margin-top: 4px; font-family: 'Nunito', sans-serif; font-size: 12px; color: var(--text2); line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .notes-list-item-preview { margin-top: 4px; font-family: 'Nunito', sans-serif; font-size: 12px; color: var(--text2); line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .notes-list-item-badges { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
   .notes-list-badge {
     display: inline-flex;
@@ -5599,6 +5599,7 @@
   overflow: hidden;
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
 }
 .note-meta {
