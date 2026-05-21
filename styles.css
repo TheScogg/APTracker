@@ -1769,6 +1769,17 @@
     display: block;
     flex-shrink: 0;
   }
+  .todo-search-wrap {
+    position: relative;
+  }
+  .todo-search-wrap .search-box {
+    padding-left: 40px;
+  }
+  .todo-search-wrap .todo-search-icon {
+    left: 14px;
+    z-index: 1;
+    color: var(--text2);
+  }
   .sort-chevron { transition: transform 0.2s; }
   .sort-dropdown { display: none; position: absolute; top: calc(100% + 5px); right: 0; background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; min-width: 180px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); z-index: 200; overflow: hidden; animation: dropIn 0.15s ease; }
   .sort-dropdown.visible { display: block; }

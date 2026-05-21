@@ -62,9 +62,9 @@
         </button>
         <button class="sort-dropdown-btn" id="todos-btn-header" type="button" data-shell-action="open-todos-modal" aria-label="Todos" title="Todos">
           <span class="todo-btn-icon" aria-hidden="true">
-            <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
-              <rect x="2.5" y="2.5" width="11" height="11" rx="2" fill="#fff" stroke="var(--green)" stroke-width="1.5"/>
-              <path d="M5.1 8.2 7.1 10.2 11.1 5.8" stroke="var(--green)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
+              <rect x="2.25" y="2.25" width="11.5" height="11.5" rx="2" fill="#fff" stroke="var(--green)" stroke-width="1.5"/>
+              <path d="M4.8 8.1 7 10.4 11.7 5.4" stroke="var(--green)" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </span>
         </button>
@@ -105,9 +105,9 @@
         </button>
         <button class="header-quick-item" type="button" data-shell-action="open-todos-modal" role="menuitem">
           <span class="header-quick-item-icon header-quick-item-icon-todos" aria-hidden="true">
-            <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
-              <rect x="2.5" y="2.5" width="11" height="11" rx="2" fill="#fff" stroke="var(--green)" stroke-width="1.5"/>
-              <path d="M5.1 8.2 7.1 10.2 11.1 5.8" stroke="var(--green)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            <svg width="22" height="22" viewBox="0 0 16 16" fill="none">
+              <rect x="2.25" y="2.25" width="11.5" height="11.5" rx="2" fill="#fff" stroke="var(--green)" stroke-width="1.5"/>
+              <path d="M4.8 8.1 7 10.4 11.7 5.4" stroke="var(--green)" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </span>
           <span class="header-quick-item-copy">
@@ -995,8 +995,11 @@
         <button class="btn btn-primary" id="todo-quick-add-btn" type="button">Add</button>
       </div>
 
-      <div class="search-wrap">
-        <span class="search-icon">🔍</span>
+      <div class="search-wrap todo-search-wrap">
+        <svg class="search-icon todo-search-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <circle cx="7" cy="7" r="4.6" stroke="currentColor" stroke-width="1.6"/>
+          <path d="M10.5 10.5 13.5 13.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+        </svg>
         <input type="text" class="search-box" id="todo-search" placeholder="Search todos...">
       </div>
 
