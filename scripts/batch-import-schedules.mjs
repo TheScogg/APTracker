@@ -212,6 +212,126 @@ function parseMaybeNumber(v) {
   return Number.isFinite(n) ? n : null;
 }
 
+function slugForId(value, fallback = 'item') {
+  return String(value || '').trim().toLowerCase()
+    .replace(/\./g, '_').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || fallback;
+}
+
+function toPressId(machineCode) {
+  return 'press_' + slugForId(machineCode, 'unknown');
+}
+
+function toRowIdFromPress(machineCode) {
+  const m = String(machineCode || '').match(/^(\d+)/);
+  if (m) return 'row_' + String(m[1]).padStart(2, '0');
+  return 'row_other';
+}
+
+function scheduleIssueId(scheduleDate, section, rowId) {
+  return `schedule_${slugForId(scheduleDate)}_${slugForId(section)}_${slugForId(rowId)}`;
+}
+
+function scheduleIssueDate(scheduleDate) {
+  const d = new Date(`${scheduleDate}T12:00:00`);
+  return Number.isFinite(d.getTime()) ? d : new Date();
+}
+
+function formatScheduleIssueDateTime(scheduleDate) {
+  const d = scheduleIssueDate(scheduleDate);
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' ' +
+    d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+}
+
+function classifyScheduleChange(row) {
+  const text = [row?.description, row?.notes, row?.partNumber, row?.mc].map(v => String(v || '')).join(' ').toLowerCase();
+  if (/\b(colou?r|purge|colorant|masterbatch)\b/.test(text)) {
+    return { statusKey: 'startup', subStatus: 'Purging / Color Change' };
+  }
+  return { statusKey: 'open', subStatus: 'Scheduled Mold Change' };
+}
+
+function buildScheduleIssuePayload(plantId, scheduleDate, shift, row, actor) {
+  const machineCode = String(row?.press || '').trim();
+  const { statusKey, subStatus } = classifyScheduleChange(row);
+  const dateTime = formatScheduleIssueDateTime(scheduleDate);
+  const createdDate = scheduleIssueDate(scheduleDate);
+  const noteParts = [
+    `${subStatus} from schedule import.`,
+    row?.partNumber ? `Part: ${row.partNumber}` : '',
+    row?.description ? `Description: ${row.description}` : '',
+    row?.cavity ? `Cavity: ${row.cavity}` : '',
+    row?.notes ? `Notes: ${row.notes}` : '',
+    row?.section ? `Section: ${row.section}` : '',
+  ].filter(Boolean);
+  const note = noteParts.join('\n');
+  const workflowId = `wf_schedule_${slugForId(scheduleDate)}_${slugForId(row?.section)}_${slugForId(row?.rowId)}`;
+
+  return {
+    machine: machineCode,
+    note,
+    dateTime,
+    dateKey: scheduleDate,
+    timestamp: createdDate.getTime(),
+    shift: String(shift || row?.shift || 1),
+    timer: null,
+    userId: actor.uid,
+    userName: actor.name,
+    photoCount: 0,
+    statusHistory: [{
+      status: statusKey,
+      subStatus,
+      note: '',
+      dateTime,
+      by: actor.name,
+      workflowId
+    }],
+    workflowStateByEntry: { [workflowId]: null },
+    schemaVersion: 2,
+    plantId,
+    pressId: toPressId(machineCode),
+    machineCode,
+    rowId: toRowIdFromPress(machineCode),
+    currentStatus: {
+      statusKey,
+      subStatusKey: subStatus,
+      label: statusKey === 'startup' ? 'Startup' : 'Open',
+      subLabel: subStatus,
+      color: statusKey === 'startup' ? '#14b8a6' : '#ef4444',
+      enteredAt: FieldValue.serverTimestamp(),
+      enteredDateTime: dateTime,
+      enteredBy: actor,
+      notePreview: note
+    },
+    lifecycle: {
+      isOpen: true,
+      isResolved: false,
+      openedAt: FieldValue.serverTimestamp(),
+      resolvedAt: null,
+      closedAt: null,
+      reopenedCount: 0
+    },
+    scheduleImport: {
+      date: scheduleDate,
+      section: row?.section || '',
+      rowId: row?.rowId || '',
+      partNumber: row?.partNumber || '',
+      description: row?.description || '',
+      notes: row?.notes || '',
+      isChange: true
+    },
+    source: {
+      type: 'schedule_import',
+      scheduleDate,
+      scheduleSection: row?.section || '',
+      scheduleRowId: row?.rowId || ''
+    },
+    createdAt: FieldValue.serverTimestamp(),
+    createdBy: actor,
+    updatedAt: FieldValue.serverTimestamp(),
+    updatedBy: actor
+  };
+}
+
 function normalizeSchemaPayload(raw) {
   if (!raw || typeof raw !== 'object') throw new Error('Schedule JSON must be an object.');
   const info = raw.schedule_info || {};
@@ -381,10 +501,12 @@ async function callDeepSeek(workerUrl, ocrText, opts) {
 async function importToFirestore(db, plantId, norm, dryRun) {
   const { scheduleDate, shift, lineSpeed, totalPlannedPcs, notes, sections } = norm;
   const dailyRef = db.doc(`plants/${plantId}/dailySchedules/${scheduleDate}`);
+  const scheduleChangeRows = [...(sections.northBayChanges || []), ...(sections.southBayChanges || [])]
+    .filter(row => String(row?.press || '').trim());
 
   if (dryRun) {
     const total = Object.values(sections).reduce((s, r) => s + r.length, 0);
-    return total;
+    return { rowCount: total, issueCount: scheduleChangeRows.length };
   }
 
   // Delete existing rows
@@ -420,20 +542,64 @@ async function importToFirestore(db, plantId, norm, dryRun) {
     }
   }
 
+  const actor = { uid: 'schedule-import', name: 'Schedule Import' };
+  let scheduleIssueCount = 0;
+  for (const row of scheduleChangeRows) {
+    const issueId = scheduleIssueId(scheduleDate, row.section, row.rowId);
+    const issueRef = db.doc(`plants/${plantId}/issues/${issueId}`);
+    const existing = await issueRef.get();
+    if (existing.exists) continue;
+    const issuePayload = buildScheduleIssuePayload(plantId, scheduleDate, shift, row, actor);
+    allOps.push({ ref: issueRef, data: issuePayload });
+    allOps.push({
+      ref: issueRef.collection('events').doc(),
+      data: {
+        type: 'issue_created',
+        eventAt: FieldValue.serverTimestamp(),
+        actor,
+        payload: {
+          machineCode: issuePayload.machineCode,
+          note: issuePayload.note,
+          initialStatusKey: issuePayload.currentStatus.statusKey,
+          initialSubStatusKey: issuePayload.currentStatus.subStatusKey,
+          source: issuePayload.source
+        },
+        schemaVersion: 2
+      }
+    });
+    allOps.push({
+      ref: issueRef.collection('events').doc(),
+      data: {
+        type: 'status_changed',
+        eventAt: FieldValue.serverTimestamp(),
+        actor,
+        payload: {
+          fromStatusKey: null,
+          fromSubStatusKey: null,
+          toStatusKey: issuePayload.currentStatus.statusKey,
+          toSubStatusKey: issuePayload.currentStatus.subStatusKey,
+          note: ''
+        },
+        schemaVersion: 2
+      }
+    });
+    scheduleIssueCount += 1;
+  }
+
   for (let i = 0; i < allOps.length; i += 450) {
     const batch = db.batch();
     allOps.slice(i, i + 450).forEach(op => batch.set(op.ref, op.data, { merge: true }));
     await batch.commit();
   }
 
-  return Object.values(sections).reduce((s, r) => s + r.length, 0);
+  return { rowCount: Object.values(sections).reduce((s, r) => s + r.length, 0), issueCount: scheduleIssueCount };
 }
 
 // ─── Per-File Pipeline ────────────────────────────────────────────────────
 
 async function processFile(db, opts, filePath) {
   const filename = parse(filePath).base;
-  const result = { file: filename, date: null, status: 'failed', error: null, rows: 0 };
+  const result = { file: filename, date: null, status: 'failed', error: null, rows: 0, scheduleIssues: 0 };
 
   try {
     const date = extractDateFromFilename(filename, opts);
@@ -465,11 +631,12 @@ async function processFile(db, opts, filePath) {
     }
 
     // Import to Firestore
-    const rowCount = await importToFirestore(db, opts.plant, norm, opts.dryRun);
-    result.rows = rowCount;
+    const importResult = await importToFirestore(db, opts.plant, norm, opts.dryRun);
+    result.rows = importResult.rowCount;
+    result.scheduleIssues = importResult.issueCount;
     result.status = opts.dryRun ? 'would_import' : 'imported';
 
-    if (opts.verbose) console.log(`  ✓ ${date}: ${rowCount} rows`);
+    if (opts.verbose) console.log(`  ✓ ${date}: ${result.rows} rows; ${result.scheduleIssues} schedule issue(s)`);
   } catch (err) {
     result.error = err.message;
   }
@@ -556,7 +723,7 @@ async function main() {
     results.push(result);
     const icon = result.status === 'imported' ? '✓' : result.status === 'would_import' ? '~' : result.status === 'skipped' ? '-' : '✗';
     const detail = result.date ? result.date : '??';
-    const rowInfo = result.rows ? ` (${result.rows} rows)` : '';
+    const rowInfo = result.rows ? ` (${result.rows} rows, ${result.scheduleIssues || 0} schedule issue(s))` : '';
     const errInfo = result.error ? `  ${result.error}` : '';
     const dryTag = result.status === 'would_import' ? ' [dry-run]' : '';
     console.log(`  ${icon} [${results.length}/${total}] ${detail}${rowInfo}${dryTag}${errInfo}`);
