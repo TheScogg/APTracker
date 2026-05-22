@@ -56,11 +56,14 @@ The app now starts a realtime watcher for each signed-in user/plant:
 - `statusKey`
 - `categoryKey`
 - `categoryKeys`
+- `workflowId` (optional; points to `statusHistory[].workflowId` for the exact workflow instance)
 - `feedKey`
 - `feedLabel`
 - `recipientUserIds`
 - `requiredJobRoleKeys` (legacy compatibility)
 - `createdAt`, `createdBy`
+
+When `workflowId` is present, accepting an alert updates `workflowStateByEntry.{workflowId}` on the linked issue. Older alerts without `workflowId` fall back to status/category workflow handling.
 
 ## Security
 
