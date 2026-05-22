@@ -5697,6 +5697,15 @@
   margin-left: 12px;
   margin-right: 12px;
 }
+#todos-modal .search-wrap {
+  flex: 0 0 auto;
+  min-width: 0;
+  margin-bottom: 14px;
+}
+#todos-modal .todo-search-icon {
+  display: block;
+  top: 50%;
+}
 #todos-modal .todo-filter-row {
   margin-bottom: 8px;
 }
