@@ -5552,6 +5552,10 @@ function setSubmitting(on) {
 // ── SUBMIT NEW ──
 window.submitIssue = async () => {
   if (!currentUserPermissions.canCreateIssue) return;
+  if (!currentMachine) {
+    showGameToast('⚠️ No press selected. Please select a press first.');
+    return;
+  }
   setSubmitting(true);
   try {
     const d = getIssueDateFromInputs('issue-date','issue-time-input');

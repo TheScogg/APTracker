@@ -25,9 +25,9 @@
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&family=Nunito:wght@300;400;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="./build-info.js?v=3bb03c2"></script>
+<script src="./build-info.js?v=be5f337-dirty"></script>
 <script src="./fcm-config.js?v=ae083d6"></script>
-<link rel="stylesheet" href="./styles.css?v=3bb03c2">
+<link rel="stylesheet" href="./styles.css?v=be5f337-dirty">
 </head>
 <body>
 
@@ -47,7 +47,7 @@
   <div id="sync-banner" class="visible">
     <div class="sync-dot" id="sync-dot"></div>
     <span id="sync-text">Connecting…</span>
-    <span id="app-version-indicator" class="app-version-indicator" title="Current commit version">rev: 3bb03c2</span>
+    <span id="app-version-indicator" class="app-version-indicator" title="Current commit version">rev: be5f337</span>
     <span id="firestore-io-indicator" class="firestore-io-indicator" title="Estimated Firestore operations for this session">R:0 W:0</span>
   </div>
 
@@ -289,10 +289,23 @@
   <div class="filter-drawer" id="filter-drawer">
     <div class="filter-inner">
       <div class="shift-filter-row">
-        <button class="shift-filter-pill active" id="shift-pill-all"    data-shell-action="set-shift-filter" data-shell-value="all">All Shifts</button>
-        <button class="shift-filter-pill"        id="shift-pill-first"  data-shell-action="set-shift-filter" data-shell-value="first">1st Shift</button>
-        <button class="shift-filter-pill"        id="shift-pill-second" data-shell-action="set-shift-filter" data-shell-value="second">2nd Shift</button>
-        <button class="shift-filter-pill"        id="shift-pill-third"  data-shell-action="set-shift-filter" data-shell-value="third">3rd Shift</button>
+        <div class="shift-dropdown-wrap" id="shift-dropdown-wrap">
+          <button class="shift-filter-pill shift-dropdown-btn active" id="shift-dropdown-btn" type="button" data-shell-action="toggle-shift-dropdown" aria-haspopup="menu" aria-expanded="false" aria-controls="shift-dropdown">
+            <span id="shift-filter-label">All Shifts</span>
+            <span class="shift-dropdown-arrow" aria-hidden="true">
+              <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
+                <path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+          </button>
+          <div class="sort-dropdown shift-dropdown" id="shift-dropdown" role="menu" aria-label="Shift filter">
+            <button class="sort-opt active" type="button" data-shell-action="set-shift-filter" data-shell-value="all" role="menuitem"><span class="sort-opt-check">✓</span>All Shifts</button>
+            <button class="sort-opt" type="button" data-shell-action="set-shift-filter" data-shell-value="first" role="menuitem"><span class="sort-opt-check"></span>1st Shift</button>
+            <button class="sort-opt" type="button" data-shell-action="set-shift-filter" data-shell-value="second" role="menuitem"><span class="sort-opt-check"></span>2nd Shift</button>
+            <button class="sort-opt" type="button" data-shell-action="set-shift-filter" data-shell-value="third" role="menuitem"><span class="sort-opt-check"></span>3rd Shift</button>
+          </div>
+        </div>
+        <button class="shift-filter-pill filter-clear-pill" type="button" data-shell-action="clear-all-filters">Clear</button>
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:6px;" id="stat-pills-row">
         <div class="stat-pill" id="pill-open"            data-shell-action="toggle-stat-filter" data-shell-value="open">           <div class="dot" style="background:var(--red)"></div>      <span id="stat-open">0 Open</span></div>
@@ -1397,7 +1410,7 @@
   </div>
 </div>
 
-<script type="module" src="./app.js?v=3bb03c2"></script>
+<script type="module" src="./app.js?v=be5f337-dirty"></script>
 
 <!-- MASCOT CHARACTER CARD POPOVER -->
 <div class="mascot-popover-backdrop" id="mascot-popover-backdrop" onclick="if(event.target===this)closeMascotPopover()">

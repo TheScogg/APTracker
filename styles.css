@@ -440,6 +440,7 @@
     background: var(--bg3);
   }
   .demo-guide-tour-btn,
+  .demo-guide-reset-btn,
   .demo-guide-collapse,
   .demo-guide-step-btn {
     border: 1px solid var(--border);
@@ -454,13 +455,16 @@
     white-space: nowrap;
   }
   .demo-guide-tour-btn,
+  .demo-guide-reset-btn,
   .demo-guide-collapse { padding: 5px 9px; }
-  .demo-guide-tour-btn {
+  .demo-guide-tour-btn,
+  .demo-guide-reset-btn {
     color: var(--accent);
     border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
   }
   .demo-guide-step-btn { padding: 5px 8px; }
   .demo-guide-tour-btn:hover,
+  .demo-guide-reset-btn:hover,
   .demo-guide-collapse:hover,
   .demo-guide-step-btn:hover {
     border-color: var(--accent);
@@ -507,9 +511,43 @@
   }
   .demo-guide-step-desc {
     font-size: 11px;
-    color: var(--text3);
+    color: var(--text2);
     line-height: 1.35;
     margin-top: 1px;
+  }
+  .demo-guide-route-flow {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+    margin-top: 5px;
+    max-width: 100%;
+  }
+  .demo-route-chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 18px;
+    border: 1px solid color-mix(in srgb, var(--text2) 34%, var(--border));
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--bg3) 88%, var(--text2) 5%);
+    color: var(--text2);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 9px;
+    line-height: 1;
+    padding: 2px 6px;
+    white-space: nowrap;
+  }
+  .demo-route-chip.accent {
+    border-color: color-mix(in srgb, var(--accent) 58%, var(--border));
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, var(--bg3));
+  }
+  .demo-route-or,
+  .demo-route-arrow {
+    color: var(--text3);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 9px;
+    line-height: 1;
   }
   .demo-guide.complete .demo-guide-count {
     color: var(--green);
@@ -689,20 +727,33 @@
     .demo-guide-actions {
       width: 100%;
       justify-content: space-between;
+      flex-wrap: wrap;
     }
     .demo-guide-body {
-      display: flex;
-      overflow-x: auto;
-      scroll-snap-type: x proximity;
+      display: grid;
+      grid-template-columns: 1fr;
+      overflow-x: visible;
     }
     .demo-guide-step {
-      min-width: 250px;
-      scroll-snap-align: start;
+      min-width: 0;
+      grid-template-columns: 22px minmax(0, 1fr) auto;
+      align-items: center;
+    }
+    .demo-guide-step-btn {
+      grid-column: 3;
+      justify-self: end;
+    }
+  }
+  @media (max-width: 360px) {
+    .demo-guide-step {
       grid-template-columns: 22px minmax(0, 1fr);
+      align-items: start;
+      padding: 10px 12px 11px;
     }
     .demo-guide-step-btn {
       grid-column: 2;
       justify-self: start;
+      margin-top: 6px;
     }
   }
   /* Notification badge on game pill */
@@ -4280,9 +4331,16 @@
   .load-more-btn:hover { border-color: var(--accent); color: var(--accent); }
   .load-more-count { font-family: 'Share Tech Mono', monospace; font-size: 11px; color: var(--text3); background: var(--bg3); border-radius: 10px; padding: 1px 7px; }
   .shift-badge { font-family: 'Share Tech Mono', monospace; font-size: 10px; font-weight: 600; border: 1px solid; border-radius: 4px; padding: 1px 5px; white-space: nowrap; }
-  .shift-filter-row { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+  .shift-filter-row { display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-top:8px; }
+  .shift-dropdown-wrap { position:relative; display:inline-flex; }
   .shift-filter-pill { background:var(--bg3); border:1px solid var(--border); border-radius:14px; color:var(--text2); font-family:'Nunito',sans-serif; font-size:12px; padding:4px 12px; cursor:pointer; transition:border-color 0.15s,color 0.15s,background 0.15s; }
   .shift-filter-pill.active { border-color:var(--accent); color:var(--accent); background:color-mix(in srgb,var(--accent) 10%,transparent); }
+  .shift-dropdown-btn { display:inline-flex; align-items:center; justify-content:space-between; gap:8px; min-width:118px; }
+  .shift-dropdown-btn.open .shift-dropdown-arrow { transform:rotate(180deg); }
+  .shift-dropdown-arrow { display:inline-flex; transition:transform 0.15s ease; }
+  .shift-dropdown { left:0; right:auto; min-width:138px; z-index:260; }
+  .filter-clear-pill { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); background: color-mix(in srgb, var(--accent) 7%, var(--bg3)); }
+  .filter-clear-pill:hover { color: var(--text); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--bg3)); }
 
   @media (max-width: 980px) {
     .press-wiki-layout { grid-template-columns: 1fr; }
