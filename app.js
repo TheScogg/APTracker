@@ -2,6 +2,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/fireba
 import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, collection, collectionGroup, updateDoc as rawUpdateDoc, deleteDoc as rawDeleteDoc, doc, getDoc as rawGetDoc, getDocs as rawGetDocs, setDoc as rawSetDoc, addDoc as rawAddDoc, onSnapshot as rawOnSnapshot, serverTimestamp, query, orderBy, where, writeBatch as rawWriteBatch, arrayUnion, arrayRemove, increment, limit, runTransaction as rawRunTransaction, startAfter } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getAuth, setPersistence, browserLocalPersistence, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut as fbSignOut, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getStorage, ref as storageRef, uploadString, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
+import { getMessaging, getToken, isSupported as isMessagingSupported, onMessage } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyABjasNBbJnsqq4M_UxKruKrN6-O2FXCwc",
@@ -24,6 +25,10 @@ const auth = getAuth(app);
 void setPersistence(auth, browserLocalPersistence).catch(() => {});
 const provider = new GoogleAuthProvider();
 provider.setCustomParameters({ prompt: "select_account" });
+const FCM_VAPID_KEY = String(window.AP_TRACKER_FCM_CONFIG?.vapidKey || '').trim();
+let fcmMessaging = null;
+let fcmRegistration = null;
+let fcmTokenRegistrationPromise = null;
 const NO_AUTH_MODE = location.pathname.endsWith('/noauth.html');
 const NO_AUTH_USER = {
   uid: 'noauth-local',
@@ -102,6 +107,118 @@ const runTransaction = async (...args) => {
   trackFirestoreWrite(1);
   return out;
 };
+
+async function postJsonWithAuth(url, payload = {}) {
+  if (!currentUser?.getIdToken) throw new Error('Sign in is required.');
+  const idToken = await currentUser.getIdToken();
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${idToken}`
+    },
+    body: JSON.stringify(payload)
+  });
+  let data = null;
+  try { data = await res.json(); } catch (_) {}
+  if (!res.ok) throw new Error(data?.error || `Request failed (${res.status})`);
+  return data;
+}
+
+async function initFcmMessaging() {
+  if (NO_AUTH_MODE || DEMO_MODE) return null;
+  if (!FCM_VAPID_KEY) return null;
+  if (!('serviceWorker' in navigator) || !('Notification' in window)) return null;
+  const supported = await isMessagingSupported().catch(() => false);
+  if (!supported) return null;
+  if (!fcmRegistration) {
+    fcmRegistration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+  }
+  if (!fcmMessaging) {
+    fcmMessaging = getMessaging(app);
+    onMessage(fcmMessaging, payload => {
+      const title = payload?.notification?.title || payload?.data?.title || 'AP Tracker';
+      const body = payload?.notification?.body || payload?.data?.body || '';
+      showGameToast(`🔔 ${title}${body ? `: ${body}` : ''}`);
+    });
+  }
+  return fcmMessaging;
+}
+
+function fcmTokenDocId(token) {
+  let hash = 0;
+  for (let i = 0; i < token.length; i += 1) hash = ((hash << 5) - hash + token.charCodeAt(i)) | 0;
+  return `web_${Math.abs(hash).toString(36)}_${token.slice(-12).replace(/[^A-Za-z0-9_-]/g, '')}`;
+}
+
+async function registerFcmToken({ requestPermission = false } = {}) {
+  if (NO_AUTH_MODE || DEMO_MODE || !currentUser?.uid) return null;
+  if (!FCM_VAPID_KEY) {
+    if (requestPermission) throw new Error('FCM is not configured. Add your Web Push VAPID key to fcm-config.js.');
+    return null;
+  }
+  if (!('Notification' in window)) {
+    if (requestPermission) throw new Error('Notifications are not supported in this browser.');
+    return null;
+  }
+  if (requestPermission && Notification.permission !== 'granted') {
+    const result = await Notification.requestPermission();
+    if (result !== 'granted') throw new Error('Notification permission was not granted.');
+  }
+  if (Notification.permission !== 'granted') return null;
+
+  const messaging = await initFcmMessaging();
+  if (!messaging) {
+    if (requestPermission) throw new Error('Firebase Cloud Messaging is not supported in this browser.');
+    return null;
+  }
+  const token = await getToken(messaging, {
+    vapidKey: FCM_VAPID_KEY,
+    serviceWorkerRegistration: fcmRegistration
+  });
+  if (!token) throw new Error('No FCM registration token was returned.');
+
+  const tokenId = fcmTokenDocId(token);
+  await setDoc(doc(db, 'users', currentUser.uid, 'fcmTokens', tokenId), {
+    token,
+    tokenId,
+    provider: 'fcm',
+    platform: 'web',
+    userAgent: navigator.userAgent || '',
+    notificationPermission: Notification.permission,
+    plantIds: userPlants.map(p => p.id).filter(Boolean),
+    currentPlantId: currentPlantId || null,
+    updatedAt: serverTimestamp(),
+    createdAt: serverTimestamp()
+  }, { merge: true });
+  return token;
+}
+
+function scheduleFcmTokenRegistration() {
+  if (fcmTokenRegistrationPromise || !currentUser?.uid) return;
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  fcmTokenRegistrationPromise = registerFcmToken()
+    .catch(err => console.warn('FCM token registration failed', err))
+    .finally(() => { fcmTokenRegistrationPromise = null; });
+}
+
+async function sendRoleAlertPush(alertId) {
+  if (!alertId || DEMO_MODE || NO_AUTH_MODE) return;
+  try {
+    await postJsonWithAuth('/api/fcm/role-alert', { plantId: currentPlantId, alertId });
+  } catch (e) {
+    console.warn('Role alert push failed', e);
+  }
+}
+
+async function sendConversationPush(conversationId, messageId) {
+  if (!conversationId || !messageId || DEMO_MODE || NO_AUTH_MODE) return;
+  try {
+    await postJsonWithAuth('/api/fcm/conversation-message', { plantId: currentPlantId, conversationId, messageId });
+  } catch (e) {
+    console.warn('Conversation push failed', e);
+  }
+}
 
 const WORKFLOW_STATES = ['called', 'accepted', 'in-progress', 'finished'];
 
@@ -423,7 +540,7 @@ async function queueRoleFeedAlert(issue, { statusKey, subStatus, note = '', work
         return memberKeys.some(key => roleKeys.includes(key));
       })
       .map(m => m.id);
-    await addDoc(collection(db, 'plants', currentPlantId, 'roleFeedAlerts'), {
+    const alertRef = await addDoc(collection(db, 'plants', currentPlantId, 'roleFeedAlerts'), {
       issueId: issue.id,
       machine: issue.machine || issue.machineCode || '',
       statusKey,
@@ -442,6 +559,7 @@ async function queueRoleFeedAlert(issue, { statusKey, subStatus, note = '', work
     if (currentUser?.uid && recipientUserIds.includes(currentUser.uid)) {
       showGameToast(`🔔 ${effectiveRoute.feedLabel}: Press ${issue.machine || 'Unknown'}`);
     }
+    void sendRoleAlertPush(alertRef.id);
   } catch (e) {
     console.warn('Role feed alert enqueue failed', e);
   }
@@ -3655,6 +3773,7 @@ async function bootstrapSignedInSession(user) {
   startRoleFeedAlertsWatcher();
   _bindMessagingKeyboardShortcut();
   setTodayDate();
+  scheduleFcmTokenRegistration();
   if (!localStorage.getItem(TUTORIAL_KEY)) setTimeout(() => window.openTutorial(), 900);
 }
 
@@ -5206,8 +5325,8 @@ function renderSharedSearchContent(barContainer, gridContainer, onSubPick, activ
 
   // Search input
   barContainer.innerHTML = '';
-  if (barContainer.id === 'search-bar-row') {
-    barContainer.className = 'search-bar-row visible';
+  if (barContainer.classList?.contains('search-bar-row')) {
+    barContainer.classList.add('visible');
   }
   const input = document.createElement('input');
   input.type = 'text';
@@ -7831,7 +7950,7 @@ function renderIssues() {
     // Sub-status panel
     const subPanel = document.createElement('div');
     subPanel.className = 'swipe-sub-panel';
-    subPanel.innerHTML = '<div class="swipe-sub-inner"></div>';
+    subPanel.innerHTML = '<div class="swipe-search-bar-row search-bar-row"></div><div class="swipe-sub-inner"></div>';
 
     row.appendChild(catPanel);
     row.appendChild(subPanel);
@@ -7872,6 +7991,11 @@ function renderIssues() {
       cp.classList.remove('visible', 'has-subs', 'search-mode');
       sp.classList.remove('visible');
       cp.querySelector('.swipe-category-inner')?.classList.remove('has-selection');
+      const swipeSearchBar = sp.querySelector('.swipe-search-bar-row');
+      if (swipeSearchBar) {
+        swipeSearchBar.innerHTML = '';
+        swipeSearchBar.classList.remove('visible');
+      }
       cp.querySelectorAll('.swipe-status-tile').forEach(t => {
         t.classList.remove('selected', 'search-match');
         t.style.opacity = '';
@@ -7913,6 +8037,11 @@ function renderIssues() {
       catInner.classList.remove('has-selection');
       catPanel.classList.remove('has-subs', 'search-mode');
       subPanel.classList.remove('visible');
+      const swipeSearchBar = subPanel.querySelector('.swipe-search-bar-row');
+      if (swipeSearchBar) {
+        swipeSearchBar.innerHTML = '';
+        swipeSearchBar.classList.remove('visible');
+      }
       catInner.querySelectorAll('.swipe-status-tile').forEach(t => {
         t.classList.remove('selected', 'search-match');
         t.style.opacity = '';
@@ -7925,6 +8054,7 @@ function renderIssues() {
       if (swipeSearchMode) { resetSwipeSearchMode(); return; }
 
       const subInner = subPanel.querySelector('.swipe-sub-inner');
+      const searchBar = subPanel.querySelector('.swipe-search-bar-row');
 
       // Set shared search state
       isSearchMode = true;
@@ -7948,9 +8078,9 @@ function renderIssues() {
         if (!getSubCats(sub).length) return;
         swipeSearchActiveSub = sub;
         dimSwipeTiles();
-        renderSharedSearchContent(subInner, subInner, swipeSubPick, swipeSearchActiveSub);
+        renderSharedSearchContent(searchBar, subInner, swipeSubPick, swipeSearchActiveSub);
       };
-      renderSharedSearchContent(subInner, subInner, swipeSubPick, swipeSearchActiveSub);
+      renderSharedSearchContent(searchBar, subInner, swipeSubPick, swipeSearchActiveSub);
       subPanel.classList.add('visible');
       scheduleIssueLogRelayout();
       scrollPanelBottomIntoView(subPanel);
@@ -8216,6 +8346,40 @@ function renderIssues() {
         closeSwipeCard(card);
       }
     });
+
+    let horizontalWheelTotal = 0;
+    let horizontalWheelTimer = null;
+    card.addEventListener('wheel', e => {
+      if (e.target.matches('input, select, textarea, button') || e.target.closest('.swipe-category-panel, .swipe-sub-panel')) {
+        return;
+      }
+      if (Math.abs(e.deltaX) < 18 || Math.abs(e.deltaX) < Math.abs(e.deltaY) * 1.15) {
+        return;
+      }
+      e.preventDefault();
+      horizontalWheelTotal += e.deltaX;
+      card.classList.toggle('peeking', horizontalWheelTotal > 18);
+      card.classList.toggle('peeking-right', horizontalWheelTotal < -18);
+      clearTimeout(horizontalWheelTimer);
+      horizontalWheelTimer = setTimeout(() => {
+        const dx = horizontalWheelTotal;
+        horizontalWheelTotal = 0;
+        card.classList.remove('peeking', 'peeking-right');
+        if (!isOpen() && dx > 35) {
+          _swipeJustHappened = true;
+          setTimeout(() => { _swipeJustHappened = false; }, 50);
+          openCategoryPanel();
+        } else if (!isOpen() && dx < -35) {
+          _swipeJustHappened = true;
+          setTimeout(() => { _swipeJustHappened = false; }, 50);
+          openPressWikiModal(toPressId(issue.machine), issue.machine);
+        } else if (isOpen() && Math.abs(dx) > 35) {
+          _swipeJustHappened = true;
+          setTimeout(() => { _swipeJustHappened = false; }, 50);
+          closeSwipeCard(card);
+        }
+      }, 80);
+    }, { passive: false });
   });
 
   if (issueDisplayLimit < totalFiltered) {
@@ -8595,9 +8759,16 @@ const SPOTLIGHT_STEPS = [
 let _sptStep = 0;
 
 window.openTutorial = function(step = 0) {
+  const overlay = document.getElementById('spotlight-overlay');
+  const wrap = document.getElementById('spt-wrap');
+  const card = document.getElementById('spt-card');
+  if (!overlay || !wrap || !card) {
+    console.warn('Tutorial markup is incomplete; skipping spotlight overlay.');
+    return;
+  }
   _sptStep = step;
-  document.getElementById('spotlight-overlay')?.classList.add('visible');
-  document.getElementById('spt-wrap')?.classList.add('visible');
+  overlay.classList.add('visible');
+  wrap.classList.add('visible');
   _renderSptStep();
 };
 
@@ -10818,6 +10989,7 @@ window.sendConversationMessage = async (conversationId, text, { mentions = [], a
     lastReadMessageId: messageRef.id
   }, { merge: true });
   await batch.commit();
+  void sendConversationPush(conversationId, messageRef.id);
 
   return messageRef.id;
 };
@@ -11391,16 +11563,12 @@ window.hideMessagingSheets = () => {
 };
 
 window.enableMessagingNotifications = async () => {
-  if (!('Notification' in window)) {
-    _messagingSetError('Notifications are not supported in this browser.');
-    return;
-  }
-  const result = await Notification.requestPermission();
-  if (result === 'granted') {
+  try {
+    await registerFcmToken({ requestPermission: true });
     _messagingSetError('');
-    showGameToast('🔔 Messaging alerts enabled');
-  } else {
-    _messagingSetError('Notification permission was not granted.');
+    showGameToast('🔔 Push alerts enabled');
+  } catch (err) {
+    _messagingSetError(err?.message || 'Notification permission was not granted.');
   }
 };
 

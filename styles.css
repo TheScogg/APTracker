@@ -1962,7 +1962,7 @@
   }
 
   .issue-row { display: flex; flex-direction: column; min-width: 0; width: 100%; margin: 0; }
-  .issue-card { display: block; width: 100%; background: color-mix(in srgb, var(--bg2) 82%, transparent); border: 1px solid var(--border); border-radius: 18px; overflow: visible; animation: slideIn 0.25s ease; user-select: none; position: relative; z-index: 1; touch-action: manipulation; transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94); box-shadow: 0 4px 24px rgba(0,0,0,0.3); }
+  .issue-card { display: block; width: 100%; background: color-mix(in srgb, var(--bg2) 82%, transparent); border: 1px solid var(--border); border-radius: 18px; overflow: visible; animation: slideIn 0.25s ease; user-select: none; position: relative; z-index: 1; touch-action: pan-y; transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94); box-shadow: 0 4px 24px rgba(0,0,0,0.3); }
   .issue-card input, .issue-card select, .issue-card textarea { user-select: text !important; touch-action: auto !important; -webkit-user-select: text !important; }
   .issue-card.dragging { transition: none; }
   .issue-card.swiped { border-radius: 18px 18px 0 0; border-bottom-color: transparent; }
@@ -4542,7 +4542,7 @@
 
   /* ── SPOTLIGHT TUTORIAL ── */
   .spotlight-overlay { position: fixed; inset: 0; z-index: 9190; pointer-events: none; }
-  .spotlight-overlay.visible { pointer-events: all; }
+  .spotlight-overlay.visible { pointer-events: none; }
   .spotlight-hl { position: fixed; z-index: 9195; border-radius: 14px; pointer-events: none; box-shadow: 0 0 0 9999px rgba(0,0,0,0.72); border: 2px solid rgba(255,255,255,0.18); opacity: 0; transition: top 0.38s cubic-bezier(0.4,0,0.2,1), left 0.38s cubic-bezier(0.4,0,0.2,1), width 0.38s cubic-bezier(0.4,0,0.2,1), height 0.38s cubic-bezier(0.4,0,0.2,1), opacity 0.25s; }
   .spotlight-hl.active { opacity: 1; }
   .spt-wrap { display: none; position: fixed; z-index: 9200; pointer-events: none; width: min(300px, calc(100vw - 24px)); }
@@ -5696,6 +5696,15 @@
 #todos-modal .todo-filter-row {
   margin-left: 12px;
   margin-right: 12px;
+}
+#todos-modal .search-wrap {
+  flex: 0 0 auto;
+  min-width: 0;
+  margin-bottom: 14px;
+}
+#todos-modal .todo-search-icon {
+  display: block;
+  top: 50%;
 }
 #todos-modal .todo-filter-row {
   margin-bottom: 8px;

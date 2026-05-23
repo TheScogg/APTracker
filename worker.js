@@ -1,4 +1,6 @@
 const FIREBASE_AUTH_ORIGIN = 'https://press-tracker-9d9c9.firebaseapp.com';
+const FIREBASE_PROJECT_ID = 'press-tracker-9d9c9';
+const FIREBASE_WEB_API_KEY = 'AIzaSyABjasNBbJnsqq4M_UxKruKrN6-O2FXCwc';
 
 let _cachedToken = null;
 let _tokenExpiresAt = 0;
@@ -213,6 +215,8 @@ function shouldBypassStaticCache(pathname) {
     || pathname === '/index.html'
     || pathname === '/app.js'
     || pathname === '/build-info.js'
+    || pathname === '/fcm-config.js'
+    || pathname === '/firebase-messaging-sw.js'
     || pathname === '/styles.css';
 }
 
@@ -938,11 +942,17 @@ async function handleDebugImage(request, env) {
 
 function firestoreValue(val) {
   if (val === null || val === undefined) return { nullValue: null };
+  if (val instanceof Date) return { timestampValue: val.toISOString() };
   if (typeof val === 'number') {
     return Number.isInteger(val) ? { integerValue: String(val) } : { doubleValue: val };
   }
   if (typeof val === 'boolean') return { booleanValue: val };
   if (Array.isArray(val)) return { arrayValue: { values: val.map(v => firestoreValue(v)) } };
+  if (typeof val === 'object') {
+    const fields = {};
+    for (const [k, v] of Object.entries(val)) fields[k] = firestoreValue(v);
+    return { mapValue: { fields } };
+  }
   return { stringValue: String(val) };
 }
 
@@ -1073,6 +1083,224 @@ async function handleImportSchedule(request, env) {
   }
 }
 
+function jsonResponse(data, init = {}) {
+  return new Response(JSON.stringify(data), {
+    ...init,
+    headers: { 'Content-Type': 'application/json', ...(init.headers || {}) }
+  });
+}
+
+function firestoreValueToJs(value) {
+  if (!value || typeof value !== 'object') return null;
+  if ('stringValue' in value) return value.stringValue;
+  if ('integerValue' in value) return Number(value.integerValue);
+  if ('doubleValue' in value) return Number(value.doubleValue);
+  if ('booleanValue' in value) return Boolean(value.booleanValue);
+  if ('timestampValue' in value) return value.timestampValue;
+  if ('nullValue' in value) return null;
+  if ('arrayValue' in value) return (value.arrayValue.values || []).map(firestoreValueToJs);
+  if ('mapValue' in value) return firestoreFieldsToJs(value.mapValue.fields || {});
+  return null;
+}
+
+function firestoreFieldsToJs(fields = {}) {
+  const out = {};
+  for (const [key, value] of Object.entries(fields || {})) out[key] = firestoreValueToJs(value);
+  return out;
+}
+
+function firestoreDocToJs(doc) {
+  if (!doc?.fields) return null;
+  const data = firestoreFieldsToJs(doc.fields);
+  const parts = String(doc.name || '').split('/');
+  data.id = parts[parts.length - 1] || '';
+  return data;
+}
+
+function firestoreDocUrl(projectId, path) {
+  const encoded = String(path || '').split('/').map(encodeURIComponent).join('/');
+  return `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/${encoded}`;
+}
+
+async function getFirestoreDocument(env, path) {
+  const projectId = env.FIREBASE_PROJECT_ID || FIREBASE_PROJECT_ID;
+  const token = await getGoogleOAuthToken(env);
+  const res = await fetch(firestoreDocUrl(projectId, path), {
+    headers: { 'Authorization': 'Bearer ' + token }
+  });
+  if (res.status === 404) return null;
+  const data = await res.json();
+  if (!res.ok) throw new Error((data.error && data.error.message) || `Firestore read failed: ${res.status}`);
+  return firestoreDocToJs(data);
+}
+
+async function patchFirestoreDocument(env, path, fields) {
+  const projectId = env.FIREBASE_PROJECT_ID || FIREBASE_PROJECT_ID;
+  const token = await getGoogleOAuthToken(env);
+  const bodyFields = {};
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(fields || {})) {
+    bodyFields[key] = firestoreValue(value);
+    params.append('updateMask.fieldPaths', key);
+  }
+  const res = await fetch(`${firestoreDocUrl(projectId, path)}?${params.toString()}`, {
+    method: 'PATCH',
+    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fields: bodyFields })
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((data.error && data.error.message) || `Firestore patch failed: ${res.status}`);
+  return data;
+}
+
+async function listUserFcmTokens(env, uid) {
+  const projectId = env.FIREBASE_PROJECT_ID || FIREBASE_PROJECT_ID;
+  const token = await getGoogleOAuthToken(env);
+  const url = `${firestoreDocUrl(projectId, `users/${uid}/fcmTokens`)}?pageSize=100`;
+  const res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token } });
+  if (res.status === 404) return [];
+  const data = await res.json();
+  if (!res.ok) throw new Error((data.error && data.error.message) || `FCM token read failed: ${res.status}`);
+  return (data.documents || [])
+    .map(firestoreDocToJs)
+    .filter(d => d?.token && d.provider === 'fcm');
+}
+
+async function authenticateFirebaseUser(request, env) {
+  const authHeader = request.headers.get('Authorization') || '';
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  if (!match) throw new Error('Missing Firebase ID token.');
+  const apiKey = env.FIREBASE_WEB_API_KEY || FIREBASE_WEB_API_KEY;
+  const res = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(apiKey)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ idToken: match[1] })
+  });
+  const data = await res.json();
+  if (!res.ok || !data.users?.[0]?.localId) throw new Error('Invalid Firebase ID token.');
+  return data.users[0];
+}
+
+async function sendFcmToTokens(env, tokens, payload) {
+  const uniqueTokens = Array.from(new Set((tokens || []).filter(Boolean)));
+  if (!uniqueTokens.length) return { attempted: 0, sent: 0, failed: 0, errors: [] };
+
+  const projectId = env.FIREBASE_PROJECT_ID || FIREBASE_PROJECT_ID;
+  const oauthToken = await getGoogleOAuthToken(env);
+  const url = `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`;
+  const results = [];
+  for (const registrationToken of uniqueTokens) {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + oauthToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: {
+          token: registrationToken,
+          data: Object.fromEntries(Object.entries({
+            ...(payload.data || {}),
+            title: payload.notification?.title || '',
+            body: payload.notification?.body || ''
+          }).map(([k, v]) => [k, String(v ?? '')])),
+          webpush: {
+            fcm_options: { link: payload.link || '/index.html' }
+          }
+        }
+      })
+    });
+    const data = await res.json().catch(() => ({}));
+    results.push({ ok: res.ok, status: res.status, data });
+  }
+  return {
+    attempted: uniqueTokens.length,
+    sent: results.filter(r => r.ok).length,
+    failed: results.filter(r => !r.ok).length,
+    errors: results.filter(r => !r.ok).slice(0, 5).map(r => ({ status: r.status, error: r.data?.error?.message || 'FCM send failed' }))
+  };
+}
+
+async function tokensForUsers(env, userIds) {
+  const tokenLists = await Promise.all(Array.from(new Set(userIds || [])).map(uid => listUserFcmTokens(env, uid)));
+  return tokenLists.flat().map(t => t.token).filter(Boolean);
+}
+
+async function handleFcmRoleAlert(request, env) {
+  if (request.method !== 'POST') return jsonResponse({ error: 'POST required' }, { status: 405 });
+  try {
+    const user = await authenticateFirebaseUser(request, env);
+    const { plantId, alertId } = await request.json();
+    if (!plantId || !alertId) return jsonResponse({ error: 'plantId and alertId are required.' }, { status: 400 });
+
+    const alert = await getFirestoreDocument(env, `plants/${plantId}/roleFeedAlerts/${alertId}`);
+    if (!alert) return jsonResponse({ error: 'Alert not found.' }, { status: 404 });
+    if (alert.notificationDelivery?.sentAt) return jsonResponse({ skipped: true, reason: 'already-sent' });
+    if (alert.createdBy?.uid !== user.localId) return jsonResponse({ error: 'Only the alert creator can trigger push delivery.' }, { status: 403 });
+
+    const recipients = (Array.isArray(alert.recipientUserIds) ? alert.recipientUserIds : []).filter(uid => uid && uid !== user.localId);
+    const tokens = await tokensForUsers(env, recipients);
+    const title = alert.feedLabel || 'AP Tracker Alert';
+    const body = `Press ${alert.machine || 'Unknown'}${alert.note ? ` - ${alert.note}` : ''}`;
+    const result = await sendFcmToTokens(env, tokens, {
+      notification: { title, body },
+      data: { type: 'role-alert', plantId, alertId, issueId: alert.issueId || '', title, body, url: '/index.html' },
+      link: '/index.html'
+    });
+    await patchFirestoreDocument(env, `plants/${plantId}/roleFeedAlerts/${alertId}`, {
+      notificationDelivery: {
+        sentAt: new Date(),
+        attempted: result.attempted,
+        sent: result.sent,
+        failed: result.failed,
+        errors: result.errors || []
+      }
+    });
+    return jsonResponse({ ok: true, ...result });
+  } catch (e) {
+    return jsonResponse({ error: e.message }, { status: 500 });
+  }
+}
+
+async function handleFcmConversationMessage(request, env) {
+  if (request.method !== 'POST') return jsonResponse({ error: 'POST required' }, { status: 405 });
+  try {
+    const user = await authenticateFirebaseUser(request, env);
+    const { plantId, conversationId, messageId } = await request.json();
+    if (!plantId || !conversationId || !messageId) {
+      return jsonResponse({ error: 'plantId, conversationId, and messageId are required.' }, { status: 400 });
+    }
+
+    const [conversation, message] = await Promise.all([
+      getFirestoreDocument(env, `plants/${plantId}/conversations/${conversationId}`),
+      getFirestoreDocument(env, `plants/${plantId}/conversations/${conversationId}/messages/${messageId}`)
+    ]);
+    if (!conversation || !message) return jsonResponse({ error: 'Conversation or message not found.' }, { status: 404 });
+    if (message.notificationDelivery?.sentAt) return jsonResponse({ skipped: true, reason: 'already-sent' });
+    if (message.sender?.uid !== user.localId) return jsonResponse({ error: 'Only the sender can trigger push delivery.' }, { status: 403 });
+
+    const recipients = (Array.isArray(conversation.memberIds) ? conversation.memberIds : []).filter(uid => uid && uid !== user.localId);
+    const tokens = await tokensForUsers(env, recipients);
+    const senderName = message.sender?.name || 'Someone';
+    const title = conversation.type === 'dm' ? `Message from ${senderName}` : (conversation.title || 'AP Tracker Message');
+    const body = message.text || (Array.isArray(message.attachments) && message.attachments.length ? 'Sent a photo' : 'New message');
+    const result = await sendFcmToTokens(env, tokens, {
+      notification: { title, body },
+      data: { type: 'conversation-message', plantId, conversationId, messageId, title, body, url: '/index.html' },
+      link: '/index.html'
+    });
+    await patchFirestoreDocument(env, `plants/${plantId}/conversations/${conversationId}/messages/${messageId}`, {
+      notificationDelivery: {
+        sentAt: new Date(),
+        attempted: result.attempted,
+        sent: result.sent,
+        failed: result.failed,
+        errors: result.errors || []
+      }
+    });
+    return jsonResponse({ ok: true, ...result });
+  } catch (e) {
+    return jsonResponse({ error: e.message }, { status: 500 });
+  }
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -1106,6 +1334,12 @@ export default {
     }
     if (url.pathname === '/api/import-schedule') {
       return handleImportSchedule(request, env);
+    }
+    if (url.pathname === '/api/fcm/role-alert') {
+      return handleFcmRoleAlert(request, env);
+    }
+    if (url.pathname === '/api/fcm/conversation-message') {
+      return handleFcmConversationMessage(request, env);
     }
     if (url.pathname === '/api/debug') {
       const info = {};
