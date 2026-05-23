@@ -33,9 +33,11 @@ const dirty = (() => {
     return false;
   }
 })();
+const assetVersion = dirty ? `${version}-dirty` : version;
 
 const buildInfo = {
   version,
+  assetVersion,
   commit: fullCommit,
   shortCommit: version,
   branch,
@@ -47,9 +49,9 @@ const content = `window.__APP_BUILD_INFO__ = ${JSON.stringify(buildInfo, null, 2
 writeFileSync(outPath, content, 'utf8');
 try {
   const indexHtml = readFileSync(indexPath, 'utf8')
-    .replace(/build-info\.js\?v=[^"']+/g, `build-info.js?v=${version}`)
-    .replace(/app\.js\?v=[^"']+/g, `app.js?v=${version}`)
-    .replace(/styles\.css\?v=[^"']+/g, `styles.css?v=${version}`)
+    .replace(/build-info\.js\?v=[^"']+/g, `build-info.js?v=${assetVersion}`)
+    .replace(/app\.js\?v=[^"']+/g, `app.js?v=${assetVersion}`)
+    .replace(/styles\.css\?v=[^"']+/g, `styles.css?v=${assetVersion}`)
     .replace(/(<span id="app-version-indicator"[^>]*>)([^<]*)(<\/span>)/, `$1rev: ${version}$3`);
   writeFileSync(indexPath, indexHtml, 'utf8');
 } catch (_) {

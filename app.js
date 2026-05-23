@@ -8714,9 +8714,16 @@ const SPOTLIGHT_STEPS = [
 let _sptStep = 0;
 
 window.openTutorial = function(step = 0) {
+  const overlay = document.getElementById('spotlight-overlay');
+  const wrap = document.getElementById('spt-wrap');
+  const card = document.getElementById('spt-card');
+  if (!overlay || !wrap || !card) {
+    console.warn('Tutorial markup is incomplete; skipping spotlight overlay.');
+    return;
+  }
   _sptStep = step;
-  document.getElementById('spotlight-overlay')?.classList.add('visible');
-  document.getElementById('spt-wrap')?.classList.add('visible');
+  overlay.classList.add('visible');
+  wrap.classList.add('visible');
   _renderSptStep();
 };
 
