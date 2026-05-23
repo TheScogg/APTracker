@@ -216,6 +216,10 @@ service cloud.firestore {
       match /todos/{todoId} {
         allow read, create, update, delete: if isSelf(userId);
       }
+
+      match /fcmTokens/{tokenId} {
+        allow read, create, update, delete: if isSelf(userId);
+      }
     }
 
     // ── User lookup index (email → uid mapping, written on sign-in) ──
