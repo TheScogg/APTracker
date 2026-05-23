@@ -8346,6 +8346,40 @@ function renderIssues() {
         closeSwipeCard(card);
       }
     });
+
+    let horizontalWheelTotal = 0;
+    let horizontalWheelTimer = null;
+    card.addEventListener('wheel', e => {
+      if (e.target.matches('input, select, textarea, button') || e.target.closest('.swipe-category-panel, .swipe-sub-panel')) {
+        return;
+      }
+      if (Math.abs(e.deltaX) < 18 || Math.abs(e.deltaX) < Math.abs(e.deltaY) * 1.15) {
+        return;
+      }
+      e.preventDefault();
+      horizontalWheelTotal += e.deltaX;
+      card.classList.toggle('peeking', horizontalWheelTotal > 18);
+      card.classList.toggle('peeking-right', horizontalWheelTotal < -18);
+      clearTimeout(horizontalWheelTimer);
+      horizontalWheelTimer = setTimeout(() => {
+        const dx = horizontalWheelTotal;
+        horizontalWheelTotal = 0;
+        card.classList.remove('peeking', 'peeking-right');
+        if (!isOpen() && dx > 35) {
+          _swipeJustHappened = true;
+          setTimeout(() => { _swipeJustHappened = false; }, 50);
+          openCategoryPanel();
+        } else if (!isOpen() && dx < -35) {
+          _swipeJustHappened = true;
+          setTimeout(() => { _swipeJustHappened = false; }, 50);
+          openPressWikiModal(toPressId(issue.machine), issue.machine);
+        } else if (isOpen() && Math.abs(dx) > 35) {
+          _swipeJustHappened = true;
+          setTimeout(() => { _swipeJustHappened = false; }, 50);
+          closeSwipeCard(card);
+        }
+      }, 80);
+    }, { passive: false });
   });
 
   if (issueDisplayLimit < totalFiltered) {
