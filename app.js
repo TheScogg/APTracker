@@ -5325,8 +5325,8 @@ function renderSharedSearchContent(barContainer, gridContainer, onSubPick, activ
 
   // Search input
   barContainer.innerHTML = '';
-  if (barContainer.id === 'search-bar-row') {
-    barContainer.className = 'search-bar-row visible';
+  if (barContainer.classList?.contains('search-bar-row')) {
+    barContainer.classList.add('visible');
   }
   const input = document.createElement('input');
   input.type = 'text';
@@ -7950,7 +7950,7 @@ function renderIssues() {
     // Sub-status panel
     const subPanel = document.createElement('div');
     subPanel.className = 'swipe-sub-panel';
-    subPanel.innerHTML = '<div class="swipe-sub-inner"></div>';
+    subPanel.innerHTML = '<div class="swipe-search-bar-row search-bar-row"></div><div class="swipe-sub-inner"></div>';
 
     row.appendChild(catPanel);
     row.appendChild(subPanel);
@@ -7991,6 +7991,11 @@ function renderIssues() {
       cp.classList.remove('visible', 'has-subs', 'search-mode');
       sp.classList.remove('visible');
       cp.querySelector('.swipe-category-inner')?.classList.remove('has-selection');
+      const swipeSearchBar = sp.querySelector('.swipe-search-bar-row');
+      if (swipeSearchBar) {
+        swipeSearchBar.innerHTML = '';
+        swipeSearchBar.classList.remove('visible');
+      }
       cp.querySelectorAll('.swipe-status-tile').forEach(t => {
         t.classList.remove('selected', 'search-match');
         t.style.opacity = '';
@@ -8032,6 +8037,11 @@ function renderIssues() {
       catInner.classList.remove('has-selection');
       catPanel.classList.remove('has-subs', 'search-mode');
       subPanel.classList.remove('visible');
+      const swipeSearchBar = subPanel.querySelector('.swipe-search-bar-row');
+      if (swipeSearchBar) {
+        swipeSearchBar.innerHTML = '';
+        swipeSearchBar.classList.remove('visible');
+      }
       catInner.querySelectorAll('.swipe-status-tile').forEach(t => {
         t.classList.remove('selected', 'search-match');
         t.style.opacity = '';
@@ -8044,6 +8054,7 @@ function renderIssues() {
       if (swipeSearchMode) { resetSwipeSearchMode(); return; }
 
       const subInner = subPanel.querySelector('.swipe-sub-inner');
+      const searchBar = subPanel.querySelector('.swipe-search-bar-row');
 
       // Set shared search state
       isSearchMode = true;
@@ -8067,9 +8078,9 @@ function renderIssues() {
         if (!getSubCats(sub).length) return;
         swipeSearchActiveSub = sub;
         dimSwipeTiles();
-        renderSharedSearchContent(subInner, subInner, swipeSubPick, swipeSearchActiveSub);
+        renderSharedSearchContent(searchBar, subInner, swipeSubPick, swipeSearchActiveSub);
       };
-      renderSharedSearchContent(subInner, subInner, swipeSubPick, swipeSearchActiveSub);
+      renderSharedSearchContent(searchBar, subInner, swipeSubPick, swipeSearchActiveSub);
       subPanel.classList.add('visible');
       scheduleIssueLogRelayout();
       scrollPanelBottomIntoView(subPanel);
