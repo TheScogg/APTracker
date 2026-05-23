@@ -7,6 +7,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AP-Tracker</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<meta name="theme-color" content="#f97316">
 <script>
   if (window.trustedTypes && window.trustedTypes.createPolicy) {
     if (!window.trustedTypes.defaultPolicy) {
@@ -21,9 +25,9 @@
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&family=Nunito:wght@300;400;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="./build-info.js?v=015a127"></script>
+<script src="./build-info.js?v=4110183"></script>
 <script src="./fcm-config.js?v=ae083d6"></script>
-<link rel="stylesheet" href="./styles.css?v=015a127">
+<link rel="stylesheet" href="./styles.css?v=4110183">
 </head>
 <body>
 
@@ -43,7 +47,7 @@
   <div id="sync-banner" class="visible">
     <div class="sync-dot" id="sync-dot"></div>
     <span id="sync-text">Connecting…</span>
-    <span id="app-version-indicator" class="app-version-indicator" title="Current commit version">rev: 015a127</span>
+    <span id="app-version-indicator" class="app-version-indicator" title="Current commit version">rev: 4110183</span>
     <span id="firestore-io-indicator" class="firestore-io-indicator" title="Estimated Firestore operations for this session">R:0 W:0</span>
   </div>
 
@@ -1393,7 +1397,7 @@
   </div>
 </div>
 
-<script type="module" src="./app.js?v=015a127"></script>
+<script type="module" src="./app.js?v=4110183"></script>
 
 <!-- MASCOT CHARACTER CARD POPOVER -->
 <div class="mascot-popover-backdrop" id="mascot-popover-backdrop" onclick="if(event.target===this)closeMascotPopover()">

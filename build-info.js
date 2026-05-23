@@ -1,10 +1,10 @@
 window.__APP_BUILD_INFO__ = {
-  "version": "015a127",
-  "commit": "015a12773c5da808c05824c2d626216381e23e1e",
-  "shortCommit": "015a127",
+  "version": "4110183",
+  "commit": "4110183d50ddce5ea9e2905fb260555071bb00ca",
+  "shortCommit": "4110183",
   "branch": "prototype",
-  "commitDate": "2026-05-22T20:54:38-04:00",
-  "builtAt": "2026-05-23T01:04:07.340Z",
-  "dirty": false
+  "commitDate": "2026-05-22T21:13:23-04:00",
+  "builtAt": "2026-05-23T01:38:45.095Z",
+  "dirty": true
 };
-window.__APP_VERSION__ = "015a127";
+window.__APP_VERSION__ = "4110183";
