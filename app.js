@@ -46,8 +46,7 @@ const DEMO_USER = {
 };
 const DEMO_PLANT_ID = 'plant_demo';
 const DEMO_PLANT_NAME = 'Demo Plant';
-let _demoSim = null;
-let buildDemoControls, startDemoEngine, stopDemoEngine, resetDemo;
+const DEMO_GUIDE_KEY = 'aptracker_demo_guide_v1';
 
 const firestoreIoStats = { reads: 0, writes: 0 };
 const APP_BUILD_INFO = window.__APP_BUILD_INFO__ || {};
@@ -3834,7 +3833,7 @@ async function bootstrapDemoSession(user) {
   const fullNameEl = document.getElementById('dropdown-full-name');
   const emailEl = document.getElementById('dropdown-email');
   if (fullNameEl) fullNameEl.textContent = 'AP Tracker Demo';
-  if (emailEl) emailEl.textContent = 'Simulating 10 virtual team members…';
+  if (emailEl) emailEl.textContent = 'Editable sandbox for exploring the app';
 
   applyDemoShell();
   await ensureDemoPlantAccess();
@@ -3852,8 +3851,7 @@ async function bootstrapDemoSession(user) {
   await loadConfig();
   startListener();
   setTodayDate();
-  buildDemoControls();
-  startDemoEngine();
+  buildDemoGuide();
 }
 
 function showDemoAuthError(error) {
@@ -3871,6 +3869,195 @@ function showDemoAuthError(error) {
   }
   const code = error?.code ? ` (${error.code})` : '';
   errorEl.textContent = `Demo access needs Firebase Anonymous Auth enabled${code}.`;
+}
+
+const DEMO_GUIDE_STEPS = [
+  {
+    key: 'floor',
+    title: 'Floor map',
+    desc: 'See rows and press status colors.',
+    action: 'floor',
+    btn: 'View map'
+  },
+  {
+    key: 'log',
+    title: 'Log an issue',
+    desc: 'Open the issue form for a sample press.',
+    action: 'log',
+    btn: 'Try form'
+  },
+  {
+    key: 'route',
+    title: 'Route an issue',
+    desc: 'Find an active card and its status controls.',
+    action: 'route',
+    btn: 'Show card'
+  },
+  {
+    key: 'workflow',
+    title: 'Workflow',
+    desc: 'Use Called, Accepted, In Progress, Finished.',
+    action: 'workflow',
+    btn: 'Highlight'
+  },
+  {
+    key: 'filters',
+    title: 'Filters',
+    desc: 'Filter by shift, machine, status, or search.',
+    action: 'filters',
+    btn: 'Open'
+  },
+  {
+    key: 'export',
+    title: 'Export',
+    desc: 'Preview PDF or download XLS reports.',
+    action: 'export',
+    btn: 'Open'
+  },
+  {
+    key: 'tools',
+    title: 'Tools',
+    desc: 'Explore Wiki, Notes, Todos, and Messages.',
+    action: 'tools',
+    btn: 'Show tools'
+  }
+];
+
+function readDemoGuideDone() {
+  try {
+    const raw = localStorage.getItem(DEMO_GUIDE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(parsed) ? parsed : []);
+  } catch (_) {
+    return new Set();
+  }
+}
+
+function saveDemoGuideDone(done) {
+  try { localStorage.setItem(DEMO_GUIDE_KEY, JSON.stringify([...done])); } catch (_) {}
+}
+
+function markDemoGuideStep(key) {
+  const done = readDemoGuideDone();
+  done.add(key);
+  saveDemoGuideDone(done);
+  renderDemoGuideProgress(done);
+}
+
+function renderDemoGuideProgress(done = readDemoGuideDone()) {
+  const wrap = document.getElementById('demo-guide');
+  if (!wrap) return;
+  DEMO_GUIDE_STEPS.forEach(step => {
+    wrap.querySelector(`[data-demo-step="${step.key}"]`)?.classList.toggle('done', done.has(step.key));
+  });
+  const count = wrap.querySelector('[data-demo-guide-count]');
+  if (count) count.textContent = `${done.size}/${DEMO_GUIDE_STEPS.length}`;
+  wrap.classList.toggle('complete', done.size >= DEMO_GUIDE_STEPS.length);
+}
+
+function demoGuideScrollTo(selector) {
+  document.querySelector(selector)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function firstDemoIssueCard() {
+  const openIssue = issues.find(issue => currentStatus(issue).status !== 'resolved') || issues[0];
+  const escapedId = openIssue && window.CSS?.escape ? CSS.escape(openIssue.id) : String(openIssue?.id || '').replace(/"/g, '\\"');
+  const row = openIssue ? document.querySelector(`.issue-row[data-id="${escapedId}"]`) : null;
+  return row?.querySelector('.issue-card') || document.querySelector('.issue-card');
+}
+
+function flashDemoGuideTarget(el) {
+  if (!el) return;
+  el.classList.remove('demo-guide-flash');
+  void el.offsetWidth;
+  el.classList.add('demo-guide-flash');
+  window.setTimeout(() => el.classList.remove('demo-guide-flash'), 1400);
+}
+
+function runDemoGuideAction(action, key) {
+  switch (action) {
+    case 'floor':
+      window.setMapMode?.('log');
+      demoGuideScrollTo('#floor-map');
+      flashDemoGuideTarget(document.getElementById('floor-map'));
+      break;
+    case 'log': {
+      window.setMapMode?.('log');
+      const machine = Object.values(PRESSES).flat()[0] || '1.01';
+      window.openAddModal?.(machine);
+      break;
+    }
+    case 'route': {
+      demoGuideScrollTo('.issues-section');
+      const card = firstDemoIssueCard();
+      flashDemoGuideTarget(card);
+      break;
+    }
+    case 'workflow': {
+      demoGuideScrollTo('.issues-section');
+      const card = firstDemoIssueCard();
+      const target = card?.querySelector('.wf-steps-wrap') || card;
+      flashDemoGuideTarget(target);
+      break;
+    }
+    case 'filters':
+      if (!document.getElementById('filter-drawer')?.classList.contains('open')) window.toggleFilterDrawer?.();
+      demoGuideScrollTo('.controls');
+      flashDemoGuideTarget(document.getElementById('filter-drawer'));
+      break;
+    case 'export':
+      demoGuideScrollTo('.issues-section');
+      if (!document.getElementById('export-dropdown')?.classList.contains('visible')) window.toggleExportDropdown?.();
+      flashDemoGuideTarget(document.getElementById('export-dropdown-wrap'));
+      break;
+    case 'tools':
+      demoGuideScrollTo('header');
+      if (!document.getElementById('header-quick-menu')?.classList.contains('visible')) toggleHeaderQuickMenu();
+      flashDemoGuideTarget(document.getElementById('header-quick-wrap'));
+      break;
+    case 'tour':
+      window.openTutorial?.();
+      break;
+    default:
+      break;
+  }
+  if (key) markDemoGuideStep(key);
+}
+
+function buildDemoGuide() {
+  if (!DEMO_MODE || document.getElementById('demo-guide')) return;
+  const sectionHeader = document.querySelector('.section-header');
+  if (!sectionHeader) return;
+
+  const guide = document.createElement('section');
+  guide.id = 'demo-guide';
+  guide.className = 'demo-guide';
+  guide.innerHTML = `
+    <div class="demo-guide-head">
+      <div>
+        <div class="demo-guide-kicker">Demo Guide</div>
+        <div class="demo-guide-title">Explore AP Tracker at your own pace</div>
+      </div>
+      <div class="demo-guide-actions">
+        <span class="demo-guide-count" data-demo-guide-count>0/${DEMO_GUIDE_STEPS.length}</span>
+        <button class="demo-guide-tour-btn" type="button" data-demo-guide-action="tour">Start tour</button>
+        <button class="demo-guide-collapse" type="button" data-demo-guide-toggle aria-expanded="true">Hide</button>
+      </div>
+    </div>
+    <div class="demo-guide-body">
+      ${DEMO_GUIDE_STEPS.map(step => `
+        <div class="demo-guide-step" data-demo-step="${step.key}">
+          <div class="demo-guide-check">✓</div>
+          <div class="demo-guide-step-copy">
+            <div class="demo-guide-step-title">${esc(step.title)}</div>
+            <div class="demo-guide-step-desc">${esc(step.desc)}</div>
+          </div>
+          <button class="demo-guide-step-btn" type="button" data-demo-guide-action="${esc(step.action)}" data-demo-guide-key="${esc(step.key)}">${esc(step.btn)}</button>
+        </div>
+      `).join('')}
+    </div>`;
+  sectionHeader.parentNode.insertBefore(guide, sectionHeader);
+  renderDemoGuideProgress();
 }
 
 onAuthStateChanged(auth, async user => {
@@ -9419,6 +9606,24 @@ document.addEventListener('click', e => {
   const trigger = e.target.closest?.('[data-shell-action]');
   if (!trigger) return;
   handleShellAction(trigger.dataset.shellAction, trigger.dataset.shellValue, trigger, e);
+});
+document.addEventListener('click', e => {
+  const guideAction = e.target.closest?.('[data-demo-guide-action]');
+  if (guideAction) {
+    e.preventDefault();
+    runDemoGuideAction(guideAction.dataset.demoGuideAction, guideAction.dataset.demoGuideKey || '');
+    return;
+  }
+  const guideToggle = e.target.closest?.('[data-demo-guide-toggle]');
+  if (guideToggle) {
+    e.preventDefault();
+    const guide = document.getElementById('demo-guide');
+    if (!guide) return;
+    const collapsed = !guide.classList.contains('collapsed');
+    guide.classList.toggle('collapsed', collapsed);
+    guideToggle.textContent = collapsed ? 'Show' : 'Hide';
+    guideToggle.setAttribute('aria-expanded', String(!collapsed));
+  }
 });
 document.addEventListener('click', e => {
   const wrap=document.getElementById('user-pill-wrap');
@@ -15973,584 +16178,3 @@ setInterval(() => {
   if (document.hidden) return;
   refreshReminderClocksInDom();
 }, 1000);
-
-// ── DEMO MODE ENGINE ──
-
-const DEMO_AGENTS = [
-  { uid: 'demo_sarah',   displayName: 'Sarah Chen',       email: 'sarah@demo.local',   role: 'processengineer', rows: ['Row 1','Row 2'],                              preferredStatuses: ['processengineer','quality'],       createWeight: 8,  statusWeight: 6 },
-  { uid: 'demo_marcus',  displayName: 'Marcus Johnson',    email: 'marcus@demo.local',  role: 'maintenance',     rows: ['Row 3','Row 4'],                              preferredStatuses: ['maintenance'],                    createWeight: 6,  statusWeight: 8 },
-  { uid: 'demo_emily',   displayName: 'Emily Rodriguez',   email: 'emily@demo.local',   role: 'quality',         rows: ['Row 5','Row 6'],                              preferredStatuses: ['quality'],                       createWeight: 5,  statusWeight: 7 },
-  { uid: 'demo_james',   displayName: 'James Kim',          email: 'james@demo.local',   role: 'admin',           rows: ['Row 1','Row 2','Row 3','Row 4','Row 5','Row 6'], preferredStatuses: ['open','resolved'],               createWeight: 4,  statusWeight: 5 },
-  { uid: 'demo_lisa',    displayName: 'Lisa Thompson',      email: 'lisa@demo.local',    role: 'operator',        rows: ['Row 1'],                                      preferredStatuses: ['alert','maintenance','materials'], createWeight: 10, statusWeight: 4 },
-  { uid: 'demo_david',   displayName: 'David Wilson',       email: 'david@demo.local',   role: 'tooldie',         rows: ['Row 2','Row 3'],                              preferredStatuses: ['tooldie','maintenance'],          createWeight: 5,  statusWeight: 7 },
-  { uid: 'demo_ana',     displayName: 'Ana Martinez',       email: 'ana@demo.local',     role: 'materials',       rows: ['Row 4'],                                      preferredStatuses: ['materials','startup'],            createWeight: 6,  statusWeight: 6 },
-  { uid: 'demo_tom',     displayName: 'Tom Baker',          email: 'tom@demo.local',     role: 'controlman',      rows: ['Row 5'],                                      preferredStatuses: ['controlman','maintenance'],        createWeight: 4,  statusWeight: 8 },
-  { uid: 'demo_rachel',  displayName: 'Rachel Green',       email: 'rachel@demo.local',  role: 'startup',         rows: ['Row 6'],                                      preferredStatuses: ['startup','quality'],              createWeight: 6,  statusWeight: 6 },
-  { uid: 'demo_mike',    displayName: 'Mike Davis',         email: 'mike@demo.local',    role: 'general',         rows: ['Row 1','Row 2','Row 3','Row 4','Row 5','Row 6'], preferredStatuses: [],                               createWeight: 7,  statusWeight: 5 }
-];
-
-const DEMO_NOTE_POOLS = {
-  general: [
-    'Press {machine} - {issue}',
-    '{machine} needs attention - {issue}',
-    'Issue on {machine}: {issue}',
-    '{machine} - {issue}',
-    'Checking {machine}, found {issue}',
-    '{issue} at {machine}',
-    'Routine check on {machine} - {issue}',
-    '{machine} reported with {issue}'
-  ],
-  issues: [
-    'unusual noise during cycle',
-    'part quality deviation detected',
-    'misfeed on transfer mechanism',
-    'sensor fault in safety circuit',
-    'scratched part surface',
-    'hydraulic pressure fluctuation',
-    'tonnage reading out of spec',
-    'slow cycle time',
-    'limit switch not triggering',
-    'coolant leak detected',
-    'die alignment issue',
-    'part dimension out of tolerance',
-    'slide lubrication low',
-    'air pressure drop in system',
-    'guard door switch intermittent',
-    'part stuck in die',
-    'operator control panel unresponsive',
-    'conveyor jam at discharge',
-    'strip feed error',
-    'counter reading mismatch'
-  ]
-};
-
-function _demoPick(list) { return list[Math.floor(Math.random() * list.length)]; }
-
-function _demoRandomNote(machine) {
-  const issue = _demoPick(DEMO_NOTE_POOLS.issues);
-  const tmpl = _demoPick(DEMO_NOTE_POOLS.general);
-  return tmpl.replace('{machine}', machine).replace('{issue}', issue);
-}
-
-function _demoMachineForAgent(agent) {
-  const machines = [];
-  for (const row of agent.rows) {
-    const rowMachines = PRESSES[row];
-    if (rowMachines) machines.push(...rowMachines);
-  }
-  if (machines.length === 0) return '1.01';
-  return _demoPick(machines);
-}
-
-function _demoPickAgent(weightKey) {
-  const total = DEMO_AGENTS.reduce((s, a) => s + a[weightKey], 0);
-  let r = Math.random() * total;
-  for (const agent of DEMO_AGENTS) {
-    r -= agent[weightKey];
-    if (r <= 0) return agent;
-  }
-  return DEMO_AGENTS[0];
-}
-
-function _demoBuildIssuePayload(issueId, machine, note, statusKey, subStatus, simTime) {
-  const d = new Date();
-  d.setHours(6, 0, 0, 0);
-  d.setSeconds(d.getSeconds() + simTime);
-  const dateTime = fmtDate(d);
-  const dateKey = localDateStr(d);
-  const timestamp = d.getTime();
-  const isUrgent = Math.random() < 0.08;
-  const workflowId = createWorkflowId(statusKey || 'open');
-  return {
-    machine, note,
-    dateTime, dateKey, timestamp,
-    shift: 'first',
-    timer: { minutes: 0, endAt: 0, isRunning: false, alerted: false },
-    userId: currentUser.uid, userName: currentUser.displayName || currentUser.email,
-    photoCount: 0,
-    createdAt: serverTimestamp(),
-    createdBy: currentActor(),
-    statusHistory: [{
-      status: statusKey || 'open',
-      subStatus: subStatus || '',
-      note: '',
-      dateTime,
-      by: currentUser.displayName || currentUser.email,
-      workflowId
-    }],
-    ...(statusKey === 'resolved'
-      ? {
-          workflowState: 'finished',
-          workflowStateByEntry: { [workflowId]: 'finished' },
-          workflowStateByEntryHistory: { [workflowId]: { finished: { by: currentActor(), at: serverTimestamp() } } },
-          workflowStateHistory: { finished: { by: currentActor(), at: serverTimestamp() } }
-        }
-      : { workflowStateByEntry: { [workflowId]: null } }),
-    ...(isUrgent ? { highPriority: true, priority: 'critical' } : {}),
-    schemaVersion: 2,
-    plantId: DEMO_PLANT_ID,
-    pressId: toPressId(machine),
-    machineCode: machine,
-    rowId: toRowId(findRowNameForMachine(machine)),
-    currentStatus: {
-      statusKey: statusKey || 'open',
-      subStatusKey: subStatus || '',
-      label: (getStatusDef(statusKey) || {}).label || statusKey || 'Open',
-      subLabel: subStatus || '',
-      color: getStatusColor(statusKey || 'open'),
-      enteredAt: serverTimestamp(),
-      enteredDateTime: dateTime,
-      enteredBy: currentActor(),
-      notePreview: note || ''
-    },
-    lifecycle: {
-      isOpen: statusKey !== 'resolved',
-      isResolved: statusKey === 'resolved',
-      openedAt: serverTimestamp(),
-      resolvedAt: statusKey === 'resolved' ? serverTimestamp() : null,
-      closedAt: statusKey === 'resolved' ? serverTimestamp() : null,
-      reopenedCount: 0
-    },
-    updatedAt: serverTimestamp(),
-    updatedBy: currentActor()
-  };
-}
-
-function _demoRunAs(agent, fn) {
-  const prev = currentUser;
-  currentUser = { ...prev, uid: agent.uid, displayName: agent.displayName, email: agent.email, photoURL: '' };
-  try { return fn(); }
-  finally { currentUser = prev; }
-}
-
-async function demoCreateIssue(agent, simTime) {
-  const machine = _demoMachineForAgent(agent);
-  const note = _demoRandomNote(machine);
-  const cfg = _demoSim?.config ?? {};
-  const openChance = cfg.openChance ?? 0.2;
-  const allStatuses = [...new Set(Object.values(STATUS_FLOW).flat())];
-  const statusKey = Math.random() < openChance ? 'open' : _demoPick(allStatuses);
-  const subStatus = '';
-  return _demoRunAs(agent, async () => {
-    const issueRef = doc(plantCol('issues'));
-    const batch = writeBatch(db);
-    batch.set(issueRef, _demoBuildIssuePayload(issueRef.id, machine, note, statusKey, subStatus, simTime));
-    batch.set(doc(issueEventsCol(issueRef.id)), {
-      type: 'issue_created', eventAt: serverTimestamp(), actor: currentActor(), schemaVersion: 2,
-      payload: { machineCode: machine, note, initialStatusKey: statusKey, initialSubStatusKey: subStatus, urgent: false }
-    });
-    batch.set(doc(issueEventsCol(issueRef.id)), {
-      type: 'status_changed', eventAt: serverTimestamp(), actor: currentActor(), schemaVersion: 2,
-      payload: { fromStatusKey: null, fromSubStatusKey: null, toStatusKey: statusKey, toSubStatusKey: subStatus, note: '' }
-    });
-    await batch.commit();
-    return { issueId: issueRef.id, machine, statusKey };
-  });
-}
-
-async function demoChangeStatus(agent, issueId, currentStatusObj, note) {
-  const validNext = STATUS_FLOW[currentStatusObj.status || 'open'] || ['resolved'];
-  const nextStatus = _demoPick(validNext);
-  return _demoRunAs(agent, () => window.addStatusEntry(issueId, nextStatus, '', note || ''));
-}
-
-async function demoResolveIssue(agent, issueId, note) {
-  return _demoRunAs(agent, () => window.addStatusEntry(issueId, 'resolved', '', note || 'Resolved - issue completed'));
-}
-
-async function demoReopenIssue(agent, issueId, note) {
-  return _demoRunAs(agent, () => window.addStatusEntry(issueId, 'open', '', note || 'Reopened - issue resurfaced'));
-}
-
-const STATUS_FLOW = {
-  open: ['alert','controlman','maintenance','materials','quality','processengineer','startup','tooldie'],
-  alert: ['maintenance','controlman','tooldie'],
-  maintenance: ['quality','startup','resolved'],
-  materials: ['startup','resolved'],
-  quality: ['resolved'],
-  processengineer: ['maintenance','tooldie','resolved'],
-  controlman: ['maintenance','resolved'],
-  startup: ['quality','resolved'],
-  tooldie: ['maintenance','quality','resolved'],
-  resolved: ['open']
-};
-
-// ── Simulation engine ──
-
-const DEMO_SHIFT_SECONDS = 6 * 3600;
-
-startDemoEngine = function() {
-  if (_demoSim) return;
-  _demoSim = {
-    simTime: 0,
-    speed: 60,
-    running: true,
-    actions: [],
-    createdIssues: [],
-    tickCount: 0,
-    paused: false,
-    config: {
-      createCount: 25,
-      openChance: 0.2,
-      updateChance: 0.5,
-      tickInterval: 4
-    }
-  };
-  _generateDemoActions();
-  _demoSim.interval = setInterval(_demoTick, 500);
-}
-
-stopDemoEngine = function() {
-  if (!_demoSim) return;
-  _demoSim.running = false;
-  clearInterval(_demoSim.interval);
-  _demoSim = null;
-}
-
-function _generateDemoActions() {
-  const actions = [];
-  const count = _demoSim?.config?.createCount ?? 25;
-  for (let i = 0; i < count; i++) {
-    const t = Math.round(300 + Math.random() * (DEMO_SHIFT_SECONDS - 600));
-    const agent = _demoPickAgent('createWeight');
-    actions.push({ type: 'create', t, agent: { ...agent } });
-  }
-  actions.sort((a, b) => a.t - b.t);
-  _demoSim.actions = actions;
-}
-
-function _demoTick() {
-  if (!_demoSim || _demoSim.paused) return;
-  _demoSim.tickCount++;
-  _demoSim.simTime += _demoSim.speed * 0.5;
-  const sim = _demoSim;
-
-  while (sim.actions.length > 0 && sim.actions[0].t <= sim.simTime) {
-    const action = sim.actions.shift();
-    _demoExecuteAction(action).catch(e => console.warn('Demo action failed:', e));
-  }
-
-  if (sim.simTime >= DEMO_SHIFT_SECONDS) {
-    _demoSimComplete();
-    return;
-  }
-
-  const cfg = sim.config ?? {};
-  const tickInterval = cfg.tickInterval ?? 4;
-  const updateChance = cfg.updateChance ?? 0.5;
-  if (sim.tickCount % tickInterval === 0 && sim.createdIssues.length > 0 && Math.random() < updateChance) {
-    const openIssues = [];
-    for (const ci of sim.createdIssues) {
-      const issue = issuesById.get(ci.issueId);
-      if (issue && !issue.lifecycle?.isResolved) {
-        const cs = currentStatus(issue);
-        if (cs && cs.status !== 'resolved') openIssues.push(ci);
-      }
-    }
-    if (openIssues.length > 0) {
-      const target = _demoPick(openIssues);
-      const followTime = sim.simTime + 60 + Math.random() * 600;
-      const agent = _demoPickAgent('statusWeight');
-      sim.actions.push({ type: 'status', t: followTime, agent: { ...agent }, issueId: target.issueId, issueMachine: target.machine });
-      sim.actions.sort((a, b) => a.t - b.t);
-    }
-  }
-
-  if (sim.simTime > DEMO_SHIFT_SECONDS * 0.5 && sim.tickCount % 12 === 0) {
-    const resolvable = [];
-    for (const ci of sim.createdIssues) {
-      const issue = issuesById.get(ci.issueId);
-      if (issue && !issue.lifecycle?.isResolved) resolvable.push(ci);
-    }
-    if (resolvable.length > 0 && Math.random() < 0.25) {
-      const target = _demoPick(resolvable);
-      const followTime = sim.simTime + 30 + Math.random() * 300;
-      const agent = _demoPickAgent('statusWeight');
-      sim.actions.push({ type: 'resolve', t: followTime, agent: { ...agent }, issueId: target.issueId, issueMachine: target.machine });
-      sim.actions.sort((a, b) => a.t - b.t);
-    }
-  }
-
-  if (sim.simTime > DEMO_SHIFT_SECONDS * 0.3 && sim.tickCount % 30 === 0 && Math.random() < 0.1) {
-    const resolved = [];
-    for (const ci of sim.createdIssues) {
-      const issue = issuesById.get(ci.issueId);
-      if (issue && issue.lifecycle?.isResolved) resolved.push(ci);
-    }
-    if (resolved.length > 0) {
-      const target = _demoPick(resolved);
-      const followTime = sim.simTime + 30;
-      const agent = _demoPickAgent('createWeight');
-      sim.actions.push({ type: 'reopen', t: followTime, agent: { ...agent }, issueId: target.issueId, issueMachine: target.machine });
-      sim.actions.sort((a, b) => a.t - b.t);
-    }
-  }
-
-  _demoUpdateUI();
-}
-
-async function _demoExecuteAction(action) {
-  const agent = DEMO_AGENTS.find(a => a.uid === action.agent.uid) || DEMO_AGENTS[0];
-  const issue = action.issueId ? issuesById.get(action.issueId) : null;
-
-  switch (action.type) {
-    case 'create': {
-      const result = await demoCreateIssue(agent, action.t);
-      if (result) _demoSim.createdIssues.push(result);
-      _demoLog(`${agent.displayName} logged issue on Press ${result.machine}`);
-      break;
-    }
-    case 'status': {
-      if (!issue) return;
-      const cs = currentStatus(issue);
-      const note = _demoRandomNote(action.issueMachine || issue.machine || '');
-      await demoChangeStatus(agent, action.issueId, cs, note);
-      _demoLog(`${agent.displayName} updated Press ${issue.machine || action.issueMachine}`);
-      break;
-    }
-    case 'resolve': {
-      if (!issue) return;
-      await demoResolveIssue(agent, action.issueId);
-      _demoLog(`${agent.displayName} resolved Press ${issue.machine || action.issueMachine}`);
-      break;
-    }
-    case 'reopen': {
-      if (!issue) return;
-      await demoReopenIssue(agent, action.issueId);
-      _demoLog(`${agent.displayName} reopened Press ${issue.machine || action.issueMachine}`);
-      break;
-    }
-  }
-}
-
-function _demoSimComplete() {
-  stopDemoEngine();
-  _demoLog('✅ Shift complete! Demo simulation finished.');
-  const btn = document.getElementById('demo-play-btn');
-  if (btn) btn.textContent = '✅';
-}
-
-function _demoLog(msg) {
-  const feed = document.getElementById('demo-feed');
-  if (!feed) return;
-  const t = _demoSim ? _demoFormatTime(_demoSim.simTime) : '--:--';
-  const el = document.createElement('div');
-  el.className = 'demo-feed-item';
-  el.textContent = `[${t}] ${msg}`;
-  feed.insertBefore(el, feed.firstChild);
-  while (feed.children.length > 50) feed.removeChild(feed.lastChild);
-}
-
-function _demoFormatTime(s) {
-  const h = Math.floor(s / 3600) + 6;
-  const m = Math.floor((s % 3600) / 60);
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-}
-
-function _demoUpdateUI() {
-  if (!_demoSim) return;
-  const timeEl = document.getElementById('demo-time');
-  const barEl = document.getElementById('demo-progress');
-  const speedEl = document.getElementById('demo-speed-label');
-  if (timeEl) timeEl.textContent = _demoFormatTime(_demoSim.simTime);
-  if (barEl) barEl.style.width = Math.min(100, (_demoSim.simTime / DEMO_SHIFT_SECONDS) * 100) + '%';
-  if (speedEl) speedEl.textContent = _demoSim.speed + '\u00d7';
-}
-
-// ── Demo controls UI ──
-
-buildDemoControls = function() {
-  const existing = document.getElementById('demo-controls');
-  if (existing) existing.remove();
-
-  const style = document.createElement('style');
-  style.textContent = `
-    #demo-controls { position:fixed; bottom:12px; left:50%; transform:translateX(-50%); z-index:9999; background:rgba(0,0,0,0.88); backdrop-filter:blur(8px); border:1px solid rgba(255,255,255,0.12); border-radius:12px; padding:10px 16px; display:flex; align-items:center; gap:12px; font-family:Nunito,sans-serif; font-size:12px; color:#fff; box-shadow:0 4px 24px rgba(0,0,0,0.5); user-select:none; min-width:480px; justify-content:center; flex-wrap:wrap; }
-    #demo-controls .demo-btn { background:rgba(255,255,255,0.1); border:none; color:#fff; width:32px; height:32px; border-radius:8px; cursor:pointer; font-size:14px; display:flex; align-items:center; justify-content:center; transition:background 0.15s; }
-    #demo-controls .demo-btn:hover { background:rgba(255,255,255,0.2); }
-    #demo-controls .demo-btn:disabled { opacity:0.3; cursor:default; }
-    #demo-controls .demo-label { color:rgba(255,255,255,0.6); font-size:11px; }
-    #demo-controls .demo-value { color:#fff; font-weight:600; }
-    #demo-controls .demo-time-display { font-family:Share Tech Mono,monospace; font-size:14px; color:#4ade80; min-width:60px; text-align:center; }
-    #demo-controls .demo-progress-track { width:100px; height:4px; background:rgba(255,255,255,0.15); border-radius:2px; overflow:hidden; }
-    #demo-controls .demo-progress-fill { height:100%; background:#4ade80; border-radius:2px; transition:width 0.3s; width:0%; }
-    #demo-controls .demo-speed-slider { width:80px; accent-color:#4ade80; cursor:pointer; }
-    #demo-controls .demo-sep { width:1px; height:24px; background:rgba(255,255,255,0.12); }
-    #demo-feed { position:fixed; bottom:68px; left:50%; transform:translateX(-50%); z-index:9998; max-height:160px; width:520px; overflow-y:auto; background:rgba(0,0,0,0.75); backdrop-filter:blur(4px); border-radius:10px; padding:8px 12px; font-family:Nunito,sans-serif; font-size:11px; color:rgba(255,255,255,0.8); pointer-events:none; }
-    #demo-feed .demo-feed-item { padding:2px 0; border-bottom:1px solid rgba(255,255,255,0.05); }
-    #demo-controls .demo-created-count { font-size:11px; color:rgba(255,255,255,0.5); }
-    #demo-settings-toggle { background:rgba(255,255,255,0.1); border:none; color:rgba(255,255,255,0.5); width:28px; height:28px; border-radius:6px; cursor:pointer; font-size:14px; display:flex; align-items:center; justify-content:center; transition:all 0.15s; }
-    #demo-settings-toggle:hover { background:rgba(255,255,255,0.2); color:#fff; }
-    #demo-settings-toggle.open { color:var(--accent,#4ade80); }
-    #demo-settings-panel { display:none; width:100%; padding:10px 4px 4px; border-top:1px solid rgba(255,255,255,0.08); margin-top:6px; }
-    #demo-settings-panel.open { display:flex; flex-wrap:wrap; gap:10px; justify-content:center; }
-    .demo-setting { display:flex; align-items:center; gap:8px; padding:4px 10px; background:rgba(255,255,255,0.04); border-radius:8px; min-width:180px; }
-    .demo-setting-label { font-size:11px; color:rgba(255,255,255,0.5); white-space:nowrap; min-width:50px; }
-    .demo-setting-value { font-size:11px; color:#fff; font-weight:600; min-width:28px; text-align:right; font-family:Share Tech Mono,monospace; }
-    .demo-setting-slider { width:60px; accent-color:#4ade80; cursor:pointer; height:4px; }
-  `;
-  document.head.appendChild(style);
-
-  const panel = document.createElement('div');
-  panel.id = 'demo-controls';
-
-  const playBtn = document.createElement('button');
-  playBtn.id = 'demo-play-btn';
-  playBtn.className = 'demo-btn';
-  playBtn.textContent = '\u23f8';
-  playBtn.title = 'Pause simulation';
-  playBtn.addEventListener('click', () => {
-    if (!_demoSim) return;
-    _demoSim.paused = !_demoSim.paused;
-    playBtn.textContent = _demoSim.paused ? '\u25b6' : '\u23f8';
-    playBtn.title = _demoSim.paused ? 'Resume simulation' : 'Pause simulation';
-  });
-  panel.appendChild(playBtn);
-
-  const resetBtn = document.createElement('button');
-  resetBtn.className = 'demo-btn';
-  resetBtn.textContent = '\u27f3';
-  resetBtn.title = 'Restart local simulation';
-  resetBtn.addEventListener('click', resetDemo);
-  panel.appendChild(resetBtn);
-
-  const sep1 = document.createElement('div');
-  sep1.className = 'demo-sep';
-  panel.appendChild(sep1);
-
-  const timeLabel = document.createElement('span');
-  timeLabel.className = 'demo-label';
-  timeLabel.textContent = 'Shift: ';
-  panel.appendChild(timeLabel);
-  const timeVal = document.createElement('span');
-  timeVal.id = 'demo-time';
-  timeVal.className = 'demo-time-display';
-  timeVal.textContent = '06:00';
-  panel.appendChild(timeVal);
-
-  const sep2 = document.createElement('div');
-  sep2.className = 'demo-sep';
-  panel.appendChild(sep2);
-
-  const progressTrack = document.createElement('div');
-  progressTrack.className = 'demo-progress-track';
-  const progressFill = document.createElement('div');
-  progressFill.id = 'demo-progress';
-  progressFill.className = 'demo-progress-fill';
-  progressTrack.appendChild(progressFill);
-  panel.appendChild(progressTrack);
-
-  const sep3 = document.createElement('div');
-  sep3.className = 'demo-sep';
-  panel.appendChild(sep3);
-
-  const speedLabel = document.createElement('span');
-  speedLabel.className = 'demo-label';
-  speedLabel.textContent = 'Speed: ';
-  panel.appendChild(speedLabel);
-  const speedVal = document.createElement('span');
-  speedVal.id = 'demo-speed-label';
-  speedVal.className = 'demo-value';
-  speedVal.textContent = '60\u00d7';
-  panel.appendChild(speedVal);
-  const speedSlider = document.createElement('input');
-  speedSlider.type = 'range';
-  speedSlider.className = 'demo-speed-slider';
-  speedSlider.min = '10';
-  speedSlider.max = '200';
-  speedSlider.value = '60';
-  speedSlider.step = '10';
-  speedSlider.addEventListener('input', () => {
-    if (_demoSim) _demoSim.speed = parseInt(speedSlider.value);
-    speedVal.textContent = speedSlider.value + '\u00d7';
-  });
-  panel.appendChild(speedSlider);
-
-  const sep4 = document.createElement('div');
-  sep4.className = 'demo-sep';
-  panel.appendChild(sep4);
-  const countSpan = document.createElement('span');
-  countSpan.id = 'demo-count';
-  countSpan.className = 'demo-created-count';
-  countSpan.textContent = '0 issues';
-  panel.appendChild(countSpan);
-
-  const gearBtn = document.createElement('button');
-  gearBtn.id = 'demo-settings-toggle';
-  gearBtn.textContent = '\u2699';
-  gearBtn.title = 'Simulation settings';
-  gearBtn.addEventListener('click', () => {
-    const sp = document.getElementById('demo-settings-panel');
-    if (!sp) return;
-    const open = !sp.classList.contains('open');
-    sp.classList.toggle('open', open);
-    gearBtn.classList.toggle('open', open);
-  });
-  panel.appendChild(gearBtn);
-
-  document.body.appendChild(panel);
-
-  const settingsPanel = document.createElement('div');
-  settingsPanel.id = 'demo-settings-panel';
-  const cfg = _demoSim?.config ?? {};
-  const sliders = [
-    { key: 'createCount', label: 'Creates', min: 5, max: 100, step: 5, def: 25 },
-    { key: 'openChance', label: 'Open %', min: 0, max: 100, step: 5, def: 20, fmt: v => v + '%', parse: v => parseInt(v) / 100 },
-    { key: 'updateChance', label: 'Update %', min: 0, max: 100, step: 5, def: 50, fmt: v => v + '%', parse: v => parseInt(v) / 100 },
-    { key: 'tickInterval', label: 'Tick freq', min: 1, max: 20, step: 1, def: 4 },
-  ];
-  for (const s of sliders) {
-    const wrap = document.createElement('div');
-    wrap.className = 'demo-setting';
-    const lbl = document.createElement('span');
-    lbl.className = 'demo-setting-label';
-    lbl.textContent = s.label;
-    wrap.appendChild(lbl);
-    const val = document.createElement('span');
-    val.className = 'demo-setting-value';
-    val.id = 'demo-cfg-' + s.key;
-    const displayVal = s.fmt ? s.fmt(String(cfg[s.key] ?? s.def)) : String(cfg[s.key] ?? s.def);
-    val.textContent = displayVal;
-    wrap.appendChild(val);
-    const input = document.createElement('input');
-    input.type = 'range';
-    input.className = 'demo-setting-slider';
-    input.min = String(s.min);
-    input.max = String(s.max);
-    input.step = String(s.step);
-    input.value = s.parse ? String(Math.round((cfg[s.key] ?? s.def) * 100)) : String(cfg[s.key] ?? s.def);
-    input.addEventListener('input', () => {
-      const raw = parseInt(input.value);
-      const final = s.parse ? s.parse(raw) : raw;
-      if (_demoSim) _demoSim.config[s.key] = final;
-      val.textContent = s.fmt ? s.fmt(String(raw)) : String(raw);
-    });
-    wrap.appendChild(input);
-    settingsPanel.appendChild(wrap);
-  }
-  panel.appendChild(settingsPanel);
-
-  const feed = document.createElement('div');
-  feed.id = 'demo-feed';
-  feed.innerHTML = '<div class="demo-feed-item" style="color:rgba(255,255,255,0.4);">Demo simulation ready. Starting shift\u2026</div>';
-  document.body.appendChild(feed);
-
-  setInterval(() => {
-    const el = document.getElementById('demo-count');
-    if (el && _demoSim) el.textContent = _demoSim.createdIssues.length + ' issues';
-  }, 1000);
-}
-
-resetDemo = async function() {
-  stopDemoEngine();
-  const feed = document.getElementById('demo-feed');
-  if (feed) {
-    feed.innerHTML = '<div class="demo-feed-item" style="color:rgba(255,255,255,0.4);">Local simulation restarted. Shared demo data is preserved.</div>';
-  }
-  const playBtn = document.getElementById('demo-play-btn');
-  if (playBtn) {
-    playBtn.textContent = '\u23f8';
-    playBtn.title = 'Pause simulation';
-  }
-  startDemoEngine();
-}
