@@ -1245,7 +1245,13 @@ async function handleFcmRoleAlert(request, env) {
       link: '/index.html'
     });
     await patchFirestoreDocument(env, `plants/${plantId}/roleFeedAlerts/${alertId}`, {
-      notificationDelivery: { sentAt: new Date(), attempted: result.attempted, sent: result.sent, failed: result.failed }
+      notificationDelivery: {
+        sentAt: new Date(),
+        attempted: result.attempted,
+        sent: result.sent,
+        failed: result.failed,
+        errors: result.errors || []
+      }
     });
     return jsonResponse({ ok: true, ...result });
   } catch (e) {
@@ -1281,7 +1287,13 @@ async function handleFcmConversationMessage(request, env) {
       link: '/index.html'
     });
     await patchFirestoreDocument(env, `plants/${plantId}/conversations/${conversationId}/messages/${messageId}`, {
-      notificationDelivery: { sentAt: new Date(), attempted: result.attempted, sent: result.sent, failed: result.failed }
+      notificationDelivery: {
+        sentAt: new Date(),
+        attempted: result.attempted,
+        sent: result.sent,
+        failed: result.failed,
+        errors: result.errors || []
+      }
     });
     return jsonResponse({ ok: true, ...result });
   } catch (e) {
