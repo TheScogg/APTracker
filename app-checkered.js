@@ -3330,7 +3330,6 @@ if (googleSignInBtn) {
 
 
 async function doSignOut() {
-  if (DEMO_MODE) { window.location.reload(); return; }
   if (NO_AUTH_MODE) {
     await bootstrapNoAuthSession();
     return;
@@ -3338,6 +3337,9 @@ async function doSignOut() {
   if (unsubscribe) { unsubscribe(); unsubscribe = null; }
   stopStatusConfigListener();
   stopGamificationListeners();
+  if (DEMO_MODE) {
+    try { sessionStorage.setItem('demo_signed_out', 'true'); } catch (_) {}
+  }
   await fbSignOut(auth);
 }
 
@@ -3511,8 +3513,29 @@ async function bootstrapDemoSession(user) {
 
 onAuthStateChanged(auth, async user => {
   if (DEMO_MODE) {
+    const explicitlySignedOut = sessionStorage.getItem('demo_signed_out') === 'true';
     if (!user) {
-      try { await signInAnonymously(auth); } catch (e) { console.error('Demo anon sign-in failed:', e); }
+      if (explicitlySignedOut) {
+        stopRoleFeedAlertsWatcher();
+        clearRoleAlertBadge();
+        stopStatusConfigListener();
+        if (_messagingInboxUnsubscribe) { _messagingInboxUnsubscribe(); _messagingInboxUnsubscribe = null; }
+        _updateMessagingEntryBadges(0);
+        currentUser = null;
+        document.getElementById('login-screen').classList.add('visible');
+        document.getElementById('app').classList.remove('visible');
+        issues = [];
+        issuesById.clear();
+        issueHistoryCursor = null;
+        issueHistoryFetchInFlight = null;
+        attachmentPhotoCache.clear();
+        issueEventHistoryCache.clear();
+        attachmentsHydrationToken++;
+        eventsHydrationToken++;
+        resetGoogleSignInButton();
+      } else {
+        try { await signInAnonymously(auth); } catch (e) { console.error('Demo anon sign-in failed:', e); }
+      }
       return;
     }
     await bootstrapDemoSession(user);

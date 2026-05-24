@@ -439,6 +439,166 @@
     border-radius: 999px;
     background: var(--bg3);
   }
+  .demo-guide-nav {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 2px;
+  }
+  .demo-guide-nav-btn {
+    background: transparent;
+    border: none;
+    color: var(--accent);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    font-weight: bold;
+    cursor: pointer;
+    padding: 3px 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: background 0.15s, color 0.15s;
+    line-height: 1;
+  }
+  .demo-guide-nav-btn:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text);
+  }
+  .demo-guide-nav .demo-guide-count {
+    border: none;
+    background: transparent;
+    padding: 0 6px;
+  }
+  .demo-guide-step {
+    display: none !important;
+  }
+  .demo-guide-step.active {
+    display: grid !important;
+  }
+  .demo-guide-progress-bar-wrap {
+    width: 100%;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.05);
+    position: relative;
+    overflow: hidden;
+  }
+  .demo-guide-progress-bar {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--accent), var(--green));
+    transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .demo-guide.show-onboarding .demo-guide-step {
+    display: none !important;
+  }
+  .demo-guide.show-onboarding .demo-guide-onboarding {
+    display: flex !important;
+  }
+  .demo-guide.show-onboarding .demo-guide-nav {
+    display: none !important;
+  }
+  .demo-guide-onboarding {
+    display: none;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 14px;
+    border-top: 1px solid rgba(255, 255, 255, 0.035);
+  }
+  .demo-guide-onboarding-title {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--green);
+    letter-spacing: 0.02em;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .demo-guide-onboarding-desc {
+    font-size: 12px;
+    color: var(--text2);
+    line-height: 1.4;
+  }
+  .demo-guide-onboarding-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin-top: 4px;
+  }
+  .demo-guide-onboarding-form input[type="text"] {
+    flex: 1;
+    min-width: 180px;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    color: var(--text);
+    padding: 6px 10px;
+    font-size: 12px;
+    font-family: 'Nunito', sans-serif;
+    outline: none;
+    transition: border-color 0.15s;
+    height: 32px;
+    box-sizing: border-box;
+  }
+  .demo-guide-onboarding-form input[type="text"]:focus {
+    border-color: var(--accent);
+  }
+  .demo-guide-onboarding-form select {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    color: var(--text);
+    padding: 0 10px;
+    font-size: 12px;
+    font-family: 'Nunito', sans-serif;
+    outline: none;
+    cursor: pointer;
+    height: 32px;
+    box-sizing: border-box;
+  }
+  .demo-guide-onboarding-btn {
+    background: var(--accent);
+    color: var(--bg);
+    border: none;
+    border-radius: 7px;
+    padding: 0 16px;
+    font-size: 12px;
+    font-weight: bold;
+    font-family: 'Nunito', sans-serif;
+    cursor: pointer;
+    transition: opacity 0.15s, transform 0.15s;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+  }
+  .demo-guide-onboarding-btn:hover {
+    opacity: 0.9;
+  }
+  .demo-guide-onboarding-btn:active {
+    transform: scale(0.98);
+  }
+  .demo-guide-onboarding-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+  @media (max-width: 700px) {
+    .demo-guide-onboarding-form {
+      flex-direction: column;
+      align-items: stretch;
+    }
+    .demo-guide-onboarding-form input[type="text"],
+    .demo-guide-onboarding-form select,
+    .demo-guide-onboarding-btn {
+      width: 100%;
+    }
+  }
   .demo-guide-tour-btn,
   .demo-guide-reset-btn,
   .demo-guide-collapse,
@@ -729,23 +889,9 @@
       justify-content: space-between;
       flex-wrap: wrap;
     }
-    .demo-guide-body {
-      display: grid;
-      grid-template-columns: 1fr;
-      overflow-x: visible;
-    }
-    .demo-guide-step {
-      min-width: 0;
-      grid-template-columns: 22px minmax(0, 1fr) auto;
-      align-items: center;
-    }
-    .demo-guide-step-btn {
-      grid-column: 3;
-      justify-self: end;
-    }
   }
   @media (max-width: 360px) {
-    .demo-guide-step {
+    .demo-guide-step.active {
       grid-template-columns: 22px minmax(0, 1fr);
       align-items: start;
       padding: 10px 12px 11px;

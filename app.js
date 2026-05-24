@@ -91,6 +91,10 @@ const setDoc = async (...args) => { const out = await rawSetDoc(...args); trackF
 const addDoc = async (...args) => { const out = await rawAddDoc(...args); trackFirestoreWrite(1); return out; };
 const updateDoc = async (...args) => { const out = await rawUpdateDoc(...args); trackFirestoreWrite(1); return out; };
 const deleteDoc = async (...args) => { const out = await rawDeleteDoc(...args); trackFirestoreWrite(1); return out; };
+const deepCopy = (obj) => {
+  if (obj === undefined) return undefined;
+  return JSON.parse(JSON.stringify(obj));
+};
 const writeBatch = (...args) => {
   const batch = rawWriteBatch(...args);
   const originalCommit = batch.commit.bind(batch);
@@ -3630,16 +3634,23 @@ if (googleSignInBtn) {
 const demoLoginBtn = document.getElementById('demo-login-btn');
 if (demoLoginBtn) {
   demoLoginBtn.addEventListener('click', () => {
-    const url = new URL(window.location.href);
-    url.searchParams.set('demo', '1');
-    window.location.href = url.toString();
+    try { sessionStorage.removeItem('demo_signed_out'); } catch (_) {}
+    if (DEMO_MODE) {
+      signInAnonymously(auth).catch(e => {
+        console.error('Demo anon sign-in failed:', e);
+        showDemoAuthError(e);
+      });
+    } else {
+      const url = new URL(window.location.href);
+      url.searchParams.set('demo', '1');
+      window.location.href = url.toString();
+    }
   });
 }
 
 
 
 async function doSignOut() {
-  if (DEMO_MODE) { window.location.reload(); return; }
   if (NO_AUTH_MODE) {
     await bootstrapNoAuthSession();
     return;
@@ -3647,6 +3658,9 @@ async function doSignOut() {
   if (unsubscribe) { unsubscribe(); unsubscribe = null; }
   stopStatusConfigListener();
   stopGamificationListeners();
+  if (DEMO_MODE) {
+    try { sessionStorage.setItem('demo_signed_out', 'true'); } catch (_) {}
+  }
   await fbSignOut(auth);
 }
 
@@ -4087,10 +4101,37 @@ function saveDemoGuideDone(done) {
   try { localStorage.setItem(DEMO_GUIDE_KEY, JSON.stringify([...done])); } catch (_) {}
 }
 
+function triggerDemoTaskCelebration() {
+  const container = document.createElement('div');
+  container.className = 'confetti-container';
+  container.style.cssText = 'position:fixed;inset:0;z-index:9999;pointer-events:none;overflow:hidden;';
+  document.body.appendChild(container);
+  launchConfetti(container, 45);
+  setTimeout(() => container.remove(), 3000);
+}
+
 function markDemoGuideStep(key) {
   const done = readDemoGuideDone();
+  if (done.has(key)) return;
+  
   done.add(key);
   saveDemoGuideDone(done);
+  
+  try { triggerDemoTaskCelebration(); } catch (e) { console.error('Celebration failed:', e); }
+  
+  // Auto-advance if the completed step was the current active step
+  const completedIdx = DEMO_GUIDE_STEPS.findIndex(step => step.key === key);
+  if (completedIdx === window.currentDemoStepIndex) {
+    let nextIncomplete = DEMO_GUIDE_STEPS.findIndex((step, idx) => idx > completedIdx && !done.has(step.key));
+    if (nextIncomplete === -1) {
+      nextIncomplete = DEMO_GUIDE_STEPS.findIndex(step => !done.has(step.key));
+    }
+    if (nextIncomplete !== -1) {
+      window.currentDemoStepIndex = nextIncomplete;
+    } else {
+      window.currentDemoStepIndex = (window.currentDemoStepIndex + 1) % DEMO_GUIDE_STEPS.length;
+    }
+  }
   renderDemoGuideProgress(done);
 }
 
@@ -4098,21 +4139,47 @@ function completeDemoGuideStep(key) {
   if (!DEMO_MODE || !key) return;
   markDemoGuideStep(key);
 }
+window.completeDemoGuideStep = completeDemoGuideStep;
+window.DEMO_GUIDE_STEPS = DEMO_GUIDE_STEPS;
 
 function resetDemoGuideProgress() {
   try { localStorage.removeItem(DEMO_GUIDE_KEY); } catch (_) {}
+  window.currentDemoStepIndex = 0;
   renderDemoGuideProgress(new Set());
 }
 
 function renderDemoGuideProgress(done = readDemoGuideDone()) {
   const wrap = document.getElementById('demo-guide');
   if (!wrap) return;
-  DEMO_GUIDE_STEPS.forEach(step => {
-    wrap.querySelector(`[data-demo-step="${step.key}"]`)?.classList.toggle('done', done.has(step.key));
+
+  if (window.currentDemoStepIndex === undefined) {
+    let firstIncompleteIdx = DEMO_GUIDE_STEPS.findIndex(step => !done.has(step.key));
+    if (firstIncompleteIdx === -1) firstIncompleteIdx = 0;
+    window.currentDemoStepIndex = firstIncompleteIdx;
+  }
+
+  DEMO_GUIDE_STEPS.forEach((step, idx) => {
+    const stepEl = wrap.querySelector(`[data-demo-step="${step.key}"]`);
+    if (stepEl) {
+      stepEl.classList.toggle('done', done.has(step.key));
+      stepEl.classList.toggle('active', idx === window.currentDemoStepIndex);
+    }
   });
+
   const count = wrap.querySelector('[data-demo-guide-count]');
-  if (count) count.textContent = `${done.size}/${DEMO_GUIDE_STEPS.length}`;
-  wrap.classList.toggle('complete', done.size >= DEMO_GUIDE_STEPS.length);
+  if (count) {
+    count.textContent = `Task ${window.currentDemoStepIndex + 1}/${DEMO_GUIDE_STEPS.length} (${done.size} done)`;
+  }
+  
+  const pct = (done.size / DEMO_GUIDE_STEPS.length) * 100;
+  const progressBar = wrap.querySelector('#demo-guide-progress-bar');
+  if (progressBar) {
+    progressBar.style.width = `${pct}%`;
+  }
+  
+  const allComplete = done.size >= DEMO_GUIDE_STEPS.length;
+  wrap.classList.toggle('complete', allComplete);
+  wrap.classList.toggle('show-onboarding', allComplete);
 }
 
 function demoGuideScrollTo(selector) {
@@ -4211,7 +4278,11 @@ function buildDemoGuide() {
         <div class="demo-guide-title">Explore AP Tracker at your own pace</div>
       </div>
       <div class="demo-guide-actions">
-        <span class="demo-guide-count" data-demo-guide-count>0/${DEMO_GUIDE_STEPS.length}</span>
+        <div class="demo-guide-nav">
+          <button class="demo-guide-nav-btn" type="button" data-demo-guide-prev aria-label="Previous step">&larr;</button>
+          <span class="demo-guide-count" data-demo-guide-count>Task 1/${DEMO_GUIDE_STEPS.length}</span>
+          <button class="demo-guide-nav-btn" type="button" data-demo-guide-next aria-label="Next step">&rarr;</button>
+        </div>
         <button class="demo-guide-reset-btn" type="button" data-demo-guide-reset>Reset</button>
         <button class="demo-guide-tour-btn" type="button" data-demo-guide-action="tour">Start tour</button>
         <button class="demo-guide-collapse" type="button" data-demo-guide-toggle aria-expanded="true">Hide</button>
@@ -4229,18 +4300,184 @@ function buildDemoGuide() {
           <button class="demo-guide-step-btn" type="button" data-demo-guide-action="${esc(step.action)}" data-demo-guide-key="${esc(step.key)}">${esc(step.btn)}</button>
         </div>
       `).join('')}
+      <div class="demo-guide-onboarding" id="demo-guide-onboarding">
+        <div class="demo-guide-onboarding-title">🎉 Mastered! Create Your Live Plant</div>
+        <div class="demo-guide-onboarding-desc">Ready to build your own AP Tracker? Enter your plant details below to initialize your live production workspace:</div>
+        <div class="demo-guide-onboarding-form">
+          <input type="text" id="demo-onboarding-plant-name" placeholder="Plant Name (e.g. Chicago Assembly Floor)" required>
+          <select id="demo-onboarding-role">
+            <option value="Production Lead">Production Lead</option>
+            <option value="Plant Manager">Plant Manager</option>
+            <option value="Maintenance Specialist">Maintenance Specialist</option>
+            <option value="CI Specialist">CI Specialist</option>
+            <option value="Operator">Machine Operator</option>
+          </select>
+          <button class="demo-guide-onboarding-btn" type="button" id="demo-onboarding-submit-btn">Create Live Plant</button>
+        </div>
+      </div>
+    </div>
+    <div class="demo-guide-progress-bar-wrap">
+      <div class="demo-guide-progress-bar" id="demo-guide-progress-bar"></div>
     </div>`;
   sectionHeader.parentNode.insertBefore(guide, sectionHeader);
   renderDemoGuideProgress();
 }
 
+async function handleOnboardingSubmit(btn) {
+  const nameInput = document.getElementById('demo-onboarding-plant-name');
+  const roleSelect = document.getElementById('demo-onboarding-role');
+  if (!nameInput || !roleSelect) return;
+  const plantName = nameInput.value.trim();
+  const userRole = roleSelect.value;
+  if (!plantName) {
+    alert("⚠️ Plant name is required.");
+    nameInput.focus();
+    return;
+  }
+  
+  btn.disabled = true;
+  btn.textContent = "Authenticating...";
+  
+  try {
+    // Prevent the Demo Mode auth listener from signing out the Google user
+    sessionStorage.setItem('demo_onboarding_in_progress', 'true');
+    
+    // 1. Sign in with Google to get permanent user credentials
+    let user;
+    if (window.__testGoogleUser) {
+      user = window.__testGoogleUser;
+    } else {
+      const result = await signInWithPopup(auth, provider);
+      user = result.user;
+    }
+    if (!user) throw new Error("Google Authentication failed.");
+    
+    btn.textContent = "Creating plant...";
+    
+    // 2. Create the new Plant document & configurations sequentially
+    const plantId = plantName.toLowerCase().replace(/[^a-z0-9]/g, '_') + '_' + Date.now().toString(36);
+    
+    const defaultPermissions = {
+      isAdmin: true,
+      canResolve: true,
+      canEditTimeline: true,
+      canDeleteIssues: true
+    };
+    
+    // Set plant doc metadata
+    await setDoc(doc(db, 'plants', plantId), {
+      name: plantName,
+      location: '',
+      createdAt: serverTimestamp(),
+      isActive: true
+    });
+    
+    // Set members doc (User is Admin/Owner of the new plant)
+    await setDoc(plantMemberDocRef(plantId, user.uid), {
+      userId: user.uid,
+      displayName: user.displayName || user.email || '',
+      email: user.email || '',
+      photoURL: user.photoURL || '',
+      role: 'admin',
+      userRole: userRole,
+      isActive: true,
+      addedAt: serverTimestamp(),
+      permissions: defaultPermissions
+    });
+    
+    // Initialize config documents (now that member doc exists, security rules will pass!)
+    await setDoc(doc(db, 'plants', plantId, 'config', 'presses'), { presses: DEFAULT_PRESSES });
+    await setDoc(doc(db, 'plants', plantId, 'config', 'statuses'), {
+      statuses: deepCopy(DEFAULT_STATUSES),
+      subcategoryRoutes: {}
+    });
+    
+    // Initialize gamification config
+    const defaultGameConfig = {
+      rules: {
+        issue_create: { label: 'Log an issue', trigger: 'issue_create', points: 10 },
+        issue_resolve: { label: 'Resolve an issue', trigger: 'issue_resolve', points: 25 },
+        event_add: { label: 'Add update note', trigger: 'event_add', points: 5 },
+        photo_upload: { label: 'Upload photo / attachment', trigger: 'photo_upload', points: 15 }
+      },
+      missions: {},
+      badges: {},
+      xpFormula: { base: 100, exponent: 1.5 }
+    };
+    await setDoc(doc(db, 'plants', plantId, 'gamificationConfig', 'main'), {
+      ...defaultGameConfig,
+      updatedAt: serverTimestamp()
+    });
+    
+    // Set user profile doc
+    await setDoc(doc(db, 'users', user.uid), {
+      displayName: user.displayName || '',
+      email: user.email || '',
+      plantIds: arrayUnion(plantId),
+      role: userRole,
+      lastPlant: plantId
+    }, { merge: true });
+    
+    // Explicitly remove demo plant from their permanent list
+    try {
+      await setDoc(doc(db, 'users', user.uid), {
+        plantIds: arrayRemove(DEMO_PLANT_ID)
+      }, { merge: true });
+    } catch (e) {
+      console.warn("Failed to remove demo plant ID:", e);
+    }
+    
+    // Clear flags
+    sessionStorage.removeItem('demo_onboarding_in_progress');
+    sessionStorage.removeItem('demo_signed_out');
+    
+    // Redirect out of demo mode by stripping "?demo=1" and setting the newly created plant ID
+    const url = new URL(window.location.href);
+    url.searchParams.delete('demo');
+    url.searchParams.set('plant', plantId);
+    
+    btn.textContent = "Done! Redirecting...";
+    window.location.href = url.toString();
+  } catch (e) {
+    console.error("Onboarding failed:", e);
+    sessionStorage.removeItem('demo_onboarding_in_progress');
+    alert("❌ Error: " + (e.message || "Failed to create plant."));
+    btn.disabled = false;
+    btn.textContent = "Create Live Plant";
+  }
+}
+
 onAuthStateChanged(auth, async user => {
   if (DEMO_MODE) {
+    const explicitlySignedOut = sessionStorage.getItem('demo_signed_out') === 'true';
     if (!user) {
-      try { await signInAnonymously(auth); } catch (e) { console.error('Demo anon sign-in failed:', e); showDemoAuthError(e); }
+      if (explicitlySignedOut) {
+        stopRoleFeedAlertsWatcher();
+        clearRoleAlertBadge();
+        stopStatusConfigListener();
+        if (_messagingInboxUnsubscribe) { _messagingInboxUnsubscribe(); _messagingInboxUnsubscribe = null; }
+        _updateMessagingEntryBadges(0);
+        currentUser = null;
+        document.getElementById('login-screen').classList.add('visible');
+        document.getElementById('app').classList.remove('visible');
+        issues = [];
+        issuesById.clear();
+        issueHistoryCursor = null;
+        issueHistoryFetchInFlight = null;
+        attachmentPhotoCache.clear();
+        issueEventHistoryCache.clear();
+        attachmentsHydrationToken++;
+        eventsHydrationToken++;
+        resetGoogleSignInButton();
+      } else {
+        try { await signInAnonymously(auth); } catch (e) { console.error('Demo anon sign-in failed:', e); showDemoAuthError(e); }
+      }
       return;
     }
     if (!user.isAnonymous) {
+      if (sessionStorage.getItem('demo_onboarding_in_progress') === 'true') {
+        return;
+      }
       try {
         await fbSignOut(auth);
         await signInAnonymously(auth);
@@ -9952,6 +10189,26 @@ document.addEventListener('click', e => {
   if (guideAction) {
     e.preventDefault();
     runDemoGuideAction(guideAction.dataset.demoGuideAction, guideAction.dataset.demoGuideKey || '');
+    return;
+  }
+  const guidePrev = e.target.closest?.('[data-demo-guide-prev]');
+  if (guidePrev) {
+    e.preventDefault();
+    window.currentDemoStepIndex = (window.currentDemoStepIndex - 1 + DEMO_GUIDE_STEPS.length) % DEMO_GUIDE_STEPS.length;
+    renderDemoGuideProgress();
+    return;
+  }
+  const guideNext = e.target.closest?.('[data-demo-guide-next]');
+  if (guideNext) {
+    e.preventDefault();
+    window.currentDemoStepIndex = (window.currentDemoStepIndex + 1) % DEMO_GUIDE_STEPS.length;
+    renderDemoGuideProgress();
+    return;
+  }
+  const onboardingSubmit = e.target.closest?.('#demo-onboarding-submit-btn');
+  if (onboardingSubmit) {
+    e.preventDefault();
+    handleOnboardingSubmit(onboardingSubmit);
     return;
   }
   const guideToggle = e.target.closest?.('[data-demo-guide-toggle]');
