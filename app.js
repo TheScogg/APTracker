@@ -3,6 +3,7 @@ import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, 
 import { getAuth, setPersistence, browserLocalPersistence, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut as fbSignOut, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getStorage, ref as storageRef, uploadString, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 import { getMessaging, getToken, isSupported as isMessagingSupported, onMessage } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
+import { createFirebasePathHelpers } from "./firebase-paths.js";
 import {
   normalizeSubcategoryRoutes as normalizeSharedSubcategoryRoutes,
   syncStatusesFromSubcategoryRoutes as syncSharedStatusesFromSubcategoryRoutes
@@ -1128,50 +1129,49 @@ const WIKI_SCOPE_SHARED = 'shared';
 let _pressWikiScope = WIKI_SCOPE_PRESS;
 
 // Firestore path helpers — all data scoped under plants/{plantId}/
-function plantCol(colName) { return collection(db, 'plants', currentPlantId, colName); }
-function plantDoc(colName, docId) { return doc(db, 'plants', currentPlantId, colName, docId); }
-function issueEventsCol(issueId) { return collection(db, 'plants', currentPlantId, 'issues', issueId, 'events'); }
-function issueAttachmentsCol(issueId) { return collection(db, 'plants', currentPlantId, 'issues', issueId, 'attachments'); }
-function pressWikiPagesCol(pressId) { return collection(db, 'plants', currentPlantId, 'presses', String(pressId), 'wikiPages'); }
-function pressWikiPageDoc(pressId, pageId) { return doc(db, 'plants', currentPlantId, 'presses', String(pressId), 'wikiPages', pageId); }
-function pressWikiRevisionsCol(pressId, pageId) { return collection(db, 'plants', currentPlantId, 'presses', String(pressId), 'wikiPages', pageId, 'revisions'); }
-function pressWikiAttachmentsCol(pressId, pageId) { return collection(db, 'plants', currentPlantId, 'presses', String(pressId), 'wikiPages', pageId, 'attachments'); }
-function wikiCollectionPath(scope, pressId) {
-  return scope === WIKI_SCOPE_SHARED
-    ? ['plants', currentPlantId, 'wikiPages']
-    : ['plants', currentPlantId, 'presses', String(pressId), 'wikiPages'];
-}
-function wikiPagesColForScope(scope, pressId) { return collection(db, ...wikiCollectionPath(scope, pressId)); }
-function wikiPageDocForScope(scope, pressId, pageId) { return doc(db, ...wikiCollectionPath(scope, pressId), pageId); }
-function wikiRevisionsColForScope(scope, pressId, pageId) { return collection(db, ...wikiCollectionPath(scope, pressId), pageId, 'revisions'); }
-function wikiAttachmentsColForScope(scope, pressId, pageId) { return collection(db, ...wikiCollectionPath(scope, pressId), pageId, 'attachments'); }
-function wikiStoragePrefixForScope(scope, pressId, pageId) {
-  return scope === WIKI_SCOPE_SHARED
-    ? `plants/${currentPlantId}/wikiPages/${pageId}`
-    : `plants/${currentPlantId}/presses/${String(pressId)}/wikiPages/${pageId}`;
-}
-function notesCol() { return collection(db, 'plants', currentPlantId, 'notes'); }
-function noteDoc(noteId) { return doc(db, 'plants', currentPlantId, 'notes', noteId); }
-function noteAttachmentsCol(noteId) { return collection(db, 'plants', currentPlantId, 'notes', noteId, 'attachments'); }
-function noteStoragePrefix(noteId) { return `plants/${currentPlantId}/notes/${noteId}`; }
-function plantTodosCol() { return collection(db, 'plants', currentPlantId, 'todos'); }
-function plantTodoDoc(todoId) { return doc(db, 'plants', currentPlantId, 'todos', todoId); }
-function userTodosCol() { return collection(db, 'users', currentUser.uid, 'todos'); }
-function userTodoDoc(todoId) { return doc(db, 'users', currentUser.uid, 'todos', todoId); }
-function plantMemberDocRef(plantId, userId) { return doc(db, 'plants', plantId, 'members', userId); }
-function gameConfigDoc() { return doc(db, 'plants', currentPlantId, 'gamificationConfig', 'main'); }
-function gameUserStatsDoc(userId) { return doc(db, 'plants', currentPlantId, 'userGameStats', userId); }
-function gameMissionsCol() { return collection(db, 'plants', currentPlantId, 'missions'); }
-function gameLeaderboardDoc(boardId) { return doc(db, 'plants', currentPlantId, 'leaderboards', boardId || gameConfig?.leaderboardPeriod || 'weekly'); }
-function userBadgesDoc(userId) { return doc(db, 'plants', currentPlantId, 'userBadges', userId); }
-function gameEventsCol() { return collection(db, 'plants', currentPlantId, 'gameEvents'); }
-function missionProgressDoc(missionId, subjectId) { return doc(db, 'plants', currentPlantId, 'missions', missionId, 'progress', subjectId); }
-function globalStoreConfigDoc() { return doc(db, 'globalConfig', 'store'); }
-function legacyPlantStoreConfigDoc() { return doc(db, 'plants', currentPlantId, 'config', 'store'); }
-function conversationsCol() { return collection(db, 'plants', currentPlantId, 'conversations'); }
-function conversationDoc(conversationId) { return doc(db, 'plants', currentPlantId, 'conversations', conversationId); }
-function conversationMessagesCol(conversationId) { return collection(db, 'plants', currentPlantId, 'conversations', conversationId, 'messages'); }
-function conversationMemberDoc(conversationId, userId) { return doc(db, 'plants', currentPlantId, 'conversations', conversationId, 'members', userId); }
+const firebasePaths = createFirebasePathHelpers({
+  db,
+  getPlantId: () => currentPlantId,
+  getUserId: () => currentUser.uid,
+  getLeaderboardPeriod: () => gameConfig?.leaderboardPeriod,
+  wikiScopeShared: WIKI_SCOPE_SHARED
+});
+function plantCol(colName) { return firebasePaths.plantCol(colName); }
+function plantDoc(colName, docId) { return firebasePaths.plantDoc(colName, docId); }
+function issueEventsCol(issueId) { return firebasePaths.issueEventsCol(issueId); }
+function issueAttachmentsCol(issueId) { return firebasePaths.issueAttachmentsCol(issueId); }
+function pressWikiPagesCol(pressId) { return firebasePaths.pressWikiPagesCol(pressId); }
+function pressWikiPageDoc(pressId, pageId) { return firebasePaths.pressWikiPageDoc(pressId, pageId); }
+function pressWikiRevisionsCol(pressId, pageId) { return firebasePaths.pressWikiRevisionsCol(pressId, pageId); }
+function pressWikiAttachmentsCol(pressId, pageId) { return firebasePaths.pressWikiAttachmentsCol(pressId, pageId); }
+function wikiCollectionPath(scope, pressId) { return firebasePaths.wikiCollectionPath(scope, pressId); }
+function wikiPagesColForScope(scope, pressId) { return firebasePaths.wikiPagesColForScope(scope, pressId); }
+function wikiPageDocForScope(scope, pressId, pageId) { return firebasePaths.wikiPageDocForScope(scope, pressId, pageId); }
+function wikiRevisionsColForScope(scope, pressId, pageId) { return firebasePaths.wikiRevisionsColForScope(scope, pressId, pageId); }
+function wikiAttachmentsColForScope(scope, pressId, pageId) { return firebasePaths.wikiAttachmentsColForScope(scope, pressId, pageId); }
+function wikiStoragePrefixForScope(scope, pressId, pageId) { return firebasePaths.wikiStoragePrefixForScope(scope, pressId, pageId); }
+function notesCol() { return firebasePaths.notesCol(); }
+function noteDoc(noteId) { return firebasePaths.noteDoc(noteId); }
+function noteAttachmentsCol(noteId) { return firebasePaths.noteAttachmentsCol(noteId); }
+function noteStoragePrefix(noteId) { return firebasePaths.noteStoragePrefix(noteId); }
+function plantTodosCol() { return firebasePaths.plantTodosCol(); }
+function plantTodoDoc(todoId) { return firebasePaths.plantTodoDoc(todoId); }
+function userTodosCol() { return firebasePaths.userTodosCol(); }
+function userTodoDoc(todoId) { return firebasePaths.userTodoDoc(todoId); }
+function plantMemberDocRef(plantId, userId) { return firebasePaths.plantMemberDocRef(plantId, userId); }
+function gameConfigDoc() { return firebasePaths.gameConfigDoc(); }
+function gameUserStatsDoc(userId) { return firebasePaths.gameUserStatsDoc(userId); }
+function gameMissionsCol() { return firebasePaths.gameMissionsCol(); }
+function gameLeaderboardDoc(boardId) { return firebasePaths.gameLeaderboardDoc(boardId); }
+function userBadgesDoc(userId) { return firebasePaths.userBadgesDoc(userId); }
+function gameEventsCol() { return firebasePaths.gameEventsCol(); }
+function missionProgressDoc(missionId, subjectId) { return firebasePaths.missionProgressDoc(missionId, subjectId); }
+function globalStoreConfigDoc() { return firebasePaths.globalStoreConfigDoc(); }
+function legacyPlantStoreConfigDoc() { return firebasePaths.legacyPlantStoreConfigDoc(); }
+function conversationsCol() { return firebasePaths.conversationsCol(); }
+function conversationDoc(conversationId) { return firebasePaths.conversationDoc(conversationId); }
+function conversationMessagesCol(conversationId) { return firebasePaths.conversationMessagesCol(conversationId); }
+function conversationMemberDoc(conversationId, userId) { return firebasePaths.conversationMemberDoc(conversationId, userId); }
 
 function currentActor() {
   return { uid: currentUser?.uid || '', name: currentUser?.displayName || currentUser?.email || 'Unknown' };
