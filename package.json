@@ -3,6 +3,7 @@
     "prebuild": "node scripts/write-build-version.mjs",
     "build": "node -e \"console.log('build-info generated')\"",
     "deploy": "node scripts/write-build-version.mjs && npx wrangler deploy",
+    "deploy:rules": "/opt/homebrew/bin/npx firebase deploy --only firestore:rules --project press-tracker-9d9c9",
     "reset:demo": "node scripts/reset-demo-plant.mjs --dry-run"
   },
   "dependencies": {

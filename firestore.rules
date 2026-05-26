@@ -133,6 +133,19 @@ service cloud.firestore {
         .hasOnly(['jobRoleKeys', 'jobFeeds', 'alertCategorySubscriptions', 'updatedAt', 'updatedBy']);
     }
 
+    function onlyUpdatesOwnMemberProfile() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['displayName', 'fullName', 'ssoNumber', 'email', 'photoURL', 'updatedAt']);
+    }
+
+    function validOwnAccessRequest(plantId) {
+      return signedIn()
+        && request.resource.data.uid == currentUid()
+        && request.resource.data.userId == currentUid()
+        && request.resource.data.requestedPlantId == plantId
+        && request.resource.data.status == "pending";
+    }
+
     function onlyRemovesSelfFromRecipients() {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['recipientUserIds'])
         && resource.data.recipientUserIds is list
@@ -232,8 +245,8 @@ service cloud.firestore {
 
     // ── Plants ──
     match /plants/{plantId} {
-      // Any active member can read plant metadata.
-      allow read: if isPlantMember(plantId);
+      // Any signed-in user can read plant metadata so onboarding can request access.
+      allow read: if signedIn();
 
       // Any signed-in user can create a plant (they will also create a member doc
       // for themselves in the same batch via _initNewPlant).
@@ -265,6 +278,16 @@ service cloud.firestore {
         allow update: if isSelf(userId)
           && isPlantMember(plantId)
           && onlyUpdatesOwnRolePrefs();
+
+        // Users can keep their own profile fields current during onboarding.
+        allow update: if isSelf(userId)
+          && isPlantMember(plantId)
+          && onlyUpdatesOwnMemberProfile();
+      }
+
+      match /accessRequests/{userId} {
+        allow read, update, delete: if isAdmin(plantId);
+        allow create, update: if isSelf(userId) && validOwnAccessRequest(plantId);
       }
 
       // ── Config (statuses, presses) ──

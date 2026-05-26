@@ -639,6 +639,17 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, setPersistence, browserLocalPersistence, GoogleAuthProvider, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut as fbSignOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {
+  assignableStatusKeys,
+  deepCopy,
+  normalizeStatusRecord,
+  normalizeStatusesForSave as normalizeSharedStatusesForSave,
+  normalizeSubcategoryRoutes as normalizeSharedSubcategoryRoutes,
+  normalizeSubsInput,
+  routeKeyFromLabel,
+  statusKeyFromLabel,
+  syncStatusesFromSubcategoryRoutes as syncSharedStatusesFromSubcategoryRoutes
+} from "./shared-config.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyABjasNBbJnsqq4M_UxKruKrN6-O2FXCwc",
@@ -891,6 +902,7 @@ let currentUser = null;
 let userPlants = [];
 let adminPlantIds = [];
 let membersByPlant = new Map();
+let accessRequestsByPlant = new Map();
 let userDirectory = [];
 let statusDraftByPlant = new Map();
 let subcategoryRouteDraftByPlant = new Map();
@@ -919,10 +931,6 @@ function esc(v) {
   return String(v || '').replace(/[&<>'"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[ch]));
 }
 
-function deepCopy(obj) {
-  return JSON.parse(JSON.stringify(obj));
-}
-
 function feedback(elId, type, message) {
   const el = document.getElementById(elId);
   if (!el) return;
@@ -934,71 +942,6 @@ function defaultPermsForRole(role) {
   if (role === 'admin') return { ...DEFAULT_PERMISSIONS };
   if (role === 'editor') return { canViewPlant: true, canCreateIssue: true, canEditIssue: true, canResolveIssue: true, canManageStatuses: false, canManagePresses: false, canExport: true };
   return { canViewPlant: true, canCreateIssue: false, canEditIssue: false, canResolveIssue: false, canManageStatuses: false, canManagePresses: false, canExport: false };
-}
-
-function normalizeSubsInput(value) {
-  return String(value || '')
-    .split(/\n|,/)
-    .map(v => v.trim())
-    .filter(Boolean);
-}
-
-function slugifyStatusLabel(label) {
-  return String(label || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '') || 'status';
-}
-
-function statusKeyFromLabel(label, statuses) {
-  const base = slugifyStatusLabel(label);
-  let key = base;
-  let n = 2;
-  while (statuses[key]) {
-    key = `${base}${n}`;
-    n += 1;
-  }
-  return key;
-}
-
-function routeKeyFromLabel(label, routes = {}) {
-  const base = String(label || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '') || 'subcategory';
-  let key = base;
-  let n = 2;
-  while (routes[key]) {
-    key = `${base}_${n}`;
-    n += 1;
-  }
-  return key;
-}
-
-function assignableStatusKeys(statuses) {
-  return Object.entries(statuses || {})
-    .filter(([key]) => key !== 'open' && key !== 'resolved')
-    .sort((a,b) => (a[1]?.order ?? 999) - (b[1]?.order ?? 999))
-    .map(([key]) => key);
-}
-
-function normalizeStatusRecord(key, item, order) {
-  const safeLabel = String(item?.label || key || 'Status').trim() || key;
-  const slug = slugifyStatusLabel(safeLabel);
-  const color = String(item?.cssColor || item?.swipeColor || '#8b949e');
-  return {
-    label: safeLabel,
-    shortLabel: String(item?.shortLabel || safeLabel),
-    icon: String(item?.icon || '●'),
-    cssColor: color,
-    swipeColor: String(item?.swipeColor || color),
-    floorCls: String(item?.floorCls || (key === 'resolved' ? 'all-resolved' : `has-${slug}`)),
-    cls: String(item?.cls || `status-${slug}`),
-    subs: Array.isArray(item?.subs) ? item.subs.map(v => String(v).trim()).filter(Boolean) : [],
-    statLabel: String(item?.statLabel || safeLabel),
-    order: Number.isFinite(Number(item?.order)) ? Number(item.order) : order
-  };
 }
 
 function normalizeRowId(press, cavity, usedIds) {
@@ -1381,103 +1324,15 @@ async function commitInChunks(ops, maxPerBatch = 450) {
 }
 
 function normalizeStatusesForSave(rawStatuses) {
-  const normalized = {};
-  const entries = Object.entries(rawStatuses || {}).sort((a,b) => (a[1]?.order ?? 999) - (b[1]?.order ?? 999));
-  entries.forEach(([key, item], idx) => {
-    normalized[key] = normalizeStatusRecord(key, item, idx);
-  });
-  if (!normalized.open) normalized.open = normalizeStatusRecord('open', DEFAULT_STATUSES.open, 0);
-  if (!normalized.resolved) normalized.resolved = normalizeStatusRecord('resolved', DEFAULT_STATUSES.resolved, Object.keys(normalized).length);
-  Object.entries(CANONICAL_OPTIONAL_STATUSES).forEach(([key, value]) => {
-    if (!normalized[key]) normalized[key] = normalizeStatusRecord(key, value, Object.keys(normalized).length);
-  });
-  return normalized;
+  return normalizeSharedStatusesForSave(rawStatuses, DEFAULT_STATUSES, CANONICAL_OPTIONAL_STATUSES);
 }
 
 function normalizeSubcategoryRoutes(rawRoutes, statuses) {
-  const normalized = {};
-  const validStatusKeys = new Set(assignableStatusKeys(statuses));
-  const labelToKey = new Map();
-
-  Object.entries(rawRoutes || {}).forEach(([rawKey, raw], idx) => {
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return;
-    const label = String(raw.label || raw.subcategory || rawKey || '').trim();
-    if (!label) return;
-    const key = String(rawKey || '').trim() || routeKeyFromLabel(label, normalized);
-    const boundSource = raw.boundStatusKeys || raw.categoryKeys || raw.statusKeys || [];
-    const boundStatusKeys = Array.isArray(boundSource)
-      ? Array.from(new Set(boundSource.map(v => String(v || '').trim()).filter(v => validStatusKeys.has(v))))
-      : [];
-    normalized[key] = {
-      label,
-      boundStatusKeys,
-      isActive: raw.isActive !== false,
-      order: Number.isFinite(Number(raw.order)) ? Number(raw.order) : idx
-    };
-    labelToKey.set(label.toLowerCase(), key);
-  });
-
-  Object.entries(statuses || {}).forEach(([statusKey, status]) => {
-    if (!validStatusKeys.has(statusKey)) return;
-    (status.subs || []).forEach(sub => {
-      const label = String(sub || '').trim();
-      if (!label) return;
-      const labelKey = label.toLowerCase();
-      const existingKey = labelToKey.get(labelKey);
-      if (existingKey) {
-        const route = normalized[existingKey];
-        if (!route.boundStatusKeys.includes(statusKey)) route.boundStatusKeys.push(statusKey);
-        return;
-      }
-      const key = routeKeyFromLabel(label, normalized);
-      normalized[key] = {
-        label,
-        boundStatusKeys: [statusKey],
-        isActive: true,
-        order: Object.keys(normalized).length
-      };
-      labelToKey.set(labelKey, key);
-    });
-  });
-
-  return Object.fromEntries(Object.entries(normalized).sort((a,b) =>
-    (a[1].order ?? 999) - (b[1].order ?? 999)
-    || a[1].label.localeCompare(b[1].label, undefined, { sensitivity: 'base' })
-  ));
+  return normalizeSharedSubcategoryRoutes(rawRoutes, statuses, { includeStatusSubs: true });
 }
 
 function syncStatusesFromSubcategoryRoutes(statuses, routes) {
-  const synced = deepCopy(statuses || {});
-  const validStatusKeys = assignableStatusKeys(synced);
-  const routeLabels = new Set(Object.values(routes || {})
-    .map(route => String(route?.label || '').trim().toLowerCase())
-    .filter(Boolean));
-  validStatusKeys.forEach(statusKey => {
-    synced[statusKey].subs = Array.isArray(synced[statusKey].subs)
-      ? synced[statusKey].subs.map(v => String(v || '').trim()).filter(Boolean)
-      : [];
-    if (routeLabels.size) {
-      synced[statusKey].subs = synced[statusKey].subs.filter(sub => !routeLabels.has(sub.toLowerCase()));
-    }
-  });
-
-  Object.values(routes || {}).forEach(route => {
-    if (!route || route.isActive === false) return;
-    const label = String(route.label || '').trim();
-    if (!label) return;
-    (route.boundStatusKeys || []).forEach(statusKey => {
-      if (!validStatusKeys.includes(statusKey) || !synced[statusKey]) return;
-      const exists = (synced[statusKey].subs || []).some(sub => sub.toLowerCase() === label.toLowerCase());
-      if (!exists) synced[statusKey].subs.push(label);
-    });
-  });
-
-  validStatusKeys.forEach(statusKey => {
-    synced[statusKey].subs = Array.from(new Map((synced[statusKey].subs || [])
-      .map(sub => [sub.toLowerCase(), sub])).values())
-      .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
-  });
-  return synced;
+  return syncSharedStatusesFromSubcategoryRoutes(statuses, routes);
 }
 
 async function finalizeRedirectSignIn() {
@@ -1542,14 +1397,16 @@ async function loadUserPlants() {
 
 async function loadMembersAndStatusesForAdminPlants() {
   membersByPlant.clear();
+  accessRequestsByPlant.clear();
   statusDraftByPlant.clear();
   subcategoryRouteDraftByPlant.clear();
   gameDraftByPlant.clear();
   missionDraftByPlant.clear();
   pressDraftByPlant.clear();
   for (const plantId of adminPlantIds) {
-    const [membersSnap, statusesSnap, gameConfigSnap, missionsSnap, pressesSnap] = await Promise.all([
+    const [membersSnap, requestsSnap, statusesSnap, gameConfigSnap, missionsSnap, pressesSnap] = await Promise.all([
       getDocs(collection(db, 'plants', plantId, 'members')),
+      getDocs(collection(db, 'plants', plantId, 'accessRequests')),
       getDoc(doc(db, 'plants', plantId, 'config', 'statuses')),
       getDoc(doc(db, 'plants', plantId, 'gamificationConfig', 'main')),
       getDocs(collection(db, 'plants', plantId, 'missions')),
@@ -1557,6 +1414,12 @@ async function loadMembersAndStatusesForAdminPlants() {
     ]);
 
     membersByPlant.set(plantId, membersSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+    accessRequestsByPlant.set(
+      plantId,
+      requestsSnap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter(r => String(r.status || 'pending') === 'pending')
+    );
 
     const rawStatuses = statusesSnap.exists() && statusesSnap.data()?.statuses
       ? statusesSnap.data().statuses
@@ -2179,6 +2042,7 @@ function renderPlantsUsers() {
 
   for (const plant of sortedPlants) {
     const members = (membersByPlant.get(plant.id) || []).sort((a,b) => (a.displayName || a.email || '').localeCompare(b.displayName || b.email || ''));
+    const accessRequests = (accessRequestsByPlant.get(plant.id) || []).sort((a,b) => (a.fullName || a.displayName || a.email || '').localeCompare(b.fullName || b.displayName || b.email || ''));
     const memberIds = new Set(members.map(m => m.userId || m.id));
     const availableUsers = userDirectory.filter(u => u.uid !== currentUser.uid && !memberIds.has(u.uid));
     const userOptions = availableUsers.map(u => {
@@ -2212,6 +2076,28 @@ function renderPlantsUsers() {
     }).join('');
 
     const activeTab = plantTab[plant.id] || 'members';
+    const requestRows = accessRequests.map(req => {
+      const label = req.fullName || req.displayName || req.email || req.userId || req.uid || 'Unknown';
+      const uid = req.userId || req.uid || req.id;
+      return `
+        <tr>
+          <td>
+            ${esc(label)}
+            <div class="muted" style="font-size:11px;">${esc(req.email || '')}${req.ssoNumber ? ` · SSO ${esc(req.ssoNumber)}` : ''}</div>
+          </td>
+          <td>
+            <select id="request-role-${plant.id}-${uid}" style="max-width:120px;">
+              <option value="editor">editor</option>
+              <option value="viewer">viewer</option>
+              <option value="admin">admin</option>
+            </select>
+          </td>
+          <td>
+            <button class="small-btn" onclick="window.approveAccessRequest('${plant.id}','${uid}')">Approve</button>
+            <button class="small-btn danger" onclick="window.declineAccessRequest('${plant.id}','${uid}')">Decline</button>
+          </td>
+        </tr>`;
+    }).join('');
     card.innerHTML = `
       <div class="plant-head">
         <div>
@@ -2237,6 +2123,15 @@ function renderPlantsUsers() {
         </div>
 
         <div class="plant-tab-pane ${activeTab === 'members' ? 'active' : ''}" id="ptab-members-${plant.id}">
+          <div style="margin-bottom:12px;">
+            <div class="muted" style="margin-bottom:6px;">Pending access requests</div>
+            <table>
+              <thead>
+                <tr><th>User</th><th>Role</th><th>Action</th></tr>
+              </thead>
+              <tbody>${requestRows || '<tr><td colspan="3" class="muted">No pending requests.</td></tr>'}</tbody>
+            </table>
+          </div>
           <table>
             <thead>
               <tr><th>User</th><th>Role</th><th>Action</th></tr>
@@ -3181,6 +3076,62 @@ window.updateRole = async function(plantId, userId, role) {
   } catch (e) {
     console.error(e);
     alert(e.message || 'Failed to update role.');
+  }
+};
+
+window.approveAccessRequest = async function(plantId, userId) {
+  const roleEl = document.getElementById(`request-role-${plantId}-${userId}`);
+  const role = roleEl?.value || 'editor';
+  try {
+    const reqRef = doc(db, 'plants', plantId, 'accessRequests', userId);
+    const reqSnap = await getDoc(reqRef);
+    if (!reqSnap.exists()) throw new Error('Request no longer exists.');
+    const req = reqSnap.data() || {};
+    const existing = await getDoc(doc(db, 'plants', plantId, 'members', userId));
+    if (existing.exists() && existing.data().isActive) throw new Error('User is already a member of this plant.');
+
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'plants', plantId, 'members', userId), {
+      userId,
+      displayName: req.fullName || req.displayName || req.email || '',
+      fullName: req.fullName || '',
+      ssoNumber: req.ssoNumber || '',
+      email: req.email || '',
+      photoURL: req.photoURL || '',
+      role,
+      isActive: true,
+      addedAt: serverTimestamp(),
+      addedBy: { uid: currentUser.uid, name: currentUser.displayName || currentUser.email || '' },
+      permissions: defaultPermsForRole(role)
+    });
+    batch.set(doc(db, 'users', userId), { plantIds: arrayUnion(plantId) }, { merge: true });
+    batch.set(reqRef, {
+      status: 'approved',
+      reviewedAt: serverTimestamp(),
+      reviewedBy: { uid: currentUser.uid, name: currentUser.displayName || currentUser.email || '' },
+      approvedRole: role
+    }, { merge: true });
+    await batch.commit();
+    feedback(`fb-${plantId}`, 'ok', `Approved ${req.fullName || req.email || userId} as ${role}.`);
+    await refreshAdminData();
+  } catch (e) {
+    console.error(e);
+    feedback(`fb-${plantId}`, 'error', e.message || 'Failed to approve request.');
+  }
+};
+
+window.declineAccessRequest = async function(plantId, userId) {
+  try {
+    await updateDoc(doc(db, 'plants', plantId, 'accessRequests', userId), {
+      status: 'declined',
+      reviewedAt: serverTimestamp(),
+      reviewedBy: { uid: currentUser.uid, name: currentUser.displayName || currentUser.email || '' }
+    });
+    feedback(`fb-${plantId}`, 'ok', 'Request declined.');
+    await refreshAdminData();
+  } catch (e) {
+    console.error(e);
+    feedback(`fb-${plantId}`, 'error', e.message || 'Failed to decline request.');
   }
 };
 

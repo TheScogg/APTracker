@@ -25,9 +25,9 @@
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&family=Nunito:wght@300;400;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="./build-info.js?v=2f43771-dirty"></script>
+<script src="./build-info.js?v=eec835b-dirty"></script>
 <script src="./fcm-config.js?v=ae083d6"></script>
-<link rel="stylesheet" href="./styles.css?v=2f43771-dirty">
+<link rel="stylesheet" href="./styles.css?v=eec835b-dirty">
 </head>
 <body>
 
@@ -42,12 +42,47 @@
   </div>
 </div>
 
+<div class="modal-overlay profile-onboarding-overlay" id="profile-onboarding-modal">
+  <div class="modal profile-onboarding-modal" role="dialog" aria-modal="true" aria-labelledby="profile-onboarding-title">
+    <div class="modal-kicker">Profile setup</div>
+    <div class="modal-title" id="profile-onboarding-title">Request plant access</div>
+    <div class="modal-subtitle">Confirm your identity and choose the plants you need. An admin will review and approve access.</div>
+
+    <label class="onboarding-field">
+      <span>Full name</span>
+      <input type="text" id="profile-onboarding-full-name" autocomplete="name" placeholder="First and last name">
+    </label>
+
+    <label class="onboarding-field">
+      <span>SSO number</span>
+      <input type="text" id="profile-onboarding-sso" inputmode="numeric" autocomplete="off" placeholder="Employee SSO">
+    </label>
+
+    <div class="onboarding-field">
+      <span>Plants</span>
+      <div class="onboarding-plant-picker" id="profile-onboarding-plant-picker">
+        <button class="onboarding-plant-toggle" id="profile-onboarding-plant-toggle" type="button" aria-haspopup="listbox" aria-expanded="false">
+          <span id="profile-onboarding-plant-label">Select plants</span>
+          <span aria-hidden="true">▾</span>
+        </button>
+        <div class="onboarding-plant-menu" id="profile-onboarding-plant-menu" role="listbox" aria-multiselectable="true"></div>
+      </div>
+      <div class="onboarding-help">This sends an access request. It does not grant access until an admin approves it.</div>
+    </div>
+
+    <div class="onboarding-error" id="profile-onboarding-error" role="alert"></div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" id="profile-onboarding-submit" type="button">Continue</button>
+    </div>
+  </div>
+</div>
+
 <!-- APP -->
 <div id="app">
   <div id="sync-banner" class="visible">
     <div class="sync-dot" id="sync-dot"></div>
     <span id="sync-text">Connecting…</span>
-    <span id="app-version-indicator" class="app-version-indicator" title="Current commit version">rev: 2f43771</span>
+    <span id="app-version-indicator" class="app-version-indicator" title="Current commit version">rev: eec835b</span>
     <span id="firestore-io-indicator" class="firestore-io-indicator" title="Estimated Firestore operations for this session">R:0 W:0</span>
   </div>
 
@@ -1410,7 +1445,7 @@
   </div>
 </div>
 
-<script type="module" src="./app.js?v=2f43771-dirty"></script>
+<script type="module" src="./app.js?v=eec835b-dirty"></script>
 
 <!-- MASCOT CHARACTER CARD POPOVER -->
 <div class="mascot-popover-backdrop" id="mascot-popover-backdrop" onclick="if(event.target===this)closeMascotPopover()">

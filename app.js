@@ -3,6 +3,10 @@ import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, 
 import { getAuth, setPersistence, browserLocalPersistence, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut as fbSignOut, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getStorage, ref as storageRef, uploadString, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 import { getMessaging, getToken, isSupported as isMessagingSupported, onMessage } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
+import {
+  normalizeSubcategoryRoutes as normalizeSharedSubcategoryRoutes,
+  syncStatusesFromSubcategoryRoutes as syncSharedStatusesFromSubcategoryRoutes
+} from "./shared-config.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyABjasNBbJnsqq4M_UxKruKrN6-O2FXCwc",
@@ -302,8 +306,11 @@ refreshAppVersionIndicator();
 let currentPlantId = null;
 let currentPlantName = '';
 let userPlants = []; // [{ id, name, location }]
+let availablePlantsForOnboarding = [];
+let currentUserProfileData = {};
 const scheduleLookupCache = new Map();
 const USER_LOOKUP_HEARTBEAT_MS = 12 * 60 * 60 * 1000;
+const PROFILE_ONBOARDING_VERSION = 1;
 // Firestore read optimization:
 // Keep the real-time listener window tight, and load older issues on demand.
 const MAX_LIVE_ISSUES = 100;
@@ -392,59 +399,15 @@ function _normalizeRoleAlertRules(inputRules) {
 }
 
 function normalizeSubcategoryRoutes(rawRoutes, statuses = STATUSES) {
-  if (!rawRoutes || typeof rawRoutes !== 'object' || Array.isArray(rawRoutes)) return {};
-  const validStatusKeys = new Set(Object.keys(statuses || {}).filter(key => key !== 'open' && key !== 'resolved'));
-  const normalized = {};
-  Object.entries(rawRoutes).forEach(([rawKey, raw], idx) => {
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return;
-    const label = String(raw.label || raw.subcategory || rawKey || '').trim();
-    if (!label) return;
-    const boundSource = raw.boundStatusKeys || raw.categoryKeys || raw.statusKeys || [];
-    const boundStatusKeys = Array.isArray(boundSource)
-      ? Array.from(new Set(boundSource.map(v => String(v || '').trim().toLowerCase()).filter(v => validStatusKeys.has(v))))
-      : [];
-    normalized[String(rawKey || label).trim().toLowerCase()] = {
-      label,
-      boundStatusKeys,
-      isActive: raw.isActive !== false,
-      order: Number.isFinite(Number(raw.order)) ? Number(raw.order) : idx
-    };
+  return normalizeSharedSubcategoryRoutes(rawRoutes, statuses, {
+    lowercaseRouteKeys: true,
+    lowercaseBoundStatusKeys: true,
+    sortRoutes: false
   });
-  return normalized;
 }
 
 function syncStatusesFromSubcategoryRoutes(statuses, routes) {
-  const synced = JSON.parse(JSON.stringify(statuses || {}));
-  const validStatusKeys = Object.keys(synced).filter(key => key !== 'open' && key !== 'resolved');
-  const routeLabels = new Set(Object.values(routes || {})
-    .map(route => String(route?.label || '').trim().toLowerCase())
-    .filter(Boolean));
-  validStatusKeys.forEach(statusKey => {
-    synced[statusKey].subs = Array.isArray(synced[statusKey].subs)
-      ? synced[statusKey].subs.map(v => String(v || '').trim()).filter(Boolean)
-      : [];
-    if (routeLabels.size) {
-      synced[statusKey].subs = synced[statusKey].subs.filter(sub => !routeLabels.has(sub.toLowerCase()));
-    }
-  });
-
-  Object.values(routes || {}).forEach(route => {
-    if (!route || route.isActive === false) return;
-    const label = String(route.label || '').trim();
-    if (!label) return;
-    (route.boundStatusKeys || []).forEach(statusKey => {
-      if (!validStatusKeys.includes(statusKey) || !synced[statusKey]) return;
-      const exists = (synced[statusKey].subs || []).some(sub => sub.toLowerCase() === label.toLowerCase());
-      if (!exists) synced[statusKey].subs.push(label);
-    });
-  });
-
-  validStatusKeys.forEach(statusKey => {
-    synced[statusKey].subs = Array.from(new Map((synced[statusKey].subs || [])
-      .map(sub => [sub.toLowerCase(), sub])).values())
-      .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
-  });
-  return synced;
+  return syncSharedStatusesFromSubcategoryRoutes(statuses, routes);
 }
 
 function resolveConfiguredSubcategoryRoute(subStatus) {
@@ -1840,6 +1803,8 @@ async function loadUserPlants() {
   try {
     const userSnap = await getDoc(doc(db, 'users', currentUser.uid));
     const userData = userSnap.exists() ? userSnap.data() : {};
+    currentUserProfileData = userData || {};
+    availablePlantsForOnboarding = await loadAvailablePlantsForOnboarding();
     _applyFirestoreThemePrefs(userData.themePrefs);
     userLifetimeXp = Number(userData.globalLifetimeXp || 0);
     userXpSpent = Number(userData.globalXpSpent || 0);
@@ -1868,11 +1833,8 @@ async function loadUserPlants() {
       await _migratePlantsToNewStructure(userPlants);
 
     } else {
-      // ── No plants yet: create default ──
-      currentPlantId = 'default';
-      userPlants = [{ id: 'default', name: 'Main Plant', location: '' }];
-      await _initNewPlant('default', 'Main Plant', '');
-      await setDoc(doc(db, 'users', currentUser.uid), { plantIds: ['default'], lastPlant: 'default' }, { merge: true });
+      currentPlantId = null;
+      userPlants = [];
     }
 
     currentPlantName = (userPlants.find(p => p.id === currentPlantId) || {}).name || currentPlantId;
@@ -1888,6 +1850,20 @@ async function loadUserPlants() {
     userPlants = [];
     document.getElementById('plant-name-display').textContent = 'Unable to load plants';
     throw e;
+  }
+}
+
+async function loadAvailablePlantsForOnboarding() {
+  if (DEMO_MODE || NO_AUTH_MODE) return [];
+  try {
+    const snap = await getDocs(collection(db, 'plants'));
+    return snap.docs
+      .map(d => ({ id: d.id, name: d.data().name || d.id, location: d.data().location || '', isActive: d.data().isActive !== false }))
+      .filter(p => p.isActive)
+      .sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
+  } catch (e) {
+    console.warn('Could not load plant directory for onboarding', e);
+    return [...userPlants];
   }
 }
 
@@ -3696,6 +3672,209 @@ function applyUserIdentityToShell(user) {
   }
 }
 
+function applyOnboardingIdentityToShell(profile = {}) {
+  const fullName = String(profile.fullName || '').trim();
+  if (!fullName) return;
+  const firstName = fullName.split(/\s+/)[0] || fullName;
+  const nameEl = document.getElementById('user-name-display');
+  const fullNameEl = document.getElementById('dropdown-full-name');
+  if (nameEl) nameEl.textContent = firstName;
+  if (fullNameEl) fullNameEl.textContent = fullName;
+}
+
+function profileOnboardingComplete(profile = {}) {
+  return profile.profileOnboarding?.completed === true
+    && String(profile.fullName || '').trim()
+    && String(profile.ssoNumber || '').trim()
+    && Array.isArray(profile.requestedPlantIds)
+    && profile.requestedPlantIds.length > 0;
+}
+
+function setProfileOnboardingError(message = '') {
+  const el = document.getElementById('profile-onboarding-error');
+  if (el) el.textContent = message;
+}
+
+function selectedProfileOnboardingPlantIds() {
+  return Array.from(document.querySelectorAll('#profile-onboarding-plant-menu input[type="checkbox"]:checked'))
+    .map(input => input.value)
+    .filter(Boolean);
+}
+
+function updateProfileOnboardingPlantLabel() {
+  const label = document.getElementById('profile-onboarding-plant-label');
+  if (!label) return;
+  const selected = new Set(selectedProfileOnboardingPlantIds());
+  if (!selected.size) {
+    label.textContent = 'Select plants';
+    return;
+  }
+  const names = availablePlantsForOnboarding.filter(p => selected.has(p.id)).map(p => p.name || p.id);
+  label.textContent = names.length === 1 ? names[0] : `${names.length} plants selected`;
+}
+
+function closeProfileOnboardingPlantMenu() {
+  document.getElementById('profile-onboarding-plant-menu')?.classList.remove('visible');
+  const btn = document.getElementById('profile-onboarding-plant-toggle');
+  btn?.classList.remove('open');
+  btn?.setAttribute('aria-expanded', 'false');
+}
+
+function renderProfileOnboardingPlants(selectedIds = []) {
+  const menu = document.getElementById('profile-onboarding-plant-menu');
+  if (!menu) return;
+  const selected = new Set(selectedIds.filter(Boolean));
+  menu.innerHTML = availablePlantsForOnboarding.map(plant => {
+    const checked = selected.has(plant.id) ? 'checked' : '';
+    const location = plant.location ? `<small>${esc(plant.location)}</small>` : '';
+    return `<label class="onboarding-plant-option" role="option" aria-selected="${checked ? 'true' : 'false'}">
+      <input type="checkbox" value="${esc(plant.id)}" ${checked}>
+      <span>${esc(plant.name || plant.id)}</span>
+      ${location}
+    </label>`;
+  }).join('');
+  updateProfileOnboardingPlantLabel();
+}
+
+async function completeProfileOnboarding() {
+  const fullName = String(document.getElementById('profile-onboarding-full-name')?.value || '').trim();
+  const ssoNumber = String(document.getElementById('profile-onboarding-sso')?.value || '').trim();
+  const plantIds = selectedProfileOnboardingPlantIds();
+  if (!fullName) throw new Error('Full name is required.');
+  if (!ssoNumber) throw new Error('SSO number is required.');
+  if (!plantIds.length) throw new Error('Choose at least one plant.');
+  const availableIds = new Set(availablePlantsForOnboarding.map(p => p.id));
+  const safePlantIds = plantIds.filter(id => availableIds.has(id));
+  if (!safePlantIds.length) throw new Error('Choose at least one plant.');
+
+  const existingPlantIds = userPlants.map(p => p.id).filter(Boolean);
+  const batch = writeBatch(db);
+  batch.set(doc(db, 'users', currentUser.uid), {
+    displayName: currentUser.displayName || currentUser.email || '',
+    email: currentUser.email || '',
+    photoURL: currentUser.photoURL || '',
+    fullName,
+    ssoNumber,
+    requestedPlantIds: safePlantIds,
+    profileOnboarding: {
+      completed: true,
+      completedAt: serverTimestamp(),
+      version: PROFILE_ONBOARDING_VERSION
+    },
+    updatedAt: serverTimestamp(),
+    createdAt: currentUserProfileData.createdAt || serverTimestamp()
+  }, { merge: true });
+  safePlantIds.filter(plantId => !existingPlantIds.includes(plantId)).forEach(plantId => {
+    batch.set(doc(db, 'plants', plantId, 'accessRequests', currentUser.uid), {
+      uid: currentUser.uid,
+      userId: currentUser.uid,
+      displayName: fullName,
+      fullName,
+      ssoNumber,
+      email: currentUser.email || '',
+      photoURL: currentUser.photoURL || '',
+      requestedPlantId: plantId,
+      requestedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      status: 'pending'
+    }, { merge: true });
+  });
+  await batch.commit();
+
+  currentUserProfileData = {
+    ...currentUserProfileData,
+    fullName,
+    ssoNumber,
+    requestedPlantIds: safePlantIds,
+    profileOnboarding: { completed: true, version: PROFILE_ONBOARDING_VERSION }
+  };
+  applyOnboardingIdentityToShell(currentUserProfileData);
+}
+
+function showProfileOnboardingIfNeeded(profile = {}) {
+  if (DEMO_MODE || NO_AUTH_MODE || profileOnboardingComplete(profile)) {
+    applyOnboardingIdentityToShell(profile);
+    return Promise.resolve();
+  }
+  const overlay = document.getElementById('profile-onboarding-modal');
+  const nameInput = document.getElementById('profile-onboarding-full-name');
+  const ssoInput = document.getElementById('profile-onboarding-sso');
+  const submitBtn = document.getElementById('profile-onboarding-submit');
+  if (!overlay || !nameInput || !ssoInput || !submitBtn) return Promise.resolve();
+
+  const existingSelection = Array.isArray(profile.requestedPlantIds) && profile.requestedPlantIds.length
+    ? profile.requestedPlantIds
+    : userPlants.map(p => p.id);
+  nameInput.value = String(profile.fullName || currentUser?.displayName || '').trim();
+  ssoInput.value = String(profile.ssoNumber || '').trim();
+  renderProfileOnboardingPlants(existingSelection);
+  setProfileOnboardingError('');
+  overlay.classList.add('visible');
+  setTimeout(() => (nameInput.value ? ssoInput : nameInput).focus(), 50);
+
+  return new Promise(resolve => {
+    submitBtn.onclick = async () => {
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Saving…';
+      setProfileOnboardingError('');
+      try {
+        await completeProfileOnboarding();
+        overlay.classList.remove('visible');
+        closeProfileOnboardingPlantMenu();
+        resolve();
+      } catch (e) {
+        setProfileOnboardingError(e.message || 'Could not save profile.');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Continue';
+      }
+    };
+  });
+}
+
+function renderPendingPlantAccessState() {
+  document.getElementById('plant-name-display').textContent = 'Access pending';
+  const issuesList = document.getElementById('issues-list');
+  if (issuesList) {
+    issuesList.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon">⏳</div>
+        <div class="empty-state-text" style="margin-bottom:8px;">Your plant access request is pending admin approval.</div>
+        <div class="empty-state-text">Once approved, reload AP Tracker and your assigned plants will appear here.</div>
+      </div>`;
+  }
+  const issueCount = document.getElementById('issue-count');
+  if (issueCount) issueCount.textContent = '0 issues';
+  const statRow = document.getElementById('stat-pills-row');
+  if (statRow) statRow.querySelectorAll('[id^="stat-"]').forEach(el => {
+    const parts = String(el.textContent || '').split(' ');
+    el.textContent = `0 ${parts.slice(1).join(' ') || ''}`.trim();
+  });
+  buildPlantDropdown();
+}
+
+document.getElementById('profile-onboarding-plant-toggle')?.addEventListener('click', e => {
+  e.preventDefault();
+  const menu = document.getElementById('profile-onboarding-plant-menu');
+  const btn = document.getElementById('profile-onboarding-plant-toggle');
+  if (!menu || !btn) return;
+  const isOpen = menu.classList.contains('visible');
+  menu.classList.toggle('visible', !isOpen);
+  btn.classList.toggle('open', !isOpen);
+  btn.setAttribute('aria-expanded', String(!isOpen));
+});
+
+document.getElementById('profile-onboarding-plant-menu')?.addEventListener('change', e => {
+  if (!e.target?.matches?.('input[type="checkbox"]')) return;
+  e.target.closest('.onboarding-plant-option')?.setAttribute('aria-selected', e.target.checked ? 'true' : 'false');
+  updateProfileOnboardingPlantLabel();
+});
+
+document.addEventListener('click', e => {
+  const picker = document.getElementById('profile-onboarding-plant-picker');
+  if (picker && !picker.contains(e.target)) closeProfileOnboardingPlantMenu();
+});
+
 async function bootstrapNoAuthSession() {
   currentUser = { ...NO_AUTH_USER };
   const loginScreen = document.getElementById('login-screen');
@@ -3776,6 +3955,13 @@ async function bootstrapSignedInSession(user) {
     } catch (e) {
       console.error('Plant recovery error:', e);
     }
+  }
+  await showProfileOnboardingIfNeeded(currentUserProfileData);
+  if (!currentPlantId) {
+    renderPendingPlantAccessState();
+    setTodayDate();
+    scheduleFcmTokenRegistration();
+    return;
   }
   await hydrateCurrentPlantView();
   gameConfig = null;

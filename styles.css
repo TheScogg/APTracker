@@ -2756,6 +2756,102 @@
     opacity: 1;
     transform: translateY(0) scale(1);
   }
+  .profile-onboarding-overlay { z-index: 1200; }
+  .profile-onboarding-modal { width: min(520px, 94vw); }
+  .onboarding-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 14px 0;
+    color: var(--text2);
+    font-family: 'Nunito', sans-serif;
+    font-size: 12px;
+    font-weight: 800;
+  }
+  .onboarding-field input[type="text"] {
+    width: 100%;
+    box-sizing: border-box;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: 'Nunito', sans-serif;
+    font-size: 14px;
+    padding: 10px 12px;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .onboarding-field input[type="text"]:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
+  }
+  .onboarding-plant-picker { position: relative; }
+  .onboarding-plant-toggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: 'Nunito', sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    padding: 10px 12px;
+    cursor: pointer;
+    text-align: left;
+  }
+  .onboarding-plant-toggle.open {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .onboarding-plant-menu {
+    display: none;
+    margin-top: 6px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg2);
+    max-height: 210px;
+    overflow-y: auto;
+    box-shadow: 0 12px 30px rgba(0,0,0,0.35);
+  }
+  .onboarding-plant-menu.visible { display: block; }
+  .onboarding-plant-option {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    color: var(--text2);
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .onboarding-plant-option:last-child { border-bottom: none; }
+  .onboarding-plant-option:hover { background: var(--bg3); color: var(--text); }
+  .onboarding-plant-option input { accent-color: var(--accent); }
+  .onboarding-plant-option small {
+    color: var(--text3);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    font-weight: 600;
+    margin-left: auto;
+  }
+  .onboarding-help {
+    color: var(--text3);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.35;
+  }
+  .onboarding-error {
+    min-height: 18px;
+    color: var(--red);
+    font-size: 12px;
+    font-weight: 800;
+    margin-top: 4px;
+  }
   .add-issue-modal { width: min(560px, 95vw); }
   .modal-title { font-family: 'Rajdhani', sans-serif; font-size: 20px; font-weight: 700; letter-spacing: 1px; margin-bottom: 5px; }
   .modal-machine { color: var(--accent); }

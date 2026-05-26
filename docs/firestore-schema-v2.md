@@ -58,6 +58,14 @@ Keep this document lightweight and user-centric.
   "displayName": "James Scoggins",
   "email": "james@example.com",
   "photoURL": "https://...",
+  "fullName": "James Scoggins",
+  "ssoNumber": "123456",
+  "requestedPlantIds": ["plant_jef", "plant_lou"],
+  "profileOnboarding": {
+    "completed": true,
+    "completedAt": "serverTimestamp",
+    "version": 1
+  },
   "defaultPlantId": "plant_jef",
   "recentPlantIds": ["plant_jef", "plant_lou"],
   "createdAt": "serverTimestamp",
@@ -118,6 +126,8 @@ This becomes the source of truth for authorization and plant-specific roles.
 {
   "userId": "uid_123",
   "displayName": "James Scoggins",
+  "fullName": "James Scoggins",
+  "ssoNumber": "123456",
   "email": "james@example.com",
   "role": "owner",
   "isActive": true,
@@ -132,6 +142,26 @@ This becomes the source of truth for authorization and plant-specific roles.
   },
   "joinedAt": "serverTimestamp",
   "lastSeenAt": "serverTimestamp"
+}
+```
+
+### `plants/{plantId}/accessRequests/{userId}`
+
+Pending requests created during onboarding. These are not authorization; admins approve by creating the member doc and adding the plant to `users/{userId}.plantIds`.
+
+```json
+{
+  "uid": "uid_123",
+  "userId": "uid_123",
+  "displayName": "James Scoggins",
+  "fullName": "James Scoggins",
+  "ssoNumber": "123456",
+  "email": "james@example.com",
+  "photoURL": "https://...",
+  "requestedPlantId": "plant_jef",
+  "requestedAt": "serverTimestamp",
+  "updatedAt": "serverTimestamp",
+  "status": "pending"
 }
 ```
 
