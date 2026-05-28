@@ -3,8 +3,31 @@ import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, 
 import { getAuth, setPersistence, browserLocalPersistence, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut as fbSignOut, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getStorage, ref as storageRef, uploadString, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 import { getMessaging, getToken, isSupported as isMessagingSupported, onMessage } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
+import { alphaColor, esc, extFromContentType, localDateStr, parseDataUrlMeta } from "./app-utils.js";
+import { createDropdownController } from "./dropdown-ui.js";
 import { createFirebasePathHelpers } from "./firebase-paths.js";
+import { initExportTool } from "./export-tool.js";
+import { initIssueReminders } from "./issue-reminders.js";
 import { initTodosTool } from "./todos-tool.js";
+import {
+  normalizeChecklistItems,
+  noteTextFromHtml as _noteTextFromHtml,
+  sanitizeNoteHtml
+} from "./notes-utils.js";
+import {
+  BUILT_IN_THEME_DEFS,
+  THEME_EDITOR_CORE_VARS,
+  applyThemeVars as applyThemeVarsFromEngine,
+  clearThemeVars as clearThemeVarsFromEngine,
+  getThemePreviewColors,
+  inferThemeModeFromVars,
+  normalizeThemeColors,
+  normalizeThemeVars,
+  readSavedTheme,
+  removeThemeClasses,
+  saveThemeSelection,
+  themeLabelSansIcon
+} from "./theme-engine.js";
 import {
   normalizeSubcategoryRoutes as normalizeSharedSubcategoryRoutes,
   syncStatusesFromSubcategoryRoutes as syncSharedStatusesFromSubcategoryRoutes
@@ -1072,7 +1095,7 @@ window.openRolePreferencesModal = async function() {
       : [];
     const finalOptions = categoryOptions.length ? categoryOptions : [{ key:'maintenance', label:'Maintenance' }];
     list.innerHTML = finalOptions.map(opt => `
-      <label style="display:flex;align-items:center;gap:8px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:8px 10px;">
+      <label style="display:flex;align-items:center;gap:8px;background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:10px;padding:8px 10px;">
         <input type="checkbox" data-role-key="${esc(opt.key)}" ${_rolePrefsDraft.includes(opt.key) ? 'checked' : ''}>
         <span>${esc(opt.label)}</span>
       </label>
@@ -1378,7 +1401,7 @@ function renderScheduleSection(container, lookupDoc, scheduleDate) {
   if (lookupDoc.hasChanges) {
     const changes = document.createElement('span');
     changes.className = 'mc-schedule-pill';
-    changes.style.color = 'var(--accent)';
+    changes.style.color = 'var(--color-accent, var(--accent))';
     changes.textContent = `${lookupDoc.changes?.length || 0} change(s)`;
     meta.appendChild(changes);
   }
@@ -1513,77 +1536,6 @@ function queueIssueEvent(batch, issueId, type, payload = {}) {
     payload,
     schemaVersion: 2
   });
-}
-
-function extFromContentType(contentType) {
-  if (contentType === 'image/jpeg') return 'jpg';
-  if (contentType === 'image/png') return 'png';
-  if (contentType === 'image/webp') return 'webp';
-  return 'bin';
-}
-
-function parseDataUrlMeta(dataUrl) {
-  const m = String(dataUrl || '').match(/^data:([^;]+);base64,(.+)$/);
-  if (!m) return null;
-  const contentType = m[1] || 'application/octet-stream';
-  const base64Body = m[2] || '';
-  const sizeBytes = Math.max(0, Math.floor((base64Body.length * 3) / 4));
-  return { contentType, sizeBytes };
-}
-
-const NOTE_ALLOWED_TAGS = new Set(['P', 'BR', 'STRONG', 'B', 'EM', 'I', 'U', 'UL', 'OL', 'LI', 'A', 'DIV', 'SPAN', 'CODE', 'PRE', 'BLOCKQUOTE', 'H1', 'H2', 'H3']);
-
-function _noteTextFromHtml(html = '') {
-  const wrap = document.createElement('div');
-  wrap.innerHTML = sanitizeNoteHtml(html);
-  return String(wrap.textContent || '').replace(/\s+\n/g, '\n').trim();
-}
-
-function sanitizeNoteHtml(html = '') {
-  const source = String(html || '');
-  if (!source) return '';
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(`<div>${source}</div>`, 'text/html');
-  const root = doc.body.firstElementChild || doc.body;
-  const out = document.createElement('div');
-
-  const appendSanitized = (parentOut, node) => {
-    if (!node) return;
-    if (node.nodeType === Node.TEXT_NODE) {
-      parentOut.appendChild(document.createTextNode(node.textContent || ''));
-      return;
-    }
-    if (node.nodeType !== Node.ELEMENT_NODE) return;
-    const tag = String(node.tagName || '').toUpperCase();
-    if (!NOTE_ALLOWED_TAGS.has(tag)) {
-      node.childNodes.forEach(child => appendSanitized(parentOut, child));
-      return;
-    }
-    const el = document.createElement(tag.toLowerCase());
-    if (tag === 'A') {
-      const href = String(node.getAttribute('href') || '').trim();
-      if (href && !/^javascript:/i.test(href)) {
-        el.setAttribute('href', href);
-        el.setAttribute('rel', 'noopener noreferrer');
-        el.setAttribute('target', '_blank');
-      }
-    }
-    node.childNodes.forEach(child => appendSanitized(el, child));
-    parentOut.appendChild(el);
-  };
-
-  root.childNodes.forEach(child => appendSanitized(out, child));
-  return out.innerHTML;
-}
-
-function normalizeChecklistItems(items = []) {
-  return (Array.isArray(items) ? items : [])
-    .map(item => ({
-      id: String(item?.id || `chk_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`),
-      text: String(item?.text || ''),
-      done: Boolean(item?.done)
-    }))
-    .filter(item => item.id || item.text);
 }
 
 async function readFileAsDataUrl(file) {
@@ -2023,6 +1975,12 @@ async function switchPlant(plantId) {
   refreshVisibleData();
 }
 
+const plantDropdown = createDropdownController({
+  dropdownId: 'plant-dropdown',
+  buttonId: 'plant-switcher-btn',
+  wrapId: 'plant-switcher-wrap'
+});
+
 // Plant dropdown UI
 function buildPlantDropdown() {
   const dd = document.getElementById('plant-dropdown');
@@ -2039,22 +1997,15 @@ function buildPlantDropdown() {
   });
 }
 
-window.togglePlantDropdown = () => {
-  const dd = document.getElementById('plant-dropdown');
-  const btn = document.getElementById('plant-switcher-btn');
-  const isOpen = dd.classList.contains('visible');
-  dd.classList.toggle('visible', !isOpen);
-  btn.classList.toggle('open', !isOpen);
-};
+window.togglePlantDropdown = plantDropdown.toggle;
 
 function closePlantDropdown() {
-  document.getElementById('plant-dropdown')?.classList.remove('visible');
-  document.getElementById('plant-switcher-btn')?.classList.remove('open');
+  plantDropdown.close();
 }
 
+plantDropdown.bindOutsideClick();
+
 document.addEventListener('click', e => {
-  const wrap = document.getElementById('plant-switcher-wrap');
-  if (wrap && !wrap.contains(e.target)) closePlantDropdown();
   const drawer = document.getElementById('game-drawer');
   const gamePills = Array.from(document.querySelectorAll('.game-pill'));
   const gamePillEl = document.getElementById('game-pill');
@@ -2066,17 +2017,17 @@ document.addEventListener('click', e => {
 // ── SINGLE SOURCE OF TRUTH FOR STATUSES ──
 // Loaded from Firestore config doc on startup. Edit via the admin panel (user menu → Manage Statuses).
 let STATUSES = {
-  open:            { label:'Open',             shortLabel:'Open',         icon:'●',  cssColor:'var(--red)',      swipeColor:'#ef4444', floorCls:'has-open',            cls:'status-open',            subs:['New Fault / Issue','Pending Triage','Scheduled Mold Change','Re-opened'],                                               statLabel:'Open',          order:0 },
+  open:            { label:'Open',             shortLabel:'Open',         icon:'●',  cssColor:'var(--color-danger, var(--red))',      swipeColor:'#ef4444', floorCls:'has-open',            cls:'status-open',            subs:['New Fault / Issue','Pending Triage','Scheduled Mold Change','Re-opened'],                                               statLabel:'Open',          order:0 },
   alert:           { label:'Alert',            shortLabel:'Alert',        icon:'🚨', cssColor:'#dc2626',         swipeColor:'#dc2626', floorCls:'has-alert',           cls:'status-alert',           subs:['Mold Protection Fault','E-Stop / Safety Hazard','Press Down - Critical','Major Oil / Fluid Leak'],                   statLabel:'Alert',         order:1 },
   attention:       { label:'Attention',        shortLabel:'Attention',    icon:'◇',  cssColor:'#0ea5e9',         swipeColor:'#0ea5e9', floorCls:'has-attention',       cls:'status-attention',       subs:['Watch Item','Needs Follow-up','Housekeeping','PM Opportunity','Operator Note','Check Next Run'],                  statLabel:'Attention',     order:1.5 },
-  controlman:      { label:'Controlman',       shortLabel:'Controlman',   icon:'🎛️', cssColor:'var(--babyblue)', swipeColor:'#38bdf8', floorCls:'has-controlman',      cls:'status-controlman',      subs:['Robot / EOAT (End of Arm Tooling) Fault','Vision System / Camera Error','Conveyor / Auxiliary Comm Loss','PLC / HMI Error'], statLabel:'Controlman',    order:2 },
-  maintenance:     { label:'Maintenance',      shortLabel:'Maintenance',  icon:'🔧', cssColor:'var(--yellow)',   swipeColor:'#eab308', floorCls:'has-maintenance',     cls:'status-maintenance',     subs:['Hydraulic Leak / Pressure Drop','Heater Band / Thermocouple Failure','Barrel / Screw / Check Ring Issue','Chiller / Thermolator Failure'], statLabel:'Maintenance',   order:3 },
+  controlman:      { label:'Controlman',       shortLabel:'Controlman',   icon:'🎛️', cssColor:'var(--color-babyblue, var(--babyblue))', swipeColor:'#38bdf8', floorCls:'has-controlman',      cls:'status-controlman',      subs:['Robot / EOAT (End of Arm Tooling) Fault','Vision System / Camera Error','Conveyor / Auxiliary Comm Loss','PLC / HMI Error'], statLabel:'Controlman',    order:2 },
+  maintenance:     { label:'Maintenance',      shortLabel:'Maintenance',  icon:'🔧', cssColor:'var(--color-warning, var(--yellow))',   swipeColor:'#eab308', floorCls:'has-maintenance',     cls:'status-maintenance',     subs:['Hydraulic Leak / Pressure Drop','Heater Band / Thermocouple Failure','Barrel / Screw / Check Ring Issue','Chiller / Thermolator Failure'], statLabel:'Maintenance',   order:3 },
   materials:       { label:'Materials',        shortLabel:'Materials',    icon:'📦', cssColor:'#8b5cf6',         swipeColor:'#8b5cf6', floorCls:'has-materials',       cls:'status-materials',       subs:['Resin Moisture / Drying Issue','Colorant / Masterbatch Ratio Error','Vacuum / Material Loader Blockage','Wrong Resin / Regrind Issue'], statLabel:'Materials',     order:4 },
-  processengineer: { label:'Process Engineer', shortLabel:'Process Eng.', icon:'⚙️', cssColor:'var(--purple)',   swipeColor:'#a855f7', floorCls:'has-processengineer', cls:'status-processengineer', subs:['Fill / Pack Pressure Adjustment','Temperature Profile Tuning','Cycle Time Optimization','Process Drift / Instability'], statLabel:'Process Eng.',  order:5 },
+  processengineer: { label:'Process Engineer', shortLabel:'Process Eng.', icon:'⚙️', cssColor:'var(--color-purple, var(--purple))',   swipeColor:'#a855f7', floorCls:'has-processengineer', cls:'status-processengineer', subs:['Fill / Pack Pressure Adjustment','Temperature Profile Tuning','Cycle Time Optimization','Process Drift / Instability'], statLabel:'Process Eng.',  order:5 },
   quality:         { label:'Quality',          shortLabel:'Quality',      icon:'✨', cssColor:'#06b6d4',         swipeColor:'#06b6d4', floorCls:'has-quality',         cls:'status-quality',         subs:['Short Shot / Non-fill','Flash / Burrs','Sink Marks / Voids','Splay / Silver Streaks','Burn Marks / Degradation','Warp / Dimensional Out-of-Spec'], statLabel:'Quality',       order:6 },
-  startup:         { label:'Startup',          shortLabel:'Startup',      icon:'🚀', cssColor:'var(--teal)',     swipeColor:'#14b8a6', floorCls:'has-startup',         cls:'status-startup',         subs:['Purging / Color Change','Mold Heat-Up / Stabilization','First Article Inspection (FAI)','Robot Homing / Path Setup'], statLabel:'Startup',       order:7 },
-  tooldie:         { label:'Tool & Die',       shortLabel:'Tool & Die',   icon:'🔩', cssColor:'var(--orange)',   swipeColor:'#f97316', floorCls:'has-tooldie',         cls:'status-tooldie',         subs:['Broken / Bent Ejector Pin','Hot Runner / Gate Issue','Water Leak in Mold','Stuck Part / Sprue','Mold Greasing / PM'], statLabel:'Tool & Die',    order:8 },
-  resolved:        { label:'Resolved',         shortLabel:'Resolved',     icon:'✓',  cssColor:'var(--green)',    swipeColor:'#22c55e', floorCls:'all-resolved',        cls:'status-resolved',        subs:['Process Parameter Adjusted','Mold Cleaned / Repaired','Hardware Replaced','Temporary Workaround'],                      statLabel:'Resolved',      order:9 },
+  startup:         { label:'Startup',          shortLabel:'Startup',      icon:'🚀', cssColor:'var(--color-teal, var(--teal))',     swipeColor:'#14b8a6', floorCls:'has-startup',         cls:'status-startup',         subs:['Purging / Color Change','Mold Heat-Up / Stabilization','First Article Inspection (FAI)','Robot Homing / Path Setup'], statLabel:'Startup',       order:7 },
+  tooldie:         { label:'Tool & Die',       shortLabel:'Tool & Die',   icon:'🔩', cssColor:'var(--color-orange, var(--orange))',   swipeColor:'#f97316', floorCls:'has-tooldie',         cls:'status-tooldie',         subs:['Broken / Bent Ejector Pin','Hot Runner / Gate Issue','Water Leak in Mold','Stuck Part / Sprue','Mold Greasing / PM'], statLabel:'Tool & Die',    order:8 },
+  resolved:        { label:'Resolved',         shortLabel:'Resolved',     icon:'✓',  cssColor:'var(--color-success, var(--green))',    swipeColor:'#22c55e', floorCls:'all-resolved',        cls:'status-resolved',        subs:['Process Parameter Adjusted','Mold Cleaned / Repaired','Hardware Replaced','Temporary Workaround'],                      statLabel:'Resolved',      order:9 },
 };
 const DEFAULT_STATUSES = JSON.parse(JSON.stringify(STATUSES));
 const CANONICAL_OPTIONAL_STATUSES = {
@@ -2186,27 +2137,6 @@ function getAllSubs() {
     (def.subs || []).forEach(sub => { seen[sub] = true; });
   });
   return Object.keys(seen).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
-}
-
-const __alphaCanvasCtx = document.createElement('canvas').getContext('2d');
-
-function alphaColor(color, alpha = 0.12) {
-  const a = Math.max(0, Math.min(1, Number(alpha)));
-  if (!__alphaCanvasCtx || !color) return `rgba(0,0,0,${a})`;
-
-  __alphaCanvasCtx.fillStyle = '#000000';
-  __alphaCanvasCtx.fillStyle = String(color);
-  const normalized = __alphaCanvasCtx.fillStyle;
-  const m = normalized.match(/^#([\da-f]{3}|[\da-f]{6})$/i);
-  if (!m) return `rgba(0,0,0,${a})`;
-
-  let hex = m[1];
-  if (hex.length === 3) hex = hex.split('').map(ch => ch + ch).join('');
-  const n = parseInt(hex, 16);
-  const r = (n >> 16) & 255;
-  const g = (n >> 8) & 255;
-  const b = n & 255;
-  return `rgba(${r},${g},${b},${a})`;
 }
 
 function getStatusLabel(statusKey, mode = 'label') {
@@ -2521,16 +2451,16 @@ function renderGamePanel() {
         const progressColor = completed
           ? 'linear-gradient(90deg,#22c55e,#4ade80)'
           : pct > 50
-            ? 'linear-gradient(90deg,var(--yellow),var(--green))'
-            : 'linear-gradient(90deg,var(--purple),var(--blue))';
+            ? 'linear-gradient(90deg,var(--color-warning, var(--yellow)),var(--color-success, var(--green)))'
+            : 'linear-gradient(90deg,var(--color-purple, var(--purple)),var(--color-info, var(--blue)))';
         const glowColor = completed ? '0 0 8px rgba(34,197,94,0.5)' : 'none';
         return `<div class="game-mission-item${completed ? ' game-mission-complete' : ''}">
           <div class="game-mission-head">
             <span>${completed ? '✓ ' : near ? '🔔 ' : ''}${esc(m.name || 'Mission')}</span>
-            <strong style="color:${completed ? 'var(--green)' : near ? 'var(--yellow)' : 'var(--text)'}">${pct}%</strong>
+            <strong style="color:${completed ? 'var(--color-success, var(--green))' : near ? 'var(--color-warning, var(--yellow))' : 'var(--color-text, var(--text))'}">${pct}%</strong>
           </div>
           <div class="game-progress"><span style="width:${pct}%;background:${progressColor};box-shadow:${glowColor}"></span></div>
-          <div class="game-mission-meta">${current} / ${target} &nbsp;·&nbsp; <span style="color:var(--yellow)">${Number(m.rewards?.xp || 0)} XP</span> reward</div>
+          <div class="game-mission-meta">${current} / ${target} &nbsp;·&nbsp; <span style="color:var(--color-warning, var(--yellow))">${Number(m.rewards?.xp || 0)} XP</span> reward</div>
         </div>`;
       }).join('');
       updateGamePillBadge(anyBadged);
@@ -2549,7 +2479,7 @@ function renderGamePanel() {
         return `<div class="game-badge-tile ${earned ? 'earned' : 'locked'}" title="${esc(b.description || b.name)}">
           <span class="badge-icon">${b.icon || '🏅'}</span>
           <span class="badge-name">${esc(b.name)}</span>
-          ${earned ? '<span style="font-size:9px;color:var(--green);">✓</span>' : ''}
+          ${earned ? '<span style="font-size:9px;color:var(--color-success, var(--green));">✓</span>' : ''}
         </div>`;
       }).join('')}</div>`;
     }
@@ -2570,7 +2500,7 @@ function renderGamePanel() {
             <span class="game-leader-name">${esc(entry.displayName || entry.name || 'User')}</span>
             ${isMe ? '<span class="game-leader-you">you</span>' : ''}
           </div>
-          <strong style="color:var(--yellow);flex-shrink:0">${Number(entry.xp || 0)} XP</strong>
+          <strong style="color:var(--color-warning, var(--yellow));flex-shrink:0">${Number(entry.xp || 0)} XP</strong>
         </div>`;
       }).join('');
     }
@@ -2592,7 +2522,7 @@ function showGameToast(message) {
   const isPositive = String(message).startsWith('+');
   const isNegative = String(message).startsWith('-') || String(message).startsWith('−');
   const icon = isNegative ? '💀' : isPositive ? '⚡' : '🎯';
-  const color = isNegative ? 'var(--red)' : 'var(--yellow)';
+  const color = isNegative ? 'var(--color-danger, var(--red))' : 'var(--color-warning, var(--yellow))';
   el.innerHTML = `<span style="color:${color};font-size:14px;">${icon}</span><span>${esc(message)}</span>`;
   el.classList.add('show');
   setTimeout(() => el.classList.remove('show'), 2000);
@@ -2659,7 +2589,7 @@ function showBadgeEarnedCelebration(badge) {
       <div class="game-mission-complete-label">Badge Unlocked!</div>
       <span class="game-badge-icon">${badge.icon || '🏅'}</span>
       <div class="game-mission-complete-name">${esc(badge.name)}</div>
-      <div style="font-size:12px;color:var(--text2);margin-top:4px;">${esc(badge.description || '')}</div>
+      <div style="font-size:12px;color:var(--color-text-muted, var(--text2));margin-top:4px;">${esc(badge.description || '')}</div>
       ${Number(badge.xpReward||0) ? `<div class="game-mission-complete-xp" style="margin-top:8px;">+${badge.xpReward} XP</div>` : ''}
     </div>`;
   document.body.appendChild(overlay);
@@ -2968,7 +2898,7 @@ async function loadStoreConfig() {
   renderStoreCard();
   renderStoreModal();
   updateStoreXpDisplay();
-  updateActiveThemeChoice(localStorage.getItem('pressTrackerTheme') || 'midnight');
+  updateActiveThemeChoice(readSavedTheme('midnight'));
   if (storeConfigUnsubscribe) storeConfigUnsubscribe();
   storeConfigUnsubscribe = onSnapshot(globalStoreConfigDoc(), snap => {
     const incoming = snap.exists() ? snap.data().items : DEFAULT_STORE_ITEMS;
@@ -2979,14 +2909,14 @@ async function loadStoreConfig() {
     renderStoreCard();
     renderStoreModal();
     updateStoreXpDisplay();
-    updateActiveThemeChoice(localStorage.getItem('pressTrackerTheme') || 'midnight');
+    updateActiveThemeChoice(readSavedTheme('midnight'));
   }, err => {
     console.warn('Global store listener failed:', err);
   });
 }
 
 function restoreSavedThemeSelection() {
-  const savedTheme = localStorage.getItem('pressTrackerTheme') || '';
+  const savedTheme = readSavedTheme('');
   if (!savedTheme || !savedTheme.startsWith('storetheme_')) return;
   if (!getThemeCatalogEntry(savedTheme)) return;
   applyTheme(savedTheme);
@@ -2995,22 +2925,6 @@ function restoreSavedThemeSelection() {
 function normalizeStoreItems(rawItems) {
   const incoming = Array.isArray(rawItems) ? rawItems : [];
   const byId = new Map();
-  const themeVarKeys = ['--bg','--bg2','--bg3','--border','--text','--text2','--text3','--accent','--accent2','--green','--red','--blue','--yellow','--orange'];
-  const themeVarDefaults = {
-    '--bg':'#0d1117','--bg2':'#161b22','--bg3':'#1c2333','--border':'#30363d',
-    '--text':'#e6edf3','--text2':'#8b949e','--text3':'#484f58',
-    '--accent':'#f97316','--accent2':'#fb923c',
-    '--green':'#22c55e','--red':'#ef4444','--blue':'#3b82f6','--yellow':'#eab308','--orange':'#f97316'
-  };
-  const hexRe = /^#[0-9a-fA-F]{6}$/;
-  const normalizeThemeVars = (vars = {}) => {
-    const out = { ...themeVarDefaults };
-    themeVarKeys.forEach(key => {
-      const value = String(vars?.[key] || '').trim();
-      if (hexRe.test(value)) out[key] = value;
-    });
-    return out;
-  };
   const normalizeThemeItem = (item = {}, idx = 0) => {
     const themeKey = item.themeKey ? String(item.themeKey).trim() : null;
     const id = themeKey ? `theme_${themeKey}` : (String(item.id || '').trim() || `storeitem_${idx}`);
@@ -3075,7 +2989,7 @@ function isThemeLocked(themeKey) {
 }
 
 function ensureCurrentThemeAccess() {
-  const savedTheme = localStorage.getItem('pressTrackerTheme') || 'midnight';
+  const savedTheme = readSavedTheme('midnight');
   if (!getThemeCatalogEntry(savedTheme)) return;
   if (!isThemeLocked(savedTheme)) return;
   showGameToast('🔒 Theme locked — switched to Midnight');
@@ -3112,7 +3026,7 @@ async function purchaseStoreItem(itemId) {
     updateStoreXpDisplay();
     renderThemeChoices();
     renderStoreModal();
-    updateActiveThemeChoice(localStorage.getItem('pressTrackerTheme') || 'midnight');
+    updateActiveThemeChoice(readSavedTheme('midnight'));
     showGameToast(`Unlocked ${item.name}!`);
     if (item.type === 'theme') {
       if (item.themeKey) applyTheme(item.themeKey);
@@ -3132,7 +3046,7 @@ function renderStoreCard() {
   if (!list) return;
   const active = storeItems.filter(i => i.isActive !== false);
   if (!active.length) {
-    list.innerHTML = `<div class="game-mission-meta" style="padding:8px 0;text-align:center;color:var(--text3);">No items in the store yet.</div>`;
+    list.innerHTML = `<div class="game-mission-meta" style="padding:8px 0;text-align:center;color:var(--color-text-subtle, var(--text3));">No items in the store yet.</div>`;
     return;
   }
   list.innerHTML = active.map(item => {
@@ -3167,19 +3081,6 @@ function renderStoreCard() {
 
 const STORE_THEME_ITEM_PREFIX = 'storeitem:';
 let _pendingPurchaseItemId = null;
-
-function inferThemeModeFromVars(vars = {}) {
-  const bg = String(vars['--bg'] || '').trim();
-  const hex = bg.startsWith('#') ? bg.slice(1) : '';
-  if (![3, 6].includes(hex.length)) return 'dark';
-  const normalized = hex.length === 3 ? hex.split('').map(ch => ch + ch).join('') : hex;
-  const r = parseInt(normalized.slice(0, 2), 16);
-  const g = parseInt(normalized.slice(2, 4), 16);
-  const b = parseInt(normalized.slice(4, 6), 16);
-  if ([r, g, b].some(Number.isNaN)) return 'dark';
-  const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
-  return luminance > 0.62 ? 'light' : 'dark';
-}
 
 function updateStoreXpDisplay() {
   const spendable = userSpendableXp();
@@ -3241,7 +3142,7 @@ async function syncBuiltInThemesToFirestore() {
 
 function renderStoreModal() {
   updateStoreXpDisplay();
-  const activeSelection = localStorage.getItem('pressTrackerTheme') || 'midnight';
+  const activeSelection = readSavedTheme('midnight');
   const spendable = userSpendableXp();
   const catalog = getThemeCatalog();
   const freeThemes = catalog.filter(theme => theme.isFree);
@@ -3326,7 +3227,7 @@ function previewStoreTheme(themeKey) {
     const item = storeItems.find(i => i.id === itemId && i.type === 'theme' && i.isActive !== false);
     if (!item?.customVars) return;
     clearCustomThemeVars();
-    document.body.classList.remove(...THEME_KEYS.map(key => `theme-${key}`));
+    removeThemeClasses(THEME_KEYS);
     applyCustomThemeVars(item.customVars);
     document.body.dataset.themeMode = inferThemeModeFromVars(item.customVars);
     updateThemeModeUI();
@@ -3338,10 +3239,13 @@ function previewStoreTheme(themeKey) {
   }
   const builtIn = THEME_OPTIONS.find(t => t.key === themeKey);
   if (!builtIn) return;
-  clearCustomThemeVars();
-  document.body.classList.remove(...THEME_KEYS.map(key => `theme-${key}`));
-  if (themeKey !== 'midnight') document.body.classList.add(`theme-${themeKey}`);
-  document.body.dataset.themeMode = builtIn.mode || 'dark';
+  applyThemeVarsFromEngine(THEME_VARS_MAP[themeKey] || {}, {
+    themeKeys: THEME_KEYS,
+    classThemeKey: themeKey,
+    mode: builtIn.mode || 'dark',
+    clearExtraKeys: [..._appliedCustomVarKeys]
+  });
+  _appliedCustomVarKeys = new Set();
   updateThemeModeUI();
 }
 window.previewStoreTheme = previewStoreTheme;
@@ -3359,10 +3263,9 @@ function applyStoreThemeItem(itemId) {
     return;
   }
   clearCustomThemeVars();
-  document.body.classList.remove(...THEME_KEYS.map(key => `theme-${key}`));
   applyCustomThemeVars(item.customVars || {});
   document.body.dataset.themeMode = inferThemeModeFromVars(item.customVars || {});
-  try { localStorage.setItem('pressTrackerTheme', `${STORE_THEME_ITEM_PREFIX}${item.id}`); } catch(e) {}
+  saveThemeSelection(`${STORE_THEME_ITEM_PREFIX}${item.id}`);
   _syncThemePrefsToFirestore();
   updateThemeModeUI();
   renderStoreModal();
@@ -3477,24 +3380,6 @@ let userLifetimeXp = 0;
 let userXpSpent = 0;
 function userSpendableXp() { return Math.max(0, userLifetimeXp - userXpSpent); }
 
-const BUILT_IN_THEME_DEFS = [
-  { key:'midnight',   name:'Midnight',   label:'🌙 Midnight',   mode:'dark',  colors:['#0d1117','#f97316','#e6edf3'], vars:{ '--bg':'#0d1117','--bg2':'#161b22','--bg3':'#1c2333','--border':'#30363d','--text':'#e6edf3','--text2':'#8b949e','--text3':'#484f58','--accent':'#f97316','--accent2':'#fb923c','--green':'#22c55e','--red':'#ef4444','--blue':'#3b82f6','--yellow':'#eab308','--orange':'#f97316' }, price:0, order:0 },
-  { key:'arctic',     name:'Arctic',     label:'❄️ Arctic',     mode:'light', colors:['#f8fafc','#0ea5e9','#0f172a'], vars:{ '--bg':'#f8fafc','--bg2':'#ffffff','--bg3':'#f1f5f9','--border':'#cbd5e1','--text':'#0f172a','--text2':'#475569','--text3':'#94a3b8','--accent':'#0ea5e9','--accent2':'#38bdf8','--green':'#16a34a','--red':'#dc2626','--blue':'#0284c7','--yellow':'#ca8a04','--orange':'#f97316' }, price:0, order:1 },
-  { key:'forest',     name:'Forest',     label:'🌲 Forest',     mode:'dark',  colors:['#0a120e','#10b981','#d1fae5'], vars:{ '--bg':'#0a120e','--bg2':'#0f1a14','--bg3':'#14241a','--border':'#1e3a28','--text':'#d1fae5','--text2':'#6ee7b7','--text3':'#34d399','--accent':'#10b981','--accent2':'#34d399','--green':'#34d399','--red':'#f87171','--blue':'#22d3ee','--yellow':'#facc15','--orange':'#fb923c' }, price:0, order:2 },
-  { key:'sunset',     name:'Sunset',     label:'🌅 Sunset',     mode:'dark',  colors:['#1a0f0a','#fb923c','#fef3c7'], vars:{ '--bg':'#1a0f0a','--bg2':'#2d1810','--bg3':'#3d2218','--border':'#54321f','--text':'#fef3c7','--text2':'#fcd34d','--text3':'#f59e0b','--accent':'#fb923c','--accent2':'#fdba74','--green':'#34d399','--red':'#f87171','--blue':'#60a5fa','--yellow':'#facc15','--orange':'#fb923c' }, price:75, order:3 },
-  { key:'ocean',      name:'Ocean',      label:'🌊 Ocean',      mode:'dark',  colors:['#0a1628','#38bdf8','#e0f2fe'], vars:{ '--bg':'#0a1628','--bg2':'#0f1e36','--bg3':'#152945','--border':'#1e3a5f','--text':'#e0f2fe','--text2':'#7dd3fc','--text3':'#0ea5e9','--accent':'#38bdf8','--accent2':'#7dd3fc','--green':'#22c55e','--red':'#f87171','--blue':'#38bdf8','--yellow':'#facc15','--orange':'#fb923c' }, price:75, order:4 },
-  { key:'royal',      name:'Royal',      label:'👑 Royal',      mode:'dark',  colors:['#18102a','#c084fc','#f3e8ff'], vars:{ '--bg':'#18102a','--bg2':'#251638','--bg3':'#331f4d','--border':'#4a2d6b','--text':'#f3e8ff','--text2':'#d8b4fe','--text3':'#a78bfa','--accent':'#c084fc','--accent2':'#d8b4fe','--green':'#34d399','--red':'#f87171','--blue':'#60a5fa','--yellow':'#facc15','--orange':'#fb923c' }, price:120, order:5 },
-  { key:'slate',      name:'Slate',      label:'⚡ Slate',      mode:'dark',  colors:['#0f1419','#64748b','#e2e8f0'], vars:{ '--bg':'#0f1419','--bg2':'#1a1f25','--bg3':'#242a31','--border':'#30363d','--text':'#e2e8f0','--text2':'#94a3b8','--text3':'#64748b','--accent':'#64748b','--accent2':'#94a3b8','--green':'#22c55e','--red':'#ef4444','--blue':'#60a5fa','--yellow':'#eab308','--orange':'#f97316' }, price:0, order:6 },
-  { key:'mint',       name:'Mint',       label:'🍃 Mint',       mode:'light', colors:['#f0fdf9','#14b8a6','#064e3b'], vars:{ '--bg':'#f0fdf9','--bg2':'#ffffff','--bg3':'#e6fff8','--border':'#a7f3d0','--text':'#064e3b','--text2':'#065f46','--text3':'#10b981','--accent':'#14b8a6','--accent2':'#10b981','--green':'#059669','--red':'#dc2626','--blue':'#0284c7','--yellow':'#ca8a04','--orange':'#ea580c' }, price:0, order:7 },
-  { key:'cyberpunk',  name:'Cyberpunk',  label:'🎮 Cyberpunk',  mode:'dark',  colors:['#0a0014','#ff00ff','#00ffff'], vars:{ '--bg':'#0a0014','--bg2':'#150028','--bg3':'#1f003d','--border':'#3d0066','--text':'#00ffff','--text2':'#ff00ff','--text3':'#9d00ff','--accent':'#ff00ff','--accent2':'#00ffff','--green':'#00ff88','--red':'#ff4d6d','--blue':'#00ffff','--yellow':'#ffee00','--orange':'#ff7a00' }, price:220, order:8 },
-  { key:'industrial', name:'Industrial', label:'🏭 Industrial', mode:'dark',  colors:['#1a1a1a','#ff6b00','#e5e5e5'], vars:{ '--bg':'#1a1a1a','--bg2':'#252525','--bg3':'#2f2f2f','--border':'#404040','--text':'#e5e5e5','--text2':'#a0a0a0','--text3':'#707070','--accent':'#ff6b00','--accent2':'#ff8a33','--green':'#4ade80','--red':'#f87171','--blue':'#60a5fa','--yellow':'#facc15','--orange':'#ff6b00' }, price:220, order:9 },
-  { key:'starship',   name:'Starship',   label:'🛸 Starship',   mode:'dark',  colors:['#030914','#26d9ff','#ddf6ff'], vars:{ '--bg':'#030914','--bg2':'#071327','--bg3':'#0d1d36','--border':'#16466b','--text':'#ddf6ff','--text2':'#8fc4dd','--text3':'#4a7fa6','--accent':'#26d9ff','--accent2':'#8bf5ff','--green':'#2cff9c','--red':'#ff5a87','--blue':'#26d9ff','--yellow':'#ffd447','--orange':'#ff9f43' }, price:180, order:10 },
-  { key:'starforge',  name:'Starforge',  label:'🧱 Starforge',  mode:'dark',  colors:['#100d0a','#ff9f1c','#f2e6d9'], vars:{ '--bg':'#100d0a','--bg2':'#1a1714','--bg3':'#27211b','--border':'#5f4a35','--text':'#f2e6d9','--text2':'#c8b8a5','--text3':'#8c7762','--accent':'#ff9f1c','--accent2':'#ffd166','--green':'#49d987','--red':'#ff6b5e','--blue':'#9aa6b2','--yellow':'#ffd166','--orange':'#ff9f1c' }, price:200, order:11 },
-  { key:'starmono',   name:'Star Mono',  label:'📟 Star Mono',  mode:'dark',  colors:['#0f1012','#c6ccd3','#eceff3'], vars:{ '--bg':'#0f1012','--bg2':'#17191c','--bg3':'#24282d','--border':'#424951','--text':'#eceff3','--text2':'#b5bcc5','--text3':'#747e89','--accent':'#c6ccd3','--accent2':'#e2e6ea','--green':'#a3a3a3','--red':'#9a9a9a','--blue':'#b8b8b8','--yellow':'#b0b0b0','--orange':'#c0c0c0' }, price:170, order:12 },
-  { key:'engel',      name:'Engel',      label:'🟢 Engel',      mode:'dark',  colors:['#0c1209','#78be20','#e8f5d8'], vars:{ '--bg':'#0c1209','--bg2':'#141e0f','--bg3':'#1b2a14','--border':'#2d4820','--text':'#e8f5d8','--text2':'#8ab870','--text3':'#4d6e38','--accent':'#78be20','--accent2':'#96d63a','--green':'#78be20','--red':'#f87171','--blue':'#00a3b5','--yellow':'#ffc72c','--orange':'#fb923c' }, price:0, order:13 },
-  { key:'cardinals',  name:'Cardinals',  label:'🔴 Cardinals',  mode:'dark',  colors:['#0e0303','#c8102e','#f5e8e8'], vars:{ '--bg':'#0e0303','--bg2':'#1c0808','--bg3':'#260c0c','--border':'#3d1515','--text':'#f5e8e8','--text2':'#c48a8a','--text3':'#7a4444','--accent':'#c8102e','--accent2':'#e81f42','--green':'#22c55e','--red':'#ff4444','--blue':'#60a5fa','--yellow':'#eab308','--orange':'#f97316' }, price:25, order:14 },
-  { key:'wildcats',   name:'Wildcats',   label:'🔵 Wildcats',   mode:'dark',  colors:['#020814','#0033a0','#e8f0ff'], vars:{ '--bg':'#020814','--bg2':'#051228','--bg3':'#071a38','--border':'#0d2d5e','--text':'#e8f0ff','--text2':'#7da8e8','--text3':'#3d6ab0','--accent':'#0033a0','--accent2':'#1a52cc','--green':'#22c55e','--red':'#ef4444','--blue':'#3b82f6','--yellow':'#eab308','--orange':'#f97316' }, price:25, order:15 }
-];
 const BUILT_IN_THEME_STORE_ITEMS = BUILT_IN_THEME_DEFS.map(theme => ({
   id: `theme_${theme.key}`,
   type: 'theme',
@@ -4692,7 +4577,7 @@ onAuthStateChanged(auth, async user => {
         <div class="empty-state">
           <div class="empty-state-icon">⚠️</div>
           <div class="empty-state-text" style="margin-bottom:12px;">Unable to load your data right now.</div>
-          <button onclick="window.location.reload()" style="font-size:13px;padding:8px 18px;border-radius:8px;border:1px solid var(--accent);background:transparent;color:var(--accent);cursor:pointer;font-family:'Nunito',sans-serif;">Reload</button>
+          <button onclick="window.location.reload()" style="font-size:13px;padding:8px 18px;border-radius:8px;border:1px solid var(--color-accent, var(--accent));background:transparent;color:var(--color-accent, var(--accent));cursor:pointer;font-family:'Nunito',sans-serif;">Reload</button>
         </div>`;
     }
   } else {
@@ -4848,7 +4733,7 @@ function startListener() {
       <div class="empty-state">
         <div class="empty-state-icon">📡</div>
         <div class="empty-state-text" style="margin-bottom:12px;">Connection lost. Retrying…</div>
-        <button onclick="startListener()" style="font-size:13px;padding:8px 18px;border-radius:8px;border:1px solid var(--accent);background:transparent;color:var(--accent);cursor:pointer;font-family:'Nunito',sans-serif;">Retry Now</button>
+        <button onclick="startListener()" style="font-size:13px;padding:8px 18px;border-radius:8px;border:1px solid var(--color-accent, var(--accent));background:transparent;color:var(--color-accent, var(--accent));cursor:pointer;font-family:'Nunito',sans-serif;">Retry Now</button>
       </div>`;
     retryTimeout = setTimeout(() => startListener(), delay);
   });
@@ -4904,6 +4789,11 @@ const SHIFT_FILTER_OPTIONS = [
   { value: 'second', label: '2nd Shift' },
   { value: 'third', label: '3rd Shift' },
 ];
+const shiftDropdown = createDropdownController({
+  dropdownId: 'shift-dropdown',
+  buttonId: 'shift-dropdown-btn',
+  wrapId: 'shift-dropdown-wrap'
+});
 
 function getShiftFilterLabel(value) {
   return SHIFT_FILTER_OPTIONS.find(opt => opt.value === value)?.label || 'All Shifts';
@@ -4924,21 +4814,10 @@ function syncShiftFilterUi() {
 }
 
 function closeShiftDropdown() {
-  document.getElementById('shift-dropdown')?.classList.remove('visible');
-  const btn = document.getElementById('shift-dropdown-btn');
-  btn?.classList.remove('open');
-  btn?.setAttribute('aria-expanded', 'false');
+  shiftDropdown.close();
 }
 
-window.toggleShiftDropdown = () => {
-  const dd = document.getElementById('shift-dropdown');
-  const btn = document.getElementById('shift-dropdown-btn');
-  if (!dd || !btn) return;
-  const isOpen = dd.classList.contains('visible');
-  dd.classList.toggle('visible', !isOpen);
-  btn.classList.toggle('open', !isOpen);
-  btn.setAttribute('aria-expanded', String(!isOpen));
-};
+window.toggleShiftDropdown = shiftDropdown.toggle;
 
 window.setShiftFilter = s => {
   issueShiftFilter = SHIFT_FILTER_OPTIONS.some(opt => opt.value === s) ? s : 'all';
@@ -5191,7 +5070,7 @@ window.handlePressClick = p => {
   if (openIssues.length === 0) {
     const statusPill = document.createElement('span');
     statusPill.className = 'mc-status-pill';
-    statusPill.style.cssText = 'color:var(--green);border-color:rgba(34,197,94,0.4);background:rgba(34,197,94,0.1);';
+    statusPill.style.cssText = 'color:var(--color-success, var(--green));border-color:rgba(34,197,94,0.4);background:rgba(34,197,94,0.1);';
     statusPill.textContent = 'Clear';
     top.appendChild(statusPill);
   } else if (openIssues.length === 1) {
@@ -5206,7 +5085,7 @@ window.handlePressClick = p => {
   } else {
     const statusPill = document.createElement('span');
     statusPill.className = 'mc-status-pill';
-    statusPill.style.cssText = 'color:var(--accent);border-color:rgba(249,115,22,0.4);background:rgba(249,115,22,0.1);';
+    statusPill.style.cssText = 'color:var(--color-accent, var(--accent));border-color:rgba(249,115,22,0.4);background:rgba(249,115,22,0.1);';
     statusPill.textContent = openIssues.length + ' issues';
     top.appendChild(statusPill);
   }
@@ -5275,7 +5154,7 @@ window.handlePressClick = p => {
   if (currentUserPermissions.canCreateIssue) {
     const addBtn = document.createElement('button');
     addBtn.className = 'mc-toolbar-btn';
-    addBtn.style.color = 'var(--accent)';
+    addBtn.style.color = 'var(--color-accent, var(--accent))';
     addBtn.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>' + (openIssues.length > 0 ? 'Add' : 'Report');
     addBtn.onclick = () => { closeMiniCard(); openAddModal(p); };
     toolbar.appendChild(addBtn);
@@ -5284,7 +5163,7 @@ window.handlePressClick = p => {
   const pressId = toPressId(p);
   const wikiBtn = document.createElement('button');
   wikiBtn.className = 'mc-toolbar-btn';
-  wikiBtn.style.color = 'var(--teal)';
+  wikiBtn.style.color = 'var(--color-teal, var(--teal))';
   wikiBtn.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><path d="M3 2h10a1 1 0 011 1v8a1 1 0 01-1 1H5l-3 2V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>Wiki';
   wikiBtn.onclick = () => { closeMiniCard(); openPressWikiModal(pressId, p); };
   // Badge dot if wiki content exists (load count async without blocking)
@@ -5302,13 +5181,13 @@ window.handlePressClick = p => {
   toolbar.appendChild(wikiBtn);
   const notesBtn = document.createElement('button');
   notesBtn.className = 'mc-toolbar-btn';
-  notesBtn.style.color = 'var(--yellow)';
+  notesBtn.style.color = 'var(--color-warning, var(--yellow))';
   notesBtn.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><path d="M3 2h10v10l-2 2H3V2z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5 5h6M5 8h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>Notes';
   notesBtn.onclick = () => { closeMiniCard(); window.openNotesModalFromPress?.(p); };
   toolbar.appendChild(notesBtn);
   const timelineBtn = document.createElement('button');
   timelineBtn.className = 'mc-toolbar-btn';
-  timelineBtn.style.color = 'var(--blue)';
+  timelineBtn.style.color = 'var(--color-info, var(--blue))';
   timelineBtn.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><path d="M8 2v6l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/></svg>Timeline';
   timelineBtn.onclick = () => { closeMiniCard(); showMachineHistory(p); };
   toolbar.appendChild(timelineBtn);
@@ -5571,7 +5450,7 @@ window.scrollToIssue = id => {
   card.scrollIntoView({ behavior: 'smooth', block: 'center' });
   // Brief highlight flash
   card.style.transition = 'box-shadow 0.3s';
-  card.style.boxShadow = '0 0 0 2px var(--accent)';
+  card.style.boxShadow = '0 0 0 2px var(--color-accent, var(--accent))';
   setTimeout(() => { card.style.boxShadow = ''; setTimeout(() => { card.style.transition = ''; }, 300); }, 1200);
 };
 
@@ -6063,7 +5942,7 @@ function renderLogCatButtons() {
   const searchBtn = document.createElement('button');
   searchBtn.className = 'log-cat-btn' + (isSearchMode ? ' selected' : '');
   searchBtn.dataset.key = '__search__';
-  const searchCol = 'var(--text2)';
+  const searchCol = 'var(--color-text-muted, var(--text2))';
   searchBtn.style.color = searchCol;
   if (isSearchMode) {
     searchBtn.style.background = alphaColor(searchCol, 0.13);
@@ -6376,7 +6255,7 @@ function updateLogCatPill() {
   if (isSearchMode) {
     sel.classList.add('visible');
     pill.textContent = '🔍 Searching…';
-    pill.style.color = 'var(--text2)'; pill.style.borderColor = 'var(--border)'; pill.style.background = 'transparent';
+    pill.style.color = 'var(--color-text-muted, var(--text2))'; pill.style.borderColor = 'var(--color-border, var(--border))'; pill.style.background = 'transparent';
     updateAddModalIssueLanguage();
     return;
   }
@@ -6515,250 +6394,59 @@ function buildIssueTimer(minutes, baseDate = new Date(), existingTimer = null) {
   };
 }
 
-const ISSUE_REMINDER_STORAGE_KEY = 'aptracker_issue_reminders_v1';
-let issueReminderMap = {};
-const _issueReminderNotified = new Set();
-const _issueReminderEscalated = new Set();
-const AUTO_CRITICAL_GRACE_MS = 30 * 1000;
-
-function loadIssueReminders() {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(ISSUE_REMINDER_STORAGE_KEY) || '{}');
-    issueReminderMap = (parsed && typeof parsed === 'object') ? parsed : {};
-  } catch (e) {
-    issueReminderMap = {};
-  }
-}
-
-function saveIssueReminders() {
-  try {
-    localStorage.setItem(ISSUE_REMINDER_STORAGE_KEY, JSON.stringify(issueReminderMap));
-  } catch (e) {}
-}
+const issueReminders = initIssueReminders({
+  getIssues: () => issues,
+  parseTimerMinutes,
+  showGameToast,
+  renderIssues,
+  updateDoc,
+  addDoc,
+  plantDoc,
+  issueEventsCol,
+  serverTimestamp,
+  currentActor
+});
 
 function clearIssueReminder(issueId) {
-  if (!issueId) return;
-  delete issueReminderMap[issueId];
-  saveIssueReminders();
+  return issueReminders.clear(issueId);
 }
 
 function setIssueReminder(issueId, minutes) {
-  const m = parseTimerMinutes(minutes);
-  if (!issueId || !m) return false;
-  const now = Date.now();
-  issueReminderMap[issueId] = {
-    minutes: m,
-    setAt: now,
-    dueAt: now + m * 60 * 1000
-  };
-  saveIssueReminders();
-  return true;
+  return issueReminders.set(issueId, minutes);
 }
 
 function getIssueReminderState(issueId, nowMs = Date.now()) {
-  const reminder = issueReminderMap?.[issueId];
-  if (!reminder?.dueAt) return null;
-  const dueAt = Number(reminder.dueAt || 0);
-  if (!Number.isFinite(dueAt) || dueAt <= 0) return null;
-  const remainingMs = dueAt - nowMs;
-  const absMin = Math.max(1, Math.ceil(Math.abs(remainingMs) / 60000));
-  return {
-    dueAt,
-    minutes: Number(reminder.minutes || 0),
-    isOverdue: remainingMs <= 0,
-    remainingMs,
-    label: remainingMs > 0 ? `⏱ Remind in ${absMin}m` : `⏰ Reminder due ${absMin}m`
-  };
+  return issueReminders.state(issueId, nowMs);
+}
+
+function getIssueReminderMinutes(issueId) {
+  return issueReminders.getReminderMinutes(issueId);
 }
 
 function formatReminderClock(state) {
-  if (!state) return '00:00';
-  const seconds = Math.max(0, Math.floor(Math.abs(Number(state.remainingMs || 0)) / 1000));
-  const mm = String(Math.floor(seconds / 60)).padStart(2, '0');
-  const ss = String(seconds % 60).padStart(2, '0');
-  return `${mm}:${ss}`;
+  return issueReminders.formatClock(state);
 }
 
-let issueReminderModalIssueId = null;
-let issueReminderWheelValue = { hours: 0, mins: 0, secs: 0 };
-
-function _buildReminderWheel(elId, max, key) {
-  const wheel = document.getElementById(elId);
-  if (!wheel) return;
-  wheel.innerHTML = '';
-  for (let i = 0; i <= max; i++) {
-    const item = document.createElement('div');
-    item.className = 'timer-wheel-item';
-    item.textContent = String(i);
-    item.dataset.value = String(i);
-    wheel.appendChild(item);
-  }
-  const updateValue = () => {
-    const itemHeight = 42;
-    const idx = Math.max(0, Math.min(max, Math.round(wheel.scrollTop / itemHeight)));
-    issueReminderWheelValue[key] = idx;
-    wheel.querySelectorAll('.timer-wheel-item').forEach((el, i) => el.classList.toggle('active', i === idx));
-  };
-  wheel.onscroll = updateValue;
-  setTimeout(() => updateValue(), 0);
+function closeIssueReminderModal() {
+  return issueReminders.closeModal();
 }
 
-function _setReminderWheelValue(elId, val) {
-  const wheel = document.getElementById(elId);
-  if (!wheel) return;
-  wheel.scrollTop = Math.max(0, Number(val || 0)) * 42;
-}
-window.openIssueReminderModal = function(issueId) {
-  const issue = issues.find(i => i.id === issueId);
-  if (!issue) return;
-  issueReminderModalIssueId = issueId;
-  const cur = getIssueReminderState(issueId);
-  const mins = Math.max(0, Number(cur?.minutes || 0));
-  _buildReminderWheel('issue-reminder-hours-wheel', 23, 'hours');
-  _buildReminderWheel('issue-reminder-mins-wheel', 59, 'mins');
-  _buildReminderWheel('issue-reminder-secs-wheel', 59, 'secs');
-  _setReminderWheelValue('issue-reminder-hours-wheel', Math.floor(mins / 60));
-  _setReminderWheelValue('issue-reminder-mins-wheel', mins % 60);
-  _setReminderWheelValue('issue-reminder-secs-wheel', 0);
-  issueReminderWheelValue.hours = Math.floor(mins / 60);
-  issueReminderWheelValue.mins = mins % 60;
-  issueReminderWheelValue.secs = 0;
-  const sub = document.getElementById('issue-reminder-modal-subtitle');
-  if (sub) sub.textContent = `Press ${issue.machine || 'Unknown'} • pick a timer`;
-  document.getElementById('issue-reminder-modal')?.classList.add('visible');
-};
-window.closeIssueReminderModal = function() {
-  document.getElementById('issue-reminder-modal')?.classList.remove('visible');
-  issueReminderModalIssueId = null;
-};
-window.setIssueReminderFromModal = function(minutes) {
-  if (!issueReminderModalIssueId) return;
-  setIssueReminder(issueReminderModalIssueId, minutes);
-  showGameToast(`⏱ Reminder set for ${minutes}m.`);
-  closeIssueReminderModal();
-  renderIssues();
-};
-window.setIssueReminderFromModalCustom = function() {
-  const h = Number(issueReminderWheelValue.hours || 0);
-  const m = Number(issueReminderWheelValue.mins || 0);
-  const s = Number(issueReminderWheelValue.secs || 0);
-  const total = Math.floor((h * 60) + m + (s / 60));
-  if (total <= 0) { showGameToast('Pick a time greater than 0 minutes.'); return; }
-  window.setIssueReminderFromModal(total);
-};
-window.clearIssueReminderFromModal = function() {
-  if (!issueReminderModalIssueId) return;
-  clearIssueReminder(issueReminderModalIssueId);
-  showGameToast('Reminder cleared.');
-  closeIssueReminderModal();
-  renderIssues();
-};
-
-window.setIssueReminderFromCard = function(issueId) {
-  const minutes = parseTimerMinutes(document.getElementById(`issue-reminder-minutes-${issueId}`)?.value);
-  if (!minutes) { showGameToast('Select a reminder time first.'); return; }
-  if (!setIssueReminder(issueId, minutes)) return;
-  showGameToast(`⏱ Reminder set for ${minutes} minute${minutes === 1 ? '' : 's'}.`);
-  renderIssues();
-};
-
-window.setIssueReminderQuick = function(issueId, minutes) {
-  const m = parseTimerMinutes(minutes);
-  if (!m) return;
-  const sel = document.getElementById(`issue-reminder-minutes-${issueId}`);
-  if (sel) sel.value = String(m);
-  setIssueReminder(issueId, m);
-  showGameToast(`⏱ Reminder set for ${m} minute${m === 1 ? '' : 's'}.`);
-  renderIssues();
-};
-
-window.clearIssueReminderFromCard = function(issueId) {
-  clearIssueReminder(issueId);
-  showGameToast('Reminder cleared.');
-  renderIssues();
-};
-
-async function autoEscalateReminderToCritical(issue, state) {
-  if (!issue?.id || !state?.dueAt) return;
-  if (issue.highPriority === true && issue.priority === 'critical') return;
-  const graceThreshold = Number(state.dueAt) + AUTO_CRITICAL_GRACE_MS;
-  if (!Number.isFinite(graceThreshold) || Date.now() < graceThreshold) return;
-  const dedupeKey = `${issue.id}:${state.dueAt}`;
-  if (_issueReminderEscalated.has(dedupeKey)) return;
-  _issueReminderEscalated.add(dedupeKey);
-  try {
-    await updateDoc(plantDoc('issues', issue.id), {
-      highPriority: true,
-      priority: 'critical',
-      priorityChangedAt: serverTimestamp(),
-      priorityChangedBy: currentActor()
-    });
-    await addDoc(issueEventsCol(issue.id), {
-      eventType: 'issue_priority_changed',
-      actor: currentActor(),
-      note: 'Auto-escalated to critical after timer expiry.',
-      metadata: {
-        fromHighPriority: !!issue.highPriority,
-        fromPriority: issue.priority || null,
-        toHighPriority: true,
-        toPriority: 'critical',
-        escalationReason: 'timer_expired_unacknowledged',
-        reminderDueAt: Number(state.dueAt)
-      },
-      eventAt: serverTimestamp()
-    });
-    showGameToast(`🚨 Auto-critical: Press ${issue.machine || 'Unknown'}`);
-  } catch (e) {
-    _issueReminderEscalated.delete(dedupeKey);
-    console.warn('Issue reminder escalation failed', e);
-  }
-}
-
-async function maybeNotifyIssueReminders(issueList = issues) {
-  if (!Array.isArray(issueList) || issueList.length === 0) return;
-  for (const issue of issueList) {
-    const state = getIssueReminderState(issue.id);
-    if (!state?.isOverdue) continue;
-    const dedupeKey = `${issue.id}:${state.dueAt}`;
-    if (!_issueReminderNotified.has(dedupeKey)) {
-      _issueReminderNotified.add(dedupeKey);
-      showGameToast(`⏰ Reminder: check Press ${issue.machine || 'Unknown'}`);
-      if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
-        try {
-          navigator.vibrate([200, 120, 200, 120, 300]);
-        } catch (e) {
-          console.warn('Issue reminder vibration failed', e);
-        }
-      }
-      if ('Notification' in window && Notification.permission === 'granted') {
-        try {
-          new Notification(`Reminder — Press ${issue.machine || 'Unknown'}`, {
-            body: issue.note || 'Go back and check the issue.'
-          });
-        } catch (e) {
-          console.warn('Issue reminder notification failed', e);
-        }
-      }
-    }
-    try {
-      await autoEscalateReminderToCritical(issue, state);
-    } catch (e) {
-      console.warn('Issue reminder auto-critical check failed', e);
-    }
-  }
+function maybeNotifyIssueReminders(issueList = issues) {
+  return issueReminders.maybeNotify(issueList);
 }
 
 function refreshReminderClocksInDom() {
-  document.querySelectorAll('[data-reminder-id]').forEach(el => {
-    const issueId = el.getAttribute('data-reminder-id');
-    if (!issueId) return;
-    const s = getIssueReminderState(issueId);
-    if (!s) return;
-    el.textContent = formatReminderClock(s);
-  });
+  return issueReminders.refreshClocksInDom();
 }
 
-loadIssueReminders();
+window.openIssueReminderModal = issueReminders.openModal;
+window.closeIssueReminderModal = closeIssueReminderModal;
+window.setIssueReminderFromModal = issueReminders.setFromModal;
+window.setIssueReminderFromModalCustom = issueReminders.setFromModalCustom;
+window.clearIssueReminderFromModal = issueReminders.clearFromModal;
+window.setIssueReminderFromCard = issueReminders.setFromCard;
+window.setIssueReminderQuick = issueReminders.setQuick;
+window.clearIssueReminderFromCard = issueReminders.clearFromCard;
 
 document.getElementById('subcategory-sheet-overlay')?.addEventListener('click', e => {
   if (e.target === e.currentTarget) closeSubcategorySheet();
@@ -6969,7 +6657,7 @@ window.openEditModal = async id => {
   renderPreviews(editPhotos,'edit-photo-previews');
   document.getElementById('edit-photo-input').value='';
   document.getElementById('edit-shift').value = issue.shift || 'auto';
-  document.getElementById('edit-timer-minutes').value = String(parseTimerMinutes(issueReminderMap?.[id]?.minutes) || '');
+  document.getElementById('edit-timer-minutes').value = String(getIssueReminderMinutes(id) || '');
   const btn = document.getElementById('edit-submit-btn');
   btn.disabled=false; btn.innerHTML='💾 Save Changes';
   document.getElementById('edit-modal').classList.add('visible');
@@ -7515,7 +7203,7 @@ function updateEditStatusSubOptions() {
   if (subs.length > 0) {
     subWrap.innerHTML = `
       <label>Sub-status (optional)</label>
-      <select id="edit-status-sub" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:9px 11px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;margin-bottom:14px;">
+      <select id="edit-status-sub" style="width:100%;background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:9px 11px;color:var(--color-text, var(--text));font-family:'Nunito',sans-serif;font-size:13px;margin-bottom:14px;">
         <option value="">None</option>
         ${subs.map(s => `<option value="${s}">${s}</option>`).join('')}
       </select>
@@ -8499,7 +8187,7 @@ function renderIssues() {
     const scfg = STATUS_CONFIG_SAFE[currentKey];
     const sc = { ...scfg, label: scfg.label + (currentSubKey ? ' › '+currentSubKey : '') };
 
-    const editedNote = issue.editedAt ? `<div style="font-size:10px;color:var(--text3);margin-top:3px;font-family:'Share Tech Mono',monospace">edited ${issue.editedAt}${issue.editedBy?' by '+esc(issue.editedBy):''}</div>` : '';
+    const editedNote = issue.editedAt ? `<div style="font-size:10px;color:var(--color-text-subtle, var(--text3));margin-top:3px;font-family:'Share Tech Mono',monospace">edited ${issue.editedAt}${issue.editedBy?' by '+esc(issue.editedBy):''}</div>` : '';
 
     // Helper to parse a formatted date string back into input values
     function parseDTForInputs(dtStr) {
@@ -8599,12 +8287,12 @@ function renderIssues() {
           <button class="tl-mini-btn tl-cancel-btn" onclick="cancelAddEntry('${issue.id}')">Cancel</button>
         </div>`
       : `<div class="tl-add-row">
-          <button class="tl-mini-btn" style="background:var(--bg3);border:1px solid var(--border);color:var(--text2);padding:4px 11px;" onclick="setPendingStatus('${issue.id}','status','')">+ Add status entry</button>
+          <button class="tl-mini-btn" style="background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));color:var(--color-text-muted, var(--text2));padding:4px 11px;" onclick="setPendingStatus('${issue.id}','status','')">+ Add status entry</button>
         </div>`;
 
     const reminderState = getIssueReminderState(issue.id);
     const resolveHtml = `<div class="status-timeline">
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text2);margin-bottom:8px;">Status History</div>
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--color-text-muted, var(--text2));margin-bottom:8px;">Status History</div>
       <div class="tl-list">
         ${timelineEntries}
       </div>
@@ -8747,7 +8435,7 @@ function renderIssues() {
           <div class="issue-machine-tag">${esc(issue.machine)}</div>
           <div class="issue-meta">
             <div class="issue-note-preview">${esc(issue.note)}</div>
-            <div class="issue-time">${datePart} ${submitterHtml}${shiftBadgeHtml}${timerBadgeHtml}${(issue.photos||[]).length?`<span class="photo-count-badge">📷 ${issue.photos.length}</span>`:''}${issue.editedAt?'<span style="color:var(--text3)">(edited)</span>':''}${alertFocusHtml}</div>
+            <div class="issue-time">${datePart} ${submitterHtml}${shiftBadgeHtml}${timerBadgeHtml}${(issue.photos||[]).length?`<span class="photo-count-badge">📷 ${issue.photos.length}</span>`:''}${issue.editedAt?'<span style="color:var(--color-text-subtle, var(--text3))">(edited)</span>':''}${alertFocusHtml}</div>
           </div>
           <button class="priority-btn${issue.highPriority?' active':''}" onclick="event.stopPropagation(); togglePriority('${issue.id}')" title="${issue.highPriority?'Remove high priority':'Mark as high priority'}">!</button>
           <div class="issue-expand-icon ${wasOpen?'open':''}" id="chevron-${issue.id}">▼</div>
@@ -8803,7 +8491,7 @@ function renderIssues() {
     // Search tile (always last)
     const searchTile = document.createElement('div');
     searchTile.className = 'swipe-status-tile swipe-search-tile';
-    searchTile.style.color = 'var(--text2)';
+    searchTile.style.color = 'var(--color-text-muted, var(--text2))';
     searchTile.dataset.status = '__search__';
     searchTile.innerHTML = `<span class="swipe-tile-icon">🔍</span><span class="swipe-tile-label">Search</span>`;
     catInner.appendChild(searchTile);
@@ -9019,8 +8707,8 @@ function renderIssues() {
           const skipChip = document.createElement('button');
           skipChip.type = 'button';
           skipChip.className = 'subcategory-item swipe-sub-action skip';
-          skipChip.innerHTML = `<span class="subcategory-item-label" style="color:var(--text3); font-style:italic;">Skip ›</span>`;
-          skipChip.style.borderColor = 'var(--border)';
+          skipChip.innerHTML = `<span class="subcategory-item-label" style="color:var(--color-text-subtle, var(--text3)); font-style:italic;">Skip ›</span>`;
+          skipChip.style.borderColor = 'var(--color-border, var(--border))';
           skipChip.style.background = 'transparent';
           skipChip.dataset.sub = '';
           subInner.appendChild(skipChip);
@@ -9965,15 +9653,10 @@ function closeMobilePeriodMenu() {
   menu.classList.remove('open');
 }
 
-function localDateStr(d) {
-  const pad=n=>String(n).padStart(2,'0');
-  return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
-}
 function fmtDate(d) {
   return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})+' '+
     d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true});
 }
-function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 function toggleUserDropdown() {
   const pill=document.getElementById('user-pill');
@@ -10439,34 +10122,6 @@ const THEME_VARS_MAP = BUILT_IN_THEME_DEFS.reduce((acc, theme) => {
   return acc;
 }, {});
 
-function themeLabelSansIcon(label) {
-  return String(label || '').replace(/^[^\s]+\s/, '');
-}
-
-function inferThemeModeFromBg(bgHex) {
-  const hex = String(bgHex || '').trim();
-  if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return 'dark';
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
-  return luminance > 0.68 ? 'light' : 'dark';
-}
-
-function normalizeThemeColors(colors, vars = {}) {
-  const fallback = [
-    vars['--bg'] || '#111111',
-    vars['--accent'] || '#888888',
-    vars['--text'] || '#ffffff',
-  ];
-  return Array.isArray(colors) && colors.length >= 3 ? colors : fallback;
-}
-
-function getThemePreviewColors(theme) {
-  const vars = theme && typeof theme === 'object' ? (theme.vars || {}) : {};
-  return normalizeThemeColors(theme?.colors, vars);
-}
-
 function getPublishedBuiltInThemeKeys() {
   const publishedKeys = new Set(
     (Array.isArray(storeItems) ? storeItems : [])
@@ -10506,19 +10161,15 @@ function getThemeCatalog() {
   const storeCustomThemes = storeItems
     .filter(item => item.type === 'theme' && item.isActive !== false && !item.themeKey && item.customVars)
     .map(item => {
-      const vars = { ...item.customVars };
+      const vars = normalizeThemeVars(item.customVars);
       return {
         key: `storetheme_${item.id}`,
         source: 'store-custom',
         label: `🎨 ${item.name || 'Custom Theme'}`,
         shortLabel: item.name || 'Custom Theme',
-        colors: [
-          vars['--bg'] || '#111111',
-          vars['--accent'] || '#888888',
-          vars['--text'] || '#ffffff',
-        ],
+        colors: normalizeThemeColors(null, vars),
         vars,
-        mode: inferThemeModeFromBg(vars['--bg']),
+        mode: inferThemeModeFromVars(vars),
         storeItemId: item.id,
         sortOrder: Number(item.order ?? 9999),
         price: Math.max(0, Number(item.price || 0)),
@@ -10533,7 +10184,7 @@ function getThemeCatalog() {
     .reverse()
     .filter(theme => theme && typeof theme === 'object')
     .map((theme, idx) => {
-      const vars = { ...(theme.vars || {}) };
+      const vars = normalizeThemeVars(theme.vars || {});
       return {
         key: `custom_${theme.id}`,
         source: 'saved-custom',
@@ -10541,7 +10192,7 @@ function getThemeCatalog() {
         shortLabel: theme.name || 'Custom',
         colors: normalizeThemeColors(null, vars),
         vars,
-        mode: inferThemeModeFromBg(vars['--bg']),
+        mode: inferThemeModeFromVars(vars),
         storeItemId: null,
         sortOrder: 50000 + idx,
         price: 0,
@@ -10561,78 +10212,31 @@ function getThemeCatalogEntry(key) {
   return getThemeCatalog().find(theme => theme.key === key) || null;
 }
 
+function renderThemeSwatches(theme) {
+  return getThemePreviewColors(theme)
+    .map(color => `<span class="te-saved-swatch" style="background:${esc(color)}"></span>`)
+    .join('');
+}
+
 // ── THEME EDITOR ──
 const CUSTOM_THEMES_KEY = 'apTracker_customThemes';
 
-const THEME_EDITOR_CORE_VARS = [
-  '--bg', '--bg2', '--bg3', '--border',
-  '--text', '--text2', '--text3',
-  '--accent', '--accent2',
-  '--green', '--red', '--blue', '--yellow', '--orange',
-  '--purple', '--teal', '--babyblue'
-];
-
-const CUSTOM_THEME_CLEAR_VARS = [
-  '--bg','--bg2','--bg3','--border','--text','--text2','--text3',
-  '--accent','--accent2','--accent-glow',
-  '--green','--green-dim','--red','--red-dim','--blue','--blue-dim',
-  '--yellow','--yellow-dim','--orange','--orange-dim',
-  '--purple','--purple-dim','--teal','--teal-dim','--babyblue','--babyblue-dim',
-  '--bg-svg','--bg-svg-image'
-];
 let _appliedCustomVarKeys = new Set();
 
 
-function _themeSvgToDataUrl(svgMarkup) {
-  const source = String(svgMarkup || '').trim();
-  if (!source) return '';
-  const normalized = source.replace(/\r\n?/g, '\n').replace(/\t/g, '  ');
-  return `url("data:image/svg+xml,${encodeURIComponent(normalized)}")`;
-}
-
-
-function __apThemeSvgToDataUrl(svgMarkup) {
-  const source = String(svgMarkup || '').trim();
-  if (!source) return '';
-  const normalized = source.replace(/\r\n?/g, '\n').replace(/\t/g, '  ');
-  return `url("data:image/svg+xml,${encodeURIComponent(normalized)}")`;
-}
-
-
-function _hexToRgba(hex, alpha) {
-  const h = hex.replace('#','');
-  const r = parseInt(h.slice(0,2),16), g = parseInt(h.slice(2,4),16), b = parseInt(h.slice(4,6),16);
-  return `rgba(${r},${g},${b},${alpha})`;
-}
-
 function clearCustomThemeVars() {
-  const keys = new Set([...CUSTOM_THEME_CLEAR_VARS, ..._appliedCustomVarKeys]);
-  keys.forEach(v => document.documentElement.style.removeProperty(v));
+  clearThemeVarsFromEngine([..._appliedCustomVarKeys]);
   _appliedCustomVarKeys = new Set();
 }
 
-function applyDerivedVars(vars) {
-  const root = document.documentElement.style;
-  if (vars['--accent']) root.setProperty('--accent-glow', _hexToRgba(vars['--accent'], 0.22));
-  ['--green','--red','--blue','--yellow','--orange','--purple','--teal','--babyblue'].forEach(k => {
-    if (vars[k]) root.setProperty(k + '-dim', _hexToRgba(vars[k], 0.12));
-  });
-  if (typeof vars['--bg-svg'] === 'string' && vars['--bg-svg'].trim()) {
-    const svgSource = String(vars['--bg-svg']).trim();
-    const svgNormalized = svgSource.replace(/\r\n?/g, '\n').replace(/\t/g, '  ');
-    root.setProperty('--bg-svg-image', `url(\"data:image/svg+xml,${encodeURIComponent(svgNormalized)}\")`);
-  }
-}
-
-
 function applyCustomThemeVars(vars) {
-  clearCustomThemeVars();
-  Object.entries(vars).forEach(([k, v]) => {
-    if (!String(k || '').startsWith('--')) return;
-    document.documentElement.style.setProperty(k, v);
-    _appliedCustomVarKeys.add(k);
+  const normalized = applyThemeVarsFromEngine(vars, {
+    themeKeys: THEME_KEYS,
+    mode: inferThemeModeFromVars(vars),
+    clearExtraKeys: [..._appliedCustomVarKeys]
   });
-  applyDerivedVars(vars);
+  _appliedCustomVarKeys = new Set(Object.keys(normalized || {}));
+  return normalized;
 }
 
 function _teGetAllVariables() {
@@ -10687,14 +10291,32 @@ function _teToHexIfColor(value) {
   return `#${toHex(m[1])}${toHex(m[2])}${toHex(m[3])}`;
 }
 
+function normalizeCustomThemeStorage(data = {}) {
+  const customThemes = (Array.isArray(data.customThemes) ? data.customThemes : [])
+    .filter(theme => theme && typeof theme === 'object')
+    .map(theme => ({
+      ...theme,
+      id: String(theme.id || `custom_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`),
+      name: String(theme.name || 'Custom Theme'),
+      vars: normalizeThemeVars(theme.vars || {}),
+      createdAt: Number(theme.createdAt || Date.now())
+    }));
+  const activeCustomId = data.activeCustomId && customThemes.some(theme => theme.id === data.activeCustomId)
+    ? data.activeCustomId
+    : null;
+  return { customThemes, activeCustomId };
+}
+
 function _loadCustomThemes() {
-  try { return JSON.parse(localStorage.getItem(CUSTOM_THEMES_KEY) || '{"customThemes":[],"activeCustomId":null}'); }
-  catch(e) { return { customThemes: [], activeCustomId: null }; }
+  try { return normalizeCustomThemeStorage(JSON.parse(localStorage.getItem(CUSTOM_THEMES_KEY) || '{"customThemes":[],"activeCustomId":null}')); }
+  catch(e) { return normalizeCustomThemeStorage(); }
 }
 
 function _saveCustomThemesStorage(data) {
-  try { localStorage.setItem(CUSTOM_THEMES_KEY, JSON.stringify(data)); } catch(e) {}
+  const normalized = normalizeCustomThemeStorage(data);
+  try { localStorage.setItem(CUSTOM_THEMES_KEY, JSON.stringify(normalized)); } catch(e) {}
   _syncThemePrefsToFirestore();
+  return normalized;
 }
 
 let _themePrefsSyncTimer = null;
@@ -10708,7 +10330,7 @@ function _syncThemePrefsToFirestore() {
   if (!currentUser) return;
   try {
     const uid = currentUser.uid;
-    const activeTheme = localStorage.getItem('pressTrackerTheme') || 'midnight';
+    const activeTheme = readSavedTheme('midnight');
     const { customThemes } = _loadCustomThemes();
     const payload = { activeTheme, customThemes };
     const signature = _themePrefsPayloadSignature(uid, payload);
@@ -10729,8 +10351,8 @@ function _applyFirestoreThemePrefs(prefs) {
   try {
     if (Array.isArray(prefs.customThemes)) {
       const local = _loadCustomThemes();
-      local.customThemes = prefs.customThemes;
-      try { localStorage.setItem(CUSTOM_THEMES_KEY, JSON.stringify(local)); } catch(e) {}
+      const normalized = normalizeCustomThemeStorage({ ...local, customThemes: prefs.customThemes });
+      try { localStorage.setItem(CUSTOM_THEMES_KEY, JSON.stringify(normalized)); } catch(e) {}
       renderAppearanceCustomThemes();
     }
     if (prefs.activeTheme) applyTheme(prefs.activeTheme);
@@ -10771,14 +10393,10 @@ function renderAppearanceCustomThemes() {
   data.customThemes.slice().reverse().forEach(theme => {
     const item = document.createElement('div');
     item.className = 'appearance-custom-item';
-    const safeName = theme.name.replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const safeName = esc(theme.name);
     item.innerHTML = `
       <span class="te-saved-name">${safeName}</span>
-      <span class="te-saved-swatches">
-        <span class="te-saved-swatch" style="background:${theme.vars['--bg'] || '#000'}"></span>
-        <span class="te-saved-swatch" style="background:${theme.vars['--accent'] || '#888'}"></span>
-        <span class="te-saved-swatch" style="background:${theme.vars['--text'] || '#fff'}"></span>
-      </span>
+      <span class="te-saved-swatches">${renderThemeSwatches(theme)}</span>
       <button class="te-saved-apply" data-id="${theme.id}">Apply</button>
       <button class="te-saved-delete" data-id="${theme.id}" title="Delete">🗑</button>`;
     list.appendChild(item);
@@ -10786,7 +10404,7 @@ function renderAppearanceCustomThemes() {
 }
 
 function updateActiveThemeChoice(theme) {
-  const savedTheme = theme ?? localStorage.getItem('pressTrackerTheme');
+  const savedTheme = theme ?? readSavedTheme('midnight');
   const currentTheme = getThemeCatalogEntry(savedTheme);
   const currentLabel = document.getElementById('theme-select-current');
   if (currentLabel) {
@@ -10840,10 +10458,10 @@ function applyTheme(theme) {
     const item = storeItems.find(i => i.id === itemId && i.type === 'theme' && i.isActive !== false);
     if (item?.customVars) {
       clearCustomThemeVars();
-      document.body.classList.remove(...THEME_KEYS.map(key => `theme-${key}`));
+      removeThemeClasses(THEME_KEYS);
       applyCustomThemeVars(item.customVars);
       document.body.dataset.themeMode = inferThemeModeFromVars(item.customVars);
-      try { localStorage.setItem('pressTrackerTheme', resolvedTheme); } catch(e) {}
+      saveThemeSelection(resolvedTheme);
       updateActiveThemeChoice(null);
       _syncThemePrefsToFirestore();
       updateThemeModeUI();
@@ -10855,10 +10473,10 @@ function applyTheme(theme) {
     const data = _loadCustomThemes();
     const found = data.customThemes.find(t => 'custom_' + t.id === resolvedTheme);
     if (found) {
-      document.body.classList.remove(...THEME_KEYS.map(key => `theme-${key}`));
+      removeThemeClasses(THEME_KEYS);
       applyCustomThemeVars(found.vars);
       document.body.dataset.themeMode = 'dark';
-      try { localStorage.setItem('pressTrackerTheme', resolvedTheme); } catch(e) {}
+      saveThemeSelection(resolvedTheme);
       updateActiveThemeChoice(null);
       _syncThemePrefsToFirestore();
       updateThemeModeUI();
@@ -10872,10 +10490,10 @@ function applyTheme(theme) {
         openStoreModal();
         return;
       }
-      document.body.classList.remove(...THEME_KEYS.map(key => `theme-${key}`));
+      removeThemeClasses(THEME_KEYS);
       applyCustomThemeVars(storeTheme.vars || {});
       document.body.dataset.themeMode = storeTheme.mode || 'dark';
-      try { localStorage.setItem('pressTrackerTheme', resolvedTheme); } catch(e) {}
+      saveThemeSelection(resolvedTheme);
       updateActiveThemeChoice(resolvedTheme);
       _syncThemePrefsToFirestore();
       updateThemeModeUI();
@@ -10888,12 +10506,16 @@ function applyTheme(theme) {
     openStoreModal();
     return;
   }
-  document.body.classList.remove(...THEME_KEYS.map(key => `theme-${key}`));
-  if (normalizedTheme !== 'midnight') document.body.classList.add(`theme-${normalizedTheme}`);
   const selectedTheme = THEME_OPTIONS.find(opt => opt.key === normalizedTheme) || THEME_OPTIONS[0];
-  document.body.dataset.themeMode = selectedTheme.mode;
+  applyThemeVarsFromEngine(THEME_VARS_MAP[normalizedTheme] || THEME_VARS_MAP.midnight || {}, {
+    themeKeys: THEME_KEYS,
+    classThemeKey: normalizedTheme,
+    mode: selectedTheme.mode,
+    clearExtraKeys: [..._appliedCustomVarKeys]
+  });
+  _appliedCustomVarKeys = new Set();
   updateActiveThemeChoice(normalizedTheme);
-  try { localStorage.setItem('pressTrackerTheme', normalizedTheme); } catch(e) {}
+  saveThemeSelection(normalizedTheme);
   _syncThemePrefsToFirestore();
   updateThemeModeUI();
 }
@@ -10901,11 +10523,11 @@ window.applyTheme = applyTheme;
 
 // Load saved theme (handles both built-in keys and custom_<id>)
 try {
-  const saved = localStorage.getItem('pressTrackerTheme');
+  const saved = readSavedTheme('');
   if (saved && saved.startsWith('custom_')) {
     const data = _loadCustomThemes();
     const found = data.customThemes.find(t => 'custom_' + t.id === saved);
-    if (found) { document.body.classList.remove(...THEME_KEYS.map(key => `theme-${key}`)); applyCustomThemeVars(found.vars); document.body.dataset.themeMode = 'dark'; updateActiveThemeChoice(null); }
+    if (found) { removeThemeClasses(THEME_KEYS); applyCustomThemeVars(found.vars); document.body.dataset.themeMode = 'dark'; updateActiveThemeChoice(null); }
     else applyTheme('midnight');
   } else if (saved && saved.startsWith('storetheme_')) {
     applyTheme(saved);
@@ -10916,7 +10538,7 @@ try {
 updateThemeModeUI();
 renderThemeChoices();
 renderAppearanceCustomThemes();
-updateActiveThemeChoice(localStorage.getItem('pressTrackerTheme') || 'midnight');
+updateActiveThemeChoice(readSavedTheme('midnight'));
 
 
 document.getElementById('appearance-custom-list')?.addEventListener('click', e => {
@@ -10934,11 +10556,11 @@ document.getElementById('appearance-custom-list')?.addEventListener('click', e =
     d.customThemes = d.customThemes.filter(t => t.id !== deleteBtn.dataset.id);
     if (d.activeCustomId === deleteBtn.dataset.id) d.activeCustomId = null;
     _saveCustomThemesStorage(d);
-    if ((localStorage.getItem('pressTrackerTheme') || '') === 'custom_' + deleteBtn.dataset.id) applyTheme('midnight');
+    if (readSavedTheme('') === 'custom_' + deleteBtn.dataset.id) applyTheme('midnight');
     renderAppearanceCustomThemes();
     renderThemeChoices();
     renderStoreModal();
-    updateActiveThemeChoice(localStorage.getItem('pressTrackerTheme') || 'midnight');
+    updateActiveThemeChoice(readSavedTheme('midnight'));
   }
 });
 
@@ -10966,7 +10588,7 @@ window.openAppearanceModal = function() {
   document.getElementById('user-pill').classList.remove('open');
   renderThemeChoices();
   renderAppearanceCustomThemes();
-  updateActiveThemeChoice(localStorage.getItem('pressTrackerTheme') || 'midnight');
+  updateActiveThemeChoice(readSavedTheme('midnight'));
   document.getElementById('appearance-modal').classList.add('visible');
 };
 
@@ -11007,7 +10629,7 @@ window.openThemeEditor = function() {
   if (!themeEditorModal || !appearanceModal) return;
   document.getElementById('user-dropdown')?.classList.remove('visible');
   document.getElementById('user-pill')?.classList.remove('open');
-  _tePrevThemeKey = localStorage.getItem('pressTrackerTheme') || 'midnight';
+  _tePrevThemeKey = readSavedTheme('midnight');
   _teEditingId = null;
   const saveBtn = document.getElementById('te-save-btn');
   if (saveBtn) saveBtn.textContent = '💾 Save';
@@ -11033,7 +10655,7 @@ window.openThemeEditor = function() {
   }
 
   // Remove CSS class theme so inline vars on :root are not overridden, enabling live preview
-  document.body.classList.remove(...THEME_KEYS.map(key => `theme-${key}`));
+  removeThemeClasses(THEME_KEYS);
   applyCustomThemeVars(_teCurrentVars);
 
   _renderTEVarsList();
@@ -11053,7 +10675,7 @@ window.closeThemeEditor = function() {
   themeEditorModal.classList.remove('visible');
   appearanceModal.classList.remove('visible');
   // Revert to what was active before editor opened
-  const saved = localStorage.getItem('pressTrackerTheme') || 'midnight';
+  const saved = readSavedTheme('midnight');
   if (saved.startsWith('custom_')) {
     const data = _loadCustomThemes();
     const found = data.customThemes.find(t => 'custom_' + t.id === saved);
@@ -11183,7 +10805,7 @@ window.saveCustomTheme = function() {
   const data = _loadCustomThemes();
   if (_teEditingId) {
     const idx = data.customThemes.findIndex(t => t.id === _teEditingId);
-    if (idx >= 0) data.customThemes[idx] = { ...data.customThemes[idx], name, vars: { ..._teCurrentVars } };
+    if (idx >= 0) data.customThemes[idx] = { ...data.customThemes[idx], name, vars: normalizeThemeVars(_teCurrentVars || {}) };
     _saveCustomThemesStorage(data);
     applyTheme('custom_' + _teEditingId);
     _teEditingId = null;
@@ -11191,7 +10813,7 @@ window.saveCustomTheme = function() {
     if (saveBtn) saveBtn.textContent = '💾 Save';
   } else {
     const id = 'custom_' + Date.now();
-    data.customThemes.push({ id, name, vars: { ..._teCurrentVars }, createdAt: Date.now() });
+    data.customThemes.push({ id, name, vars: normalizeThemeVars(_teCurrentVars || {}), createdAt: Date.now() });
     data.activeCustomId = id;
     _saveCustomThemesStorage(data);
     applyTheme('custom_' + id);
@@ -11214,14 +10836,10 @@ function _renderTESavedList() {
   data.customThemes.slice().reverse().forEach(theme => {
     const item = document.createElement('div');
     item.className = 'te-saved-item';
-    const safeName = theme.name.replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const safeName = esc(theme.name);
     item.innerHTML = `
       <span class="te-saved-name">${safeName}</span>
-      <span class="te-saved-swatches">
-        <span class="te-saved-swatch" style="background:${theme.vars['--bg'] || '#000'}"></span>
-        <span class="te-saved-swatch" style="background:${theme.vars['--accent'] || '#888'}"></span>
-        <span class="te-saved-swatch" style="background:${theme.vars['--text'] || '#fff'}"></span>
-      </span>
+      <span class="te-saved-swatches">${renderThemeSwatches(theme)}</span>
       <button class="te-saved-apply" data-id="${theme.id}">Apply</button>
       <button class="te-saved-delete" data-id="${theme.id}" title="Delete">🗑</button>`;
     item.querySelector('.te-saved-apply').addEventListener('click', () => {
@@ -11244,7 +10862,7 @@ function _renderTESavedList() {
       d.customThemes = d.customThemes.filter(t => t.id !== theme.id);
       if (d.activeCustomId === theme.id) d.activeCustomId = null;
       _saveCustomThemesStorage(d);
-      if ((localStorage.getItem('pressTrackerTheme') || '') === 'custom_' + theme.id) applyTheme('midnight');
+      if (readSavedTheme('') === 'custom_' + theme.id) applyTheme('midnight');
       _renderTESavedList();
       renderAppearanceCustomThemes();
       renderThemeChoices();
@@ -11416,6 +11034,16 @@ const SORT_OPTIONS = [
   { value: 'recently-updated', label: 'Recently updated' },
 ];
 let currentSort = 'newest';
+const sortDropdown = createDropdownController({
+  dropdownId: 'sort-dropdown',
+  buttonId: 'sort-dropdown-btn',
+  wrapId: 'sort-dropdown-wrap'
+});
+const exportDropdown = createDropdownController({
+  dropdownId: 'export-dropdown',
+  buttonId: 'export-menu-btn',
+  wrapId: 'export-dropdown-wrap'
+});
 
 function buildSortDropdown() {
   const dd = document.getElementById('sort-dropdown');
@@ -11447,49 +11075,23 @@ document.getElementById('sort-select')?.addEventListener('change', function() {
   setSort(this.value);
 });
 
-window.toggleSortDropdown = () => {
-  const dd = document.getElementById('sort-dropdown');
-  const btn = document.getElementById('sort-dropdown-btn');
-  const isOpen = dd.classList.contains('visible');
-  dd.classList.toggle('visible', !isOpen);
-  btn.classList.toggle('open', !isOpen);
-};
+window.toggleSortDropdown = sortDropdown.toggle;
 
 function closeSortDropdown() {
-  document.getElementById('sort-dropdown')?.classList.remove('visible');
-  document.getElementById('sort-dropdown-btn')?.classList.remove('open');
+  sortDropdown.close();
 }
 
-document.addEventListener('click', e => {
-  const wrap = document.getElementById('sort-dropdown-wrap');
-  if (wrap && !wrap.contains(e.target)) closeSortDropdown();
-});
-
-document.addEventListener('click', e => {
-  const wrap = document.getElementById('shift-dropdown-wrap');
-  if (wrap && !wrap.contains(e.target)) closeShiftDropdown();
-});
+sortDropdown.bindOutsideClick();
+shiftDropdown.bindOutsideClick();
 
 syncShiftFilterUi();
 buildSortDropdown();
 
-window.toggleExportDropdown = () => {
-  const dd = document.getElementById('export-dropdown');
-  const btn = document.getElementById('export-menu-btn');
-  const isOpen = dd?.classList.contains('visible');
-  dd?.classList.toggle('visible', !isOpen);
-  btn?.classList.toggle('open', !isOpen);
-};
+window.toggleExportDropdown = exportDropdown.toggle;
 
-window.closeExportDropdown = () => {
-  document.getElementById('export-dropdown')?.classList.remove('visible');
-  document.getElementById('export-menu-btn')?.classList.remove('open');
-};
+window.closeExportDropdown = exportDropdown.close;
 
-document.addEventListener('click', e => {
-  const wrap = document.getElementById('export-dropdown-wrap');
-  if (wrap && !wrap.contains(e.target)) window.closeExportDropdown?.();
-});
+exportDropdown.bindOutsideClick();
 
 // ── ACTIVE ROWS TOGGLE ──
 let issueRowScope = 'all';
@@ -11859,16 +11461,16 @@ window.confirmSerialModal = async () => {
   if (!sn) {
     serialError.textContent = 'Please enter a serial number';
     serialError.style.display = 'block';
-    serialInput.style.borderColor = 'var(--red)';
-    document.getElementById('serial-select').style.borderColor = 'var(--red)';
+    serialInput.style.borderColor = 'var(--color-danger, var(--red))';
+    document.getElementById('serial-select').style.borderColor = 'var(--color-danger, var(--red))';
     serialInput.focus();
     return;
   }
   if (!serialPattern.test(sn)) {
     serialError.textContent = 'Serial should usually look like STK##### (example: STK12345)';
     serialError.style.display = 'block';
-    serialInput.style.borderColor = 'var(--red)';
-    document.getElementById('serial-select').style.borderColor = 'var(--red)';
+    serialInput.style.borderColor = 'var(--color-danger, var(--red))';
+    document.getElementById('serial-select').style.borderColor = 'var(--color-danger, var(--red))';
     serialInput.focus();
     return;
   }
@@ -12184,7 +11786,7 @@ function _messagingSetPhotoPreview(file = null) {
     return;
   }
   const objectUrl = URL.createObjectURL(file);
-  wrap.innerHTML = `<div class="msg-reaction" style="display:inline-flex;margin:8px 0;">📷 ${esc(file.name || 'image')}</div><img src="${objectUrl}" alt="selected photo preview" style="max-width:180px;border-radius:10px;border:1px solid var(--border);margin-top:6px;">`;
+  wrap.innerHTML = `<div class="msg-reaction" style="display:inline-flex;margin:8px 0;">📷 ${esc(file.name || 'image')}</div><img src="${objectUrl}" alt="selected photo preview" style="max-width:180px;border-radius:10px;border:1px solid var(--color-border, var(--border));margin-top:6px;">`;
 }
 
 function _messagingNotifyIncoming(message, conversationName) {
@@ -12354,7 +11956,7 @@ function _renderMessagingMessages(messages) {
     const senderName = mine ? 'You' : (msg.sender?.name || _messagingUserLabel(_messagingMemberByUid(msg.sender?.uid) || {}));
     const avatar = mine ? '' : `<div class="msg-row-avatar">${_messagingAvatarHtml({ type: 'dm', memberIds: [currentUser?.uid, msg.sender?.uid] }, 28)}</div>`;
     const attachments = (msg.attachments || []).filter(att => att.kind === 'image' && att.url)
-      .map(att => `<img class="messaging-msg-image" src="${esc(att.url)}" alt="${esc(att.fileName || 'image')}" style="max-width:200px;border-radius:10px;border:1px solid var(--border);margin-top:4px;">`).join('');
+      .map(att => `<img class="messaging-msg-image" src="${esc(att.url)}" alt="${esc(att.fileName || 'image')}" style="max-width:200px;border-radius:10px;border:1px solid var(--color-border, var(--border));margin-top:4px;">`).join('');
     html.push(`<div class="msg-row ${mine ? 'sent' : 'recv'}">
       ${avatar}
       <div class="msg-bubble-group">
@@ -13184,9 +12786,9 @@ function _pressWikiRenderTreeNode(parentEl, node, tree, depth = 0) {
   row.style.alignItems = 'center';
   row.style.gap = '8px';
   row.style.padding = `10px 12px 10px ${12 + depth * 18}px`;
-  row.style.borderBottom = '1px solid var(--line)';
+  row.style.borderBottom = '1px solid var(--color-border, var(--border))';
   row.style.background = node.id === _pressWikiSelectedPageId ? 'color-mix(in srgb, var(--ios-blue) 14%, transparent)' : 'transparent';
-  row.style.color = 'var(--text)';
+  row.style.color = 'var(--color-text, var(--text))';
   row.style.cursor = 'pointer';
   row.style.textAlign = 'left';
 
@@ -13201,9 +12803,9 @@ function _pressWikiRenderTreeNode(parentEl, node, tree, depth = 0) {
     toggle.style.width = '22px';
     toggle.style.height = '22px';
     toggle.style.borderRadius = '6px';
-    toggle.style.border = '1px solid var(--line)';
-    toggle.style.background = 'var(--bg2)';
-    toggle.style.color = 'var(--text2)';
+    toggle.style.border = '1px solid var(--color-border, var(--border))';
+    toggle.style.background = 'var(--color-surface, var(--bg2))';
+    toggle.style.color = 'var(--color-text-muted, var(--text2))';
     toggle.style.display = 'inline-flex';
     toggle.style.alignItems = 'center';
     toggle.style.justifyContent = 'center';
@@ -13228,7 +12830,7 @@ function _pressWikiRenderTreeNode(parentEl, node, tree, depth = 0) {
   title.textContent = node.title || node.id || 'Untitled';
   const meta = document.createElement('div');
   meta.style.fontSize = '11px';
-  meta.style.color = 'var(--text3)';
+  meta.style.color = 'var(--color-text-subtle, var(--text3))';
   meta.style.fontFamily = "'Share Tech Mono', monospace";
   meta.textContent = `Photos: ${node.photoCount || 0}`;
   main.appendChild(title);
@@ -13319,19 +12921,19 @@ function _pressWikiSetScope(scope, { reload = true } = {}) {
   const isShared = _pressWikiScope === WIKI_SCOPE_SHARED;
   [pressBtn, sharedBtn].forEach(btn => {
     if (!btn) return;
-    btn.style.background = 'var(--bg3)';
-    btn.style.borderColor = 'var(--border)';
-    btn.style.color = 'var(--text2)';
+    btn.style.background = 'var(--color-surface-raised, var(--bg3))';
+    btn.style.borderColor = 'var(--color-border, var(--border))';
+    btn.style.color = 'var(--color-text-muted, var(--text2))';
   });
   if (pressBtn) {
-    pressBtn.style.background = !isShared ? 'var(--accent)' : 'var(--bg3)';
-    pressBtn.style.borderColor = !isShared ? 'var(--accent)' : 'var(--border)';
-    pressBtn.style.color = !isShared ? 'white' : 'var(--text2)';
+    pressBtn.style.background = !isShared ? 'var(--color-accent, var(--accent))' : 'var(--color-surface-raised, var(--bg3))';
+    pressBtn.style.borderColor = !isShared ? 'var(--color-accent, var(--accent))' : 'var(--color-border, var(--border))';
+    pressBtn.style.color = !isShared ? 'white' : 'var(--color-text-muted, var(--text2))';
   }
   if (sharedBtn) {
-    sharedBtn.style.background = isShared ? 'var(--accent)' : 'var(--bg3)';
-    sharedBtn.style.borderColor = isShared ? 'var(--accent)' : 'var(--border)';
-    sharedBtn.style.color = isShared ? 'white' : 'var(--text2)';
+    sharedBtn.style.background = isShared ? 'var(--color-accent, var(--accent))' : 'var(--color-surface-raised, var(--bg3))';
+    sharedBtn.style.borderColor = isShared ? 'var(--color-accent, var(--accent))' : 'var(--color-border, var(--border))';
+    sharedBtn.style.color = isShared ? 'white' : 'var(--color-text-muted, var(--text2))';
   }
   const pressLabelBtn = document.getElementById('press-wiki-scope-press');
   if (pressLabelBtn) pressLabelBtn.textContent = _pressWikiPressLabel();
@@ -13433,7 +13035,7 @@ function _pressWikiAppendMarkdownBlock(bodyEl, line) {
     if (imgMatch[1]) {
       const cap = document.createElement('figcaption');
       cap.style.fontSize = '12px';
-      cap.style.color = 'var(--text3)';
+      cap.style.color = 'var(--color-text-subtle, var(--text3))';
       cap.style.marginTop = '4px';
       cap.textContent = imgMatch[1];
       figure.appendChild(cap);
@@ -13458,7 +13060,7 @@ function _pressWikiAppendMarkdownBlock(bodyEl, line) {
   if (/^---+$/.test(trimmed)) {
     const hr = document.createElement('hr');
     hr.style.border = 'none';
-    hr.style.borderTop = '1px solid var(--line)';
+    hr.style.borderTop = '1px solid var(--color-border, var(--border))';
     hr.style.margin = '10px 0';
     bodyEl.appendChild(hr);
     return true;
@@ -13478,7 +13080,7 @@ function renderPressWikiEmptySelection(message = _pressWikiEmptySelectionMessage
   if (bodyEl) {
     bodyEl.innerHTML = '';
     const empty = document.createElement('div');
-    empty.style.color = 'var(--text3)';
+    empty.style.color = 'var(--color-text-subtle, var(--text3))';
     empty.style.fontSize = '13px';
     empty.style.lineHeight = '1.45';
     empty.textContent = message;
@@ -13642,7 +13244,7 @@ async function loadPressWikiPage(pageId) {
     const revisions = revSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     const currentRevision = revisions.find(r => r.id === currentRevisionId) || revisions[0] || null;
     _renderPressWikiBody(currentRevision?.body || 'No revision body available.');
-    revisionsEl.innerHTML = revisions.length ? '' : '<div style="color:var(--text3);">No revisions yet.</div>';
+    revisionsEl.innerHTML = revisions.length ? '' : '<div style="color:var(--color-text-subtle, var(--text3));">No revisions yet.</div>';
     revisions.forEach(rev => {
       const row = document.createElement('button');
       row.type = 'button';
@@ -13917,7 +13519,7 @@ function renderPressWikiPhotoPicker() {
     return;
   }
   picker.style.display = 'block';
-  picker.innerHTML = '<div style="font-size:12px;color:var(--text3);margin-bottom:6px;">Insert from press wiki photos</div>';
+  picker.innerHTML = '<div style="font-size:12px;color:var(--color-text-subtle, var(--text3));margin-bottom:6px;">Insert from press wiki photos</div>';
   _pressWikiAttachmentsCache.forEach((a, idx) => {
     if (!a.url) return;
     const btn = document.createElement('button');
@@ -14011,18 +13613,18 @@ const wikiEditBody = document.getElementById('press-wiki-edit-body');
 if (wikiEditBody) {
   wikiEditBody.addEventListener('dragover', (e) => {
     e.preventDefault();
-    wikiEditBody.style.borderColor = 'var(--accent)';
-    wikiEditBody.style.background = 'var(--bg2)';
+    wikiEditBody.style.borderColor = 'var(--color-accent, var(--accent))';
+    wikiEditBody.style.background = 'var(--color-surface, var(--bg2))';
   });
   wikiEditBody.addEventListener('dragleave', (e) => {
     e.preventDefault();
-    wikiEditBody.style.borderColor = 'var(--border)';
-    wikiEditBody.style.background = 'var(--bg3)';
+    wikiEditBody.style.borderColor = 'var(--color-border, var(--border))';
+    wikiEditBody.style.background = 'var(--color-surface-raised, var(--bg3))';
   });
   wikiEditBody.addEventListener('drop', async (e) => {
     e.preventDefault();
-    wikiEditBody.style.borderColor = 'var(--border)';
-    wikiEditBody.style.background = 'var(--bg3)';
+    wikiEditBody.style.borderColor = 'var(--color-border, var(--border))';
+    wikiEditBody.style.background = 'var(--color-surface-raised, var(--bg3))';
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       await handlePressWikiFilesUpload(e.dataTransfer.files, true);
     }
@@ -15832,338 +15434,53 @@ window.addEventListener('resize', () => {
   }
 });
 
-// ── EXPORT PDF ──
-window.openExportModal = () => {
-  // Build PDF preview from current filtered issues
-  const search = document.getElementById('search-input').value.toLowerCase();
-  const mf = document.getElementById('machine-filter').value;
-  const sf = document.getElementById('status-filter').value;
-  const sort = currentSort;
+// ── EXPORT TOOL ──
+const exportTool = initExportTool({
+  getIssues: () => issues,
+  getCurrentSort: () => currentSort,
+  getIssueRowScope: () => issueRowScope,
+  getActiveRows: () => activeRows,
+  getPresses: () => PRESSES,
+  getIssueScope: () => issueScope,
+  getCurrentUser: () => currentUser,
+  getCurrentPlantId: () => currentPlantId,
+  periodFilter,
+  issueHasActiveStatus,
+  applySortOrder,
+  getStatuses: () => STATUSES,
+  currentStatusKey,
+  alphaColor,
+  esc,
+  localDateStr,
+  completeDemoGuideStep,
+  fetchIssueEventHistory,
+  fetchAttachmentPhotos,
+  toRowId,
+  getStatusDef,
+  getHtml2Pdf: () => window.html2pdf,
+  getXlsx: () => window.XLSX
+});
 
-  const activeRowMachines = new Set();
-  if (issueRowScope === 'active' && activeRows.size > 0) {
-    activeRows.forEach(rowName => { (PRESSES[rowName]||[]).forEach(m => activeRowMachines.add(m)); });
-  }
+function openExportModal() {
+  return exportTool.openModal();
+}
 
-  let filtered = issues.filter(i => {
-    if (issueScope === 'mine' && i.userId !== currentUser?.uid) return false;
-    if (!periodFilter(i)) return false;
-    if (issueRowScope === 'active' && activeRows.size > 0 && !activeRowMachines.has(i.machine)) return false;
-    if (mf && i.machine !== mf) return false;
-    if (sf && !issueHasActiveStatus(i, sf)) return false;
-    if (search) {
-      const machineText = String(i.machine || '').toLowerCase();
-      const noteText = String(i.note || '').toLowerCase();
-      const resolveText = String(i.resolveNote || '').toLowerCase();
-      const userText = String(i.userName || '').toLowerCase();
-      if (!machineText.includes(search) && !noteText.includes(search) && !resolveText.includes(search) && !userText.includes(search)) return false;
-    }
-    return true;
-  });
+function closeExportModal() {
+  return exportTool.closeModal();
+}
 
-  // Apply same sort as the issue log so the PDF always matches what the user sees.
-  applySortOrder(filtered, sort);
+function downloadPDF() {
+  return exportTool.downloadPDF();
+}
 
-  document.getElementById('export-subtitle').textContent = filtered.length + ' issue' + (filtered.length!==1?'s':'') + ' in current view';
+function downloadExcel() {
+  return exportTool.downloadExcel();
+}
 
-  // Build print-ready HTML
-  const STATUS_CONFIG = Object.fromEntries(Object.entries(STATUSES).map(([k,v])=>[k,{label:v.label,icon:v.icon,color:v.swipeColor||v.cssColor||v.color,subs:v.subs}]));
-  const STATUS_CONFIG_FALLBACK = key => STATUS_CONFIG[key] || { label: key || 'Unknown', icon: '●', color: '#8b949e', subs: [] };
-  const now = new Date();
-  const dateStr = now.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
-  const userName = currentUser?.displayName || currentUser?.email || 'Unknown';
-
-  let cardsHtml = '';
-  filtered.forEach(issue => {
-    const history = issue.eventHistory && issue.eventHistory.length > 0
-      ? issue.eventHistory
-      : [{
-          status: currentStatusKey(issue),
-          subStatus: issue.currentStatus?.subStatusKey || '',
-          note: issue.currentStatus?.notePreview || '',
-          dateTime: issue.currentStatus?.enteredDateTime || issue.dateTime || '',
-          by: issue.currentStatus?.enteredBy?.name || issue.userName || ''
-        }];
-    const lastEntry = history[history.length-1];
-    const lastKey = lastEntry.status || 'open';
-    const cfg = STATUS_CONFIG_FALLBACK(lastKey);
-    const statusLabel = cfg.label + (lastEntry.subStatus ? ' \u203a '+lastEntry.subStatus : '');
-    const col = cfg.color || '#ef4444';
-
-    // Status pill colors for print (light bg)
-    const pillBg = alphaColor(col, 0.09);
-    const pillBorder = alphaColor(col, 0.27);
-
-    // Photos
-    const photosHtml = (issue.photos||[]).length
-      ? '<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">' + issue.photos.map(p => '<img src="'+p.dataUrl+'" style="width:60px;height:60px;object-fit:cover;border-radius:4px;border:1px solid #ddd;">').join('') + '</div>' : '';
-
-    // Timeline
-    let tlHtml = '';
-    history.forEach((entry, idx) => {
-      const ecfg = STATUS_CONFIG_FALLBACK(entry.status);
-      const isCurrent = idx === history.length - 1;
-      tlHtml += '<div style="padding:3px 0 3px 10px;border-left:2px solid '+(isCurrent?ecfg.color:'#ddd')+';margin-bottom:2px;">'
-        + '<div style="font-size:9px;font-weight:700;color:'+ecfg.color+';">'+ecfg.icon+' '+ecfg.label+(entry.subStatus?' \u203a '+esc(entry.subStatus):'')+(isCurrent?' (current)':'')+'</div>'
-        + '<div style="font-size:8px;color:#999;">'+(entry.dateTime||'')+(entry.by?' \u2014 '+esc(entry.by):'')+'</div>'
-        + (entry.note ? '<div style="font-size:8px;color:#666;font-style:italic;">\u201c'+esc(entry.note)+'\u201d</div>' : '')
-        + '</div>';
-    });
-
-    const datePart = issue.dateTime || '';
-
-    cardsHtml += `<div style="border:1px solid #ddd;border-radius:6px;margin-bottom:10px;overflow:hidden;page-break-inside:avoid;">
-      <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid #eee;background:#fafafa;">
-        <span style="font-size:14px;font-weight:700;color:#ea580c;font-family:monospace;background:#fff7ed;border:1px solid #fed7aa;border-radius:4px;padding:2px 8px;">${esc(issue.machine)}</span>
-        <span style="font-size:12px;font-weight:700;flex:1;">${esc(issue.note||'')}</span>
-        <span style="font-size:8px;font-weight:700;padding:2px 6px;border-radius:3px;text-transform:uppercase;letter-spacing:0.3px;background:${pillBg};color:${col};border:1px solid ${pillBorder};">${esc(statusLabel)}</span>
-      </div>
-      <div style="padding:10px;font-size:10px;">
-        <div style="font-size:11px;line-height:1.5;margin-bottom:6px;color:#333;">${esc(issue.note||'')}</div>
-        <div style="display:flex;gap:16px;color:#666;font-size:9px;margin-bottom:4px;">
-          <span><span style="color:#999;">Logged:</span> ${esc(datePart)}</span>
-          <span><span style="color:#999;">By:</span> ${esc(issue.userName||'')}</span>
-        </div>
-        ${issue.resolveNote ? '<div style="display:flex;gap:16px;color:#666;font-size:9px;margin-bottom:4px;"><span><span style="color:#999;">Resolved:</span> '+(issue.resolveDateTime||'')+'</span><span><span style="color:#999;">By:</span> '+(issue.resolvedBy||'')+'</span></div><div style="font-size:9px;color:#166534;background:#dcfce7;padding:4px 8px;border-radius:4px;margin-bottom:6px;">'+esc(issue.resolveNote)+'</div>' : ''}
-        ${photosHtml}
-        <div style="margin-top:8px;padding-top:6px;border-top:1px solid #eee;">
-          <div style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#999;margin-bottom:4px;">Status history</div>
-          ${tlHtml}
-        </div>
-      </div>
-    </div>`;
-  });
-
-  const previewHtml = `<div id="pdf-content" style="background:white;padding:20px;color:#1a1a1a;font-family:'Segoe UI',sans-serif;font-size:11px;">
-    <div style="display:flex;align-items:flex-end;justify-content:space-between;border-bottom:2px solid #ea580c;padding-bottom:8px;margin-bottom:16px;">
-      <div style="font-size:18px;font-weight:700;color:#ea580c;letter-spacing:0.5px;">AP-TRACKER</div>
-      <div style="text-align:right;font-size:9px;color:#666;line-height:1.5;">Issue log report<br>${dateStr}<br>Generated by ${esc(userName)}</div>
-    </div>
-    ${cardsHtml}
-  </div>`;
-
-  document.getElementById('export-preview').innerHTML = previewHtml;
-  document.getElementById('export-modal').classList.add('visible');
-};
-
-window.closeExportModal = () => {
-  document.getElementById('export-modal').classList.remove('visible');
-};
-
-window.downloadPDF = async () => {
-  const btn = document.getElementById('export-dl-btn');
-  let wrapper = null;
-  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Generating…';
-  try {
-    const src = document.getElementById('pdf-content');
-    if (!src) throw new Error('PDF content not found');
-    closeExportModal();
-    // Clone into a temp wrapper at position 0,0 to prevent html2pdf top-margin bug
-    wrapper = document.createElement('div');
-    wrapper.style.cssText = 'position:fixed;top:0;left:-10000px;width:816px;background:white;opacity:0.01;pointer-events:none;';
-    const clone = src.cloneNode(true);
-    wrapper.appendChild(clone);
-    document.body.appendChild(wrapper);
-    const opt = {
-      margin: [0.4, 0.4, 0.4, 0.4],
-      filename: 'AP-Tracker-Report-' + localDateStr(new Date()) + '.pdf',
-      image: { type: 'jpeg', quality: 0.95 },
-      html2canvas: { scale: 2, useCORS: true, scrollY: 0, scrollX: 0 },
-      jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' },
-      pagebreak: { mode: ['avoid-all', 'css'] }
-    };
-    await html2pdf().set(opt).from(clone).save();
-    completeDemoGuideStep('export');
-  } catch(e) {
-    console.error('PDF export error:', e);
-  } finally {
-    if (wrapper && wrapper.parentNode) wrapper.parentNode.removeChild(wrapper);
-    btn.disabled = false;
-    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v8M5 7l3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 12v1a1 1 0 001 1h8a1 1 0 001-1v-1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg> Download PDF';
-  }
-};
-
-// Close export modal on escape / overlay click
-document.getElementById('export-modal')?.addEventListener('click', e => { if(e.target===document.getElementById('export-modal')) closeExportModal(); });
-
-window.downloadExcel = async () => {
-  if (typeof XLSX === 'undefined') {
-    alert('Excel library not loaded. Please refresh and try again.');
-    return;
-  }
-  const btn = document.getElementById('export-excel-menu-item');
-  const origInner = btn.innerHTML;
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span> Building…';
-  try {
-    // Apply the same filters as the PDF export and the issue log view
-    const search = document.getElementById('search-input').value.toLowerCase();
-    const mf = document.getElementById('machine-filter').value;
-    const sf = document.getElementById('status-filter').value;
-    const sort = currentSort;
-
-    const activeRowMachines = new Set();
-    if (issueRowScope === 'active' && activeRows.size > 0) {
-      activeRows.forEach(rowName => { (PRESSES[rowName]||[]).forEach(m => activeRowMachines.add(m)); });
-    }
-
-    let filtered = issues.filter(i => {
-      if (issueScope === 'mine' && i.userId !== currentUser?.uid) return false;
-      if (!periodFilter(i)) return false;
-      if (issueRowScope === 'active' && activeRows.size > 0 && !activeRowMachines.has(i.machine)) return false;
-      if (mf && i.machine !== mf) return false;
-      if (sf && !issueHasActiveStatus(i, sf)) return false;
-      if (search) {
-        const mt = String(i.machine||'').toLowerCase(), nt = String(i.note||'').toLowerCase();
-        const rt = String(i.resolveNote||'').toLowerCase(), ut = String(i.userName||'').toLowerCase();
-        if (!mt.includes(search) && !nt.includes(search) && !rt.includes(search) && !ut.includes(search)) return false;
-      }
-      return true;
-    });
-    applySortOrder(filtered, sort);
-
-    // Ensure event history and photos are fetched for all filtered issues
-    await Promise.all(filtered.map(async issue => {
-      if (issue.schemaVersion === 2 && (!issue.eventHistory || issue.eventHistory.length === 0)) {
-        const h = await fetchIssueEventHistory(issue);
-        if (h.length > 0) issue.eventHistory = h;
-      }
-      if (Number(issue.photoCount || 0) > 0 && (!issue.photos || issue.photos.length === 0)) {
-        issue.photos = await fetchAttachmentPhotos(issue.id);
-      }
-    }));
-
-    // Build rowId → human-readable row name lookup
-    const rowIdToName = {};
-    Object.entries(PRESSES).forEach(([rowName, machines]) => {
-      rowIdToName[toRowId(rowName)] = rowName;
-    });
-
-    // Convert a Firestore Timestamp, epoch ms number, or Date to a JS Date (or null)
-    const toJsDate = ts => {
-      if (!ts) return null;
-      if (ts instanceof Date) return ts;
-      if (typeof ts.toDate === 'function') return ts.toDate();
-      if (typeof ts === 'number') return new Date(ts);
-      return null;
-    };
-
-    // ── Issues sheet ──
-    const ISSUE_HEADERS = ['Issue ID','Plant ID','Machine','Row','Date Logged','Note','Status','Sub-Status',
-      'Logged By','Resolved','Resolved At','Resolve Note','Resolved By','Photo Count','Photo URLs',
-      'Workflow State','Created At','Updated At'];
-    const issueRows = filtered.map(issue => {
-      const statusKey = currentStatusKey(issue);
-      const statusLabel = getStatusDef(statusKey).label || statusKey;
-      const subStatus = issue.currentStatus?.subStatusKey || '';
-      const rowName = rowIdToName[issue.rowId] || issue.rowId || '';
-      const isResolved = !!(issue.lifecycle?.isResolved || issue.resolved);
-      const history = issue.eventHistory || issue.statusHistory || [];
-      const resolvedEntry = history.slice().reverse().find(e => e.status === 'resolved');
-      const photoUrls = (issue.photos||[]).map(p=>p.dataUrl).filter(Boolean).join('\n');
-      return {
-        'Issue ID': issue.id,
-        'Plant ID': issue.plantId || currentPlantId,
-        'Machine': issue.machine || '',
-        'Row': rowName,
-        'Date Logged': toJsDate(issue.timestamp) || issue.dateTime || '',
-        'Note': issue.note || '',
-        'Status': statusLabel,
-        'Sub-Status': subStatus,
-        'Logged By': issue.userName || '',
-        'Resolved': isResolved ? 'Yes' : 'No',
-        'Resolved At': toJsDate(issue.lifecycle?.resolvedAt) || '',
-        'Resolve Note': issue.resolveNote || '',
-        'Resolved By': resolvedEntry?.by || issue.resolvedBy || '',
-        'Photo Count': Number(issue.photoCount || 0),
-        'Photo URLs': photoUrls,
-        'Workflow State': issue.workflowState || 'called',
-        'Created At': toJsDate(issue.createdAt) || '',
-        'Updated At': toJsDate(issue.updatedAt) || '',
-      };
-    });
-
-    // ── Events sheet ──
-    const EVENT_HEADERS = ['Issue ID','Machine','Event #','Date/Time','From Status','To Status','Sub-Status','Note','By'];
-    const eventRows = [];
-    filtered.forEach(issue => {
-      const history = issue.eventHistory || issue.statusHistory || [];
-      history.forEach((entry, idx) => {
-        const prevKey = idx > 0 ? history[idx-1].status : '';
-        eventRows.push({
-          'Issue ID': issue.id,
-          'Machine': issue.machine || '',
-          'Event #': idx + 1,
-          'Date/Time': entry.dateTime || '',
-          'From Status': prevKey ? (getStatusDef(prevKey).label || prevKey) : '',
-          'To Status': getStatusDef(entry.status).label || entry.status || '',
-          'Sub-Status': entry.subStatus || '',
-          'Note': entry.note || '',
-          'By': entry.by || '',
-        });
-      });
-    });
-
-    // ── Photos sheet ──
-    const PHOTO_HEADERS = ['Issue ID','Machine','File Name','Storage Path','Download URL','Content Type','Size (bytes)'];
-    const photoRows = [];
-    filtered.forEach(issue => {
-      (issue.photos||[]).forEach(p => {
-        photoRows.push({
-          'Issue ID': issue.id,
-          'Machine': issue.machine || '',
-          'File Name': p.name || '',
-          'Storage Path': p.storagePath || '',
-          'Download URL': p.dataUrl || '',
-          'Content Type': p.contentType || '',
-          'Size (bytes)': Number(p.sizeBytes || 0),
-        });
-      });
-    });
-
-    const mkSheet = (rows, headers) => XLSX.utils.json_to_sheet(
-      rows.length > 0 ? rows : [Object.fromEntries(headers.map(h=>[h,null]))],
-      { header: headers, cellDates: true }
-    );
-
-    const wsIssues = mkSheet(issueRows, ISSUE_HEADERS);
-    const wsEvents = mkSheet(eventRows, EVENT_HEADERS);
-    const wsPhotos = mkSheet(photoRows, PHOTO_HEADERS);
-
-    wsIssues['!cols'] = [24,14,10,12,20,44,18,18,20,10,20,44,20,12,60,16,20,20].map(w=>({wch:w}));
-    wsEvents['!cols'] = [24,10,8,20,18,18,18,44,20].map(w=>({wch:w}));
-    wsPhotos['!cols'] = [24,10,30,60,80,14,14].map(w=>({wch:w}));
-
-    if (issueRows.length > 0) {
-      const r = XLSX.utils.decode_range(wsIssues['!ref']);
-      wsIssues['!autofilter'] = { ref: XLSX.utils.encode_range({s:{r:0,c:0}, e:{r:0,c:r.e.c}}) };
-    }
-
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, wsIssues, 'Issues');
-    XLSX.utils.book_append_sheet(wb, wsEvents, 'Events');
-    XLSX.utils.book_append_sheet(wb, wsPhotos, 'Photos');
-
-    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-    const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'AP-Tracker-Export-' + localDateStr(new Date()) + '.xlsx';
-    a.style.display = 'none';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    completeDemoGuideStep('export');
-  } catch(e) {
-    console.error('Excel export error:', e);
-    alert('Excel export failed. See console for details.');
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = origInner;
-  }
-};
+window.openExportModal = openExportModal;
+window.closeExportModal = closeExportModal;
+window.downloadPDF = downloadPDF;
+window.downloadExcel = downloadExcel;
 
 // ── ADMIN PANEL ──
 const ADMIN_ICONS = ['🔧','🔩','⚙️','🎛️','🚀','🔍','⚠️','🛠️','🔬','📋','🏭','💡','🔄','📦','🧪','🔑','⛽','🖨️','🤖','🧲','🔒','🔓','📡','🧯','🔌','💧','🌡️','🔋','🪛','🪚','📏','🧰','🔦','🚨','🛞','⚡','🧹','🪝','🗜️','📐'];
@@ -16300,11 +15617,11 @@ function renderAdminList() {
       const bulkInput = document.createElement('textarea');
       bulkInput.style.width = '100%';
       bulkInput.style.minHeight = '120px';
-      bulkInput.style.background = 'var(--bg2)';
-      bulkInput.style.border = '1px solid var(--border)';
+      bulkInput.style.background = 'var(--color-surface, var(--bg2))';
+      bulkInput.style.border = '1px solid var(--color-border, var(--border))';
       bulkInput.style.borderRadius = '8px';
       bulkInput.style.padding = '10px';
-      bulkInput.style.color = 'var(--text)';
+      bulkInput.style.color = 'var(--color-text, var(--text))';
       bulkInput.style.fontFamily = "'Nunito', sans-serif";
       bulkInput.style.fontSize = '13px';
       const bulkActions = document.createElement('div');
@@ -16398,7 +15715,7 @@ function renderAdminList() {
   const trigger = document.createElement('button'); trigger.className = 'add-cat-trigger'; trigger.textContent = '＋ Add Category';
   const form = document.createElement('div'); form.className = 'add-cat-form';
   const addError = document.createElement('div');
-  addError.style.color = 'var(--red)';
+  addError.style.color = 'var(--color-danger, var(--red))';
   addError.style.fontSize = '12px';
   addError.style.marginBottom = '8px';
   addError.style.display = 'none';
@@ -16482,17 +15799,17 @@ window.resetToDefaults = async () => {
   
   // Reset STATUSES to the comprehensive defaults from the code
   STATUSES = {
-    open:            { label:'Open',             shortLabel:'Open',         icon:'●',  cssColor:'var(--red)',      swipeColor:'#ef4444', floorCls:'has-open',            cls:'status-open',            subs:['New Fault / Issue','Pending Triage','Scheduled Mold Change','Re-opened'],                                               statLabel:'Open',          order:0 },
+    open:            { label:'Open',             shortLabel:'Open',         icon:'●',  cssColor:'var(--color-danger, var(--red))',      swipeColor:'#ef4444', floorCls:'has-open',            cls:'status-open',            subs:['New Fault / Issue','Pending Triage','Scheduled Mold Change','Re-opened'],                                               statLabel:'Open',          order:0 },
     alert:           { label:'Alert',            shortLabel:'Alert',        icon:'🚨', cssColor:'#dc2626',         swipeColor:'#dc2626', floorCls:'has-alert',           cls:'status-alert',           subs:['Mold Protection Fault','E-Stop / Safety Hazard','Press Down - Critical','Major Oil / Fluid Leak'],                   statLabel:'Alert',         order:1 },
     attention:       { label:'Attention',        shortLabel:'Attention',    icon:'◇',  cssColor:'#0ea5e9',         swipeColor:'#0ea5e9', floorCls:'has-attention',       cls:'status-attention',       subs:['Watch Item','Needs Follow-up','Housekeeping','PM Opportunity','Operator Note','Check Next Run'],                  statLabel:'Attention',     order:1.5 },
-    controlman:      { label:'Controlman',       shortLabel:'Controlman',   icon:'🎛️', cssColor:'var(--babyblue)', swipeColor:'#38bdf8', floorCls:'has-controlman',      cls:'status-controlman',      subs:['Robot / EOAT (End of Arm Tooling) Fault','Vision System / Camera Error','Conveyor / Auxiliary Comm Loss','PLC / HMI Error'], statLabel:'Controlman',    order:2 },
-    maintenance:     { label:'Maintenance',      shortLabel:'Maintenance',  icon:'🔧', cssColor:'var(--yellow)',   swipeColor:'#eab308', floorCls:'has-maintenance',     cls:'status-maintenance',     subs:['Hydraulic Leak / Pressure Drop','Heater Band / Thermocouple Failure','Barrel / Screw / Check Ring Issue','Chiller / Thermolator Failure'], statLabel:'Maintenance',   order:3 },
+    controlman:      { label:'Controlman',       shortLabel:'Controlman',   icon:'🎛️', cssColor:'var(--color-babyblue, var(--babyblue))', swipeColor:'#38bdf8', floorCls:'has-controlman',      cls:'status-controlman',      subs:['Robot / EOAT (End of Arm Tooling) Fault','Vision System / Camera Error','Conveyor / Auxiliary Comm Loss','PLC / HMI Error'], statLabel:'Controlman',    order:2 },
+    maintenance:     { label:'Maintenance',      shortLabel:'Maintenance',  icon:'🔧', cssColor:'var(--color-warning, var(--yellow))',   swipeColor:'#eab308', floorCls:'has-maintenance',     cls:'status-maintenance',     subs:['Hydraulic Leak / Pressure Drop','Heater Band / Thermocouple Failure','Barrel / Screw / Check Ring Issue','Chiller / Thermolator Failure'], statLabel:'Maintenance',   order:3 },
     materials:       { label:'Materials',        shortLabel:'Materials',    icon:'📦', cssColor:'#8b5cf6',         swipeColor:'#8b5cf6', floorCls:'has-materials',       cls:'status-materials',       subs:['Resin Moisture / Drying Issue','Colorant / Masterbatch Ratio Error','Vacuum / Material Loader Blockage','Wrong Resin / Regrind Issue'], statLabel:'Materials',     order:4 },
-    processengineer: { label:'Process Engineer', shortLabel:'Process Eng.', icon:'⚙️', cssColor:'var(--purple)',   swipeColor:'#a855f7', floorCls:'has-processengineer', cls:'status-processengineer', subs:['Fill / Pack Pressure Adjustment','Temperature Profile Tuning','Cycle Time Optimization','Process Drift / Instability'], statLabel:'Process Eng.',  order:5 },
+    processengineer: { label:'Process Engineer', shortLabel:'Process Eng.', icon:'⚙️', cssColor:'var(--color-purple, var(--purple))',   swipeColor:'#a855f7', floorCls:'has-processengineer', cls:'status-processengineer', subs:['Fill / Pack Pressure Adjustment','Temperature Profile Tuning','Cycle Time Optimization','Process Drift / Instability'], statLabel:'Process Eng.',  order:5 },
     quality:         { label:'Quality',          shortLabel:'Quality',      icon:'✨', cssColor:'#06b6d4',         swipeColor:'#06b6d4', floorCls:'has-quality',         cls:'status-quality',         subs:['Short Shot / Non-fill','Flash / Burrs','Sink Marks / Voids','Splay / Silver Streaks','Burn Marks / Degradation','Warp / Dimensional Out-of-Spec'], statLabel:'Quality',       order:6 },
-    startup:         { label:'Startup',          shortLabel:'Startup',      icon:'🚀', cssColor:'var(--teal)',     swipeColor:'#14b8a6', floorCls:'has-startup',         cls:'status-startup',         subs:['Purging / Color Change','Mold Heat-Up / Stabilization','First Article Inspection (FAI)','Robot Homing / Path Setup'], statLabel:'Startup',       order:7 },
-    tooldie:         { label:'Tool & Die',       shortLabel:'Tool & Die',   icon:'🔩', cssColor:'var(--orange)',   swipeColor:'#f97316', floorCls:'has-tooldie',         cls:'status-tooldie',         subs:['Broken / Bent Ejector Pin','Hot Runner / Gate Issue','Water Leak in Mold','Stuck Part / Sprue','Mold Greasing / PM'], statLabel:'Tool & Die',    order:8 },
-    resolved:        { label:'Resolved',         shortLabel:'Resolved',     icon:'✓',  cssColor:'var(--green)',    swipeColor:'#22c55e', floorCls:'all-resolved',        cls:'status-resolved',        subs:['Process Parameter Adjusted','Mold Cleaned / Repaired','Hardware Replaced','Temporary Workaround'],                      statLabel:'Resolved',      order:9 },
+    startup:         { label:'Startup',          shortLabel:'Startup',      icon:'🚀', cssColor:'var(--color-teal, var(--teal))',     swipeColor:'#14b8a6', floorCls:'has-startup',         cls:'status-startup',         subs:['Purging / Color Change','Mold Heat-Up / Stabilization','First Article Inspection (FAI)','Robot Homing / Path Setup'], statLabel:'Startup',       order:7 },
+    tooldie:         { label:'Tool & Die',       shortLabel:'Tool & Die',   icon:'🔩', cssColor:'var(--color-orange, var(--orange))',   swipeColor:'#f97316', floorCls:'has-tooldie',         cls:'status-tooldie',         subs:['Broken / Bent Ejector Pin','Hot Runner / Gate Issue','Water Leak in Mold','Stuck Part / Sprue','Mold Greasing / PM'], statLabel:'Tool & Die',    order:8 },
+    resolved:        { label:'Resolved',         shortLabel:'Resolved',     icon:'✓',  cssColor:'var(--color-success, var(--green))',    swipeColor:'#22c55e', floorCls:'all-resolved',        cls:'status-resolved',        subs:['Process Parameter Adjusted','Mold Cleaned / Repaired','Hardware Replaced','Temporary Workaround'],                      statLabel:'Resolved',      order:9 },
   };
   SUBCATEGORY_ROUTES = {};
   

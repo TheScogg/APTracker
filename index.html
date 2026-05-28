@@ -25,9 +25,9 @@
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&family=Nunito:wght@300;400;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="./build-info.js?v=7f3af2b-dirty"></script>
+<script src="./build-info.js?v=cec81a8-dirty"></script>
 <script src="./fcm-config.js?v=ae083d6"></script>
-<link rel="stylesheet" href="./styles.css?v=7f3af2b-dirty">
+<link rel="stylesheet" href="./styles.css?v=cec81a8-dirty">
 </head>
 <body>
 
@@ -82,7 +82,7 @@
   <div id="sync-banner" class="visible">
     <div class="sync-dot" id="sync-dot"></div>
     <span id="sync-text">Connecting…</span>
-    <span id="app-version-indicator" class="app-version-indicator" title="Current commit version">rev: 7f3af2b</span>
+    <span id="app-version-indicator" class="app-version-indicator" title="Current commit version">rev: cec81a8</span>
     <span id="firestore-io-indicator" class="firestore-io-indicator" title="Estimated Firestore operations for this session">R:0 W:0</span>
   </div>
 
@@ -103,8 +103,8 @@
         <button class="sort-dropdown-btn" id="todos-btn-header" type="button" data-shell-action="open-todos-modal" aria-label="Todos" title="Todos">
           <span class="todo-btn-icon" aria-hidden="true">
             <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
-              <rect x="2.25" y="2.25" width="11.5" height="11.5" rx="2" fill="#fff" stroke="var(--green)" stroke-width="1.5"/>
-              <path d="M4.8 8.1 7 10.4 11.7 5.4" stroke="var(--green)" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round"/>
+              <rect x="2.25" y="2.25" width="11.5" height="11.5" rx="2" fill="#fff" stroke="var(--color-success, var(--green))" stroke-width="1.5"/>
+              <path d="M4.8 8.1 7 10.4 11.7 5.4" stroke="var(--color-success, var(--green))" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </span>
         </button>
@@ -146,8 +146,8 @@
         <button class="header-quick-item" type="button" data-shell-action="open-todos-modal" role="menuitem">
           <span class="header-quick-item-icon header-quick-item-icon-todos" aria-hidden="true">
             <svg width="22" height="22" viewBox="0 0 16 16" fill="none">
-              <rect x="2.25" y="2.25" width="11.5" height="11.5" rx="2" fill="#fff" stroke="var(--green)" stroke-width="1.5"/>
-              <path d="M4.8 8.1 7 10.4 11.7 5.4" stroke="var(--green)" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round"/>
+              <rect x="2.25" y="2.25" width="11.5" height="11.5" rx="2" fill="#fff" stroke="var(--color-success, var(--green))" stroke-width="1.5"/>
+              <path d="M4.8 8.1 7 10.4 11.7 5.4" stroke="var(--color-success, var(--green))" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </span>
           <span class="header-quick-item-copy">
@@ -343,8 +343,8 @@
         <button class="shift-filter-pill filter-clear-pill" type="button" data-shell-action="clear-all-filters">Clear</button>
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:6px;" id="stat-pills-row">
-        <div class="stat-pill" id="pill-open"            data-shell-action="toggle-stat-filter" data-shell-value="open">           <div class="dot" style="background:var(--red)"></div>      <span id="stat-open">0 Open</span></div>
-        <div class="stat-pill" id="pill-resolved"        data-shell-action="toggle-stat-filter" data-shell-value="resolved">       <div class="dot" style="background:var(--green)"></div>    <span id="stat-resolved">0 Resolved</span></div>
+        <div class="stat-pill" id="pill-open"            data-shell-action="toggle-stat-filter" data-shell-value="open">           <div class="dot" style="background:var(--color-danger, var(--red))"></div>      <span id="stat-open">0 Open</span></div>
+        <div class="stat-pill" id="pill-resolved"        data-shell-action="toggle-stat-filter" data-shell-value="resolved">       <div class="dot" style="background:var(--color-success, var(--green))"></div>    <span id="stat-resolved">0 Resolved</span></div>
       </div>
       <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;">
         <select id="machine-filter"><option value="">All Machines</option></select>
@@ -447,7 +447,7 @@
     <label id="issue-note-label">What happened?</label>
     <textarea id="issue-note" placeholder="Example: Hydraulic leak at press startup" rows="3"></textarea>
     <div class="issue-quick-phrases" id="issue-quick-phrases"></div>
-    <label>Photos <span style="color:var(--text3);font-size:9px;letter-spacing:0;text-transform:none;font-family:'Nunito',sans-serif">(optional)</span></label>
+    <label>Photos <span style="color:var(--color-text-subtle, var(--text3));font-size:9px;letter-spacing:0;text-transform:none;font-family:'Nunito',sans-serif">(optional)</span></label>
     <div class="issue-attach-hint">Tap once for camera or library. Photos preview right here.</div>
     <div class="photo-stack">
       <div class="photo-btn-row">
@@ -466,14 +466,14 @@
       <div style="margin-bottom:14px">
         <label style="margin-bottom:5px">When did it happen?</label>
         <div style="display:flex;gap:8px;align-items:center">
-          <input type="date" id="issue-date" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;outline:none;flex:1;">
-          <input type="time" id="issue-time-input" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:120px;">
-          <button onclick="resetIssueDateTime()" style="font-size:11px;color:var(--accent);background:none;border:none;cursor:pointer;font-family:'Nunito',sans-serif;white-space:nowrap;padding:0;" title="Reset to now">↺ Now</button>
+          <input type="date" id="issue-date" style="background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:7px 10px;color:var(--color-text, var(--text));font-family:'Nunito',sans-serif;font-size:13px;outline:none;flex:1;">
+          <input type="time" id="issue-time-input" style="background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:7px 10px;color:var(--color-text, var(--text));font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:120px;">
+          <button onclick="resetIssueDateTime()" style="font-size:11px;color:var(--color-accent, var(--accent));background:none;border:none;cursor:pointer;font-family:'Nunito',sans-serif;white-space:nowrap;padding:0;" title="Reset to now">↺ Now</button>
         </div>
       </div>
       <div style="margin-bottom:14px">
         <label style="margin-bottom:5px">Shift</label>
-        <select id="issue-shift" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:100%;">
+        <select id="issue-shift" style="background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:7px 10px;color:var(--color-text, var(--text));font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:100%;">
           <option value="auto">Auto-detect from time</option>
           <option value="first">1st Shift (5:54 AM – 1:54 PM)</option>
           <option value="second">2nd Shift (1:54 PM – 9:54 PM)</option>
@@ -482,7 +482,7 @@
       </div>
       <div style="margin-bottom:14px">
         <label style="margin-bottom:5px">Check-back timer</label>
-        <select id="issue-timer-minutes" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:100%;">
+        <select id="issue-timer-minutes" style="background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:7px 10px;color:var(--color-text, var(--text));font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:100%;">
           <option value="">No timer</option>
           <option value="15">15 minutes</option>
           <option value="30">30 minutes</option>
@@ -492,7 +492,7 @@
       </div>
     </div>
     <div style="margin-bottom:4px">
-      <label style="margin-bottom:6px">Status <span style="color:var(--text3);font-size:9px;letter-spacing:0;text-transform:none;font-family:'Nunito',sans-serif">(optional — defaults to Open)</span></label>
+      <label style="margin-bottom:6px">Status <span style="color:var(--color-text-subtle, var(--text3));font-size:9px;letter-spacing:0;text-transform:none;font-family:'Nunito',sans-serif">(optional — defaults to Open)</span></label>
       <div class="log-cat-selected" id="log-cat-selected">
         <span class="log-cat-pill" id="log-cat-pill"></span>
         <button class="log-cat-clear" id="log-cat-clear">✕ clear</button>
@@ -544,13 +544,13 @@
     <div style="margin-bottom:14px">
       <label style="margin-bottom:5px">Date &amp; Time</label>
       <div style="display:flex;gap:8px;align-items:center">
-        <input type="date" id="edit-date" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;outline:none;flex:1;">
-        <input type="time" id="edit-time-input" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:120px;">
+        <input type="date" id="edit-date" style="background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:7px 10px;color:var(--color-text, var(--text));font-family:'Nunito',sans-serif;font-size:13px;outline:none;flex:1;">
+        <input type="time" id="edit-time-input" style="background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:7px 10px;color:var(--color-text, var(--text));font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:120px;">
       </div>
     </div>
     <div style="margin-bottom:14px">
       <label style="margin-bottom:5px">Shift</label>
-      <select id="edit-shift" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:100%;">
+      <select id="edit-shift" style="background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:7px 10px;color:var(--color-text, var(--text));font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:100%;">
         <option value="auto">Auto-detect from time</option>
         <option value="first">1st Shift (5:54 AM – 1:54 PM)</option>
         <option value="second">2nd Shift (1:54 PM – 9:54 PM)</option>
@@ -559,7 +559,7 @@
     </div>
     <div style="margin-bottom:14px">
       <label style="margin-bottom:5px">Initial Reminder</label>
-      <select id="edit-timer-minutes" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:100%;">
+      <select id="edit-timer-minutes" style="background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:7px 10px;color:var(--color-text, var(--text));font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:100%;">
         <option value="">No timer</option>
         <option value="15">15 minutes</option>
         <option value="30">30 minutes</option>
@@ -677,7 +677,7 @@
   <div class="modal">
     <div class="modal-title">✏️ Edit Status Entry</div>
     <label>Status</label>
-    <select id="edit-status-select" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:9px 11px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;margin-bottom:14px;"></select>
+    <select id="edit-status-select" style="width:100%;background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:9px 11px;color:var(--color-text, var(--text));font-family:'Nunito',sans-serif;font-size:13px;margin-bottom:14px;"></select>
     <div id="edit-status-sub-wrap"></div>
     <label>Note (optional)</label>
     <textarea id="edit-status-note" placeholder="Additional details…" style="min-height:60px;margin-bottom:14px;"></textarea>
@@ -692,8 +692,8 @@
     <div style="margin-bottom:14px;">
       <label>Date & Time</label>
       <div style="display:flex;gap:8px;">
-        <input type="date" id="edit-status-date" style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;">
-        <input type="time" id="edit-status-time" style="width:120px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;">
+        <input type="date" id="edit-status-date" style="flex:1;background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:7px 10px;color:var(--color-text, var(--text));font-family:'Nunito',sans-serif;font-size:13px;">
+        <input type="time" id="edit-status-time" style="width:120px;background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:7px 10px;color:var(--color-text, var(--text));font-family:'Nunito',sans-serif;font-size:13px;">
       </div>
     </div>
     <div class="modal-actions">
@@ -718,10 +718,10 @@
   <div class="modal" style="max-width:620px;">
     <div class="modal-title" style="display:flex;align-items:center;justify-content:space-between;">
       <span style="display:flex;align-items:center;gap:8px;">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 1h6l4 4v9a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1z" stroke="var(--accent)" stroke-width="1.3"/><path d="M10 1v4h4M5 9h6M5 11.5h4" stroke="var(--accent)" stroke-width="1.3" stroke-linecap="round"/></svg>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 1h6l4 4v9a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1z" stroke="var(--color-accent, var(--accent))" stroke-width="1.3"/><path d="M10 1v4h4M5 9h6M5 11.5h4" stroke="var(--color-accent, var(--accent))" stroke-width="1.3" stroke-linecap="round"/></svg>
         Export Issue Log
       </span>
-      <button style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;" onclick="closeExportModal()">&times;</button>
+      <button style="background:none;border:none;color:var(--color-text-subtle, var(--text3));font-size:18px;cursor:pointer;" onclick="closeExportModal()">&times;</button>
     </div>
     <div class="modal-subtitle" id="export-subtitle">—</div>
     <div id="export-preview" style="max-height:50vh;overflow-y:auto;margin-bottom:12px;border-radius:6px;"></div>
@@ -740,22 +740,22 @@
   <div class="modal" style="max-width:380px;">
     <div class="modal-title" style="display:flex;align-items:center;justify-content:space-between;">
       <span style="display:flex;align-items:center;gap:8px;">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="4" width="14" height="8" rx="1" stroke="var(--blue)" stroke-width="1.2"/><path d="M4 6v4M6 6v4M8 6v4M10 6v4M12 6v4" stroke="var(--blue)" stroke-width="0.8"/></svg>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="4" width="14" height="8" rx="1" stroke="var(--color-info, var(--blue))" stroke-width="1.2"/><path d="M4 6v4M6 6v4M8 6v4M10 6v4M12 6v4" stroke="var(--color-info, var(--blue))" stroke-width="0.8"/></svg>
         Serial Number
       </span>
-      <button style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;" onclick="closeSerialModal()">&times;</button>
+      <button style="background:none;border:none;color:var(--color-text-subtle, var(--text3));font-size:18px;cursor:pointer;" onclick="closeSerialModal()">&times;</button>
     </div>
     <div style="padding:0 24px 6px;">
-      <div style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px;margin-bottom:14px;">
-        <span id="serial-modal-machine" style="font-weight:700;color:var(--accent);font-family:'Share Tech Mono',monospace;"></span>
+      <div style="font-size:12px;color:var(--color-text-muted, var(--text2));display:flex;align-items:center;gap:6px;margin-bottom:14px;">
+        <span id="serial-modal-machine" style="font-weight:700;color:var(--color-accent, var(--accent));font-family:'Share Tech Mono',monospace;"></span>
         →
-        <span id="serial-modal-status" style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;border:1px solid rgba(59,130,246,0.4);color:var(--blue);background:rgba(59,130,246,0.1);"></span>
+        <span id="serial-modal-status" style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;border:1px solid rgba(59,130,246,0.4);color:var(--color-info, var(--blue));background:rgba(59,130,246,0.1);"></span>
       </div>
       <label style="margin-bottom:5px;">Material (Select or Enter Custom)</label>
-      <select id="serial-select" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:13px;outline:none;margin-bottom:8px;"></select>
-      <input type="text" id="serial-input" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-family:'Share Tech Mono',monospace;font-size:14px;outline:none;letter-spacing:0.5px;margin-bottom:4px;" placeholder="Or enter custom (e.g. STK12345)">
-      <div style="font-size:10px;color:var(--text3);margin-bottom:4px;">Required for Needs → Material. Pick from list or enter custom.</div>
-      <div id="serial-error" style="font-size:11px;color:var(--red);display:none;">Please select or enter a material code</div>
+      <select id="serial-select" style="width:100%;background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:10px 12px;color:var(--color-text, var(--text));font-size:13px;outline:none;margin-bottom:8px;"></select>
+      <input type="text" id="serial-input" style="width:100%;background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:10px 12px;color:var(--color-text, var(--text));font-family:'Share Tech Mono',monospace;font-size:14px;outline:none;letter-spacing:0.5px;margin-bottom:4px;" placeholder="Or enter custom (e.g. STK12345)">
+      <div style="font-size:10px;color:var(--color-text-subtle, var(--text3));margin-bottom:4px;">Required for Needs → Material. Pick from list or enter custom.</div>
+      <div id="serial-error" style="font-size:11px;color:var(--color-danger, var(--red));display:none;">Please select or enter a material code</div>
     </div>
     <div class="modal-actions" style="padding-top:10px;">
       <button class="btn btn-ghost" onclick="closeSerialModal()">Cancel</button>
@@ -782,7 +782,7 @@
       </div>
       <div class="press-wiki-header-content">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:8px;">
-          <div style="display:inline-flex;gap:3px;padding:3px;background:var(--bg3);border:1px solid var(--line);border-radius:999px;">
+          <div style="display:inline-flex;gap:3px;padding:3px;background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:999px;">
             <button id="press-wiki-scope-press" class="btn btn-ghost" type="button" aria-haspopup="dialog" aria-expanded="false" style="padding:4px 10px;border-radius:999px;font-size:12px;">This Press</button>
             <button id="press-wiki-scope-shared" class="btn btn-ghost" type="button" style="padding:4px 10px;border-radius:999px;font-size:12px;">Shared Library</button>
           </div>
@@ -808,7 +808,7 @@
             <div id="press-wiki-press-picker-tree" class="press-wiki-press-picker-tree"></div>
         </div>
         <div class="press-wiki-picker-wrap" style="margin-top:8px;">
-          <label for="press-wiki-picker-btn" style="display:block;font-size:12px;color:var(--text3);white-space:nowrap;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px;">Select Page</label>
+          <label for="press-wiki-picker-btn" style="display:block;font-size:12px;color:var(--color-text-subtle, var(--text3));white-space:nowrap;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px;">Select Page</label>
           <button id="press-wiki-picker-btn" class="press-wiki-picker-btn" type="button" aria-haspopup="tree" aria-expanded="false">
             <span class="press-wiki-picker-copy">
               <span id="press-wiki-picker-title" class="press-wiki-picker-title">No page selected</span>
@@ -830,7 +830,7 @@
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px;">
           <div id="press-wiki-title" style="display:none;font-size:18px;font-weight:700;line-height:1.1;">No page selected</div>
         </div>
-        <div id="press-wiki-meta" style="font-size:12px;color:var(--text3);margin-top:3px;"></div>
+        <div id="press-wiki-meta" style="font-size:12px;color:var(--color-text-subtle, var(--text3));margin-top:3px;"></div>
       </div>
       <div class="notes-editor-panel" style="flex:1;overflow-y:auto;padding:8px 12px 12px;">
         <div id="press-wiki-new-page-row" style="margin-top:0;display:none;gap:8px;align-items:center;">
@@ -838,14 +838,14 @@
           <button id="press-wiki-create-page-btn" class="btn btn-blue" type="button">Create</button>
           <button id="press-wiki-cancel-create-page-btn" class="btn btn-ghost" type="button">Cancel</button>
         </div>
-        <div id="press-wiki-error" style="display:none;font-size:12px;color:var(--red);margin-top:6px;"></div>
+        <div id="press-wiki-error" style="display:none;font-size:12px;color:var(--color-danger, var(--red));margin-top:6px;"></div>
 
         <div id="press-wiki-body" style="margin-top:6px;white-space:normal;font-size:14px;line-height:1.45;"></div>
         <div id="press-wiki-attachments" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:8px;"></div>
 
         <div id="press-wiki-editor" style="margin-top:8px;display:none;">
           <input id="press-wiki-edit-title" class="input" type="text" placeholder="Page title">
-          <div class="formatting-toolbar" style="display:flex;gap:4px;margin-top:6px;padding:4px;background:var(--bg3);border:1px solid var(--border);border-bottom:none;border-radius:8px 8px 0 0;">
+          <div class="formatting-toolbar" style="display:flex;gap:4px;margin-top:6px;padding:4px;background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-bottom:none;border-radius:8px 8px 0 0;">
             <button type="button" class="btn btn-ghost" style="padding:4px 8px;font-size:12px;" onclick="insertMarkdown('press-wiki-edit-body', '**', '**')"><b>B</b></button>
             <button type="button" class="btn btn-ghost" style="padding:4px 8px;font-size:12px;font-style:italic;" onclick="insertMarkdown('press-wiki-edit-body', '*', '*')">I</button>
             <button type="button" class="btn btn-ghost" style="padding:4px 8px;font-size:12px;text-decoration:underline;" onclick="insertMarkdown('press-wiki-edit-body', '<u>', '</u>')">U</button>
@@ -860,10 +860,10 @@
             <button id="press-wiki-cancel-edit-btn" class="btn btn-ghost" type="button">Cancel</button>
           </div>
           <input type="file" id="press-wiki-file-input" accept="image/*" multiple style="display:none">
-          <div id="press-wiki-photo-picker" style="margin-top:6px;display:none;border:1px solid var(--line);border-radius:10px;padding:8px;"></div>
+          <div id="press-wiki-photo-picker" style="margin-top:6px;display:none;border:1px solid var(--color-border, var(--border));border-radius:10px;padding:8px;"></div>
         </div>
 
-        <details style="margin-top:10px;border:1px solid var(--line);border-radius:10px;padding:8px;">
+        <details style="margin-top:10px;border:1px solid var(--color-border, var(--border));border-radius:10px;padding:8px;">
           <summary style="font-size:12px;font-weight:600;cursor:pointer;user-select:none;outline:none;">Revision History</summary>
           <div id="press-wiki-revisions" style="margin-top:8px;max-height:220px;overflow:auto;"></div>
         </details>
@@ -1270,8 +1270,8 @@
   <div class="modal" style="max-width:340px;text-align:center;">
     <div class="store-confirm-icon" id="purchase-confirm-icon"></div>
     <div class="modal-title" style="justify-content:center;margin-bottom:8px;" id="purchase-confirm-title">Buy Theme?</div>
-    <p style="color:var(--text2);font-size:14px;margin:0 0 6px;" id="purchase-confirm-desc"></p>
-    <p style="color:var(--text3);font-size:12px;margin:0 0 20px;" id="purchase-confirm-remaining"></p>
+    <p style="color:var(--color-text-muted, var(--text2));font-size:14px;margin:0 0 6px;" id="purchase-confirm-desc"></p>
+    <p style="color:var(--color-text-subtle, var(--text3));font-size:12px;margin:0 0 20px;" id="purchase-confirm-remaining"></p>
     <div class="modal-actions" style="justify-content:center;gap:10px;">
       <button class="btn btn-ghost" onclick="closePurchaseConfirm()">Cancel</button>
       <button class="btn btn-primary" id="purchase-confirm-btn" onclick="confirmStorePurchase()">Confirm</button>
@@ -1284,7 +1284,7 @@
   <div class="modal theme-editor-modal" id="theme-editor-modal">
     <div class="modal-title" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
       <span>🎨 Appearance</span>
-      <button style="background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer;line-height:1;" onclick="closeThemeEditor()">✕</button>
+      <button style="background:none;border:none;color:var(--color-text-subtle, var(--text3));font-size:20px;cursor:pointer;line-height:1;" onclick="closeThemeEditor()">✕</button>
     </div>
 
     <div class="te-section">
@@ -1314,7 +1314,7 @@
 
     <div class="te-section">
       <div class="te-section-label">SVG Background (Any Theme)</div>
-      <textarea id="te-bg-svg-input" style="width:100%;min-height:90px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text2);font-family:'Share Tech Mono',monospace;font-size:11px;" placeholder="Paste raw SVG markup (optional)."></textarea>
+      <textarea id="te-bg-svg-input" style="width:100%;min-height:90px;background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:10px;color:var(--color-text-muted, var(--text2));font-family:'Share Tech Mono',monospace;font-size:11px;" placeholder="Paste raw SVG markup (optional)."></textarea>
     </div>
 
     <div class="te-section">
@@ -1339,9 +1339,9 @@
 <div class="modal-overlay" id="role-prefs-modal">
   <div class="modal" style="max-width:520px">
     <h3 style="margin:0 0 8px">My Alert Categories</h3>
-    <p style="margin:0 0 12px;color:var(--text2);font-size:13px">Subscribe to the categories you cover today. Alerts will notify everyone subscribed to that category.</p>
+    <p style="margin:0 0 12px;color:var(--color-text-muted, var(--text2));font-size:13px">Subscribe to the categories you cover today. Alerts will notify everyone subscribed to that category.</p>
     <div id="role-prefs-list" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:10px"></div>
-    <div id="role-prefs-msg" style="font-size:12px;color:var(--text3);min-height:16px;margin-bottom:8px"></div>
+    <div id="role-prefs-msg" style="font-size:12px;color:var(--color-text-subtle, var(--text3));min-height:16px;margin-bottom:8px"></div>
     <div class="modal-actions" style="justify-content:flex-end;">
       <button class="btn btn-ghost" type="button" onclick="closeRolePreferencesModal()">Cancel</button>
       <button class="btn btn-primary" type="button" onclick="saveRolePreferences()">Save Categories</button>
@@ -1415,7 +1415,7 @@
     <!-- Leaderboard card -->
     <div class="game-card">
       <div class="game-card-title">Leaderboard</div>
-      <div style="font-size:10px;color:var(--text3);margin-bottom:8px;" id="game-lb-period-label">This week</div>
+      <div style="font-size:10px;color:var(--color-text-subtle, var(--text3));margin-bottom:8px;" id="game-lb-period-label">This week</div>
       <div id="game-leaderboard-list"></div>
     </div>
     <!-- Badges card -->
@@ -1427,7 +1427,7 @@
     <div class="game-card">
       <div class="game-card-title" style="display:flex;align-items:center;justify-content:space-between;">
         <span>🛒 Store</span>
-        <span id="game-store-xp-label" style="font-size:10px;color:var(--yellow);font-weight:700;">0 XP</span>
+        <span id="game-store-xp-label" style="font-size:10px;color:var(--color-warning, var(--yellow));font-weight:700;">0 XP</span>
       </div>
       <div id="game-store-list"></div>
     </div>
@@ -1445,7 +1445,7 @@
   </div>
 </div>
 
-<script type="module" src="./app.js?v=7f3af2b-dirty"></script>
+<script type="module" src="./app.js?v=cec81a8-dirty"></script>
 
 <!-- MASCOT CHARACTER CARD POPOVER -->
 <div class="mascot-popover-backdrop" id="mascot-popover-backdrop" onclick="if(event.target===this)closeMascotPopover()">
