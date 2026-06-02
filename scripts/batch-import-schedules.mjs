@@ -244,6 +244,12 @@ function formatScheduleIssueDateTime(scheduleDate) {
 
 function classifyScheduleChange(row) {
   const text = [row?.description, row?.notes, row?.partNumber, row?.mc].map(v => String(v || '')).join(' ').toLowerCase();
+  if (/\bc\s*\/\s*c\b|\bcolou?r\s+change\b/.test(text)) {
+    return { statusKey: 'controlman', subStatus: 'Color Change' };
+  }
+  if (/\bm\s*\/\s*c\b|\bmold\s+change\b/.test(text)) {
+    return { statusKey: 'controlman', subStatus: 'Mold Change' };
+  }
   if (/\b(colou?r|purge|colorant|masterbatch)\b/.test(text)) {
     return { statusKey: 'startup', subStatus: 'Purging / Color Change' };
   }
@@ -294,9 +300,9 @@ function buildScheduleIssuePayload(plantId, scheduleDate, shift, row, actor) {
     currentStatus: {
       statusKey,
       subStatusKey: subStatus,
-      label: statusKey === 'startup' ? 'Startup' : 'Open',
+      label: statusKey === 'startup' ? 'Startup' : (statusKey === 'controlman' ? 'Controlman' : 'Open'),
       subLabel: subStatus,
-      color: statusKey === 'startup' ? '#14b8a6' : '#ef4444',
+      color: statusKey === 'startup' ? '#14b8a6' : (statusKey === 'controlman' ? '#38bdf8' : '#ef4444'),
       enteredAt: FieldValue.serverTimestamp(),
       enteredDateTime: dateTime,
       enteredBy: actor,

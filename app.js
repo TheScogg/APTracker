@@ -2020,7 +2020,7 @@ let STATUSES = {
   open:            { label:'Open',             shortLabel:'Open',         icon:'●',  cssColor:'var(--color-danger, var(--red))',      swipeColor:'#ef4444', floorCls:'has-open',            cls:'status-open',            subs:['New Fault / Issue','Pending Triage','Scheduled Mold Change','Re-opened'],                                               statLabel:'Open',          order:0 },
   alert:           { label:'Alert',            shortLabel:'Alert',        icon:'🚨', cssColor:'#dc2626',         swipeColor:'#dc2626', floorCls:'has-alert',           cls:'status-alert',           subs:['Mold Protection Fault','E-Stop / Safety Hazard','Press Down - Critical','Major Oil / Fluid Leak'],                   statLabel:'Alert',         order:1 },
   attention:       { label:'Attention',        shortLabel:'Attention',    icon:'◇',  cssColor:'#0ea5e9',         swipeColor:'#0ea5e9', floorCls:'has-attention',       cls:'status-attention',       subs:['Watch Item','Needs Follow-up','Housekeeping','PM Opportunity','Operator Note','Check Next Run'],                  statLabel:'Attention',     order:1.5 },
-  controlman:      { label:'Controlman',       shortLabel:'Controlman',   icon:'🎛️', cssColor:'var(--color-babyblue, var(--babyblue))', swipeColor:'#38bdf8', floorCls:'has-controlman',      cls:'status-controlman',      subs:['Robot / EOAT (End of Arm Tooling) Fault','Vision System / Camera Error','Conveyor / Auxiliary Comm Loss','PLC / HMI Error'], statLabel:'Controlman',    order:2 },
+  controlman:      { label:'Controlman',       shortLabel:'Controlman',   icon:'🎛️', cssColor:'var(--color-babyblue, var(--babyblue))', swipeColor:'#38bdf8', floorCls:'has-controlman',      cls:'status-controlman',      subs:['Color Change','Mold Change','Robot / EOAT (End of Arm Tooling) Fault','Vision System / Camera Error','Conveyor / Auxiliary Comm Loss','PLC / HMI Error'], statLabel:'Controlman',    order:2 },
   maintenance:     { label:'Maintenance',      shortLabel:'Maintenance',  icon:'🔧', cssColor:'var(--color-warning, var(--yellow))',   swipeColor:'#eab308', floorCls:'has-maintenance',     cls:'status-maintenance',     subs:['Hydraulic Leak / Pressure Drop','Heater Band / Thermocouple Failure','Barrel / Screw / Check Ring Issue','Chiller / Thermolator Failure'], statLabel:'Maintenance',   order:3 },
   materials:       { label:'Materials',        shortLabel:'Materials',    icon:'📦', cssColor:'#8b5cf6',         swipeColor:'#8b5cf6', floorCls:'has-materials',       cls:'status-materials',       subs:['Resin Moisture / Drying Issue','Colorant / Masterbatch Ratio Error','Vacuum / Material Loader Blockage','Wrong Resin / Regrind Issue'], statLabel:'Materials',     order:4 },
   processengineer: { label:'Process Engineer', shortLabel:'Process Eng.', icon:'⚙️', cssColor:'var(--color-purple, var(--purple))',   swipeColor:'#a855f7', floorCls:'has-processengineer', cls:'status-processengineer', subs:['Fill / Pack Pressure Adjustment','Temperature Profile Tuning','Cycle Time Optimization','Process Drift / Instability'], statLabel:'Process Eng.',  order:5 },
@@ -6050,26 +6050,38 @@ function renderSharedSearchContent(barContainer, gridContainer, onSubPick, activ
   const subPick = onSubPick || handleSearchSubPick;
   const selectedSub = String(activeSub || '');
 
-  const filter = searchFilterText.toLowerCase();
-  const allSubs = getAllSubs();
-  const filtered = filter ? allSubs.filter(s => s.toLowerCase().includes(filter)) : allSubs;
-
   // Search input
-  barContainer.innerHTML = '';
   if (barContainer.classList?.contains('search-bar-row')) {
     barContainer.classList.add('visible');
   }
-  const input = document.createElement('input');
-  input.type = 'text';
-  input.className = 'search-input';
-  input.placeholder = 'Find subcategory…';
-  input.value = searchFilterText;
-  input.setAttribute('autocomplete', 'off');
-  input.addEventListener('input', () => {
-    searchFilterText = input.value;
-    renderSharedSearchContent(barContainer, gridContainer, subPick, selectedSub);
-  });
-  barContainer.appendChild(input);
+  let input = barContainer.querySelector?.('.search-input');
+  if (!input) {
+    barContainer.innerHTML = '';
+    input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'search-input';
+    input.placeholder = 'Find subcategory…';
+    input.value = searchFilterText;
+    input.setAttribute('autocomplete', 'off');
+    input.addEventListener('input', () => {
+      searchFilterText = input.value;
+      renderSharedSearchResults(gridContainer, subPick, selectedSub);
+    });
+    barContainer.appendChild(input);
+    requestAnimationFrame(() => input.focus());
+  } else if (document.activeElement !== input) {
+    input.value = searchFilterText;
+  }
+
+  renderSharedSearchResults(gridContainer, subPick, selectedSub);
+}
+
+function renderSharedSearchResults(gridContainer, onSubPick, selectedSub = '') {
+  if (!gridContainer) return;
+  const subPick = onSubPick || handleSearchSubPick;
+  const filter = searchFilterText.toLowerCase();
+  const allSubs = getAllSubs();
+  const filtered = filter ? allSubs.filter(s => s.toLowerCase().includes(filter)) : allSubs;
 
   // Subcategory grid
   gridContainer.innerHTML = '';
@@ -6085,7 +6097,6 @@ function renderSharedSearchContent(barContainer, gridContainer, onSubPick, activ
     msg.className = 'search-no-match';
     msg.textContent = allSubs.length ? 'No subcategories match "' + searchFilterText + '"' : 'No subcategories are configured.';
     gridContainer.appendChild(msg);
-    requestAnimationFrame(() => input.focus());
     return;
   }
 
@@ -6108,10 +6119,8 @@ function renderSharedSearchContent(barContainer, gridContainer, onSubPick, activ
     gridContainer.appendChild(item);
   });
 
-  if (gridContainer.id !== 'log-sub-row') {
-    input.style.marginBottom = '8px';
-  }
-  requestAnimationFrame(() => input.focus());
+  const searchInput = gridContainer.parentElement?.querySelector?.('.search-input');
+  if (gridContainer.id !== 'log-sub-row' && searchInput) searchInput.style.marginBottom = '8px';
 }
 
 // Add-issue modal callbacks
@@ -6377,7 +6386,7 @@ function getIssueDateFromInputs(dateId, timeId) {
 function parseTimerMinutes(rawValue) {
   const val = Number(rawValue || 0);
   if (!Number.isFinite(val) || val <= 0) return 0;
-  return Math.round(val);
+  return Math.round(val * 60) / 60;
 }
 
 function buildIssueTimer(minutes, baseDate = new Date(), existingTimer = null) {
@@ -6387,10 +6396,17 @@ function buildIssueTimer(minutes, baseDate = new Date(), existingTimer = null) {
   const startMs = Number.isFinite(startedAtMs) && startedAtMs > 0
     ? startedAtMs
     : (baseDate instanceof Date ? baseDate.getTime() : Date.now());
+  const actor = currentActor();
   return {
     minutes: m,
     startedAtMs: startMs,
-    dueAtMs: startMs + m * 60 * 1000
+    dueAtMs: startMs + m * 60 * 1000,
+    enabled: true,
+    notificationStatus: 'pending',
+    notificationRequestedAtMs: Date.now(),
+    notificationRequestedBy: actor,
+    notificationOwnerUid: actor?.uid || '',
+    notificationDelivery: null
   };
 }
 
@@ -6404,7 +6420,8 @@ const issueReminders = initIssueReminders({
   plantDoc,
   issueEventsCol,
   serverTimestamp,
-  currentActor
+  currentActor,
+  ensurePushEnabled: () => registerFcmToken({ requestPermission: true })
 });
 
 function clearIssueReminder(issueId) {
@@ -8121,10 +8138,12 @@ function renderIssues() {
     const wasOpen=expanded.has(issue.id);
     const isMyIssue=issue.userId===currentUser?.uid;
     const isAlertFocus = !!issue.__alertFocus;
+    const reminderState = getIssueReminderState(issue.id);
+    const isTimerOverdue = !!reminderState?.isOverdue;
     const row=document.createElement('div'); row.className='issue-row'; row.dataset.id = issue.id;
     if (isAlertFocus) row.classList.add('alert-focus-issue');
     const card=document.createElement('div');
-    card.className='issue-card'+(issueIsResolvedV2(issue)?' resolved':'')+(issue.highPriority?' high-priority':'')+(isAlertFocus?' alert-focus-card':'');
+    card.className='issue-card'+(issueIsResolvedV2(issue)?' resolved':'')+(issue.highPriority?' high-priority':'')+(isTimerOverdue?' timer-overdue':'')+(isAlertFocus?' alert-focus-card':'');
 
     const _photoList = (issue.photos || []).map(p => ({
       url: p.dataUrl || p.downloadURL || p.url || '',
@@ -8290,7 +8309,6 @@ function renderIssues() {
           <button class="tl-mini-btn" style="background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));color:var(--color-text-muted, var(--text2));padding:4px 11px;" onclick="setPendingStatus('${issue.id}','status','')">+ Add status entry</button>
         </div>`;
 
-    const reminderState = getIssueReminderState(issue.id);
     const resolveHtml = `<div class="status-timeline">
       <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--color-text-muted, var(--text2));margin-bottom:8px;">Status History</div>
       <div class="tl-list">
@@ -8299,7 +8317,13 @@ function renderIssues() {
       ${addRowHtml}
     </div>
     <div class="action-row issue-footer-actions" style="margin-top:10px;">
-      <button class="issue-reminder-btn${reminderState?.isOverdue ? ' overdue' : ''}" onclick="event.stopPropagation(); openIssueReminderModal('${issue.id}')" title="Set check-back timer">⏱ <span data-reminder-id="${issue.id}">${formatReminderClock(reminderState)}</span></button>
+      <button class="issue-reminder-btn${reminderState?.isOverdue ? ' overdue' : ''}" onclick="event.stopPropagation(); openIssueReminderModal('${issue.id}')" title="Set check-back timer">
+        <span class="issue-reminder-icon">⏱</span>
+        <span class="issue-reminder-copy">
+          <span class="issue-reminder-label">${reminderState?.isOverdue ? 'Check now' : 'Check back'}</span>
+          <span class="issue-reminder-time" data-reminder-id="${issue.id}">${formatReminderClock(reminderState)}</span>
+        </span>
+      </button>
       ${canEdit ? `<div class="issue-footer-actions-right">
       <button class="btn btn-ghost" onclick="openNotesModalFromIssue('${issue.id}')">📝 Notes</button>
       <button class="btn btn-edit" onclick="openEditModal('${issue.id}')">✏️ Edit</button>
@@ -8427,7 +8451,7 @@ function renderIssues() {
     const shiftBadgeHtml = _shiftDef
       ? `<span class="shift-badge" style="background:${_shiftDef.color}20;color:${_shiftDef.color};border-color:${_shiftDef.color}50">${_shiftDef.shortLabel}</span>`
       : '';
-    const timerBadgeHtml = reminderState ? `<span class="shift-badge ${reminderState.isOverdue ? 'status-open' : ''}" data-reminder-id="${issue.id}">${formatReminderClock(reminderState)}</span>` : '';
+    const timerBadgeHtml = reminderState ? `<span class="timer-mini-badge ${reminderState.isOverdue ? 'overdue' : ''}"><span class="timer-mini-dot"></span><span data-reminder-id="${issue.id}">${formatReminderClock(reminderState)}</span></span>` : '';
 
     card.innerHTML=`
       <div class="issue-card-header" onclick="toggleCard('${issue.id}')">
@@ -8437,7 +8461,7 @@ function renderIssues() {
             <div class="issue-note-preview">${esc(issue.note)}</div>
             <div class="issue-time">${datePart} ${submitterHtml}${shiftBadgeHtml}${timerBadgeHtml}${(issue.photos||[]).length?`<span class="photo-count-badge">📷 ${issue.photos.length}</span>`:''}${issue.editedAt?'<span style="color:var(--color-text-subtle, var(--text3))">(edited)</span>':''}${alertFocusHtml}</div>
           </div>
-          <button class="priority-btn${issue.highPriority?' active':''}" onclick="event.stopPropagation(); togglePriority('${issue.id}')" title="${issue.highPriority?'Remove high priority':'Mark as high priority'}">!</button>
+          <button class="priority-btn${(issue.highPriority || isTimerOverdue)?' active':''}" onclick="event.stopPropagation(); togglePriority('${issue.id}')" title="${isTimerOverdue?'Timer overdue - clear timer to stop pulse':(issue.highPriority?'Remove high priority':'Mark as high priority')}">!</button>
           <div class="issue-expand-icon ${wasOpen?'open':''}" id="chevron-${issue.id}">▼</div>
         </div>
         ${wfStatusRowsHtml}
@@ -12309,6 +12333,21 @@ let _pressWikiPickerOpen = false;
 let _pressWikiPressPickerOpen = false;
 const PRESS_WIKI_SHARED_INDEX_PAGE_ID = 'shared-library-index';
 
+function getCurrentOpenMachine() {
+  const filterMachine = String(document.getElementById('machine-filter')?.value || '').trim();
+  return filterMachine || activeMiniCard?.machine || currentMachine || '';
+}
+
+function getCurrentOpenIssue() {
+  const openBody = document.querySelector('.issue-body.visible');
+  const issueId = openBody?.id?.replace(/^body-/, '') || '';
+  if (issueId) return issues.find(i => i.id === issueId) || null;
+
+  const machine = getCurrentOpenMachine();
+  if (!machine) return null;
+  return issues.find(issue => issue.machine === machine && currentStatusKey(issue) !== 'resolved') || null;
+}
+
 // ── TODOS TOOL ──
 const todosTool = initTodosTool({
   doc,
@@ -12329,12 +12368,8 @@ const todosTool = initTodosTool({
   localDateStr,
   esc,
   toPressId,
-  getOpenMachine: () => document.getElementById('machine-filter')?.value || activeMiniCard?.machine || currentMachine || '',
-  getOpenIssue: () => {
-    const openBody = document.querySelector('.issue-body.visible');
-    const issueId = openBody?.id?.replace(/^body-/, '') || '';
-    return issueId ? issues.find(i => i.id === issueId) || null : null;
-  },
+  getOpenMachine: getCurrentOpenMachine,
+  getOpenIssue: getCurrentOpenIssue,
   completeDemoGuideStep
 });
 window.openTodosModal = todosTool.open;
@@ -13760,6 +13795,36 @@ function _notesContextTitle(context = _notesContext) {
   return context.label || 'Plant-wide';
 }
 
+function _notesOpenPressContext() {
+  if (_notesContext.pressId) {
+    return {
+      pressId: _notesContext.pressId,
+      machineCode: _notesContext.machineCode || _notesContext.label?.replace(/^Press\s*[·-]?\s*/i, '') || ''
+    };
+  }
+  const issue = getCurrentOpenIssue();
+  const machineCode = issue?.machine || getCurrentOpenMachine();
+  const pressId = issue?.pressId || (machineCode ? toPressId(machineCode) : '');
+  return pressId ? { pressId, machineCode } : null;
+}
+
+function _notesOpenIssueContext() {
+  if (_notesContext.issueId) {
+    const issue = issues.find(i => i.id === _notesContext.issueId) || null;
+    const machineCode = issue?.machine || _notesContext.machineCode || '';
+    const pressId = issue?.pressId || _notesContext.pressId || (machineCode ? toPressId(machineCode) : '');
+    return { issueId: _notesContext.issueId, pressId, machineCode };
+  }
+  const issue = getCurrentOpenIssue();
+  if (!issue?.id) return null;
+  const machineCode = issue.machine || '';
+  return {
+    issueId: issue.id,
+    pressId: issue.pressId || (machineCode ? toPressId(machineCode) : ''),
+    machineCode
+  };
+}
+
 function _notesNormalizeDoc(note = {}) {
   const checklistItems = normalizeChecklistItems(note.checklistItems);
   const tags = Array.isArray(note.tags)
@@ -14451,8 +14516,8 @@ function _notesRenderEditor(note = null) {
   document.getElementById('notes-add-checklist-inline-btn')?.toggleAttribute('disabled', !note?.id);
   document.getElementById('notes-checklist-input')?.toggleAttribute('disabled', !note?.id);
   document.getElementById('notes-photo-btn')?.toggleAttribute('disabled', !note?.id);
-  document.getElementById('notes-link-press-btn')?.toggleAttribute('disabled', !note?.id || !_notesContext.pressId);
-  document.getElementById('notes-link-issue-btn')?.toggleAttribute('disabled', !note?.id || !_notesContext.issueId);
+  document.getElementById('notes-link-press-btn')?.toggleAttribute('disabled', !note?.id || !_notesOpenPressContext());
+  document.getElementById('notes-link-issue-btn')?.toggleAttribute('disabled', !note?.id || !_notesOpenIssueContext());
   _notesRenderTagChips(note);
   _notesRenderTagSuggestions(note);
   _notesRenderContextChips(note);
@@ -14757,12 +14822,16 @@ async function _notesSaveActiveNote({ immediate = false } = {}) {
 async function _notesSetContextLink(kind) {
   if (!_notesState.currentNote?.id) return;
   if (kind === 'press') {
-    const pressId = _notesContext.pressId || '';
-    const machineCode = _notesContext.machineCode || _notesContext.label?.replace(/^Press\s+/i, '') || '';
-    _notesState.currentNote.pressId = pressId;
-    _notesState.currentNote.machineCode = machineCode;
+    const context = _notesOpenPressContext();
+    if (!context) return;
+    _notesState.currentNote.pressId = context.pressId || '';
+    _notesState.currentNote.machineCode = context.machineCode || '';
   } else if (kind === 'issue') {
-    _notesState.currentNote.issueId = _notesContext.issueId || '';
+    const context = _notesOpenIssueContext();
+    if (!context) return;
+    _notesState.currentNote.issueId = context.issueId || '';
+    _notesState.currentNote.pressId = context.pressId || _notesState.currentNote.pressId || '';
+    _notesState.currentNote.machineCode = context.machineCode || _notesState.currentNote.machineCode || '';
   }
   _notesState.dirty = true;
   await _notesSaveActiveNote({ immediate: true });
@@ -15296,11 +15365,9 @@ document.getElementById('notes-checklist-input')?.addEventListener('keydown', e 
   }
 });
 document.getElementById('notes-link-press-btn')?.addEventListener('click', () => {
-  if (!_notesContext.pressId) return;
   void _notesSetContextLink('press');
 });
 document.getElementById('notes-link-issue-btn')?.addEventListener('click', () => {
-  if (!_notesContext.issueId) return;
   void _notesSetContextLink('issue');
 });
 document.getElementById('notes-preview-btn')?.addEventListener('click', () => {
@@ -15802,7 +15869,7 @@ window.resetToDefaults = async () => {
     open:            { label:'Open',             shortLabel:'Open',         icon:'●',  cssColor:'var(--color-danger, var(--red))',      swipeColor:'#ef4444', floorCls:'has-open',            cls:'status-open',            subs:['New Fault / Issue','Pending Triage','Scheduled Mold Change','Re-opened'],                                               statLabel:'Open',          order:0 },
     alert:           { label:'Alert',            shortLabel:'Alert',        icon:'🚨', cssColor:'#dc2626',         swipeColor:'#dc2626', floorCls:'has-alert',           cls:'status-alert',           subs:['Mold Protection Fault','E-Stop / Safety Hazard','Press Down - Critical','Major Oil / Fluid Leak'],                   statLabel:'Alert',         order:1 },
     attention:       { label:'Attention',        shortLabel:'Attention',    icon:'◇',  cssColor:'#0ea5e9',         swipeColor:'#0ea5e9', floorCls:'has-attention',       cls:'status-attention',       subs:['Watch Item','Needs Follow-up','Housekeeping','PM Opportunity','Operator Note','Check Next Run'],                  statLabel:'Attention',     order:1.5 },
-    controlman:      { label:'Controlman',       shortLabel:'Controlman',   icon:'🎛️', cssColor:'var(--color-babyblue, var(--babyblue))', swipeColor:'#38bdf8', floorCls:'has-controlman',      cls:'status-controlman',      subs:['Robot / EOAT (End of Arm Tooling) Fault','Vision System / Camera Error','Conveyor / Auxiliary Comm Loss','PLC / HMI Error'], statLabel:'Controlman',    order:2 },
+    controlman:      { label:'Controlman',       shortLabel:'Controlman',   icon:'🎛️', cssColor:'var(--color-babyblue, var(--babyblue))', swipeColor:'#38bdf8', floorCls:'has-controlman',      cls:'status-controlman',      subs:['Color Change','Mold Change','Robot / EOAT (End of Arm Tooling) Fault','Vision System / Camera Error','Conveyor / Auxiliary Comm Loss','PLC / HMI Error'], statLabel:'Controlman',    order:2 },
     maintenance:     { label:'Maintenance',      shortLabel:'Maintenance',  icon:'🔧', cssColor:'var(--color-warning, var(--yellow))',   swipeColor:'#eab308', floorCls:'has-maintenance',     cls:'status-maintenance',     subs:['Hydraulic Leak / Pressure Drop','Heater Band / Thermocouple Failure','Barrel / Screw / Check Ring Issue','Chiller / Thermolator Failure'], statLabel:'Maintenance',   order:3 },
     materials:       { label:'Materials',        shortLabel:'Materials',    icon:'📦', cssColor:'#8b5cf6',         swipeColor:'#8b5cf6', floorCls:'has-materials',       cls:'status-materials',       subs:['Resin Moisture / Drying Issue','Colorant / Masterbatch Ratio Error','Vacuum / Material Loader Blockage','Wrong Resin / Regrind Issue'], statLabel:'Materials',     order:4 },
     processengineer: { label:'Process Engineer', shortLabel:'Process Eng.', icon:'⚙️', cssColor:'var(--color-purple, var(--purple))',   swipeColor:'#a855f7', floorCls:'has-processengineer', cls:'status-processengineer', subs:['Fill / Pack Pressure Adjustment','Temperature Profile Tuning','Cycle Time Optimization','Process Drift / Instability'], statLabel:'Process Eng.',  order:5 },
@@ -15939,6 +16006,10 @@ document.getElementById('issue-reminder-modal')?.addEventListener('click', e => 
 setInterval(() => {
   if (document.hidden) return;
   maybeNotifyIssueReminders(issues);
+}, 1000);
+
+setInterval(() => {
+  if (document.hidden) return;
   if (issues.length > 0) renderIssues();
 }, 60000);
 

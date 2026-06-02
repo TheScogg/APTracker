@@ -1,5 +1,5 @@
 const ISSUE_REMINDER_STORAGE_KEY = 'aptracker_issue_reminders_v1';
-const AUTO_CRITICAL_GRACE_MS = 30 * 1000;
+const AUTO_HOT_GRACE_MS = 0;
 
 export function initIssueReminders(deps) {
   const {
@@ -12,7 +12,9 @@ export function initIssueReminders(deps) {
     plantDoc,
     issueEventsCol,
     serverTimestamp,
-    currentActor
+    currentActor,
+    ensurePushEnabled,
+    autoHotIssue
   } = deps;
 
   let reminderMap = {};
@@ -40,6 +42,7 @@ export function initIssueReminders(deps) {
     if (!issueId) return;
     delete reminderMap[issueId];
     save();
+    persistTimerClear(issueId);
   }
 
   function set(issueId, minutes) {
@@ -52,35 +55,136 @@ export function initIssueReminders(deps) {
       dueAt: now + parsedMinutes * 60 * 1000
     };
     save();
+    persistTimerSet(issueId, reminderMap[issueId]);
+    requestPushRegistration();
     return true;
   }
 
+  function issueTimerReminder(issueId) {
+    const issue = getIssues().find(item => item?.id === issueId);
+    if (!issue) return null;
+    const timer = issue.timer || null;
+    if (!timer?.enabled || !timer?.dueAtMs) return null;
+    const dueAt = Number(timer.dueAtMs || 0);
+    if (!Number.isFinite(dueAt) || dueAt <= 0) return null;
+    return {
+      minutes: parseTimerMinutes(timer.minutes),
+      setAt: Number(timer.startedAtMs || 0),
+      dueAt
+    };
+  }
+
+  function reminderForIssue(issueId) {
+    return issueTimerReminder(issueId) || reminderMap?.[issueId] || null;
+  }
+
   function state(issueId, nowMs = Date.now()) {
-    const reminder = reminderMap?.[issueId];
+    const reminder = reminderForIssue(issueId);
     if (!reminder?.dueAt) return null;
     const dueAt = Number(reminder.dueAt || 0);
     if (!Number.isFinite(dueAt) || dueAt <= 0) return null;
     const remainingMs = dueAt - nowMs;
-    const absMin = Math.max(1, Math.ceil(Math.abs(remainingMs) / 60000));
     return {
       dueAt,
       minutes: Number(reminder.minutes || 0),
       isOverdue: remainingMs <= 0,
       remainingMs,
-      label: remainingMs > 0 ? `⏱ Remind in ${absMin}m` : `⏰ Reminder due ${absMin}m`
+      label: remainingMs > 0
+        ? `Remind in ${formatDurationCompact(remainingMs)}`
+        : `Due ${formatDurationCompact(Math.abs(remainingMs))}`
     };
   }
 
   function getReminderMinutes(issueId) {
-    return parseTimerMinutes(reminderMap?.[issueId]?.minutes);
+    return parseTimerMinutes(reminderForIssue(issueId)?.minutes);
+  }
+
+  function timerPayload(reminder) {
+    const actor = currentActor();
+    const dueAt = Number(reminder?.dueAt || 0);
+    const minutes = parseTimerMinutes(reminder?.minutes);
+    const startedAtMs = Number(reminder?.setAt || 0) || Date.now();
+    return {
+      enabled: true,
+      minutes,
+      startedAtMs,
+      dueAtMs: dueAt,
+      notificationStatus: 'pending',
+      notificationRequestedAtMs: Date.now(),
+      notificationRequestedBy: actor,
+      notificationOwnerUid: actor?.uid || '',
+      notificationDelivery: null
+    };
+  }
+
+  function persistTimerSet(issueId, reminder) {
+    if (!issueId || !reminder?.dueAt || typeof updateDoc !== 'function' || typeof plantDoc !== 'function') return;
+    updateDoc(plantDoc('issues', issueId), { timer: timerPayload(reminder) })
+      .catch(error => console.warn('Issue reminder timer sync failed', error));
+  }
+
+  function persistTimerClear(issueId) {
+    if (!issueId || typeof updateDoc !== 'function' || typeof plantDoc !== 'function') return;
+    updateDoc(plantDoc('issues', issueId), { timer: null })
+      .catch(error => console.warn('Issue reminder timer clear sync failed', error));
+  }
+
+  function requestPushRegistration() {
+    if (typeof ensurePushEnabled !== 'function') return;
+    ensurePushEnabled().catch(error => console.warn('Issue reminder push registration failed', error));
   }
 
   function formatClock(reminderState) {
     if (!reminderState) return '00:00';
     const seconds = Math.max(0, Math.floor(Math.abs(Number(reminderState.remainingMs || 0)) / 1000));
-    const mm = String(Math.floor(seconds / 60)).padStart(2, '0');
-    const ss = String(seconds % 60).padStart(2, '0');
-    return `${mm}:${ss}`;
+    const hours = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    if (hours > 0) return `${hours}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  }
+
+  function formatDurationCompact(ms) {
+    const totalSeconds = Math.max(1, Math.ceil(Math.abs(Number(ms || 0)) / 1000));
+    const hours = Math.floor(totalSeconds / 3600);
+    const mins = Math.floor((totalSeconds % 3600) / 60);
+    const secs = totalSeconds % 60;
+    if (hours > 0) return `${hours}h ${mins}m`;
+    if (mins > 0) return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
+    return `${secs}s`;
+  }
+
+  function formatTimerMinutes(minutes) {
+    const totalSeconds = Math.max(1, Math.round(Number(minutes || 0) * 60));
+    const hours = Math.floor(totalSeconds / 3600);
+    const mins = Math.floor((totalSeconds % 3600) / 60);
+    const secs = totalSeconds % 60;
+    if (hours > 0) return `${hours}h${mins ? ` ${mins}m` : ''}`;
+    if (mins > 0) return `${mins} minute${mins === 1 ? '' : 's'}${secs ? ` ${secs}s` : ''}`;
+    return `${secs} second${secs === 1 ? '' : 's'}`;
+  }
+
+  function formatSelectedClock(totalSeconds) {
+    const seconds = Math.max(0, Math.round(Number(totalSeconds || 0)));
+    const hours = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    if (hours > 0) return `${hours}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  }
+
+  function selectedWheelSeconds() {
+    return (Number(wheelValue.hours || 0) * 3600)
+      + (Number(wheelValue.mins || 0) * 60)
+      + Number(wheelValue.secs || 0);
+  }
+
+  function updateTimerPreview() {
+    const preview = document.getElementById('issue-reminder-preview');
+    if (!preview) return;
+    const seconds = selectedWheelSeconds();
+    preview.textContent = formatSelectedClock(seconds);
+    preview.classList.toggle('empty', seconds <= 0);
   }
 
   function buildWheel(elId, max, key) {
@@ -99,6 +203,7 @@ export function initIssueReminders(deps) {
       const idx = Math.max(0, Math.min(max, Math.round(wheel.scrollTop / itemHeight)));
       wheelValue[key] = idx;
       wheel.querySelectorAll('.timer-wheel-item').forEach((el, i) => el.classList.toggle('active', i === idx));
+      updateTimerPreview();
     };
     wheel.onscroll = updateValue;
     setTimeout(() => updateValue(), 0);
@@ -116,15 +221,17 @@ export function initIssueReminders(deps) {
     modalIssueId = issueId;
     const current = state(issueId);
     const minutes = Math.max(0, Number(current?.minutes || 0));
+    const totalSeconds = Math.round(minutes * 60);
     buildWheel('issue-reminder-hours-wheel', 23, 'hours');
     buildWheel('issue-reminder-mins-wheel', 59, 'mins');
     buildWheel('issue-reminder-secs-wheel', 59, 'secs');
-    setWheelValue('issue-reminder-hours-wheel', Math.floor(minutes / 60));
-    setWheelValue('issue-reminder-mins-wheel', minutes % 60);
-    setWheelValue('issue-reminder-secs-wheel', 0);
-    wheelValue.hours = Math.floor(minutes / 60);
-    wheelValue.mins = minutes % 60;
-    wheelValue.secs = 0;
+    setWheelValue('issue-reminder-hours-wheel', Math.floor(totalSeconds / 3600));
+    setWheelValue('issue-reminder-mins-wheel', Math.floor((totalSeconds % 3600) / 60));
+    setWheelValue('issue-reminder-secs-wheel', totalSeconds % 60);
+    wheelValue.hours = Math.floor(totalSeconds / 3600);
+    wheelValue.mins = Math.floor((totalSeconds % 3600) / 60);
+    wheelValue.secs = totalSeconds % 60;
+    updateTimerPreview();
     const sub = document.getElementById('issue-reminder-modal-subtitle');
     if (sub) sub.textContent = `Press ${issue.machine || 'Unknown'} • pick a timer`;
     document.getElementById('issue-reminder-modal')?.classList.add('visible');
@@ -137,8 +244,9 @@ export function initIssueReminders(deps) {
 
   function setFromModal(minutes) {
     if (!modalIssueId) return;
-    set(modalIssueId, minutes);
-    showGameToast(`⏱ Reminder set for ${minutes}m.`);
+    const parsedMinutes = parseTimerMinutes(minutes);
+    if (!set(modalIssueId, parsedMinutes)) return;
+    showGameToast(`⏱ Reminder set for ${formatTimerMinutes(parsedMinutes)}.`);
     closeModal();
     renderIssues();
   }
@@ -147,9 +255,9 @@ export function initIssueReminders(deps) {
     const h = Number(wheelValue.hours || 0);
     const m = Number(wheelValue.mins || 0);
     const s = Number(wheelValue.secs || 0);
-    const total = Math.floor((h * 60) + m + (s / 60));
+    const total = parseTimerMinutes((h * 60) + m + (s / 60));
     if (total <= 0) {
-      showGameToast('Pick a time greater than 0 minutes.');
+      showGameToast('Pick a time greater than 0 seconds.');
       return;
     }
     setFromModal(total);
@@ -170,7 +278,7 @@ export function initIssueReminders(deps) {
       return;
     }
     if (!set(issueId, minutes)) return;
-    showGameToast(`⏱ Reminder set for ${minutes} minute${minutes === 1 ? '' : 's'}.`);
+    showGameToast(`⏱ Reminder set for ${formatTimerMinutes(minutes)}.`);
     renderIssues();
   }
 
@@ -180,7 +288,7 @@ export function initIssueReminders(deps) {
     const sel = document.getElementById(`issue-reminder-minutes-${issueId}`);
     if (sel) sel.value = String(parsedMinutes);
     set(issueId, parsedMinutes);
-    showGameToast(`⏱ Reminder set for ${parsedMinutes} minute${parsedMinutes === 1 ? '' : 's'}.`);
+    showGameToast(`⏱ Reminder set for ${formatTimerMinutes(parsedMinutes)}.`);
     renderIssues();
   }
 
@@ -190,39 +298,45 @@ export function initIssueReminders(deps) {
     renderIssues();
   }
 
-  async function autoEscalateToCritical(issue, reminderState) {
+  async function autoEscalateToHot(issue, reminderState) {
     if (!issue?.id || !reminderState?.dueAt) return;
-    if (issue.highPriority === true && issue.priority === 'critical') return;
-    const graceThreshold = Number(reminderState.dueAt) + AUTO_CRITICAL_GRACE_MS;
+    const graceThreshold = Number(reminderState.dueAt) + AUTO_HOT_GRACE_MS;
     if (!Number.isFinite(graceThreshold) || Date.now() < graceThreshold) return;
     const dedupeKey = `${issue.id}:${reminderState.dueAt}`;
     if (escalated.has(dedupeKey)) return;
     escalated.add(dedupeKey);
     try {
-      await updateDoc(plantDoc('issues', issue.id), {
-        highPriority: true,
-        priority: 'critical',
-        priorityChangedAt: serverTimestamp(),
-        priorityChangedBy: currentActor()
-      });
-      await addDoc(issueEventsCol(issue.id), {
-        eventType: 'issue_priority_changed',
-        actor: currentActor(),
-        note: 'Auto-escalated to critical after timer expiry.',
-        metadata: {
-          fromHighPriority: !!issue.highPriority,
-          fromPriority: issue.priority || null,
-          toHighPriority: true,
-          toPriority: 'critical',
-          escalationReason: 'timer_expired_unacknowledged',
-          reminderDueAt: Number(reminderState.dueAt)
-        },
-        eventAt: serverTimestamp()
-      });
-      showGameToast(`🚨 Auto-critical: Press ${issue.machine || 'Unknown'}`);
+      if (typeof autoHotIssue === 'function') {
+        await autoHotIssue(issue, reminderState);
+      } else {
+        await updateDoc(plantDoc('issues', issue.id), {
+          highPriority: true,
+          priority: 'critical',
+          priorityChangedAt: serverTimestamp(),
+          priorityChangedBy: currentActor()
+        });
+        await addDoc(issueEventsCol(issue.id), {
+          eventType: 'issue_priority_changed',
+          actor: currentActor(),
+          note: 'Auto-escalated after timer expiry.',
+          metadata: {
+            fromHighPriority: !!issue.highPriority,
+            fromPriority: issue.priority || null,
+            toHighPriority: true,
+            toPriority: 'critical',
+            escalationReason: 'timer_expired_unacknowledged',
+            reminderDueAt: Number(reminderState.dueAt)
+          },
+          eventAt: serverTimestamp()
+        });
+      }
+      issue.highPriority = true;
+      issue.priority = 'critical';
+      renderIssues();
+      showGameToast(`🚨 Hot: Press ${issue.machine || 'Unknown'}`);
     } catch (error) {
       escalated.delete(dedupeKey);
-      console.warn('Issue reminder escalation failed', error);
+      console.warn('Issue reminder hot status escalation failed', error);
     }
   }
 
@@ -235,6 +349,7 @@ export function initIssueReminders(deps) {
       if (!notified.has(dedupeKey)) {
         notified.add(dedupeKey);
         showGameToast(`⏰ Reminder: check Press ${issue.machine || 'Unknown'}`);
+        renderIssues();
         if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
           try {
             navigator.vibrate([200, 120, 200, 120, 300]);
@@ -253,9 +368,9 @@ export function initIssueReminders(deps) {
         }
       }
       try {
-        await autoEscalateToCritical(issue, reminderState);
+        await autoEscalateToHot(issue, reminderState);
       } catch (error) {
-        console.warn('Issue reminder auto-critical check failed', error);
+        console.warn('Issue reminder auto-hot check failed', error);
       }
     }
   }

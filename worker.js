@@ -1153,6 +1153,22 @@ async function patchFirestoreDocument(env, path, fields) {
   return data;
 }
 
+async function runFirestoreQuery(env, structuredQuery) {
+  const projectId = env.FIREBASE_PROJECT_ID || FIREBASE_PROJECT_ID;
+  const token = await getGoogleOAuthToken(env);
+  const res = await fetch(`https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents:runQuery`, {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ structuredQuery })
+  });
+  const data = await res.json().catch(() => []);
+  if (!res.ok) {
+    const message = data?.error?.message || `Firestore query failed: ${res.status}`;
+    throw new Error(message);
+  }
+  return Array.isArray(data) ? data : [];
+}
+
 async function listUserFcmTokens(env, uid) {
   const projectId = env.FIREBASE_PROJECT_ID || FIREBASE_PROJECT_ID;
   const token = await getGoogleOAuthToken(env);
@@ -1221,6 +1237,149 @@ async function sendFcmToTokens(env, tokens, payload) {
 async function tokensForUsers(env, userIds) {
   const tokenLists = await Promise.all(Array.from(new Set(userIds || [])).map(uid => listUserFcmTokens(env, uid)));
   return tokenLists.flat().map(t => t.token).filter(Boolean);
+}
+
+function firestoreRelativePathFromName(name) {
+  const marker = '/documents/';
+  const idx = String(name || '').indexOf(marker);
+  return idx >= 0 ? String(name).slice(idx + marker.length) : '';
+}
+
+function plantIssuePathParts(relativePath) {
+  const parts = String(relativePath || '').split('/');
+  const plantIndex = parts.indexOf('plants');
+  const issueIndex = parts.indexOf('issues');
+  if (plantIndex < 0 || issueIndex < 0) return null;
+  return {
+    plantId: parts[plantIndex + 1] || '',
+    issueId: parts[issueIndex + 1] || ''
+  };
+}
+
+function addRecipientId(set, value) {
+  const uid = String(value || '').trim();
+  if (uid) set.add(uid);
+}
+
+function issueTimerRecipientIds(issue) {
+  const recipients = new Set();
+  const timer = issue?.timer || {};
+  addRecipientId(recipients, timer.notificationOwnerUid);
+  addRecipientId(recipients, timer.notificationRequestedBy?.uid);
+  addRecipientId(recipients, issue?.createdBy?.uid);
+  addRecipientId(recipients, issue?.userId);
+  addRecipientId(recipients, issue?.ownerUid);
+  addRecipientId(recipients, issue?.createdByUid);
+  addRecipientId(recipients, issue?.submitterUid);
+  addRecipientId(recipients, issue?.assignedToUid);
+  for (const uid of Array.isArray(issue?.watcherUids) ? issue.watcherUids : []) addRecipientId(recipients, uid);
+  return Array.from(recipients);
+}
+
+function issueTimerMessage(issue, plantId, issueId) {
+  const machine = issue?.machine || issue?.machineCode || 'Unknown';
+  const title = `Timer due - Press ${machine}`;
+  const note = String(issue?.note || '').trim();
+  const body = note ? note.slice(0, 140) : 'Go back and check the issue.';
+  return {
+    notification: { title, body },
+    data: { type: 'issue-timer', plantId, issueId, title, body, url: '/index.html' },
+    link: '/index.html'
+  };
+}
+
+async function listPendingIssueTimers(env, limit = 100) {
+  const rows = await runFirestoreQuery(env, {
+    from: [{ collectionId: 'issues', allDescendants: true }],
+    where: {
+      fieldFilter: {
+        field: { fieldPath: 'timer.notificationStatus' },
+        op: 'EQUAL',
+        value: { stringValue: 'pending' }
+      }
+    },
+    limit
+  });
+  return rows
+    .map(row => row.document)
+    .filter(Boolean)
+    .map(doc => ({
+      path: firestoreRelativePathFromName(doc.name),
+      issue: firestoreDocToJs(doc)
+    }));
+}
+
+async function processDueIssueTimers(env) {
+  const nowMs = Date.now();
+  const pending = await listPendingIssueTimers(env);
+  const summary = { checked: pending.length, due: 0, attempted: 0, sent: 0, failed: 0, skipped: 0, errors: [] };
+
+  for (const entry of pending) {
+    const { path, issue } = entry;
+    const pathParts = plantIssuePathParts(path);
+    const timer = issue?.timer || {};
+    const dueAtMs = Number(timer.dueAtMs || 0);
+    if (!pathParts?.plantId || !pathParts?.issueId || !timer.enabled || !Number.isFinite(dueAtMs) || dueAtMs > nowMs) {
+      summary.skipped += 1;
+      continue;
+    }
+
+    summary.due += 1;
+    const recipients = issueTimerRecipientIds(issue);
+    try {
+      const tokens = await tokensForUsers(env, recipients);
+      const result = await sendFcmToTokens(env, tokens, issueTimerMessage(issue, pathParts.plantId, pathParts.issueId));
+      summary.attempted += result.attempted;
+      summary.sent += result.sent;
+      summary.failed += result.failed;
+
+      const delivery = {
+        sentAt: new Date(),
+        recipientUserIds: recipients,
+        attempted: result.attempted,
+        sent: result.sent,
+        failed: result.failed,
+        errors: result.errors || []
+      };
+      await patchFirestoreDocument(env, path, {
+        timer: {
+          ...timer,
+          notificationStatus: result.sent > 0 ? 'sent' : 'failed',
+          notificationDelivery: delivery
+        }
+      });
+    } catch (error) {
+      summary.failed += 1;
+      summary.errors.push({ issueId: pathParts.issueId, error: error.message });
+      await patchFirestoreDocument(env, path, {
+        timer: {
+          ...timer,
+          notificationStatus: 'failed',
+          notificationDelivery: {
+            sentAt: new Date(),
+            recipientUserIds: recipients,
+            attempted: 0,
+            sent: 0,
+            failed: 1,
+            errors: [{ error: error.message }]
+          }
+        }
+      }).catch(() => {});
+    }
+  }
+
+  return summary;
+}
+
+async function handleFcmDueIssueTimers(request, env) {
+  if (request.method !== 'POST') return jsonResponse({ error: 'POST required' }, { status: 405 });
+  try {
+    await authenticateFirebaseUser(request, env);
+    const summary = await processDueIssueTimers(env);
+    return jsonResponse({ ok: true, ...summary });
+  } catch (e) {
+    return jsonResponse({ error: e.message }, { status: 500 });
+  }
 }
 
 async function handleFcmRoleAlert(request, env) {
@@ -1341,6 +1500,9 @@ export default {
     if (url.pathname === '/api/fcm/conversation-message') {
       return handleFcmConversationMessage(request, env);
     }
+    if (url.pathname === '/api/fcm/due-issue-timers') {
+      return handleFcmDueIssueTimers(request, env);
+    }
     if (url.pathname === '/api/debug') {
       const info = {};
       for (const key of Object.keys(env)) {
@@ -1359,5 +1521,9 @@ export default {
 
     const assetResponse = await env.ASSETS.fetch(request);
     return withStaticCacheHeaders(assetResponse, url.pathname);
+  },
+
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(processDueIssueTimers(env));
   }
 };

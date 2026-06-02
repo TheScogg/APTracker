@@ -232,7 +232,7 @@ export function initTodosTool({
     };
   }
 
-  async function saveTodo(todo, { creating = false, oldScope = null } = {}) {
+  async function saveTodo(todo, { creating = false, oldScope = null, activate = true } = {}) {
     if (!getCurrentUser() || !getCurrentPlantId()) return null;
     const scope = todo.scope === 'shared' ? 'shared' : 'personal';
     const id = todo.id || doc(scope === 'shared' ? plantTodosCol() : userTodosCol()).id;
@@ -240,7 +240,7 @@ export function initTodosTool({
     const createsTargetDoc = creating || !todo.id || (oldScope && oldScope !== scope);
     await setDoc(todoRef(scope, id), todoPayload(normalized, { creating: createsTargetDoc }), { merge: true });
     if (oldScope && oldScope !== scope && todo.id) await deleteDoc(todoRef(oldScope, todo.id));
-    state.activeKey = `${scope}:${id}`;
+    if (activate) state.activeKey = `${scope}:${id}`;
     return { ...normalized, id, scope };
   }
 
@@ -251,10 +251,10 @@ export function initTodosTool({
     const scope = state.scope === 'shared' ? 'shared' : 'personal';
     input.value = '';
     try {
-      const saved = await saveTodo({ title, notes: '', listName: 'Inbox', dueDate: '', priority: 'none', isCompleted: false, scope }, { creating: true });
+      const saved = await saveTodo({ title, notes: '', listName: 'Inbox', dueDate: '', priority: 'none', isCompleted: false, scope }, { creating: true, activate: false });
       if (saved) {
         state.error = '';
-        renderEditor(saved);
+        renderEditor(null);
       }
     } catch (err) {
       if (input) input.value = title;
@@ -357,16 +357,17 @@ export function initTodosTool({
     setEditorVisible(false);
   }
 
-  function linkOpenPress() {
+  async function linkOpenPress() {
     if (!state.current) return;
     const machine = getOpenMachine();
     if (!machine) return;
     state.current.machineCode = machine;
     state.current.pressId = toPressId(machine);
     renderEditor(state.current);
+    await saveFromEditor();
   }
 
-  function linkOpenIssue() {
+  async function linkOpenIssue() {
     if (!state.current) return;
     const issue = getOpenIssue();
     if (!issue) return;
@@ -374,6 +375,7 @@ export function initTodosTool({
     state.current.machineCode = issue.machine || state.current.machineCode || '';
     state.current.pressId = issue.machine ? toPressId(issue.machine) : (state.current.pressId || '');
     renderEditor(state.current);
+    await saveFromEditor();
   }
 
   function clearLinks() {
