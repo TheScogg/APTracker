@@ -1009,13 +1009,20 @@ function scheduleIssueId(scheduleDate, section, rowId) {
   return `schedule_${slugForId(scheduleDate)}_${slugForId(section)}_${slugForId(rowId)}`;
 }
 
-function scheduleIssueDate(scheduleDate) {
-  const d = new Date(`${scheduleDate}T12:00:00`);
+function scheduleShiftStartTime(shift) {
+  const normalized = String(shift || '').trim().toLowerCase();
+  if (normalized === '2' || normalized === 'second') return '13:54:00';
+  if (normalized === '3' || normalized === 'third') return '21:54:00';
+  return '05:54:00';
+}
+
+function scheduleIssueDate(scheduleDate, shift) {
+  const d = new Date(`${scheduleDate}T${scheduleShiftStartTime(shift)}`);
   return Number.isFinite(d.getTime()) ? d : new Date();
 }
 
-function formatScheduleIssueDateTime(scheduleDate) {
-  const d = scheduleIssueDate(scheduleDate);
+function formatScheduleIssueDateTime(scheduleDate, shift) {
+  const d = scheduleIssueDate(scheduleDate, shift);
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' ' +
     d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
 }
@@ -1045,8 +1052,9 @@ function classifyScheduleChange(row) {
 function buildScheduleIssuePayload(plantId, scheduleDate, shift, row, actor) {
   const machineCode = String(row?.press || '').trim();
   const status = classifyScheduleChange(row);
-  const dateTime = formatScheduleIssueDateTime(scheduleDate);
-  const createdDate = scheduleIssueDate(scheduleDate);
+  const issueShift = shift || row?.shift || 1;
+  const dateTime = formatScheduleIssueDateTime(scheduleDate, issueShift);
+  const createdDate = scheduleIssueDate(scheduleDate, issueShift);
   const note = [
     `${status.subStatus} from schedule import.`,
     row?.partNumber ? `Part: ${row.partNumber}` : '',
@@ -1063,7 +1071,7 @@ function buildScheduleIssuePayload(plantId, scheduleDate, shift, row, actor) {
     dateTime,
     dateKey: scheduleDate,
     timestamp: createdDate.getTime(),
-    shift: String(shift || row?.shift || 1),
+    shift: String(issueShift),
     timer: null,
     userId: actor.uid,
     userName: actor.name,

@@ -541,9 +541,39 @@
   /* SYNC BANNER */
   #sync-banner { display: none; align-items: center; gap: 8px; background: var(--color-surface-raised, var(--bg3)); border-bottom: 1px solid var(--color-border, var(--border)); padding: 7px 28px; font-size: 12px; color: var(--color-text-muted, var(--text2)); font-family: 'Share Tech Mono', monospace; }
   #sync-banner.visible { display: flex; }
+  #sync-banner[data-sync-status="live"] { border-bottom-color: color-mix(in srgb, var(--color-success, var(--green)) 42%, var(--color-border, var(--border))); }
+  #sync-banner[data-sync-status="cached"] { border-bottom-color: color-mix(in srgb, var(--color-warning, var(--yellow)) 45%, var(--color-border, var(--border))); }
+  #sync-banner[data-sync-status="syncing"] { border-bottom-color: color-mix(in srgb, var(--color-info, var(--blue)) 45%, var(--color-border, var(--border))); }
+  #sync-banner[data-sync-status="offline"],
+  #sync-banner[data-sync-status="error"] { border-bottom-color: color-mix(in srgb, var(--color-danger, var(--red)) 48%, var(--color-border, var(--border))); }
   .sync-dot { width: 7px; height: 7px; border-radius: 50%; background: #eab308; animation: pulse 1.2s infinite; flex-shrink: 0; }
   .sync-dot.ok { background: var(--color-success, var(--green)); animation: none; }
   .sync-dot.err { background: var(--color-danger, var(--red)); animation: none; }
+  .sync-dot.cached { background: var(--color-warning, var(--yellow)); animation: none; }
+  .sync-dot.syncing { background: var(--color-info, var(--blue)); animation: pulse 1.2s infinite; }
+  .issue-card.local-pending {
+    border-color: color-mix(in srgb, var(--color-info, var(--blue)) 48%, var(--color-border, var(--border)));
+  }
+  .issue-card.sync-failed {
+    border-color: color-mix(in srgb, var(--color-danger, var(--red)) 62%, var(--color-border, var(--border)));
+  }
+  .local-sync-badge {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid color-mix(in srgb, var(--color-info, var(--blue)) 45%, var(--color-border, var(--border)));
+    color: var(--color-info, var(--blue));
+    background: color-mix(in srgb, var(--color-info, var(--blue)) 12%, transparent);
+    border-radius: 999px;
+    padding: 1px 6px;
+    font-size: 10px;
+    font-weight: 800;
+    white-space: nowrap;
+  }
+  .local-sync-badge.failed {
+    border-color: color-mix(in srgb, var(--color-danger, var(--red)) 54%, var(--color-border, var(--border)));
+    color: var(--color-danger, var(--red));
+    background: color-mix(in srgb, var(--color-danger, var(--red)) 12%, transparent);
+  }
   .firestore-io-indicator {
     margin-left: auto;
     font-size: 11px;
@@ -5844,6 +5874,15 @@
 }
 .search-box:focus {
   border-color: var(--color-accent, var(--accent));
+}
+
+@media (hover: none) and (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+  select,
+  textarea,
+  [contenteditable="true"] {
+    font-size: 16px !important;
+  }
 }
 
 /* Filter pills (AP-Tracker stat-pill style) */

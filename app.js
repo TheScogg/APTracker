@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, collection, collectionGroup, updateDoc as rawUpdateDoc, deleteDoc as rawDeleteDoc, doc, getDoc as rawGetDoc, getDocs as rawGetDocs, setDoc as rawSetDoc, addDoc as rawAddDoc, onSnapshot as rawOnSnapshot, serverTimestamp, query, orderBy, where, writeBatch as rawWriteBatch, arrayUnion, arrayRemove, increment, limit, runTransaction as rawRunTransaction, startAfter } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, collectionGroup, updateDoc as rawUpdateDoc, deleteDoc as rawDeleteDoc, doc, getDoc as rawGetDoc, getDocs as rawGetDocs, setDoc as rawSetDoc, addDoc as rawAddDoc, onSnapshot as rawOnSnapshot, serverTimestamp, query, orderBy, where, writeBatch as rawWriteBatch, arrayUnion, arrayRemove, increment, limit, runTransaction as rawRunTransaction, startAfter } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getAuth, setPersistence, browserLocalPersistence, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut as fbSignOut, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getStorage, ref as storageRef, uploadString, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 import { getMessaging, getToken, isSupported as isMessagingSupported, onMessage } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
@@ -44,7 +44,7 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = initializeFirestore(app, {
-  localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
 });
 const storage = getStorage(app);
 const storageFallback = firebaseConfig.storageBucket && firebaseConfig.storageBucket.includes('.appspot.com')
@@ -116,10 +116,10 @@ const getDocs = async (...args) => {
   trackFirestoreRead(snap?.size ?? 0);
   return snap;
 };
-const setDoc = async (...args) => { const out = await rawSetDoc(...args); trackFirestoreWrite(1); return out; };
-const addDoc = async (...args) => { const out = await rawAddDoc(...args); trackFirestoreWrite(1); return out; };
-const updateDoc = async (...args) => { const out = await rawUpdateDoc(...args); trackFirestoreWrite(1); return out; };
-const deleteDoc = async (...args) => { const out = await rawDeleteDoc(...args); trackFirestoreWrite(1); return out; };
+const setDoc = async (...args) => { const out = await rawSetDoc(...args); trackFirestoreWrite(1); markLocalWriteQueued(); return out; };
+const addDoc = async (...args) => { const out = await rawAddDoc(...args); trackFirestoreWrite(1); markLocalWriteQueued(); return out; };
+const updateDoc = async (...args) => { const out = await rawUpdateDoc(...args); trackFirestoreWrite(1); markLocalWriteQueued(); return out; };
+const deleteDoc = async (...args) => { const out = await rawDeleteDoc(...args); trackFirestoreWrite(1); markLocalWriteQueued(); return out; };
 const deepCopy = (obj) => {
   if (obj === undefined) return undefined;
   return JSON.parse(JSON.stringify(obj));
@@ -130,6 +130,7 @@ const writeBatch = (...args) => {
   batch.commit = async (...commitArgs) => {
     const out = await originalCommit(...commitArgs);
     trackFirestoreWrite(1);
+    markLocalWriteQueued();
     return out;
   };
   return batch;
@@ -137,8 +138,431 @@ const writeBatch = (...args) => {
 const runTransaction = async (...args) => {
   const out = await rawRunTransaction(...args);
   trackFirestoreWrite(1);
+  markLocalWriteQueued();
   return out;
 };
+
+const syncState = {
+  status: 'connecting',
+  online: typeof navigator === 'undefined' ? true : navigator.onLine !== false,
+  fromCache: true,
+  hasPendingWrites: false,
+  lastServerAt: null,
+  lastError: null,
+  manualText: 'Connecting...'
+};
+
+function statusClassForSyncState(status) {
+  if (status === 'live') return 'ok';
+  if (status === 'offline' || status === 'error') return 'err';
+  if (status === 'syncing') return 'syncing';
+  if (status === 'cached') return 'cached';
+  return '';
+}
+
+function defaultSyncText() {
+  if (syncState.status === 'switching') return syncState.manualText || 'Switching plant...';
+  if (syncState.status === 'error') return syncState.manualText || 'Error - retrying connection';
+  if (syncState.hasPendingWrites) return 'Syncing - local changes pending';
+  if (!syncState.online) return 'Offline - showing cached data';
+  if (syncState.fromCache) return 'Cached - showing saved data';
+  if (syncState.lastServerAt) return syncState.manualText || 'Live - synced across all devices';
+  return syncState.manualText || 'Connecting...';
+}
+
+function applySyncBanner() {
+  const banner = document.getElementById('sync-banner');
+  const dot = document.getElementById('sync-dot');
+  const text = document.getElementById('sync-text');
+  if (!banner || !dot || !text) return;
+  banner.classList.add('visible');
+  banner.dataset.syncStatus = syncState.status || 'connecting';
+  dot.className = `sync-dot ${statusClassForSyncState(syncState.status)}`.trim();
+  text.textContent = defaultSyncText();
+}
+
+function deriveSyncStatus() {
+  if (syncState.status === 'switching' || syncState.status === 'error') return syncState.status;
+  if (syncState.hasPendingWrites) return 'syncing';
+  if (!syncState.online) return 'offline';
+  if (syncState.fromCache) return 'cached';
+  if (syncState.lastServerAt) return 'live';
+  return 'connecting';
+}
+
+function refreshSyncState(patch = {}) {
+  Object.assign(syncState, patch);
+  if (!patch.status) syncState.status = deriveSyncStatus();
+  applySyncBanner();
+}
+
+function observeSyncSnapshot(snapshot) {
+  const fromCache = Boolean(snapshot?.metadata?.fromCache);
+  const hasPendingWrites = Boolean(snapshot?.metadata?.hasPendingWrites);
+  refreshSyncState({
+    status: null,
+    fromCache,
+    hasPendingWrites,
+    lastServerAt: fromCache ? syncState.lastServerAt : Date.now(),
+    lastError: null,
+    manualText: ''
+  });
+}
+
+function isOfflineLikeError(error) {
+  const code = String(error?.code || '').toLowerCase();
+  const message = String(error?.message || '').toLowerCase();
+  return !syncState.online
+    || code === 'unavailable'
+    || code === 'deadline-exceeded'
+    || message.includes('offline')
+    || message.includes('network')
+    || message.includes('failed to get document');
+}
+
+function hasLocalPhotos(photos = []) {
+  return (photos || []).some(p => p?.dataUrl && !p?.storagePath && !p?.downloadURL && !p?.url);
+}
+
+function guardOfflinePhotos(photos = [], context = 'Photos') {
+  if (syncState.online || !hasLocalPhotos(photos)) return false;
+  const message = `${context} require connection. Save again after WiFi is back.`;
+  setSyncStatus('err', message);
+  if (typeof showGameToast === 'function') showGameToast(message);
+  return true;
+}
+
+function markLocalWriteQueued() {
+  if (!syncState.online || syncState.fromCache) {
+    refreshSyncState({ status: 'syncing', hasPendingWrites: true, manualText: 'Syncing - local changes pending' });
+  }
+}
+
+const ISSUE_OUTBOX_DB = 'aptracker_issue_outbox_v1';
+const ISSUE_OUTBOX_STORE = 'issues';
+let issueOutboxDbPromise = null;
+let issueOutboxFlushPromise = null;
+
+function openIssueOutboxDb() {
+  if (issueOutboxDbPromise) return issueOutboxDbPromise;
+  issueOutboxDbPromise = new Promise((resolve, reject) => {
+    if (!('indexedDB' in window)) {
+      reject(new Error('Local offline storage is not supported in this browser.'));
+      return;
+    }
+    const req = indexedDB.open(ISSUE_OUTBOX_DB, 1);
+    req.onupgradeneeded = () => {
+      const dbi = req.result;
+      const store = dbi.objectStoreNames.contains(ISSUE_OUTBOX_STORE)
+        ? req.transaction.objectStore(ISSUE_OUTBOX_STORE)
+        : dbi.createObjectStore(ISSUE_OUTBOX_STORE, { keyPath: 'id' });
+      if (!store.indexNames.contains('plantId')) store.createIndex('plantId', 'plantId', { unique: false });
+      if (!store.indexNames.contains('status')) store.createIndex('status', 'status', { unique: false });
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error || new Error('Could not open local issue outbox.'));
+  });
+  return issueOutboxDbPromise;
+}
+
+async function issueOutboxTx(mode, fn) {
+  const dbi = await openIssueOutboxDb();
+  return new Promise((resolve, reject) => {
+    const tx = dbi.transaction(ISSUE_OUTBOX_STORE, mode);
+    const store = tx.objectStore(ISSUE_OUTBOX_STORE);
+    let result;
+    tx.oncomplete = () => resolve(result);
+    tx.onerror = () => reject(tx.error || new Error('Local issue outbox transaction failed.'));
+    tx.onabort = () => reject(tx.error || new Error('Local issue outbox transaction aborted.'));
+    result = fn(store);
+  });
+}
+
+function requestToPromise(req) {
+  return new Promise((resolve, reject) => {
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error || new Error('Local outbox request failed.'));
+  });
+}
+
+async function saveLocalIssueOutboxItem(item) {
+  await issueOutboxTx('readwrite', store => store.put(item));
+}
+
+async function deleteLocalIssueOutboxItem(id) {
+  await issueOutboxTx('readwrite', store => store.delete(id));
+}
+
+async function loadLocalIssueOutboxItems() {
+  return issueOutboxTx('readonly', store => requestToPromise(store.getAll()));
+}
+
+function localIssueForOutboxItem(item) {
+  const draft = item.draft || {};
+  const localPhotos = item.localPhotos || [];
+  const payload = buildLocalIssuePayloadFromDraft(item.id, draft, localPhotos);
+  return {
+    ...payload,
+    id: item.id,
+    photos: localPhotos,
+    __localPending: item.status !== 'failed',
+    __localSyncStatus: item.status || 'pending',
+    __localSyncError: item.error || '',
+    photoCount: localPhotos.length || Number(payload.photoCount || 0)
+  };
+}
+
+function buildLocalIssuePayloadFromDraft(issueId, draft, photos = []) {
+  const statusDateTime = draft.statusDateTime || draft.dateTime || fmtDate(new Date());
+  const actor = draft.actor || currentActor();
+  const workflowId = draft.initialWorkflowId || createWorkflowId(draft.initialStatus || 'open');
+  const statusKey = draft.initialStatus || 'open';
+  const subStatus = draft.initialSubStatus || '';
+  return {
+    machine: draft.machine || '',
+    machineCode: draft.machine || '',
+    note: draft.note || 'No Description Provided',
+    dateTime: draft.dateTime || statusDateTime,
+    dateKey: draft.dateKey || localDateStr(new Date()),
+    timestamp: Number(draft.timestamp || Date.now()),
+    shift: draft.shift || '',
+    timer: draft.timer || null,
+    userId: draft.userId || currentUser?.uid || '',
+    userName: draft.userName || currentUser?.displayName || currentUser?.email || '',
+    photoCount: photos.length,
+    photos,
+    createdAt: draft.createdAtIso || new Date().toISOString(),
+    createdBy: actor,
+    statusHistory: [{
+      status: statusKey,
+      subStatus,
+      note: '',
+      dateTime: statusDateTime,
+      by: actor.name || draft.userName || '',
+      workflowId
+    }],
+    ...(statusKey === 'resolved'
+      ? {
+          workflowState: 'finished',
+          workflowStateByEntry: { [workflowId]: 'finished' },
+          workflowStateByEntryHistory: { [workflowId]: { finished: { by: actor, at: draft.createdAtIso || new Date().toISOString() } } },
+          workflowStateHistory: { finished: { by: actor, at: draft.createdAtIso || new Date().toISOString() } }
+        }
+      : { workflowStateByEntry: { [workflowId]: null } }),
+    ...(draft.isUrgent ? { highPriority: true, priority: 'critical' } : {}),
+    schemaVersion: 2,
+    plantId: draft.plantId || currentPlantId,
+    pressId: draft.pressId || toPressId(draft.machine || ''),
+    rowId: draft.rowId || toRowId(findRowNameForMachine(draft.machine || '')),
+    currentStatus: {
+      statusKey,
+      subStatusKey: subStatus,
+      label: getStatusDef(statusKey)?.label || statusKey || 'Open',
+      subLabel: subStatus,
+      color: getStatusColor(statusKey),
+      enteredAt: draft.createdAtIso || new Date().toISOString(),
+      enteredDateTime: statusDateTime,
+      enteredBy: actor,
+      notePreview: draft.note || ''
+    },
+    lifecycle: { isOpen: statusKey !== 'resolved', isResolved: statusKey === 'resolved', openedAt: draft.createdAtIso || new Date().toISOString() },
+    updatedAt: draft.createdAtIso || new Date().toISOString(),
+    updatedBy: actor
+  };
+}
+
+function buildServerIssuePayloadFromDraft(issueId, draft, uploadedPhotos = []) {
+  const statusKey = draft.initialStatus || 'open';
+  const subStatus = draft.initialSubStatus || '';
+  const workflowId = draft.initialWorkflowId || createWorkflowId(statusKey);
+  const actor = draft.actor || currentActor();
+  return {
+    machine: draft.machine || '',
+    note: draft.note || 'No Description Provided',
+    dateTime: draft.dateTime,
+    dateKey: draft.dateKey,
+    timestamp: Number(draft.timestamp || Date.now()),
+    shift: draft.shift || '',
+    timer: draft.timer || null,
+    userId: draft.userId || currentUser?.uid || '',
+    userName: draft.userName || currentUser?.displayName || currentUser?.email || '',
+    photoCount: uploadedPhotos.length,
+    createdAt: serverTimestamp(),
+    createdBy: actor,
+    statusHistory: [{
+      status: statusKey,
+      subStatus,
+      note: '',
+      dateTime: draft.statusDateTime || draft.dateTime,
+      by: actor.name || draft.userName || '',
+      workflowId
+    }],
+    ...(statusKey === 'resolved'
+      ? {
+          workflowState: 'finished',
+          workflowStateByEntry: { [workflowId]: 'finished' },
+          workflowStateByEntryHistory: { [workflowId]: { finished: { by: actor, at: serverTimestamp() } } },
+          workflowStateHistory: { finished: { by: actor, at: serverTimestamp() } }
+        }
+      : { workflowStateByEntry: { [workflowId]: null } }),
+    ...(draft.isUrgent ? { highPriority: true, priority: 'critical' } : {}),
+    ...buildIssueV2Compat({
+      machineCode: draft.machine || '',
+      statusKey,
+      subStatus,
+      statusDateTime: draft.statusDateTime || draft.dateTime,
+      note: draft.note || 'No Description Provided'
+    }),
+    plantId: draft.plantId || currentPlantId,
+    pressId: draft.pressId || toPressId(draft.machine || ''),
+    rowId: draft.rowId || toRowId(findRowNameForMachine(draft.machine || ''))
+  };
+}
+
+function queuePlantIssueEvent(batch, plantId, issueId, type, payload = {}) {
+  const evtRef = doc(collection(db, 'plants', plantId, 'issues', issueId, 'events'));
+  batch.set(evtRef, {
+    type,
+    eventAt: serverTimestamp(),
+    actor: currentActor(),
+    payload,
+    schemaVersion: 2
+  });
+}
+
+function queuePlantAttachmentDocs(batch, plantId, issueId, photos = []) {
+  photos.forEach((p, idx) => {
+    if (!p?.storagePath) return;
+    const attachmentId = `photo_${String(idx).padStart(3, '0')}_${String(p.storagePath).split('/').pop().replace(/[^a-zA-Z0-9]+/g, '_')}`;
+    batch.set(doc(db, 'plants', plantId, 'issues', issueId, 'attachments', attachmentId), {
+      type: 'photo',
+      name: p.name || attachmentId,
+      storagePath: p.storagePath,
+      storageBucket: p.storageBucket || '',
+      downloadURL: p.downloadURL || p.dataUrl || '',
+      contentType: p.contentType || '',
+      sizeBytes: Number(p.sizeBytes || 0),
+      uploadedAt: serverTimestamp(),
+      uploadedBy: currentActor(),
+      schemaVersion: 2
+    }, { merge: true });
+  });
+}
+
+async function hydrateLocalIssueOutboxForCurrentPlant() {
+  if (!currentPlantId) return;
+  try {
+    const items = await loadLocalIssueOutboxItems();
+    let changed = false;
+    items.filter(item => item.plantId === currentPlantId).forEach(item => {
+      if (!issuesById.has(item.id)) {
+        issuesById.set(item.id, localIssueForOutboxItem(item));
+        changed = true;
+      }
+    });
+    if (changed) {
+      rebuildIssuesArrayFromMap();
+      refreshVisibleData();
+    }
+    const pendingCount = items.filter(item => item.plantId === currentPlantId && item.status !== 'failed').length;
+    if (pendingCount > 0) setSyncStatus('syncing', `Syncing - ${pendingCount} local issue${pendingCount === 1 ? '' : 's'} pending`);
+  } catch (e) {
+    console.warn('Could not hydrate local issue outbox', e);
+  }
+}
+
+function removeSyncedOutboxItemsFromSnapshot(snap) {
+  if (!snap?.docs?.length) return;
+  snap.docs.forEach(d => {
+    const issue = issuesById.get(d.id);
+    if (issue?.__localPending || issue?.__localSyncStatus) {
+      deleteLocalIssueOutboxItem(d.id).catch(e => console.warn('Could not clear synced local issue', e));
+    }
+  });
+}
+
+async function flushOneIssueOutboxItem(item) {
+  const syncingItem = { ...item, status: 'syncing', error: '', updatedAt: new Date().toISOString() };
+  await saveLocalIssueOutboxItem(syncingItem);
+  if (currentPlantId === item.plantId) {
+    issuesById.set(item.id, localIssueForOutboxItem(syncingItem));
+    rebuildIssuesArrayFromMap();
+    refreshVisibleData();
+  }
+
+  const uploadedPhotos = await withTimeout(
+    uploadIssuePhotosToStorage(item.id, item.localPhotos || [], item.plantId),
+    20000,
+    'Offline issue photo upload'
+  );
+  const issuePayload = buildServerIssuePayloadFromDraft(item.id, item.draft || {}, uploadedPhotos);
+  const batch = writeBatch(db);
+  batch.set(doc(db, 'plants', item.plantId, 'issues', item.id), issuePayload);
+  queuePlantAttachmentDocs(batch, item.plantId, item.id, uploadedPhotos);
+  (item.events || []).forEach(evt => queuePlantIssueEvent(batch, item.plantId, item.id, evt.type, evt.payload || {}));
+  await withTimeout(batch.commit(), 15000, 'Offline issue Firestore sync');
+
+  await deleteLocalIssueOutboxItem(item.id);
+  attachmentPhotoCache.set(item.id, uploadedPhotos);
+  if (currentPlantId === item.plantId) {
+    issuesById.set(item.id, {
+      ...issuePayload,
+      id: item.id,
+      photos: uploadedPhotos,
+      __localPending: false,
+      __localSyncStatus: ''
+    });
+    rebuildIssuesArrayFromMap();
+    refreshVisibleData();
+  }
+
+  if (currentPlantId === item.plantId) {
+    queueRoleFeedAlert({ id: item.id, machine: item.machine }, item.roleAlert || {}).catch(e => console.warn('role alert queue failed', e));
+    awardGamification('issue_created_complete', { issueId: item.id, dedupeSuffix: 'issue-created', tags: ['issue:create', `status:${item.initialStatus || 'open'}`] }).catch(e => console.warn('gamification issue-created award failed', e));
+    if (uploadedPhotos.length > 0) awardGamification('photo_attached', { issueId: item.id, dedupeSuffix: 'photo', tags: ['photo:attached'] }).catch(e => console.warn('gamification photo award failed', e));
+  }
+}
+
+async function flushIssueOutbox() {
+  if (DEMO_MODE || NO_AUTH_MODE || !currentUser?.uid || !syncState.online) return;
+  if (issueOutboxFlushPromise) return issueOutboxFlushPromise;
+  issueOutboxFlushPromise = (async () => {
+    const items = (await loadLocalIssueOutboxItems())
+      .filter(item => item.userId === currentUser.uid && item.status !== 'failed')
+      .sort((a, b) => Number(a.createdAtMs || 0) - Number(b.createdAtMs || 0));
+    if (!items.length) return;
+    setSyncStatus('syncing', `Syncing - ${items.length} local issue${items.length === 1 ? '' : 's'} pending`);
+    for (const item of items) {
+      try {
+        await flushOneIssueOutboxItem(item);
+      } catch (e) {
+        const permissionDenied = e?.code === 'permission-denied';
+        const failedItem = {
+          ...item,
+          status: permissionDenied ? 'failed' : 'pending',
+          error: e?.message || 'Sync failed. Will retry.',
+          updatedAt: new Date().toISOString()
+        };
+        await saveLocalIssueOutboxItem(failedItem).catch(err => console.warn('Could not update local issue failure', err));
+        if (currentPlantId === item.plantId) {
+          issuesById.set(item.id, localIssueForOutboxItem(failedItem));
+          rebuildIssuesArrayFromMap();
+          refreshVisibleData();
+        }
+        if (permissionDenied) setSyncStatus('err', 'Local issue sync failed: access denied.');
+        else setSyncStatus('syncing', 'Syncing - local issue will retry');
+        if (isOfflineLikeError(e)) break;
+      }
+    }
+  })().finally(() => { issueOutboxFlushPromise = null; });
+  return issueOutboxFlushPromise;
+}
+
+function scheduleIssueOutboxFlush() {
+  setTimeout(() => {
+    flushIssueOutbox().catch(e => console.warn('issue outbox flush failed', e));
+  }, 0);
+}
 
 async function postJsonWithAuth(url, payload = {}) {
   if (!currentUser?.getIdToken) throw new Error('Sign in is required.');
@@ -1547,7 +1971,7 @@ async function readFileAsDataUrl(file) {
   });
 }
 
-async function uploadIssuePhotosToStorage(issueId, photos) {
+async function uploadIssuePhotosToStorage(issueId, photos, plantId = currentPlantId) {
   const out = [];
   for (let idx = 0; idx < (photos || []).length; idx++) {
     const p = photos[idx] || {};
@@ -1557,7 +1981,7 @@ async function uploadIssuePhotosToStorage(issueId, photos) {
     if (!meta) { out.push(p); continue; }
     const ext = extFromContentType(meta.contentType);
     const fileName = `${Date.now()}_${idx}.${ext}`;
-    const path = `plants/${currentPlantId}/issues/${issueId}/photos/${fileName}`;
+    const path = `plants/${plantId}/issues/${issueId}/photos/${fileName}`;
     let sRef = storageRef(storage, path);
     let url = '';
     try {
@@ -1956,6 +2380,9 @@ async function switchPlant(plantId) {
   buildPlantDropdown();
   closePlantDropdown();
   issues = [];
+  issuesById.clear();
+  issueHistoryCursor = null;
+  issueHistoryFetchInFlight = null;
   attachmentPhotoCache.clear();
   issueEventHistoryCache.clear();
   attachmentsHydrationToken++;
@@ -1965,11 +2392,13 @@ async function switchPlant(plantId) {
   syncShiftFilterUi();
   setSyncStatus('', 'Switching plant…');
   await hydrateCurrentPlantView();
+  await hydrateLocalIssueOutboxForCurrentPlant();
   gameConfig = null;
   await ensureGamificationConfig();
   await backfillGlobalXpIfNeeded();
   startGamificationListeners();
   startListener();
+  scheduleIssueOutboxFlush();
   _startMessagingInboxWatcher();
   startRoleFeedAlertsWatcher();
   refreshVisibleData();
@@ -3850,11 +4279,13 @@ async function bootstrapSignedInSession(user) {
     return;
   }
   await hydrateCurrentPlantView();
+  await hydrateLocalIssueOutboxForCurrentPlant();
   gameConfig = null;
   await ensureGamificationConfig();
   await backfillGlobalXpIfNeeded();
   startGamificationListeners();
   startListener();
+  scheduleIssueOutboxFlush();
   _startMessagingInboxWatcher();
   startRoleFeedAlertsWatcher();
   _bindMessagingKeyboardShortcut();
@@ -4681,14 +5112,16 @@ function startListener() {
   if (retryTimeout) { clearTimeout(retryTimeout); retryTimeout = null; }
   if (issueBootstrapTimeout) { clearTimeout(issueBootstrapTimeout); issueBootstrapTimeout = null; }
   if (!currentPlantId) return;
-  issuesById.clear();
-  issueHistoryCursor = null;
-  issueHistoryFetchInFlight = null;
 
   const q = query(plantCol('issues'), orderBy('createdAt', 'desc'), limit(MAX_LIVE_ISSUES));
   let firstSnapshotReceived = false;
-  unsubscribe = onSnapshot(q, snap => {
+  unsubscribe = onSnapshot(q, { includeMetadataChanges: true }, snap => {
     firstSnapshotReceived = true;
+    observeSyncSnapshot(snap);
+    if (!snap.metadata?.fromCache) {
+      removeSyncedOutboxItemsFromSnapshot(snap);
+      scheduleIssueOutboxFlush();
+    }
     if (issueBootstrapTimeout) { clearTimeout(issueBootstrapTimeout); issueBootstrapTimeout = null; }
     retryCount = 0; // reset on success
     snap.docChanges().forEach(change => {
@@ -4707,7 +5140,9 @@ function startListener() {
     if (!issueHistoryCursor && snap.docs.length) {
       issueHistoryCursor = snap.docs[snap.docs.length - 1];
     }
-    setSyncStatus('ok', 'Live — synced across all devices');
+    if (snap.metadata?.hasPendingWrites) {
+      setSyncStatus('syncing', 'Syncing - local changes pending');
+    }
   }, err => {
     console.error('Snapshot error:', err);
     const isPermissionError = err?.code === 'permission-denied';
@@ -4728,13 +5163,7 @@ function startListener() {
     retryCount++;
     const delay = nextIssueListenerRetryDelay(retryCount);
     setSyncStatus('err', `Connection lost. Retrying in ${formatRetryDelay(delay)}…`);
-    // Show retry button in issue list
-    document.getElementById('issues-list').innerHTML = `
-      <div class="empty-state">
-        <div class="empty-state-icon">📡</div>
-        <div class="empty-state-text" style="margin-bottom:12px;">Connection lost. Retrying…</div>
-        <button onclick="startListener()" style="font-size:13px;padding:8px 18px;border-radius:8px;border:1px solid var(--color-accent, var(--accent));background:transparent;color:var(--color-accent, var(--accent));cursor:pointer;font-family:'Nunito',sans-serif;">Retry Now</button>
-      </div>`;
+    refreshVisibleData();
     retryTimeout = setTimeout(() => startListener(), delay);
   });
   issueBootstrapTimeout = setTimeout(async () => {
@@ -4750,7 +5179,7 @@ function startListener() {
       if (snap.docs.length) {
         issueHistoryCursor = snap.docs[snap.docs.length - 1];
       }
-      setSyncStatus('ok', 'Live connection delayed — loaded cached/latest data');
+      setSyncStatus(syncState.online ? 'cached' : 'offline', syncState.online ? 'Cached - showing saved data' : 'Offline - showing cached data');
     } catch (e) {
       console.warn('Bootstrap issues fallback read failed:', e);
       if (DEMO_MODE) {
@@ -4767,12 +5196,35 @@ function startListener() {
 
 // ── SYNC ──
 function setSyncStatus(status, text) {
-  const dot = document.getElementById('sync-dot');
-  dot.className = 'sync-dot' + (status==='ok'?' ok':status==='err'?' err':'');
-  document.getElementById('sync-text').textContent = text;
-  document.getElementById('sync-banner').classList.add('visible');
-  if (status==='ok') setTimeout(() => document.getElementById('sync-banner').classList.remove('visible'), 2500);
+  const normalized = status === 'ok'
+    ? 'live'
+    : status === 'err'
+      ? 'error'
+      : status === 'syncing'
+        ? 'syncing'
+        : status === 'cached'
+          ? 'cached'
+          : status === 'offline'
+            ? 'offline'
+            : 'switching';
+  refreshSyncState({
+    status: normalized,
+    manualText: text || '',
+    lastError: normalized === 'error' ? text || 'Connection error' : null,
+    lastServerAt: normalized === 'live' ? Date.now() : syncState.lastServerAt,
+    fromCache: normalized === 'live' ? false : syncState.fromCache
+  });
 }
+
+window.addEventListener('online', () => {
+  refreshSyncState({ status: null, online: true, lastError: null, manualText: '' });
+  if (currentPlantId && currentUser && !pageHidden && !unsubscribe) startListener();
+  scheduleIssueOutboxFlush();
+});
+window.addEventListener('offline', () => {
+  refreshSyncState({ status: 'offline', online: false, manualText: 'Offline - showing cached data' });
+});
+applySyncBanner();
 
 // ── SCOPE TOGGLE ──
 window.setScope = s => {
@@ -6556,89 +7008,68 @@ window.submitIssue = async () => {
     const timerMinutes = parseTimerMinutes(document.getElementById('issue-timer-minutes')?.value);
     const isUrgent = Boolean(document.getElementById('issue-urgent')?.checked);
     const issueRef = doc(plantCol('issues'));
-    const uploadedPhotos = await uploadIssuePhotosToStorage(issueRef.id, pendingPhotos);
-    const issuePayload = {
-      machine: currentMachine, note,
-      dateTime: fmtDate(d), dateKey: localDateStr(d), timestamp: d.getTime(),
+    const actor = currentActor();
+    const draft = {
+      plantId: currentPlantId,
+      machine: currentMachine,
+      note,
+      dateTime: fmtDate(d),
+      statusDateTime: fmtDate(d),
+      dateKey: localDateStr(d),
+      timestamp: d.getTime(),
+      pressId: toPressId(currentMachine),
+      rowId: toRowId(findRowNameForMachine(currentMachine)),
       shift,
       timer: buildIssueTimer(timerMinutes, d),
-      userId: currentUser.uid, userName: currentUser.displayName||currentUser.email,
-      photoCount: uploadedPhotos.length,
-      createdAt: serverTimestamp(),
-      createdBy: currentActor(),
-      statusHistory: [{
-        status: initialStatus,
-        subStatus: initialSubStatus,
-        note: '',
-        dateTime: fmtDate(d),
-        by: currentUser.displayName || currentUser.email,
-        workflowId: initialWorkflowId
-      }],
-      ...(initialStatus === 'resolved'
-        ? {
-            workflowState: 'finished',
-            workflowStateByEntry: { [initialWorkflowId]: 'finished' },
-            workflowStateByEntryHistory: { [initialWorkflowId]: { finished: { by: currentActor(), at: serverTimestamp() } } },
-            workflowStateHistory: { finished: { by: currentActor(), at: serverTimestamp() } }
-          }
-        : { workflowStateByEntry: { [initialWorkflowId]: null } }),
-      ...(isUrgent ? { highPriority: true, priority: 'critical' } : {}),
-      ...buildIssueV2Compat({
-        machineCode: currentMachine,
-        statusKey: initialStatus,
-        subStatus: initialSubStatus,
-        statusDateTime: fmtDate(d),
-        note
-      })
+      userId: currentUser.uid,
+      userName: currentUser.displayName||currentUser.email,
+      actor,
+      initialStatus,
+      initialSubStatus,
+      initialWorkflowId,
+      isUrgent,
+      createdAtIso: new Date().toISOString()
     };
-    const batch = writeBatch(db);
-    batch.set(issueRef, issuePayload);
-    queueAttachmentDocs(batch, issueRef.id, uploadedPhotos);
-    queueIssueEvent(batch, issueRef.id, 'issue_created', {
-      machineCode: currentMachine,
-      note,
-      initialStatusKey: initialStatus,
-      initialSubStatusKey: initialSubStatus,
-      urgent: isUrgent
-    });
-    queueIssueEvent(batch, issueRef.id, 'status_changed', {
-      fromStatusKey: null,
-      fromSubStatusKey: null,
-      toStatusKey: initialStatus,
-      toSubStatusKey: initialSubStatus,
-      note: ''
-    });
-    await batch.commit();
+    const localPhotos = pendingPhotos.map(p => ({ ...p }));
+    const outboxItem = {
+      id: issueRef.id,
+      plantId: currentPlantId,
+      userId: currentUser.uid,
+      machine: currentMachine,
+      initialStatus,
+      status: 'pending',
+      draft,
+      localPhotos,
+      events: [
+        {
+          type: 'issue_created',
+          payload: { machineCode: currentMachine, note, initialStatusKey: initialStatus, initialSubStatusKey: initialSubStatus, urgent: isUrgent }
+        },
+        {
+          type: 'status_changed',
+          payload: { fromStatusKey: null, fromSubStatusKey: null, toStatusKey: initialStatus, toSubStatusKey: initialSubStatus, note: '' }
+        }
+      ],
+      roleAlert: { statusKey: initialStatus, subStatus: initialSubStatus, note, workflowId: initialWorkflowId },
+      createdAtMs: Date.now(),
+      updatedAt: new Date().toISOString()
+    };
+    await saveLocalIssueOutboxItem(outboxItem);
     issueLogPrefs.lastStatusKey = initialStatus;
     issueLogPrefs.lastStatusSub = initialSubStatus;
     issueLogPrefs.timerMinutes = String(document.getElementById('issue-timer-minutes')?.value || '');
     issueLogPrefs.urgent = false;
     saveIssueLogPrefs();
-    await queueRoleFeedAlert({ id: issueRef.id, machine: currentMachine }, {
-      statusKey: initialStatus,
-      subStatus: initialSubStatus,
-      note,
-      workflowId: initialWorkflowId
-    });
     if (timerMinutes > 0) setIssueReminder(issueRef.id, timerMinutes);
-    attachmentPhotoCache.set(issueRef.id, uploadedPhotos);
-    await awardGamification('issue_created_complete', { issueId: issueRef.id, dedupeSuffix: 'issue-created', tags: ['issue:create', `status:${initialStatus}`] });
-    if (uploadedPhotos.length > 0) await awardGamification('photo_attached', { issueId: issueRef.id, dedupeSuffix: 'photo', tags: ['photo:attached'] });
-    const createdIssue = {
-      ...issuePayload,
-      id: issueRef.id,
-      photos: uploadedPhotos,
-      currentStatus: {
-        statusKey: initialStatus,
-        subStatusKey: initialSubStatus,
-        subLabel: initialSubStatus,
-        notePreview: note
-      },
-      lifecycle: { isResolved: initialStatus === 'resolved' }
-    };
+    attachmentPhotoCache.set(issueRef.id, localPhotos);
+    issuesById.set(issueRef.id, localIssueForOutboxItem(outboxItem));
+    rebuildIssuesArrayFromMap();
+    refreshVisibleData();
+    setSyncStatus('syncing', 'Syncing - local issue pending');
     completeDemoGuideStep('log');
     closeModal();
-    showGameToast(`✅ Logged Press ${currentMachine}`);
+    showGameToast(syncState.online ? `Logged Press ${currentMachine} - syncing` : `Saved locally for Press ${currentMachine}`);
+    scheduleIssueOutboxFlush();
     if (requiresSerialNumber(initialStatus, initialSubStatus)) {
       setTimeout(() => {
         openSerialModal(issueRef.id, initialStatus, initialSubStatus, fmtDate(d));
@@ -6647,7 +7078,12 @@ window.submitIssue = async () => {
         }
       }, 50);
     }
-  } catch(e) { setSyncStatus('err','Error saving: '+e.message); setSubmitting(false); }
+  } catch(e) {
+    setSyncStatus('err','Error saving locally: '+e.message);
+    setSubmitting(false);
+  } finally {
+    if (document.getElementById('add-modal')?.classList.contains('visible')) setSubmitting(false);
+  }
 };
 
 // ── EDIT MODAL ──
@@ -6687,6 +7123,10 @@ window.saveEdit = async () => {
   const btn = document.getElementById('edit-submit-btn');
   btn.disabled=true; btn.innerHTML='<span class="spinner"></span> Saving…';
   try {
+    if (guardOfflinePhotos(editPhotos, 'Issue photos')) {
+      btn.disabled=false; btn.innerHTML='💾 Save Changes';
+      return;
+    }
     const d = getIssueDateFromInputs('edit-date','edit-time-input');
     const issue = issues.find(i=>i.id===editTargetId);
     const last = currentStatus(issue || {});
@@ -6720,7 +7160,12 @@ window.saveEdit = async () => {
     if (timerMinutes > 0) setIssueReminder(editTargetId, timerMinutes);
     else clearIssueReminder(editTargetId);
     attachmentPhotoCache.set(editTargetId, uploadedPhotos);
-    if (uploadedPhotos.length > 0) await awardGamification('photo_attached', { issueId: editTargetId, dedupeSuffix: 'photo', tags: ['photo:attached'] });
+    if (uploadedPhotos.length > 0) awardGamification('photo_attached', { issueId: editTargetId, dedupeSuffix: 'photo', tags: ['photo:attached'] }).catch(e => console.warn('gamification photo award failed', e));
+    const editedIssue = { ...(issue || {}), ...issuePatch, id: editTargetId, photos: uploadedPhotos };
+    issuesById.set(editTargetId, editedIssue);
+    rebuildIssuesArrayFromMap();
+    refreshVisibleData();
+    if (!syncState.online) setSyncStatus('syncing', 'Syncing - local changes pending');
     closeEditModal();
   } catch(e) {
     setSyncStatus('err','Error saving: '+e.message);
@@ -6782,7 +7227,13 @@ window.confirmResolve = async () => {
       note: note || 'Resolved (no details provided)'
     });
     await batch.commit();
-    await awardGamification('issue_resolved', { issueId: resolveTargetId, dedupeSuffix: resolvedAtText, tags: ['issue:resolved', 'status:resolved'] });
+    if (issue) {
+      issuesById.set(resolveTargetId, { ...issue, ...issuePatch, id: resolveTargetId, resolved: true });
+      rebuildIssuesArrayFromMap();
+      refreshVisibleData();
+    }
+    if (!syncState.online) setSyncStatus('syncing', 'Syncing - local changes pending');
+    awardGamification('issue_resolved', { issueId: resolveTargetId, dedupeSuffix: resolvedAtText, tags: ['issue:resolved', 'status:resolved'] }).catch(e => console.warn('gamification resolve award failed', e));
     closeResolveModal();
   } catch(e) { setSyncStatus('err','Error: '+e.message); btn.disabled=false; btn.innerHTML='Mark Resolved'; }
 };
@@ -6833,7 +7284,13 @@ window.confirmReopen = async () => {
     batch.update(plantDoc('issues',reopenTargetId), issuePatch);
     queueIssueEvent(batch, reopenTargetId, 'issue_reopened', { reason: note || '' });
     await batch.commit();
-    await awardGamification('issue_reopened', { issueId: reopenTargetId, dedupeSuffix: reopenDateTime, tags: ['issue:reopened', `status:${reopenStatusKey}`] });
+    if (issue) {
+      issuesById.set(reopenTargetId, { ...issue, ...issuePatch, id: reopenTargetId, resolved: false });
+      rebuildIssuesArrayFromMap();
+      refreshVisibleData();
+    }
+    if (!syncState.online) setSyncStatus('syncing', 'Syncing - local changes pending');
+    awardGamification('issue_reopened', { issueId: reopenTargetId, dedupeSuffix: reopenDateTime, tags: ['issue:reopened', `status:${reopenStatusKey}`] }).catch(e => console.warn('gamification reopen award failed', e));
     closeReopenModal();
   } catch(e) { setSyncStatus('err','Error: '+e.message); btn.disabled=false; btn.innerHTML='Re-open Issue'; }
 };
@@ -6887,6 +7344,51 @@ async function getLatestIssueForStatusMutation(issueId, fallbackIssue) {
   }
 }
 
+function buildAddStatusEntryMutation(baseIssue, fallbackIssue, entry, status, subStatus, note) {
+  const base = baseIssue || fallbackIssue || {};
+  const history = getMutableStatusHistory(base);
+  const prevEntry = history[history.length - 1] || null;
+  const prevWorkflowIdBeforePush = getEntryWorkflowId(prevEntry);
+  if (prevEntry && !prevWorkflowIdBeforePush) {
+    prevEntry.workflowId = createWorkflowId(prevEntry.status);
+    history[history.length - 1] = prevEntry;
+  }
+  const prev = currentStatus(base || fallbackIssue || {});
+  const prevWorkflowState = base?.workflowState || null;
+  const prevWorkflowId = getEntryWorkflowId(prevEntry);
+  history.push(entry);
+  return {
+    prev,
+    issuePatch: {
+      statusHistory: history,
+      ...(status === 'resolved'
+        ? {
+            workflowState: 'finished',
+            'workflowStateHistory.finished': { by: currentActor(), at: serverTimestamp() },
+            [`workflowStateByEntry.${entry.workflowId}`]: 'finished',
+            [`workflowStateByEntryHistory.${entry.workflowId}.finished`]: { by: currentActor(), at: serverTimestamp() }
+          }
+        : { workflowState: null }),
+      ...(status !== 'resolved' ? { [`workflowStateByEntry.${entry.workflowId}`]: null } : {}),
+      ...(status !== 'resolved' && prevWorkflowId && prevWorkflowState
+        ? { [`workflowStateByEntry.${prevWorkflowId}`]: prevWorkflowState }
+        : {}),
+      ...(status !== 'resolved' && prev?.status && prevWorkflowState
+        ? { [`workflowStateByStatus.${prev.status}`]: prevWorkflowState }
+        : {}),
+      ...(status !== 'resolved' ? { [`workflowStateByStatus.${status}`]: null } : {}),
+      ...buildIssueV2Compat({
+        machineCode: base?.machine || base?.machineCode || fallbackIssue?.machine || '',
+        statusKey: status,
+        subStatus: subStatus || '',
+        statusDateTime: entry.dateTime,
+        note: note || '',
+        baseIssue: base || fallbackIssue
+      })
+    }
+  };
+}
+
 // Add a new status entry to history
 window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
   if (!currentUserPermissions.canEditIssue) return;
@@ -6902,74 +7404,73 @@ window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
     workflowId
   };
   let prev = currentStatus(issue);
+  let appliedIssuePatch = null;
   try {
-    await runTransaction(db, async tx => {
-      const ref = plantDoc('issues', id);
-      const snap = await tx.get(ref);
-      const base = snap.exists() ? { id, ...snap.data() } : issue;
-      prev = currentStatus(base || issue);
-      const history = getMutableStatusHistory(base || issue);
-      const prevEntry = history[history.length - 1] || null;
-      const prevWorkflowIdBeforePush = getEntryWorkflowId(prevEntry);
-      if (prevEntry && !prevWorkflowIdBeforePush) {
-        prevEntry.workflowId = createWorkflowId(prevEntry.status);
-        history[history.length - 1] = prevEntry;
-      }
-      history.push(entry);
-      const prevWorkflowState = (base?.workflowState || null);
-      const prevWorkflowId = getEntryWorkflowId(prevEntry);
-      const issuePatch = {
-        statusHistory: history,
-        ...(status === 'resolved'
-          ? {
-              workflowState: 'finished',
-              'workflowStateHistory.finished': { by: currentActor(), at: serverTimestamp() },
-              [`workflowStateByEntry.${workflowId}`]: 'finished',
-              [`workflowStateByEntryHistory.${workflowId}.finished`]: { by: currentActor(), at: serverTimestamp() }
-            }
-          : { workflowState: null }),
-        ...(status !== 'resolved' ? { [`workflowStateByEntry.${workflowId}`]: null } : {}),
-        ...(status !== 'resolved' && prevWorkflowId && prevWorkflowState
-          ? { [`workflowStateByEntry.${prevWorkflowId}`]: prevWorkflowState }
-          : {}),
-        ...(status !== 'resolved' && prev?.status && prevWorkflowState
-          ? { [`workflowStateByStatus.${prev.status}`]: prevWorkflowState }
-          : {}),
-        ...(status !== 'resolved' ? { [`workflowStateByStatus.${status}`]: null } : {}),
-        ...buildIssueV2Compat({
-          machineCode: base?.machine || base?.machineCode || issue.machine || '',
-          statusKey: status,
-          subStatus: subStatus || '',
-          statusDateTime: entry.dateTime,
-          note: note || '',
-          baseIssue: base || issue
-        })
-      };
-      tx.update(ref, issuePatch);
-    });
-
-    await addDoc(issueEventsCol(id), {
-      type: 'status_changed',
-      eventAt: serverTimestamp(),
-      actor: currentActor(),
-      payload: {
+    const writeStatusChange = (batch, issuePatch) => {
+      batch.update(plantDoc('issues', id), issuePatch);
+      queueIssueEvent(batch, id, 'status_changed', {
         fromStatusKey: prev?.status || currentStatusKey(issue),
         fromSubStatusKey: prev?.subStatus || '',
         toStatusKey: status,
         toSubStatusKey: subStatus || '',
         note: note || ''
-      },
-      schemaVersion: 2
-    });
-    await queueRoleFeedAlert(issue, {
+      });
+    };
+    const commitOfflineStatusBatch = async () => {
+      const mutation = buildAddStatusEntryMutation(issue, issue, entry, status, subStatus, note);
+      prev = mutation.prev;
+      appliedIssuePatch = mutation.issuePatch;
+      const batch = writeBatch(db);
+      writeStatusChange(batch, mutation.issuePatch);
+      await batch.commit();
+    };
+    if (syncState.online) {
+      try {
+        await runTransaction(db, async tx => {
+          const ref = plantDoc('issues', id);
+          const snap = await tx.get(ref);
+          const base = snap.exists() ? { id, ...snap.data() } : issue;
+          const mutation = buildAddStatusEntryMutation(base, issue, entry, status, subStatus, note);
+          prev = mutation.prev;
+          appliedIssuePatch = mutation.issuePatch;
+          tx.update(ref, mutation.issuePatch);
+        });
+        await addDoc(issueEventsCol(id), {
+          type: 'status_changed',
+          eventAt: serverTimestamp(),
+          actor: currentActor(),
+          payload: {
+            fromStatusKey: prev?.status || currentStatusKey(issue),
+            fromSubStatusKey: prev?.subStatus || '',
+            toStatusKey: status,
+            toSubStatusKey: subStatus || '',
+            note: note || ''
+          },
+          schemaVersion: 2
+        });
+      } catch (e) {
+        if (!isOfflineLikeError(e)) throw e;
+        refreshSyncState({ status: 'offline', online: false, manualText: 'Offline - showing cached data' });
+        await commitOfflineStatusBatch();
+      }
+    } else {
+      await commitOfflineStatusBatch();
+    }
+    if (appliedIssuePatch) {
+      issuesById.set(id, { ...issue, ...appliedIssuePatch, id });
+      rebuildIssuesArrayFromMap();
+      refreshVisibleData();
+      if (!syncState.online) setSyncStatus('syncing', 'Syncing - local changes pending');
+    }
+    queueRoleFeedAlert(issue, {
       statusKey: status,
       subStatus: subStatus || '',
       note: note || '',
       workflowId
-    });
+    }).catch(e => console.warn('role alert queue failed', e));
     issueEventHistoryCache.delete(id);
-    await awardGamification('status_changed_valid', { issueId: id, dedupeSuffix: entry.dateTime || String(Date.now()), tags: ['status:changed', `status:${status}`] });
-    if (status === 'resolved') await awardGamification('issue_resolved', { issueId: id, dedupeSuffix: 'status-resolved', tags: ['issue:resolved', 'status:resolved'] });
+    awardGamification('status_changed_valid', { issueId: id, dedupeSuffix: entry.dateTime || String(Date.now()), tags: ['status:changed', `status:${status}`] }).catch(e => console.warn('gamification award failed', e));
+    if (status === 'resolved') awardGamification('issue_resolved', { issueId: id, dedupeSuffix: 'status-resolved', tags: ['issue:resolved', 'status:resolved'] }).catch(e => console.warn('gamification resolve award failed', e));
     if (status && status !== 'open') completeDemoGuideStep('route');
   } catch(e) { setSyncStatus('err','Error: '+e.message); }
 };
@@ -7023,6 +7524,10 @@ window.updateStatusEntry = async (id, idx, status, subStatus, note, dateTime, ph
     }
     await batch.commit();
     issueEventHistoryCache.delete(id);
+    issuesById.set(id, { ...(latestIssue || issue), ...issuePatch, id });
+    rebuildIssuesArrayFromMap();
+    refreshVisibleData();
+    if (!syncState.online) setSyncStatus('syncing', 'Syncing - local changes pending');
   } catch(e) { setSyncStatus('err','Error: '+e.message); }
 };
 
@@ -7255,6 +7760,7 @@ window.saveEditStatusEntry = async () => {
   }
   
   const newStatusPhotos = editStatusPhotos.filter(p => p.dataUrl);
+  if (guardOfflinePhotos(newStatusPhotos, 'Status photos')) return;
   const existingStatusPhotos = editStatusPhotos.filter(p => !p.dataUrl);
   const uploadedStatusPhotos = newStatusPhotos.length ? await uploadIssuePhotosToStorage(issueId, newStatusPhotos) : [];
   const mergedStatusPhotos = [...existingStatusPhotos, ...uploadedStatusPhotos].map(p => ({
@@ -7324,7 +7830,11 @@ window.setSubStatus = async (id, sub) => {
       });
     }
     await batch.commit();
-    await awardGamification('status_changed_valid', { issueId: id, dedupeSuffix: 'set-sub', tags: ['status:changed', `status:${last.status || 'open'}`, `sub:${sub || ''}`] });
+    issuesById.set(id, { ...issue, ...issuePatch, id });
+    rebuildIssuesArrayFromMap();
+    refreshVisibleData();
+    if (!syncState.online) setSyncStatus('syncing', 'Syncing - local changes pending');
+    awardGamification('status_changed_valid', { issueId: id, dedupeSuffix: 'set-sub', tags: ['status:changed', `status:${last.status || 'open'}`, `sub:${sub || ''}`] }).catch(e => console.warn('gamification sub-status award failed', e));
   }
   catch(e) { setSyncStatus('err','Error updating: '+e.message); }
 };
@@ -8138,12 +8648,13 @@ function renderIssues() {
     const wasOpen=expanded.has(issue.id);
     const isMyIssue=issue.userId===currentUser?.uid;
     const isAlertFocus = !!issue.__alertFocus;
+    const isLocalIssue = !!(issue.__localPending || issue.__localSyncStatus);
     const reminderState = getIssueReminderState(issue.id);
     const isTimerOverdue = !!reminderState?.isOverdue;
     const row=document.createElement('div'); row.className='issue-row'; row.dataset.id = issue.id;
     if (isAlertFocus) row.classList.add('alert-focus-issue');
     const card=document.createElement('div');
-    card.className='issue-card'+(issueIsResolvedV2(issue)?' resolved':'')+(issue.highPriority?' high-priority':'')+(isTimerOverdue?' timer-overdue':'')+(isAlertFocus?' alert-focus-card':'');
+    card.className='issue-card'+(issueIsResolvedV2(issue)?' resolved':'')+(issue.highPriority?' high-priority':'')+(isTimerOverdue?' timer-overdue':'')+(isAlertFocus?' alert-focus-card':'')+(isLocalIssue?' local-pending':'')+(issue.__localSyncStatus === 'failed'?' sync-failed':'');
 
     const _photoList = (issue.photos || []).map(p => ({
       url: p.dataUrl || p.downloadURL || p.url || '',
@@ -8289,7 +8800,7 @@ function renderIssues() {
     const pend = pendingEntry[issue.id] || {};
     const pendSubs = STATUS_CONFIG[pend.status]?.subs || [];
     const pendNowDT = toLocalDTInputs(new Date());
-    const canEdit = currentUserPermissions.canEditIssue;
+    const canEdit = currentUserPermissions.canEditIssue && !isLocalIssue;
     const addRowHtml = !canEdit ? '' : pend.status !== undefined
       ? `<div class="tl-add-row">
           <select class="tl-mini-select" onchange="setPendingStatus('${issue.id}','status',this.value)">
@@ -8325,7 +8836,6 @@ function renderIssues() {
         </span>
       </button>
       ${canEdit ? `<div class="issue-footer-actions-right">
-      <button class="btn btn-ghost" onclick="openNotesModalFromIssue('${issue.id}')">📝 Notes</button>
       <button class="btn btn-edit" onclick="openEditModal('${issue.id}')">✏️ Edit</button>
       ${DEMO_MODE ? '' : `<button class="btn btn-danger" onclick="deleteIssue('${issue.id}')">🗑 Delete</button>`}
       </div>` : ''}
@@ -8452,6 +8962,9 @@ function renderIssues() {
       ? `<span class="shift-badge" style="background:${_shiftDef.color}20;color:${_shiftDef.color};border-color:${_shiftDef.color}50">${_shiftDef.shortLabel}</span>`
       : '';
     const timerBadgeHtml = reminderState ? `<span class="timer-mini-badge ${reminderState.isOverdue ? 'overdue' : ''}"><span class="timer-mini-dot"></span><span data-reminder-id="${issue.id}">${formatReminderClock(reminderState)}</span></span>` : '';
+    const localSyncBadgeHtml = isLocalIssue
+      ? `<span class="local-sync-badge ${issue.__localSyncStatus === 'failed' ? 'failed' : ''}">${issue.__localSyncStatus === 'failed' ? 'Sync failed' : issue.__localSyncStatus === 'syncing' ? 'Uploading' : 'Pending sync'}</span>`
+      : '';
 
     card.innerHTML=`
       <div class="issue-card-header" onclick="toggleCard('${issue.id}')">
@@ -8459,9 +8972,9 @@ function renderIssues() {
           <div class="issue-machine-tag">${esc(issue.machine)}</div>
           <div class="issue-meta">
             <div class="issue-note-preview">${esc(issue.note)}</div>
-            <div class="issue-time">${datePart} ${submitterHtml}${shiftBadgeHtml}${timerBadgeHtml}${(issue.photos||[]).length?`<span class="photo-count-badge">📷 ${issue.photos.length}</span>`:''}${issue.editedAt?'<span style="color:var(--color-text-subtle, var(--text3))">(edited)</span>':''}${alertFocusHtml}</div>
+            <div class="issue-time">${datePart} ${submitterHtml}${shiftBadgeHtml}${timerBadgeHtml}${localSyncBadgeHtml}${(issue.photos||[]).length?`<span class="photo-count-badge">📷 ${issue.photos.length}</span>`:''}${issue.editedAt?'<span style="color:var(--color-text-subtle, var(--text3))">(edited)</span>':''}${alertFocusHtml}</div>
           </div>
-          <button class="priority-btn${(issue.highPriority || isTimerOverdue)?' active':''}" onclick="event.stopPropagation(); togglePriority('${issue.id}')" title="${isTimerOverdue?'Timer overdue - clear timer to stop pulse':(issue.highPriority?'Remove high priority':'Mark as high priority')}">!</button>
+          <button class="priority-btn${(issue.highPriority || isTimerOverdue)?' active':''}" onclick="event.stopPropagation(); ${isLocalIssue ? '' : `togglePriority('${issue.id}')`}" ${isLocalIssue ? 'disabled' : ''} title="${isLocalIssue?'Sync before changing priority':isTimerOverdue?'Timer overdue - clear timer to stop pulse':(issue.highPriority?'Remove high priority':'Mark as high priority')}">!</button>
           <div class="issue-expand-icon ${wasOpen?'open':''}" id="chevron-${issue.id}">▼</div>
         </div>
         ${wfStatusRowsHtml}
