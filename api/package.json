@@ -1,0 +1,14 @@
+{
+  "name": "ap-tracker-sql-api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "func start",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@azure/functions": "^4.0.0",
+    "firebase-admin": "^13.8.0",
+    "mssql": "^11.0.0"
+  }
+}
