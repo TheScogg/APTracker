@@ -5,6 +5,7 @@ import { getStorage, ref as storageRef, uploadString, getDownloadURL, deleteObje
 import { getMessaging, getToken, isSupported as isMessagingSupported, onMessage } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 import { alphaColor, esc, extFromContentType, localDateStr, parseDataUrlMeta } from "./app-utils.js";
 import { createDropdownController } from "./dropdown-ui.js";
+import { createDataApi, DATA_BACKEND_SQL, selectedDataBackend } from "./data-api.js";
 import { createFirebasePathHelpers } from "./firebase-paths.js";
 import { initExportTool } from "./export-tool.js";
 import { initIssueReminders } from "./issue-reminders.js";
@@ -59,6 +60,7 @@ let fcmMessaging = null;
 let fcmRegistration = null;
 let fcmTokenRegistrationPromise = null;
 const NO_AUTH_MODE = location.pathname.endsWith('/noauth.html');
+const SELECTED_DATA_BACKEND = selectedDataBackend();
 const NO_AUTH_USER = {
   uid: 'noauth-local',
   displayName: 'No Auth Guest',
@@ -76,6 +78,7 @@ const DEMO_USER = {
 const DEMO_PLANT_ID = 'plant_demo';
 const DEMO_PLANT_NAME = 'Demo Plant';
 const DEMO_GUIDE_KEY = 'aptracker_demo_guide_v1';
+const SQL_STAGING_READ_MODE = SELECTED_DATA_BACKEND === DATA_BACKEND_SQL && !NO_AUTH_MODE && !DEMO_MODE;
 
 const firestoreIoStats = { reads: 0, writes: 0 };
 const APP_BUILD_INFO = window.__APP_BUILD_INFO__ || {};
@@ -141,6 +144,57 @@ const runTransaction = async (...args) => {
   markLocalWriteQueued();
   return out;
 };
+const dataApi = createDataApi({
+  sql: {
+    async getIdToken() {
+      if (!currentUser?.getIdToken) throw new Error('Sign in is required.');
+      return currentUser.getIdToken();
+    }
+  }
+});
+const sqlPlantBootstrapCache = new Map();
+
+function shouldUseSqlStagingReads() {
+  return SQL_STAGING_READ_MODE;
+}
+
+async function safeSqlRead(label, loader) {
+  if (!shouldUseSqlStagingReads()) return null;
+  try {
+    return await loader();
+  } catch (error) {
+    console.warn(`SQL staging read failed for ${label}; falling back to Firebase.`, error);
+    return null;
+  }
+}
+
+async function ensureSqlPlantBootstrap(plantId) {
+  if (!shouldUseSqlStagingReads() || !plantId) return null;
+  if (sqlPlantBootstrapCache.has(plantId)) return sqlPlantBootstrapCache.get(plantId);
+  const payload = await safeSqlRead(`plant bootstrap ${plantId}`, () => dataApi.loadPlantBootstrap(plantId));
+  if (payload) sqlPlantBootstrapCache.set(plantId, payload);
+  return payload;
+}
+
+function toCompatTimestamp(value) {
+  if (!value) return null;
+  const ms = value instanceof Date ? value.getTime() : Date.parse(value);
+  if (!Number.isFinite(ms)) return null;
+  return {
+    toMillis: () => ms,
+    toDate: () => new Date(ms)
+  };
+}
+
+function formatSqlDateTime(value, fallback = '') {
+  const timestamp = toCompatTimestamp(value);
+  if (!timestamp) return fallback;
+  try {
+    return fmtDate(timestamp.toDate());
+  } catch (_) {
+    return fallback;
+  }
+}
 
 const syncState = {
   status: 'connecting',
@@ -2039,6 +2093,36 @@ const issueDetailsHydrationInFlight = new Map(); // issueId -> Promise<void>
 
 async function fetchAttachmentPhotos(issueId) {
   if (attachmentPhotoCache.has(issueId)) return attachmentPhotoCache.get(issueId);
+  if (shouldUseSqlStagingReads()) {
+    const payload = await safeSqlRead(`attachments ${issueId}`, () => dataApi.listIssueAttachments(currentPlantId, issueId));
+    if (payload) {
+      const photos = [];
+      for (const att of (payload.attachments || [])) {
+        if (!att?.storagePath && !att?.downloadUrl) continue;
+        let downloadUrl = att.downloadUrl || '';
+        if (!downloadUrl && att.storagePath) {
+          try {
+            const attStorage = att.storageBucket ? getStorage(app, `gs://${att.storageBucket}`) : storage;
+            downloadUrl = await getDownloadURL(storageRef(attStorage, att.storagePath));
+          } catch (_) {
+            downloadUrl = '';
+          }
+        }
+        photos.push({
+          name: att.fileName || att.attachmentId || issueId,
+          dataUrl: downloadUrl,
+          storagePath: att.storagePath || '',
+          storageBucket: att.storageBucket || '',
+          contentType: att.contentType || '',
+          sizeBytes: Number(att.sizeBytes || 0),
+          takenAt: '',
+          uploadedAt: att.uploadedAt || ''
+        });
+      }
+      attachmentPhotoCache.set(issueId, photos);
+      return photos;
+    }
+  }
   const snap = await getDocs(issueAttachmentsCol(issueId));
   if (snap.empty) {
     attachmentPhotoCache.set(issueId, []);
@@ -2084,20 +2168,23 @@ async function hydrateIssuePhotosFromAttachments(issueList) {
 function normalizeEventHistory(issue, events) {
   const out = [];
   (events || []).forEach(ev => {
-    if (ev.type !== 'status_changed') return;
-    const toStatus = ev.payload?.toStatusKey || 'open';
-    const toSub = ev.payload?.toSubStatusKey || '';
-    const note = ev.payload?.note || '';
+    const eventType = ev.type || ev.eventType || '';
+    if (eventType !== 'status_changed') return;
+    const payload = ev.payload || {};
+    const toStatus = payload.toStatusKey || payload.statusKey || 'open';
+    const toSub = payload.toSubStatusKey || payload.subStatusKey || '';
+    const note = payload.note || '';
     let dateTime = '';
     try {
       if (ev.eventAt?.toDate) dateTime = fmtDate(ev.eventAt.toDate());
+      else if (ev.eventAt) dateTime = fmtDate(new Date(ev.eventAt));
     } catch (_) {}
     out.push({
       status: toStatus,
       subStatus: toSub,
       note,
       dateTime: dateTime || issue.dateTime || '',
-      by: ev.actor?.name || issue.userName || ''
+      by: ev.actor?.name || ev.actorName || issue.userName || ''
     });
   });
   return out;
@@ -2105,6 +2192,14 @@ function normalizeEventHistory(issue, events) {
 
 async function fetchIssueEventHistory(issue) {
   if (issueEventHistoryCache.has(issue.id)) return issueEventHistoryCache.get(issue.id);
+  if (shouldUseSqlStagingReads()) {
+    const payload = await safeSqlRead(`events ${issue.id}`, () => dataApi.listIssueEvents(currentPlantId, issue.id));
+    if (payload) {
+      const history = normalizeEventHistory(issue, payload.events || []);
+      issueEventHistoryCache.set(issue.id, history);
+      return history;
+    }
+  }
   const q = query(issueEventsCol(issue.id), orderBy('eventAt', 'asc'));
   const snap = await getDocs(q);
   if (snap.empty) {
@@ -2166,6 +2261,9 @@ function refreshVisibleData() {
 }
 
 async function hydrateCurrentPlantView() {
+  if (shouldUseSqlStagingReads() && currentPlantId) {
+    await ensureSqlPlantBootstrap(currentPlantId);
+  }
   await Promise.all([loadPlantPresses(), loadCurrentMember(currentPlantId), loadStoreConfig()]);
   buildFloorMap();
   await loadConfig();
@@ -2178,7 +2276,10 @@ async function hydrateCurrentPlantView() {
 // self-migrates by writing plant docs + member docs and switching to plantIds.
 async function loadUserPlants() {
   try {
-    const userSnap = await getDoc(doc(db, 'users', currentUser.uid));
+    const [userSnap, sqlContext] = await Promise.all([
+      getDoc(doc(db, 'users', currentUser.uid)),
+      safeSqlRead('current user context', () => dataApi.getCurrentUserContext())
+    ]);
     const userData = userSnap.exists() ? userSnap.data() : {};
     currentUserProfileData = userData || {};
     availablePlantsForOnboarding = await loadAvailablePlantsForOnboarding();
@@ -2191,7 +2292,25 @@ async function loadUserPlants() {
       activeMascot: rawInv.activeMascot || null,
     };
 
-    if (Array.isArray(userData.plantIds) && userData.plantIds.length > 0) {
+    if (sqlContext?.plants?.length) {
+      userPlants = sqlContext.plants.map(plant => ({
+        id: plant.plantId,
+        name: plant.plantName || plant.plantId,
+        location: ''
+      }));
+      const lastPlantCandidates = [
+        userData.lastPlant,
+        sqlContext.user?.lastPlantId,
+        localStorage.getItem('apTrackerLastPlant')
+      ].filter(Boolean);
+      const firstValidLastPlant = lastPlantCandidates.find(plantId => userPlants.some(p => p.id === plantId));
+      currentPlantId = firstValidLastPlant || (userPlants[0]?.id || null);
+      currentUserProfileData = {
+        ...currentUserProfileData,
+        lastPlant: currentPlantId,
+        plantIds: userPlants.map(p => p.id)
+      };
+    } else if (Array.isArray(userData.plantIds) && userData.plantIds.length > 0) {
       // ── New structure: fetch each plant doc for name/location ──
       const plantDocs = await Promise.all(
         userData.plantIds.map(id => getDoc(doc(db, 'plants', id)))
@@ -2305,6 +2424,13 @@ async function _migratePlantsToNewStructure(plants) {
 
 // Load current user's member doc for the given plant; set role + permissions + update UI
 async function loadCurrentMember(plantId) {
+  const sqlBootstrap = await ensureSqlPlantBootstrap(plantId);
+  if (sqlBootstrap?.member) {
+    currentUserPermissions = { ...DEFAULT_PERMISSIONS, ...(sqlBootstrap.member.permissions || {}) };
+    currentUserRole = normalizeMemberRole(sqlBootstrap.member.role) || 'editor';
+    applyRoleUI();
+    return;
+  }
   try {
     const snap = await getDoc(plantMemberDocRef(plantId, currentUser.uid));
     if (snap.exists()) {
@@ -2348,6 +2474,12 @@ function applyRoleUI() {
 
 // Load press layout for current plant
 async function loadPlantPresses() {
+  const sqlBootstrap = await ensureSqlPlantBootstrap(currentPlantId);
+  if (sqlBootstrap?.pressConfig?.presses) {
+    PRESSES = sqlBootstrap.pressConfig.presses;
+    ALL_MACHINES = Object.values(PRESSES).flat();
+    return;
+  }
   try {
     const snap = await getDoc(plantDoc('config', 'presses'));
     if (snap.exists() && snap.data().presses) {
@@ -2670,6 +2802,15 @@ async function loadConfig() {
   const mySerial = ++statusConfigLoadSerial;
   const plantId = currentPlantId;
   stopStatusConfigListener();
+  const sqlBootstrap = await ensureSqlPlantBootstrap(plantId);
+  if (sqlBootstrap?.statusConfig?.statuses) {
+    const loadedStatuses = normalizeLoadedStatuses(sqlBootstrap.statusConfig.statuses);
+    SUBCATEGORY_ROUTES = normalizeSubcategoryRoutes(sqlBootstrap.statusConfig.subcategoryRoutes, loadedStatuses);
+    STATUSES = syncStatusesFromSubcategoryRoutes(loadedStatuses, SUBCATEGORY_ROUTES);
+    rebuildDerivedStatus();
+    refreshStatusDependentUI();
+    return;
+  }
   try {
     const snap = await getDoc(plantDoc('config', 'statuses'));
     if (mySerial !== statusConfigLoadSerial || plantId !== currentPlantId) return;

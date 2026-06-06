@@ -4,6 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "func start",
+    "import:plant": "node scripts/import-plant-from-firestore.mjs",
+    "parity:plant": "node scripts/sql-parity-check.mjs",
     "test": "node --test"
   },
   "dependencies": {

@@ -1,5 +1,12 @@
 import { app } from '@azure/functions';
-import { getCurrentUserContext, getPlantBootstrap, listIssues } from './routes.js';
+import {
+  getCurrentUserContext,
+  getIssue,
+  getPlantBootstrap,
+  listIssueAttachments,
+  listIssueEvents,
+  listIssues
+} from './routes.js';
 
 app.http('me', {
   methods: ['GET'],
@@ -20,4 +27,25 @@ app.http('plantIssues', {
   authLevel: 'anonymous',
   route: 'plants/{plantId}/issues',
   handler: listIssues
+});
+
+app.http('plantIssue', {
+  methods: ['GET'],
+  authLevel: 'anonymous',
+  route: 'plants/{plantId}/issues/{issueId}',
+  handler: getIssue
+});
+
+app.http('plantIssueEvents', {
+  methods: ['GET'],
+  authLevel: 'anonymous',
+  route: 'plants/{plantId}/issues/{issueId}/events',
+  handler: listIssueEvents
+});
+
+app.http('plantIssueAttachments', {
+  methods: ['GET'],
+  authLevel: 'anonymous',
+  route: 'plants/{plantId}/issues/{issueId}/attachments',
+  handler: listIssueAttachments
 });

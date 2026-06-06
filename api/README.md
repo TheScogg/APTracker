@@ -21,6 +21,23 @@ This directory is the starting point for the Azure-hosted API that will replace 
 7. Add parity/import scripts.
 8. Add SignalR publish hooks.
 
+## Currently implemented
+
+- `GET /api/me`
+- `GET /api/plants/:plantId/bootstrap`
+- `GET /api/plants/:plantId/issues`
+- `GET /api/plants/:plantId/issues/:issueId`
+- `GET /api/plants/:plantId/issues/:issueId/events`
+- `GET /api/plants/:plantId/issues/:issueId/attachments`
+
+## Staging checks
+
+- Frontend SQL staging reads can be enabled with `?dataBackend=sql`.
+- The current app wiring uses SQL for signed-in bootstrap and issue detail hydration, while live issue lists and writes stay on Firebase.
+- Run `npm run import:plant -- --plant <plantId>` for a dry-run import summary.
+- Run `npm run import:plant -- --plant <plantId> --commit` to upsert one plant's bootstrap data, issues, events, and attachment metadata into SQL.
+- Run `npm run parity:plant -- --plant <plantId>` from `api/` to compare Firestore and SQL counts for one plant.
+
 ## Environment variables
 
 - `SQL_CONNECTION_STRING`
