@@ -15,14 +15,13 @@
     "directory": ".",
     "binding": "ASSETS"
   },
-  // Add your D1 binding after creating the database in Cloudflare:
-  // "d1_databases": [
-  //   {
-  //     "binding": "APTRACKER_DB",
-  //     "database_name": "your-database-name",
-  //     "database_id": "your-database-id"
-  //   }
-  // ],
+  "d1_databases": [
+    {
+      "binding": "APTRACKER_DB",
+      "database_name": "coe_db",
+      "database_id": "8f86cf6d-1bfc-45ba-883e-d249014b79a1"
+    }
+  ],
   "compatibility_flags": [
     "nodejs_compat"
   ]

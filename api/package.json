@@ -5,12 +5,12 @@
   "scripts": {
     "dev": "func start",
     "import:plant": "node scripts/import-plant-from-firestore.mjs",
+    "audit:plant": "node scripts/audit-firestore-plant.mjs",
     "parity:plant": "node scripts/sql-parity-check.mjs",
     "test": "node --test"
   },
   "dependencies": {
     "@azure/functions": "^4.0.0",
-    "firebase-admin": "^13.8.0",
-    "mssql": "^11.0.0"
+    "firebase-admin": "^13.8.0"
   }
 }

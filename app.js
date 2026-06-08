@@ -79,6 +79,7 @@ const DEMO_PLANT_ID = 'plant_demo';
 const DEMO_PLANT_NAME = 'Demo Plant';
 const DEMO_GUIDE_KEY = 'aptracker_demo_guide_v1';
 const SQL_STAGING_READ_MODE = SELECTED_DATA_BACKEND === DATA_BACKEND_SQL && !NO_AUTH_MODE && !DEMO_MODE;
+const SQL_STAGING_PLANT_IDS = new Set(['ap4_mnc7kecn']);
 
 const firestoreIoStats = { reads: 0, writes: 0 };
 const APP_BUILD_INFO = window.__APP_BUILD_INFO__ || {};
@@ -154,8 +155,8 @@ const dataApi = createDataApi({
 });
 const sqlPlantBootstrapCache = new Map();
 
-function shouldUseSqlStagingReads() {
-  return SQL_STAGING_READ_MODE;
+function shouldUseSqlStagingReads(plantId = currentPlantId) {
+  return SQL_STAGING_READ_MODE && SQL_STAGING_PLANT_IDS.has(String(plantId || ''));
 }
 
 async function safeSqlRead(label, loader) {
@@ -194,6 +195,191 @@ function formatSqlDateTime(value, fallback = '') {
   } catch (_) {
     return fallback;
   }
+}
+
+function normalizeSqlIssueForApp(issue = {}) {
+  const currentStatus = {
+    statusKey: issue.currentStatusKey || 'open',
+    subStatusKey: issue.currentSubStatusKey || '',
+    label: issue.currentStatusLabel || issue.currentStatusKey || 'open',
+    subLabel: issue.currentSubStatusLabel || issue.currentSubStatusKey || '',
+    color: issue.currentStatusColor || getStatusColor(issue.currentStatusKey || 'open'),
+    enteredAt: toCompatTimestamp(issue.currentStatusEnteredAt),
+    enteredDateTime: formatSqlDateTime(issue.currentStatusEnteredAt, issue.createdAt || ''),
+    enteredBy: {
+      uid: issue.currentStatusEnteredByUid || '',
+      name: issue.currentStatusEnteredByName || ''
+    },
+    notePreview: issue.latestNotePreview || issue.note || ''
+  };
+  const createdAtTs = toCompatTimestamp(issue.createdAt);
+  const updatedAtTs = toCompatTimestamp(issue.updatedAt);
+  const openedAtTs = toCompatTimestamp(issue.openedAt || issue.createdAt);
+  const resolvedAtTs = toCompatTimestamp(issue.resolvedAt);
+  return {
+    ...issue,
+    id: issue.issueId,
+    plantId: issue.plantId || currentPlantId,
+    machine: issue.machineCode || '',
+    machineCode: issue.machineCode || '',
+    dateKey: issue.reportingDateKey || (createdAtTs?.toDate ? localDateStr(createdAtTs.toDate()) : ''),
+    reportingDateKey: issue.reportingDateKey || '',
+    reportingWeekKey: issue.reportingWeekKey || '',
+    reportingMonthKey: issue.reportingMonthKey || '',
+    shift: issue.reportingShiftKey || '',
+    userId: issue.createdByUid || '',
+    userName: issue.createdByName || '',
+    createdAt: createdAtTs,
+    updatedAt: updatedAtTs,
+    dateTime: formatSqlDateTime(issue.currentStatusEnteredAt || issue.openedAt || issue.createdAt, ''),
+    timestamp: createdAtTs?.toMillis ? createdAtTs.toMillis() : Date.now(),
+    currentStatus,
+    statusHistory: Array.isArray(issue.legacyStatusHistory) ? issue.legacyStatusHistory.map(entry => ({ ...entry })) : [],
+    lifecycle: {
+      isOpen: issue.isOpen !== false,
+      isResolved: !!issue.isResolved,
+      openedAt: openedAtTs,
+      resolvedAt: resolvedAtTs,
+      closedAt: toCompatTimestamp(issue.closedAt),
+      reopenedCount: Number(issue.reopenedCount || 0)
+    },
+    resolved: !!issue.isResolved,
+    photos: attachmentPhotoCache.get(issue.issueId) || [],
+    eventHistory: issueEventHistoryCache.get(issue.issueId) || []
+  };
+}
+
+function normalizeSqlIssueList(issuesList = []) {
+  return (issuesList || []).map(normalizeSqlIssueForApp);
+}
+
+function setNestedValue(target, path, value) {
+  const parts = String(path || '').split('.').filter(Boolean);
+  if (!parts.length) return;
+  let cursor = target;
+  for (let i = 0; i < parts.length - 1; i += 1) {
+    const key = parts[i];
+    if (!cursor[key] || typeof cursor[key] !== 'object' || Array.isArray(cursor[key])) cursor[key] = {};
+    cursor = cursor[key];
+  }
+  cursor[parts[parts.length - 1]] = value;
+}
+
+function applyIssuePatchLocally(baseIssue, patch = {}) {
+  const next = deepCopy(baseIssue || {}) || {};
+  Object.entries(patch || {}).forEach(([key, value]) => {
+    if (key.includes('.')) setNestedValue(next, key, deepCopy(value));
+    else next[key] = deepCopy(value);
+  });
+  return next;
+}
+
+function buildCurrentStatusLocal(statusKey, subStatus = '', enteredDateTime = '', note = '') {
+  const def = getStatusDef(statusKey);
+  const enteredAt = new Date().toISOString();
+  return {
+    statusKey: statusKey || 'open',
+    subStatusKey: subStatus || '',
+    label: def?.label || statusKey || 'Open',
+    subLabel: subStatus || '',
+    color: getStatusColor(statusKey),
+    enteredAt,
+    enteredDateTime: enteredDateTime || fmtDate(new Date()),
+    enteredBy: currentActor(),
+    notePreview: note || ''
+  };
+}
+
+function deriveLifecycleLocal(statusKey, baseIssue = null, opts = {}) {
+  const isResolved = statusKey === 'resolved';
+  const now = new Date().toISOString();
+  const wasResolved = !!(baseIssue?.lifecycle?.isResolved || baseIssue?.resolved);
+  const priorReopenCount = Number(baseIssue?.lifecycle?.reopenedCount || 0);
+  const openedAt = baseIssue?.lifecycle?.openedAt?.toDate
+    ? baseIssue.lifecycle.openedAt.toDate().toISOString()
+    : (baseIssue?.lifecycle?.openedAt || baseIssue?.createdAt || now);
+  return {
+    isOpen: !isResolved,
+    isResolved,
+    openedAt,
+    resolvedAt: isResolved ? now : null,
+    closedAt: isResolved ? now : null,
+    reopenedCount: opts.forceReopenIncrement ? priorReopenCount + 1 : (wasResolved && !isResolved ? priorReopenCount + 1 : priorReopenCount)
+  };
+}
+
+function buildIssueV2CompatLocal({ machineCode, statusKey, subStatus = '', statusDateTime = '', note = '', baseIssue = null, forceReopenIncrement = false }) {
+  const rowName = findRowNameForMachine(machineCode);
+  return {
+    schemaVersion: 2,
+    plantId: currentPlantId,
+    pressId: toPressId(machineCode),
+    machineCode: machineCode || '',
+    rowId: toRowId(rowName),
+    currentStatus: buildCurrentStatusLocal(statusKey, subStatus, statusDateTime, note),
+    lifecycle: deriveLifecycleLocal(statusKey, baseIssue, { forceReopenIncrement }),
+    updatedAt: new Date().toISOString(),
+    updatedBy: currentActor()
+  };
+}
+
+function sqlAttachmentPayloads(photos = []) {
+  return (photos || []).filter(photo => photo?.storagePath).map((photo, index) => ({
+    attachmentId: `photo_${String(index).padStart(3, '0')}_${String(photo.storagePath).split('/').pop().replace(/[^a-zA-Z0-9]+/g, '_')}`,
+    type: 'photo',
+    fileName: photo.name || '',
+    contentType: photo.contentType || 'image/jpeg',
+    storagePath: photo.storagePath,
+    storageBucket: photo.storageBucket || '',
+    downloadUrl: photo.downloadURL || photo.dataUrl || '',
+    uploadedBy: currentActor(),
+    uploadedAt: photo.uploadedAt || new Date().toISOString(),
+    sizeBytes: Number(photo.sizeBytes || 0),
+    schemaVersion: 2
+  }));
+}
+
+function sqlEventPayload(type, payload = {}) {
+  const now = new Date().toISOString();
+  return {
+    type,
+    eventAt: now,
+    createdAt: now,
+    actor: currentActor(),
+    payload,
+    schemaVersion: 2
+  };
+}
+
+async function commitSqlIssueWrite(issueId, issue, { attachments = [], replaceAttachments = false, events = [], permissionName } = {}) {
+  const payload = await dataApi.updateIssue(currentPlantId, issueId, {
+    issueId,
+    issue,
+    attachments,
+    replaceAttachments,
+    events,
+    permissionName
+  });
+  if (payload?.issue) {
+    issuesById.set(issueId, normalizeSqlIssueForApp(payload.issue));
+    rebuildIssuesArrayFromMap();
+    refreshVisibleData();
+  }
+  if (attachments.length) {
+    attachmentPhotoCache.set(issueId, issue.photos || []);
+  }
+  if (events.length) {
+    issueEventHistoryCache.delete(issueId);
+  }
+  refreshSyncState({
+    status: 'live',
+    fromCache: false,
+    hasPendingWrites: false,
+    lastServerAt: Date.now(),
+    lastError: null,
+    manualText: 'Live - synced from D1'
+  });
+  return payload;
 }
 
 const syncState = {
@@ -1981,6 +2167,16 @@ window.toggleSecondaryStatus = async (id, statusKey) => {
     ? current.filter(k => k !== statusKey)
     : [...current, statusKey];
   try {
+    if (shouldUseSqlStagingReads(currentPlantId)) {
+      const nextIssue = applyIssuePatchLocally(issue, {
+        secondaryStatuses: updated,
+        updatedAt: new Date().toISOString(),
+        updatedBy: currentActor()
+      });
+      nextIssue.id = id;
+      await commitSqlIssueWrite(id, nextIssue);
+      return;
+    }
     await updateDoc(plantDoc('issues', id), {
       secondaryStatuses: updated,
       updatedAt: serverTimestamp(),
@@ -5189,10 +5385,14 @@ document.addEventListener('visibilitychange', () => {
 let retryTimeout = null;
 let retryCount = 0;
 let issueBootstrapTimeout = null;
+let sqlIssuePollTimer = null;
+let lastSqlIssuePollPlantId = '';
+let lastSqlIssuePollSignature = '';
 const ISSUE_LISTENER_RETRY_BASE_MS = 500;
 const ISSUE_LISTENER_RETRY_MAX_MS = 10000;
 const ISSUE_LISTENER_RETRY_JITTER = 0.2;
 const ISSUE_LISTENER_BOOTSTRAP_FALLBACK_MS = 3000;
+const SQL_ISSUE_POLL_MS = 10000;
 
 function nextIssueListenerRetryDelay(attempt) {
   const safeAttempt = Math.max(1, Number(attempt) || 1);
@@ -5226,6 +5426,7 @@ function rebuildIssuesArrayFromMap() {
 }
 
 async function loadIssueHistoryPage() {
+  if (shouldUseSqlStagingReads(currentPlantId)) return;
   if (!currentPlantId || !issueHistoryCursor || issueHistoryFetchInFlight) return;
   const cursor = issueHistoryCursor;
   issueHistoryFetchInFlight = (async () => {
@@ -5247,12 +5448,91 @@ async function loadIssueHistoryPage() {
   return issueHistoryFetchInFlight;
 }
 
+async function refreshIssuesFromSql() {
+  const payload = await safeSqlRead(`issues ${currentPlantId}`, () => dataApi.listIssues(currentPlantId, { limit: 500 }));
+  if (!payload) return false;
+  const nextSignature = JSON.stringify(payload.issues || []);
+  const didPlantChange = lastSqlIssuePollPlantId !== currentPlantId;
+  const didIssueSetChange = didPlantChange || lastSqlIssuePollSignature !== nextSignature;
+  lastSqlIssuePollPlantId = currentPlantId;
+  lastSqlIssuePollSignature = nextSignature;
+  if (!didIssueSetChange) {
+    void _refreshRoleAlertBadgeCount();
+    refreshSyncState({
+      status: 'live',
+      fromCache: false,
+      hasPendingWrites: false,
+      lastServerAt: Date.now(),
+      lastError: null,
+      manualText: 'Live - synced from D1'
+    });
+    return true;
+  }
+  const normalized = normalizeSqlIssueList(payload.issues || []);
+  issuesById.clear();
+  normalized.forEach(issue => {
+    issuesById.set(issue.id, issue);
+  });
+  rebuildIssuesArrayFromMap();
+  refreshVisibleData();
+  void _refreshRoleAlertBadgeCount();
+  refreshSyncState({
+    status: 'live',
+    fromCache: false,
+    hasPendingWrites: false,
+    lastServerAt: Date.now(),
+    lastError: null,
+    manualText: 'Live - synced from D1'
+  });
+  return true;
+}
+
+function stopSqlIssuePolling() {
+  if (sqlIssuePollTimer) {
+    clearTimeout(sqlIssuePollTimer);
+    sqlIssuePollTimer = null;
+  }
+  lastSqlIssuePollPlantId = '';
+  lastSqlIssuePollSignature = '';
+}
+
+function startSqlIssuePolling() {
+  stopSqlIssuePolling();
+  if (!currentPlantId || !shouldUseSqlStagingReads(currentPlantId)) return;
+  let active = true;
+  unsubscribe = () => {
+    active = false;
+    stopSqlIssuePolling();
+    unsubscribe = null;
+  };
+  const poll = async () => {
+    if (!active || pageHidden || !currentPlantId) return;
+    try {
+      const ok = await refreshIssuesFromSql();
+      if (ok) setSyncStatus('ok', 'Live - synced from D1');
+      else setSyncStatus('err', 'D1 issue poll failed');
+    } catch (error) {
+      console.warn('SQL issue poll failed', error);
+      setSyncStatus('err', 'D1 issue poll failed');
+    }
+    if (active) {
+      sqlIssuePollTimer = setTimeout(poll, SQL_ISSUE_POLL_MS);
+    }
+  };
+  void poll();
+}
+
 function startListener() {
   if (pageHidden) return;
   if (unsubscribe) unsubscribe();
+  stopSqlIssuePolling();
   if (retryTimeout) { clearTimeout(retryTimeout); retryTimeout = null; }
   if (issueBootstrapTimeout) { clearTimeout(issueBootstrapTimeout); issueBootstrapTimeout = null; }
   if (!currentPlantId) return;
+  if (shouldUseSqlStagingReads(currentPlantId)) {
+    startSqlIssuePolling();
+    return;
+  }
 
   const q = query(plantCol('issues'), orderBy('createdAt', 'desc'), limit(MAX_LIVE_ISSUES));
   let firstSnapshotReceived = false;
@@ -7172,6 +7452,52 @@ window.submitIssue = async () => {
       createdAtIso: new Date().toISOString()
     };
     const localPhotos = pendingPhotos.map(p => ({ ...p }));
+    if (shouldUseSqlStagingReads(currentPlantId)) {
+      if (guardOfflinePhotos(localPhotos, 'Issue photos')) {
+        setSubmitting(false);
+        return;
+      }
+      if (!syncState.online) {
+        setSyncStatus('err', 'D1 issue logging currently requires connection.');
+        setSubmitting(false);
+        return;
+      }
+      const uploadedPhotos = await uploadIssuePhotosToStorage(issueRef.id, localPhotos);
+      const createdIssue = buildLocalIssuePayloadFromDraft(issueRef.id, draft, uploadedPhotos);
+      createdIssue.id = issueRef.id;
+      createdIssue.photos = uploadedPhotos;
+      const payload = await dataApi.createIssue(currentPlantId, {
+        issueId: issueRef.id,
+        issue: createdIssue,
+        attachments: sqlAttachmentPayloads(uploadedPhotos),
+        replaceAttachments: true,
+        permissionName: 'canCreateIssue',
+        events: [
+          sqlEventPayload('issue_created', { machineCode: currentMachine, note, initialStatusKey: initialStatus, initialSubStatusKey: initialSubStatus, urgent: isUrgent }),
+          sqlEventPayload('status_changed', { fromStatusKey: null, fromSubStatusKey: null, toStatusKey: initialStatus, toSubStatusKey: initialSubStatus, note: '' })
+        ]
+      });
+      attachmentPhotoCache.set(issueRef.id, uploadedPhotos);
+      issuesById.set(issueRef.id, payload?.issue ? normalizeSqlIssueForApp(payload.issue) : { ...createdIssue, id: issueRef.id });
+      rebuildIssuesArrayFromMap();
+      refreshVisibleData();
+      issueLogPrefs.lastStatusKey = initialStatus;
+      issueLogPrefs.lastStatusSub = initialSubStatus;
+      issueLogPrefs.timerMinutes = String(document.getElementById('issue-timer-minutes')?.value || '');
+      issueLogPrefs.urgent = false;
+      saveIssueLogPrefs();
+      if (timerMinutes > 0) setIssueReminder(issueRef.id, timerMinutes);
+      completeDemoGuideStep('log');
+      closeModal();
+      showGameToast(`Logged Press ${currentMachine}`);
+      queueRoleFeedAlert({ id: issueRef.id, machine: currentMachine }, { statusKey: initialStatus, subStatus: initialSubStatus, note, workflowId: initialWorkflowId }).catch(e => console.warn('role alert queue failed', e));
+      if (uploadedPhotos.length > 0) awardGamification('photo_attached', { issueId: issueRef.id, dedupeSuffix: 'photo', tags: ['photo:attached'] }).catch(e => console.warn('gamification photo award failed', e));
+      awardGamification('issue_created_complete', { issueId: issueRef.id, dedupeSuffix: 'issue-created', tags: ['issue:create', `status:${initialStatus || 'open'}`] }).catch(e => console.warn('gamification issue-created award failed', e));
+      if (requiresSerialNumber(initialStatus, initialSubStatus)) {
+        setTimeout(() => openSerialModal(issueRef.id, initialStatus, initialSubStatus, fmtDate(d)), 50);
+      }
+      return;
+    }
     const outboxItem = {
       id: issueRef.id,
       plantId: currentPlantId,
@@ -7275,6 +7601,38 @@ window.saveEdit = async () => {
     const shift = shiftSel === 'auto' ? getShiftForTime(d, getShiftSchedule(currentPlantId)) : shiftSel;
     const timerMinutes = parseTimerMinutes(document.getElementById('edit-timer-minutes')?.value);
     const uploadedPhotos = await uploadIssuePhotosToStorage(editTargetId, editPhotos);
+    if (shouldUseSqlStagingReads(currentPlantId)) {
+      const issuePatch = {
+        note,
+        dateTime: fmtDate(d), dateKey: localDateStr(d), timestamp: d.getTime(),
+        shift,
+        timer: buildIssueTimer(timerMinutes, d, issue?.timer || null),
+        photoCount: uploadedPhotos.length,
+        editedAt: fmtDate(new Date()), editedBy: currentUser.displayName||currentUser.email,
+        ...buildIssueV2CompatLocal({
+          machineCode: issue?.machine || currentMachine,
+          statusKey: last?.status || currentStatusKey(issue || {}),
+          subStatus: last?.subStatus || issue?.subStatus || '',
+          statusDateTime: last?.dateTime || issue?.dateTime || fmtDate(new Date()),
+          note,
+          baseIssue: issue
+        })
+      };
+      const nextIssue = applyIssuePatchLocally(issue, issuePatch);
+      nextIssue.id = editTargetId;
+      nextIssue.photos = uploadedPhotos;
+      await commitSqlIssueWrite(editTargetId, nextIssue, {
+        attachments: sqlAttachmentPayloads(uploadedPhotos),
+        replaceAttachments: true,
+        events: [sqlEventPayload('issue_edited', { fieldsChanged: ['note', 'photos', 'dateTime', 'dateKey', 'timestamp'] })]
+      });
+      if (timerMinutes > 0) setIssueReminder(editTargetId, timerMinutes);
+      else clearIssueReminder(editTargetId);
+      attachmentPhotoCache.set(editTargetId, uploadedPhotos);
+      if (uploadedPhotos.length > 0) awardGamification('photo_attached', { issueId: editTargetId, dedupeSuffix: 'photo', tags: ['photo:attached'] }).catch(e => console.warn('gamification photo award failed', e));
+      closeEditModal();
+      return;
+    }
     const issuePatch = {
       note,
       dateTime: fmtDate(d), dateKey: localDateStr(d), timestamp: d.getTime(),
@@ -7357,6 +7715,34 @@ window.confirmResolve = async () => {
         baseIssue: issue
       })
     };
+    if (shouldUseSqlStagingReads(currentPlantId)) {
+      const nextIssue = applyIssuePatchLocally(issue, {
+        ...issuePatch,
+        workflowStateHistory: { ...(issue?.workflowStateHistory || {}), finished: { by: currentActor(), at: new Date().toISOString() } },
+        workflowStateByEntry: { ...(issue?.workflowStateByEntry || {}), [resolvedWorkflowId]: 'finished' },
+        workflowStateByEntryHistory: {
+          ...(issue?.workflowStateByEntryHistory || {}),
+          [resolvedWorkflowId]: { ...((issue?.workflowStateByEntryHistory || {})[resolvedWorkflowId] || {}), finished: { by: currentActor(), at: new Date().toISOString() } }
+        }
+      });
+      nextIssue.id = resolveTargetId;
+      await commitSqlIssueWrite(resolveTargetId, nextIssue, {
+        permissionName: 'canResolveIssue',
+        events: [
+          sqlEventPayload('issue_resolved', { resolutionNote: note || 'Resolved (no details provided)' }),
+          sqlEventPayload('status_changed', {
+            fromStatusKey: last?.status || currentStatusKey(issue || {}),
+            fromSubStatusKey: last?.subStatus || '',
+            toStatusKey: 'resolved',
+            toSubStatusKey: '',
+            note: note || 'Resolved (no details provided)'
+          })
+        ]
+      });
+      awardGamification('issue_resolved', { issueId: resolveTargetId, dedupeSuffix: resolvedAtText, tags: ['issue:resolved', 'status:resolved'] }).catch(e => console.warn('gamification resolve award failed', e));
+      closeResolveModal();
+      return;
+    }
     const batch = writeBatch(db);
     batch.update(plantDoc('issues',resolveTargetId), issuePatch);
     queueIssueEvent(batch, resolveTargetId, 'issue_resolved', { resolutionNote: note || 'Resolved (no details provided)' });
@@ -7421,6 +7807,32 @@ window.confirmReopen = async () => {
         forceReopenIncrement: true
       })
     };
+    if (shouldUseSqlStagingReads(currentPlantId)) {
+      const nextIssue = applyIssuePatchLocally(issue, {
+        reopenNote:note||'',reopenDateTime,
+        reopenedBy:currentUser.displayName||currentUser.email,resolveHistory,
+        statusHistory,
+        workflowState: null,
+        workflowStateByEntry: { ...(issue?.workflowStateByEntry || {}), [reopenWorkflowId]: null },
+        ...buildIssueV2CompatLocal({
+          machineCode: issue?.machine || '',
+          statusKey: reopenStatusKey,
+          subStatus: reopenSubStatus,
+          statusDateTime: reopenDateTime,
+          note: note || '',
+          baseIssue: issue,
+          forceReopenIncrement: true
+        })
+      });
+      nextIssue.id = reopenTargetId;
+      await commitSqlIssueWrite(reopenTargetId, nextIssue, {
+        permissionName: 'canResolveIssue',
+        events: [sqlEventPayload('issue_reopened', { reason: note || '' })]
+      });
+      awardGamification('issue_reopened', { issueId: reopenTargetId, dedupeSuffix: reopenDateTime, tags: ['issue:reopened', `status:${reopenStatusKey}`] }).catch(e => console.warn('gamification reopen award failed', e));
+      closeReopenModal();
+      return;
+    }
     const batch = writeBatch(db);
     batch.update(plantDoc('issues',reopenTargetId), issuePatch);
     queueIssueEvent(batch, reopenTargetId, 'issue_reopened', { reason: note || '' });
@@ -7476,6 +7888,11 @@ function getMutableStatusHistory(issue) {
 }
 
 async function getLatestIssueForStatusMutation(issueId, fallbackIssue) {
+  if (shouldUseSqlStagingReads(currentPlantId)) {
+    const payload = await safeSqlRead(`issue ${issueId}`, () => dataApi.getIssue(currentPlantId, issueId));
+    if (payload?.issue) return normalizeSqlIssueForApp(payload.issue);
+    return fallbackIssue || null;
+  }
   try {
     const snap = await getDoc(plantDoc('issues', issueId));
     if (!snap.exists()) return fallbackIssue || null;
@@ -7547,6 +7964,62 @@ window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
   let prev = currentStatus(issue);
   let appliedIssuePatch = null;
   try {
+    if (shouldUseSqlStagingReads(currentPlantId)) {
+      const mutation = buildAddStatusEntryMutation(issue, issue, entry, status, subStatus, note);
+      prev = mutation.prev;
+      appliedIssuePatch = {
+        ...mutation.issuePatch,
+        workflowStateHistory: mutation.issuePatch.workflowState === 'finished'
+          ? { ...(issue?.workflowStateHistory || {}), finished: { by: currentActor(), at: new Date().toISOString() } }
+          : { ...(issue?.workflowStateHistory || {}) },
+        workflowStateByEntry: {
+          ...(issue?.workflowStateByEntry || {}),
+          [entry.workflowId]: mutation.issuePatch.workflowState === 'finished' ? 'finished' : null
+        },
+        workflowStateByEntryHistory: mutation.issuePatch.workflowState === 'finished'
+          ? {
+              ...(issue?.workflowStateByEntryHistory || {}),
+              [entry.workflowId]: { ...((issue?.workflowStateByEntryHistory || {})[entry.workflowId] || {}), finished: { by: currentActor(), at: new Date().toISOString() } }
+            }
+          : { ...(issue?.workflowStateByEntryHistory || {}) }
+      };
+      const nextIssue = applyIssuePatchLocally(issue, {
+        statusHistory: mutation.issuePatch.statusHistory,
+        workflowState: mutation.issuePatch.workflowState,
+        workflowStateHistory: appliedIssuePatch.workflowStateHistory,
+        workflowStateByEntry: appliedIssuePatch.workflowStateByEntry,
+        workflowStateByEntryHistory: appliedIssuePatch.workflowStateByEntryHistory,
+        ...buildIssueV2CompatLocal({
+          machineCode: issue?.machine || issue?.machineCode || '',
+          statusKey: status,
+          subStatus: subStatus || '',
+          statusDateTime: entry.dateTime,
+          note: note || '',
+          baseIssue: issue
+        })
+      });
+      nextIssue.id = id;
+      await commitSqlIssueWrite(id, nextIssue, {
+        events: [sqlEventPayload('status_changed', {
+          fromStatusKey: prev?.status || currentStatusKey(issue),
+          fromSubStatusKey: prev?.subStatus || '',
+          toStatusKey: status,
+          toSubStatusKey: subStatus || '',
+          note: note || ''
+        })]
+      });
+      queueRoleFeedAlert(issue, {
+        statusKey: status,
+        subStatus: subStatus || '',
+        note: note || '',
+        workflowId
+      }).catch(e => console.warn('role alert queue failed', e));
+      issueEventHistoryCache.delete(id);
+      awardGamification('status_changed_valid', { issueId: id, dedupeSuffix: entry.dateTime || String(Date.now()), tags: ['status:changed', `status:${status}`] }).catch(e => console.warn('gamification award failed', e));
+      if (status === 'resolved') awardGamification('issue_resolved', { issueId: id, dedupeSuffix: 'status-resolved', tags: ['issue:resolved', 'status:resolved'] }).catch(e => console.warn('gamification resolve award failed', e));
+      if (status && status !== 'open') completeDemoGuideStep('route');
+      return;
+    }
     const writeStatusChange = (batch, issuePatch) => {
       batch.update(plantDoc('issues', id), issuePatch);
       queueIssueEvent(batch, id, 'status_changed', {
@@ -7987,6 +8460,18 @@ window.setWorkflowState = async (id, state) => {
   const issue = issues.find(i => i.id === id);
   if (issue && (issue.workflowState || 'called') === state) return;
   try {
+    if (shouldUseSqlStagingReads(currentPlantId)) {
+      const nextIssue = applyIssuePatchLocally(issue, {
+        workflowState: state,
+        workflowStateHistory: { ...(issue?.workflowStateHistory || {}), [state]: { by: actor, at: new Date().toISOString() } },
+        updatedAt: new Date().toISOString(),
+        updatedBy: actor
+      });
+      nextIssue.id = id;
+      await commitSqlIssueWrite(id, nextIssue);
+      completeDemoGuideStep('workflow');
+      return;
+    }
     await updateDoc(plantDoc('issues', id), {
       workflowState: state,
       [`workflowStateHistory.${state}`]: { by: actor, at: serverTimestamp() },
@@ -8006,6 +8491,57 @@ async function setWorkflowStateForEntryLocator(issueId, state, locateEntry) {
   let updatedWorkflowId = '';
   let didWrite = false;
   try {
+    if (shouldUseSqlStagingReads(currentPlantId)) {
+      const base = issue;
+      if (!base) return '';
+      const history = getMutableStatusHistory(base);
+      let entryIndex = locateEntry(history, base);
+      if (entryIndex < 0) return '';
+      if (!history[entryIndex]) {
+        const current = currentStatus(base);
+        history[entryIndex] = {
+          status: current?.status || currentStatusKey(base),
+          subStatus: current?.subStatus || '',
+          note: current?.note || '',
+          dateTime: current?.dateTime || base?.dateTime || fmtDate(new Date()),
+          by: current?.by || base?.userName || ''
+        };
+      }
+      const entry = { ...history[entryIndex] };
+      let workflowId = getEntryWorkflowId(entry);
+      if (!workflowId) {
+        workflowId = createWorkflowId(entry.status);
+        entry.workflowId = workflowId;
+        history[entryIndex] = entry;
+      }
+      const isCurrentEntry = isCurrentWorkflowEntry(entryIndex, history.length, entry, base);
+      const patch = {
+        statusHistory: history,
+        workflowStateByEntry: { ...(base?.workflowStateByEntry || {}), [workflowId]: state },
+        workflowStateByEntryHistory: {
+          ...(base?.workflowStateByEntryHistory || {}),
+          [workflowId]: { ...((base?.workflowStateByEntryHistory || {})[workflowId] || {}), [state]: { by: actor, at: new Date().toISOString() } }
+        },
+        updatedAt: new Date().toISOString(),
+        updatedBy: actor
+      };
+      if (isCurrentEntry) {
+        patch.workflowState = state;
+        patch.workflowStateHistory = { ...(base?.workflowStateHistory || {}), [state]: { by: actor, at: new Date().toISOString() } };
+        if (entry.status) {
+          patch.workflowStateByStatus = { ...(base?.workflowStateByStatus || {}), [entry.status]: state };
+          patch.workflowStateByStatusHistory = {
+            ...(base?.workflowStateByStatusHistory || {}),
+            [entry.status]: { ...((base?.workflowStateByStatusHistory || {})[entry.status] || {}), [state]: { by: actor, at: new Date().toISOString() } }
+          };
+        }
+      }
+      const nextIssue = applyIssuePatchLocally(base, patch);
+      nextIssue.id = issueId;
+      await commitSqlIssueWrite(issueId, nextIssue);
+      updatedWorkflowId = workflowId;
+      didWrite = true;
+    } else {
     await runTransaction(db, async tx => {
       const ref = plantDoc('issues', issueId);
       const snap = await tx.get(ref);
@@ -8057,6 +8593,7 @@ async function setWorkflowStateForEntryLocator(issueId, state, locateEntry) {
       updatedWorkflowId = workflowId;
       didWrite = true;
     });
+    }
     if (didWrite && updatedWorkflowId) {
       await awardGamification('workflow_step_advance', { issueId, dedupeSuffix: `${updatedWorkflowId}:${state}`, tags: ['workflow:advance', `workflow:${state}`] });
       completeDemoGuideStep('workflow');
@@ -8091,6 +8628,26 @@ window.setWorkflowStateForStatus = async (issueId, statusKey, state) => {
     : (issue?.workflowStateByStatus?.[statusKey] || null);
   if (current === state) return;
   try {
+    if (shouldUseSqlStagingReads(currentPlantId)) {
+      const nextIssue = applyIssuePatchLocally(issue, {
+        workflowStateByStatus: { ...(issue?.workflowStateByStatus || {}), [statusKey]: state },
+        workflowStateByStatusHistory: {
+          ...(issue?.workflowStateByStatusHistory || {}),
+          [statusKey]: { ...((issue?.workflowStateByStatusHistory || {})[statusKey] || {}), [state]: { by: actor, at: new Date().toISOString() } }
+        },
+        ...(statusKey === primaryKey ? {
+          workflowState: state,
+          workflowStateHistory: { ...(issue?.workflowStateHistory || {}), [state]: { by: actor, at: new Date().toISOString() } }
+        } : {}),
+        updatedAt: new Date().toISOString(),
+        updatedBy: actor
+      });
+      nextIssue.id = issueId;
+      await commitSqlIssueWrite(issueId, nextIssue);
+      await awardGamification('workflow_step_advance', { issueId, dedupeSuffix: `${statusKey}:${state}`, tags: ['workflow:advance', `workflow:${state}`] });
+      completeDemoGuideStep('workflow');
+      return;
+    }
     const patch = {
       [`workflowStateByStatus.${statusKey}`]: state,
       [`workflowStateByStatusHistory.${statusKey}.${state}`]: { by: actor, at: serverTimestamp() },
@@ -8181,6 +8738,12 @@ window.togglePriority = async (id) => {
   const issue = issues.find(i => i.id === id);
   if (!issue) return;
   try {
+    if (shouldUseSqlStagingReads(currentPlantId)) {
+      const nextIssue = applyIssuePatchLocally(issue, { highPriority: !issue.highPriority, priority: !issue.highPriority ? 'critical' : issue.priority });
+      nextIssue.id = id;
+      await commitSqlIssueWrite(id, nextIssue);
+      return;
+    }
     await updateDoc(plantDoc('issues', id), { highPriority: !issue.highPriority });
   } catch(e) {
     setSyncStatus('err', 'Error updating priority: ' + e.message);
@@ -8682,6 +9245,7 @@ function renderIssues() {
   const mf=document.getElementById('machine-filter').value;
   const sf=document.getElementById('status-filter').value;
   const sort=currentSort;
+  const openSwipeSnapshot = captureOpenSwipeSnapshot();
 
   // Build set of machines in active rows (for Active Rows filter)
   const activeRowMachines = new Set();
@@ -8761,6 +9325,7 @@ function renderIssues() {
 
   const expanded=new Set();
   document.querySelectorAll('.issue-body.visible').forEach(el=>expanded.add(el.id.replace('body-','')));
+  openSwipeRow = null;
   list.innerHTML='';
 
   const STATUS_CONFIG = Object.fromEntries(Object.entries(STATUSES).map(([k,v])=>[k,{label:v.label,cls:v.cls,icon:v.icon,color:v.cssColor,subs:v.subs}]));
@@ -9609,6 +10174,10 @@ function renderIssues() {
         }
       }, 80);
     }, { passive: false });
+
+    if (openSwipeSnapshot?.issueId === issue.id) {
+      openCategoryPanel();
+    }
   });
 
   if (issueDisplayLimit < totalFiltered) {
@@ -9639,6 +10208,14 @@ window.loadMoreIssues = function() {
 
 // ── SWIPE TO STATUS ──
 let openSwipeRow = null;
+
+function captureOpenSwipeSnapshot() {
+  if (!openSwipeRow?.card) return null;
+  const row = openSwipeRow.card.closest('.issue-row');
+  const issueId = row?.dataset?.id || '';
+  if (!issueId) return null;
+  return { issueId };
+}
 
 function closeSwipe() {
   if (!openSwipeRow) return;
