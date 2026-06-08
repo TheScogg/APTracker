@@ -1,46 +1,55 @@
-# AP Tracker SQL Migration Plan
+# AP Tracker D1 Migration Plan
 
-This plan starts the Firebase-to-SQL switchover while preserving the current app behavior. The first migration target is Azure SQL behind an Azure-hosted HTTP API. Firebase Auth and Firebase Storage remain in service during phase one.
+This plan keeps the current app behavior intact while moving the SQL migration target from Azure SQL to Cloudflare D1. Firebase Auth and Firebase Storage remain in service during the first cutover phases.
 
 ## Target architecture
 
-- Static app remains deployable as the current Cloudflare Pages/Workers asset app.
-- Browser sends Firebase ID tokens to the SQL API with `Authorization: Bearer <idToken>`.
-- Azure Functions or Azure App Service verifies Firebase ID tokens and enforces plant permissions from SQL.
-- Azure SQL stores all app metadata and operational records currently stored in Firestore.
-- Firebase Storage continues storing photos and attachments; SQL stores object metadata and storage paths.
-- Azure SignalR replaces Firestore `onSnapshot` for live updates after the HTTP API is stable.
+- Static app and API stay on the current Cloudflare Pages/Workers deployment shape.
+- Browser sends Firebase ID tokens to the Worker API with `Authorization: Bearer <idToken>`.
+- The Worker verifies Firebase ID tokens, resolves plant permissions from D1, and serves the SQL read path.
+- Cloudflare D1 stores app metadata and operational records currently mirrored from Firestore.
+- Firebase Storage continues storing photos and attachment binaries; D1 stores attachment metadata and storage paths.
+- Realtime starts with polling against the HTTP API, with Durable Objects or WebSockets only if polling becomes a clear bottleneck.
+
+## Current repo direction
+
+- Read endpoints now belong in the main Worker, not a separate Azure Functions app.
+- The shared frontend contract in `data-api.js` remains valid.
+- The first D1 migration lives at `migrations/0001_d1_core.sql`.
+- `api/` is now best treated as import/parity tooling and legacy scaffold reference, not the production runtime target.
 
 ## Migration phases
 
-### Phase 1: foundation
+### Phase 1: D1 foundation
 
-- Add Azure SQL schema for core Firebase collections.
-- Add an API scaffold with explicit auth, permission, and route boundaries.
-- Add a frontend data adapter interface that can be implemented by Firebase or SQL.
-- Keep the existing Firebase runtime untouched.
+- Create the D1 schema for the core Firestore collections.
+- Bind the D1 database in `wrangler.jsonc`.
+- Keep the existing Firebase runtime untouched for writes and live listeners.
+- Route SQL read endpoints through the existing Worker under `/api/...`.
 
-### Phase 2: SQL API read path
+### Phase 2: D1 read path
 
-- Implement API endpoints for user bootstrap, plant bootstrap, issue list, issue details, events, and attachments.
-- Add SQL import scripts that backfill Firebase data into SQL.
-- Build parity checks that compare Firestore counts and important derived values against SQL.
-- Add a config flag that lets the frontend use SQL reads in staging.
+- Implement `GET /api/me`.
+- Implement `GET /api/plants/:plantId/bootstrap`.
+- Implement issue list/detail/events/attachments reads from D1.
+- Backfill Firestore data into D1.
+- Run parity checks against Firestore by plant.
+- Enable staged SQL reads in the frontend with `?dataBackend=sql`.
 
-### Phase 3: SQL write path
+### Phase 3: D1 write path
 
-- Implement issue create/update/status-change/event append through the SQL API.
+- Implement issue create/update/status-change/event append through the Worker API.
 - Preserve append-only event semantics.
-- Publish SignalR update events from successful SQL writes.
-- Keep Firebase writes available only for rollback until production cutover.
+- Continue writing attachment binaries to Firebase Storage while persisting metadata in D1.
+- Keep Firebase writes available behind a rollback switch until cutover is accepted.
 
 ### Phase 4: production cutover
 
 - Freeze Firestore writes during the cutover window.
 - Run final export/import and parity checks.
 - Deploy the frontend with SQL API mode enabled.
-- Monitor issue creation, issue updates, attachment metadata, login/bootstrap, and realtime update delivery.
-- Keep Firestore data intact as a rollback snapshot until the SQL app is accepted.
+- Monitor bootstrap, issue reads, writes, and attachment metadata.
+- Keep Firestore data intact as a rollback snapshot until the D1-backed app is accepted.
 
 ## Core API surface
 
@@ -55,19 +64,19 @@ This plan starts the Firebase-to-SQL switchover while preserving the current app
 - `GET /api/plants/:plantId/issues/:issueId/attachments`
 - `POST /api/plants/:plantId/issues/:issueId/attachments`
 
-Admin, wiki, notes, todos, messaging, schedules, and gamification should follow the same API pattern after the core issue flow is stable.
+Admin, wiki, notes, todos, messaging, schedules, and gamification should follow the same Worker API pattern after the core issue flow is stable.
 
 ## Permission model
 
-Firestore rules move into API middleware:
+Firestore rules move into Worker middleware:
 
 - Verify Firebase ID token.
 - Resolve `uid`.
 - Load active `plant_members` row for the requested `plant_id`.
 - Check permissions JSON for action-specific rights.
-- Deny access before any plant-scoped SQL query runs.
+- Deny access before any plant-scoped D1 query runs.
 
-Every plant-scoped SQL query must include `plant_id`.
+Every plant-scoped D1 query must include `plant_id`.
 
 ## Backfill order
 
@@ -96,12 +105,24 @@ Every plant-scoped SQL query must include `plant_id`.
 - Latest created/updated timestamps.
 - Leaderboard and user XP totals where gamification is migrated.
 
-## Cutover checklist
+## Wrangler binding template
 
-- Staging SQL import passes parity checks.
-- SQL API can run app bootstrap and issue workflows in staging.
-- SignalR or polling fallback is validated for live issue updates.
-- Production Firestore write freeze window is scheduled.
-- Final import and parity scripts are ready.
-- Rollback deploy target remains available.
-- Firestore data is preserved read-only after cutover.
+Add a D1 binding once you have the database name and ID:
+
+```jsonc
+{
+  "d1_databases": [
+    {
+      "binding": "APTRACKER_DB",
+      "database_name": "your-database-name",
+      "database_id": "your-database-id"
+    }
+  ]
+}
+```
+
+Cloudflare’s current docs for the binding and local dev flow:
+
+- [D1 Worker API](https://developers.cloudflare.com/d1/worker-api/)
+- [D1 local development](https://developers.cloudflare.com/d1/build-with-d1/local-development/)
+- [Wrangler configuration](https://developers.cloudflare.com/workers/wrangler/configuration/)

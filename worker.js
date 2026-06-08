@@ -1,3 +1,5 @@
+import { handleD1ApiRequest } from './d1-api.js';
+
 const FIREBASE_AUTH_ORIGIN = 'https://press-tracker-9d9c9.firebaseapp.com';
 const FIREBASE_PROJECT_ID = 'press-tracker-9d9c9';
 const FIREBASE_WEB_API_KEY = 'AIzaSyABjasNBbJnsqq4M_UxKruKrN6-O2FXCwc';
@@ -1468,6 +1470,13 @@ export default {
       const upstreamUrl = new URL(url.pathname + url.search, FIREBASE_AUTH_ORIGIN);
       const upstreamRequest = new Request(upstreamUrl.toString(), request);
       return fetch(upstreamRequest);
+    }
+
+    const d1ApiResponse = await handleD1ApiRequest(request, env, {
+      authenticateRequest: authenticateFirebaseUser
+    });
+    if (d1ApiResponse) {
+      return d1ApiResponse;
     }
 
     if (url.pathname === '/api/ocr') {

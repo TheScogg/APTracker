@@ -109,7 +109,7 @@ export class SqlDataApi {
   }
 
   subscribeToPlant(_plantId, _handlers = {}) {
-    throw new Error('SQL realtime adapter is not implemented yet. Use SignalR in the next migration phase.');
+    throw new Error('SQL realtime adapter is not implemented yet. Start with polling, then add Durable Objects or WebSockets if needed.');
   }
 }
 

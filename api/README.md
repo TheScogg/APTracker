@@ -1,56 +1,36 @@
-# AP Tracker SQL API Scaffold
+# AP Tracker SQL Migration Toolkit
 
-This directory is the starting point for the Azure-hosted API that will replace direct browser-to-Firestore data access.
+This folder is no longer the planned production runtime target.
 
-## Runtime target
+AP Tracker’s SQL migration now points at the existing Cloudflare Worker plus Cloudflare D1, not Azure Functions plus Azure SQL. The live read-path implementation is being wired into:
 
-- Azure Functions or Azure App Service
-- Azure SQL Database
-- Firebase Auth token verification
-- Firebase Storage retained for attachment binaries during phase one
-- Azure SignalR added after the HTTP API is stable
+- [worker.js](/Users/chris/APTracker/worker.js)
+- [d1-api.js](/Users/chris/APTracker/d1-api.js)
+- [migrations/0001_d1_core.sql](/Users/chris/APTracker/migrations/0001_d1_core.sql)
 
-## First implementation order
+## What stays useful here
 
-1. Wire Firebase token verification.
-2. Add Azure SQL connection pooling.
-3. Implement `GET /api/me`.
-4. Implement `GET /api/plants/:plantId/bootstrap`.
-5. Implement issue list/detail endpoints.
-6. Implement issue writes and append-only events.
-7. Add parity/import scripts.
-8. Add SignalR publish hooks.
+- Firestore import/backfill scripts
+- Firestore-vs-SQL parity scripts
+- Shared serializers that are still reused by the Worker D1 layer
 
-## Currently implemented
+## What is legacy here
 
-- `GET /api/me`
-- `GET /api/plants/:plantId/bootstrap`
-- `GET /api/plants/:plantId/issues`
-- `GET /api/plants/:plantId/issues/:issueId`
-- `GET /api/plants/:plantId/issues/:issueId/events`
-- `GET /api/plants/:plantId/issues/:issueId/attachments`
+- Azure Functions entrypoint assumptions
+- `mssql` connection handling
+- Azure-specific environment variable expectations
 
-## Staging checks
+## Updated runtime direction
 
-- Frontend SQL staging reads can be enabled with `?dataBackend=sql`.
-- The current app wiring uses SQL for signed-in bootstrap and issue detail hydration, while live issue lists and writes stay on Firebase.
-- Run `npm run import:plant -- --plant <plantId>` for a dry-run import summary.
-- Run `npm run import:plant -- --plant <plantId> --commit` to upsert one plant's bootstrap data, issues, events, and attachment metadata into SQL.
-- Run `npm run parity:plant -- --plant <plantId>` from `api/` to compare Firestore and SQL counts for one plant.
+1. Browser sends Firebase ID token to the Worker API.
+2. Worker verifies the Firebase user.
+3. Worker checks `plant_members` permissions from D1.
+4. Worker serves `/api/me`, `/api/plants/:plantId/bootstrap`, and issue read endpoints from D1.
+5. Firebase Storage continues to hold attachment binaries during the first migration stages.
 
-## Environment variables
+## Recommended next repo steps
 
-- `SQL_CONNECTION_STRING`
-- `FIREBASE_PROJECT_ID`
-- `FIREBASE_SERVICE_ACCOUNT_JSON`
-- `SIGNALR_CONNECTION_STRING` once realtime migration begins
-
-## Security rule replacement
-
-Every plant-scoped route must:
-
-1. Verify Firebase ID token.
-2. Load `plant_members` for `(plant_id, uid)`.
-3. Require `is_active = 1`.
-4. Check action-specific permissions from `permissions_json`.
-5. Include `plant_id` in every SQL query.
+1. Bind your Cloudflare D1 database in `wrangler.jsonc`.
+2. Apply `migrations/0001_d1_core.sql`.
+3. Update the import/parity scripts to write to and read from D1 instead of SQL Server.
+4. Add D1-backed write endpoints once read parity is stable.
