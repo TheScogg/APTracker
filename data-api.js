@@ -55,6 +55,49 @@ export class SqlDataApi {
     return this.request('/me');
   }
 
+  updateCurrentUserContext(patch) {
+    return this.request('/me', {
+      method: 'PATCH',
+      body: patch
+    });
+  }
+
+  listPlants(params = {}) {
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') query.set(key, String(value));
+    });
+    const suffix = query.toString() ? `?${query}` : '';
+    return this.request(`/plants${suffix}`);
+  }
+
+  listPlantMembers(plantId, params = {}) {
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') query.set(key, String(value));
+    });
+    const suffix = query.toString() ? `?${query}` : '';
+    return this.request(`/plants/${encodeURIComponent(plantId)}/members${suffix}`);
+  }
+
+  updatePlantMember(plantId, uid, patch) {
+    return this.request(`/plants/${encodeURIComponent(plantId)}/members/${encodeURIComponent(uid)}`, {
+      method: 'PATCH',
+      body: patch
+    });
+  }
+
+  getGamificationState(plantId) {
+    return this.request(`/plants/${encodeURIComponent(plantId)}/gamification`);
+  }
+
+  awardGamification(plantId, payload) {
+    return this.request(`/plants/${encodeURIComponent(plantId)}/gamification/award`, {
+      method: 'POST',
+      body: payload
+    });
+  }
+
   loadPlantBootstrap(plantId) {
     return this.request(`/plants/${encodeURIComponent(plantId)}/bootstrap`);
   }
@@ -66,6 +109,12 @@ export class SqlDataApi {
     });
     const suffix = query.toString() ? `?${query}` : '';
     return this.request(`/plants/${encodeURIComponent(plantId)}/issues${suffix}`);
+  }
+
+  deleteIssue(plantId, issueId) {
+    return this.request(`/plants/${encodeURIComponent(plantId)}/issues/${encodeURIComponent(issueId)}`, {
+      method: 'DELETE'
+    });
   }
 
   getIssue(plantId, issueId) {
@@ -108,6 +157,29 @@ export class SqlDataApi {
     });
   }
 
+  listRoleAlerts(plantId, params = {}) {
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') query.set(key, String(value));
+    });
+    const suffix = query.toString() ? `?${query}` : '';
+    return this.request(`/plants/${encodeURIComponent(plantId)}/role-alerts${suffix}`);
+  }
+
+  createRoleAlert(plantId, payload) {
+    return this.request(`/plants/${encodeURIComponent(plantId)}/role-alerts`, {
+      method: 'POST',
+      body: payload
+    });
+  }
+
+  updateRoleAlert(plantId, alertId, patch) {
+    return this.request(`/plants/${encodeURIComponent(plantId)}/role-alerts/${encodeURIComponent(alertId)}`, {
+      method: 'PATCH',
+      body: patch
+    });
+  }
+
   subscribeToPlant(_plantId, _handlers = {}) {
     throw new Error('SQL realtime adapter is not implemented yet. Start with polling, then add Durable Objects or WebSockets if needed.');
   }
@@ -123,8 +195,15 @@ export class FirebaseDataApi {
   }
 
   getCurrentUserContext() { return this.unavailable('getCurrentUserContext'); }
+  updateCurrentUserContext() { return this.unavailable('updateCurrentUserContext'); }
+  listPlants() { return this.unavailable('listPlants'); }
+  listPlantMembers() { return this.unavailable('listPlantMembers'); }
+  updatePlantMember() { return this.unavailable('updatePlantMember'); }
+  getGamificationState() { return this.unavailable('getGamificationState'); }
+  awardGamification() { return this.unavailable('awardGamification'); }
   loadPlantBootstrap() { return this.unavailable('loadPlantBootstrap'); }
   listIssues() { return this.unavailable('listIssues'); }
+  deleteIssue() { return this.unavailable('deleteIssue'); }
   getIssue() { return this.unavailable('getIssue'); }
   createIssue() { return this.unavailable('createIssue'); }
   updateIssue() { return this.unavailable('updateIssue'); }
@@ -132,6 +211,9 @@ export class FirebaseDataApi {
   appendIssueEvent() { return this.unavailable('appendIssueEvent'); }
   listIssueAttachments() { return this.unavailable('listIssueAttachments'); }
   createIssueAttachment() { return this.unavailable('createIssueAttachment'); }
+  listRoleAlerts() { return this.unavailable('listRoleAlerts'); }
+  createRoleAlert() { return this.unavailable('createRoleAlert'); }
+  updateRoleAlert() { return this.unavailable('updateRoleAlert'); }
   subscribeToPlant() { return this.unavailable('subscribeToPlant'); }
 }
 

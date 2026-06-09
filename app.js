@@ -155,6 +155,10 @@ const dataApi = createDataApi({
 });
 const sqlPlantBootstrapCache = new Map();
 
+function shouldUseSqlBootstrap() {
+  return SQL_STAGING_READ_MODE;
+}
+
 function shouldUseSqlStagingReads(plantId = currentPlantId) {
   return SQL_STAGING_READ_MODE && SQL_STAGING_PLANT_IDS.has(String(plantId || ''));
 }
@@ -165,6 +169,16 @@ async function safeSqlRead(label, loader) {
     return await loader();
   } catch (error) {
     console.warn(`SQL staging read failed for ${label}; falling back to Firebase.`, error);
+    return null;
+  }
+}
+
+async function safeSqlBootstrapRead(label, loader) {
+  if (!shouldUseSqlBootstrap()) return null;
+  try {
+    return await loader();
+  } catch (error) {
+    console.warn(`SQL bootstrap read failed for ${label}; falling back to Firebase.`, error);
     return null;
   }
 }
@@ -1052,6 +1066,7 @@ let _activeRoleAlertCount = 0;
 let _roleAlertsShowAccepted = false;
 let _roleAlertsCache = [];
 let _roleAlertBadgeRefreshTimer = null;
+let _roleAlertsPollTimer = null;
 let _roleAlertsLoadToken = 0;
 let _roleAlertFocusIssueId = '';
 const ROLE_KEY_ALIASES = {
@@ -1069,6 +1084,16 @@ function _expandRoleAliases(roleKeys) {
     (ROLE_KEY_ALIASES[key] || [key]).forEach(v => out.add(v));
   });
   return Array.from(out);
+}
+
+async function loadPlantMembersForAlerts() {
+  if (!currentPlantId) return [];
+  if (shouldUseSqlStagingReads(currentPlantId)) {
+    const payload = await safeSqlRead(`plant members ${currentPlantId}`, () => dataApi.listPlantMembers(currentPlantId, { active: true }));
+    return Array.isArray(payload?.members) ? payload.members : [];
+  }
+  const membersSnap = await getDocs(collection(db, 'plants', currentPlantId, 'members'));
+  return membersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 
 function _normalizeRoleAlertRules(inputRules) {
@@ -1170,14 +1195,13 @@ async function queueRoleFeedAlert(issue, { statusKey, subStatus, note = '', work
     jobRoleKeys: []
   };
   try {
-    const membersSnap = await getDocs(collection(db, 'plants', currentPlantId, 'members'));
+    const members = await loadPlantMembersForAlerts();
     const roleKeys = _expandRoleAliases(Array.isArray(effectiveRoute.jobRoleKeys) ? effectiveRoute.jobRoleKeys : []);
     const categoryKey = String(statusKey || '').trim().toLowerCase();
     const categoryKeys = Array.isArray(effectiveRoute.categoryKeys) && effectiveRoute.categoryKeys.length
       ? Array.from(new Set(effectiveRoute.categoryKeys.map(v => String(v || '').trim().toLowerCase()).filter(Boolean)))
       : [categoryKey];
-    const recipientUserIds = membersSnap.docs
-      .map(d => ({ id: d.id, ...d.data() }))
+    const recipientUserIds = members
       .filter(m => m?.isActive !== false)
       .filter(m => {
         const hasExplicitSubscriptions = Object.prototype.hasOwnProperty.call(m || {}, 'alertCategorySubscriptions');
@@ -1194,27 +1218,65 @@ async function queueRoleFeedAlert(issue, { statusKey, subStatus, note = '', work
         const memberKeys = _expandRoleAliases(normalizedRoleKeys);
         return memberKeys.some(key => roleKeys.includes(key));
       })
-      .map(m => m.id);
-    const alertRef = await addDoc(collection(db, 'plants', currentPlantId, 'roleFeedAlerts'), {
-      issueId: issue.id,
-      machine: issue.machine || issue.machineCode || '',
-      statusKey,
-      subStatus: subStatus || '',
-      workflowId: normalizeWorkflowId(workflowId),
-      note: note || '',
-      feedKey: effectiveRoute.feedKey,
-      feedLabel: effectiveRoute.feedLabel,
-      categoryKey,
-      categoryKeys,
-      requiredJobRoleKeys: roleKeys,
-      recipientUserIds,
-      createdAt: serverTimestamp(),
-      createdBy: currentActor()
-    });
+      .map(m => m.id || m.uid);
+    let createdAlertId = '';
+    if (shouldUseSqlStagingReads(currentPlantId)) {
+      const payload = await dataApi.createRoleAlert(currentPlantId, {
+        issueId: issue.id,
+        machine: issue.machine || issue.machineCode || '',
+        statusKey,
+        subStatus: subStatus || '',
+        workflowId: normalizeWorkflowId(workflowId),
+        note: note || '',
+        feedKey: effectiveRoute.feedKey,
+        feedLabel: effectiveRoute.feedLabel,
+        categoryKey,
+        categoryKeys,
+        requiredJobRoleKeys: roleKeys,
+        recipientUserIds,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        createdBy: currentActor(),
+        raw: {
+          issueId: issue.id,
+          machine: issue.machine || issue.machineCode || '',
+          statusKey,
+          subStatus: subStatus || '',
+          workflowId: normalizeWorkflowId(workflowId),
+          note: note || '',
+          feedKey: effectiveRoute.feedKey,
+          feedLabel: effectiveRoute.feedLabel,
+          categoryKey,
+          categoryKeys,
+          requiredJobRoleKeys: roleKeys,
+          recipientUserIds,
+          createdBy: currentActor()
+        }
+      });
+      createdAlertId = payload?.alert?.alertId || '';
+    } else {
+      const alertRef = await addDoc(collection(db, 'plants', currentPlantId, 'roleFeedAlerts'), {
+        issueId: issue.id,
+        machine: issue.machine || issue.machineCode || '',
+        statusKey,
+        subStatus: subStatus || '',
+        workflowId: normalizeWorkflowId(workflowId),
+        note: note || '',
+        feedKey: effectiveRoute.feedKey,
+        feedLabel: effectiveRoute.feedLabel,
+        categoryKey,
+        categoryKeys,
+        requiredJobRoleKeys: roleKeys,
+        recipientUserIds,
+        createdAt: serverTimestamp(),
+        createdBy: currentActor()
+      });
+      createdAlertId = alertRef.id;
+    }
     if (currentUser?.uid && recipientUserIds.includes(currentUser.uid)) {
       showGameToast(`🔔 ${effectiveRoute.feedLabel}: Press ${issue.machine || 'Unknown'}`);
     }
-    void sendRoleAlertPush(alertRef.id);
+    if (createdAlertId) void sendRoleAlertPush(createdAlertId);
   } catch (e) {
     console.warn('Role feed alert enqueue failed', e);
   }
@@ -1224,6 +1286,10 @@ function stopRoleFeedAlertsWatcher() {
   if (_roleFeedAlertsUnsubscribe) {
     _roleFeedAlertsUnsubscribe();
     _roleFeedAlertsUnsubscribe = null;
+  }
+  if (_roleAlertsPollTimer) {
+    clearTimeout(_roleAlertsPollTimer);
+    _roleAlertsPollTimer = null;
   }
   _setActiveRoleAlertCount(0);
 }
@@ -1406,6 +1472,64 @@ window.clearRoleAlertBadge = function() {
 
 async function _loadActiveRoleAlertsForCurrentUser() {
   if (!currentPlantId || !currentUser?.uid) return [];
+  if (shouldUseSqlStagingReads(currentPlantId)) {
+    const payload = await safeSqlRead(`role alerts ${currentPlantId}`, () => dataApi.listRoleAlerts(currentPlantId, { limit: 80 }));
+    const sourceAlerts = Array.isArray(payload?.alerts) ? payload.alerts : [];
+    const alerts = [];
+    for (const alert of sourceAlerts) {
+      const issueId = String(alert.issueId || '').trim();
+      if (!issueId) continue;
+      const issue = issues.find(i => i.id === issueId) || null;
+      const issueLifecycle = issue?.lifecycle || null;
+      const isResolved = !!(alert.isResolved || (issue && (issue.resolved || issueLifecycle?.isResolved)));
+      const alertStatusKey = alert.statusKey || currentStatusKey(issue || {}) || '';
+      const alertWorkflowId = normalizeWorkflowId(alert.workflowId || '');
+      const workflowState = isResolved
+        ? 'resolved'
+        : (_getRoleAlertWorkflowState(issue || null, alertStatusKey, alertWorkflowId) || null);
+      const createdAt = toCompatTimestamp(alert.createdAt);
+      const createdAtLabel = createdAt?.toDate
+        ? createdAt.toDate().toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+        : '';
+      const issueMachine = issue && (issue.machine || issue.machineCode) ? (issue.machine || issue.machineCode) : 'Unknown';
+      const issueCurrentStatus = issue?.currentStatus || null;
+      const issueSubStatus = issueCurrentStatus?.subStatusKey || '';
+      const issueNote = issue?.note || '';
+      const workflowAcceptedBy = workflowState === 'accepted'
+        ? (
+            (alertWorkflowId && issue?.workflowStateByEntryHistory?.[alertWorkflowId]?.accepted?.by) ||
+            issue?.workflowStateHistory?.accepted?.by ||
+            issue?.workflowStateByStatusHistory?.[alertStatusKey]?.accepted?.by ||
+            null
+          )
+        : null;
+      alerts.push({
+        id: alert.alertId,
+        issueId,
+        machine: alert.raw?.machine || issueMachine,
+        feedLabel: alert.feedLabel || alert.categoryKey || alert.statusKey || 'Alert',
+        statusKey: alertStatusKey,
+        workflowId: alertWorkflowId,
+        subStatus: alert.raw?.subStatus || issueSubStatus,
+        categoryKey: alert.categoryKey || alert.statusKey || '',
+        note: alert.body || alert.raw?.note || issueNote,
+        createdAt,
+        createdAtLabel,
+        plantName: currentPlantName || currentPlantId || '',
+        workflowState,
+        isResolved,
+        isAccepted: isResolved || workflowState === 'accepted',
+        acceptedBy: workflowAcceptedBy || (isResolved ? (issue && (issue.resolvedBy || issue.reopenedBy || issue.workflowStateHistory?.finished?.by || null)) : null),
+        raw: alert.raw || { recipientUserIds: alert.recipientUserIds || [] }
+      });
+    }
+    alerts.sort((a, b) => {
+      const aMs = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+      const bMs = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+      return bMs - aMs;
+    });
+    return alerts;
+  }
   const q = query(
     collection(db, 'plants', currentPlantId, 'roleFeedAlerts'),
     where('recipientUserIds', 'array-contains', currentUser.uid),
@@ -1645,11 +1769,21 @@ window.focusIssueFromAlert = function(issueId) {
 window.deleteRoleAlert = async function(alertId, categoryKey, statusKey) {
   if (!currentPlantId || !alertId || !currentUser?.uid) return;
   try {
-  const alertRef = doc(db, 'plants', currentPlantId, 'roleFeedAlerts', alertId);
-  const snap = await getDoc(alertRef);
-  if (!snap.exists()) {
-    await openRoleAlertInboxModal();
-    return;
+    if (shouldUseSqlStagingReads(currentPlantId)) {
+      const existing = _roleAlertsCache.find(alert => alert.id === alertId);
+      const nextRecipients = (existing?.raw?.recipientUserIds || []).filter(uid => uid !== currentUser.uid);
+      await dataApi.updateRoleAlert(currentPlantId, alertId, { recipientUserIds: nextRecipients });
+      if (document.getElementById('role-alerts-modal')?.classList.contains('visible')) {
+        await _openRoleAlertInboxModalInternal({ resetToggle: false });
+      }
+      await _refreshRoleAlertBadgeCount();
+      return;
+    }
+    const alertRef = doc(db, 'plants', currentPlantId, 'roleFeedAlerts', alertId);
+    const snap = await getDoc(alertRef);
+    if (!snap.exists()) {
+      await openRoleAlertInboxModal();
+      return;
     }
     await updateDoc(alertRef, {
       recipientUserIds: arrayRemove(currentUser.uid)
@@ -1701,6 +1835,38 @@ window.unacceptRoleAlert = async function(issueId, statusKey, workflowId = '') {
 function startRoleFeedAlertsWatcher() {
   stopRoleFeedAlertsWatcher();
   if (!currentPlantId || !currentUser?.uid) return;
+  if (shouldUseSqlStagingReads(currentPlantId)) {
+    let active = true;
+    const poll = async () => {
+      if (!active || pageHidden || !currentPlantId) return;
+      try {
+        const alerts = await _loadActiveRoleAlertsForCurrentUser();
+        _roleAlertsCache = alerts;
+        _setActiveRoleAlertCount(alerts.filter(a => !a.isAccepted).length);
+        alerts.forEach(alert => {
+          if (_seenRoleFeedAlerts.has(alert.id)) return;
+          _seenRoleFeedAlerts.add(alert.id);
+          const createdMs = alert.createdAt?.toMillis ? alert.createdAt.toMillis() : 0;
+          if (createdMs && (Date.now() - createdMs) > (10 * 60 * 1000)) return;
+          _unreadRoleAlertCount += 1;
+          showGameToast(`🔔 ${alert.feedLabel || 'Alert'} · Press ${alert.machine || 'Unknown'}`);
+        });
+      } catch (err) {
+        console.warn('roleFeedAlerts SQL poll error', err);
+      }
+      if (active) _roleAlertsPollTimer = setTimeout(poll, 10000);
+    };
+    _roleFeedAlertsUnsubscribe = () => {
+      active = false;
+      if (_roleAlertsPollTimer) {
+        clearTimeout(_roleAlertsPollTimer);
+        _roleAlertsPollTimer = null;
+      }
+      _roleFeedAlertsUnsubscribe = null;
+    };
+    void poll();
+    return;
+  }
   const q = query(
     collection(db, 'plants', currentPlantId, 'roleFeedAlerts'),
     where('recipientUserIds', 'array-contains', currentUser.uid),
@@ -1749,11 +1915,15 @@ window.openRolePreferencesModal = async function() {
   msg.textContent = 'Loading categories…';
   list.innerHTML = '';
   try {
-    const [categoryOptions, memberSnap] = await Promise.all([
+    const [categoryOptions, memberPayload] = await Promise.all([
       Promise.resolve(getAvailableCategoryOptionsForPreferences()),
-      getDoc(plantMemberDocRef(currentPlantId, currentUser.uid))
+      shouldUseSqlStagingReads(currentPlantId)
+        ? safeSqlRead(`member ${currentPlantId}:${currentUser.uid}`, () => dataApi.listPlantMembers(currentPlantId, { active: false }))
+        : getDoc(plantMemberDocRef(currentPlantId, currentUser.uid))
     ]);
-    const member = memberSnap.exists() ? (memberSnap.data() || {}) : {};
+    const member = shouldUseSqlStagingReads(currentPlantId)
+      ? ((memberPayload?.members || []).find(entry => (entry.uid || entry.id) === currentUser.uid) || {})
+      : (memberPayload.exists() ? (memberPayload.data() || {}) : {});
     _rolePrefsDraft = Array.isArray(member.alertCategorySubscriptions)
       ? member.alertCategorySubscriptions.map(v => String(v || '').trim().toLowerCase()).filter(Boolean)
       : [];
@@ -1784,11 +1954,17 @@ window.saveRolePreferences = async function() {
     .filter(Boolean);
   try {
     msg.textContent = 'Saving…';
-    await updateDoc(plantMemberDocRef(currentPlantId, currentUser.uid), {
-      alertCategorySubscriptions: selected,
-      updatedAt: serverTimestamp(),
-      updatedBy: currentActor()
-    });
+    if (shouldUseSqlStagingReads(currentPlantId)) {
+      await dataApi.updatePlantMember(currentPlantId, currentUser.uid, {
+        alertCategorySubscriptions: selected
+      });
+    } else {
+      await updateDoc(plantMemberDocRef(currentPlantId, currentUser.uid), {
+        alertCategorySubscriptions: selected,
+        updatedAt: serverTimestamp(),
+        updatedBy: currentActor()
+      });
+    }
     msg.textContent = 'Saved.';
     setTimeout(() => {
       closeRolePreferencesModal();
@@ -2472,11 +2648,26 @@ async function hydrateCurrentPlantView() {
 // self-migrates by writing plant docs + member docs and switching to plantIds.
 async function loadUserPlants() {
   try {
-    const [userSnap, sqlContext] = await Promise.all([
-      getDoc(doc(db, 'users', currentUser.uid)),
-      safeSqlRead('current user context', () => dataApi.getCurrentUserContext())
-    ]);
-    const userData = userSnap.exists() ? userSnap.data() : {};
+    const sqlContext = await safeSqlBootstrapRead('current user context', () => dataApi.getCurrentUserContext());
+    let userData = {};
+    let usingSqlBootstrap = false;
+    if (sqlContext?.user) {
+      usingSqlBootstrap = true;
+      userData = {
+        displayName: sqlContext.user.displayName || currentUser?.displayName || currentUser?.email || '',
+        email: sqlContext.user.email || currentUser?.email || '',
+        photoURL: sqlContext.user.photoUrl || currentUser?.photoURL || '',
+        fullName: sqlContext.user.fullName || '',
+        ssoNumber: sqlContext.user.ssoNumber || '',
+        lastPlant: sqlContext.user.lastPlantId || '',
+        requestedPlantIds: Array.isArray(sqlContext.user.requestedPlantIds) ? sqlContext.user.requestedPlantIds : [],
+        profileOnboarding: sqlContext.user.profileOnboarding || null,
+        globalLifetimeXp: Number(sqlContext.user.globalLifetimeXp || 0)
+      };
+    } else {
+      const userSnap = await getDoc(doc(db, 'users', currentUser.uid));
+      userData = userSnap.exists() ? userSnap.data() : {};
+    }
     currentUserProfileData = userData || {};
     availablePlantsForOnboarding = await loadAvailablePlantsForOnboarding();
     _applyFirestoreThemePrefs(userData.themePrefs);
@@ -2506,7 +2697,7 @@ async function loadUserPlants() {
         lastPlant: currentPlantId,
         plantIds: userPlants.map(p => p.id)
       };
-    } else if (Array.isArray(userData.plantIds) && userData.plantIds.length > 0) {
+    } else if (!usingSqlBootstrap && Array.isArray(userData.plantIds) && userData.plantIds.length > 0) {
       // ── New structure: fetch each plant doc for name/location ──
       const plantDocs = await Promise.all(
         userData.plantIds.map(id => getDoc(doc(db, 'plants', id)))
@@ -2517,7 +2708,7 @@ async function loadUserPlants() {
       const lastPlantValid = userData.lastPlant && userPlants.some(p => p.id === userData.lastPlant);
       currentPlantId = lastPlantValid ? userData.lastPlant : (userPlants[0]?.id || null);
 
-    } else if (Array.isArray(userData.plants) && userData.plants.length > 0) {
+    } else if (!usingSqlBootstrap && Array.isArray(userData.plants) && userData.plants.length > 0) {
       // ── Old structure: migrate plant metadata into plant docs + member docs ──
       userPlants = userData.plants;
       const lastPlantValid = userData.lastPlant && userPlants.some(p => p.id === userData.lastPlant);
@@ -2547,6 +2738,18 @@ async function loadUserPlants() {
 
 async function loadAvailablePlantsForOnboarding() {
   if (DEMO_MODE || NO_AUTH_MODE) return [];
+  const sqlPlants = await safeSqlBootstrapRead('plant directory', () => dataApi.listPlants({ active: true }));
+  if (Array.isArray(sqlPlants?.plants) && sqlPlants.plants.length) {
+    return sqlPlants.plants
+      .map(plant => ({
+        id: plant.plantId,
+        name: plant.name || plant.plantId,
+        location: plant.location || '',
+        isActive: plant.isActive !== false
+      }))
+      .filter(p => p.isActive)
+      .sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
+  }
   try {
     const snap = await getDocs(collection(db, 'plants'));
     return snap.docs
@@ -2703,7 +2906,16 @@ async function switchPlant(plantId) {
   currentPlantName = (userPlants.find(p => p.id === plantId) || {}).name || plantId;
   document.getElementById('plant-name-display').textContent = currentPlantName;
   // Save last plant to user doc
-  try { await setDoc(doc(db, 'users', currentUser.uid), { lastPlant: currentPlantId }, { merge: true }); } catch(e) {}
+  if (shouldUseSqlBootstrap()) {
+    try {
+      await dataApi.updateCurrentUserContext({ lastPlantId: currentPlantId });
+      currentUserProfileData = { ...currentUserProfileData, lastPlant: currentPlantId };
+    } catch (e) {
+      console.warn('Could not persist last plant in D1', e);
+    }
+  } else {
+    try { await setDoc(doc(db, 'users', currentUser.uid), { lastPlant: currentPlantId }, { merge: true }); } catch(e) {}
+  }
   try { localStorage.setItem('apTrackerLastPlant', currentPlantId); } catch(e) {}
   buildPlantDropdown();
   closePlantDropdown();
@@ -3386,6 +3598,7 @@ function checkBadgeTrigger(badge, stats) {
 
 async function checkAndAwardBadges() {
   if (!currentPlantId || !currentUser?.uid) return;
+  if (shouldUseSqlStagingReads(currentPlantId)) return;
   const defs = (gameBadgeDefs.length ? gameBadgeDefs : DEFAULT_BADGE_DEFS).filter(b => b.isEnabled !== false);
   for (const badge of defs) {
     if (gameUserBadges[badge.id]) continue; // already earned
@@ -3419,6 +3632,7 @@ async function checkAndAwardBadges() {
 
 async function ensureGamificationConfig() {
   if (!currentPlantId) return;
+  if (shouldUseSqlStagingReads(currentPlantId)) return;
   const ref = gameConfigDoc();
   const snap = await getDoc(ref);
   if (!snap.exists()) await setDoc(ref, { ...GAME_DEFAULT_CONFIG, schemaVersion: 1, updatedAt: serverTimestamp() }, { merge: true });
@@ -3434,7 +3648,33 @@ function stopGamificationListeners() {
   if (gameLeaderboardUnsubscribe) { gameLeaderboardUnsubscribe(); gameLeaderboardUnsubscribe = null; }
   if (gameConfigUnsubscribe) { gameConfigUnsubscribe(); gameConfigUnsubscribe = null; }
   if (gameBadgesUnsubscribe) { gameBadgesUnsubscribe(); gameBadgesUnsubscribe = null; }
+  if (gameSqlPollTimer) { clearTimeout(gameSqlPollTimer); gameSqlPollTimer = null; }
   gameMissionProgressCache.clear();
+}
+
+function applySqlGamificationState(payload = {}) {
+  gameConfig = payload.config?.config || GAME_DEFAULT_CONFIG;
+  gameBadgeDefs = Array.isArray(gameConfig.badges) ? gameConfig.badges : DEFAULT_BADGE_DEFS;
+  gameUserBadges = payload.badges?.earnedBadges || {};
+  gameUserStats = payload.stats || { totals: { xp: 0, level: 1 }, streaks: { current: 0 } };
+  gameMissions = Array.isArray(payload.missions) ? payload.missions : [];
+  if (payload.user && Number.isFinite(Number(payload.user.globalLifetimeXp))) {
+    userLifetimeXp = Math.max(0, Number(payload.user.globalLifetimeXp || 0));
+  }
+  const leaderboard = payload.leaderboard || {};
+  if (Array.isArray(leaderboard.entries)) {
+    gameLeaderboard = leaderboard.entries;
+  } else if (leaderboard.entriesByUid && typeof leaderboard.entriesByUid === 'object') {
+    gameLeaderboard = Object.values(leaderboard.entriesByUid).sort((a, b) => Number(b?.xp || 0) - Number(a?.xp || 0));
+  } else {
+    gameLeaderboard = [];
+  }
+  renderGamePanel();
+  const defs = gameBadgeDefs.length ? gameBadgeDefs : DEFAULT_BADGE_DEFS;
+  (Array.isArray(payload.awardSummary?.badges) ? payload.awardSummary.badges : []).forEach(entry => {
+    const badge = defs.find(def => def.id === entry.id) || entry;
+    if (badge?.id) showBadgeEarnedCelebration(badge);
+  });
 }
 
 function startGamificationListeners() {
@@ -3443,6 +3683,25 @@ function startGamificationListeners() {
 
   // Reset so the first Firestore snapshot doesn't false-trigger a level-up celebration
   gamePrevLevel = 0;
+
+  if (shouldUseSqlStagingReads(currentPlantId)) {
+    const poll = async () => {
+      if (!currentPlantId || !currentUser?.uid) return;
+      if (pageHidden) {
+        gameSqlPollTimer = setTimeout(poll, 10000);
+        return;
+      }
+      try {
+        const payload = await safeSqlRead(`gamification ${currentPlantId}`, () => dataApi.getGamificationState(currentPlantId));
+        if (payload) applySqlGamificationState(payload);
+      } catch (e) {
+        console.warn('Gamification SQL poll failed:', e?.message || e);
+      }
+      gameSqlPollTimer = setTimeout(poll, 10000);
+    };
+    void poll();
+    return;
+  }
 
   // Config listener — keeps gameBadgeDefs + leaderboardPeriod live
   gameConfigUnsubscribe = onSnapshot(gameConfigDoc(), snap => {
@@ -3546,6 +3805,40 @@ async function awardGamification(reason, context = {}) {
   if (DEMO_MODE) return;
   if (!currentPlantId || !currentUser?.uid) return;
   try {
+    if (shouldUseSqlStagingReads(currentPlantId)) {
+      const tags = Array.isArray(context.tags) ? context.tags.map(t => String(t || '').trim()).filter(Boolean) : [];
+      if (reason === 'photo_attached') {
+        const photoCapKey = `photo:${context.issueId || 'none'}`;
+        const priorPhotoCount = Number(gameCapTracker.get(photoCapKey) || 0);
+        const maxPhotos = Number(gameConfig?.caps?.photo_attached_per_issue || 0);
+        if (maxPhotos > 0 && priorPhotoCount >= maxPhotos) return;
+      }
+      if (reason === 'status_changed_valid') {
+        const hourBucket = Math.floor(Date.now() / 3600000);
+        const statusCapKey = `status:${context.issueId || 'none'}:${hourBucket}`;
+        const priorStatusCount = Number(gameCapTracker.get(statusCapKey) || 0);
+        const maxStatusPerHour = Number(gameConfig?.caps?.status_changed_valid_per_issue_per_hour || 0);
+        if (maxStatusPerHour > 0 && priorStatusCount >= maxStatusPerHour) return;
+      }
+      const payload = await dataApi.awardGamification(currentPlantId, { reason, context: { ...context, tags } });
+      if (payload?.stats || payload?.config || payload?.missions || payload?.badges || payload?.leaderboard) {
+        applySqlGamificationState(payload);
+      }
+      if (reason === 'photo_attached') {
+        const photoCapKey = `photo:${context.issueId || 'none'}`;
+        gameCapTracker.set(photoCapKey, Number(gameCapTracker.get(photoCapKey) || 0) + 1);
+      }
+      if (reason === 'status_changed_valid') {
+        const hourBucket = Math.floor(Date.now() / 3600000);
+        const statusCapKey = `status:${context.issueId || 'none'}:${hourBucket}`;
+        gameCapTracker.set(statusCapKey, Number(gameCapTracker.get(statusCapKey) || 0) + 1);
+      }
+      const awardSummary = payload?.awardSummary || null;
+      if (awardSummary?.awarded && Number(awardSummary.totalDelta || 0)) {
+        showGameToast(`${awardSummary.totalDelta > 0 ? '+' : ''}${awardSummary.totalDelta} XP • ${reason.replaceAll('_', ' ')}`);
+      }
+      return;
+    }
     if (!gameConfig) {
       const cfgSnap = await getDoc(gameConfigDoc());
       gameConfig = cfgSnap.exists() ? cfgSnap.data() : GAME_DEFAULT_CONFIG;
@@ -4197,6 +4490,7 @@ let gameMissionsUnsubscribe = null;
 let gameLeaderboardUnsubscribe = null;
 let gameConfigUnsubscribe = null;
 let gameBadgesUnsubscribe = null;
+let gameSqlPollTimer = null;
 let gamePrevLevel = 0;
 const gameCapTracker = new Map();
 const gameMissionPrevPct = new Map();
@@ -4432,6 +4726,23 @@ async function completeProfileOnboarding() {
     }, { merge: true });
   });
   await batch.commit();
+  if (shouldUseSqlBootstrap()) {
+    try {
+      await dataApi.updateCurrentUserContext({
+        displayName: currentUser.displayName || currentUser.email || '',
+        fullName,
+        ssoNumber,
+        requestedPlantIds: safePlantIds,
+        profileOnboarding: {
+          completed: true,
+          version: PROFILE_ONBOARDING_VERSION,
+          completedAt: new Date().toISOString()
+        }
+      });
+    } catch (e) {
+      console.warn('Could not sync onboarding profile to D1', e);
+    }
+  }
 
   currentUserProfileData = {
     ...currentUserProfileData,
@@ -4569,7 +4880,7 @@ async function bootstrapSignedInSession(user) {
   buildFloorMap();
   await loadUserPlants();
   // Recovery: find real plants from alternative sources
-  if (!DEMO_MODE && userPlants.some(p => p.id === DEMO_PLANT_ID)) {
+  if (!DEMO_MODE && !shouldUseSqlBootstrap() && userPlants.some(p => p.id === DEMO_PLANT_ID)) {
     try {
       // Try user's own doc which we already have
       const userSnap2 = await rawGetDoc(doc(db, 'users', currentUser.uid));
@@ -4669,6 +4980,25 @@ function withTimeout(promise, timeoutMs, description = 'Operation') {
     }, timeoutMs);
   });
   return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timeoutId));
+}
+
+function isPermissionDeniedError(error) {
+  return error?.code === 'permission-denied'
+    || String(error?.message || '').toLowerCase().includes('permission-denied');
+}
+
+function hydrateOfflineDemoSandbox() {
+  PRESSES = { ...DEFAULT_PRESSES };
+  ALL_MACHINES = Object.values(PRESSES).flat();
+  STATUSES = deepCopy(DEFAULT_STATUSES);
+  SUBCATEGORY_ROUTES = {};
+  rebuildDerivedStatus();
+  currentUserRole = 'editor';
+  currentUserPermissions = { ...DEMO_PERMISSIONS };
+  applyRoleUI();
+  buildFloorMap();
+  seedInMemoryDemoIssues();
+  setSyncStatus('ok', 'Offline Demo Sandbox - loaded local demo data');
 }
 
 function seedInMemoryDemoIssues() {
@@ -4781,12 +5111,16 @@ async function ensureDemoPlantAccess() {
     const plantRef = doc(db, 'plants', DEMO_PLANT_ID);
     const memberRef = plantMemberDocRef(DEMO_PLANT_ID, currentUser.uid);
     const userRef = doc(db, 'users', currentUser.uid);
-    
-    // Race setDoc operations with a short timeout to prevent indefinite hangs
-    await withTimeout(setDoc(memberRef, demoMemberPayload('editor'), { merge: true }), 2000, 'setDoc memberRef');
-    await withTimeout(setDoc(userRef, { plantIds: [DEMO_PLANT_ID], lastPlant: DEMO_PLANT_ID, isDemoUser: true }, { merge: true }), 2000, 'setDoc userRef');
 
-    const snap = await withTimeout(getDoc(plantRef), 2000, 'getDoc plantRef');
+    await withTimeout(setDoc(memberRef, demoMemberPayload('editor'), { merge: true }), 7000, 'setDoc memberRef');
+    await withTimeout(setDoc(userRef, { plantIds: [DEMO_PLANT_ID], lastPlant: DEMO_PLANT_ID, isDemoUser: true }, { merge: true }), 7000, 'setDoc userRef');
+
+    const memberSnap = await withTimeout(getDoc(memberRef), 7000, 'getDoc memberRef');
+    if (!memberSnap.exists()) {
+      throw new Error('Demo member access was not visible after write');
+    }
+
+    const snap = await withTimeout(getDoc(plantRef), 4000, 'getDoc plantRef');
 
     if (!snap.exists()) {
       await withTimeout(setDoc(plantRef, {
@@ -4795,10 +5129,16 @@ async function ensureDemoPlantAccess() {
         createdAt: serverTimestamp(),
         isActive: true,
         isDemo: true
-      }), 2000, 'setDoc plantRef');
+      }), 4000, 'setDoc plantRef');
     }
+    return true;
   } catch (e) {
-    console.error('ensureDemoPlantAccess failed or timed out:', e);
+    if (isPermissionDeniedError(e)) {
+      console.warn('Demo plant access is not available yet; using local demo sandbox fallback.', e);
+    } else {
+      console.warn('Demo plant bootstrap timed out; using local demo sandbox fallback.', e);
+    }
+    return false;
   }
 }
 
@@ -4813,44 +5153,72 @@ async function bootstrapDemoSession(user) {
   if (emailEl) emailEl.textContent = 'Editable sandbox for exploring the app';
 
   applyDemoShell();
-  
-  try {
-    await ensureDemoPlantAccess();
-  } catch (e) {
-    console.error('ensureDemoPlantAccess threw error in bootstrap:', e);
-  }
 
   currentPlantId = DEMO_PLANT_ID;
   currentPlantName = DEMO_PLANT_NAME;
   userPlants = [{ id: DEMO_PLANT_ID, name: DEMO_PLANT_NAME, location: 'Demo Location' }];
   buildPlantDropdown();
   document.getElementById('plant-name-display').textContent = currentPlantName;
-  
+
+  const hasRemoteDemoAccess = await ensureDemoPlantAccess();
+
+  try {
+    await loadStoreConfig();
+  } catch (e) {
+    console.warn('Demo store config load failed; continuing with defaults.', e);
+  }
+
+  if (!hasRemoteDemoAccess) {
+    hydrateOfflineDemoSandbox();
+    setTodayDate();
+    buildDemoGuide();
+    return;
+  }
+
+  let remoteDemoBootstrapReady = true;
   try {
     await withTimeout(
-      Promise.all([loadPlantPresses(), loadCurrentMember(currentPlantId), loadStoreConfig()]),
-      3000,
-      'bootstrapDemoSession config promises'
+      Promise.all([loadPlantPresses(), loadCurrentMember(currentPlantId)]),
+      7000,
+      'bootstrapDemoSession plant bootstrap'
     );
   } catch (e) {
-    console.error('loadPlantPresses/loadCurrentMember/loadStoreConfig failed or timed out in bootstrap:', e);
+    remoteDemoBootstrapReady = false;
+    console.warn('Demo config bootstrap failed; falling back to local sandbox data.', e);
   }
-  
+
+  if (!remoteDemoBootstrapReady) {
+    hydrateOfflineDemoSandbox();
+    setTodayDate();
+    buildDemoGuide();
+    return;
+  }
+
   currentUserRole = 'editor';
   currentUserPermissions = { ...DEMO_PERMISSIONS };
   applyRoleUI();
   buildFloorMap();
-  
+
   try {
-    await withTimeout(loadConfig(), 2000, 'loadConfig');
+    await withTimeout(loadConfig(), 5000, 'loadConfig');
   } catch (e) {
-    console.error('loadConfig failed or timed out in bootstrap:', e);
+    if (isPermissionDeniedError(e)) {
+      console.warn('Demo status config is not readable yet; using local defaults.', e);
+    } else {
+      console.warn('Demo status config load timed out; using local defaults.', e);
+    }
+    STATUSES = deepCopy(DEFAULT_STATUSES);
+    SUBCATEGORY_ROUTES = {};
+    rebuildDerivedStatus();
+    refreshStatusDependentUI();
   }
-  
+
   try {
     startListener();
   } catch (e) {
-    console.error('startListener failed in bootstrap:', e);
+    console.warn('Demo listener failed to start; using local demo issues.', e);
+    seedInMemoryDemoIssues();
+    setSyncStatus('ok', 'Offline Demo Sandbox - loaded local demo data');
   }
   
   setTodayDate();
@@ -8114,6 +8482,36 @@ window.updateStatusEntry = async (id, idx, status, subStatus, note, dateTime, ph
   // Recalculate current status from last entry
   const last = history[history.length - 1];
   try {
+    if (shouldUseSqlStagingReads(currentPlantId)) {
+      const nextIssue = applyIssuePatchLocally(latestIssue || issue, {
+        statusHistory: history,
+        ...(Array.isArray(photos) ? { photos: issue.photos || [] } : {}),
+        ...buildIssueV2CompatLocal({
+          machineCode: issue.machine || issue.machineCode || '',
+          statusKey: last.status || 'open',
+          subStatus: last.subStatus || '',
+          statusDateTime: last.dateTime || fmtDate(new Date()),
+          note: last.note || '',
+          baseIssue: latestIssue || issue
+        })
+      });
+      nextIssue.id = id;
+      if ((prev?.status || 'open') !== (last.status || 'open') || (prev?.subStatus || '') !== (last.subStatus || '')) {
+        await commitSqlIssueWrite(id, nextIssue, {
+          events: [sqlEventPayload('status_changed', {
+            fromStatusKey: prev?.status || currentStatusKey(latestIssue || issue),
+            fromSubStatusKey: prev?.subStatus || '',
+            toStatusKey: last.status || 'open',
+            toSubStatusKey: last.subStatus || '',
+            note: last.note || ''
+          })]
+        });
+      } else {
+        await commitSqlIssueWrite(id, nextIssue);
+      }
+      issueEventHistoryCache.delete(id);
+      return;
+    }
     const issuePatch = {
       statusHistory: history,
       ...buildIssueV2Compat({
@@ -8156,6 +8554,35 @@ window.removeStatusEntry = async (id, idx) => {
   history.splice(idx, 1);
   const last = history[history.length - 1];
   try {
+    if (shouldUseSqlStagingReads(currentPlantId)) {
+      const nextIssue = applyIssuePatchLocally(latestIssue || issue, {
+        statusHistory: history,
+        ...buildIssueV2CompatLocal({
+          machineCode: issue.machine || issue.machineCode || '',
+          statusKey: last.status || 'open',
+          subStatus: last.subStatus || '',
+          statusDateTime: last.dateTime || fmtDate(new Date()),
+          note: last.note || '',
+          baseIssue: latestIssue || issue
+        })
+      });
+      nextIssue.id = id;
+      if ((prev?.status || 'open') !== (last.status || 'open') || (prev?.subStatus || '') !== (last.subStatus || '')) {
+        await commitSqlIssueWrite(id, nextIssue, {
+          events: [sqlEventPayload('status_changed', {
+            fromStatusKey: prev?.status || currentStatusKey(latestIssue || issue),
+            fromSubStatusKey: prev?.subStatus || '',
+            toStatusKey: last.status || 'open',
+            toSubStatusKey: last.subStatus || '',
+            note: 'Timeline entry removed'
+          })]
+        });
+      } else {
+        await commitSqlIssueWrite(id, nextIssue);
+      }
+      issueEventHistoryCache.delete(id);
+      return;
+    }
     const issuePatch = {
       statusHistory: history,
       ...buildIssueV2Compat({
@@ -8203,6 +8630,44 @@ window.setStatusCurrentFromHistory = async (id, idx) => {
   };
   history.push(nextEntry);
   try {
+    if (shouldUseSqlStagingReads(currentPlantId)) {
+      const nextIssue = applyIssuePatchLocally(issue, {
+        statusHistory: history,
+        workflowState: nextEntry.status !== 'resolved' ? 'called' : 'finished',
+        workflowStateHistory: {
+          ...(issue?.workflowStateHistory || {}),
+          [nextEntry.status !== 'resolved' ? 'called' : 'finished']: { by: currentActor(), at: new Date().toISOString() }
+        },
+        workflowStateByStatus: { ...(issue?.workflowStateByStatus || {}), [nextEntry.status]: 'called' },
+        workflowStateByEntry: { ...(issue?.workflowStateByEntry || {}), [workflowId]: 'called' },
+        workflowStateByEntryHistory: {
+          ...(issue?.workflowStateByEntryHistory || {}),
+          [workflowId]: { ...((issue?.workflowStateByEntryHistory || {})[workflowId] || {}), called: { by: currentActor(), at: new Date().toISOString() } }
+        },
+        ...buildIssueV2CompatLocal({
+          machineCode: issue.machine || issue.machineCode || '',
+          statusKey: nextEntry.status,
+          subStatus: nextEntry.subStatus,
+          statusDateTime: nextEntry.dateTime,
+          note: nextEntry.note,
+          baseIssue: issue,
+          forceReopenIncrement: nextEntry.status !== 'resolved'
+        })
+      });
+      nextIssue.id = id;
+      await commitSqlIssueWrite(id, nextIssue, {
+        events: [sqlEventPayload('status_changed', {
+          fromStatusKey: prev?.status || currentStatusKey(issue),
+          fromSubStatusKey: prev?.subStatus || '',
+          toStatusKey: nextEntry.status,
+          toSubStatusKey: nextEntry.subStatus || '',
+          note: 'Set current from history'
+        })]
+      });
+      issueEventHistoryCache.delete(id);
+      await awardGamification('status_changed_valid', { issueId: id, dedupeSuffix: `set-current-${Date.now()}`, tags: ['status:changed', `status:${nextEntry.status}`] });
+      return;
+    }
     const patch = {
       statusHistory: history,
       [`workflowStateByStatus.${nextEntry.status}`]: 'called',
@@ -9138,6 +9603,16 @@ window.deleteIssue = async id => {
   if (!currentUserPermissions.canEditIssue) return;
   if (!confirm('Delete this issue permanently?')) return;
   try {
+    if (shouldUseSqlStagingReads(currentPlantId)) {
+      await dataApi.deleteIssue(currentPlantId, id);
+      clearIssueReminder(id);
+      issuesById.delete(id);
+      issueEventHistoryCache.delete(id);
+      issueDetailsHydrationInFlight.delete(id);
+      rebuildIssuesArrayFromMap();
+      refreshVisibleData();
+      return;
+    }
     const batch = writeBatch(db);
     batch.delete(plantDoc('issues', id));
     const alertsSnap = await getDocs(query(collection(db, 'plants', currentPlantId, 'roleFeedAlerts'), where('issueId', '==', id)));

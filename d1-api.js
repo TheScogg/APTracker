@@ -1,12 +1,18 @@
 import {
   serializeGamificationConfig,
+  serializeGameLeaderboard,
+  serializeGameMission,
+  serializeGameMissionProgress,
   serializeIssue,
   serializeIssueAttachment,
   serializeIssueEvent,
   serializePlant,
   serializePlantMember,
   serializePressConfig,
+  serializeRoleFeedAlert,
   serializeStatusConfig,
+  serializeUserBadges,
+  serializeUserGameStats,
   serializeUserContextRows
 } from './api/src/serializers.js';
 
@@ -80,6 +86,11 @@ function jsonString(value, fallback = null) {
   return JSON.stringify(value);
 }
 
+function jsonOrNull(value) {
+  if (value == null) return null;
+  return JSON.stringify(value);
+}
+
 function stringOrNull(value) {
   if (value == null) return null;
   const text = String(value).trim();
@@ -92,6 +103,47 @@ function numberOrZero(value) {
 
 function numberOrNull(value) {
   return Number.isFinite(Number(value)) ? Number(value) : null;
+}
+
+const DEFAULT_BADGE_DEFS = [
+  { id: 'badge_first_resolve', name: 'First Responder', icon: '✅', description: 'Resolve your first issue', triggerType: 'issues_resolved', threshold: 1, xpReward: 25, isEnabled: true },
+  { id: 'badge_streak_3', name: 'On a Roll', icon: '🔥', description: 'Maintain a 3-day streak', triggerType: 'streak_days', threshold: 3, xpReward: 30, isEnabled: true },
+  { id: 'badge_streak_10', name: 'Committed', icon: '💪', description: '10-day streak', triggerType: 'streak_days', threshold: 10, xpReward: 100, isEnabled: true },
+  { id: 'badge_photo_pro', name: 'Photo Pro', icon: '📸', description: 'Attach 50 photos', triggerType: 'photos_attached', threshold: 50, xpReward: 75, isEnabled: true },
+  { id: 'badge_level_5', name: 'Veteran', icon: '⭐', description: 'Reach Level 5', triggerType: 'level_reached', threshold: 5, xpReward: 150, isEnabled: true },
+  { id: 'badge_xp_500', name: 'XP Hunter', icon: '⚡', description: 'Earn 500 total XP', triggerType: 'xp_milestone', threshold: 500, xpReward: 50, isEnabled: true },
+  { id: 'badge_resolver_10', name: 'Problem Solver', icon: '🏆', description: 'Resolve 10 issues', triggerType: 'issues_resolved', threshold: 10, xpReward: 100, isEnabled: true }
+];
+
+function gameLevelFromXp(xp) {
+  const safeXp = Math.max(0, Number(xp || 0));
+  return Math.max(1, Math.floor(Math.sqrt(safeXp / 100)) + 1);
+}
+
+function checkBadgeTrigger(badge, stats) {
+  const threshold = Number(badge?.threshold || 1);
+  switch (badge?.triggerType) {
+    case 'xp_milestone': return Number(stats?.totals?.xp || 0) >= threshold;
+    case 'level_reached': return Number(stats?.totals?.level || 1) >= threshold;
+    case 'streak_days': return Number(stats?.streaks?.current || 0) >= threshold;
+    case 'issues_resolved': return Number(stats?.totals?.issuesResolved || 0) >= threshold;
+    case 'photos_attached': return Number(stats?.totals?.photosAttached || 0) >= threshold;
+    case 'issues_created': return Number(stats?.totals?.issuesCreated || 0) >= threshold;
+    case 'missions_completed': return Number(stats?.totals?.missionsCompleted || 0) >= threshold;
+    default: return false;
+  }
+}
+
+function missionReasonMatches(mission, reason) {
+  const type = mission?.objective?.type || '';
+  if (type === 'resolve_issues_older_than_hours') return reason === 'issue_resolved';
+  if (type === 'status_changes') return reason === 'status_changed_valid';
+  if (type === 'workflow_advances') return reason === 'workflow_step_advance';
+  if (type === 'serial_captures') return reason === 'serial_captured_when_required';
+  if (type === 'photo_attachments') return reason === 'photo_attached';
+  if (type === 'issues_created') return reason === 'issue_created_complete';
+  if (type.startsWith('trigger:')) return type.slice(8) === reason;
+  return false;
 }
 
 function buildCurrentStatusFromIssue(issue = {}) {
@@ -394,6 +446,8 @@ async function upsertIssueWriteBundle(db, plantId, body, user) {
 async function deleteIssue(db, plantId, issueId, user) {
   await requirePlantPermission(db, plantId, user, 'canEditIssue');
   await db.batch([
+    db.prepare('DELETE FROM role_feed_alert_recipients WHERE alert_id IN (SELECT alert_id FROM role_feed_alerts WHERE plant_id = ? AND issue_id = ?)').bind(plantId, issueId),
+    db.prepare('DELETE FROM role_feed_alerts WHERE plant_id = ? AND issue_id = ?').bind(plantId, issueId),
     db.prepare('DELETE FROM issue_attachments WHERE plant_id = ? AND issue_id = ?').bind(plantId, issueId),
     db.prepare('DELETE FROM issue_events WHERE plant_id = ? AND issue_id = ?').bind(plantId, issueId),
     db.prepare('DELETE FROM issues WHERE plant_id = ? AND issue_id = ?').bind(plantId, issueId)
@@ -434,7 +488,29 @@ async function requirePlantPermission(db, plantId, user, permissionName) {
   return member;
 }
 
+async function upsertAuthUserRow(db, user) {
+  await run(
+    db,
+    `
+      INSERT INTO users (
+        uid, email, display_name, photo_url, updated_at
+      ) VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(uid) DO UPDATE SET
+        email = COALESCE(excluded.email, users.email),
+        display_name = COALESCE(excluded.display_name, users.display_name),
+        photo_url = COALESCE(excluded.photo_url, users.photo_url),
+        updated_at = excluded.updated_at
+    `,
+    user.uid,
+    stringOrNull(user.email),
+    stringOrNull(user.name),
+    stringOrNull(user.picture),
+    nowIso()
+  );
+}
+
 async function getCurrentUserContext(db, user) {
+  await upsertAuthUserRow(db, user);
   const rows = await all(
     db,
     `
@@ -442,8 +518,13 @@ async function getCurrentUserContext(db, user) {
         u.uid,
         u.email,
         u.display_name,
+        u.full_name,
+        u.sso_number,
         u.photo_url,
         u.last_plant_id,
+        u.requested_plant_ids_json,
+        u.profile_onboarding_json,
+        u.global_lifetime_xp,
         pm.plant_id,
         pm.role,
         pm.is_active,
@@ -460,6 +541,523 @@ async function getCurrentUserContext(db, user) {
   return jsonResponse({
     auth: user,
     ...serializeUserContextRows(rows)
+  });
+}
+
+async function updateCurrentUserContext(db, user, patch = {}) {
+  await upsertAuthUserRow(db, user);
+  const updates = [];
+  const values = [];
+
+  if (Object.prototype.hasOwnProperty.call(patch, 'lastPlantId')) {
+    updates.push('last_plant_id = ?');
+    values.push(stringOrNull(patch.lastPlantId));
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'displayName')) {
+    updates.push('display_name = ?');
+    values.push(stringOrNull(patch.displayName));
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'fullName')) {
+    updates.push('full_name = ?');
+    values.push(stringOrNull(patch.fullName));
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'ssoNumber')) {
+    updates.push('sso_number = ?');
+    values.push(stringOrNull(patch.ssoNumber));
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'requestedPlantIds')) {
+    updates.push('requested_plant_ids_json = ?');
+    values.push(jsonOrNull(Array.isArray(patch.requestedPlantIds) ? patch.requestedPlantIds : []));
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'profileOnboarding')) {
+    updates.push('profile_onboarding_json = ?');
+    values.push(jsonOrNull(patch.profileOnboarding || null));
+  }
+
+  if (updates.length) {
+    updates.push('updated_at = ?');
+    values.push(nowIso());
+    values.push(user.uid);
+    await run(db, `UPDATE users SET ${updates.join(', ')} WHERE uid = ?`, ...values);
+  }
+
+  return getCurrentUserContext(db, user);
+}
+
+async function listPlants(db, user, request) {
+  await upsertAuthUserRow(db, user);
+  const url = new URL(request.url);
+  const activeOnly = url.searchParams.get('active') !== 'false';
+  const plants = await all(
+    db,
+    `
+      SELECT *
+      FROM plants
+      ${activeOnly ? 'WHERE is_active = 1' : ''}
+      ORDER BY name COLLATE NOCASE
+    `
+  );
+  return jsonResponse({ plants: plants.map(serializePlant) });
+}
+
+async function listPlantMembers(db, request, plantId, user) {
+  await requirePlantPermission(db, plantId, user, 'canViewPlant');
+  const url = new URL(request.url);
+  const activeOnly = url.searchParams.get('active') !== 'false';
+  const rows = await all(
+    db,
+    `
+      SELECT plant_id, uid, role, is_active, display_name, full_name, sso_number, email,
+             permissions_json, alert_category_subscriptions_json, job_role_keys_json, job_feeds_json,
+             joined_at, last_seen_at
+      FROM plant_members
+      WHERE plant_id = ?
+      ${activeOnly ? 'AND is_active = 1' : ''}
+      ORDER BY COALESCE(full_name, display_name, email, uid) COLLATE NOCASE
+    `,
+    plantId
+  );
+  return jsonResponse({
+    members: rows.map(row => ({
+      uid: row.uid,
+      displayName: row.display_name,
+      fullName: row.full_name,
+      ssoNumber: row.sso_number,
+      email: row.email,
+      ...serializePlantMember(row)
+    }))
+  });
+}
+
+async function updatePlantMember(db, plantId, uid, body, user) {
+  const currentMember = await requirePlantPermission(db, plantId, user, null);
+  if (user.uid !== uid) {
+    const permissions = parsePermissions(currentMember.permissions_json);
+    if (permissions.canManageMembers !== true && currentMember.role !== 'admin') {
+      throw Object.assign(new Error('Permission denied'), { status: 403 });
+    }
+  }
+  const updates = [];
+  const values = [];
+  if (Object.prototype.hasOwnProperty.call(body, 'alertCategorySubscriptions')) {
+    updates.push('alert_category_subscriptions_json = ?');
+    values.push(jsonOrNull(Array.isArray(body.alertCategorySubscriptions) ? body.alertCategorySubscriptions : []));
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'jobRoleKeys')) {
+    updates.push('job_role_keys_json = ?');
+    values.push(jsonOrNull(Array.isArray(body.jobRoleKeys) ? body.jobRoleKeys : []));
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'jobFeeds')) {
+    updates.push('job_feeds_json = ?');
+    values.push(jsonOrNull(Array.isArray(body.jobFeeds) ? body.jobFeeds : []));
+  }
+  if (!updates.length) {
+    const row = await first(
+      db,
+      `
+        SELECT plant_id, uid, role, is_active, display_name, full_name, sso_number, email,
+               permissions_json, alert_category_subscriptions_json, job_role_keys_json, job_feeds_json,
+               joined_at, last_seen_at
+        FROM plant_members
+        WHERE plant_id = ? AND uid = ?
+        LIMIT 1
+      `,
+      plantId,
+      uid
+    );
+    return jsonResponse({
+      member: row ? {
+        uid: row.uid,
+        displayName: row.display_name,
+        fullName: row.full_name,
+        ssoNumber: row.sso_number,
+        email: row.email,
+        ...serializePlantMember(row)
+      } : null
+    });
+  }
+  values.push(plantId, uid);
+  await run(db, `UPDATE plant_members SET ${updates.join(', ')} WHERE plant_id = ? AND uid = ?`, ...values);
+  const saved = await first(
+    db,
+    `
+      SELECT plant_id, uid, role, is_active, display_name, full_name, sso_number, email,
+             permissions_json, alert_category_subscriptions_json, job_role_keys_json, job_feeds_json,
+             joined_at, last_seen_at
+      FROM plant_members
+      WHERE plant_id = ? AND uid = ?
+      LIMIT 1
+    `,
+    plantId,
+    uid
+  );
+  return jsonResponse({
+    member: saved ? {
+      uid: saved.uid,
+      displayName: saved.display_name,
+      fullName: saved.full_name,
+      ssoNumber: saved.sso_number,
+      email: saved.email,
+      ...serializePlantMember(saved)
+    } : null
+  });
+}
+
+async function listRoleAlerts(db, request, plantId, user) {
+  await requirePlantPermission(db, plantId, user, 'canViewPlant');
+  const url = new URL(request.url);
+  const limit = Math.max(1, Math.min(200, Number(url.searchParams.get('limit')) || 80));
+  const includeDismissed = url.searchParams.get('includeDismissed') === 'true';
+  const alerts = await all(
+    db,
+    `
+      SELECT *
+      FROM role_feed_alerts
+      WHERE plant_id = ?
+        AND EXISTS (
+          SELECT 1
+          FROM json_each(COALESCE(recipient_user_ids_json, '[]'))
+          WHERE value = ?
+        )
+        ${includeDismissed ? '' : 'AND is_resolved = 0'}
+      ORDER BY created_at DESC
+      LIMIT ?
+    `,
+    plantId,
+    user.uid,
+    limit
+  );
+  return jsonResponse({ alerts: alerts.map(serializeRoleFeedAlert) });
+}
+
+async function createRoleAlert(db, plantId, body, user) {
+  await requirePlantPermission(db, plantId, user, body.permissionName || 'canEditIssue');
+  const alertId = stringOrNull(body.alertId) || `alert_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  const createdAt = asIso(body.createdAt, nowIso());
+  const updatedAt = asIso(body.updatedAt, createdAt);
+  const recipientUserIds = Array.from(new Set((Array.isArray(body.recipientUserIds) ? body.recipientUserIds : []).map(v => String(v || '').trim()).filter(Boolean)));
+  await run(
+    db,
+    `
+      INSERT INTO role_feed_alerts (
+        alert_id, plant_id, issue_id, status_key, subcategory_key, title, body, is_resolved,
+        created_at, updated_at, category_key, category_keys_json, workflow_id, feed_key, feed_label,
+        recipient_user_ids_json, required_job_role_keys_json, created_by_json, raw_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(alert_id) DO UPDATE SET
+        issue_id = excluded.issue_id,
+        status_key = excluded.status_key,
+        subcategory_key = excluded.subcategory_key,
+        title = excluded.title,
+        body = excluded.body,
+        is_resolved = excluded.is_resolved,
+        updated_at = excluded.updated_at,
+        category_key = excluded.category_key,
+        category_keys_json = excluded.category_keys_json,
+        workflow_id = excluded.workflow_id,
+        feed_key = excluded.feed_key,
+        feed_label = excluded.feed_label,
+        recipient_user_ids_json = excluded.recipient_user_ids_json,
+        required_job_role_keys_json = excluded.required_job_role_keys_json,
+        created_by_json = excluded.created_by_json,
+        raw_json = excluded.raw_json
+    `,
+    alertId,
+    plantId,
+    stringOrNull(body.issueId),
+    stringOrNull(body.statusKey),
+    stringOrNull(body.subcategoryKey || body.subStatus),
+    stringOrNull(body.title || body.feedLabel),
+    stringOrNull(body.body || body.note),
+    body.isResolved ? 1 : 0,
+    createdAt,
+    updatedAt,
+    stringOrNull(body.categoryKey),
+    jsonOrNull(body.categoryKeys || null),
+    stringOrNull(body.workflowId),
+    stringOrNull(body.feedKey),
+    stringOrNull(body.feedLabel),
+    jsonOrNull(recipientUserIds),
+    jsonOrNull(body.requiredJobRoleKeys || null),
+    jsonOrNull(body.createdBy || null),
+    jsonOrNull(body.raw || body || null)
+  );
+  const alert = await first(db, 'SELECT * FROM role_feed_alerts WHERE plant_id = ? AND alert_id = ? LIMIT 1', plantId, alertId);
+  return jsonResponse({ alert: serializeRoleFeedAlert(alert) });
+}
+
+async function updateRoleAlert(db, plantId, alertId, body, user) {
+  await requirePlantPermission(db, plantId, user, 'canViewPlant');
+  const alert = await first(db, 'SELECT * FROM role_feed_alerts WHERE plant_id = ? AND alert_id = ? LIMIT 1', plantId, alertId);
+  if (!alert) {
+    return jsonResponse({ error: 'Role alert not found' }, { status: 404 });
+  }
+  const nextRecipients = Object.prototype.hasOwnProperty.call(body, 'recipientUserIds')
+    ? Array.from(new Set((Array.isArray(body.recipientUserIds) ? body.recipientUserIds : []).map(v => String(v || '').trim()).filter(Boolean)))
+    : JSON.parse(alert.recipient_user_ids_json || '[]');
+  await run(
+    db,
+    `
+      UPDATE role_feed_alerts
+      SET recipient_user_ids_json = ?,
+          is_resolved = ?,
+          updated_at = ?
+      WHERE plant_id = ? AND alert_id = ?
+    `,
+    jsonOrNull(nextRecipients),
+    body.isResolved ? 1 : Number(alert.is_resolved || 0),
+    nowIso(),
+    plantId,
+    alertId
+  );
+  const saved = await first(db, 'SELECT * FROM role_feed_alerts WHERE plant_id = ? AND alert_id = ? LIMIT 1', plantId, alertId);
+  return jsonResponse({ alert: serializeRoleFeedAlert(saved) });
+}
+
+async function getGamificationState(db, plantId, user) {
+  await requirePlantPermission(db, plantId, user, 'canViewPlant');
+  const [configRow, statsRow, badgesRow, leaderboardRow, missionRows, progressRows, userRow] = await Promise.all([
+    first(db, 'SELECT * FROM gamification_config WHERE plant_id = ? LIMIT 1', plantId),
+    first(db, 'SELECT * FROM user_game_stats WHERE plant_id = ? AND uid = ? LIMIT 1', plantId, user.uid),
+    first(db, 'SELECT * FROM user_badges WHERE plant_id = ? AND uid = ? LIMIT 1', plantId, user.uid),
+    first(db, 'SELECT * FROM game_leaderboards WHERE plant_id = ? AND board_id = ? LIMIT 1', plantId, 'weekly'),
+    all(db, 'SELECT * FROM game_missions WHERE plant_id = ? AND is_active = 1 ORDER BY starts_at DESC LIMIT 6', plantId),
+    all(db, 'SELECT * FROM game_mission_progress WHERE plant_id = ? AND subject_id = ?', plantId, user.uid),
+    first(db, 'SELECT global_lifetime_xp FROM users WHERE uid = ? LIMIT 1', user.uid)
+  ]);
+  const progressByMissionId = new Map(progressRows.map(row => [row.mission_id, serializeGameMissionProgress(row)]));
+  return jsonResponse({
+    config: serializeGamificationConfig(configRow),
+    stats: serializeUserGameStats(statsRow),
+    badges: serializeUserBadges(badgesRow),
+    leaderboard: serializeGameLeaderboard(leaderboardRow),
+    user: {
+      uid: user.uid,
+      globalLifetimeXp: Number(userRow?.global_lifetime_xp || 0)
+    },
+    missions: missionRows.map(row => ({
+      ...serializeGameMission(row),
+      progress: progressByMissionId.get(row.mission_id) || null
+    }))
+  });
+}
+
+async function awardGamification(db, plantId, body, user) {
+  await requirePlantPermission(db, plantId, user, 'canViewPlant');
+  const reason = stringOrNull(body.reason);
+  if (!reason) throw Object.assign(new Error('Missing gamification reason.'), { status: 400 });
+  const context = body.context && typeof body.context === 'object' ? body.context : {};
+  const configRow = await first(db, 'SELECT * FROM gamification_config WHERE plant_id = ? LIMIT 1', plantId);
+  const gameConfig = serializeGamificationConfig(configRow)?.config || {};
+  if (gameConfig.enabled === false) {
+    return jsonResponse({ awarded: false, reason: 'disabled' });
+  }
+  const weights = gameConfig.weights || {};
+  const penalties = gameConfig.penalties || {};
+  const base = Number(weights[reason] || penalties[reason] || 0);
+  const tags = Array.isArray(context.tags) ? context.tags.map(v => String(v || '').trim()).filter(Boolean) : [];
+  const customRules = Array.isArray(gameConfig.customRules) ? gameConfig.customRules : [];
+  const matchingCustomRules = customRules.filter(rule => {
+    if (rule?.isEnabled === false) return false;
+    const trigger = String(rule?.triggerKey || '').trim();
+    if (!trigger) return false;
+    return trigger === reason || tags.includes(trigger);
+  });
+  const customDelta = matchingCustomRules.reduce((sum, rule) => sum + Number(rule?.points || 0), 0);
+  const totalDelta = base + customDelta;
+  if (!totalDelta) {
+    return jsonResponse({ awarded: false, reason: 'no_delta' });
+  }
+  const issueId = stringOrNull(context.issueId) || 'none';
+  const dedupeKey = `${user.uid}:${issueId}:${reason}:${String(context.dedupeSuffix || '')}`;
+  const existingEvent = await first(db, 'SELECT game_event_id FROM game_events WHERE plant_id = ? AND dedupe_key = ? LIMIT 1', plantId, dedupeKey);
+  if (existingEvent) {
+    const currentResponse = await getGamificationState(db, plantId, user);
+    const currentPayload = await currentResponse.json();
+    return jsonResponse({
+      ...currentPayload,
+      awardSummary: { awarded: false, reason: 'deduped', totalDelta: 0, badges: [], missionsCompleted: [] }
+    });
+  }
+
+  const now = nowIso();
+  const eventId = `ge_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  const [statsRow, badgesRow, missionRows, progressRows, leaderboardExisting] = await Promise.all([
+    first(db, 'SELECT * FROM user_game_stats WHERE plant_id = ? AND uid = ? LIMIT 1', plantId, user.uid),
+    first(db, 'SELECT * FROM user_badges WHERE plant_id = ? AND uid = ? LIMIT 1', plantId, user.uid),
+    all(db, 'SELECT * FROM game_missions WHERE plant_id = ? AND is_active = 1 ORDER BY starts_at DESC LIMIT 6', plantId),
+    all(db, 'SELECT * FROM game_mission_progress WHERE plant_id = ? AND subject_id = ?', plantId, user.uid),
+    first(db, 'SELECT * FROM game_leaderboards WHERE plant_id = ? AND board_id = ? LIMIT 1', plantId, 'weekly')
+  ]);
+  const currentTotals = statsRow ? JSON.parse(statsRow.totals_json || '{}') : {};
+  const currentStreaks = statsRow ? JSON.parse(statsRow.streaks_json || '{}') : {};
+  const earnedBadges = badgesRow ? JSON.parse(badgesRow.earned_badges_json || '{}') : {};
+  const nextTotals = { ...currentTotals, xp: Number(currentTotals.xp || 0) + totalDelta };
+  if (reason === 'issue_resolved') nextTotals.issuesResolved = Number(currentTotals.issuesResolved || 0) + 1;
+  if (reason === 'issue_created_complete') nextTotals.issuesCreated = Number(currentTotals.issuesCreated || 0) + 1;
+  if (reason === 'photo_attached') nextTotals.photosAttached = Number(currentTotals.photosAttached || 0) + 1;
+  if (reason === 'serial_captured_when_required') nextTotals.serialsCaptured = Number(currentTotals.serialsCaptured || 0) + 1;
+  const nextStreaks = { ...currentStreaks, current: Number(currentStreaks.current || 0) + (totalDelta > 0 ? 1 : 0) };
+  nextTotals.level = gameLevelFromXp(nextTotals.xp);
+
+  const progressByMissionId = new Map(progressRows.map(row => [row.mission_id, row]));
+  const missionProgressUpserts = [];
+  const completedMissionIds = [];
+  for (const missionRow of missionRows) {
+    const mission = serializeGameMission(missionRow);
+    if (!missionReasonMatches(mission, reason)) continue;
+    const threshold = Math.max(1, Number(mission?.objective?.threshold || 1));
+    const prev = progressByMissionId.get(missionRow.mission_id);
+    const current = Number(prev?.current_value || 0);
+    const next = Math.min(threshold, current + 1);
+    const completed = next >= threshold;
+    const percent = Math.round((next / threshold) * 100);
+    if (completed && !Number(prev?.completed || 0)) {
+      completedMissionIds.push(missionRow.mission_id);
+      nextTotals.missionsCompleted = Number(nextTotals.missionsCompleted || 0) + 1;
+    }
+    missionProgressUpserts.push({
+      missionProgressRowId: prev?.mission_progress_row_id || `${plantId}:${missionRow.mission_id}:${user.uid}`,
+      missionId: missionRow.mission_id,
+      currentValue: next,
+      targetValue: threshold,
+      percent,
+      completed,
+      rawJson: {
+        subjectId: user.uid,
+        subjectType: prev?.subject_type || 'user',
+        current: next,
+        target: threshold,
+        percent,
+        completed
+      }
+    });
+  }
+
+  const workingStats = {
+    totals: { ...nextTotals },
+    streaks: { ...nextStreaks }
+  };
+  const badgeDefs = Array.isArray(gameConfig.badges) && gameConfig.badges.length ? gameConfig.badges : DEFAULT_BADGE_DEFS;
+  const newlyEarnedBadges = [];
+  for (const badge of badgeDefs.filter(entry => entry?.isEnabled !== false)) {
+    if (!badge?.id || earnedBadges[badge.id]) continue;
+    if (!checkBadgeTrigger(badge, workingStats)) continue;
+    earnedBadges[badge.id] = {
+      earnedAt: now,
+      badgeName: badge.name || badge.id,
+      icon: badge.icon || '🏅'
+    };
+    newlyEarnedBadges.push({
+      id: badge.id,
+      name: badge.name || badge.id,
+      icon: badge.icon || '🏅',
+      description: badge.description || '',
+      xpReward: Number(badge.xpReward || 0)
+    });
+    if (Number(badge.xpReward || 0) > 0) {
+      workingStats.totals.xp = Number(workingStats.totals.xp || 0) + Number(badge.xpReward || 0);
+    }
+  }
+  workingStats.totals.level = gameLevelFromXp(workingStats.totals.xp);
+  const bonusXp = newlyEarnedBadges.reduce((sum, badge) => sum + Number(badge.xpReward || 0), 0);
+
+  const leaderboardRowId = `${plantId}:weekly`;
+  const entriesByUid = leaderboardExisting ? JSON.parse(leaderboardExisting.entries_by_uid_json || '{}') : {};
+  entriesByUid[user.uid] = {
+    uid: user.uid,
+    displayName: user.name,
+    xp: Number(workingStats.totals.xp || 0),
+    updatedAt: now
+  };
+  const entries = Object.values(entriesByUid).sort((a, b) => Number(b?.xp || 0) - Number(a?.xp || 0));
+
+  const statements = [
+    db.prepare(`
+      INSERT INTO game_events (game_event_id, plant_id, uid, type, xp_delta, dedupe_key, payload_json, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(eventId, plantId, user.uid, 'xp_awarded', totalDelta, dedupeKey, jsonOrNull({
+      reason,
+      issueId,
+      tags,
+      delta: { xp: totalDelta, baseXp: base, customXp: customDelta },
+      appliedRules: matchingCustomRules.map(rule => ({ id: rule?.id || '', label: rule?.label || '', triggerKey: rule?.triggerKey || '', points: Number(rule?.points || 0) })),
+      badges: newlyEarnedBadges.map(badge => badge.id),
+      missionsCompleted: completedMissionIds
+    }), now),
+    db.prepare(`
+      INSERT INTO user_game_stats (plant_id, uid, totals_json, updated_at, user_id, display_name, streaks_json, last_event_at, schema_version)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(plant_id, uid) DO UPDATE SET
+        totals_json = excluded.totals_json,
+        updated_at = excluded.updated_at,
+        user_id = excluded.user_id,
+        display_name = excluded.display_name,
+        streaks_json = excluded.streaks_json,
+        last_event_at = excluded.last_event_at,
+        schema_version = excluded.schema_version
+    `).bind(plantId, user.uid, jsonOrNull(workingStats.totals), now, user.uid, user.name, jsonOrNull(workingStats.streaks), now, 1),
+    db.prepare(`
+      INSERT INTO user_badges (plant_id, uid, earned_badges_json, updated_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(plant_id, uid) DO UPDATE SET
+        earned_badges_json = excluded.earned_badges_json,
+        updated_at = excluded.updated_at
+    `).bind(plantId, user.uid, jsonOrNull(earnedBadges), now),
+    db.prepare(`
+      UPDATE users
+      SET global_lifetime_xp = COALESCE(global_lifetime_xp, 0) + ?,
+          updated_at = ?
+      WHERE uid = ?
+    `).bind(totalDelta + bonusXp, now, user.uid),
+    db.prepare(`
+      INSERT INTO game_leaderboards (leaderboard_row_id, plant_id, board_id, entries_json, entries_by_uid_json, updated_at, schema_version)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(plant_id, board_id) DO UPDATE SET
+        entries_json = excluded.entries_json,
+        entries_by_uid_json = excluded.entries_by_uid_json,
+        updated_at = excluded.updated_at,
+        schema_version = excluded.schema_version
+    `).bind(leaderboardRowId, plantId, 'weekly', jsonOrNull(entries), jsonOrNull(entriesByUid), now, 1),
+    ...missionProgressUpserts.map(progress => db.prepare(`
+      INSERT INTO game_mission_progress (
+        mission_progress_row_id, plant_id, mission_id, subject_id, subject_type,
+        current_value, target_value, percent, completed, updated_at, raw_json
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(plant_id, mission_id, subject_id) DO UPDATE SET
+        current_value = excluded.current_value,
+        target_value = excluded.target_value,
+        percent = excluded.percent,
+        completed = excluded.completed,
+        updated_at = excluded.updated_at,
+        raw_json = excluded.raw_json
+    `).bind(
+      progress.missionProgressRowId,
+      plantId,
+      progress.missionId,
+      user.uid,
+      'user',
+      progress.currentValue,
+      progress.targetValue,
+      progress.percent,
+      progress.completed ? 1 : 0,
+      now,
+      jsonOrNull(progress.rawJson)
+    ))
+  ];
+  await db.batch(statements);
+  const response = await getGamificationState(db, plantId, user);
+  const payload = await response.json();
+  return jsonResponse({
+    ...payload,
+    awardSummary: {
+      awarded: true,
+      reason,
+      totalDelta,
+      badges: newlyEarnedBadges,
+      missionsCompleted: completedMissionIds
+    }
   });
 }
 
@@ -556,7 +1154,16 @@ export async function handleD1ApiRequest(request, env, { authenticateRequest } =
 
   try {
     const meMatch = request.method === 'GET' && url.pathname === '/api/me';
+    const meUpdateMatch = request.method === 'PATCH' && url.pathname === '/api/me';
+    const plantsListMatch = request.method === 'GET' && url.pathname === '/api/plants';
     const bootstrapMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/bootstrap$/);
+    const plantMembersMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/members$/);
+    const plantMemberUpdateMatch = request.method === 'PATCH' && url.pathname.match(/^\/api\/plants\/([^/]+)\/members\/([^/]+)$/);
+    const gamificationMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/gamification$/);
+    const gamificationAwardMatch = request.method === 'POST' && url.pathname.match(/^\/api\/plants\/([^/]+)\/gamification\/award$/);
+    const roleAlertsMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/role-alerts$/);
+    const roleAlertCreateMatch = request.method === 'POST' && url.pathname.match(/^\/api\/plants\/([^/]+)\/role-alerts$/);
+    const roleAlertUpdateMatch = request.method === 'PATCH' && url.pathname.match(/^\/api\/plants\/([^/]+)\/role-alerts\/([^/]+)$/);
     const issuesMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/issues$/);
     const issueCreateMatch = request.method === 'POST' && url.pathname.match(/^\/api\/plants\/([^/]+)\/issues$/);
     const issueMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/issues\/([^/]+)$/);
@@ -565,7 +1172,7 @@ export async function handleD1ApiRequest(request, env, { authenticateRequest } =
     const eventsMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/issues\/([^/]+)\/events$/);
     const attachmentsMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/issues\/([^/]+)\/attachments$/);
 
-    if (!meMatch && !bootstrapMatch && !issuesMatch && !issueCreateMatch && !issueMatch && !issueUpdateMatch && !issueDeleteMatch && !eventsMatch && !attachmentsMatch) {
+    if (!meMatch && !meUpdateMatch && !plantsListMatch && !bootstrapMatch && !plantMembersMatch && !plantMemberUpdateMatch && !gamificationMatch && !gamificationAwardMatch && !roleAlertsMatch && !roleAlertCreateMatch && !roleAlertUpdateMatch && !issuesMatch && !issueCreateMatch && !issueMatch && !issueUpdateMatch && !issueDeleteMatch && !eventsMatch && !attachmentsMatch) {
       return null;
     }
 
@@ -577,8 +1184,35 @@ export async function handleD1ApiRequest(request, env, { authenticateRequest } =
     if (meMatch) {
       return getCurrentUserContext(db, user);
     }
+    if (meUpdateMatch) {
+      return updateCurrentUserContext(db, user, await request.json());
+    }
+    if (plantsListMatch) {
+      return listPlants(db, user, request);
+    }
     if (bootstrapMatch) {
       return getPlantBootstrap(db, decodePathSegment(bootstrapMatch[1]), user);
+    }
+    if (plantMembersMatch) {
+      return listPlantMembers(db, request, decodePathSegment(plantMembersMatch[1]), user);
+    }
+    if (plantMemberUpdateMatch) {
+      return updatePlantMember(db, decodePathSegment(plantMemberUpdateMatch[1]), decodePathSegment(plantMemberUpdateMatch[2]), await request.json(), user);
+    }
+    if (gamificationMatch) {
+      return getGamificationState(db, decodePathSegment(gamificationMatch[1]), user);
+    }
+    if (gamificationAwardMatch) {
+      return awardGamification(db, decodePathSegment(gamificationAwardMatch[1]), await request.json(), user);
+    }
+    if (roleAlertsMatch) {
+      return listRoleAlerts(db, request, decodePathSegment(roleAlertsMatch[1]), user);
+    }
+    if (roleAlertCreateMatch) {
+      return createRoleAlert(db, decodePathSegment(roleAlertCreateMatch[1]), await request.json(), user);
+    }
+    if (roleAlertUpdateMatch) {
+      return updateRoleAlert(db, decodePathSegment(roleAlertUpdateMatch[1]), decodePathSegment(roleAlertUpdateMatch[2]), await request.json(), user);
     }
     if (issuesMatch) {
       return listIssues(db, request, decodePathSegment(issuesMatch[1]), user);

@@ -388,7 +388,7 @@ const TABLES = {
   plant_members: {
     name: 'plant_members',
     keys: ['plant_id', 'uid'],
-    columns: [['plant_id'], ['uid'], ['role'], ['is_active'], ['display_name'], ['full_name'], ['sso_number'], ['email'], ['permissions_json'], ['joined_at'], ['last_seen_at']]
+    columns: [['plant_id'], ['uid'], ['role'], ['is_active'], ['display_name'], ['full_name'], ['sso_number'], ['email'], ['permissions_json'], ['alert_category_subscriptions_json'], ['job_role_keys_json'], ['job_feeds_json'], ['joined_at'], ['last_seen_at']]
   },
   access_requests: {
     name: 'access_requests',
@@ -885,6 +885,9 @@ function buildRows(snapshot, users) {
       sso_number: stringOrNull(data.ssoNumber),
       email: stringOrNull(data.email),
       permissions_json: jsonOrNull(data.permissions || {}),
+      alert_category_subscriptions_json: jsonOrNull(data.alertCategorySubscriptions || null),
+      job_role_keys_json: jsonOrNull(data.jobRoleKeys || null),
+      job_feeds_json: jsonOrNull(data.jobFeeds || null),
       joined_at: dateOrNow(data.addedAt || data.joinedAt || data.createdAt),
       last_seen_at: toDate(data.lastSeenAt || data.lastSeen)
     };

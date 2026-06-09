@@ -29,8 +29,13 @@ export function serializeUserContextRows(rows = []) {
       uid: first.uid,
       email: first.email,
       displayName: first.display_name,
+      fullName: first.full_name,
+      ssoNumber: first.sso_number,
       photoUrl: first.photo_url,
-      lastPlantId: first.last_plant_id
+      lastPlantId: first.last_plant_id,
+      requestedPlantIds: parseJson(first.requested_plant_ids_json, []),
+      profileOnboarding: parseJson(first.profile_onboarding_json, null),
+      globalLifetimeXp: Number(first.global_lifetime_xp || 0)
     },
     plants: rows
       .filter(row => row.plant_id)
@@ -66,7 +71,10 @@ export function serializePlantMember(row) {
   return {
     role: row.role,
     isActive: Boolean(row.is_active),
-    permissions: parseJson(row.permissions_json, {})
+    permissions: parseJson(row.permissions_json, {}),
+    alertCategorySubscriptions: parseJson(row.alert_category_subscriptions_json, []),
+    jobRoleKeys: parseJson(row.job_role_keys_json, []),
+    jobFeeds: parseJson(row.job_feeds_json, [])
   };
 }
 
@@ -97,6 +105,103 @@ export function serializeGamificationConfig(row) {
     plantId: row.plant_id,
     config: parseJson(row.config_json, {}),
     updatedAt: toIso(row.updated_at)
+  };
+}
+
+export function serializeUserGameStats(row) {
+  if (!row) return null;
+  return {
+    plantId: row.plant_id,
+    uid: row.uid,
+    userId: row.user_id,
+    displayName: row.display_name,
+    totals: parseJson(row.totals_json, {}),
+    streaks: parseJson(row.streaks_json, {}),
+    lastEventAt: toIso(row.last_event_at),
+    updatedAt: toIso(row.updated_at),
+    schemaVersion: row.schema_version
+  };
+}
+
+export function serializeUserBadges(row) {
+  if (!row) return null;
+  return {
+    plantId: row.plant_id,
+    uid: row.uid,
+    earnedBadges: parseJson(row.earned_badges_json, {}),
+    updatedAt: toIso(row.updated_at)
+  };
+}
+
+export function serializeGameLeaderboard(row) {
+  if (!row) return null;
+  return {
+    plantId: row.plant_id,
+    boardId: row.board_id,
+    entries: parseJson(row.entries_json, []),
+    entriesByUid: parseJson(row.entries_by_uid_json, {}),
+    updatedAt: toIso(row.updated_at),
+    schemaVersion: row.schema_version
+  };
+}
+
+export function serializeGameMission(row) {
+  if (!row) return null;
+  const raw = parseJson(row.raw_json, null) || {};
+  return {
+    id: row.mission_id,
+    plantId: row.plant_id,
+    name: row.name,
+    description: row.description,
+    objective: parseJson(row.objective_json, {}),
+    rewards: parseJson(row.rewards_json, {}),
+    isActive: Boolean(row.is_active),
+    startsAt: toIso(row.starts_at),
+    endsAt: toIso(row.ends_at),
+    updatedAt: toIso(row.updated_at),
+    ...raw
+  };
+}
+
+export function serializeGameMissionProgress(row) {
+  if (!row) return null;
+  const raw = parseJson(row.raw_json, null) || {};
+  return {
+    plantId: row.plant_id,
+    missionId: row.mission_id,
+    subjectId: row.subject_id,
+    subjectType: row.subject_type,
+    current: row.current_value,
+    target: row.target_value,
+    percent: row.percent,
+    completed: Boolean(row.completed),
+    updatedAt: toIso(row.updated_at),
+    ...raw
+  };
+}
+
+export function serializeRoleFeedAlert(row) {
+  if (!row) return null;
+  return {
+    alertId: row.alert_id,
+    plantId: row.plant_id,
+    issueId: row.issue_id,
+    statusKey: row.status_key,
+    subcategoryKey: row.subcategory_key,
+    title: row.title,
+    body: row.body,
+    isResolved: Boolean(row.is_resolved),
+    createdAt: toIso(row.created_at),
+    updatedAt: toIso(row.updated_at),
+    categoryKey: row.category_key,
+    categoryKeys: parseJson(row.category_keys_json, []),
+    workflowId: row.workflow_id,
+    feedKey: row.feed_key,
+    feedLabel: row.feed_label,
+    recipientUserIds: parseJson(row.recipient_user_ids_json, []),
+    requiredJobRoleKeys: parseJson(row.required_job_role_keys_json, []),
+    createdBy: parseJson(row.created_by_json, null),
+    raw: parseJson(row.raw_json, null)
   };
 }
 
