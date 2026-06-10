@@ -1,4 +1,6 @@
 import {
+  serializeDailySchedule,
+  serializeDailyScheduleRow,
   serializeGamificationConfig,
   serializeGameLeaderboard,
   serializeGameMission,
@@ -9,6 +11,8 @@ import {
   serializePlant,
   serializePlantMember,
   serializePressConfig,
+  serializePlantStoreConfig,
+  serializeRoleAlertRoutingConfig,
   serializeRoleFeedAlert,
   serializeStatusConfig,
   serializeUserBadges,
@@ -103,6 +107,173 @@ function numberOrZero(value) {
 
 function numberOrNull(value) {
   return Number.isFinite(Number(value)) ? Number(value) : null;
+}
+
+function slugForId(value, fallback = 'item') {
+  return String(value || '').trim().toLowerCase()
+    .replace(/\./g, '_')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '') || fallback;
+}
+
+function scheduleIssueId(scheduleDate, section, rowId) {
+  return `schedule_${slugForId(scheduleDate)}_${slugForId(section)}_${slugForId(rowId)}`;
+}
+
+function scheduleShiftStartTime(shift) {
+  const normalized = String(shift || '').trim().toLowerCase();
+  if (normalized === '2' || normalized === 'second') return '13:54:00';
+  if (normalized === '3' || normalized === 'third') return '21:54:00';
+  return '05:54:00';
+}
+
+function scheduleIssueDate(scheduleDate, shift) {
+  const parsed = new Date(`${scheduleDate}T${scheduleShiftStartTime(shift)}`);
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+}
+
+function formatScheduleIssueDateTime(scheduleDate, shift) {
+  const date = scheduleIssueDate(scheduleDate, shift);
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' ' +
+    date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+}
+
+function classifyScheduleChange(row) {
+  const text = [row?.description, row?.notes, row?.partNumber, row?.mc].map(value => String(value || '')).join(' ').toLowerCase();
+  if (/\bc\s*\/\s*c\b|\bcolou?r\s+change\b/.test(text)) {
+    return { statusKey: 'controlman', subStatus: 'Color Change' };
+  }
+  if (/\bm\s*\/\s*c\b|\bmold\s+change\b/.test(text)) {
+    return { statusKey: 'controlman', subStatus: 'Mold Change' };
+  }
+  if (/\b(colou?r|purge|colorant|masterbatch)\b/.test(text)) {
+    return { statusKey: 'startup', subStatus: 'Purging / Color Change' };
+  }
+  return { statusKey: 'open', subStatus: 'Scheduled Mold Change' };
+}
+
+function buildScheduleImportIssue(plantId, scheduleDate, shift, row) {
+  const actor = { uid: 'schedule-import', name: 'Schedule Import' };
+  const machineCode = String(row?.press || '').trim();
+  const { statusKey, subStatus } = classifyScheduleChange(row);
+  const issueShift = row?.shift || shift || 1;
+  const dateTime = formatScheduleIssueDateTime(scheduleDate, issueShift);
+  const createdDate = scheduleIssueDate(scheduleDate, issueShift);
+  const workflowId = `wf_schedule_${slugForId(scheduleDate)}_${slugForId(row?.section)}_${slugForId(row?.rowId)}`;
+  const note = [
+    `${subStatus} from schedule import.`,
+    row?.partNumber ? `Part: ${row.partNumber}` : '',
+    row?.description ? `Description: ${row.description}` : '',
+    row?.cavity ? `Cavity: ${row.cavity}` : '',
+    row?.notes ? `Notes: ${row.notes}` : '',
+    row?.section ? `Section: ${row.section}` : ''
+  ].filter(Boolean).join('\n');
+
+  return {
+    issueId: scheduleIssueId(scheduleDate, row?.section, row?.rowId),
+    issue: {
+      machine: machineCode,
+      machineCode,
+      plantId,
+      pressId: machineCode ? `press_${slugForId(machineCode, 'unknown')}` : null,
+      rowId: (() => {
+        const match = machineCode.match(/^(\d+)/);
+        return match ? `row_${String(match[1]).padStart(2, '0')}` : 'row_other';
+      })(),
+      note,
+      dateTime,
+      dateKey: scheduleDate,
+      timestamp: createdDate.getTime(),
+      shift: String(issueShift),
+      timer: null,
+      userId: actor.uid,
+      userName: actor.name,
+      photoCount: 0,
+      statusHistory: [{
+        status: statusKey,
+        subStatus,
+        note: '',
+        dateTime,
+        by: actor.name,
+        workflowId
+      }],
+      workflowStateByEntry: { [workflowId]: null },
+      schemaVersion: 2,
+      currentStatus: {
+        statusKey,
+        subStatusKey: subStatus,
+        label: statusKey === 'startup' ? 'Startup' : (statusKey === 'controlman' ? 'Controlman' : 'Open'),
+        subLabel: subStatus,
+        color: statusKey === 'startup' ? '#14b8a6' : (statusKey === 'controlman' ? '#38bdf8' : '#ef4444'),
+        enteredAt: createdDate.toISOString(),
+        enteredDateTime: dateTime,
+        enteredBy: actor,
+        notePreview: note
+      },
+      lifecycle: {
+        isOpen: true,
+        isResolved: false,
+        openedAt: createdDate.toISOString(),
+        resolvedAt: null,
+        closedAt: null,
+        reopenedCount: 0
+      },
+      scheduleImport: {
+        date: scheduleDate,
+        section: row?.section || '',
+        rowId: row?.rowId || '',
+        partNumber: row?.partNumber || '',
+        description: row?.description || '',
+        notes: row?.notes || '',
+        isChange: true
+      },
+      source: {
+        type: 'schedule_import',
+        scheduleDate,
+        scheduleSection: row?.section || '',
+        scheduleRowId: row?.rowId || ''
+      },
+      createdAt: createdDate.toISOString(),
+      createdBy: actor,
+      updatedAt: createdDate.toISOString(),
+      updatedBy: actor
+    },
+    events: [
+      {
+        eventId: `${scheduleIssueId(scheduleDate, row?.section, row?.rowId)}:created`,
+        eventType: 'issue_created',
+        eventAt: createdDate.toISOString(),
+        actorUid: actor.uid,
+        actorName: actor.name,
+        payload: {
+          machineCode,
+          note,
+          initialStatusKey: statusKey,
+          initialSubStatusKey: subStatus,
+          source: {
+            type: 'schedule_import',
+            scheduleDate,
+            scheduleSection: row?.section || '',
+            scheduleRowId: row?.rowId || ''
+          }
+        }
+      },
+      {
+        eventId: `${scheduleIssueId(scheduleDate, row?.section, row?.rowId)}:status_changed`,
+        eventType: 'status_changed',
+        eventAt: createdDate.toISOString(),
+        actorUid: actor.uid,
+        actorName: actor.name,
+        payload: {
+          fromStatusKey: null,
+          fromSubStatusKey: null,
+          toStatusKey: statusKey,
+          toSubStatusKey: subStatus,
+          note: ''
+        }
+      }
+    ]
+  };
 }
 
 const DEFAULT_BADGE_DEFS = [
@@ -271,6 +442,190 @@ function buildEventRowFromClient(plantId, issueId, event = {}, index = 0) {
 
 async function run(db, sql, ...params) {
   return db.prepare(sql).bind(...params).run();
+}
+
+export async function importDailyScheduleToD1(db, plantId, payload = {}) {
+  const scheduleDate = stringOrNull(payload.scheduleDate);
+  if (!scheduleDate) {
+    throw Object.assign(new Error('Missing scheduleDate.'), { status: 400 });
+  }
+
+  const sectionKeys = ['page1', 'page2', 'northBayChanges', 'southBayChanges'];
+  const sectionsInput = payload.sections && typeof payload.sections === 'object' ? payload.sections : {};
+  const rowsBySection = Object.fromEntries(sectionKeys.map(key => [key, Array.isArray(sectionsInput[key]) ? sectionsInput[key] : []]));
+  const now = nowIso();
+  const statements = [
+    db.prepare(`
+      INSERT INTO daily_schedules (
+        daily_schedule_row_id, plant_id, schedule_date, shift, line_speed, total_planned_pcs, source_file_name,
+        source_file_type, status, notes, page1_count, page2_count, north_bay_changes_count, south_bay_changes_count,
+        raw_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(daily_schedule_row_id) DO UPDATE SET
+        shift = excluded.shift,
+        line_speed = excluded.line_speed,
+        total_planned_pcs = excluded.total_planned_pcs,
+        source_file_name = excluded.source_file_name,
+        source_file_type = excluded.source_file_type,
+        status = excluded.status,
+        notes = excluded.notes,
+        page1_count = excluded.page1_count,
+        page2_count = excluded.page2_count,
+        north_bay_changes_count = excluded.north_bay_changes_count,
+        south_bay_changes_count = excluded.south_bay_changes_count,
+        raw_json = excluded.raw_json,
+        updated_at = excluded.updated_at
+    `).bind(
+      `${plantId}:${scheduleDate}`,
+      plantId,
+      scheduleDate,
+      stringOrNull(payload.shift),
+      payload.lineSpeed == null ? null : String(payload.lineSpeed),
+      payload.totalPlannedPcs == null ? null : String(payload.totalPlannedPcs),
+      stringOrNull(payload.sourceFileName) || `batch-import-${scheduleDate}`,
+      stringOrNull(payload.sourceFileType) || 'application/pdf',
+      stringOrNull(payload.status) || 'imported',
+      stringOrNull(payload.notes),
+      rowsBySection.page1.length,
+      rowsBySection.page2.length,
+      rowsBySection.northBayChanges.length,
+      rowsBySection.southBayChanges.length,
+      jsonOrNull({
+        scheduleDate,
+        plantId,
+        shift: payload.shift,
+        lineSpeed: payload.lineSpeed,
+        totalPlannedPcs: payload.totalPlannedPcs,
+        sourceFileName: stringOrNull(payload.sourceFileName) || `batch-import-${scheduleDate}`,
+        sourceFileType: stringOrNull(payload.sourceFileType) || 'application/pdf',
+        status: stringOrNull(payload.status) || 'imported',
+        notes: stringOrNull(payload.notes),
+        page1Count: rowsBySection.page1.length,
+        page2Count: rowsBySection.page2.length,
+        northBayChangesCount: rowsBySection.northBayChanges.length,
+        southBayChangesCount: rowsBySection.southBayChanges.length
+      }),
+      now,
+      now
+    ),
+    db.prepare('DELETE FROM daily_schedule_rows WHERE plant_id = ? AND schedule_date = ?').bind(plantId, scheduleDate)
+  ];
+
+  sectionKeys.forEach(sectionKey => {
+    rowsBySection[sectionKey].forEach((row, index) => {
+      const rowId = stringOrNull(row.rowId) || `${sectionKey}_${index + 1}`;
+      const normalizedRow = {
+        rowId,
+        scheduleDate,
+        shift: row.shift ?? payload.shift ?? 1,
+        section: row.section || sectionKey,
+        press: String(row.press || ''),
+        partStorageLocation: Array.isArray(row.partStorageLocation) ? row.partStorageLocation : [],
+        partNumber: String(row.partNumber || ''),
+        description: String(row.description || ''),
+        cavity: String(row.cavity || ''),
+        doh: row.doh == null ? null : Number(row.doh),
+        labelsPerShift: row.labelsPerShift == null ? null : Number(row.labelsPerShift),
+        mc: String(row.mc || ''),
+        notes: String(row.notes || ''),
+        displayOrder: Number(row.displayOrder || index + 1),
+        isChange: Boolean(row.isChange)
+      };
+      statements.push(
+        db.prepare(`
+          INSERT INTO daily_schedule_rows (
+            daily_schedule_item_row_id, plant_id, schedule_date, section_key, row_id, press, part_number, description,
+            cavity, doh, labels_per_shift, mc, notes, shift, part_storage_location_json, raw_json, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(daily_schedule_item_row_id) DO UPDATE SET
+            press = excluded.press,
+            part_number = excluded.part_number,
+            description = excluded.description,
+            cavity = excluded.cavity,
+            doh = excluded.doh,
+            labels_per_shift = excluded.labels_per_shift,
+            mc = excluded.mc,
+            notes = excluded.notes,
+            shift = excluded.shift,
+            part_storage_location_json = excluded.part_storage_location_json,
+            raw_json = excluded.raw_json,
+            updated_at = excluded.updated_at
+        `).bind(
+          `${plantId}:${scheduleDate}:${sectionKey}:${rowId}`,
+          plantId,
+          scheduleDate,
+          sectionKey,
+          rowId,
+          stringOrNull(normalizedRow.press),
+          stringOrNull(normalizedRow.partNumber),
+          stringOrNull(normalizedRow.description),
+          stringOrNull(normalizedRow.cavity),
+          normalizedRow.doh == null ? null : String(normalizedRow.doh),
+          normalizedRow.labelsPerShift == null ? null : String(normalizedRow.labelsPerShift),
+          stringOrNull(normalizedRow.mc),
+          stringOrNull(normalizedRow.notes),
+          stringOrNull(normalizedRow.shift),
+          jsonOrNull(normalizedRow.partStorageLocation),
+          jsonOrNull(normalizedRow),
+          now,
+          now
+        )
+      );
+    });
+  });
+
+  const scheduleChangeRows = [...rowsBySection.northBayChanges, ...rowsBySection.southBayChanges]
+    .filter(row => String(row?.press || '').trim());
+  let createdScheduleIssueCount = 0;
+
+  for (const row of scheduleChangeRows) {
+    const bundle = buildScheduleImportIssue(plantId, scheduleDate, payload.shift, row);
+    const existing = await first(db, 'SELECT issue_id FROM issues WHERE plant_id = ? AND issue_id = ? LIMIT 1', plantId, bundle.issueId);
+    if (existing) continue;
+
+    const issueRow = buildIssueRowFromClient(plantId, bundle.issueId, bundle.issue);
+    statements.push(db.prepare(issueUpsertStatement()).bind(...issueUpsertParams(issueRow)));
+    createdScheduleIssueCount += 1;
+
+    bundle.events
+      .map((event, index) => buildEventRowFromClient(plantId, bundle.issueId, event, index))
+      .forEach(eventRow => {
+        statements.push(
+          db.prepare(`
+            INSERT INTO issue_events (
+              event_id, issue_id, plant_id, event_type, event_at, actor_uid, actor_name, payload_json, dedupe_key, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(event_id) DO UPDATE SET
+              event_type = excluded.event_type,
+              event_at = excluded.event_at,
+              actor_uid = excluded.actor_uid,
+              actor_name = excluded.actor_name,
+              payload_json = excluded.payload_json,
+              dedupe_key = excluded.dedupe_key,
+              created_at = excluded.created_at
+          `).bind(
+            eventRow.event_id,
+            eventRow.issue_id,
+            eventRow.plant_id,
+            eventRow.event_type,
+            eventRow.event_at,
+            eventRow.actor_uid,
+            eventRow.actor_name,
+            eventRow.payload_json,
+            eventRow.dedupe_key,
+            eventRow.created_at
+          )
+        );
+      });
+  }
+
+  await db.batch(statements);
+
+  return {
+    schedule: serializeDailySchedule(await first(db, 'SELECT * FROM daily_schedules WHERE plant_id = ? AND schedule_date = ? LIMIT 1', plantId, scheduleDate)),
+    rowCount: Object.values(rowsBySection).reduce((sum, rows) => sum + rows.length, 0),
+    scheduleIssueCount: createdScheduleIssueCount
+  };
 }
 
 function issueUpsertStatement() {
@@ -703,6 +1058,101 @@ async function updatePlantMember(db, plantId, uid, body, user) {
   });
 }
 
+async function requirePlantConfigManager(db, plantId, user) {
+  const currentMember = await requirePlantPermission(db, plantId, user, null);
+  const permissions = parsePermissions(currentMember.permissions_json);
+  if (currentMember.role !== 'admin' && permissions.canManageStatuses !== true) {
+    throw Object.assign(new Error('Permission denied'), { status: 403 });
+  }
+  return currentMember;
+}
+
+async function getStatusConfig(db, plantId, user) {
+  await requirePlantPermission(db, plantId, user, 'canViewPlant');
+  const row = await first(db, 'SELECT * FROM plant_status_config WHERE plant_id = ? LIMIT 1', plantId);
+  return jsonResponse({ statusConfig: serializeStatusConfig(row) });
+}
+
+async function updateStatusConfig(db, plantId, body, user) {
+  await requirePlantConfigManager(db, plantId, user);
+  const statuses = body?.statuses && typeof body.statuses === 'object' && !Array.isArray(body.statuses)
+    ? body.statuses
+    : {};
+  const subcategoryRoutes = body?.subcategoryRoutes && typeof body.subcategoryRoutes === 'object'
+    ? body.subcategoryRoutes
+    : null;
+  await run(
+    db,
+    `
+      INSERT INTO plant_status_config (plant_id, statuses_json, subcategory_routes_json, updated_by_uid, updated_at)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(plant_id) DO UPDATE SET
+        statuses_json = excluded.statuses_json,
+        subcategory_routes_json = excluded.subcategory_routes_json,
+        updated_by_uid = excluded.updated_by_uid,
+        updated_at = excluded.updated_at
+    `,
+    plantId,
+    jsonOrNull(statuses),
+    jsonOrNull(subcategoryRoutes),
+    user.uid,
+    nowIso()
+  );
+  return getStatusConfig(db, plantId, user);
+}
+
+async function getStoreConfig(db, plantId, user) {
+  await requirePlantPermission(db, plantId, user, 'canViewPlant');
+  const row = await first(db, 'SELECT * FROM plant_store_config WHERE plant_id = ? LIMIT 1', plantId);
+  return jsonResponse({ storeConfig: serializePlantStoreConfig(row) });
+}
+
+async function updateStoreConfig(db, plantId, body, user) {
+  await requirePlantConfigManager(db, plantId, user);
+  const config = body?.config && typeof body.config === 'object' ? body.config : {};
+  await run(
+    db,
+    `
+      INSERT INTO plant_store_config (plant_id, config_json, updated_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(plant_id) DO UPDATE SET
+        config_json = excluded.config_json,
+        updated_at = excluded.updated_at
+    `,
+    plantId,
+    jsonOrNull(config),
+    nowIso()
+  );
+  return getStoreConfig(db, plantId, user);
+}
+
+async function getRoleAlertRouting(db, plantId, user) {
+  await requirePlantPermission(db, plantId, user, 'canViewPlant');
+  const row = await first(db, 'SELECT * FROM role_alert_routing_config WHERE plant_id = ? LIMIT 1', plantId);
+  return jsonResponse({ roleAlertRouting: serializeRoleAlertRoutingConfig(row) });
+}
+
+async function updateRoleAlertRouting(db, plantId, body, user) {
+  await requirePlantConfigManager(db, plantId, user);
+  const rules = Array.isArray(body?.rules) ? body.rules : [];
+  await run(
+    db,
+    `
+      INSERT INTO role_alert_routing_config (plant_id, rules_json, updated_by_uid, updated_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(plant_id) DO UPDATE SET
+        rules_json = excluded.rules_json,
+        updated_by_uid = excluded.updated_by_uid,
+        updated_at = excluded.updated_at
+    `,
+    plantId,
+    jsonOrNull(rules),
+    user.uid,
+    nowIso()
+  );
+  return getRoleAlertRouting(db, plantId, user);
+}
+
 async function listRoleAlerts(db, request, plantId, user) {
   await requirePlantPermission(db, plantId, user, 'canViewPlant');
   const url = new URL(request.url);
@@ -1063,18 +1513,61 @@ async function awardGamification(db, plantId, body, user) {
 
 async function getPlantBootstrap(db, plantId, user) {
   const member = await requirePlantPermission(db, plantId, user, 'canViewPlant');
-  const [plant, statuses, presses, game] = await Promise.all([
+  const [plant, statuses, presses, game, store, roleAlertRouting] = await Promise.all([
     first(db, 'SELECT * FROM plants WHERE plant_id = ? LIMIT 1', plantId),
     first(db, 'SELECT * FROM plant_status_config WHERE plant_id = ? LIMIT 1', plantId),
     first(db, 'SELECT * FROM plant_press_config WHERE plant_id = ? LIMIT 1', plantId),
-    first(db, 'SELECT * FROM gamification_config WHERE plant_id = ? LIMIT 1', plantId)
+    first(db, 'SELECT * FROM gamification_config WHERE plant_id = ? LIMIT 1', plantId),
+    first(db, 'SELECT * FROM plant_store_config WHERE plant_id = ? LIMIT 1', plantId),
+    first(db, 'SELECT * FROM role_alert_routing_config WHERE plant_id = ? LIMIT 1', plantId)
   ]);
   return jsonResponse({
     plant: serializePlant(plant),
     member: serializePlantMember(member),
     statusConfig: serializeStatusConfig(statuses),
     pressConfig: serializePressConfig(presses),
-    gamificationConfig: serializeGamificationConfig(game)
+    gamificationConfig: serializeGamificationConfig(game),
+    storeConfig: serializePlantStoreConfig(store),
+    roleAlertRouting: serializeRoleAlertRoutingConfig(roleAlertRouting)
+  });
+}
+
+async function getDailySchedule(db, plantId, scheduleDate, user) {
+  await requirePlantPermission(db, plantId, user, 'canViewPlant');
+  const schedule = await first(
+    db,
+    'SELECT * FROM daily_schedules WHERE plant_id = ? AND schedule_date = ? LIMIT 1',
+    plantId,
+    scheduleDate
+  );
+  if (!schedule) {
+    return jsonResponse({ schedule: null, sections: {} });
+  }
+  const rows = await all(
+    db,
+    `
+      SELECT *
+      FROM daily_schedule_rows
+      WHERE plant_id = ? AND schedule_date = ?
+      ORDER BY section_key ASC, COALESCE(CAST(json_extract(raw_json, '$.displayOrder') AS INTEGER), 999999) ASC, row_id ASC
+    `,
+    plantId,
+    scheduleDate
+  );
+  const sections = {
+    page1: [],
+    page2: [],
+    northBayChanges: [],
+    southBayChanges: []
+  };
+  rows.forEach(row => {
+    const key = row.section_key;
+    if (!sections[key]) sections[key] = [];
+    sections[key].push(serializeDailyScheduleRow(row));
+  });
+  return jsonResponse({
+    schedule: serializeDailySchedule(schedule),
+    sections
   });
 }
 
@@ -1157,8 +1650,15 @@ export async function handleD1ApiRequest(request, env, { authenticateRequest } =
     const meUpdateMatch = request.method === 'PATCH' && url.pathname === '/api/me';
     const plantsListMatch = request.method === 'GET' && url.pathname === '/api/plants';
     const bootstrapMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/bootstrap$/);
+    const dailyScheduleMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/daily-schedules\/([^/]+)$/);
     const plantMembersMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/members$/);
     const plantMemberUpdateMatch = request.method === 'PATCH' && url.pathname.match(/^\/api\/plants\/([^/]+)\/members\/([^/]+)$/);
+    const statusConfigMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/status-config$/);
+    const statusConfigUpdateMatch = request.method === 'PUT' && url.pathname.match(/^\/api\/plants\/([^/]+)\/status-config$/);
+    const storeConfigMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/store-config$/);
+    const storeConfigUpdateMatch = request.method === 'PUT' && url.pathname.match(/^\/api\/plants\/([^/]+)\/store-config$/);
+    const roleAlertRoutingMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/role-alert-routing$/);
+    const roleAlertRoutingUpdateMatch = request.method === 'PUT' && url.pathname.match(/^\/api\/plants\/([^/]+)\/role-alert-routing$/);
     const gamificationMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/gamification$/);
     const gamificationAwardMatch = request.method === 'POST' && url.pathname.match(/^\/api\/plants\/([^/]+)\/gamification\/award$/);
     const roleAlertsMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/role-alerts$/);
@@ -1172,7 +1672,7 @@ export async function handleD1ApiRequest(request, env, { authenticateRequest } =
     const eventsMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/issues\/([^/]+)\/events$/);
     const attachmentsMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/issues\/([^/]+)\/attachments$/);
 
-    if (!meMatch && !meUpdateMatch && !plantsListMatch && !bootstrapMatch && !plantMembersMatch && !plantMemberUpdateMatch && !gamificationMatch && !gamificationAwardMatch && !roleAlertsMatch && !roleAlertCreateMatch && !roleAlertUpdateMatch && !issuesMatch && !issueCreateMatch && !issueMatch && !issueUpdateMatch && !issueDeleteMatch && !eventsMatch && !attachmentsMatch) {
+    if (!meMatch && !meUpdateMatch && !plantsListMatch && !bootstrapMatch && !dailyScheduleMatch && !plantMembersMatch && !plantMemberUpdateMatch && !statusConfigMatch && !statusConfigUpdateMatch && !storeConfigMatch && !storeConfigUpdateMatch && !roleAlertRoutingMatch && !roleAlertRoutingUpdateMatch && !gamificationMatch && !gamificationAwardMatch && !roleAlertsMatch && !roleAlertCreateMatch && !roleAlertUpdateMatch && !issuesMatch && !issueCreateMatch && !issueMatch && !issueUpdateMatch && !issueDeleteMatch && !eventsMatch && !attachmentsMatch) {
       return null;
     }
 
@@ -1193,11 +1693,32 @@ export async function handleD1ApiRequest(request, env, { authenticateRequest } =
     if (bootstrapMatch) {
       return getPlantBootstrap(db, decodePathSegment(bootstrapMatch[1]), user);
     }
+    if (dailyScheduleMatch) {
+      return getDailySchedule(db, decodePathSegment(dailyScheduleMatch[1]), decodePathSegment(dailyScheduleMatch[2]), user);
+    }
     if (plantMembersMatch) {
       return listPlantMembers(db, request, decodePathSegment(plantMembersMatch[1]), user);
     }
     if (plantMemberUpdateMatch) {
       return updatePlantMember(db, decodePathSegment(plantMemberUpdateMatch[1]), decodePathSegment(plantMemberUpdateMatch[2]), await request.json(), user);
+    }
+    if (statusConfigMatch) {
+      return getStatusConfig(db, decodePathSegment(statusConfigMatch[1]), user);
+    }
+    if (statusConfigUpdateMatch) {
+      return updateStatusConfig(db, decodePathSegment(statusConfigUpdateMatch[1]), await request.json(), user);
+    }
+    if (storeConfigMatch) {
+      return getStoreConfig(db, decodePathSegment(storeConfigMatch[1]), user);
+    }
+    if (storeConfigUpdateMatch) {
+      return updateStoreConfig(db, decodePathSegment(storeConfigUpdateMatch[1]), await request.json(), user);
+    }
+    if (roleAlertRoutingMatch) {
+      return getRoleAlertRouting(db, decodePathSegment(roleAlertRoutingMatch[1]), user);
+    }
+    if (roleAlertRoutingUpdateMatch) {
+      return updateRoleAlertRouting(db, decodePathSegment(roleAlertRoutingUpdateMatch[1]), await request.json(), user);
     }
     if (gamificationMatch) {
       return getGamificationState(db, decodePathSegment(gamificationMatch[1]), user);

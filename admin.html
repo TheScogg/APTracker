@@ -466,7 +466,7 @@
           <!-- Daily Schedule Import -->
           <div class="card" style="margin-top:12px;">
             <h2><span class="step-num">3</span>Daily Schedule Import</h2>
-            <p class="muted" style="margin-bottom:10px;">Upload or paste schedule JSON to import daily schedules into Firestore.</p>
+            <p class="muted" style="margin-bottom:10px;">Upload or paste schedule JSON to import daily schedules into SQL.</p>
             <div class="grid-2">
               <input id="schedule-date" class="mono-input" type="date" />
               <input id="schedule-source-name" placeholder="Source file name (optional, e.g. Apr 10, 2026.pdf)" />
@@ -1335,6 +1335,101 @@ async function commitInChunks(ops, maxPerBatch = 450) {
     });
     await batch.commit();
   }
+}
+
+async function adminApiRequest(path, options = {}) {
+  if (!currentUser?.getIdToken) throw new Error('Sign in is required.');
+  const token = await currentUser.getIdToken();
+  const headers = {
+    ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+    Authorization: `Bearer ${token}`,
+    ...(options.headers || {})
+  };
+  const res = await fetch(path, {
+    ...options,
+    headers,
+    body: options.body && typeof options.body !== 'string'
+      ? JSON.stringify(options.body)
+      : options.body
+  });
+  const text = await res.text();
+  let data = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch (_) {
+      data = null;
+    }
+  }
+  if (!res.ok) {
+    const snippet = text ? text.replace(/\s+/g, ' ').trim().slice(0, 180) : '';
+    throw new Error(data?.error || snippet || `Request failed (${res.status})`);
+  }
+  if (!data && text) {
+    const snippet = text.replace(/\s+/g, ' ').trim().slice(0, 180);
+    throw new Error(`Expected JSON response but received: ${snippet}`);
+  }
+  return data;
+}
+
+function schedulePayloadForImport(normalized, sourceName = '', sourceType = '') {
+  return {
+    schedule_info: {
+      date: normalized.scheduleDate,
+      shift: normalized.shift,
+      line_speed: normalized.lineSpeed,
+      total_planned_pcs: normalized.totalPlannedPcs,
+      note: normalized.notes
+    },
+    page_1: (normalized.sections.page1 || []).map(row => ({
+      press: row.press,
+      part_storage_location: row.partStorageLocation,
+      part_number: row.partNumber,
+      description: row.description,
+      cavity: row.cavity,
+      doh: row.doh,
+      labels_per_shift: row.labelsPerShift,
+      mc: row.mc,
+      notes: row.notes
+    })),
+    page_2: (normalized.sections.page2 || []).map(row => ({
+      press: row.press,
+      part_storage_location: row.partStorageLocation,
+      part_number: row.partNumber,
+      description: row.description,
+      cavity: row.cavity,
+      doh: row.doh,
+      labels_per_shift: row.labelsPerShift,
+      mc: row.mc,
+      notes: row.notes
+    })),
+    north_bay_changes: (normalized.sections.northBayChanges || []).map(row => ({
+      press: row.press,
+      part_storage_location: row.partStorageLocation,
+      part_number: row.partNumber,
+      description: row.description,
+      cavity: row.cavity,
+      doh: row.doh,
+      labels_per_shift: row.labelsPerShift,
+      mc: row.mc,
+      notes: row.notes
+    })),
+    south_bay_changes: (normalized.sections.southBayChanges || []).map(row => ({
+      press: row.press,
+      part_storage_location: row.partStorageLocation,
+      part_number: row.partNumber,
+      description: row.description,
+      cavity: row.cavity,
+      doh: row.doh,
+      labels_per_shift: row.labelsPerShift,
+      mc: row.mc,
+      notes: row.notes
+    })),
+    _meta: {
+      sourceFileName: sourceName || '',
+      sourceFileType: sourceType || ''
+    }
+  };
 }
 
 function normalizeStatusesForSave(rawStatuses) {
@@ -2338,54 +2433,24 @@ async function importDailySchedule() {
     if (!scheduleDate) throw new Error('Schedule date is required.');
     if (!/^\d{4}-\d{2}-\d{2}$/.test(scheduleDate)) throw new Error('Schedule date must use yyyy-mm-dd format.');
 
-    const dailyRef = doc(db, 'plants', plantId, 'dailySchedules', scheduleDate);
-    const sections = normalized.sections;
-    const existingDaily = await getDoc(dailyRef);
-    const deleteOps = [];
+    normalized.scheduleDate = scheduleDate;
     for (const cfg of SCHEDULE_SECTIONS) {
-      const sectionRef = collection(db, 'plants', plantId, 'dailySchedules', scheduleDate, cfg.section);
-      const existingRows = await getDocs(sectionRef);
-      existingRows.forEach(rowDoc => deleteOps.push({ type: 'delete', ref: rowDoc.ref }));
+      for (const row of (normalized.sections[cfg.section] || [])) row.scheduleDate = scheduleDate;
     }
-    await commitInChunks(deleteOps);
-
-    const setOps = [];
-    setOps.push({ type: 'set', ref: dailyRef, data: {
-      scheduleDate,
-      plantId,
-      shift: normalized.shift,
-      lineSpeed: normalized.lineSpeed,
-      totalPlannedPcs: normalized.totalPlannedPcs,
-      sourceFileName: String(sourceNameInput?.value || selectedFile?.name || '').trim(),
-      sourceFileType: selectedFile?.type || (String(sourceNameInput?.value || '').toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'application/json'),
-      status: 'imported',
-      notes: normalized.notes,
-      page1Count: sections.page1.length,
-      page2Count: sections.page2.length,
-      northBayChangesCount: sections.northBayChanges.length,
-      southBayChangesCount: sections.southBayChanges.length,
-      updatedAt: serverTimestamp(),
-      createdAt: existingDaily.exists() ? (existingDaily.data().createdAt || serverTimestamp()) : serverTimestamp()
-    }, options: { merge: true } });
-
-    for (const cfg of SCHEDULE_SECTIONS) {
-      const sectionRows = sections[cfg.section];
-      sectionRows.forEach(row => {
-        setOps.push({ type: 'set', ref: doc(db, 'plants', plantId, 'dailySchedules', scheduleDate, cfg.section, row.rowId), data: {
-          ...row,
-          scheduleDate,
-          plantId,
-          shift: normalized.shift,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
-        }});
-      });
-    }
-    const scheduleIssueCount = await appendScheduleChangeIssueOps(setOps, plantId, scheduleDate, normalized.shift, sections);
-    await commitInChunks(setOps);
+    const sourceName = String(sourceNameInput?.value || selectedFile?.name || '').trim();
+    const sourceType = selectedFile?.type || (sourceName.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'application/json');
+    const importPayload = schedulePayloadForImport(normalized, sourceName, sourceType);
+    const result = await adminApiRequest(`/api/import-schedule?plant=${encodeURIComponent(plantId)}`, {
+      method: 'POST',
+      headers: {
+        'x-source-file-name': sourceName || `admin-import-${scheduleDate}`,
+        'x-source-file-type': sourceType
+      },
+      body: importPayload
+    });
 
     if (dateInput && !dateInput.value) dateInput.value = scheduleDate;
-    feedback('schedule-import-feedback', 'ok', `Imported ${scheduleDate} for ${plantId}: ${sections.page1.length + sections.page2.length + sections.northBayChanges.length + sections.southBayChanges.length} rows; created ${scheduleIssueCount} schedule issue(s).`);
+    feedback('schedule-import-feedback', 'ok', `Imported ${scheduleDate} for ${plantId}: ${result.totalRows || 0} rows; created ${result.scheduleIssues || 0} schedule issue(s).`);
   } catch (e) {
     console.error(e);
     feedback('schedule-import-feedback', 'error', e.message || 'Failed to import schedule JSON.');
@@ -2559,34 +2624,17 @@ async function batchImportSchedules() {
         for (const cfg of SCHEDULE_SECTIONS) { for (const row of (norm.sections[cfg.section]||[])) row.scheduleDate = date; }
 
         feedback('batch-feedback', '', `[${i+1}/${fileArr.length}] Importing: ${date}`);
-        const dailyRef = doc(db, 'plants', plantId, 'dailySchedules', date);
-        const deleteOps = [];
-        for (const cfg of SCHEDULE_SECTIONS) {
-          const snap = await getDocs(collection(db, 'plants', plantId, 'dailySchedules', date, cfg.section));
-          snap.forEach(d => deleteOps.push({ type:'delete', ref:d.ref }));
-        }
-        await commitInChunks(deleteOps);
-
-        const setOps = [{ type:'set', ref:dailyRef, data:{
-          scheduleDate:date, plantId, shift:norm.shift,
-          lineSpeed:norm.lineSpeed, totalPlannedPcs:norm.totalPlannedPcs,
-          sourceFileName:file.name, sourceFileType:'application/pdf',
-          status:'imported', notes:norm.notes,
-          page1Count:norm.sections.page1.length, page2Count:norm.sections.page2.length,
-          northBayChangesCount:norm.sections.northBayChanges.length, southBayChangesCount:norm.sections.southBayChanges.length,
-          updatedAt:serverTimestamp(), createdAt:serverTimestamp(),
-        }}];
-
-        for (const cfg of SCHEDULE_SECTIONS) {
-          for (const row of (norm.sections[cfg.section]||[])) {
-            setOps.push({ type:'set', ref:doc(db, 'plants', plantId, 'dailySchedules', date, cfg.section, row.rowId), data:{ ...row, scheduleDate:date, plantId, shift:norm.shift, createdAt:serverTimestamp(), updatedAt:serverTimestamp() }});
-          }
-        }
-        const scheduleIssueCount = await appendScheduleChangeIssueOps(setOps, plantId, date, norm.shift, norm.sections);
-        await commitInChunks(setOps);
+        const result = await adminApiRequest(`/api/import-schedule?plant=${encodeURIComponent(plantId)}`, {
+          method: 'POST',
+          headers: {
+            'x-source-file-name': file.name,
+            'x-source-file-type': 'application/pdf'
+          },
+          body: schedulePayloadForImport(norm, file.name, 'application/pdf')
+        });
 
         rowCount = Object.values(norm.sections).reduce((s,r)=>s+r.length, 0);
-        icon = '✅'; statusText = 'Imported'; detail = `${rowCount} rows; ${scheduleIssueCount} schedule issue(s)`;
+        icon = '✅'; statusText = 'Imported'; detail = `${result.totalRows || rowCount} rows; ${result.scheduleIssues || 0} schedule issue(s)`;
         successCount++;
       }
     } catch (err) {
@@ -2632,44 +2680,39 @@ async function viewSchedule() {
   if (!plantId) { feedback('view-schedule-feedback', 'error', 'Select a plant in Step 3.'); return; }
 
   try {
-    const dailyRef = doc(db, 'plants', plantId, 'dailySchedules', date);
-    const dailySnap = await getDoc(dailyRef);
-    if (!dailySnap.exists()) throw new Error(`No schedule found for ${date} in plant ${plantId}.`);
+    const data = await adminApiRequest(`/api/plants/${encodeURIComponent(plantId)}/daily-schedules/${encodeURIComponent(date)}`);
+    if (!data?.schedule) throw new Error(`No schedule found for ${date} in plant ${plantId}.`);
 
-    const data = dailySnap.data();
+    const schedule = data.schedule || {};
     const result = {
       schedule_info: {
-        date: data.scheduleDate || date,
-        shift: String(data.shift || ''),
-        line_speed: data.lineSpeed != null ? String(data.lineSpeed) : '',
-        total_planned_pcs: data.totalPlannedPcs != null ? String(data.totalPlannedPcs) : '',
-        note: data.notes || '',
+        date: schedule.scheduleDate || date,
+        shift: String(schedule.shift || ''),
+        line_speed: schedule.lineSpeed != null ? String(schedule.lineSpeed) : '',
+        total_planned_pcs: schedule.totalPlannedPcs != null ? String(schedule.totalPlannedPcs) : '',
+        note: schedule.notes || '',
       }
     };
 
     const sectionMap = [
-      { fbKey: 'page1', jsonKey: 'page_1' },
-      { fbKey: 'page2', jsonKey: 'page_2' },
-      { fbKey: 'northBayChanges', jsonKey: 'north_bay_changes' },
-      { fbKey: 'southBayChanges', jsonKey: 'south_bay_changes' },
+      { apiKey: 'page1', jsonKey: 'page_1' },
+      { apiKey: 'page2', jsonKey: 'page_2' },
+      { apiKey: 'northBayChanges', jsonKey: 'north_bay_changes' },
+      { apiKey: 'southBayChanges', jsonKey: 'south_bay_changes' },
     ];
 
-    for (const { fbKey, jsonKey } of sectionMap) {
-      const snap = await getDocs(collection(db, 'plants', plantId, 'dailySchedules', date, fbKey));
-      result[jsonKey] = snap.docs.map(d => {
-        const r = d.data();
-        return {
-          press: r.press || '',
-          part_storage_location: Array.isArray(r.partStorageLocation) ? r.partStorageLocation : [],
-          part_number: r.partNumber || '',
-          description: r.description || '',
-          cavity: r.cavity || '',
-          doh: r.doh != null ? String(r.doh) : '',
-          labels_per_shift: r.labelsPerShift != null ? String(r.labelsPerShift) : '',
-          mc: r.mc || '',
-          notes: r.notes || '',
-        };
-      });
+    for (const { apiKey, jsonKey } of sectionMap) {
+      result[jsonKey] = (data.sections?.[apiKey] || []).map(r => ({
+        press: r.press || '',
+        part_storage_location: Array.isArray(r.partStorageLocation) ? r.partStorageLocation : [],
+        part_number: r.partNumber || '',
+        description: r.description || '',
+        cavity: r.cavity || '',
+        doh: r.doh != null ? String(r.doh) : '',
+        labels_per_shift: r.labelsPerShift != null ? String(r.labelsPerShift) : '',
+        mc: r.mc || '',
+        notes: r.notes || '',
+      }));
     }
 
     document.getElementById('schedule-json-text').value = JSON.stringify(result, null, 2);

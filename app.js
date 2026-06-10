@@ -191,6 +191,11 @@ async function ensureSqlPlantBootstrap(plantId) {
   return payload;
 }
 
+function invalidateSqlPlantBootstrap(plantId = currentPlantId) {
+  if (!plantId) return;
+  sqlPlantBootstrapCache.delete(plantId);
+}
+
 function toCompatTimestamp(value) {
   if (!value) return null;
   const ms = value instanceof Date ? value.getTime() : Date.parse(value);
@@ -1152,6 +1157,23 @@ async function getRoleAlertRoutingRules() {
     return _roleAlertRulesCache.rules;
   }
   try {
+    if (shouldUseSqlStagingReads(currentPlantId)) {
+      const sqlBootstrap = await ensureSqlPlantBootstrap(currentPlantId);
+      const bootstrapRules = _normalizeRoleAlertRules(sqlBootstrap?.roleAlertRouting?.rules || null);
+      if (bootstrapRules.length > 0) {
+        _roleAlertRulesCache.plantId = currentPlantId;
+        _roleAlertRulesCache.fetchedAt = now;
+        _roleAlertRulesCache.rules = bootstrapRules;
+        return bootstrapRules;
+      }
+      const payload = await safeSqlRead(`role alert routing ${currentPlantId}`, () => dataApi.getRoleAlertRouting(currentPlantId));
+      const sqlRules = _normalizeRoleAlertRules(payload?.roleAlertRouting?.rules || null);
+      const rules = sqlRules.length > 0 ? sqlRules : _normalizeRoleAlertRules(ROLE_ALERT_ROUTING_RULES_DEFAULT);
+      _roleAlertRulesCache.plantId = currentPlantId;
+      _roleAlertRulesCache.fetchedAt = now;
+      _roleAlertRulesCache.rules = rules;
+      return rules;
+    }
     const snap = await getDoc(doc(db, 'plants', currentPlantId, 'config', 'roleAlertRouting'));
     const dbRules = _normalizeRoleAlertRules(snap.exists() ? snap.data()?.rules : null);
     const rules = dbRules.length > 0 ? dbRules : _normalizeRoleAlertRules(ROLE_ALERT_ROUTING_RULES_DEFAULT);
@@ -2099,7 +2121,7 @@ function normalizeSchedulePress(machineCode) {
   return String(machineCode || '').trim();
 }
 
-function buildScheduleIndexFromSnaps(snapsBySection) {
+function buildScheduleIndexFromSectionRows(rowsBySection) {
   const scheduled = new Set();
   const lookupByPress = new Map();
   const sortByOrder = (a, b) => Number(a.displayOrder || 0) - Number(b.displayOrder || 0);
@@ -2115,11 +2137,10 @@ function buildScheduleIndexFromSnaps(snapsBySection) {
     lookupByPress.set(machine, existing);
   };
 
-  Object.entries(snapsBySection).forEach(([section, snap]) => {
-    snap.docs.forEach(d => {
-      const data = d.data() || {};
-      const machine = normalizeSchedulePress(data.press);
-      pushRow(machine, { id: d.id, ...data, section });
+  Object.entries(rowsBySection).forEach(([section, rows]) => {
+    (Array.isArray(rows) ? rows : []).forEach((data, idx) => {
+      const machine = normalizeSchedulePress(data?.press);
+      pushRow(machine, { id: data?.rowId || data?.id || `${section}_${idx + 1}`, ...data, section });
     });
   });
 
@@ -2136,6 +2157,12 @@ async function loadDailyScheduleIndex(date) {
   if (dailyScheduleIndexState && dailyScheduleIndexState.plantId === currentPlantId && dailyScheduleIndexState.date === date) {
     return dailyScheduleIndexState;
   }
+  const sqlPayload = await safeSqlRead(`daily schedule ${currentPlantId}:${date}`, () => dataApi.getDailySchedule(currentPlantId, date));
+  if (sqlPayload?.schedule) {
+    const { scheduled, lookupByPress } = buildScheduleIndexFromSectionRows(sqlPayload.sections || {});
+    dailyScheduleIndexState = { plantId: currentPlantId, date, scheduled, lookupByPress };
+    return dailyScheduleIndexState;
+  }
   const dailyRef = doc(db, 'plants', currentPlantId, 'dailySchedules', date);
   const dailySnap = await getDoc(dailyRef);
   if (!dailySnap.exists()) {
@@ -2146,8 +2173,10 @@ async function loadDailyScheduleIndex(date) {
   const sectionSnaps = await Promise.all(
     sections.map(s => getDocs(collection(db, 'plants', currentPlantId, 'dailySchedules', date, s)))
   );
-  const snapsBySection = Object.fromEntries(sections.map((s, idx) => [s, sectionSnaps[idx]]));
-  const { scheduled, lookupByPress } = buildScheduleIndexFromSnaps(snapsBySection);
+  const rowsBySection = Object.fromEntries(
+    sections.map((section, idx) => [section, sectionSnaps[idx].docs.map(d => ({ id: d.id, ...(d.data() || {}) }))])
+  );
+  const { scheduled, lookupByPress } = buildScheduleIndexFromSectionRows(rowsBySection);
   dailyScheduleIndexState = { plantId: currentPlantId, date, scheduled, lookupByPress };
   return dailyScheduleIndexState;
 }
@@ -3219,6 +3248,19 @@ async function loadConfig() {
     refreshStatusDependentUI();
     return;
   }
+  if (shouldUseSqlStagingReads(plantId)) {
+    try {
+      const payload = await safeSqlRead(`status config ${plantId}`, () => dataApi.getStatusConfig(plantId));
+      const loadedStatuses = normalizeLoadedStatuses(payload?.statusConfig?.statuses || {});
+      SUBCATEGORY_ROUTES = normalizeSubcategoryRoutes(payload?.statusConfig?.subcategoryRoutes, loadedStatuses);
+      STATUSES = syncStatusesFromSubcategoryRoutes(loadedStatuses, SUBCATEGORY_ROUTES);
+      rebuildDerivedStatus();
+      refreshStatusDependentUI();
+      return;
+    } catch (e) {
+      console.warn('SQL status config load failed:', e);
+    }
+  }
   try {
     const snap = await getDoc(plantDoc('config', 'statuses'));
     if (mySerial !== statusConfigLoadSerial || plantId !== currentPlantId) return;
@@ -3307,6 +3349,14 @@ function buildStatusFilterPills() {
 
 async function saveConfig() {
   STATUSES = syncStatusesFromSubcategoryRoutes(STATUSES, SUBCATEGORY_ROUTES);
+  if (shouldUseSqlStagingReads(currentPlantId)) {
+    await dataApi.updateStatusConfig(currentPlantId, {
+      statuses: STATUSES,
+      subcategoryRoutes: SUBCATEGORY_ROUTES
+    });
+    invalidateSqlPlantBootstrap(currentPlantId);
+    return;
+  }
   await setDoc(plantDoc('config', 'statuses'), { statuses: STATUSES, subcategoryRoutes: SUBCATEGORY_ROUTES });
 }
 
@@ -3940,6 +3990,29 @@ async function awardGamification(reason, context = {}) {
 // ── XP STORE ──
 
 async function loadStoreConfig() {
+  if (shouldUseSqlStagingReads(currentPlantId)) {
+    try {
+      const sqlBootstrap = await ensureSqlPlantBootstrap(currentPlantId);
+      const config = sqlBootstrap?.storeConfig?.config
+        || (await safeSqlRead(`store config ${currentPlantId}`, () => dataApi.getStoreConfig(currentPlantId)))?.storeConfig?.config
+        || DEFAULT_STORE_ITEMS;
+      storeItems = normalizeStoreItems(config.items || config);
+    } catch (e) {
+      storeItems = normalizeStoreItems(DEFAULT_STORE_ITEMS);
+    }
+    ensureCurrentThemeAccess();
+    restoreSavedThemeSelection();
+    renderThemeChoices();
+    renderStoreCard();
+    renderStoreModal();
+    updateStoreXpDisplay();
+    updateActiveThemeChoice(readSavedTheme('midnight'));
+    if (storeConfigUnsubscribe) {
+      storeConfigUnsubscribe();
+      storeConfigUnsubscribe = null;
+    }
+    return;
+  }
   try {
     const globalSnap = await getDoc(globalStoreConfigDoc());
     if (globalSnap.exists()) {
@@ -4178,19 +4251,39 @@ async function syncBuiltInThemesToFirestore() {
   const syncBtn = document.getElementById('store-sync-themes-btn');
   if (syncBtn) { syncBtn.disabled = true; syncBtn.textContent = 'Syncing…'; }
   try {
-    const storeRef = globalStoreConfigDoc();
-    const snap = await getDoc(storeRef);
-    const incomingItems = Array.isArray(snap.data()?.items) ? snap.data().items : [];
+    let incomingItems = [];
+    if (shouldUseSqlStagingReads(currentPlantId)) {
+      const payload = await dataApi.getStoreConfig(currentPlantId);
+      incomingItems = Array.isArray(payload?.storeConfig?.config?.items) ? payload.storeConfig.config.items : [];
+    } else {
+      const storeRef = globalStoreConfigDoc();
+      const snap = await getDoc(storeRef);
+      incomingItems = Array.isArray(snap.data()?.items) ? snap.data().items : [];
+    }
     const builtInIds = new Set(BUILT_IN_THEME_STORE_ITEMS.map(item => item.id));
     const nonBuiltIns = incomingItems.filter(item => !builtInIds.has(String(item?.id || '').trim()));
     const mergedItems = [...nonBuiltIns, ...BUILT_IN_THEME_STORE_ITEMS];
     mergedItems.sort((a, b) => Number(a?.order || 0) - Number(b?.order || 0));
-    await setDoc(storeRef, {
-      items: mergedItems,
-      updatedAt: serverTimestamp(),
-      updatedBy: currentUser?.uid || null
-    }, { merge: true });
-    showGameToast('✅ Built-in themes synced to Firestore');
+    if (shouldUseSqlStagingReads(currentPlantId)) {
+      await dataApi.updateStoreConfig(currentPlantId, {
+        config: {
+          items: mergedItems,
+          updatedAt: new Date().toISOString(),
+          updatedBy: currentUser?.uid || null
+        }
+      });
+      invalidateSqlPlantBootstrap(currentPlantId);
+      await loadStoreConfig();
+      showGameToast('✅ Built-in themes synced to D1');
+    } else {
+      const storeRef = globalStoreConfigDoc();
+      await setDoc(storeRef, {
+        items: mergedItems,
+        updatedAt: serverTimestamp(),
+        updatedBy: currentUser?.uid || null
+      }, { merge: true });
+      showGameToast('✅ Built-in themes synced to Firestore');
+    }
   } catch (e) {
     console.error('Theme sync failed:', e);
     showGameToast('Could not sync themes');

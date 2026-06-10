@@ -108,6 +108,72 @@ export function serializeGamificationConfig(row) {
   };
 }
 
+export function serializePlantStoreConfig(row) {
+  if (!row) return null;
+  return {
+    plantId: row.plant_id,
+    config: parseJson(row.config_json, {}),
+    updatedAt: toIso(row.updated_at)
+  };
+}
+
+export function serializeRoleAlertRoutingConfig(row) {
+  if (!row) return null;
+  return {
+    plantId: row.plant_id,
+    rules: parseJson(row.rules_json, []),
+    updatedByUid: row.updated_by_uid,
+    updatedAt: toIso(row.updated_at)
+  };
+}
+
+export function serializeDailySchedule(row) {
+  if (!row) return null;
+  const raw = parseJson(row.raw_json, null) || {};
+  return {
+    plantId: row.plant_id,
+    scheduleDate: row.schedule_date,
+    shift: row.shift,
+    lineSpeed: row.line_speed == null ? null : Number(row.line_speed),
+    totalPlannedPcs: row.total_planned_pcs == null ? null : Number(row.total_planned_pcs),
+    sourceFileName: row.source_file_name,
+    sourceFileType: row.source_file_type,
+    status: row.status,
+    notes: row.notes,
+    page1Count: Number(row.page1_count || 0),
+    page2Count: Number(row.page2_count || 0),
+    northBayChangesCount: Number(row.north_bay_changes_count || 0),
+    southBayChangesCount: Number(row.south_bay_changes_count || 0),
+    createdAt: toIso(row.created_at),
+    updatedAt: toIso(row.updated_at),
+    ...raw
+  };
+}
+
+export function serializeDailyScheduleRow(row) {
+  if (!row) return null;
+  const raw = parseJson(row.raw_json, null) || {};
+  return {
+    plantId: row.plant_id,
+    scheduleDate: row.schedule_date,
+    section: row.section_key,
+    rowId: row.row_id,
+    press: row.press,
+    partNumber: row.part_number,
+    description: row.description,
+    cavity: row.cavity,
+    doh: row.doh == null ? null : Number(row.doh),
+    labelsPerShift: row.labels_per_shift == null ? null : Number(row.labels_per_shift),
+    mc: row.mc,
+    notes: row.notes,
+    shift: row.shift,
+    partStorageLocation: parseJson(row.part_storage_location_json, []),
+    createdAt: toIso(row.created_at),
+    updatedAt: toIso(row.updated_at),
+    ...raw
+  };
+}
+
 export function serializeUserGameStats(row) {
   if (!row) return null;
   return {

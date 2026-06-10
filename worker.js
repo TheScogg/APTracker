@@ -1,4 +1,4 @@
-import { handleD1ApiRequest } from './d1-api.js';
+import { handleD1ApiRequest, importDailyScheduleToD1 } from './d1-api.js';
 
 const FIREBASE_AUTH_ORIGIN = 'https://press-tracker-9d9c9.firebaseapp.com';
 const FIREBASE_PROJECT_ID = 'press-tracker-9d9c9';
@@ -940,146 +940,188 @@ async function handleDebugImage(request, env) {
   });
 }
 
-// ── Import schedule JSON to Firestore ─────────────────────────────────
+// ── Import schedule JSON to D1 ────────────────────────────────────────
 
-function firestoreValue(val) {
-  if (val === null || val === undefined) return { nullValue: null };
-  if (val instanceof Date) return { timestampValue: val.toISOString() };
-  if (typeof val === 'number') {
-    return Number.isInteger(val) ? { integerValue: String(val) } : { doubleValue: val };
+const SCHEDULE_SECTIONS = [
+  { inputKey: 'page_1', section: 'page1', isChange: false },
+  { inputKey: 'page_2', section: 'page2', isChange: false },
+  { inputKey: 'north_bay_changes', section: 'northBayChanges', isChange: true },
+  { inputKey: 'south_bay_changes', section: 'southBayChanges', isChange: true }
+];
+
+function normalizeScheduleRowId(press, cavity, usedIds) {
+  const rawPress = String(press || '').trim().toLowerCase()
+    .replace(/\./g, '_')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'row';
+  const safeCavity = String(cavity || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
+  if (!usedIds.has(rawPress)) {
+    usedIds.add(rawPress);
+    return rawPress;
   }
-  if (typeof val === 'boolean') return { booleanValue: val };
-  if (Array.isArray(val)) return { arrayValue: { values: val.map(v => firestoreValue(v)) } };
-  if (typeof val === 'object') {
-    const fields = {};
-    for (const [k, v] of Object.entries(val)) fields[k] = firestoreValue(v);
-    return { mapValue: { fields } };
+  if (safeCavity) {
+    const cavityId = `${rawPress}_cav${safeCavity}`;
+    if (!usedIds.has(cavityId)) {
+      usedIds.add(cavityId);
+      return cavityId;
+    }
   }
-  return { stringValue: String(val) };
+  let index = 2;
+  let nextId = `${rawPress}_${index}`;
+  while (usedIds.has(nextId)) {
+    index += 1;
+    nextId = `${rawPress}_${index}`;
+  }
+  usedIds.add(nextId);
+  return nextId;
+}
+
+function parseMaybeNumber(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function canonicalizeScheduleKeys(raw) {
+  if (!raw || typeof raw !== 'object') return raw;
+  const normalized = { ...raw };
+  const sectionMap = {
+    page1: 'page_1',
+    page2: 'page_2',
+    northBayChanges: 'north_bay_changes',
+    southBayChanges: 'south_bay_changes',
+    north_bay_change: 'north_bay_changes',
+    south_bay_change: 'south_bay_changes'
+  };
+  for (const [alternate, canonical] of Object.entries(sectionMap)) {
+    if (normalized[alternate] !== undefined && normalized[canonical] === undefined) {
+      normalized[canonical] = normalized[alternate];
+      delete normalized[alternate];
+    }
+  }
+  if (normalized.schedule_info && typeof normalized.schedule_info === 'object') {
+    const info = { ...normalized.schedule_info };
+    const infoMap = {
+      scheduleDate: 'date',
+      schedule_date: 'date',
+      lineSpeed: 'line_speed',
+      totalPlannedPcs: 'total_planned_pcs'
+    };
+    for (const [alternate, canonical] of Object.entries(infoMap)) {
+      if (info[alternate] !== undefined && info[canonical] === undefined) {
+        info[canonical] = info[alternate];
+      }
+    }
+    normalized.schedule_info = info;
+  }
+  if (!normalized.schedule_info && (normalized.date || normalized.shift)) {
+    normalized.schedule_info = {
+      date: normalized.date || '',
+      shift: normalized.shift || '',
+      line_speed: '',
+      total_planned_pcs: '',
+      note: ''
+    };
+  }
+  return normalized;
+}
+
+function extractSchedulePayload(parsed) {
+  if (parsed?.schedule_info) return parsed;
+  if (parsed?.dailySchedules && typeof parsed.dailySchedules === 'object') {
+    const firstEntry = Object.values(parsed.dailySchedules)[0];
+    if (firstEntry && typeof firstEntry === 'object') return firstEntry;
+  }
+  return parsed;
+}
+
+function normalizeSchedulePayload(raw) {
+  if (!raw || typeof raw !== 'object') throw new Error('Schedule JSON must be an object.');
+  const info = raw.schedule_info || {};
+  const scheduleDate = String(info.date || '').trim();
+  if (!scheduleDate) throw new Error('schedule_info.date is required (yyyy-mm-dd).');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(scheduleDate)) throw new Error('schedule_info.date must use yyyy-mm-dd format.');
+
+  const sections = {};
+  for (const cfg of SCHEDULE_SECTIONS) {
+    const rows = Array.isArray(raw[cfg.inputKey]) ? raw[cfg.inputKey] : [];
+    const usedIds = new Set();
+    sections[cfg.section] = rows.map((row, index) => ({
+      rowId: normalizeScheduleRowId(row?.press, row?.cavity, usedIds),
+      scheduleDate,
+      shift: Number(info.shift) || 1,
+      section: cfg.section,
+      press: String(row?.press || ''),
+      partStorageLocation: Array.isArray(row?.part_storage_location)
+        ? row.part_storage_location.map(value => String(value ?? ''))
+        : [],
+      partNumber: String(row?.part_number || ''),
+      description: String(row?.description || ''),
+      cavity: String(row?.cavity || ''),
+      doh: parseMaybeNumber(row?.doh),
+      labelsPerShift: parseMaybeNumber(row?.labels_per_shift),
+      mc: String(row?.mc || ''),
+      notes: String(row?.notes || ''),
+      displayOrder: index + 1,
+      isChange: cfg.isChange
+    }));
+  }
+
+  return {
+    scheduleDate,
+    shift: Number(info.shift) || 1,
+    lineSpeed: parseMaybeNumber(info.line_speed),
+    totalPlannedPcs: parseMaybeNumber(info.total_planned_pcs),
+    notes: String(info.note || ''),
+    sections
+  };
 }
 
 async function handleImportSchedule(request, env) {
-  if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405 });
-
   let plantId;
+  let scheduleDate;
   try {
     const url = new URL(request.url);
     plantId = url.searchParams.get('plant');
+    scheduleDate = url.searchParams.get('date');
     if (!plantId) throw new Error('Missing ?plant= parameter');
-  } catch (e) {
-    return new Response(JSON.stringify({ error: e.message }), { status: 400, headers: { 'Content-Type': 'application/json' } });
-  }
 
-  try {
-    const scheduleJson = await request.json();
-    if (!scheduleJson || !scheduleJson.schedule_info || !scheduleJson.schedule_info.date) {
-      return new Response(JSON.stringify({ error: 'Invalid schedule JSON — missing schedule_info.date' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+    const db = env.APTRACKER_DB || env.DB;
+    if (!db) throw new Error('D1 binding not configured. Add APTRACKER_DB or DB to wrangler.jsonc.');
+
+    if (request.method === 'GET') {
+      if (!scheduleDate) throw new Error('Missing ?date= parameter');
+      const existing = await db
+        .prepare('SELECT schedule_date FROM daily_schedules WHERE plant_id = ? AND schedule_date = ? LIMIT 1')
+        .bind(plantId, scheduleDate)
+        .first();
+      return jsonResponse({ exists: Boolean(existing), plantId, date: scheduleDate });
     }
 
-    const saJson = env.GOOGLE_SERVICE_ACCOUNT;
-    if (!saJson) throw new Error('GOOGLE_SERVICE_ACCOUNT not configured');
-    const sa = JSON.parse(saJson);
-    const projectId = sa.project_id;
-    const token = await getGoogleOAuthToken(env);
-
-    const scheduleDate = scheduleJson.schedule_info.date;
-    const basePath = `projects/${projectId}/databases/(default)/documents/plants/${plantId}/dailySchedules/${scheduleDate}`;
-    const now = new Date();
-
-    // Build writes array
-    const writes = [];
-
-    // Main doc
-    const mainFields = {};
-    const mainPairs = [
-      ['scheduleDate', scheduleDate],
-      ['plantId', plantId],
-      ['shift', scheduleJson.schedule_info.shift],
-      ['lineSpeed', scheduleJson.schedule_info.line_speed],
-      ['totalPlannedPcs', scheduleJson.schedule_info.total_planned_pcs],
-      ['sourceFileName', 'iOS Shortcut'],
-      ['sourceFileType', 'image/jpeg'],
-      ['status', 'imported'],
-      ['notes', scheduleJson.schedule_info.note],
-      ['page1Count', (scheduleJson.page_1 || []).length],
-      ['page2Count', (scheduleJson.page_2 || []).length],
-      ['northBayChangesCount', (scheduleJson.north_bay_changes || []).length],
-      ['southBayChangesCount', (scheduleJson.south_bay_changes || []).length]
-    ];
-    for (const [k, v] of mainPairs) mainFields[k] = firestoreValue(v);
-    mainFields.updatedAt = { timestampValue: now.toISOString() };
-    mainFields.createdAt = { timestampValue: now.toISOString() };
-
-    writes.push({ update: { name: basePath, fields: mainFields } });
-
-    // Section rows
-    const sections = [
-      { key: 'page_1', name: 'page1' },
-      { key: 'page_2', name: 'page2' },
-      { key: 'north_bay_changes', name: 'northBayChanges' },
-      { key: 'south_bay_changes', name: 'southBayChanges' }
-    ];
-
-    for (const section of sections) {
-      const rows = scheduleJson[section.key] || [];
-      for (const row of rows) {
-        const baseId = row.row_id || row.press || `row-${Math.random().toString(36).slice(2, 8)}`;
-        const rowId = row.part_number ? `${baseId}_${row.part_number.replace(/[^a-zA-Z0-9]/g, '_')}` : baseId;
-        const pslArray = Array.isArray(row.part_storage_location)
-          ? row.part_storage_location
-          : (row.part_storage_location ? [String(row.part_storage_location)] : []);
-
-        const rowFields = {};
-        const rPairs = [
-          ['rowId', rowId],
-          ['press', row.press],
-          ['partStorageLocation', pslArray],
-          ['partNumber', row.part_number],
-          ['description', row.description],
-          ['cavity', row.cavity],
-          ['doh', row.doh],
-          ['labelsPerShift', row.labels_per_shift],
-          ['mc', row.mc],
-          ['notes', row.notes],
-          ['scheduleDate', scheduleDate],
-          ['plantId', plantId],
-          ['shift', scheduleJson.schedule_info.shift]
-        ];
-        for (const [k, v] of rPairs) rowFields[k] = firestoreValue(v);
-        rowFields.updatedAt = { timestampValue: now.toISOString() };
-        rowFields.createdAt = { timestampValue: now.toISOString() };
-
-        writes.push({ update: { name: `${basePath}/${section.name}/${rowId}`, fields: rowFields } });
-      }
+    if (request.method !== 'POST') {
+      return new Response('Method Not Allowed', { status: 405 });
     }
 
-    // Commit in batches of 500 (Firestore limit)
-    const commitUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents:commit`;
-    const headers = { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' };
+    const scheduleJson = canonicalizeScheduleKeys(await request.json());
+    const payload = extractSchedulePayload(scheduleJson);
+    const normalized = normalizeSchedulePayload(payload);
+    const imported = await importDailyScheduleToD1(db, plantId, {
+      ...normalized,
+      sourceFileName: request.headers.get('x-source-file-name') || 'api-import',
+      sourceFileType: request.headers.get('x-source-file-type') || 'application/json',
+      status: 'imported'
+    });
 
-    for (let i = 0; i < writes.length; i += 500) {
-      const batch = writes.slice(i, i + 500);
-      const res = await fetch(commitUrl, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ writes: batch })
-      });
-      if (!res.ok) {
-        const err = await res.text();
-        throw new Error(`Firestore commit error (batch ${i / 500}): ${res.status} ${err}`);
-      }
-    }
-
-    return new Response(JSON.stringify({
+    return jsonResponse({
       success: true,
       plantId,
-      date: scheduleDate,
-      totalRows: scheduleJson.page_1.length + scheduleJson.page_2.length + scheduleJson.north_bay_changes.length + scheduleJson.south_bay_changes.length
-    }), { headers: { 'Content-Type': 'application/json' } });
-
+      date: normalized.scheduleDate,
+      totalRows: imported.rowCount,
+      scheduleIssues: imported.scheduleIssueCount
+    });
   } catch (e) {
-    return new Response(JSON.stringify({ success: false, error: e.message }), {
-      status: 500,
+    return new Response(JSON.stringify({ success: false, error: e.message, plantId, date: scheduleDate }), {
+      status: e?.status || 500,
       headers: { 'Content-Type': 'application/json' }
     });
   }

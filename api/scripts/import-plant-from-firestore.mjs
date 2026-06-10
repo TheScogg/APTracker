@@ -405,6 +405,11 @@ const TABLES = {
     keys: ['plant_id'],
     columns: [['plant_id'], ['presses_json'], ['updated_by_uid'], ['updated_at']]
   },
+  role_alert_routing_config: {
+    name: 'role_alert_routing_config',
+    keys: ['plant_id'],
+    columns: [['plant_id'], ['rules_json'], ['updated_by_uid'], ['updated_at']]
+  },
   presses: {
     name: 'presses',
     keys: ['plant_id', 'press_id'],
@@ -552,6 +557,7 @@ async function loadPlantSnapshot(targetPlantId) {
     membersSnap,
     accessRequestsSnap,
     statusesSnap,
+    roleAlertRoutingSnap,
     storeConfigSnap,
     pressesConfigSnap,
     gameConfigSnap,
@@ -574,6 +580,7 @@ async function loadPlantSnapshot(targetPlantId) {
     plantRef.collection('members').get(),
     plantRef.collection('accessRequests').get(),
     plantRef.collection('config').doc('statuses').get(),
+    plantRef.collection('config').doc('roleAlertRouting').get(),
     plantRef.collection('config').doc('store').get(),
     plantRef.collection('config').doc('presses').get(),
     plantRef.collection('gamificationConfig').doc('main').get(),
@@ -697,6 +704,7 @@ async function loadPlantSnapshot(targetPlantId) {
     members: membersSnap.docs.map(docSnap => ({ id: docSnap.id, data: docSnap.data() || {} })),
     accessRequests: accessRequestsSnap.docs.map(docSnap => ({ id: docSnap.id, data: docSnap.data() || {} })),
     statusConfig: statusesSnap.exists ? (statusesSnap.data() || {}) : null,
+    roleAlertRoutingConfig: roleAlertRoutingSnap.exists ? (roleAlertRoutingSnap.data() || {}) : null,
     storeConfig: storeConfigSnap.exists ? (storeConfigSnap.data() || {}) : null,
     pressConfig: pressesConfigSnap.exists ? (pressesConfigSnap.data() || {}) : null,
     gamificationConfig: gameConfigSnap.exists ? (gameConfigSnap.data() || {}) : null,
@@ -922,6 +930,13 @@ function buildRows(snapshot, users) {
     presses_json: jsonOrNull(snapshot.pressConfig.presses || {}),
     updated_by_uid: stringOrNull(snapshot.pressConfig.updatedBy?.uid || snapshot.pressConfig.updatedByUid),
     updated_at: dateOrNow(snapshot.pressConfig.updatedAt)
+  }] : [];
+
+  const roleAlertRoutingRows = snapshot.roleAlertRoutingConfig ? [{
+    plant_id: snapshot.plant.id,
+    rules_json: jsonOrNull(snapshot.roleAlertRoutingConfig.rules || []),
+    updated_by_uid: stringOrNull(snapshot.roleAlertRoutingConfig.updatedBy?.uid || snapshot.roleAlertRoutingConfig.updatedByUid),
+    updated_at: dateOrNow(snapshot.roleAlertRoutingConfig.updatedAt)
   }] : [];
 
   const pressRows = [];
@@ -1450,6 +1465,7 @@ function buildRows(snapshot, users) {
     access_requests: accessRequestRows,
     plant_status_config: statusConfigRows,
     plant_press_config: pressConfigRows,
+    role_alert_routing_config: roleAlertRoutingRows,
     presses: pressRows,
     gamification_config: gameConfigRows,
     plant_store_config: storeConfigRows,
@@ -1487,6 +1503,7 @@ function buildImportSql(rowsByTable) {
     'access_requests',
     'plant_status_config',
     'plant_press_config',
+    'role_alert_routing_config',
     'presses',
     'gamification_config',
     'plant_store_config',

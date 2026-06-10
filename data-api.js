@@ -87,6 +87,39 @@ export class SqlDataApi {
     });
   }
 
+  getStatusConfig(plantId) {
+    return this.request(`/plants/${encodeURIComponent(plantId)}/status-config`);
+  }
+
+  updateStatusConfig(plantId, payload) {
+    return this.request(`/plants/${encodeURIComponent(plantId)}/status-config`, {
+      method: 'PUT',
+      body: payload
+    });
+  }
+
+  getStoreConfig(plantId) {
+    return this.request(`/plants/${encodeURIComponent(plantId)}/store-config`);
+  }
+
+  updateStoreConfig(plantId, payload) {
+    return this.request(`/plants/${encodeURIComponent(plantId)}/store-config`, {
+      method: 'PUT',
+      body: payload
+    });
+  }
+
+  getRoleAlertRouting(plantId) {
+    return this.request(`/plants/${encodeURIComponent(plantId)}/role-alert-routing`);
+  }
+
+  updateRoleAlertRouting(plantId, payload) {
+    return this.request(`/plants/${encodeURIComponent(plantId)}/role-alert-routing`, {
+      method: 'PUT',
+      body: payload
+    });
+  }
+
   getGamificationState(plantId) {
     return this.request(`/plants/${encodeURIComponent(plantId)}/gamification`);
   }
@@ -100,6 +133,10 @@ export class SqlDataApi {
 
   loadPlantBootstrap(plantId) {
     return this.request(`/plants/${encodeURIComponent(plantId)}/bootstrap`);
+  }
+
+  getDailySchedule(plantId, scheduleDate) {
+    return this.request(`/plants/${encodeURIComponent(plantId)}/daily-schedules/${encodeURIComponent(scheduleDate)}`);
   }
 
   listIssues(plantId, params = {}) {
@@ -199,9 +236,16 @@ export class FirebaseDataApi {
   listPlants() { return this.unavailable('listPlants'); }
   listPlantMembers() { return this.unavailable('listPlantMembers'); }
   updatePlantMember() { return this.unavailable('updatePlantMember'); }
+  getStatusConfig() { return this.unavailable('getStatusConfig'); }
+  updateStatusConfig() { return this.unavailable('updateStatusConfig'); }
+  getStoreConfig() { return this.unavailable('getStoreConfig'); }
+  updateStoreConfig() { return this.unavailable('updateStoreConfig'); }
+  getRoleAlertRouting() { return this.unavailable('getRoleAlertRouting'); }
+  updateRoleAlertRouting() { return this.unavailable('updateRoleAlertRouting'); }
   getGamificationState() { return this.unavailable('getGamificationState'); }
   awardGamification() { return this.unavailable('awardGamification'); }
   loadPlantBootstrap() { return this.unavailable('loadPlantBootstrap'); }
+  getDailySchedule() { return this.unavailable('getDailySchedule'); }
   listIssues() { return this.unavailable('listIssues'); }
   deleteIssue() { return this.unavailable('deleteIssue'); }
   getIssue() { return this.unavailable('getIssue'); }
