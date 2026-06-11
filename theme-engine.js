@@ -745,3 +745,31 @@ export function saveThemeSelection(themeKey) {
     localStorage.setItem(THEME_STORAGE_KEY, themeKey);
   } catch (error) {}
 }
+
+export function hexToRgb(hex) {
+  const normalized = normalizeHex(hex);
+  if (!normalized) return { r: 0, g: 0, b: 0 };
+  return {
+    r: parseInt(normalized.slice(1, 3), 16),
+    g: parseInt(normalized.slice(3, 5), 16),
+    b: parseInt(normalized.slice(5, 7), 16)
+  };
+}
+
+export function getRelativeLuminance(hex) {
+  const rgb = hexToRgb(hex);
+  const a = [rgb.r, rgb.g, rgb.b].map(v => {
+    v /= 255;
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  });
+  return a[0] * 0.2126 + a[1] * 0.7152 + a[2] * 0.0722;
+}
+
+export function getContrastRatio(hex1, hex2) {
+  const l1 = getRelativeLuminance(hex1);
+  const l2 = getRelativeLuminance(hex2);
+  const brightest = Math.max(l1, l2);
+  const darkest = Math.min(l1, l2);
+  return (brightest + 0.05) / (darkest + 0.05);
+}
+

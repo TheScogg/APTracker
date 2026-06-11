@@ -980,8 +980,27 @@ async function updateCurrentUserContext(db, user, patch = {}) {
     await run(db, `UPDATE users SET ${updates.join(', ')} WHERE uid = ?`, ...values);
   }
 
+  const refreshed = await first(db, 'SELECT * FROM users WHERE uid = ? LIMIT 1', user.uid);
+
+  await run(
+    db,
+    `
+      UPDATE plant_members
+      SET
+        display_name = COALESCE(?, display_name),
+        full_name = COALESCE(?, full_name),
+        sso_number = COALESCE(?, sso_number),
+        email = COALESCE(?, email)
+      WHERE uid = ?
+    `,
+    stringOrNull(refreshed?.display_name),
+    stringOrNull(refreshed?.full_name),
+    stringOrNull(refreshed?.sso_number),
+    stringOrNull(refreshed?.email),
+    user.uid
+  );
+
   if (user.email) {
-    const refreshed = await first(db, 'SELECT * FROM users WHERE uid = ? LIMIT 1', user.uid);
     await run(
       db,
       `
@@ -1716,6 +1735,38 @@ async function getGamificationAdmin(db, plantId, user) {
   return jsonResponse({
     gamificationConfig: serializeGamificationConfig(configRow),
     missions: missionRows.map(serializeGameMission)
+  });
+}
+
+async function resetGamificationLeaderboard(db, plantId, body, user) {
+  await requirePlantConfigManager(db, plantId, user);
+  const boardId = stringOrNull(body?.boardId || body?.period) || 'weekly';
+  const now = nowIso();
+  await run(
+    db,
+    `
+      INSERT INTO game_leaderboards (
+        leaderboard_row_id, plant_id, board_id, entries_json, entries_by_uid_json, updated_at, schema_version
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(plant_id, board_id) DO UPDATE SET
+        entries_json = excluded.entries_json,
+        entries_by_uid_json = excluded.entries_by_uid_json,
+        updated_at = excluded.updated_at,
+        schema_version = excluded.schema_version
+    `,
+    `${plantId}:${boardId}`,
+    plantId,
+    boardId,
+    jsonOrNull([]),
+    jsonOrNull({}),
+    now,
+    1
+  );
+  return jsonResponse({
+    ok: true,
+    boardId,
+    updatedAt: now,
+    resetBy: { uid: user.uid, name: user.name }
   });
 }
 
@@ -3022,6 +3073,7 @@ export async function handleD1ApiRequest(request, env, { authenticateRequest } =
   try {
     const meMatch = request.method === 'GET' && url.pathname === '/api/me';
     const meUpdateMatch = request.method === 'PATCH' && url.pathname === '/api/me';
+    const accessRequestCreateSelfMatch = request.method === 'POST' && url.pathname === '/api/access-requests';
     const plantsListMatch = request.method === 'GET' && url.pathname === '/api/plants';
     const plantCreateMatch = request.method === 'POST' && url.pathname === '/api/plants';
     const bootstrapMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/bootstrap$/);
@@ -3044,6 +3096,7 @@ export async function handleD1ApiRequest(request, env, { authenticateRequest } =
     const gamificationAwardMatch = request.method === 'POST' && url.pathname.match(/^\/api\/plants\/([^/]+)\/gamification\/award$/);
     const gamificationAdminMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/gamification-admin$/);
     const gamificationAdminUpdateMatch = request.method === 'PUT' && url.pathname.match(/^\/api\/plants\/([^/]+)\/gamification-admin$/);
+    const gamificationLeaderboardResetMatch = request.method === 'POST' && url.pathname.match(/^\/api\/plants\/([^/]+)\/gamification\/leaderboard-reset$/);
     const userDirectoryMatch = request.method === 'GET' && url.pathname === '/api/user-directory';
     const roleAlertsMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/role-alerts$/);
     const roleAlertCreateMatch = request.method === 'POST' && url.pathname.match(/^\/api\/plants\/([^/]+)\/role-alerts$/);
@@ -3073,7 +3126,7 @@ export async function handleD1ApiRequest(request, env, { authenticateRequest } =
     const wikiPageDeleteMatch = request.method === 'DELETE' && url.pathname.match(/^\/api\/plants\/([^/]+)\/wiki-pages\/([^/]+)$/);
     const wikiAttachmentCreateMatch = request.method === 'POST' && url.pathname.match(/^\/api\/plants\/([^/]+)\/wiki-pages\/([^/]+)\/attachments$/);
 
-    if (!meMatch && !meUpdateMatch && !plantsListMatch && !plantCreateMatch && !bootstrapMatch && !dailyScheduleMatch && !plantMembersMatch && !plantMemberCreateMatch && !plantMemberUpdateMatch && !plantMemberDeleteMatch && !accessRequestsMatch && !accessRequestUpdateMatch && !statusConfigMatch && !statusConfigUpdateMatch && !pressConfigMatch && !pressConfigUpdateMatch && !storeConfigMatch && !storeConfigUpdateMatch && !roleAlertRoutingMatch && !roleAlertRoutingUpdateMatch && !gamificationMatch && !gamificationAwardMatch && !gamificationAdminMatch && !gamificationAdminUpdateMatch && !userDirectoryMatch && !roleAlertsMatch && !roleAlertCreateMatch && !roleAlertUpdateMatch && !issuesMatch && !issueCreateMatch && !issueMatch && !issueUpdateMatch && !issueDeleteMatch && !eventsMatch && !attachmentsMatch && !notesMatch && !noteCreateMatch && !noteUpdateMatch && !noteDeleteMatch && !noteAttachmentsMatch && !noteAttachmentCreateMatch && !noteAttachmentDeleteMatch && !conversationsMatch && !conversationCreateMatch && !conversationMessagesMatch && !conversationMessageCreateMatch && !conversationReadMatch && !wikiPagesMatch && !wikiPageMatch && !wikiRevisionSaveMatch && !wikiPageDeleteMatch && !wikiAttachmentCreateMatch) {
+    if (!meMatch && !meUpdateMatch && !accessRequestCreateSelfMatch && !plantsListMatch && !plantCreateMatch && !bootstrapMatch && !dailyScheduleMatch && !plantMembersMatch && !plantMemberCreateMatch && !plantMemberUpdateMatch && !plantMemberDeleteMatch && !accessRequestsMatch && !accessRequestUpdateMatch && !statusConfigMatch && !statusConfigUpdateMatch && !pressConfigMatch && !pressConfigUpdateMatch && !storeConfigMatch && !storeConfigUpdateMatch && !roleAlertRoutingMatch && !roleAlertRoutingUpdateMatch && !gamificationMatch && !gamificationAwardMatch && !gamificationAdminMatch && !gamificationAdminUpdateMatch && !gamificationLeaderboardResetMatch && !userDirectoryMatch && !roleAlertsMatch && !roleAlertCreateMatch && !roleAlertUpdateMatch && !issuesMatch && !issueCreateMatch && !issueMatch && !issueUpdateMatch && !issueDeleteMatch && !eventsMatch && !attachmentsMatch && !notesMatch && !noteCreateMatch && !noteUpdateMatch && !noteDeleteMatch && !noteAttachmentsMatch && !noteAttachmentCreateMatch && !noteAttachmentDeleteMatch && !conversationsMatch && !conversationCreateMatch && !conversationMessagesMatch && !conversationMessageCreateMatch && !conversationReadMatch && !wikiPagesMatch && !wikiPageMatch && !wikiRevisionSaveMatch && !wikiPageDeleteMatch && !wikiAttachmentCreateMatch) {
       return null;
     }
 
@@ -3087,6 +3140,9 @@ export async function handleD1ApiRequest(request, env, { authenticateRequest } =
     }
     if (meUpdateMatch) {
       return updateCurrentUserContext(db, user, await request.json());
+    }
+    if (accessRequestCreateSelfMatch) {
+      return createAccessRequests(db, user, await request.json());
     }
     if (plantsListMatch) {
       return listPlants(db, user, request);
@@ -3153,6 +3209,9 @@ export async function handleD1ApiRequest(request, env, { authenticateRequest } =
     }
     if (gamificationAdminUpdateMatch) {
       return updateGamificationAdmin(db, decodePathSegment(gamificationAdminUpdateMatch[1]), await request.json(), user);
+    }
+    if (gamificationLeaderboardResetMatch) {
+      return resetGamificationLeaderboard(db, decodePathSegment(gamificationLeaderboardResetMatch[1]), await request.json(), user);
     }
     if (userDirectoryMatch) {
       return listUserDirectory(db, user);

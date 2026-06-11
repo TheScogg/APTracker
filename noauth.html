@@ -918,8 +918,14 @@
     </div>
 
     <div class="te-section">
-      <div class="te-section-label">Theme Editor Base</div>
-      <select id="te-base-select" class="te-base-select"></select>
+      <div class="te-section-label" style="display:flex;align-items:center;justify-content:space-between;">
+        <span>Theme Editor Base</span>
+        <button onclick="resetThemeToBase()" style="font-size:11px;color:var(--color-accent, var(--accent));background:none;border:none;cursor:pointer;font-family:'Nunito',sans-serif;white-space:nowrap;padding:0;" title="Reset variables to base theme values">↺ Reset to Base</button>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <select id="te-base-select" class="te-base-select" style="flex:1;"></select>
+        <span id="te-contrast-display" class="te-contrast-badge"></span>
+      </div>
     </div>
 
     <div class="te-section">
@@ -932,15 +938,28 @@
     </div>
 
     <div class="te-section">
-      <div class="te-section-label">SVG Background (Any Theme)</div>
-      <textarea id="te-bg-svg-input" style="width:100%;min-height:90px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text2);font-family:'Share Tech Mono',monospace;font-size:11px;" placeholder="Paste raw SVG markup (optional)."></textarea>
+      <div class="te-section-label" style="display:flex;align-items:center;justify-content:space-between;">
+        <span>SVG Background (Any Theme)</span>
+        <select id="te-bg-svg-preset" style="background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:6px;padding:2px 6px;color:var(--color-text-muted, var(--text2));font-size:11px;font-family:'Nunito',sans-serif;outline:none;cursor:pointer;">
+          <option value="">-- Choose Preset Pattern --</option>
+          <option value="grid">Fine Grid</option>
+          <option value="dots">Matrix Dots</option>
+          <option value="scanlines">Retro Scanlines</option>
+          <option value="diagonal">Slanted Lines</option>
+        </select>
+      </div>
+      <textarea id="te-bg-svg-input" style="width:100%;min-height:90px;background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:10px;color:var(--color-text-muted, var(--text2));font-family:'Share Tech Mono',monospace;font-size:11px;margin-top:6px;" placeholder="Paste raw SVG markup (optional)."></textarea>
     </div>
 
     <div class="te-section">
       <div class="te-section-label">Save / Update Theme</div>
-      <div style="display:flex;gap:8px;align-items:center;">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
         <input id="te-theme-name" class="te-theme-search" type="text" placeholder="Theme name" style="flex:1;">
         <button id="te-save-btn" class="btn btn-primary" type="button" onclick="saveCustomTheme()">💾 Save</button>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="btn btn-ghost" type="button" style="flex:1;font-size:11px;padding:6px 8px;" onclick="exportCurrentTheme()">📤 Export Code</button>
+        <button class="btn btn-ghost" type="button" style="flex:1;font-size:11px;padding:6px 8px;" onclick="importThemeCode()">📥 Import Code</button>
       </div>
     </div>
 

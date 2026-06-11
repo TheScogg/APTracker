@@ -27,7 +27,8 @@ import {
   readSavedTheme,
   removeThemeClasses,
   saveThemeSelection,
-  themeLabelSansIcon
+  themeLabelSansIcon,
+  getContrastRatio
 } from "./theme-engine.js";
 import {
   normalizeSubcategoryRoutes as normalizeSharedSubcategoryRoutes,
@@ -204,6 +205,20 @@ function toCompatTimestamp(value) {
     toMillis: () => ms,
     toDate: () => new Date(ms)
   };
+}
+
+function compatTimestampMillis(value) {
+  if (!value) return 0;
+  if (typeof value?.toMillis === 'function') {
+    const ms = Number(value.toMillis());
+    return Number.isFinite(ms) ? ms : 0;
+  }
+  if (value instanceof Date) {
+    const ms = value.getTime();
+    return Number.isFinite(ms) ? ms : 0;
+  }
+  const ms = Date.parse(value);
+  return Number.isFinite(ms) ? ms : 0;
 }
 
 function formatSqlDateTime(value, fallback = '') {
@@ -1546,8 +1561,8 @@ async function _loadActiveRoleAlertsForCurrentUser() {
       });
     }
     alerts.sort((a, b) => {
-      const aMs = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
-      const bMs = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+      const aMs = compatTimestampMillis(a.createdAt);
+      const bMs = compatTimestampMillis(b.createdAt);
       return bMs - aMs;
     });
     return alerts;
@@ -1611,8 +1626,8 @@ async function _loadActiveRoleAlertsForCurrentUser() {
     });
   }
   alerts.sort((a, b) => {
-    const aMs = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
-    const bMs = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+    const aMs = compatTimestampMillis(a.createdAt);
+    const bMs = compatTimestampMillis(b.createdAt);
     return bMs - aMs;
   });
   return alerts;
@@ -1795,6 +1810,7 @@ window.deleteRoleAlert = async function(alertId, categoryKey, statusKey) {
       const existing = _roleAlertsCache.find(alert => alert.id === alertId);
       const nextRecipients = (existing?.raw?.recipientUserIds || []).filter(uid => uid !== currentUser.uid);
       await dataApi.updateRoleAlert(currentPlantId, alertId, { recipientUserIds: nextRecipients });
+      _roleAlertsCache = _roleAlertsCache.filter(alert => alert.id !== alertId);
       if (document.getElementById('role-alerts-modal')?.classList.contains('visible')) {
         await _openRoleAlertInboxModalInternal({ resetToggle: false });
       }
@@ -1868,10 +1884,17 @@ function startRoleFeedAlertsWatcher() {
         alerts.forEach(alert => {
           if (_seenRoleFeedAlerts.has(alert.id)) return;
           _seenRoleFeedAlerts.add(alert.id);
-          const createdMs = alert.createdAt?.toMillis ? alert.createdAt.toMillis() : 0;
+          const createdMs = compatTimestampMillis(alert.createdAt);
           if (createdMs && (Date.now() - createdMs) > (10 * 60 * 1000)) return;
           _unreadRoleAlertCount += 1;
           showGameToast(`🔔 ${alert.feedLabel || 'Alert'} · Press ${alert.machine || 'Unknown'}`);
+          if ('Notification' in window && Notification.permission === 'granted') {
+            try {
+              new Notification(alert.feedLabel || 'New Alert', {
+                body: `${alert.machine || 'Press'} · ${alert.note || alert.statusKey || ''}`.trim()
+              });
+            } catch (_) {}
+          }
         });
       } catch (err) {
         console.warn('roleFeedAlerts SQL poll error', err);
@@ -2793,6 +2816,18 @@ async function loadAvailablePlantsForOnboarding() {
 
 async function _syncCurrentUserMembershipProfile(plantIds = []) {
   if (!currentUser?.uid || !Array.isArray(plantIds) || !plantIds.length) return;
+  if (shouldUseSqlBootstrap()) {
+    try {
+      await dataApi.updateCurrentUserContext({
+        displayName: currentUser.displayName || currentUser.email || '',
+        fullName: currentUserProfileData?.fullName || null,
+        ssoNumber: currentUserProfileData?.ssoNumber || null
+      });
+    } catch (e) {
+      console.warn('Could not sync membership profile fields to D1', e);
+    }
+    return;
+  }
   const batch = writeBatch(db);
   plantIds.filter(Boolean).forEach(plantId => {
     batch.set(plantMemberDocRef(plantId, currentUser.uid), {
@@ -4786,55 +4821,52 @@ async function completeProfileOnboarding() {
   const safePlantIds = plantIds.filter(id => availableIds.has(id));
   if (!safePlantIds.length) throw new Error('Choose at least one plant.');
 
-  const existingPlantIds = userPlants.map(p => p.id).filter(Boolean);
-  const batch = writeBatch(db);
-  batch.set(doc(db, 'users', currentUser.uid), {
-    displayName: currentUser.displayName || currentUser.email || '',
-    email: currentUser.email || '',
-    photoURL: currentUser.photoURL || '',
-    fullName,
-    ssoNumber,
-    requestedPlantIds: safePlantIds,
-    profileOnboarding: {
-      completed: true,
-      completedAt: serverTimestamp(),
-      version: PROFILE_ONBOARDING_VERSION
-    },
-    updatedAt: serverTimestamp(),
-    createdAt: currentUserProfileData.createdAt || serverTimestamp()
-  }, { merge: true });
-  safePlantIds.filter(plantId => !existingPlantIds.includes(plantId)).forEach(plantId => {
-    batch.set(doc(db, 'plants', plantId, 'accessRequests', currentUser.uid), {
-      uid: currentUser.uid,
-      userId: currentUser.uid,
-      displayName: fullName,
+  if (shouldUseSqlBootstrap()) {
+    await dataApi.createAccessRequests({
+      displayName: currentUser.displayName || currentUser.email || '',
       fullName,
       ssoNumber,
+      plantIds: safePlantIds,
+      profileOnboarding: {
+        completed: true,
+        version: PROFILE_ONBOARDING_VERSION,
+        completedAt: new Date().toISOString()
+      }
+    });
+  } else {
+    const existingPlantIds = userPlants.map(p => p.id).filter(Boolean);
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'users', currentUser.uid), {
+      displayName: currentUser.displayName || currentUser.email || '',
       email: currentUser.email || '',
       photoURL: currentUser.photoURL || '',
-      requestedPlantId: plantId,
-      requestedAt: serverTimestamp(),
+      fullName,
+      ssoNumber,
+      requestedPlantIds: safePlantIds,
+      profileOnboarding: {
+        completed: true,
+        completedAt: serverTimestamp(),
+        version: PROFILE_ONBOARDING_VERSION
+      },
       updatedAt: serverTimestamp(),
-      status: 'pending'
+      createdAt: currentUserProfileData.createdAt || serverTimestamp()
     }, { merge: true });
-  });
-  await batch.commit();
-  if (shouldUseSqlBootstrap()) {
-    try {
-      await dataApi.updateCurrentUserContext({
-        displayName: currentUser.displayName || currentUser.email || '',
+    safePlantIds.filter(plantId => !existingPlantIds.includes(plantId)).forEach(plantId => {
+      batch.set(doc(db, 'plants', plantId, 'accessRequests', currentUser.uid), {
+        uid: currentUser.uid,
+        userId: currentUser.uid,
+        displayName: fullName,
         fullName,
         ssoNumber,
-        requestedPlantIds: safePlantIds,
-        profileOnboarding: {
-          completed: true,
-          version: PROFILE_ONBOARDING_VERSION,
-          completedAt: new Date().toISOString()
-        }
-      });
-    } catch (e) {
-      console.warn('Could not sync onboarding profile to D1', e);
-    }
+        email: currentUser.email || '',
+        photoURL: currentUser.photoURL || '',
+        requestedPlantId: plantId,
+        requestedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        status: 'pending'
+      }, { merge: true });
+    });
+    await batch.commit();
   }
 
   currentUserProfileData = {
@@ -4959,7 +4991,7 @@ async function bootstrapSignedInSession(user) {
 
   // Write user lookup record so admins can find this user by email when adding to plants.
   // Fire-and-forget — failure is non-fatal.
-  if (user.email && shouldSyncUserLookup(user.email)) {
+  if (!shouldUseSqlBootstrap() && user.email && shouldSyncUserLookup(user.email)) {
     setDoc(doc(db, 'userLookup', user.email.toLowerCase()), {
       uid: user.uid,
       displayName: user.displayName || '',
@@ -12446,6 +12478,197 @@ document.addEventListener('pointercancel', _teHandleColorPickerPointerRelease, t
 document.addEventListener('touchend', _teHandleColorPickerPointerRelease, true);
 document.addEventListener('touchcancel', _teHandleColorPickerPointerRelease, true);
 
+const VAR_GROUPS = {
+  "Core Backgrounds": ['--color-bg', '--color-surface', '--color-surface-raised', '--color-border', '--bg', '--bg2', '--bg3', '--border'],
+  "Typography": ['--color-text', '--color-text-muted', '--color-text-subtle', '--text', '--text2', '--text3'],
+  "Accents & Focus": ['--color-accent', '--color-accent-strong', '--focus-ring', '--accent', '--accent2', '--accent-glow'],
+  "Alert States": ['--color-success', '--color-danger', '--color-info', '--color-warning', '--green', '--red', '--blue', '--yellow'],
+  "Badge/Mascot Colors": ['--color-orange', '--color-purple', '--color-teal', '--color-babyblue', '--orange', '--purple', '--teal', '--babyblue'],
+  "Soft Alert Backdrops": [
+    '--color-success-soft',
+    '--color-danger-soft',
+    '--color-info-soft',
+    '--color-warning-soft',
+    '--color-orange-soft',
+    '--color-purple-soft',
+    '--color-teal-soft',
+    '--color-babyblue-soft',
+    '--green-dim',
+    '--red-dim',
+    '--blue-dim',
+    '--yellow-dim',
+    '--orange-dim',
+    '--purple-dim',
+    '--teal-dim',
+    '--babyblue-dim'
+  ]
+};
+
+const SVG_PRESETS = {
+  grid: `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" opacity="0.1"><path d="M 40 0 L 0 0 0 40" fill="none" stroke="var(--color-accent, #f97316)" stroke-width="0.5"/></svg>`,
+  dots: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" opacity="0.15"><circle cx="2" cy="2" r="1" fill="var(--color-accent, #f97316)"/></svg>`,
+  scanlines: `<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4" opacity="0.08"><rect width="4" height="2" fill="var(--color-text, #ffffff)"/><rect y="2" width="4" height="2" fill="transparent"/></svg>`,
+  diagonal: `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" opacity="0.05"><path d="M 0 40 L 40 0 M -10 10 L 10 -10 M 30 50 L 50 30" fill="none" stroke="var(--color-text, #ffffff)" stroke-width="1"/></svg>`
+};
+
+function renderAppearanceThemeGrid() {
+  const grid = document.getElementById('appearance-theme-grid');
+  if (!grid) return;
+  const availableThemes = getThemeCatalog().filter(theme => theme.isOwned && theme.source === 'builtin');
+  const activeSelection = readSavedTheme('midnight');
+  
+  grid.innerHTML = availableThemes.map(theme => {
+    const [bg, accent, textColor] = getThemePreviewColors(theme);
+    const isActive = theme.key === activeSelection;
+    const nameOnly = theme.shortLabel || themeLabelSansIcon(theme.label);
+    
+    return `
+      <div class="store-theme-card ${isActive ? 'stc-active' : ''}" role="button" onclick="applyAppearanceTheme('${theme.key}')">
+        <div class="stc-preview" style="--stc-bg:${bg}; --stc-accent:${accent}; --stc-text:${textColor}">
+          <div class="stc-preview-bg"></div>
+          <div class="stc-preview-stripe"></div>
+          <div class="stc-preview-ui">
+            <div class="stc-ui-bar" style="background:${accent}22"></div>
+            <div class="stc-ui-row">
+              <div class="stc-ui-dot" style="background:${accent}"></div>
+              <div class="stc-ui-line" style="background:${textColor}22"></div>
+            </div>
+          </div>
+          ${isActive ? '<div class="stc-active-check">✓</div>' : ''}
+        </div>
+        <div class="stc-footer" style="padding:6px 8px;">
+          <span class="stc-name" style="font-size:11px;">${esc(nameOnly)}</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function updateLiveContrastBadge() {
+  const display = document.getElementById('te-contrast-display');
+  if (!display) return;
+  
+  const baseKey = document.getElementById('te-base-select')?.value || 'midnight';
+  const baseVars = THEME_VARS_MAP[baseKey] || THEME_VARS_MAP.midnight || {};
+  
+  const bg = _teCurrentVars?.['--color-bg'] || _teCurrentVars?.['--bg'] || baseVars['--color-bg'] || baseVars['--bg'] || '#0d1117';
+  const text = _teCurrentVars?.['--color-text'] || _teCurrentVars?.['--text'] || baseVars['--color-text'] || baseVars['--text'] || '#e6edf3';
+  
+  try {
+    const ratio = getContrastRatio(bg, text);
+    const pass = ratio >= 4.5;
+    display.textContent = `${ratio.toFixed(1)}:1 ${pass ? 'Pass' : 'Fail'}`;
+    display.className = `te-contrast-badge ${pass ? 'te-contrast-pass' : 'te-contrast-fail'}`;
+    display.title = pass ? 'WCAG 2.0 AA Contrast Compliant' : 'Low Contrast Warning: Text may be hard to read';
+  } catch (e) {
+    display.textContent = 'N/A';
+    display.className = 'te-contrast-badge te-contrast-fail';
+  }
+}
+
+window.applyAppearanceTheme = function(themeKey) {
+  applyTheme(themeKey);
+  const baseKey = THEME_KEYS.includes(themeKey) ? themeKey : 'midnight';
+  const sel = document.getElementById('te-base-select');
+  if (sel) sel.value = baseKey;
+  _teCurrentVars = { ...(THEME_VARS_MAP[baseKey] || THEME_VARS_MAP.midnight) };
+  
+  removeThemeClasses(THEME_KEYS);
+  applyCustomThemeVars(_teCurrentVars);
+
+  _renderTEVarsList();
+  renderAppearanceThemeGrid();
+  renderAppearanceCustomThemes();
+  
+  const svgField = document.getElementById('te-bg-svg-input');
+  if (svgField) svgField.value = _teCurrentVars['--bg-svg'] || '';
+  updateLiveContrastBadge();
+};
+
+window.resetThemeToBase = function() {
+  const baseKey = document.getElementById('te-base-select')?.value || 'midnight';
+  const base = THEME_VARS_MAP[baseKey];
+  if (base) {
+    _teCurrentVars = { ...base };
+    _teEditingId = null;
+    const saveBtn = document.getElementById('te-save-btn');
+    if (saveBtn) saveBtn.textContent = '💾 Save';
+    const themeNameInput = document.getElementById('te-theme-name');
+    if (themeNameInput) themeNameInput.value = '';
+    
+    const svgField = document.getElementById('te-bg-svg-input');
+    if (svgField) svgField.value = _teCurrentVars['--bg-svg'] || '';
+    const svgPreset = document.getElementById('te-bg-svg-preset');
+    if (svgPreset) svgPreset.value = '';
+
+    applyCustomThemeVars(_teCurrentVars);
+    _renderTEVarsList();
+    updateLiveContrastBadge();
+    showGameToast('↺ Reset variables to base defaults');
+  }
+};
+
+window.exportCurrentTheme = function() {
+  const nameEl = document.getElementById('te-theme-name');
+  const name = (nameEl ? nameEl.value.trim() : '') || 'My Custom Theme';
+  const dataToExport = {
+    name,
+    vars: normalizeThemeVars(_teCurrentVars || {})
+  };
+  try {
+    const payload = btoa(JSON.stringify(dataToExport));
+    navigator.clipboard.writeText(payload).then(() => {
+      showGameToast('📋 Theme code copied to clipboard!');
+    }).catch(() => {
+      alert(`Here is your theme code:\n\n${payload}`);
+    });
+  } catch (e) {
+    showGameToast('❌ Failed to export theme');
+  }
+};
+
+window.importThemeCode = function() {
+  const code = prompt('Paste your theme code (base64) here:');
+  if (!code) return;
+  try {
+    const parsed = JSON.parse(atob(code.trim()));
+    if (!parsed || typeof parsed !== 'object' || !parsed.name || !parsed.vars) {
+      alert('Invalid theme code format.');
+      return;
+    }
+    
+    const data = _loadCustomThemes();
+    const id = 'custom_' + Date.now();
+    data.customThemes.push({
+      id,
+      name: parsed.name,
+      vars: normalizeThemeVars(parsed.vars),
+      createdAt: Date.now()
+    });
+    data.activeCustomId = id;
+    _saveCustomThemesStorage(data);
+    applyTheme('custom_' + id);
+    
+    _teEditingId = id;
+    _teCurrentVars = { ...parsed.vars };
+    const themeNameInput = document.getElementById('te-theme-name');
+    if (themeNameInput) themeNameInput.value = parsed.name;
+    const saveBtn = document.getElementById('te-save-btn');
+    if (saveBtn) saveBtn.textContent = '💾 Update';
+    
+    _renderTEVarsList();
+    renderAppearanceThemeGrid();
+    renderAppearanceCustomThemes();
+    renderThemeChoices();
+    renderStoreModal();
+    updateLiveContrastBadge();
+    
+    showGameToast('🎉 Theme imported successfully!');
+  } catch (e) {
+    alert('Failed to parse theme code. Make sure it was copied correctly.');
+  }
+};
+
 window.openThemeEditor = function() {
   const themeEditorModal = document.getElementById('theme-editor-modal');
   const appearanceModal = document.getElementById('appearance-modal');
@@ -12481,8 +12704,32 @@ window.openThemeEditor = function() {
   removeThemeClasses(THEME_KEYS);
   applyCustomThemeVars(_teCurrentVars);
 
+  const svgPreset = document.getElementById('te-bg-svg-preset');
+  if (svgPreset) {
+    svgPreset.value = '';
+    if (!svgPreset.dataset.hasListener) {
+      svgPreset.addEventListener('change', e => {
+        const val = e.target.value;
+        if (val && SVG_PRESETS[val]) {
+          const svgMarkup = SVG_PRESETS[val];
+          const input = document.getElementById('te-bg-svg-input');
+          if (input) {
+            input.value = svgMarkup;
+            _teCurrentVars = _teCurrentVars || {};
+            _teCurrentVars['--bg-svg'] = svgMarkup;
+            applyCustomThemeVars(_teCurrentVars);
+          }
+        }
+      });
+      svgPreset.dataset.hasListener = "true";
+    }
+  }
+
   _renderTEVarsList();
   _renderTESavedList();
+  renderAppearanceThemeGrid();
+  updateLiveContrastBadge();
+
   const themeNameInput = document.getElementById('te-theme-name');
   if (themeNameInput) themeNameInput.value = '';
   const svgField = document.getElementById('te-bg-svg-input');
@@ -12518,6 +12765,7 @@ document.getElementById('te-base-select')?.addEventListener('change', e => {
     if (themeNameInput) themeNameInput.value = '';
     _renderTEVarsList();
     applyCustomThemeVars(_teCurrentVars);
+    updateLiveContrastBadge();
   }
 });
 
@@ -12529,86 +12777,126 @@ function _renderTEVarsList() {
   const baseKey = document.getElementById('te-base-select')?.value || 'midnight';
   const baseVars = THEME_VARS_MAP[baseKey] || THEME_VARS_MAP.midnight || {};
   const search = String(document.getElementById('te-theme-search')?.value || '').trim().toLowerCase();
-  const vars = _teGetAllVariables().filter(cssVar => !search || cssVar.toLowerCase().includes(search));
+  
+  const allVars = _teGetAllVariables().filter(cssVar => !search || cssVar.toLowerCase().includes(search));
   const countEl = document.getElementById('te-var-count');
-  if (countEl) countEl.textContent = `${vars.length} var${vars.length === 1 ? '' : 's'}`;
+  if (countEl) countEl.textContent = `${allVars.length} var${allVars.length === 1 ? '' : 's'}`;
 
   container.innerHTML = '';
-  if (!vars.length) {
+  if (!allVars.length) {
     container.innerHTML = `<div class="te-empty-vars">No CSS variables match your search.</div>`;
     return;
   }
 
-  vars.forEach(cssVar => {
-    const currentVal = _teCurrentVars?.[cssVar] || baseVars[cssVar] || getComputedStyle(document.documentElement).getPropertyValue(cssVar).trim() || '';
-    const baseVal = baseVars[cssVar] || '';
-    const row = document.createElement('div');
-    row.className = 'te-var-item';
-    row.setAttribute('role', 'listitem');
-    const safeCurrent = esc(currentVal);
-    row.innerHTML = `
-      <div class="te-var-item-header">
-        <label class="te-var-name" for="te-var-${cssVar.slice(2)}">${cssVar}</label>
-        <span class="te-var-hint">${baseVal ? 'base: ' + esc(baseVal) : 'custom variable'}</span>
-      </div>
-      <div class="te-var-controls">
-        <input id="te-var-${cssVar.slice(2)}" class="te-var-text" type="text" value="${safeCurrent}" aria-label="${cssVar} value">
-        <input class="te-var-color" type="color" aria-label="${cssVar} color picker">
-        <button class="te-var-reset" type="button">Reset</button>
-      </div>`;
-
-    const textInput = row.querySelector('.te-var-text');
-    const colorInput = row.querySelector('.te-var-color');
-    const resetBtn = row.querySelector('.te-var-reset');
-    const colorHex = _teToHexIfColor(currentVal);
-    colorInput.value = colorHex || '#000000';
-    colorInput.style.visibility = colorHex ? 'visible' : 'hidden';
-
-    textInput.addEventListener('input', e => {
-      _teCurrentVars[cssVar] = e.target.value.trim();
-      const nextHex = _teToHexIfColor(_teCurrentVars[cssVar]);
-      colorInput.style.visibility = nextHex ? 'visible' : 'hidden';
-      if (nextHex) colorInput.value = nextHex;
-      applyCustomThemeVars(_teCurrentVars);
-    });
-
-    const extendBackdropGuard = (ms = 400) => { _teIgnoreBackdropClickUntil = Date.now() + ms; };
-    colorInput.addEventListener('pointerdown', () => {
-      _teColorPickerPointerActive = true;
-      _teColorPickerInteracting = true;
-      extendBackdropGuard(5000);
-    });
-    colorInput.addEventListener('input', e => {
-      _teColorPickerInteracting = true;
-      extendBackdropGuard(5000);
-      _teCurrentVars[cssVar] = e.target.value;
-      textInput.value = e.target.value;
-      applyCustomThemeVars(_teCurrentVars);
-    });
-    colorInput.addEventListener('change', () => {
-      extendBackdropGuard(1500);
-      _teQueueColorPickerInteractionRelease(300);
-    });
-    colorInput.addEventListener('blur', () => {
-      extendBackdropGuard(1500);
-      _teQueueColorPickerInteractionRelease(350);
-    });
-
-    resetBtn.addEventListener('click', () => {
-      if (baseVal) {
-        _teCurrentVars[cssVar] = baseVal;
-        textInput.value = baseVal;
-      } else {
-        delete _teCurrentVars[cssVar];
-        textInput.value = '';
+  const groupAssignments = {};
+  allVars.forEach(v => {
+    let assigned = false;
+    for (const [groupName, varList] of Object.entries(VAR_GROUPS)) {
+      if (varList.includes(v)) {
+        if (!groupAssignments[groupName]) groupAssignments[groupName] = [];
+        groupAssignments[groupName].push(v);
+        assigned = true;
+        break;
       }
-      const nextHex = _teToHexIfColor(textInput.value);
-      colorInput.style.visibility = nextHex ? 'visible' : 'hidden';
-      if (nextHex) colorInput.value = nextHex;
-      applyCustomThemeVars(_teCurrentVars);
-    });
+    }
+    if (!assigned) {
+      if (!groupAssignments["Other / Custom"]) groupAssignments["Other / Custom"] = [];
+      groupAssignments["Other / Custom"].push(v);
+    }
+  });
 
-    container.appendChild(row);
+  Object.entries(groupAssignments).forEach(([groupName, groupVars], gIdx) => {
+    if (!groupVars.length) return;
+    
+    const accordion = document.createElement('div');
+    accordion.className = 'te-accordion' + (search || gIdx === 0 ? ' open' : '');
+    
+    const header = document.createElement('div');
+    header.className = 'te-accordion-header';
+    header.innerHTML = `<span>${groupName} (${groupVars.length})</span><span class="te-accordion-icon">▶</span>`;
+    header.onclick = () => accordion.classList.toggle('open');
+    
+    const content = document.createElement('div');
+    content.className = 'te-accordion-content';
+    
+    groupVars.forEach(cssVar => {
+      const currentVal = _teCurrentVars?.[cssVar] || baseVars[cssVar] || getComputedStyle(document.documentElement).getPropertyValue(cssVar).trim() || '';
+      const baseVal = baseVars[cssVar] || '';
+      const row = document.createElement('div');
+      row.className = 'te-var-item';
+      row.setAttribute('role', 'listitem');
+      const safeCurrent = esc(currentVal);
+      row.innerHTML = `
+        <div class="te-var-item-header">
+          <label class="te-var-name" for="te-var-${cssVar.slice(2)}">${cssVar}</label>
+          <span class="te-var-hint">${baseVal ? 'base: ' + esc(baseVal) : 'custom variable'}</span>
+        </div>
+        <div class="te-var-controls">
+          <input id="te-var-${cssVar.slice(2)}" class="te-var-text" type="text" value="${safeCurrent}" aria-label="${cssVar} value">
+          <input class="te-var-color" type="color" aria-label="${cssVar} color picker">
+          <button class="te-var-reset" type="button">Reset</button>
+        </div>`;
+
+      const textInput = row.querySelector('.te-var-text');
+      const colorInput = row.querySelector('.te-var-color');
+      const resetBtn = row.querySelector('.te-var-reset');
+      const colorHex = _teToHexIfColor(currentVal);
+      colorInput.value = colorHex || '#000000';
+      colorInput.style.visibility = colorHex ? 'visible' : 'hidden';
+
+      textInput.addEventListener('input', e => {
+        _teCurrentVars[cssVar] = e.target.value.trim();
+        const nextHex = _teToHexIfColor(_teCurrentVars[cssVar]);
+        colorInput.style.visibility = nextHex ? 'visible' : 'hidden';
+        if (nextHex) colorInput.value = nextHex;
+        applyCustomThemeVars(_teCurrentVars);
+        updateLiveContrastBadge();
+      });
+
+      const extendBackdropGuard = (ms = 400) => { _teIgnoreBackdropClickUntil = Date.now() + ms; };
+      colorInput.addEventListener('pointerdown', () => {
+        _teColorPickerPointerActive = true;
+        _teColorPickerInteracting = true;
+        extendBackdropGuard(5000);
+      });
+      colorInput.addEventListener('input', e => {
+        _teColorPickerInteracting = true;
+        extendBackdropGuard(5000);
+        _teCurrentVars[cssVar] = e.target.value;
+        textInput.value = e.target.value;
+        applyCustomThemeVars(_teCurrentVars);
+        updateLiveContrastBadge();
+      });
+      colorInput.addEventListener('change', () => {
+        extendBackdropGuard(1500);
+        _teQueueColorPickerInteractionRelease(300);
+      });
+      colorInput.addEventListener('blur', () => {
+        extendBackdropGuard(1500);
+        _teQueueColorPickerInteractionRelease(350);
+      });
+
+      resetBtn.addEventListener('click', () => {
+        if (baseVal) {
+          _teCurrentVars[cssVar] = baseVal;
+          textInput.value = baseVal;
+        } else {
+          delete _teCurrentVars[cssVar];
+          textInput.value = '';
+        }
+        const nextHex = _teToHexIfColor(textInput.value);
+        colorInput.style.visibility = nextHex ? 'visible' : 'hidden';
+        if (nextHex) colorInput.value = nextHex;
+        applyCustomThemeVars(_teCurrentVars);
+        updateLiveContrastBadge();
+      });
+
+      content.appendChild(row);
+    });
+    
+    accordion.appendChild(header);
+    accordion.appendChild(content);
+    container.appendChild(accordion);
   });
 }
 
