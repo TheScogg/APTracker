@@ -13311,6 +13311,9 @@ document.getElementById('serial-modal')?.addEventListener('click', e => { if(e.t
 let _conversationListUnsubscribe = null;
 let _conversationThreadUnsubscribe = null;
 let _messagingInboxUnsubscribe = null;
+let _conversationListPollTimer = null;
+let _conversationThreadPollTimer = null;
+let _messagingInboxPollTimer = null;
 
 function _conversationType(inputType) {
   const normalized = String(inputType || 'group').trim().toLowerCase();
@@ -13332,6 +13335,15 @@ window.createConversation = async ({ type = 'group', title = '', memberIds = [],
   if (uniqueMembers.length < 2) throw new Error('At least two members are required.');
   if (normalizedType === 'dm' && uniqueMembers.length !== 2) throw new Error('DM conversations must have exactly two members.');
   if (normalizedType === 'group' && !String(title || '').trim()) throw new Error('Group conversations require a title.');
+  if (shouldUseSqlStagingReads(currentPlantId)) {
+    const payload = await dataApi.createConversation(currentPlantId, {
+      type: normalizedType,
+      title: normalizedType === 'dm' ? null : String(title || '').trim(),
+      pressId: normalizedType === 'press' ? String(pressId || '').trim() || null : null,
+      memberIds: uniqueMembers
+    });
+    return payload?.conversation?.id || payload?.conversation?.conversationId || null;
+  }
 
   if (normalizedType === 'dm') {
     const dmQuery = query(
@@ -13391,6 +13403,34 @@ window.watchConversations = (onConversations, { type = null } = {}, onError = nu
     _conversationListUnsubscribe();
     _conversationListUnsubscribe = null;
   }
+  if (_conversationListPollTimer) {
+    clearTimeout(_conversationListPollTimer);
+    _conversationListPollTimer = null;
+  }
+  if (shouldUseSqlStagingReads(currentPlantId)) {
+    let active = true;
+    _conversationListUnsubscribe = () => {
+      active = false;
+      if (_conversationListPollTimer) {
+        clearTimeout(_conversationListPollTimer);
+        _conversationListPollTimer = null;
+      }
+      _conversationListUnsubscribe = null;
+    };
+    const poll = async () => {
+      if (!active || !currentPlantId) return;
+      try {
+        const payload = await safeSqlRead(`conversations ${currentPlantId}`, () => dataApi.listConversations(currentPlantId, type ? { type } : {}));
+        if (payload && typeof onConversations === 'function') onConversations(payload.conversations || []);
+      } catch (err) {
+        console.warn('conversations poll error', err);
+        if (typeof onError === 'function') onError(err);
+      }
+      if (active) _conversationListPollTimer = setTimeout(poll, 5000);
+    };
+    void poll();
+    return _conversationListUnsubscribe;
+  }
   const constraints = [
     where('memberIds', 'array-contains', currentUser.uid),
     orderBy('lastMessageAt', 'desc')
@@ -13415,6 +13455,33 @@ window.openConversation = (conversationId, onMessages) => {
     _conversationThreadUnsubscribe();
     _conversationThreadUnsubscribe = null;
   }
+  if (_conversationThreadPollTimer) {
+    clearTimeout(_conversationThreadPollTimer);
+    _conversationThreadPollTimer = null;
+  }
+  if (shouldUseSqlStagingReads(currentPlantId)) {
+    let active = true;
+    _conversationThreadUnsubscribe = () => {
+      active = false;
+      if (_conversationThreadPollTimer) {
+        clearTimeout(_conversationThreadPollTimer);
+        _conversationThreadPollTimer = null;
+      }
+      _conversationThreadUnsubscribe = null;
+    };
+    const poll = async () => {
+      if (!active || !currentPlantId || !conversationId) return;
+      try {
+        const payload = await safeSqlRead(`conversation messages ${conversationId}`, () => dataApi.listConversationMessages(currentPlantId, conversationId));
+        if (payload && typeof onMessages === 'function') onMessages(payload.messages || []);
+      } catch (err) {
+        console.warn('conversation poll error', err);
+      }
+      if (active) _conversationThreadPollTimer = setTimeout(poll, 3000);
+    };
+    void poll();
+    return _conversationThreadUnsubscribe;
+  }
   const q = query(conversationMessagesCol(conversationId), orderBy('createdAt', 'asc'));
   _conversationThreadUnsubscribe = onSnapshot(q, snap => {
     const messages = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -13429,6 +13496,17 @@ window.sendConversationMessage = async (conversationId, text, { mentions = [], a
   const normalizedAttachments = Array.isArray(attachments) ? attachments.filter(Boolean) : [];
   if (!conversationId || (!trimmedText && !normalizedAttachments.length)) return null;
   const actor = currentActor();
+  if (shouldUseSqlStagingReads(currentPlantId)) {
+    const payload = await dataApi.createConversationMessage(currentPlantId, conversationId, {
+      text: trimmedText,
+      mentions,
+      attachments: normalizedAttachments,
+      type: 'text'
+    });
+    const messageId = payload?.message?.id || payload?.message?.messageId || null;
+    if (messageId) void sendConversationPush(conversationId, messageId);
+    return messageId;
+  }
 
   const messageRef = doc(conversationMessagesCol(conversationId));
   const batch = writeBatch(db);
@@ -13467,6 +13545,12 @@ window.sendConversationMessage = async (conversationId, text, { mentions = [], a
 window.markConversationRead = async (conversationId, lastReadMessageId = null) => {
   if (!_requireChatContext()) return;
   if (!conversationId) return;
+  if (shouldUseSqlStagingReads(currentPlantId)) {
+    await dataApi.markConversationRead(currentPlantId, conversationId, {
+      lastReadMessageId: lastReadMessageId || null
+    });
+    return;
+  }
   await setDoc(conversationMemberDoc(conversationId, currentUser.uid), {
     userId: currentUser.uid,
     lastReadAt: serverTimestamp(),
@@ -13521,8 +13605,43 @@ function _startMessagingInboxWatcher() {
     _messagingInboxUnsubscribe();
     _messagingInboxUnsubscribe = null;
   }
+  if (_messagingInboxPollTimer) {
+    clearTimeout(_messagingInboxPollTimer);
+    _messagingInboxPollTimer = null;
+  }
   if (!currentPlantId || !currentUser?.uid) {
     _updateMessagingEntryBadges(0);
+    return;
+  }
+  if (shouldUseSqlStagingReads(currentPlantId)) {
+    let active = true;
+    _messagingInboxUnsubscribe = () => {
+      active = false;
+      if (_messagingInboxPollTimer) {
+        clearTimeout(_messagingInboxPollTimer);
+        _messagingInboxPollTimer = null;
+      }
+      _messagingInboxUnsubscribe = null;
+    };
+    const poll = async () => {
+      if (!active || !currentPlantId || !currentUser?.uid) return;
+      try {
+        const payload = await safeSqlRead(`messaging inbox ${currentPlantId}`, () => dataApi.listConversations(currentPlantId));
+        const conversations = payload?.conversations || [];
+        const unreadCount = _messagingUnreadTotal(conversations);
+        _updateMessagingEntryBadges(unreadCount);
+        const tabBadge = document.getElementById('messaging-tab-all-badge');
+        if (tabBadge) {
+          tabBadge.textContent = unreadCount > 99 ? '99+' : String(unreadCount);
+          tabBadge.style.display = unreadCount ? 'inline-flex' : 'none';
+        }
+      } catch (err) {
+        console.warn('messaging inbox poll error', err);
+        _updateMessagingEntryBadges(0);
+      }
+      if (active) _messagingInboxPollTimer = setTimeout(poll, 5000);
+    };
+    void poll();
     return;
   }
   const q = query(
@@ -13661,8 +13780,8 @@ function _messagingFilteredConversations() {
   const tab = _messagingState.tab;
   const q = String(_messagingState.search || '').trim().toLowerCase();
   const sorted = [..._messagingState.conversations].sort((a, b) => {
-    const at = a.lastMessageAt?.toMillis?.() ?? a.lastMessageAt?.seconds * 1000 ?? 0;
-    const bt = b.lastMessageAt?.toMillis?.() ?? b.lastMessageAt?.seconds * 1000 ?? 0;
+    const at = a.lastMessageAt?.toMillis?.() ?? a.lastMessageAt?.seconds * 1000 ?? (a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0);
+    const bt = b.lastMessageAt?.toMillis?.() ?? b.lastMessageAt?.seconds * 1000 ?? (b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0);
     return bt - at;
   });
   return sorted.filter(conv => {
@@ -13677,9 +13796,10 @@ function _messagingFilteredConversations() {
 
 function _messagingUnreadCount(conv) {
   const lastId = conv?.lastMessage?.id;
-  const lastSenderUid = conv?.lastMessage?.sender?.uid;
+  const lastSenderUid = conv?.lastMessage?.sender?.uid || conv?.lastMessage?.senderUid;
   if (!lastId || !lastSenderUid || lastSenderUid === currentUser?.uid) return 0;
-  return _messagingState.lastSeenByConversation[conv.id] === lastId ? 0 : 1;
+  const lastReadId = conv?.myMembership?.lastReadMessageId || _messagingState.lastSeenByConversation[conv.id] || null;
+  return lastReadId === lastId ? 0 : 1;
 }
 
 function _messagingAvatarHtml(conv, size = 40) {
@@ -13810,7 +13930,9 @@ function _selectMessagingConversation(conversationId) {
       _messagingNotifyIncoming(lastMessage, _messagingConversationName(selected));
     }
     if (lastMessage) _messagingState.lastSeenByConversation[conversationId] = lastMessage.id;
-    markConversationRead(conversationId, lastId).catch(err => console.warn('markConversationRead failed', err));
+    if (lastId && lastId !== seenId) {
+      markConversationRead(conversationId, lastId).catch(err => console.warn('markConversationRead failed', err));
+    }
   });
 }
 
@@ -13862,6 +13984,12 @@ function _renderMessagingMemberPicks() {
 
 async function _messagingSelectableMembers() {
   if (NO_AUTH_MODE || !currentPlantId || !currentUser?.uid) return [];
+  if (shouldUseSqlStagingReads(currentPlantId)) {
+    const payload = await safeSqlRead(`messaging members ${currentPlantId}`, () => dataApi.listPlantMembers(currentPlantId, { active: true }));
+    return (payload?.members || [])
+      .filter(m => m.uid !== currentUser.uid && m.isActive !== false)
+      .sort((a, b) => String(_messagingUserLabel(a)).localeCompare(String(_messagingUserLabel(b))));
+  }
   const membersSnap = await getDocs(collection(db, 'plants', currentPlantId, 'members'));
   return membersSnap.docs
     .map(d => ({ uid: d.id, ...d.data() }))
@@ -13909,6 +14037,10 @@ window.openMessagingModal = (options = {}) => {
 
   watchConversations(conversations => {
     _messagingState.conversations = conversations;
+    conversations.forEach(conv => {
+      const lastReadMessageId = conv?.myMembership?.lastReadMessageId || null;
+      if (lastReadMessageId) _messagingState.lastSeenByConversation[conv.id] = lastReadMessageId;
+    });
     const stillExists = conversations.some(c => c.id === _messagingState.activeConversationId);
     if (!stillExists) _messagingState.activeConversationId = conversations[0]?.id || null;
     _renderMessagingConversations();
@@ -14177,6 +14309,7 @@ window.closeTodosModal = todosTool.close;
 let _notesLoadToken = 0;
 let _notesSaveTimer = null;
 let _notesUnsubscribe = null;
+let _notesPollTimer = null;
 let _notesAttachmentsCache = [];
 let _notesContext = { pressId: null, issueId: null, label: 'Plant-wide' };
 const _notesState = {
@@ -15031,8 +15164,17 @@ async function loadPressWikiPageList() {
   }
   if (!_pressWikiModalPressId) return [];
   const queryPressId = _pressWikiScope === WIKI_SCOPE_PRESS ? activePressId : _pressWikiModalPressId;
-  const pagesSnap = await getDocs(wikiPagesColForScope(_pressWikiScope, queryPressId));
-  const pages = pagesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  let pages = [];
+  if (shouldUseSqlStagingReads(currentPlantId)) {
+    const payload = await safeSqlRead(`wiki pages ${currentPlantId}:${_pressWikiScope}:${queryPressId || 'shared'}`, () => dataApi.listWikiPages(currentPlantId, {
+      scope: _pressWikiScope,
+      pressId: _pressWikiScope === WIKI_SCOPE_SHARED ? '' : queryPressId
+    }));
+    pages = (payload?.pages || []).map(page => ({ ...page, id: page.id || page.pageId || '' }));
+  } else {
+    const pagesSnap = await getDocs(wikiPagesColForScope(_pressWikiScope, queryPressId));
+    pages = pagesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  }
   _pressWikiPageListCache = pages;
   if (!pages.length) {
     _pressWikiSelectedPageId = null;
@@ -15061,21 +15203,42 @@ async function loadPressWikiPage(pageId) {
   revisionsEl.innerHTML = '';
   attachmentsEl.innerHTML = '';
   try {
-    const pageRef = wikiPageDocForScope(_pressWikiScope, _pressWikiScope === WIKI_SCOPE_PRESS ? activePressId : _pressWikiModalPressId, pageId);
-    const pageSnap = await getDoc(pageRef);
-    if (!pageSnap.exists()) {
+    let page = null;
+    let revisions = [];
+    let attachments = [];
+    if (shouldUseSqlStagingReads(currentPlantId)) {
+      const payload = await safeSqlRead(`wiki page ${currentPlantId}:${pageId}`, () => dataApi.getWikiPage(currentPlantId, pageId, {
+        scope: _pressWikiScope,
+        pressId: _pressWikiScope === WIKI_SCOPE_SHARED ? '' : activePressId
+      }));
+      page = payload?.page ? { ...payload.page, id: payload.page.id || payload.page.pageId || pageId } : null;
+      revisions = (payload?.revisions || []).map(rev => ({ ...rev, id: rev.id || rev.revisionId || '' }));
+      attachments = (payload?.attachments || []).map(att => ({ ...att, id: att.id || att.attachmentId || '' }));
+    } else {
+      const pageRef = wikiPageDocForScope(_pressWikiScope, _pressWikiScope === WIKI_SCOPE_PRESS ? activePressId : _pressWikiModalPressId, pageId);
+      const pageSnap = await getDoc(pageRef);
+      if (!pageSnap.exists()) {
+        _pressWikiSelectedPageId = null;
+        renderPressWikiEmptySelection(_pressWikiEmptySelectionMessage());
+        _pressWikiSyncScopeBadge(_pressWikiScope);
+        return;
+      }
+      page = pageSnap.data() || {};
+      const revSnap = await getDocs(query(wikiRevisionsColForScope(_pressWikiScope, _pressWikiScope === WIKI_SCOPE_PRESS ? activePressId : _pressWikiModalPressId, pageId), orderBy('editedAt', 'desc'), limit(30)));
+      revisions = revSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const attachSnap = await getDocs(query(wikiAttachmentsColForScope(_pressWikiScope, _pressWikiScope === WIKI_SCOPE_PRESS ? activePressId : _pressWikiModalPressId, pageId), orderBy('uploadedAt', 'desc'), limit(24)));
+      attachments = attachSnap.docs.map(d => ({ id: d.id, ...(d.data() || {}) }));
+    }
+    if (!page) {
       _pressWikiSelectedPageId = null;
       renderPressWikiEmptySelection(_pressWikiEmptySelectionMessage());
       _pressWikiSyncScopeBadge(_pressWikiScope);
       return;
     }
-    const page = pageSnap.data() || {};
     const currentRevisionId = page.currentRevisionId || null;
     titleEl.textContent = page.title || pageId;
     metaEl.textContent = `${_pressWikiScopeLabel(page.scope || _pressWikiScope)} · Updated ${_relativeTime(page.updatedAt) || 'recently'}`;
     _pressWikiSyncScopeBadge(page.scope || _pressWikiScope);
-    const revSnap = await getDocs(query(wikiRevisionsColForScope(_pressWikiScope, _pressWikiScope === WIKI_SCOPE_PRESS ? activePressId : _pressWikiModalPressId, pageId), orderBy('editedAt', 'desc'), limit(30)));
-    const revisions = revSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     const currentRevision = revisions.find(r => r.id === currentRevisionId) || revisions[0] || null;
     _renderPressWikiBody(currentRevision?.body || 'No revision body available.');
     revisionsEl.innerHTML = revisions.length ? '' : '<div style="color:var(--color-text-subtle, var(--text3));">No revisions yet.</div>';
@@ -15091,8 +15254,7 @@ async function loadPressWikiPage(pageId) {
       row.onclick = () => { _renderPressWikiBody(rev.body || ''); };
       revisionsEl.appendChild(row);
     });
-    const attachSnap = await getDocs(query(wikiAttachmentsColForScope(_pressWikiScope, _pressWikiScope === WIKI_SCOPE_PRESS ? activePressId : _pressWikiModalPressId, pageId), orderBy('uploadedAt', 'desc'), limit(24)));
-    _pressWikiAttachmentsCache = attachSnap.docs.map(d => ({ id: d.id, ...(d.data() || {}) }));
+    _pressWikiAttachmentsCache = attachments;
     _pressWikiAttachmentsCache.forEach((data, idx) => {
       if (!data.url) return;
       const btn = document.createElement('button');
@@ -15203,32 +15365,43 @@ async function savePressWikiRevision() {
   const mm = String(now.getMonth() + 1).padStart(2, '0');
   const yy = String(now.getFullYear()).slice(-2);
   const changeNote = rawChangeNote || `${fallbackActorName} : ${dd}/${mm}/${yy}`;
-  const pageRef = wikiPageDocForScope(_pressWikiScope, _pressWikiScope === WIKI_SCOPE_PRESS ? activePressId : _pressWikiModalPressId, _pressWikiSelectedPageId);
-  const revisionRef = doc(wikiRevisionsColForScope(_pressWikiScope, _pressWikiScope === WIKI_SCOPE_PRESS ? activePressId : _pressWikiModalPressId, _pressWikiSelectedPageId));
-  await runTransaction(db, async tx => {
-    const snap = await tx.get(pageRef);
-    const prevRevisionId = snap.exists() ? (snap.data()?.currentRevisionId || null) : null;
-    const existingParentId = snap.exists() ? _pressWikiNormalizeParentId(snap.data()?.parentPageId) : null;
-    const existingSortOrder = snap.exists() ? (Number.isFinite(Number(snap.data()?.sortOrder)) ? Number(snap.data()?.sortOrder) : 0) : 0;
-    tx.set(revisionRef, { body, changeNote, prevRevisionId, editedBy: currentActor(), editedAt: serverTimestamp() });
-    tx.set(pageRef, {
-      title: title || snap.data()?.title || _pressWikiSelectedPageId,
-      slug: _pressWikiSelectedPageId,
-      machineCode: _pressWikiScope === WIKI_SCOPE_SHARED ? '' : (_pressWikiPressInfo(activePressId)?.machineCode || _pressWikiMachineCode || ''),
+  if (shouldUseSqlStagingReads(currentPlantId)) {
+    await dataApi.saveWikiRevision(currentPlantId, _pressWikiSelectedPageId, {
       scope: _pressWikiScope,
-      pressId: _pressWikiScope === WIKI_SCOPE_SHARED ? null : activePressId,
-      currentRevisionId: revisionRef.id,
-      updatedBy: currentActor(),
-      updatedAt: serverTimestamp(),
-      lastActivityAt: serverTimestamp(),
-      photoCount: snap.exists() ? (snap.data()?.photoCount || 0) : 0,
-      createdBy: snap.exists() ? (snap.data()?.createdBy || currentActor()) : currentActor(),
-      createdAt: snap.exists() ? (snap.data()?.createdAt || serverTimestamp()) : serverTimestamp(),
-      parentPageId: existingParentId,
-      sortOrder: existingSortOrder,
-      schemaVersion: 2
-    }, { merge: true });
-  });
+      pressId: _pressWikiScope === WIKI_SCOPE_SHARED ? '' : activePressId,
+      title,
+      body,
+      changeNote,
+      actor: currentActor()
+    });
+  } else {
+    const pageRef = wikiPageDocForScope(_pressWikiScope, _pressWikiScope === WIKI_SCOPE_PRESS ? activePressId : _pressWikiModalPressId, _pressWikiSelectedPageId);
+    const revisionRef = doc(wikiRevisionsColForScope(_pressWikiScope, _pressWikiScope === WIKI_SCOPE_PRESS ? activePressId : _pressWikiModalPressId, _pressWikiSelectedPageId));
+    await runTransaction(db, async tx => {
+      const snap = await tx.get(pageRef);
+      const prevRevisionId = snap.exists() ? (snap.data()?.currentRevisionId || null) : null;
+      const existingParentId = snap.exists() ? _pressWikiNormalizeParentId(snap.data()?.parentPageId) : null;
+      const existingSortOrder = snap.exists() ? (Number.isFinite(Number(snap.data()?.sortOrder)) ? Number(snap.data()?.sortOrder) : 0) : 0;
+      tx.set(revisionRef, { body, changeNote, prevRevisionId, editedBy: currentActor(), editedAt: serverTimestamp() });
+      tx.set(pageRef, {
+        title: title || snap.data()?.title || _pressWikiSelectedPageId,
+        slug: _pressWikiSelectedPageId,
+        machineCode: _pressWikiScope === WIKI_SCOPE_SHARED ? '' : (_pressWikiPressInfo(activePressId)?.machineCode || _pressWikiMachineCode || ''),
+        scope: _pressWikiScope,
+        pressId: _pressWikiScope === WIKI_SCOPE_SHARED ? null : activePressId,
+        currentRevisionId: revisionRef.id,
+        updatedBy: currentActor(),
+        updatedAt: serverTimestamp(),
+        lastActivityAt: serverTimestamp(),
+        photoCount: snap.exists() ? (snap.data()?.photoCount || 0) : 0,
+        createdBy: snap.exists() ? (snap.data()?.createdBy || currentActor()) : currentActor(),
+        createdAt: snap.exists() ? (snap.data()?.createdAt || serverTimestamp()) : serverTimestamp(),
+        parentPageId: existingParentId,
+        sortOrder: existingSortOrder,
+        schemaVersion: 2
+      }, { merge: true });
+    });
+  }
   togglePressWikiEditor(false);
   await loadPressWikiPageList();
   await loadPressWikiPage(_pressWikiSelectedPageId);
@@ -15260,16 +15433,24 @@ async function deletePressWikiPage() {
   if (!ok) return;
   _setPressWikiError('');
   try {
-    const attachmentSnap = await getDocs(wikiAttachmentsColForScope(_pressWikiScope, _pressWikiScope === WIKI_SCOPE_PRESS ? activePressId : _pressWikiModalPressId, pageId));
-    const attachments = attachmentSnap.docs.map(d => ({ id: d.id, ...(d.data() || {}) }));
+    const attachments = shouldUseSqlStagingReads(currentPlantId)
+      ? (_pressWikiAttachmentsCache || [])
+      : (await getDocs(wikiAttachmentsColForScope(_pressWikiScope, _pressWikiScope === WIKI_SCOPE_PRESS ? activePressId : _pressWikiModalPressId, pageId))).docs.map(d => ({ id: d.id, ...(d.data() || {}) }));
     await Promise.allSettled(attachments.map(async a => {
       if (!a?.storagePath) return;
       const attStorage = a.storageBucket ? getStorage(app, `gs://${a.storageBucket}`) : storage;
       await deleteObject(storageRef(attStorage, a.storagePath));
     }));
-    await _deleteWikiDocsInBatches(wikiAttachmentsColForScope(_pressWikiScope, _pressWikiScope === WIKI_SCOPE_PRESS ? activePressId : _pressWikiModalPressId, pageId));
-    await _deleteWikiDocsInBatches(wikiRevisionsColForScope(_pressWikiScope, _pressWikiScope === WIKI_SCOPE_PRESS ? activePressId : _pressWikiModalPressId, pageId));
-    await deleteDoc(wikiPageDocForScope(_pressWikiScope, _pressWikiScope === WIKI_SCOPE_PRESS ? activePressId : _pressWikiModalPressId, pageId));
+    if (shouldUseSqlStagingReads(currentPlantId)) {
+      await dataApi.deleteWikiPage(currentPlantId, pageId, {
+        scope: _pressWikiScope,
+        pressId: _pressWikiScope === WIKI_SCOPE_SHARED ? '' : activePressId
+      });
+    } else {
+      await _deleteWikiDocsInBatches(wikiAttachmentsColForScope(_pressWikiScope, _pressWikiScope === WIKI_SCOPE_PRESS ? activePressId : _pressWikiModalPressId, pageId));
+      await _deleteWikiDocsInBatches(wikiRevisionsColForScope(_pressWikiScope, _pressWikiScope === WIKI_SCOPE_PRESS ? activePressId : _pressWikiModalPressId, pageId));
+      await deleteDoc(wikiPageDocForScope(_pressWikiScope, _pressWikiScope === WIKI_SCOPE_PRESS ? activePressId : _pressWikiModalPressId, pageId));
+    }
     _pressWikiSelectedPageId = null;
     await loadPressWikiPageList();
     if (_pressWikiSelectedPageId) {
@@ -15298,6 +15479,14 @@ function togglePressWikiEditor(show) {
 
 function _pressWikiCurrentBodyText() {
   return String(_pressWikiRenderedBodyRaw || '');
+}
+
+function _pressWikiSqlParams(pageId = _pressWikiSelectedPageId) {
+  return {
+    scope: _pressWikiScope === WIKI_SCOPE_SHARED ? WIKI_SCOPE_SHARED : WIKI_SCOPE_PRESS,
+    pressId: _pressWikiScope === WIKI_SCOPE_SHARED ? '' : (_pressWikiActivePressId() || ''),
+    pageId: String(pageId || '').trim()
+  };
 }
 
 function togglePressWikiCreateRow(show) {
@@ -15339,7 +15528,14 @@ async function createPressWikiPageFromInput() {
   _pressWikiSelectedPageId = pageId;
   togglePressWikiCreateRow(false);
   await loadPressWikiPageList();
-  await loadPressWikiPage(pageId);
+  if (!shouldUseSqlStagingReads(currentPlantId)) {
+    await loadPressWikiPage(pageId);
+  } else {
+    document.getElementById('press-wiki-title').textContent = pageId;
+    _renderPressWikiBody('');
+    _pressWikiAttachmentsCache = [];
+    renderPressWikiPhotoPicker();
+  }
   togglePressWikiEditor(true);
   _setPressWikiError('');
 }
@@ -15482,15 +15678,23 @@ async function handlePressWikiFilesUpload(files, autoInsert) {
       const url = await getDownloadURL(sRef);
       
       const attDoc = {
+        attachmentId: attId,
         storagePath: path,
         url: url,
         contentType: file.type,
         caption: file.name,
         uploadedBy: currentActor(),
-        uploadedAt: serverTimestamp()
+        uploadedAt: shouldUseSqlStagingReads(currentPlantId) ? new Date().toISOString() : serverTimestamp()
       };
-      
-      await setDoc(doc(db, ...wikiStoragePrefixForScope(_pressWikiScope, _pressWikiScope === WIKI_SCOPE_PRESS ? activePressId : _pressWikiModalPressId, _pressWikiSelectedPageId).split('/'), 'attachments', attId), attDoc);
+      if (shouldUseSqlStagingReads(currentPlantId)) {
+        await dataApi.createWikiAttachment(currentPlantId, _pressWikiSelectedPageId, {
+          ...attDoc,
+          scope: _pressWikiScope,
+          pressId: _pressWikiScope === WIKI_SCOPE_SHARED ? '' : activePressId
+        });
+      } else {
+        await setDoc(doc(db, ...wikiStoragePrefixForScope(_pressWikiScope, _pressWikiScope === WIKI_SCOPE_PRESS ? activePressId : _pressWikiModalPressId, _pressWikiSelectedPageId).split('/'), 'attachments', attId), attDoc);
+      }
       uploadedCount++;
       
       if (autoInsert) {
@@ -15504,7 +15708,7 @@ async function handlePressWikiFilesUpload(files, autoInsert) {
       }
     }
     
-    if (uploadedCount > 0) {
+    if (uploadedCount > 0 && !shouldUseSqlStagingReads(currentPlantId)) {
       const pageRef = wikiPageDocForScope(_pressWikiScope, _pressWikiScope === WIKI_SCOPE_PRESS ? activePressId : _pressWikiModalPressId, _pressWikiSelectedPageId);
       const snap = await getDoc(pageRef);
       if (snap.exists()) {
@@ -15657,13 +15861,19 @@ function _notesNormalizeDoc(note = {}) {
 }
 
 function _notesSortValue(note) {
-  const updatedAt = note?.updatedAt?.toMillis?.() ?? note?.updatedAt?.seconds * 1000 ?? 0;
+  const updatedAt = note?.updatedAt?.toMillis?.()
+    ?? note?.updatedAt?.seconds * 1000
+    ?? (note?.updatedAt ? new Date(note.updatedAt).getTime() : 0);
   return {
     pinned: note?.isPinned ? 1 : 0,
     archived: note?.isArchived ? 1 : 0,
     updatedAt,
     title: String(note?.title || '').toLowerCase()
   };
+}
+
+function _notesCreateClientId(prefix = 'note') {
+  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function _notesCompare(a, b) {
@@ -16514,6 +16724,15 @@ async function _notesLoadAttachments(noteId) {
     _notesRenderAttachments();
     return [];
   }
+  if (shouldUseSqlStagingReads(currentPlantId)) {
+    const payload = await safeSqlRead(`note attachments ${noteId}`, () => dataApi.listNoteAttachments(currentPlantId, noteId));
+    _notesAttachmentsCache = Array.isArray(payload?.attachments) ? payload.attachments.map(att => ({
+      ...att,
+      id: att.id || att.attachmentId || ''
+    })) : [];
+    _notesRenderAttachments();
+    return _notesAttachmentsCache;
+  }
   const snap = await getDocs(query(noteAttachmentsCol(noteId), orderBy('uploadedAt', 'desc')));
   _notesAttachmentsCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
   _notesRenderAttachments();
@@ -16531,7 +16750,11 @@ async function _notesDeleteAttachment(attachmentId) {
       const attStorage = att.storageBucket ? getStorage(app, `gs://${att.storageBucket}`) : storage;
       await deleteObject(storageRef(attStorage, att.storagePath));
     }
-    await deleteDoc(doc(noteAttachmentsCol(noteId), attachmentId));
+    if (shouldUseSqlStagingReads(currentPlantId)) {
+      await dataApi.deleteNoteAttachment(currentPlantId, noteId, attachmentId);
+    } else {
+      await deleteDoc(doc(noteAttachmentsCol(noteId), attachmentId));
+    }
     _notesAttachmentsCache = _notesAttachmentsCache.filter(item => item.id !== attachmentId);
     if (_notesState.currentNote) _notesState.currentNote.photoCount = _notesAttachmentsCache.length;
     _notesRenderAttachments();
@@ -16572,7 +16795,10 @@ function _notesBuildPayload(note, { persistCreatedAt = false } = {}) {
     note?.machineCode || '',
     note?.issueId || ''
   ].join(' ').toLowerCase();
+  const useSql = shouldUseSqlStagingReads(currentPlantId);
   return {
+    id: note?.id || '',
+    noteId: note?.id || '',
     title,
     bodyHtml,
     bodyText,
@@ -16585,11 +16811,11 @@ function _notesBuildPayload(note, { persistCreatedAt = false } = {}) {
     isArchived: Boolean(note?.isArchived),
     photoCount: Number(note?.photoCount || 0),
     searchText,
-    updatedAt: serverTimestamp(),
+    updatedAt: useSql ? new Date().toISOString() : serverTimestamp(),
     updatedBy: actor,
     schemaVersion: 1,
     ...(persistCreatedAt ? {
-      createdAt: note?.createdAt || serverTimestamp(),
+      createdAt: note?.createdAt || (useSql ? new Date().toISOString() : serverTimestamp()),
       createdBy: note?.createdBy || actor
     } : {})
   };
@@ -16605,7 +16831,18 @@ async function _notesSaveActiveNote({ immediate = false } = {}) {
       _notesSaveTimer = null;
     }
     if (immediate) _notesSetStatus('Saving…', '');
-    await setDoc(noteDoc(note.id), payload, { merge: true });
+    if (shouldUseSqlStagingReads(currentPlantId)) {
+      const response = await dataApi.updateNote(currentPlantId, note.id, payload);
+      if (response?.note) {
+        _notesState.currentNote = _notesNormalizeDoc(response.note);
+        _notesState.notes = (_notesState.notes || [])
+          .filter(item => item.id !== note.id)
+          .concat(_notesState.currentNote)
+          .sort(_notesCompare);
+      }
+    } else {
+      await setDoc(noteDoc(note.id), payload, { merge: true });
+    }
     _notesState.dirty = false;
     _notesState.saving = false;
     _notesState.lastSavedAt = new Date();
@@ -16653,7 +16890,7 @@ async function _notesToggleArchive() {
 
 async function _notesCreateNewNote(templateKey = 'blank') {
   if (!currentPlantId || !_notesState.notes) return;
-  const ref = doc(notesCol());
+  const noteId = shouldUseSqlStagingReads(currentPlantId) ? _notesCreateClientId('note') : doc(notesCol()).id;
   const pressId = _notesContext.pressId || '';
   const issueId = _notesContext.issueId || '';
   const issue = issueId ? issues.find(i => i.id === issueId) : null;
@@ -16671,7 +16908,7 @@ async function _notesCreateNewNote(templateKey = 'blank') {
     ...(issueId ? ['issue'] : [])
   ]));
   const draft = {
-    id: ref.id,
+    id: noteId,
     title,
     bodyHtml: template.bodyHtml || '',
     bodyText: _noteTextFromHtml(template.bodyHtml || ''),
@@ -16684,19 +16921,26 @@ async function _notesCreateNewNote(templateKey = 'blank') {
     isArchived: false,
     photoCount: 0,
     searchText: title.toLowerCase(),
-    createdAt: serverTimestamp(),
+    createdAt: shouldUseSqlStagingReads(currentPlantId) ? new Date().toISOString() : serverTimestamp(),
     createdBy: currentActor(),
-    updatedAt: serverTimestamp(),
+    updatedAt: shouldUseSqlStagingReads(currentPlantId) ? new Date().toISOString() : serverTimestamp(),
     updatedBy: currentActor(),
     schemaVersion: 1
   };
   _notesState.creating = true;
-  _notesState.activeNoteId = ref.id;
+  _notesState.activeNoteId = noteId;
   _notesSetView('editor');
   _notesRenderEditor(_notesNormalizeDoc(draft));
   queueMicrotask(_notesFocusTitle);
-  await setDoc(ref, draft);
-  await _notesLoadAttachments(ref.id);
+  if (shouldUseSqlStagingReads(currentPlantId)) {
+    const response = await dataApi.createNote(currentPlantId, draft);
+    const saved = _notesNormalizeDoc(response?.note || draft);
+    _notesState.notes = (_notesState.notes || []).filter(note => note.id !== saved.id).concat(saved).sort(_notesCompare);
+    _notesState.currentNote = saved;
+  } else {
+    await setDoc(noteDoc(noteId), draft);
+  }
+  await _notesLoadAttachments(noteId);
   _notesState.creating = false;
   _notesRenderList();
   _notesSetStatus('Saved', 'New note created');
@@ -16708,15 +16952,21 @@ async function _notesDeleteActiveNote() {
   const ok = confirm(`Delete "${note.title || 'Untitled Note'}"? This will remove the note and its attachments.`);
   if (!ok) return;
   try {
-    const snap = await getDocs(noteAttachmentsCol(note.id));
-    await Promise.allSettled(snap.docs.map(async d => {
-      const att = d.data() || {};
+    const attachments = shouldUseSqlStagingReads(currentPlantId)
+      ? (_notesAttachmentsCache || [])
+      : (await getDocs(noteAttachmentsCol(note.id))).docs.map(d => d.data() || {});
+    await Promise.allSettled(attachments.map(async att => {
       if (!att.storagePath) return;
       const attStorage = att.storageBucket ? getStorage(app, `gs://${att.storageBucket}`) : storage;
       await deleteObject(storageRef(attStorage, att.storagePath));
     }));
-    await _deleteWikiDocsInBatches(noteAttachmentsCol(note.id));
-    await deleteDoc(noteDoc(note.id));
+    if (shouldUseSqlStagingReads(currentPlantId)) {
+      await dataApi.deleteNote(currentPlantId, note.id);
+      _notesState.notes = (_notesState.notes || []).filter(item => item.id !== note.id);
+    } else {
+      await _deleteWikiDocsInBatches(noteAttachmentsCol(note.id));
+      await deleteDoc(noteDoc(note.id));
+    }
     _notesState.activeNoteId = null;
     _notesRenderEditor(null);
     _notesRenderList();
@@ -16749,6 +16999,8 @@ async function _notesUploadAttachments(files) {
       }
       const url = await getDownloadURL(sRef);
       const attDoc = {
+        id: attId,
+        attachmentId: attId,
         storagePath: path,
         storageBucket: sRef.bucket,
         url,
@@ -16756,11 +17008,19 @@ async function _notesUploadAttachments(files) {
         contentType: file.type || 'image/jpeg',
         sizeBytes: file.size || 0,
         uploadedBy: currentActor(),
-        uploadedAt: serverTimestamp(),
+        uploadedAt: shouldUseSqlStagingReads(currentPlantId) ? new Date().toISOString() : serverTimestamp(),
         schemaVersion: 1
       };
-      await setDoc(doc(noteAttachmentsCol(noteId), attId), attDoc);
-      uploaded.push(attDoc);
+      if (shouldUseSqlStagingReads(currentPlantId)) {
+        const response = await dataApi.createNoteAttachment(currentPlantId, noteId, attDoc);
+        uploaded.push(response?.attachment ? {
+          ...response.attachment,
+          id: response.attachment.id || response.attachment.attachmentId || attId
+        } : attDoc);
+      } else {
+        await setDoc(doc(noteAttachmentsCol(noteId), attId), attDoc);
+        uploaded.push(attDoc);
+      }
     }
     _notesAttachmentsCache = [..._notesAttachmentsCache, ...uploaded];
     if (_notesState.currentNote) _notesState.currentNote.photoCount = _notesAttachmentsCache.length;
@@ -16864,9 +17124,48 @@ async function _notesStartListener() {
     _notesUnsubscribe();
     _notesUnsubscribe = null;
   }
+  if (_notesPollTimer) {
+    clearTimeout(_notesPollTimer);
+    _notesPollTimer = null;
+  }
   if (!currentPlantId || !currentUser?.uid) {
     _notesRenderList();
     _notesRenderEditor(null);
+    return;
+  }
+  if (shouldUseSqlStagingReads(currentPlantId)) {
+    const token = ++_notesLoadToken;
+    let active = true;
+    _notesUnsubscribe = () => {
+      active = false;
+      if (_notesPollTimer) {
+        clearTimeout(_notesPollTimer);
+        _notesPollTimer = null;
+      }
+      _notesUnsubscribe = null;
+    };
+    const poll = async () => {
+      if (!active || token !== _notesLoadToken || !currentPlantId) return;
+      const payload = await safeSqlRead(`notes ${currentPlantId}`, () => dataApi.listNotes(currentPlantId, { includeArchived: true }));
+      if (payload) {
+        _notesState.error = '';
+        _notesState.notes = (payload.notes || []).map(note => _notesNormalizeDoc(note)).sort(_notesCompare);
+        _notesRenderList();
+        _notesSyncFilterButtons();
+        if (_notesState.activeNoteId) {
+          const activeNote = _notesState.notes.find(note => note.id === _notesState.activeNoteId) || null;
+          if (activeNote && !_notesState.dirty) {
+            _notesRenderEditor(activeNote);
+          } else if (!activeNote) {
+            _notesState.activeNoteId = null;
+            _notesRenderEditor(null);
+          }
+        }
+        _notesEnsureActiveSelection();
+      }
+      if (active) _notesPollTimer = setTimeout(poll, 5000);
+    };
+    await poll();
     return;
   }
   const token = ++_notesLoadToken;

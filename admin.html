@@ -897,6 +897,18 @@ const auth = getAuth(app);
 setPersistence(auth, browserLocalPersistence).catch(() => {});
 const provider = new GoogleAuthProvider();
 provider.setCustomParameters({ prompt: 'select_account' });
+const DATA_BACKEND_SQL = 'sql';
+function selectedDataBackend() {
+  const explicit = String(window.AP_TRACKER_DATA_BACKEND || '').trim().toLowerCase();
+  if (explicit === 'sql' || explicit === 'firebase') return explicit;
+  const params = new URLSearchParams(window.location.search || '');
+  const fromQuery = String(params.get('dataBackend') || '').trim().toLowerCase();
+  if (fromQuery === 'sql' || fromQuery === 'firebase') return fromQuery;
+  return 'firebase';
+}
+function shouldUseSqlAdmin() {
+  return selectedDataBackend() === DATA_BACKEND_SQL;
+}
 
 let currentUser = null;
 let userPlants = [];
@@ -1490,6 +1502,20 @@ async function loadUserPlants() {
     currentThemeSelection = localStorage.getItem(THEME_STORAGE_KEY) || FALLBACK_THEME_KEY;
   }
   syncAdminTheme(currentThemeSelection, globalStoreDraft);
+  if (shouldUseSqlAdmin()) {
+    const ctx = await adminApiRequest('/api/me');
+    userPlants = Array.isArray(ctx?.plants)
+      ? ctx.plants.map(plant => ({
+          id: plant.plantId,
+          name: plant.plantName || plant.plantId,
+          location: plant.location || ''
+        }))
+      : [];
+    adminPlantIds = Array.isArray(ctx?.plants)
+      ? ctx.plants.filter(plant => plant.role === 'admin' && plant.isActive !== false).map(plant => plant.plantId)
+      : [];
+    return;
+  }
   const plantIds = Array.isArray(userData.plantIds) ? userData.plantIds : [];
 
   const plantDocs = await Promise.all(plantIds.map(id => getDoc(doc(db, 'plants', id))));
@@ -1513,6 +1539,50 @@ async function loadMembersAndStatusesForAdminPlants() {
   missionDraftByPlant.clear();
   pressDraftByPlant.clear();
   for (const plantId of adminPlantIds) {
+    if (shouldUseSqlAdmin()) {
+      const [membersPayload, requestsPayload, bootstrapPayload, gamificationPayload] = await Promise.all([
+        adminApiRequest(`/api/plants/${encodeURIComponent(plantId)}/members?active=false`),
+        adminApiRequest(`/api/plants/${encodeURIComponent(plantId)}/access-requests?status=pending`),
+        adminApiRequest(`/api/plants/${encodeURIComponent(plantId)}/bootstrap`),
+        adminApiRequest(`/api/plants/${encodeURIComponent(plantId)}/gamification-admin`)
+      ]);
+
+      membersByPlant.set(plantId, Array.isArray(membersPayload?.members)
+        ? membersPayload.members.map(member => ({ id: member.uid, userId: member.uid, ...member }))
+        : []);
+      accessRequestsByPlant.set(
+        plantId,
+        Array.isArray(requestsPayload?.accessRequests)
+          ? requestsPayload.accessRequests
+              .map(request => ({ id: request.uid, ...request }))
+              .filter(request => String(request.status || 'pending') === 'pending')
+          : []
+      );
+
+      const rawStatuses = bootstrapPayload?.statusConfig?.statuses || deepCopy(DEFAULT_STATUSES);
+      const normalizedStatuses = normalizeStatusesForSave(rawStatuses);
+      const normalizedRoutes = normalizeSubcategoryRoutes(bootstrapPayload?.statusConfig?.subcategoryRoutes || null, normalizedStatuses);
+      statusDraftByPlant.set(plantId, syncStatusesFromSubcategoryRoutes(normalizedStatuses, normalizedRoutes));
+      subcategoryRouteDraftByPlant.set(plantId, normalizedRoutes);
+
+      const gameConfig = bootstrapPayload?.gamificationConfig?.config || deepCopy(DEFAULT_GAME_CONFIG);
+      gameDraftByPlant.set(plantId, {
+        enabled: gameConfig.enabled !== false,
+        weights: { ...deepCopy(DEFAULT_GAME_CONFIG.weights), ...(gameConfig.weights || {}) },
+        penalties: { ...deepCopy(DEFAULT_GAME_CONFIG.penalties), ...(gameConfig.penalties || {}) },
+        caps: { ...deepCopy(DEFAULT_GAME_CONFIG.caps), ...(gameConfig.caps || {}) },
+        customRules: Array.isArray(gameConfig.customRules) ? gameConfig.customRules.map(r => ({ ...r })) : [],
+        leaderboardPeriod: gameConfig.leaderboardPeriod || 'weekly',
+      });
+      missionDraftByPlant.set(plantId, Array.isArray(gamificationPayload?.missions) ? gamificationPayload.missions.map(mission => ({ ...mission })) : []);
+      const storedBadges = Array.isArray(gameConfig.badges) ? gameConfig.badges : null;
+      badgeDraftByPlant.set(plantId, storedBadges ? storedBadges.map(b => ({ ...b })) : deepCopy(DEFAULT_BADGE_DEFS));
+      const rawPresses = bootstrapPayload?.pressConfig?.presses
+        ? bootstrapPayload.pressConfig.presses
+        : deepCopy(DEFAULT_PRESSES);
+      pressDraftByPlant.set(plantId, deepCopy(rawPresses));
+      continue;
+    }
     const [membersSnap, requestsSnap, statusesSnap, gameConfigSnap, missionsSnap, pressesSnap] = await Promise.all([
       getDocs(collection(db, 'plants', plantId, 'members')),
       getDocs(collection(db, 'plants', plantId, 'accessRequests')),
@@ -1560,6 +1630,25 @@ async function loadMembersAndStatusesForAdminPlants() {
 }
 
 async function loadGlobalStoreDraft() {
+  if (shouldUseSqlAdmin()) {
+    try {
+      const sourcePlantId = adminPlantIds[0];
+      if (!sourcePlantId) {
+        globalStoreDraft = normalizeGlobalStoreItems(DEFAULT_STORE_ITEMS);
+      } else {
+        const payload = await adminApiRequest(`/api/plants/${encodeURIComponent(sourcePlantId)}/store-config`);
+        const rawItems = payload?.storeConfig?.config?.items || DEFAULT_STORE_ITEMS;
+        globalStoreDraft = normalizeGlobalStoreItems(rawItems);
+      }
+    } catch (e) {
+      console.warn('Failed to load D1 store config:', e);
+      globalStoreDraft = normalizeGlobalStoreItems(DEFAULT_STORE_ITEMS);
+    }
+    storeThemeEditorDraft = null;
+    storeThemeEditorIndex = -1;
+    syncAdminTheme(currentThemeSelection, globalStoreDraft);
+    return;
+  }
   try {
     const snap = await getDoc(doc(db, 'globalConfig', 'store'));
     globalStoreDraft = normalizeGlobalStoreItems(snap.exists() ? snap.data().items : DEFAULT_STORE_ITEMS);
@@ -1610,6 +1699,24 @@ function getNextAvailableBuiltinThemeKey(excludeIndex = -1) {
 }
 
 async function loadUserDirectory() {
+  if (shouldUseSqlAdmin()) {
+    const payload = await adminApiRequest('/api/user-directory');
+    const deduped = new Map();
+    (Array.isArray(payload?.users) ? payload.users : []).forEach(user => {
+      const uid = String(user.uid || '').trim();
+      if (!uid || deduped.has(uid)) return;
+      deduped.set(uid, {
+        uid,
+        displayName: String(user.displayName || '').trim(),
+        email: String(user.email || '').trim().toLowerCase(),
+        photoURL: String(user.photoURL || '').trim()
+      });
+    });
+    userDirectory = Array.from(deduped.values()).sort((a, b) =>
+      (a.displayName || a.email || a.uid).localeCompare(b.displayName || b.email || b.uid)
+    );
+    return;
+  }
   const usersSnap = await getDocs(collection(db, 'userLookup'));
   const deduped = new Map();
   usersSnap.forEach(d => {
@@ -2351,26 +2458,43 @@ async function createPlant() {
 
   try {
     const id = name.toLowerCase().replace(/[^a-z0-9]/g, '_') + '_' + Date.now().toString(36);
-    const batch = writeBatch(db);
-    batch.set(doc(db, 'plants', id), { name, location: location || '', createdAt: serverTimestamp(), isActive: true });
-    batch.set(doc(db, 'plants', id, 'members', currentUser.uid), {
-      userId: currentUser.uid,
-      displayName: currentUser.displayName || currentUser.email || '',
-      email: currentUser.email || '',
-      photoURL: currentUser.photoURL || '',
-      role: 'admin',
-      isActive: true,
-      addedAt: serverTimestamp(),
-      permissions: { ...DEFAULT_PERMISSIONS }
-    });
-    batch.set(doc(db, 'plants', id, 'config', 'presses'), { presses: DEFAULT_PRESSES });
-    batch.set(doc(db, 'plants', id, 'config', 'statuses'), {
-      statuses: deepCopy(DEFAULT_STATUSES),
-      subcategoryRoutes: normalizeSubcategoryRoutes({}, DEFAULT_STATUSES)
-    });
-    batch.set(doc(db, 'plants', id, 'gamificationConfig', 'main'), { ...deepCopy(DEFAULT_GAME_CONFIG), updatedAt: serverTimestamp() }, { merge: true });
-    batch.set(doc(db, 'users', currentUser.uid), { plantIds: arrayUnion(id) }, { merge: true });
-    await batch.commit();
+    if (shouldUseSqlAdmin()) {
+      await adminApiRequest('/api/plants', {
+        method: 'POST',
+        body: {
+          plantId: id,
+          name,
+          location: location || '',
+          defaultPermissions: { ...DEFAULT_PERMISSIONS },
+          defaultPresses: deepCopy(DEFAULT_PRESSES),
+          defaultStatuses: deepCopy(DEFAULT_STATUSES),
+          defaultSubcategoryRoutes: normalizeSubcategoryRoutes({}, DEFAULT_STATUSES),
+          defaultGameConfig: deepCopy(DEFAULT_GAME_CONFIG),
+          defaultStoreConfig: { items: deepCopy(DEFAULT_STORE_ITEMS) }
+        }
+      });
+    } else {
+      const batch = writeBatch(db);
+      batch.set(doc(db, 'plants', id), { name, location: location || '', createdAt: serverTimestamp(), isActive: true });
+      batch.set(doc(db, 'plants', id, 'members', currentUser.uid), {
+        userId: currentUser.uid,
+        displayName: currentUser.displayName || currentUser.email || '',
+        email: currentUser.email || '',
+        photoURL: currentUser.photoURL || '',
+        role: 'admin',
+        isActive: true,
+        addedAt: serverTimestamp(),
+        permissions: { ...DEFAULT_PERMISSIONS }
+      });
+      batch.set(doc(db, 'plants', id, 'config', 'presses'), { presses: DEFAULT_PRESSES });
+      batch.set(doc(db, 'plants', id, 'config', 'statuses'), {
+        statuses: deepCopy(DEFAULT_STATUSES),
+        subcategoryRoutes: normalizeSubcategoryRoutes({}, DEFAULT_STATUSES)
+      });
+      batch.set(doc(db, 'plants', id, 'gamificationConfig', 'main'), { ...deepCopy(DEFAULT_GAME_CONFIG), updatedAt: serverTimestamp() }, { merge: true });
+      batch.set(doc(db, 'users', currentUser.uid), { plantIds: arrayUnion(id) }, { merge: true });
+      await batch.commit();
+    }
 
     window.closeAddPlantModal();
     await refreshAdminData();
@@ -3093,24 +3217,40 @@ window.addMember = async function(plantId) {
 
   try {
     if (target.uid === currentUser.uid) throw new Error('You are already in this plant.');
+    if (shouldUseSqlAdmin()) {
+      const existingMembers = membersByPlant.get(plantId) || [];
+      const existing = existingMembers.find(member => member.id === target.uid && member.isActive !== false);
+      if (existing) throw new Error('User is already a member of this plant.');
+      await adminApiRequest(`/api/plants/${encodeURIComponent(plantId)}/members`, {
+        method: 'POST',
+        body: {
+          uid: target.uid,
+          displayName: target.displayName || '',
+          email: target.email || email,
+          role,
+          isActive: true,
+          permissions: defaultPermsForRole(role)
+        }
+      });
+    } else {
+      const existing = await getDoc(doc(db, 'plants', plantId, 'members', target.uid));
+      if (existing.exists() && existing.data().isActive) throw new Error('User is already a member of this plant.');
 
-    const existing = await getDoc(doc(db, 'plants', plantId, 'members', target.uid));
-    if (existing.exists() && existing.data().isActive) throw new Error('User is already a member of this plant.');
-
-    const batch = writeBatch(db);
-    batch.set(doc(db, 'plants', plantId, 'members', target.uid), {
-      userId: target.uid,
-      displayName: target.displayName || '',
-      email: target.email || email,
-      photoURL: target.photoURL || '',
-      role,
-      isActive: true,
-      addedAt: serverTimestamp(),
-      addedBy: { uid: currentUser.uid, name: currentUser.displayName || currentUser.email || '' },
-      permissions: defaultPermsForRole(role)
-    });
-    batch.set(doc(db, 'users', target.uid), { plantIds: arrayUnion(plantId) }, { merge: true });
-    await batch.commit();
+      const batch = writeBatch(db);
+      batch.set(doc(db, 'plants', plantId, 'members', target.uid), {
+        userId: target.uid,
+        displayName: target.displayName || '',
+        email: target.email || email,
+        photoURL: target.photoURL || '',
+        role,
+        isActive: true,
+        addedAt: serverTimestamp(),
+        addedBy: { uid: currentUser.uid, name: currentUser.displayName || currentUser.email || '' },
+        permissions: defaultPermsForRole(role)
+      });
+      batch.set(doc(db, 'users', target.uid), { plantIds: arrayUnion(plantId) }, { merge: true });
+      await batch.commit();
+    }
 
     if (userEl) userEl.value = '';
     feedback(`fb-${plantId}`, 'ok', `Added ${target.displayName || target.email || target.uid} as ${role}.`);
@@ -3123,12 +3263,22 @@ window.addMember = async function(plantId) {
 
 window.updateRole = async function(plantId, userId, role) {
   try {
-    await updateDoc(doc(db, 'plants', plantId, 'members', userId), {
-      role,
-      permissions: defaultPermsForRole(role),
-      updatedAt: serverTimestamp(),
-      updatedBy: { uid: currentUser.uid, name: currentUser.displayName || currentUser.email || '' }
-    });
+    if (shouldUseSqlAdmin()) {
+      await adminApiRequest(`/api/plants/${encodeURIComponent(plantId)}/members/${encodeURIComponent(userId)}`, {
+        method: 'PATCH',
+        body: {
+          role,
+          permissions: defaultPermsForRole(role)
+        }
+      });
+    } else {
+      await updateDoc(doc(db, 'plants', plantId, 'members', userId), {
+        role,
+        permissions: defaultPermsForRole(role),
+        updatedAt: serverTimestamp(),
+        updatedBy: { uid: currentUser.uid, name: currentUser.displayName || currentUser.email || '' }
+      });
+    }
     await refreshAdminData();
   } catch (e) {
     console.error(e);
@@ -3140,6 +3290,19 @@ window.approveAccessRequest = async function(plantId, userId) {
   const roleEl = document.getElementById(`request-role-${plantId}-${userId}`);
   const role = roleEl?.value || 'editor';
   try {
+    if (shouldUseSqlAdmin()) {
+      await adminApiRequest(`/api/plants/${encodeURIComponent(plantId)}/access-requests/${encodeURIComponent(userId)}`, {
+        method: 'PATCH',
+        body: {
+          status: 'approved',
+          role,
+          permissions: defaultPermsForRole(role)
+        }
+      });
+      feedback(`fb-${plantId}`, 'ok', `Approved ${userId} as ${role}.`);
+      await refreshAdminData();
+      return;
+    }
     const reqRef = doc(db, 'plants', plantId, 'accessRequests', userId);
     const reqSnap = await getDoc(reqRef);
     if (!reqSnap.exists()) throw new Error('Request no longer exists.');
@@ -3179,11 +3342,18 @@ window.approveAccessRequest = async function(plantId, userId) {
 
 window.declineAccessRequest = async function(plantId, userId) {
   try {
-    await updateDoc(doc(db, 'plants', plantId, 'accessRequests', userId), {
-      status: 'declined',
-      reviewedAt: serverTimestamp(),
-      reviewedBy: { uid: currentUser.uid, name: currentUser.displayName || currentUser.email || '' }
-    });
+    if (shouldUseSqlAdmin()) {
+      await adminApiRequest(`/api/plants/${encodeURIComponent(plantId)}/access-requests/${encodeURIComponent(userId)}`, {
+        method: 'PATCH',
+        body: { status: 'declined' }
+      });
+    } else {
+      await updateDoc(doc(db, 'plants', plantId, 'accessRequests', userId), {
+        status: 'declined',
+        reviewedAt: serverTimestamp(),
+        reviewedBy: { uid: currentUser.uid, name: currentUser.displayName || currentUser.email || '' }
+      });
+    }
     feedback(`fb-${plantId}`, 'ok', 'Request declined.');
     await refreshAdminData();
   } catch (e) {
@@ -3195,10 +3365,16 @@ window.declineAccessRequest = async function(plantId, userId) {
 window.removeMember = async function(plantId, userId, label) {
   if (!confirm(`Remove ${label} from this plant?`)) return;
   try {
-    const batch = writeBatch(db);
-    batch.delete(doc(db, 'plants', plantId, 'members', userId));
-    batch.set(doc(db, 'users', userId), { plantIds: arrayRemove(plantId) }, { merge: true });
-    await batch.commit();
+    if (shouldUseSqlAdmin()) {
+      await adminApiRequest(`/api/plants/${encodeURIComponent(plantId)}/members/${encodeURIComponent(userId)}`, {
+        method: 'DELETE'
+      });
+    } else {
+      const batch = writeBatch(db);
+      batch.delete(doc(db, 'plants', plantId, 'members', userId));
+      batch.set(doc(db, 'users', userId), { plantIds: arrayRemove(plantId) }, { merge: true });
+      await batch.commit();
+    }
     await refreshAdminData();
   } catch (e) {
     console.error(e);
@@ -3345,10 +3521,17 @@ window.saveStatuses = async function(plantId) {
   const subcategoryRoutes = normalizeSubcategoryRoutes(subcategoryRouteDraftByPlant.get(plantId) || {}, statuses);
   const syncedStatuses = normalizeStatusesForSave(syncStatusesFromSubcategoryRoutes(statuses, subcategoryRoutes));
   try {
-    await setDoc(doc(db, 'plants', plantId, 'config', 'statuses'), { statuses: syncedStatuses, subcategoryRoutes });
+    if (shouldUseSqlAdmin()) {
+      await adminApiRequest(`/api/plants/${encodeURIComponent(plantId)}/status-config`, {
+        method: 'PUT',
+        body: { statuses: syncedStatuses, subcategoryRoutes }
+      });
+    } else {
+      await setDoc(doc(db, 'plants', plantId, 'config', 'statuses'), { statuses: syncedStatuses, subcategoryRoutes });
+    }
     statusDraftByPlant.set(plantId, syncedStatuses);
     subcategoryRouteDraftByPlant.set(plantId, subcategoryRoutes);
-    feedback(`status-fb-${plantId}`, 'ok', 'Saved statuses to Firestore.');
+    feedback(`status-fb-${plantId}`, 'ok', shouldUseSqlAdmin() ? 'Saved statuses to D1.' : 'Saved statuses to Firestore.');
   } catch (e) {
     console.error(e);
     feedback(`status-fb-${plantId}`, 'error', e.message || 'Failed to save statuses.');
@@ -3556,36 +3739,31 @@ window.saveGamification = async function(plantId) {
   const missions = deepCopy(missionDraftByPlant.get(plantId) || []);
   try {
     const badges = deepCopy(badgeDraftByPlant.get(plantId) || DEFAULT_BADGE_DEFS);
-    await setDoc(doc(db, 'plants', plantId, 'gamificationConfig', 'main'), {
-      enabled: cfg.enabled !== false,
-      weights: cfg.weights || {},
-      penalties: cfg.penalties || {},
-      caps: cfg.caps || {},
-      customRules: Array.isArray(cfg.customRules) ? cfg.customRules : [],
-      badges: badges.map(b => ({
-        id: b.id || `badge_${Date.now().toString(36)}`,
-        name: b.name || 'Badge',
-        icon: b.icon || '🏅',
-        description: b.description || '',
-        triggerType: b.triggerType || 'xp_milestone',
-        threshold: Math.max(1, Number(b.threshold || 1)),
-        xpReward: Number(b.xpReward || 0),
-        isEnabled: b.isEnabled !== false,
-      })),
-      leaderboardPeriod: cfg.leaderboardPeriod || 'weekly',
-      updatedAt: serverTimestamp(),
-      updatedBy: { uid: currentUser.uid, name: currentUser.displayName || currentUser.email || '' }
-    }, { merge: true });
-
-    const existingSnap = await getDocs(collection(db, 'plants', plantId, 'missions'));
-    const desiredIds = new Set(missions.map(m => m.id));
-    for (const docSnap of existingSnap.docs) {
-      if (!desiredIds.has(docSnap.id)) await deleteDoc(docSnap.ref);
-    }
-    for (const mission of missions) {
-      const id = mission.id || `mission_${Date.now().toString(36)}`;
-      await setDoc(doc(db, 'plants', plantId, 'missions', id), {
+    const payload = {
+      config: {
+        enabled: cfg.enabled !== false,
+        weights: cfg.weights || {},
+        penalties: cfg.penalties || {},
+        caps: cfg.caps || {},
+        customRules: Array.isArray(cfg.customRules) ? cfg.customRules : [],
+        badges: badges.map(b => ({
+          id: b.id || `badge_${Date.now().toString(36)}`,
+          name: b.name || 'Badge',
+          icon: b.icon || '🏅',
+          description: b.description || '',
+          triggerType: b.triggerType || 'xp_milestone',
+          threshold: Math.max(1, Number(b.threshold || 1)),
+          xpReward: Number(b.xpReward || 0),
+          isEnabled: b.isEnabled !== false,
+        })),
+        leaderboardPeriod: cfg.leaderboardPeriod || 'weekly',
+        updatedAt: new Date().toISOString(),
+        updatedBy: { uid: currentUser.uid, name: currentUser.displayName || currentUser.email || '' }
+      },
+      missions: missions.map(mission => ({
+        id: mission.id || `mission_${Date.now().toString(36)}`,
         name: mission.name || 'Mission',
+        description: mission.description || '',
         objective: {
           type: String(mission.objective?.type || '').trim(),
           threshold: Math.max(1, Number(mission.objective?.threshold || 1))
@@ -3593,11 +3771,45 @@ window.saveGamification = async function(plantId) {
         rewards: { xp: Number(mission.rewards?.xp || 0) },
         isActive: mission.isActive !== false,
         startsAt: mission.startsAt || new Date().toISOString(),
+        endsAt: mission.endsAt || null,
+        createdAt: mission.createdAt || null
+      }))
+    };
+    if (shouldUseSqlAdmin()) {
+      await adminApiRequest(`/api/plants/${encodeURIComponent(plantId)}/gamification-admin`, {
+        method: 'PUT',
+        body: payload
+      });
+      feedback(`game-fb-${plantId}`, 'ok', 'Saved gamification config and missions to D1.');
+    } else {
+      await setDoc(doc(db, 'plants', plantId, 'gamificationConfig', 'main'), {
+        ...payload.config,
         updatedAt: serverTimestamp(),
         updatedBy: { uid: currentUser.uid, name: currentUser.displayName || currentUser.email || '' }
       }, { merge: true });
+
+      const existingSnap = await getDocs(collection(db, 'plants', plantId, 'missions'));
+      const desiredIds = new Set(missions.map(m => m.id));
+      for (const docSnap of existingSnap.docs) {
+        if (!desiredIds.has(docSnap.id)) await deleteDoc(docSnap.ref);
+      }
+      for (const mission of missions) {
+        const id = mission.id || `mission_${Date.now().toString(36)}`;
+        await setDoc(doc(db, 'plants', plantId, 'missions', id), {
+          name: mission.name || 'Mission',
+          objective: {
+            type: String(mission.objective?.type || '').trim(),
+            threshold: Math.max(1, Number(mission.objective?.threshold || 1))
+          },
+          rewards: { xp: Number(mission.rewards?.xp || 0) },
+          isActive: mission.isActive !== false,
+          startsAt: mission.startsAt || new Date().toISOString(),
+          updatedAt: serverTimestamp(),
+          updatedBy: { uid: currentUser.uid, name: currentUser.displayName || currentUser.email || '' }
+        }, { merge: true });
+      }
+      feedback(`game-fb-${plantId}`, 'ok', 'Saved gamification config and missions.');
     }
-    feedback(`game-fb-${plantId}`, 'ok', 'Saved gamification config and missions.');
     await refreshAdminData();
   } catch (e) {
     console.error(e);
@@ -3670,12 +3882,20 @@ window.savePresses = async function(plantId) {
   if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
   try {
     const presses = pressDraftByPlant.get(plantId) || {};
-    await setDoc(doc(db, 'plants', plantId, 'config', 'presses'), {
-      presses,
-      updatedAt: serverTimestamp(),
-      updatedBy: { uid: currentUser.uid, name: currentUser.displayName || currentUser.email || '' }
-    }, { merge: true });
-    feedback(`press-fb-${plantId}`, 'ok', 'Press configuration saved.');
+    if (shouldUseSqlAdmin()) {
+      await adminApiRequest(`/api/plants/${encodeURIComponent(plantId)}/press-config`, {
+        method: 'PUT',
+        body: { presses }
+      });
+      feedback(`press-fb-${plantId}`, 'ok', 'Press configuration saved to D1.');
+    } else {
+      await setDoc(doc(db, 'plants', plantId, 'config', 'presses'), {
+        presses,
+        updatedAt: serverTimestamp(),
+        updatedBy: { uid: currentUser.uid, name: currentUser.displayName || currentUser.email || '' }
+      }, { merge: true });
+      feedback(`press-fb-${plantId}`, 'ok', 'Press configuration saved.');
+    }
   } catch (e) {
     console.error(e);
     feedback(`press-fb-${plantId}`, 'error', e.message || 'Failed to save press configuration.');
@@ -3880,8 +4100,22 @@ window.commitStoreThemeEditor = function() {
 window.saveStoreDraft = async function() {
   const items = (globalStoreDraft || []).map((item, idx) => ({ ...item, order: idx }));
   try {
-    await setDoc(doc(db, 'globalConfig', 'store'), { items, updatedAt: serverTimestamp() }, { merge: true });
-    feedback('store-fb-global', 'ok', 'Global store saved.');
+    if (shouldUseSqlAdmin()) {
+      await Promise.all(adminPlantIds.map(plantId => adminApiRequest(`/api/plants/${encodeURIComponent(plantId)}/store-config`, {
+        method: 'PUT',
+        body: {
+          config: {
+            items,
+            updatedAt: new Date().toISOString(),
+            updatedBy: currentUser?.uid || null
+          }
+        }
+      })));
+      feedback('store-fb-global', 'ok', 'Store saved to D1 for admin plants.');
+    } else {
+      await setDoc(doc(db, 'globalConfig', 'store'), { items, updatedAt: serverTimestamp() }, { merge: true });
+      feedback('store-fb-global', 'ok', 'Global store saved.');
+    }
   } catch(e) {
     feedback('store-fb-global', 'error', 'Save failed: ' + (e?.message || e));
   }

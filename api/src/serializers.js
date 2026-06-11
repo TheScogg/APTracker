@@ -364,6 +364,186 @@ export function serializeIssueAttachment(row) {
   };
 }
 
+export function serializeNote(row) {
+  if (!row) return null;
+  return {
+    id: row.note_id,
+    noteId: row.note_id,
+    plantId: row.plant_id,
+    title: row.title,
+    bodyHtml: row.body_html,
+    bodyText: row.body_text,
+    checklistItems: parseJson(row.checklist_items_json, []),
+    tags: parseJson(row.tags_json, []),
+    pressId: row.press_id,
+    machineCode: row.machine_code,
+    issueId: row.issue_id,
+    isPinned: Boolean(row.is_pinned),
+    isArchived: Boolean(row.is_archived),
+    photoCount: Number(row.photo_count || 0),
+    searchText: row.search_text || '',
+    createdBy: row.created_by_uid ? { uid: row.created_by_uid } : null,
+    updatedBy: row.updated_by_uid ? { uid: row.updated_by_uid } : null,
+    createdAt: toIso(row.created_at),
+    updatedAt: toIso(row.updated_at),
+    schemaVersion: 1
+  };
+}
+
+export function serializeNoteAttachment(row) {
+  if (!row) return null;
+  return {
+    id: row.attachment_id,
+    attachmentId: row.attachment_id,
+    noteId: row.note_id,
+    plantId: row.plant_id,
+    storagePath: row.storage_path,
+    storageBucket: row.storage_bucket,
+    fileName: row.file_name,
+    contentType: row.content_type,
+    sizeBytes: row.size_bytes == null ? 0 : Number(row.size_bytes),
+    url: row.url,
+    downloadURL: row.url,
+    uploadedBy: parseJson(row.uploaded_by_json, null),
+    uploadedAt: toIso(row.uploaded_at),
+    schemaVersion: row.schema_version
+  };
+}
+
+export function serializeConversation(row) {
+  if (!row) return null;
+  const lastMessage = parseJson(row.last_message_json, null);
+  return {
+    id: row.conversation_id,
+    conversationId: row.conversation_id,
+    plantId: row.plant_id,
+    type: row.type || 'group',
+    title: row.title || '',
+    pressId: row.press_id || '',
+    memberIds: parseJson(row.member_ids_json, []),
+    memberCount: Number(row.member_count || 0),
+    createdBy: row.created_by_uid || row.created_by_name
+      ? { uid: row.created_by_uid || '', name: row.created_by_name || '' }
+      : null,
+    createdAt: toIso(row.created_at),
+    lastMessageText: row.last_message_text || '',
+    lastMessageAt: toIso(row.last_message_at),
+    lastMessage: lastMessage ? {
+      ...lastMessage,
+      id: lastMessage.id || null,
+      sender: lastMessage.sender || null,
+      at: toIso(lastMessage.at || row.last_message_at)
+    } : null,
+    isArchived: Boolean(row.is_archived),
+    myMembership: row.member_uid ? {
+      uid: row.member_uid,
+      role: row.member_role || 'member',
+      joinedAt: toIso(row.member_joined_at),
+      lastReadAt: toIso(row.member_last_read_at),
+      lastReadMessageId: row.member_last_read_message_id || null,
+      unreadCount: Number(row.member_unread_count || 0),
+      muted: Boolean(row.member_muted)
+    } : null
+  };
+}
+
+export function serializeConversationMessage(row) {
+  if (!row) return null;
+  return {
+    id: row.message_id,
+    messageId: row.message_id,
+    conversationId: row.conversation_id,
+    plantId: row.plant_id,
+    type: row.type || 'text',
+    text: row.body || '',
+    sender: {
+      uid: row.sender_uid || '',
+      name: row.sender_name || ''
+    },
+    mentions: parseJson(row.mentions_json, []),
+    attachments: parseJson(row.attachments_json, []),
+    createdAt: toIso(row.created_at),
+    editedAt: toIso(row.edited_at),
+    deletedAt: toIso(row.deleted_at)
+  };
+}
+
+export function serializeWikiPage(row) {
+  if (!row) return null;
+  return {
+    id: row.page_id,
+    pageId: row.page_id,
+    wikiPageRowId: row.wiki_page_row_id,
+    plantId: row.plant_id,
+    scope: row.scope,
+    pressId: row.press_id || '',
+    title: row.title || '',
+    slug: row.slug || '',
+    summary: row.summary || '',
+    tags: parseJson(row.tags_json, []),
+    parentPageId: row.parent_page_id || null,
+    sortOrder: row.sort_order == null ? null : Number(row.sort_order),
+    isPinned: Boolean(row.is_pinned),
+    isLocked: Boolean(row.is_locked),
+    visibility: row.visibility || '',
+    currentRevisionId: row.current_revision_id || null,
+    photoCount: Number(row.photo_count || 0),
+    searchText: row.search_text || '',
+    createdBy: parseJson(row.created_by_json, null),
+    updatedBy: parseJson(row.updated_by_json, null),
+    createdAt: toIso(row.created_at),
+    updatedAt: toIso(row.updated_at),
+    lastActivityAt: toIso(row.last_activity_at),
+    lastVerifiedAt: toIso(row.last_verified_at),
+    lastVerifiedBy: row.last_verified_by || null,
+    schemaVersion: Number(row.schema_version || 1)
+  };
+}
+
+export function serializeWikiRevision(row) {
+  if (!row) return null;
+  return {
+    id: row.revision_id,
+    revisionId: row.revision_id,
+    wikiRevisionRowId: row.wiki_revision_row_id,
+    wikiPageRowId: row.wiki_page_row_id,
+    plantId: row.plant_id,
+    scope: row.scope,
+    pressId: row.press_id || '',
+    pageId: row.page_id,
+    body: row.body || '',
+    changeNote: row.change_note || '',
+    prevRevisionId: row.prev_revision_id || null,
+    editedBy: parseJson(row.edited_by_json, null),
+    editedAt: toIso(row.edited_at)
+  };
+}
+
+export function serializeWikiAttachment(row) {
+  if (!row) return null;
+  return {
+    id: row.attachment_id,
+    attachmentId: row.attachment_id,
+    wikiAttachmentRowId: row.wiki_attachment_row_id,
+    wikiPageRowId: row.wiki_page_row_id,
+    plantId: row.plant_id,
+    scope: row.scope,
+    pressId: row.press_id || '',
+    pageId: row.page_id,
+    storagePath: row.storage_path,
+    contentType: row.content_type || '',
+    caption: row.caption || '',
+    linkedRevisionId: row.linked_revision_id || null,
+    uploadedBy: parseJson(row.uploaded_by_json, null),
+    uploadedAt: toIso(row.uploaded_at),
+    width: row.width == null ? null : Number(row.width),
+    height: row.height == null ? null : Number(row.height),
+    url: row.url || '',
+    downloadURL: row.url || '',
+    schemaVersion: Number(row.schema_version || 1)
+  };
+}
+
 export const __testOnly = {
   parseJson,
   toIso

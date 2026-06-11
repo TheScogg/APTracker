@@ -1,4 +1,6 @@
 import {
+  serializeConversation,
+  serializeConversationMessage,
   serializeDailySchedule,
   serializeDailyScheduleRow,
   serializeGamificationConfig,
@@ -8,6 +10,8 @@ import {
   serializeIssue,
   serializeIssueAttachment,
   serializeIssueEvent,
+  serializeNote,
+  serializeNoteAttachment,
   serializePlant,
   serializePlantMember,
   serializePressConfig,
@@ -17,7 +21,10 @@ import {
   serializeStatusConfig,
   serializeUserBadges,
   serializeUserGameStats,
-  serializeUserContextRows
+  serializeUserContextRows,
+  serializeWikiAttachment,
+  serializeWikiPage,
+  serializeWikiRevision
 } from './api/src/serializers.js';
 
 function jsonResponse(body, init = {}) {
@@ -114,6 +121,18 @@ function slugForId(value, fallback = 'item') {
     .replace(/\./g, '_')
     .replace(/[^a-z0-9]+/g, '_')
     .replace(/^_+|_+$/g, '') || fallback;
+}
+
+function wikiPageRowId(scope, pressId, pageId) {
+  return `${scope}:${pressId || 'shared'}:${pageId}`;
+}
+
+function wikiRevisionRowId(scope, pressId, pageId, revisionId) {
+  return `${wikiPageRowId(scope, pressId, pageId)}:${revisionId}`;
+}
+
+function wikiAttachmentRowId(scope, pressId, pageId, attachmentId) {
+  return `${wikiPageRowId(scope, pressId, pageId)}:${attachmentId}`;
 }
 
 function scheduleIssueId(scheduleDate, section, rowId) {
@@ -955,6 +974,82 @@ async function listPlants(db, user, request) {
   return jsonResponse({ plants: plants.map(serializePlant) });
 }
 
+async function createPlant(db, user, body = {}) {
+  await upsertAuthUserRow(db, user);
+  const name = stringOrNull(body.name);
+  if (!name) throw Object.assign(new Error('Plant name is required.'), { status: 400 });
+  const plantId = stringOrNull(body.plantId) || `${name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${Date.now().toString(36)}`;
+  const location = stringOrNull(body.location) || '';
+  const now = nowIso();
+  const defaultPermissions = body.defaultPermissions && typeof body.defaultPermissions === 'object'
+    ? body.defaultPermissions
+    : {
+        canViewPlant: true,
+        canCreateIssue: true,
+        canEditIssue: true,
+        canResolveIssue: true,
+        canManageStatuses: true,
+        canManagePresses: true,
+        canExport: true
+      };
+  const defaultPresses = body.defaultPresses && typeof body.defaultPresses === 'object' ? body.defaultPresses : {};
+  const defaultStatuses = body.defaultStatuses && typeof body.defaultStatuses === 'object' ? body.defaultStatuses : {};
+  const defaultSubcategoryRoutes = body.defaultSubcategoryRoutes && typeof body.defaultSubcategoryRoutes === 'object'
+    ? body.defaultSubcategoryRoutes
+    : {};
+  const defaultGameConfig = body.defaultGameConfig && typeof body.defaultGameConfig === 'object' ? body.defaultGameConfig : {};
+  const defaultStoreConfig = body.defaultStoreConfig && typeof body.defaultStoreConfig === 'object' ? body.defaultStoreConfig : {};
+  const statements = [
+    db.prepare(`
+      INSERT INTO plants (plant_id, name, location, is_active, created_by_uid, updated_by_uid, created_at, updated_at, schema_version)
+      VALUES (?, ?, ?, 1, ?, ?, ?, ?, 1)
+    `).bind(plantId, name, location, user.uid, user.uid, now, now),
+    db.prepare(`
+      INSERT INTO plant_members (
+        plant_id, uid, role, is_active, display_name, full_name, sso_number, email,
+        permissions_json, alert_category_subscriptions_json, job_role_keys_json, job_feeds_json,
+        joined_at, last_seen_at
+      ) VALUES (?, ?, 'admin', 1, ?, ?, NULL, ?, ?, ?, ?, ?, ?, NULL)
+    `).bind(
+      plantId,
+      user.uid,
+      stringOrNull(user.name),
+      stringOrNull(user.name),
+      stringOrNull(user.email),
+      jsonOrNull(defaultPermissions),
+      jsonOrNull([]),
+      jsonOrNull([]),
+      jsonOrNull([]),
+      now
+    ),
+    db.prepare(`
+      INSERT INTO plant_press_config (plant_id, presses_json, updated_by_uid, updated_at)
+      VALUES (?, ?, ?, ?)
+    `).bind(plantId, jsonOrNull(defaultPresses), user.uid, now),
+    db.prepare(`
+      INSERT INTO plant_status_config (plant_id, statuses_json, subcategory_routes_json, updated_by_uid, updated_at)
+      VALUES (?, ?, ?, ?, ?)
+    `).bind(plantId, jsonOrNull(defaultStatuses), jsonOrNull(defaultSubcategoryRoutes), user.uid, now),
+    db.prepare(`
+      INSERT INTO gamification_config (plant_id, config_json, updated_at)
+      VALUES (?, ?, ?)
+    `).bind(plantId, jsonOrNull(defaultGameConfig), now),
+    db.prepare(`
+      INSERT INTO plant_store_config (plant_id, config_json, updated_at)
+      VALUES (?, ?, ?)
+    `).bind(plantId, jsonOrNull(defaultStoreConfig), now)
+  ];
+  await db.batch(statements);
+  return jsonResponse({
+    plant: {
+      plantId,
+      name,
+      location,
+      isActive: true
+    }
+  }, { status: 201 });
+}
+
 async function listPlantMembers(db, request, plantId, user) {
   await requirePlantPermission(db, plantId, user, 'canViewPlant');
   const url = new URL(request.url);
@@ -986,9 +1081,10 @@ async function listPlantMembers(db, request, plantId, user) {
 
 async function updatePlantMember(db, plantId, uid, body, user) {
   const currentMember = await requirePlantPermission(db, plantId, user, null);
+  const permissions = parsePermissions(currentMember.permissions_json);
+  const canManageMembers = permissions.canManageMembers === true || currentMember.role === 'admin';
   if (user.uid !== uid) {
-    const permissions = parsePermissions(currentMember.permissions_json);
-    if (permissions.canManageMembers !== true && currentMember.role !== 'admin') {
+    if (!canManageMembers) {
       throw Object.assign(new Error('Permission denied'), { status: 403 });
     }
   }
@@ -1005,6 +1101,41 @@ async function updatePlantMember(db, plantId, uid, body, user) {
   if (Object.prototype.hasOwnProperty.call(body, 'jobFeeds')) {
     updates.push('job_feeds_json = ?');
     values.push(jsonOrNull(Array.isArray(body.jobFeeds) ? body.jobFeeds : []));
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'role')) {
+    if (!canManageMembers) throw Object.assign(new Error('Permission denied'), { status: 403 });
+    updates.push('role = ?');
+    values.push(stringOrNull(body.role) || 'editor');
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'permissions')) {
+    if (!canManageMembers) throw Object.assign(new Error('Permission denied'), { status: 403 });
+    updates.push('permissions_json = ?');
+    values.push(jsonOrNull(body.permissions && typeof body.permissions === 'object' ? body.permissions : {}));
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'isActive')) {
+    if (!canManageMembers) throw Object.assign(new Error('Permission denied'), { status: 403 });
+    updates.push('is_active = ?');
+    values.push(body.isActive === false ? 0 : 1);
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'displayName')) {
+    if (!canManageMembers) throw Object.assign(new Error('Permission denied'), { status: 403 });
+    updates.push('display_name = ?');
+    values.push(stringOrNull(body.displayName));
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'fullName')) {
+    if (!canManageMembers) throw Object.assign(new Error('Permission denied'), { status: 403 });
+    updates.push('full_name = ?');
+    values.push(stringOrNull(body.fullName));
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'ssoNumber')) {
+    if (!canManageMembers) throw Object.assign(new Error('Permission denied'), { status: 403 });
+    updates.push('sso_number = ?');
+    values.push(stringOrNull(body.ssoNumber));
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'email')) {
+    if (!canManageMembers) throw Object.assign(new Error('Permission denied'), { status: 403 });
+    updates.push('email = ?');
+    values.push(stringOrNull(body.email));
   }
   if (!updates.length) {
     const row = await first(
@@ -1054,6 +1185,189 @@ async function updatePlantMember(db, plantId, uid, body, user) {
       ssoNumber: saved.sso_number,
       email: saved.email,
       ...serializePlantMember(saved)
+    } : null
+  });
+}
+
+async function addPlantMember(db, plantId, body, user) {
+  const currentMember = await requirePlantPermission(db, plantId, user, null);
+  const permissions = parsePermissions(currentMember.permissions_json);
+  if (permissions.canManageMembers !== true && currentMember.role !== 'admin') {
+    throw Object.assign(new Error('Permission denied'), { status: 403 });
+  }
+  const uid = stringOrNull(body.uid);
+  if (!uid) throw Object.assign(new Error('Missing uid.'), { status: 400 });
+  const role = stringOrNull(body.role) || 'editor';
+  const permissionPayload = body.permissions && typeof body.permissions === 'object'
+    ? body.permissions
+    : {};
+  await run(
+    db,
+    `
+      INSERT INTO plant_members (
+        plant_id, uid, role, is_active, display_name, full_name, sso_number, email,
+        permissions_json, alert_category_subscriptions_json, job_role_keys_json, job_feeds_json,
+        joined_at, last_seen_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(plant_id, uid) DO UPDATE SET
+        role = excluded.role,
+        is_active = excluded.is_active,
+        display_name = COALESCE(excluded.display_name, plant_members.display_name),
+        full_name = COALESCE(excluded.full_name, plant_members.full_name),
+        sso_number = COALESCE(excluded.sso_number, plant_members.sso_number),
+        email = COALESCE(excluded.email, plant_members.email),
+        permissions_json = excluded.permissions_json,
+        joined_at = COALESCE(plant_members.joined_at, excluded.joined_at)
+    `,
+    plantId,
+    uid,
+    role,
+    body.isActive === false ? 0 : 1,
+    stringOrNull(body.displayName),
+    stringOrNull(body.fullName),
+    stringOrNull(body.ssoNumber),
+    stringOrNull(body.email),
+    jsonOrNull(permissionPayload),
+    jsonOrNull(Array.isArray(body.alertCategorySubscriptions) ? body.alertCategorySubscriptions : []),
+    jsonOrNull(Array.isArray(body.jobRoleKeys) ? body.jobRoleKeys : []),
+    jsonOrNull(Array.isArray(body.jobFeeds) ? body.jobFeeds : []),
+    nowIso(),
+    null
+  );
+  const saved = await first(
+    db,
+    `
+      SELECT plant_id, uid, role, is_active, display_name, full_name, sso_number, email,
+             permissions_json, alert_category_subscriptions_json, job_role_keys_json, job_feeds_json,
+             joined_at, last_seen_at
+      FROM plant_members
+      WHERE plant_id = ? AND uid = ?
+      LIMIT 1
+    `,
+    plantId,
+    uid
+  );
+  return jsonResponse({
+    member: saved ? {
+      uid: saved.uid,
+      displayName: saved.display_name,
+      fullName: saved.full_name,
+      ssoNumber: saved.sso_number,
+      email: saved.email,
+      ...serializePlantMember(saved)
+    } : null
+  });
+}
+
+async function deletePlantMember(db, plantId, uid, user) {
+  const currentMember = await requirePlantPermission(db, plantId, user, null);
+  const permissions = parsePermissions(currentMember.permissions_json);
+  if (permissions.canManageMembers !== true && currentMember.role !== 'admin') {
+    throw Object.assign(new Error('Permission denied'), { status: 403 });
+  }
+  await run(db, 'DELETE FROM plant_members WHERE plant_id = ? AND uid = ?', plantId, uid);
+  return jsonResponse({ ok: true });
+}
+
+async function listAccessRequests(db, request, plantId, user) {
+  const currentMember = await requirePlantPermission(db, plantId, user, null);
+  const permissions = parsePermissions(currentMember.permissions_json);
+  if (permissions.canManageMembers !== true && currentMember.role !== 'admin') {
+    throw Object.assign(new Error('Permission denied'), { status: 403 });
+  }
+  const url = new URL(request.url);
+  const status = stringOrNull(url.searchParams.get('status'));
+  const rows = await all(
+    db,
+    `
+      SELECT *
+      FROM access_requests
+      WHERE plant_id = ?
+      ${status ? 'AND status = ?' : ''}
+      ORDER BY requested_at DESC
+    `,
+    ...(status ? [plantId, status] : [plantId])
+  );
+  return jsonResponse({
+    accessRequests: rows.map(row => ({
+      uid: row.uid,
+      status: row.status,
+      displayName: row.display_name,
+      fullName: row.full_name,
+      ssoNumber: row.sso_number,
+      email: row.email,
+      photoUrl: row.photo_url,
+      requestedAt: asIso(row.requested_at),
+      updatedAt: asIso(row.updated_at)
+    }))
+  });
+}
+
+async function updateAccessRequest(db, plantId, uid, body, user) {
+  const currentMember = await requirePlantPermission(db, plantId, user, null);
+  const permissions = parsePermissions(currentMember.permissions_json);
+  if (permissions.canManageMembers !== true && currentMember.role !== 'admin') {
+    throw Object.assign(new Error('Permission denied'), { status: 403 });
+  }
+  const existing = await first(db, 'SELECT * FROM access_requests WHERE plant_id = ? AND uid = ? LIMIT 1', plantId, uid);
+  if (!existing) throw Object.assign(new Error('Access request not found.'), { status: 404 });
+  const nextStatus = stringOrNull(body.status) || existing.status || 'pending';
+  await run(
+    db,
+    'UPDATE access_requests SET status = ?, updated_at = ? WHERE plant_id = ? AND uid = ?',
+    nextStatus,
+    nowIso(),
+    plantId,
+    uid
+  );
+  if (nextStatus === 'approved') {
+    const role = stringOrNull(body.role) || 'editor';
+    const permissionPayload = body.permissions && typeof body.permissions === 'object' ? body.permissions : {};
+    await run(
+      db,
+      `
+        INSERT INTO plant_members (
+          plant_id, uid, role, is_active, display_name, full_name, sso_number, email,
+          permissions_json, alert_category_subscriptions_json, job_role_keys_json, job_feeds_json,
+          joined_at, last_seen_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(plant_id, uid) DO UPDATE SET
+          role = excluded.role,
+          is_active = excluded.is_active,
+          display_name = COALESCE(excluded.display_name, plant_members.display_name),
+          full_name = COALESCE(excluded.full_name, plant_members.full_name),
+          sso_number = COALESCE(excluded.sso_number, plant_members.sso_number),
+          email = COALESCE(excluded.email, plant_members.email),
+          permissions_json = excluded.permissions_json
+      `,
+      plantId,
+      uid,
+      role,
+      1,
+      existing.display_name,
+      existing.full_name,
+      existing.sso_number,
+      existing.email,
+      jsonOrNull(permissionPayload),
+      jsonOrNull([]),
+      jsonOrNull([]),
+      jsonOrNull([]),
+      nowIso(),
+      null
+    );
+  }
+  const saved = await first(db, 'SELECT * FROM access_requests WHERE plant_id = ? AND uid = ? LIMIT 1', plantId, uid);
+  return jsonResponse({
+    accessRequest: saved ? {
+      uid: saved.uid,
+      status: saved.status,
+      displayName: saved.display_name,
+      fullName: saved.full_name,
+      ssoNumber: saved.sso_number,
+      email: saved.email,
+      photoUrl: saved.photo_url,
+      requestedAt: asIso(saved.requested_at),
+      updatedAt: asIso(saved.updated_at)
     } : null
   });
 }
@@ -1262,6 +1576,153 @@ async function updateRoleAlert(db, plantId, alertId, body, user) {
   );
   const saved = await first(db, 'SELECT * FROM role_feed_alerts WHERE plant_id = ? AND alert_id = ? LIMIT 1', plantId, alertId);
   return jsonResponse({ alert: serializeRoleFeedAlert(saved) });
+}
+
+async function getPressConfig(db, plantId, user) {
+  await requirePlantPermission(db, plantId, user, 'canViewPlant');
+  const row = await first(db, 'SELECT * FROM plant_press_config WHERE plant_id = ? LIMIT 1', plantId);
+  return jsonResponse({ pressConfig: serializePressConfig(row) });
+}
+
+async function updatePressConfig(db, plantId, body, user) {
+  await requirePlantConfigManager(db, plantId, user);
+  const presses = body?.presses && typeof body.presses === 'object' && !Array.isArray(body.presses)
+    ? body.presses
+    : {};
+  await run(
+    db,
+    `
+      INSERT INTO plant_press_config (plant_id, presses_json, updated_by_uid, updated_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(plant_id) DO UPDATE SET
+        presses_json = excluded.presses_json,
+        updated_by_uid = excluded.updated_by_uid,
+        updated_at = excluded.updated_at
+    `,
+    plantId,
+    jsonOrNull(presses),
+    user.uid,
+    nowIso()
+  );
+  return getPressConfig(db, plantId, user);
+}
+
+async function getGamificationAdmin(db, plantId, user) {
+  await requirePlantPermission(db, plantId, user, 'canViewPlant');
+  const [configRow, missionRows] = await Promise.all([
+    first(db, 'SELECT * FROM gamification_config WHERE plant_id = ? LIMIT 1', plantId),
+    all(db, 'SELECT * FROM game_missions WHERE plant_id = ? ORDER BY COALESCE(starts_at, updated_at) DESC, mission_id ASC', plantId)
+  ]);
+  return jsonResponse({
+    gamificationConfig: serializeGamificationConfig(configRow),
+    missions: missionRows.map(serializeGameMission)
+  });
+}
+
+async function updateGamificationAdmin(db, plantId, body, user) {
+  await requirePlantConfigManager(db, plantId, user);
+  const config = body?.config && typeof body.config === 'object' ? body.config : {};
+  const missions = Array.isArray(body?.missions) ? body.missions : [];
+  const now = nowIso();
+  const existingMissionRows = await all(db, 'SELECT mission_id FROM game_missions WHERE plant_id = ?', plantId);
+  const desiredIds = new Set(missions.map(mission => stringOrNull(mission?.id)).filter(Boolean));
+  const statements = [
+    db.prepare(`
+      INSERT INTO gamification_config (plant_id, config_json, updated_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(plant_id) DO UPDATE SET
+        config_json = excluded.config_json,
+        updated_at = excluded.updated_at
+    `).bind(plantId, jsonOrNull(config), now)
+  ];
+
+  existingMissionRows.forEach(row => {
+    if (!desiredIds.has(row.mission_id)) {
+      statements.push(db.prepare('DELETE FROM game_mission_progress WHERE plant_id = ? AND mission_id = ?').bind(plantId, row.mission_id));
+      statements.push(db.prepare('DELETE FROM game_missions WHERE plant_id = ? AND mission_id = ?').bind(plantId, row.mission_id));
+    }
+  });
+
+  missions.forEach((mission, index) => {
+    const missionId = stringOrNull(mission?.id) || `mission_${Date.now().toString(36)}_${index}`;
+    const startsAt = asIso(mission?.startsAt, now);
+    statements.push(db.prepare(`
+      INSERT INTO game_missions (
+        mission_row_id, plant_id, mission_id, name, description, objective_json, rewards_json,
+        is_active, starts_at, ends_at, updated_at, raw_json
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(plant_id, mission_id) DO UPDATE SET
+        name = excluded.name,
+        description = excluded.description,
+        objective_json = excluded.objective_json,
+        rewards_json = excluded.rewards_json,
+        is_active = excluded.is_active,
+        starts_at = excluded.starts_at,
+        ends_at = excluded.ends_at,
+        updated_at = excluded.updated_at,
+        raw_json = excluded.raw_json
+    `).bind(
+      `${plantId}:${missionId}`,
+      plantId,
+      missionId,
+      stringOrNull(mission?.name) || 'Mission',
+      stringOrNull(mission?.description),
+      jsonOrNull(mission?.objective && typeof mission.objective === 'object' ? mission.objective : {}),
+      jsonOrNull(mission?.rewards && typeof mission.rewards === 'object' ? mission.rewards : {}),
+      mission?.isActive === false ? 0 : 1,
+      startsAt,
+      asIso(mission?.endsAt),
+      now,
+      jsonOrNull({
+        id: missionId,
+        name: stringOrNull(mission?.name) || 'Mission',
+        description: stringOrNull(mission?.description) || '',
+        objective: mission?.objective && typeof mission.objective === 'object' ? mission.objective : {},
+        rewards: mission?.rewards && typeof mission.rewards === 'object' ? mission.rewards : {},
+        isActive: mission?.isActive !== false,
+        startsAt,
+        endsAt: asIso(mission?.endsAt),
+        createdAt: asIso(mission?.createdAt, startsAt),
+        updatedAt: now
+      })
+    ));
+  });
+
+  await db.batch(statements);
+  return getGamificationAdmin(db, plantId, user);
+}
+
+async function listUserDirectory(db, user) {
+  const adminRows = await all(
+    db,
+    `
+      SELECT plant_id
+      FROM plant_members
+      WHERE uid = ? AND is_active = 1 AND role = 'admin'
+      LIMIT 1
+    `,
+    user.uid
+  );
+  if (!adminRows.length) {
+    throw Object.assign(new Error('Permission denied'), { status: 403 });
+  }
+  const rows = await all(
+    db,
+    `
+      SELECT email_normalized, uid, display_name, full_name, photo_url
+      FROM user_lookup
+      ORDER BY COALESCE(display_name, email_normalized, uid) COLLATE NOCASE
+    `
+  );
+  return jsonResponse({
+    users: rows.map(row => ({
+      uid: row.uid,
+      displayName: row.display_name || row.full_name || '',
+      email: row.email_normalized || '',
+      photoURL: row.photo_url || ''
+    }))
+  });
 }
 
 async function getGamificationState(db, plantId, user) {
@@ -1641,6 +2102,819 @@ async function listIssueAttachments(db, plantId, issueId, user) {
   return jsonResponse({ attachments: attachments.map(serializeIssueAttachment) });
 }
 
+async function getNoteRow(db, plantId, noteId) {
+  return first(
+    db,
+    `
+      SELECT *
+      FROM notes
+      WHERE plant_id = ? AND note_id = ?
+      LIMIT 1
+    `,
+    plantId,
+    noteId
+  );
+}
+
+async function listNotes(db, request, plantId, user) {
+  await requirePlantPermission(db, plantId, user, null);
+  const url = new URL(request.url);
+  const includeArchived = url.searchParams.get('includeArchived') === 'true';
+  const rows = await all(
+    db,
+    `
+      SELECT *
+      FROM notes
+      WHERE plant_id = ?
+        ${includeArchived ? '' : 'AND is_archived = 0'}
+      ORDER BY is_pinned DESC, updated_at DESC, title COLLATE NOCASE ASC
+    `,
+    plantId
+  );
+  return jsonResponse({ notes: rows.map(serializeNote) });
+}
+
+async function createNote(db, plantId, body, user) {
+  await requirePlantPermission(db, plantId, user, null);
+  const noteId = stringOrNull(body.noteId || body.id);
+  if (!noteId) throw Object.assign(new Error('Missing noteId.'), { status: 400 });
+  const now = nowIso();
+  const createdAt = asIso(body.createdAt, now);
+  const updatedAt = asIso(body.updatedAt, createdAt);
+  const createdByUid = stringOrNull(body.createdBy?.uid || body.createdByUid) || user.uid;
+  const updatedByUid = stringOrNull(body.updatedBy?.uid || body.updatedByUid) || user.uid;
+  await run(
+    db,
+    `
+      INSERT INTO notes (
+        note_id, plant_id, title, body_html, body_text, checklist_items_json, tags_json, press_id, machine_code, issue_id,
+        is_pinned, is_archived, photo_count, search_text, created_by_uid, updated_by_uid, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(note_id) DO UPDATE SET
+        title = excluded.title,
+        body_html = excluded.body_html,
+        body_text = excluded.body_text,
+        checklist_items_json = excluded.checklist_items_json,
+        tags_json = excluded.tags_json,
+        press_id = excluded.press_id,
+        machine_code = excluded.machine_code,
+        issue_id = excluded.issue_id,
+        is_pinned = excluded.is_pinned,
+        is_archived = excluded.is_archived,
+        photo_count = excluded.photo_count,
+        search_text = excluded.search_text,
+        updated_by_uid = excluded.updated_by_uid,
+        updated_at = excluded.updated_at
+    `,
+    noteId,
+    plantId,
+    stringOrNull(body.title) || 'Untitled Note',
+    stringOrNull(body.bodyHtml),
+    stringOrNull(body.bodyText),
+    jsonOrNull(Array.isArray(body.checklistItems) ? body.checklistItems : []),
+    jsonOrNull(Array.isArray(body.tags) ? body.tags : []),
+    stringOrNull(body.pressId),
+    stringOrNull(body.machineCode),
+    stringOrNull(body.issueId),
+    asBoolInt(body.isPinned),
+    asBoolInt(body.isArchived),
+    numberOrZero(body.photoCount),
+    stringOrNull(body.searchText),
+    createdByUid,
+    updatedByUid,
+    createdAt,
+    updatedAt
+  );
+  const saved = await getNoteRow(db, plantId, noteId);
+  return jsonResponse({ note: serializeNote(saved) }, { status: 201 });
+}
+
+async function updateNote(db, plantId, noteId, body, user) {
+  await requirePlantPermission(db, plantId, user, null);
+  const existing = await getNoteRow(db, plantId, noteId);
+  if (!existing) throw Object.assign(new Error('Note not found.'), { status: 404 });
+  const now = nowIso();
+  await run(
+    db,
+    `
+      UPDATE notes
+      SET title = ?,
+          body_html = ?,
+          body_text = ?,
+          checklist_items_json = ?,
+          tags_json = ?,
+          press_id = ?,
+          machine_code = ?,
+          issue_id = ?,
+          is_pinned = ?,
+          is_archived = ?,
+          photo_count = ?,
+          search_text = ?,
+          updated_by_uid = ?,
+          updated_at = ?
+      WHERE plant_id = ? AND note_id = ?
+    `,
+    stringOrNull(body.title) || existing.title || 'Untitled Note',
+    stringOrNull(body.bodyHtml),
+    stringOrNull(body.bodyText),
+    jsonOrNull(Array.isArray(body.checklistItems) ? body.checklistItems : []),
+    jsonOrNull(Array.isArray(body.tags) ? body.tags : []),
+    stringOrNull(body.pressId),
+    stringOrNull(body.machineCode),
+    stringOrNull(body.issueId),
+    asBoolInt(body.isPinned),
+    asBoolInt(body.isArchived),
+    numberOrZero(body.photoCount),
+    stringOrNull(body.searchText),
+    stringOrNull(body.updatedBy?.uid || body.updatedByUid) || user.uid,
+    asIso(body.updatedAt, now),
+    plantId,
+    noteId
+  );
+  const saved = await getNoteRow(db, plantId, noteId);
+  return jsonResponse({ note: serializeNote(saved) });
+}
+
+async function deleteNote(db, plantId, noteId, user) {
+  await requirePlantPermission(db, plantId, user, null);
+  await db.batch([
+    db.prepare('DELETE FROM note_attachments WHERE plant_id = ? AND note_id = ?').bind(plantId, noteId),
+    db.prepare('DELETE FROM notes WHERE plant_id = ? AND note_id = ?').bind(plantId, noteId)
+  ]);
+  return jsonResponse({ ok: true, noteId });
+}
+
+async function listNoteAttachments(db, plantId, noteId, user) {
+  await requirePlantPermission(db, plantId, user, null);
+  const note = await getNoteRow(db, plantId, noteId);
+  if (!note) throw Object.assign(new Error('Note not found.'), { status: 404 });
+  const attachments = await all(
+    db,
+    `
+      SELECT *
+      FROM note_attachments
+      WHERE plant_id = ? AND note_id = ?
+      ORDER BY uploaded_at DESC
+    `,
+    plantId,
+    noteId
+  );
+  return jsonResponse({ attachments: attachments.map(serializeNoteAttachment) });
+}
+
+async function createNoteAttachment(db, plantId, noteId, body, user) {
+  await requirePlantPermission(db, plantId, user, null);
+  const note = await getNoteRow(db, plantId, noteId);
+  if (!note) throw Object.assign(new Error('Note not found.'), { status: 404 });
+  const attachmentId = stringOrNull(body.attachmentId || body.id);
+  const storagePath = stringOrNull(body.storagePath);
+  if (!attachmentId || !storagePath) {
+    throw Object.assign(new Error('Missing attachmentId or storagePath.'), { status: 400 });
+  }
+  const noteAttachmentRowId = `${noteId}:${attachmentId}`;
+  const uploadedAt = asIso(body.uploadedAt, nowIso());
+  await run(
+    db,
+    `
+      INSERT INTO note_attachments (
+        note_attachment_id, note_id, plant_id, attachment_id, storage_path, storage_bucket, file_name,
+        content_type, size_bytes, url, uploaded_by_json, uploaded_at, schema_version
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(note_attachment_id) DO UPDATE SET
+        storage_path = excluded.storage_path,
+        storage_bucket = excluded.storage_bucket,
+        file_name = excluded.file_name,
+        content_type = excluded.content_type,
+        size_bytes = excluded.size_bytes,
+        url = excluded.url,
+        uploaded_by_json = excluded.uploaded_by_json,
+        uploaded_at = excluded.uploaded_at,
+        schema_version = excluded.schema_version
+    `,
+    noteAttachmentRowId,
+    noteId,
+    plantId,
+    attachmentId,
+    storagePath,
+    stringOrNull(body.storageBucket),
+    stringOrNull(body.fileName),
+    stringOrNull(body.contentType),
+    numberOrNull(body.sizeBytes),
+    stringOrNull(body.url || body.downloadURL),
+    jsonOrNull(body.uploadedBy || { uid: user.uid, name: user.name }),
+    uploadedAt,
+    numberOrZero(body.schemaVersion || 1)
+  );
+  await run(
+    db,
+    `
+      UPDATE notes
+      SET photo_count = (
+            SELECT COUNT(*)
+            FROM note_attachments
+            WHERE plant_id = ? AND note_id = ?
+          ),
+          updated_by_uid = ?,
+          updated_at = ?
+      WHERE plant_id = ? AND note_id = ?
+    `,
+    plantId,
+    noteId,
+    user.uid,
+    uploadedAt,
+    plantId,
+    noteId
+  );
+  const saved = await first(
+    db,
+    `
+      SELECT *
+      FROM note_attachments
+      WHERE plant_id = ? AND note_id = ? AND attachment_id = ?
+      LIMIT 1
+    `,
+    plantId,
+    noteId,
+    attachmentId
+  );
+  return jsonResponse({ attachment: serializeNoteAttachment(saved) }, { status: 201 });
+}
+
+async function deleteNoteAttachment(db, plantId, noteId, attachmentId, user) {
+  await requirePlantPermission(db, plantId, user, null);
+  const note = await getNoteRow(db, plantId, noteId);
+  if (!note) throw Object.assign(new Error('Note not found.'), { status: 404 });
+  await run(
+    db,
+    'DELETE FROM note_attachments WHERE plant_id = ? AND note_id = ? AND attachment_id = ?',
+    plantId,
+    noteId,
+    attachmentId
+  );
+  const now = nowIso();
+  await run(
+    db,
+    `
+      UPDATE notes
+      SET photo_count = (
+            SELECT COUNT(*)
+            FROM note_attachments
+            WHERE plant_id = ? AND note_id = ?
+          ),
+          updated_by_uid = ?,
+          updated_at = ?
+      WHERE plant_id = ? AND note_id = ?
+    `,
+    plantId,
+    noteId,
+    user.uid,
+    now,
+    plantId,
+    noteId
+  );
+  return jsonResponse({ ok: true, attachmentId });
+}
+
+async function requireConversationMember(db, plantId, conversationId, user) {
+  await requirePlantPermission(db, plantId, user, null);
+  const row = await first(
+    db,
+    `
+      SELECT c.*, cm.uid AS member_uid, cm.role AS member_role
+      FROM conversations c
+      JOIN conversation_members cm
+        ON cm.conversation_id = c.conversation_id
+      WHERE c.plant_id = ? AND c.conversation_id = ? AND cm.uid = ?
+      LIMIT 1
+    `,
+    plantId,
+    conversationId,
+    user.uid
+  );
+  if (!row) throw Object.assign(new Error('Conversation access denied'), { status: 403 });
+  return row;
+}
+
+async function listConversations(db, request, plantId, user) {
+  await requirePlantPermission(db, plantId, user, null);
+  const url = new URL(request.url);
+  const type = stringOrNull(url.searchParams.get('type'));
+  const rows = await all(
+    db,
+    `
+      SELECT c.*,
+             cm.uid AS member_uid,
+             cm.role AS member_role,
+             cm.joined_at AS member_joined_at,
+             cm.last_read_at AS member_last_read_at,
+             cm.last_read_message_id AS member_last_read_message_id,
+             cm.unread_count AS member_unread_count,
+             cm.muted AS member_muted
+      FROM conversations c
+      JOIN conversation_members cm
+        ON cm.conversation_id = c.conversation_id
+      WHERE c.plant_id = ?
+        AND cm.uid = ?
+        ${type ? 'AND c.type = ?' : ''}
+        AND c.is_archived = 0
+      ORDER BY COALESCE(c.last_message_at, c.created_at) DESC
+    `,
+    ...(type ? [plantId, user.uid, type] : [plantId, user.uid])
+  );
+  return jsonResponse({ conversations: rows.map(serializeConversation) });
+}
+
+async function createConversation(db, plantId, body, user) {
+  await requirePlantPermission(db, plantId, user, null);
+  const now = nowIso();
+  const type = ['dm', 'group', 'press'].includes(String(body.type || '').trim().toLowerCase())
+    ? String(body.type || '').trim().toLowerCase()
+    : 'group';
+  const actor = { uid: user.uid, name: user.name || user.email || user.uid };
+  const memberIds = Array.from(new Set([...(Array.isArray(body.memberIds) ? body.memberIds : []), user.uid].map(v => String(v || '').trim()).filter(Boolean)));
+  if (memberIds.length < 2) throw Object.assign(new Error('At least two members are required.'), { status: 400 });
+  if (type === 'dm' && memberIds.length !== 2) throw Object.assign(new Error('DM conversations must have exactly two members.'), { status: 400 });
+  const title = stringOrNull(body.title);
+  if (type === 'group' && !title) throw Object.assign(new Error('Group conversations require a title.'), { status: 400 });
+  const pressId = type === 'press' ? stringOrNull(body.pressId) : null;
+
+  const memberPlaceholders = memberIds.map(() => '?').join(', ');
+  const allowedMembers = await all(
+    db,
+    `
+      SELECT uid
+      FROM plant_members
+      WHERE plant_id = ? AND is_active = 1 AND uid IN (${memberPlaceholders})
+    `,
+    plantId,
+    ...memberIds
+  );
+  if (allowedMembers.length !== memberIds.length) {
+    throw Object.assign(new Error('One or more selected members are not active in this plant.'), { status: 400 });
+  }
+
+  if (type === 'dm') {
+    const existingRows = await all(
+      db,
+      `
+        SELECT c.*,
+               cm.uid AS member_uid,
+               cm.role AS member_role,
+               cm.joined_at AS member_joined_at,
+               cm.last_read_at AS member_last_read_at,
+               cm.last_read_message_id AS member_last_read_message_id,
+               cm.unread_count AS member_unread_count,
+               cm.muted AS member_muted
+        FROM conversations c
+        JOIN conversation_members cm
+          ON cm.conversation_id = c.conversation_id
+        WHERE c.plant_id = ?
+          AND cm.uid = ?
+          AND c.type = 'dm'
+          AND c.is_archived = 0
+          AND c.member_count = 2
+          AND c.member_ids_json = ?
+      `,
+      plantId,
+      user.uid
+    );
+    const sortedIds = [...memberIds].sort();
+    const existing = existingRows.find(row => {
+      let ids = [];
+      try {
+        const parsed = JSON.parse(row.member_ids_json || '[]');
+        if (Array.isArray(parsed)) ids = parsed;
+      } catch {}
+      return ids.length === sortedIds.length && ids.slice().sort().every((value, index) => value === sortedIds[index]);
+    });
+    if (existing) {
+      return jsonResponse({ conversation: serializeConversation(existing) });
+    }
+  }
+
+  const conversationId = stringOrNull(body.conversationId || body.id) || `conv_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  const memberIdsJson = jsonOrNull([...memberIds].sort());
+  const statements = [
+    db.prepare(
+      `
+        INSERT INTO conversations (
+          conversation_id, plant_id, type, title, member_ids_json, last_message_text, last_message_at,
+          created_by_uid, created_at, press_id, member_count, created_by_name, last_message_json, is_archived
+        ) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, NULL, 0)
+      `
+    ).bind(
+      conversationId,
+      plantId,
+      type,
+      title,
+      memberIdsJson,
+      now,
+      user.uid,
+      now,
+      pressId,
+      memberIds.length,
+      actor.name
+    )
+  ];
+  memberIds.forEach(uid => {
+    statements.push(
+      db.prepare(
+        `
+          INSERT INTO conversation_members (
+            conversation_id, uid, last_read_at, muted, role, joined_at, last_read_message_id, unread_count
+          ) VALUES (?, ?, ?, 0, ?, ?, NULL, 0)
+        `
+      ).bind(
+        conversationId,
+        uid,
+        now,
+        uid === user.uid ? 'owner' : 'member',
+        now
+      )
+    );
+  });
+  await db.batch(statements);
+  const created = await first(
+    db,
+    `
+      SELECT c.*,
+             cm.uid AS member_uid,
+             cm.role AS member_role,
+             cm.joined_at AS member_joined_at,
+             cm.last_read_at AS member_last_read_at,
+             cm.last_read_message_id AS member_last_read_message_id,
+             cm.unread_count AS member_unread_count,
+             cm.muted AS member_muted
+      FROM conversations c
+      JOIN conversation_members cm
+        ON cm.conversation_id = c.conversation_id
+      WHERE c.plant_id = ? AND c.conversation_id = ? AND cm.uid = ?
+      LIMIT 1
+    `,
+    plantId,
+    conversationId,
+    user.uid
+  );
+  return jsonResponse({ conversation: serializeConversation(created) }, { status: 201 });
+}
+
+async function listConversationMessages(db, plantId, conversationId, user) {
+  await requireConversationMember(db, plantId, conversationId, user);
+  const rows = await all(
+    db,
+    `
+      SELECT *
+      FROM conversation_messages
+      WHERE plant_id = ? AND conversation_id = ?
+      ORDER BY created_at ASC
+    `,
+    plantId,
+    conversationId
+  );
+  return jsonResponse({ messages: rows.map(serializeConversationMessage) });
+}
+
+async function createConversationMessage(db, plantId, conversationId, body, user) {
+  await requireConversationMember(db, plantId, conversationId, user);
+  const text = String(body.text || '').trim();
+  const attachments = Array.isArray(body.attachments) ? body.attachments.filter(Boolean) : [];
+  if (!text && !attachments.length) {
+    throw Object.assign(new Error('Message body or attachment is required.'), { status: 400 });
+  }
+  const now = nowIso();
+  const messageId = stringOrNull(body.messageId || body.id) || `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  const lastMessage = {
+    id: messageId,
+    textPreview: text ? text.slice(0, 280) : (attachments.length ? '📷 Photo' : ''),
+    sender: { uid: user.uid, name: user.name || user.email || user.uid },
+    senderUid: user.uid,
+    senderName: user.name || user.email || user.uid,
+    at: now
+  };
+  await run(
+    db,
+    `
+      INSERT INTO conversation_messages (
+        message_id, conversation_id, plant_id, sender_uid, sender_name, body, created_at, type,
+        mentions_json, attachments_json, edited_at, deleted_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)
+    `,
+    messageId,
+    conversationId,
+    plantId,
+    user.uid,
+    stringOrNull(user.name || user.email || user.uid),
+    text,
+    now,
+    stringOrNull(body.type) || 'text',
+    jsonOrNull(Array.from(new Set((Array.isArray(body.mentions) ? body.mentions : []).map(v => String(v || '').trim()).filter(Boolean)))),
+    jsonOrNull(attachments)
+  );
+  await run(
+    db,
+    `
+      UPDATE conversations
+      SET last_message_text = ?,
+          last_message_at = ?,
+          last_message_json = ?
+      WHERE plant_id = ? AND conversation_id = ?
+    `,
+    lastMessage.textPreview,
+    now,
+    jsonOrNull(lastMessage),
+    plantId,
+    conversationId
+  );
+  await db.batch([
+    db.prepare(
+      `
+        UPDATE conversation_members
+        SET last_read_at = ?, last_read_message_id = ?, unread_count = 0
+        WHERE conversation_id = ? AND uid = ?
+      `
+    ).bind(now, messageId, conversationId, user.uid),
+    db.prepare(
+      `
+        UPDATE conversation_members
+        SET unread_count = COALESCE(unread_count, 0) + 1
+        WHERE conversation_id = ? AND uid != ?
+      `
+    ).bind(conversationId, user.uid)
+  ]);
+  const saved = await first(
+    db,
+    `
+      SELECT *
+      FROM conversation_messages
+      WHERE message_id = ?
+      LIMIT 1
+    `,
+    messageId
+  );
+  return jsonResponse({ message: serializeConversationMessage(saved) }, { status: 201 });
+}
+
+async function markConversationRead(db, plantId, conversationId, body, user) {
+  await requireConversationMember(db, plantId, conversationId, user);
+  const now = nowIso();
+  await run(
+    db,
+    `
+      UPDATE conversation_members
+      SET last_read_at = ?, last_read_message_id = ?, unread_count = 0
+      WHERE conversation_id = ? AND uid = ?
+    `,
+    now,
+    stringOrNull(body.lastReadMessageId),
+    conversationId,
+    user.uid
+  );
+  return jsonResponse({ ok: true, conversationId, lastReadMessageId: stringOrNull(body.lastReadMessageId) });
+}
+
+function parseWikiScopeParams(url) {
+  const scope = String(url.searchParams.get('scope') || 'press').trim().toLowerCase() === 'shared' ? 'shared' : 'press';
+  const pressId = stringOrNull(url.searchParams.get('pressId'));
+  return { scope, pressId };
+}
+
+async function getWikiPageRow(db, plantId, scope, pressId, pageId) {
+  return first(
+    db,
+    `
+      SELECT *
+      FROM wiki_pages
+      WHERE plant_id = ? AND scope = ? AND ${scope === 'shared' ? 'press_id IS NULL' : 'press_id = ?'} AND page_id = ?
+      LIMIT 1
+    `,
+    ...(scope === 'shared' ? [plantId, scope, pageId] : [plantId, scope, pressId, pageId])
+  );
+}
+
+async function listWikiPages(db, request, plantId, user) {
+  await requirePlantPermission(db, plantId, user, null);
+  const { scope, pressId } = parseWikiScopeParams(new URL(request.url));
+  if (scope === 'press' && !pressId) throw Object.assign(new Error('pressId is required for press wiki scope.'), { status: 400 });
+  const rows = await all(
+    db,
+    `
+      SELECT *
+      FROM wiki_pages
+      WHERE plant_id = ? AND scope = ? AND ${scope === 'shared' ? 'press_id IS NULL' : 'press_id = ?'}
+      ORDER BY COALESCE(sort_order, 0) ASC, updated_at DESC, title COLLATE NOCASE ASC
+    `,
+    ...(scope === 'shared' ? [plantId, scope] : [plantId, scope, pressId])
+  );
+  return jsonResponse({ pages: rows.map(serializeWikiPage) });
+}
+
+async function getWikiPageDetail(db, request, plantId, pageId, user) {
+  await requirePlantPermission(db, plantId, user, null);
+  const { scope, pressId } = parseWikiScopeParams(new URL(request.url));
+  if (scope === 'press' && !pressId) throw Object.assign(new Error('pressId is required for press wiki scope.'), { status: 400 });
+  const page = await getWikiPageRow(db, plantId, scope, pressId, pageId);
+  if (!page) throw Object.assign(new Error('Wiki page not found.'), { status: 404 });
+  const revisions = await all(
+    db,
+    `
+      SELECT *
+      FROM wiki_revisions
+      WHERE wiki_page_row_id = ?
+      ORDER BY edited_at DESC
+      LIMIT 30
+    `,
+    page.wiki_page_row_id
+  );
+  const attachments = await all(
+    db,
+    `
+      SELECT *
+      FROM wiki_attachments
+      WHERE wiki_page_row_id = ?
+      ORDER BY uploaded_at DESC
+      LIMIT 24
+    `,
+    page.wiki_page_row_id
+  );
+  return jsonResponse({
+    page: serializeWikiPage(page),
+    revisions: revisions.map(serializeWikiRevision),
+    attachments: attachments.map(serializeWikiAttachment)
+  });
+}
+
+async function saveWikiRevision(db, request, plantId, pageId, body, user) {
+  await requirePlantPermission(db, plantId, user, 'canEditIssue');
+  const { scope, pressId } = parseWikiScopeParams(new URL(request.url));
+  if (scope === 'press' && !pressId) throw Object.assign(new Error('pressId is required for press wiki scope.'), { status: 400 });
+  const rawBody = String(body.body || '').trim();
+  if (!rawBody) throw Object.assign(new Error('Body is required.'), { status: 400 });
+  const now = nowIso();
+  const actor = body.actor && typeof body.actor === 'object'
+    ? body.actor
+    : { uid: user.uid, name: user.name || user.email || user.uid };
+  const pageRowId = wikiPageRowId(scope, pressId, pageId);
+  const existing = await getWikiPageRow(db, plantId, scope, pressId, pageId);
+  const revisionId = stringOrNull(body.revisionId) || `rev_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  const revisionRowId = wikiRevisionRowId(scope, pressId, pageId, revisionId);
+  const prevRevisionId = existing?.current_revision_id || null;
+  const title = stringOrNull(body.title) || existing?.title || pageId;
+  const changeNote = stringOrNull(body.changeNote) || 'Update';
+  await db.batch([
+    db.prepare(
+      `
+        INSERT INTO wiki_revisions (
+          wiki_revision_row_id, wiki_page_row_id, plant_id, scope, press_id, page_id, revision_id, body,
+          change_note, prev_revision_id, edited_by_json, edited_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `
+    ).bind(
+      revisionRowId,
+      pageRowId,
+      plantId,
+      scope,
+      pressId,
+      pageId,
+      revisionId,
+      rawBody,
+      changeNote,
+      prevRevisionId,
+      jsonOrNull(actor),
+      now
+    ),
+    db.prepare(
+      `
+        INSERT INTO wiki_pages (
+          wiki_page_row_id, plant_id, scope, press_id, page_id, title, slug, summary, tags_json, parent_page_id,
+          sort_order, is_pinned, is_locked, visibility, current_revision_id, photo_count, search_text, created_by_json,
+          updated_by_json, created_at, updated_at, last_activity_at, last_verified_at, last_verified_by, schema_version
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(wiki_page_row_id) DO UPDATE SET
+          title = excluded.title,
+          slug = excluded.slug,
+          current_revision_id = excluded.current_revision_id,
+          updated_by_json = excluded.updated_by_json,
+          updated_at = excluded.updated_at,
+          last_activity_at = excluded.last_activity_at,
+          search_text = excluded.search_text,
+          summary = COALESCE(excluded.summary, wiki_pages.summary),
+          parent_page_id = COALESCE(wiki_pages.parent_page_id, excluded.parent_page_id),
+          sort_order = COALESCE(wiki_pages.sort_order, excluded.sort_order),
+          photo_count = COALESCE(wiki_pages.photo_count, excluded.photo_count),
+          schema_version = excluded.schema_version
+      `
+    ).bind(
+      pageRowId,
+      plantId,
+      scope,
+      pressId,
+      pageId,
+      title,
+      stringOrNull(body.slug) || pageId,
+      stringOrNull(body.summary),
+      jsonOrNull(Array.isArray(body.tags) ? body.tags : (existing?.tags_json ? JSON.parse(existing.tags_json) : [])),
+      stringOrNull(body.parentPageId),
+      numberOrNull(body.sortOrder) ?? 0,
+      body.isPinned ? 1 : 0,
+      body.isLocked ? 1 : 0,
+      stringOrNull(body.visibility) || 'plant',
+      revisionId,
+      numberOrZero(body.photoCount ?? existing?.photo_count ?? 0),
+      stringOrNull(`${title} ${rawBody}`.toLowerCase()),
+      jsonOrNull(existing?.created_by_json ? JSON.parse(existing.created_by_json) : actor),
+      jsonOrNull(actor),
+      existing?.created_at || now,
+      now,
+      now,
+      existing?.last_verified_at || null,
+      existing?.last_verified_by || null,
+      numberOrZero(body.schemaVersion || existing?.schema_version || 2)
+    )
+  ]);
+  return getWikiPageDetail(db, request, plantId, pageId, user);
+}
+
+async function deleteWikiPage(db, request, plantId, pageId, user) {
+  await requirePlantPermission(db, plantId, user, 'canEditIssue');
+  const { scope, pressId } = parseWikiScopeParams(new URL(request.url));
+  if (scope === 'press' && !pressId) throw Object.assign(new Error('pressId is required for press wiki scope.'), { status: 400 });
+  const page = await getWikiPageRow(db, plantId, scope, pressId, pageId);
+  if (!page) throw Object.assign(new Error('Wiki page not found.'), { status: 404 });
+  const child = await first(db, `SELECT page_id FROM wiki_pages WHERE plant_id = ? AND scope = ? AND ${scope === 'shared' ? 'press_id IS NULL' : 'press_id = ?'} AND parent_page_id = ? LIMIT 1`, ...(scope === 'shared' ? [plantId, scope, pageId] : [plantId, scope, pressId, pageId]));
+  if (child) throw Object.assign(new Error('Move child pages first before deleting this page.'), { status: 400 });
+  await db.batch([
+    db.prepare('DELETE FROM wiki_attachments WHERE wiki_page_row_id = ?').bind(page.wiki_page_row_id),
+    db.prepare('DELETE FROM wiki_revisions WHERE wiki_page_row_id = ?').bind(page.wiki_page_row_id),
+    db.prepare('DELETE FROM wiki_pages WHERE wiki_page_row_id = ?').bind(page.wiki_page_row_id)
+  ]);
+  return jsonResponse({ ok: true, pageId });
+}
+
+async function createWikiAttachment(db, request, plantId, pageId, body, user) {
+  await requirePlantPermission(db, plantId, user, 'canEditIssue');
+  const { scope, pressId } = parseWikiScopeParams(new URL(request.url));
+  if (scope === 'press' && !pressId) throw Object.assign(new Error('pressId is required for press wiki scope.'), { status: 400 });
+  const page = await getWikiPageRow(db, plantId, scope, pressId, pageId);
+  if (!page) throw Object.assign(new Error('Wiki page not found.'), { status: 404 });
+  const attachmentId = stringOrNull(body.attachmentId || body.id);
+  const storagePath = stringOrNull(body.storagePath);
+  if (!attachmentId || !storagePath) throw Object.assign(new Error('Missing attachmentId or storagePath.'), { status: 400 });
+  const now = asIso(body.uploadedAt, nowIso());
+  await db.batch([
+    db.prepare(
+      `
+        INSERT INTO wiki_attachments (
+          wiki_attachment_row_id, wiki_page_row_id, plant_id, scope, press_id, page_id, attachment_id, storage_path,
+          content_type, caption, linked_revision_id, uploaded_by_json, uploaded_at, width, height, url, schema_version
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(wiki_attachment_row_id) DO UPDATE SET
+          storage_path = excluded.storage_path,
+          content_type = excluded.content_type,
+          caption = excluded.caption,
+          linked_revision_id = excluded.linked_revision_id,
+          uploaded_by_json = excluded.uploaded_by_json,
+          uploaded_at = excluded.uploaded_at,
+          width = excluded.width,
+          height = excluded.height,
+          url = excluded.url,
+          schema_version = excluded.schema_version
+      `
+    ).bind(
+      wikiAttachmentRowId(scope, pressId, pageId, attachmentId),
+      page.wiki_page_row_id,
+      plantId,
+      scope,
+      pressId,
+      pageId,
+      attachmentId,
+      storagePath,
+      stringOrNull(body.contentType),
+      stringOrNull(body.caption),
+      stringOrNull(body.linkedRevisionId || page.current_revision_id),
+      jsonOrNull(body.uploadedBy || { uid: user.uid, name: user.name || user.email || user.uid }),
+      now,
+      numberOrNull(body.width),
+      numberOrNull(body.height),
+      stringOrNull(body.url || body.downloadURL),
+      numberOrZero(body.schemaVersion || 1)
+    ),
+    db.prepare(
+      `
+        UPDATE wiki_pages
+        SET photo_count = (
+              SELECT COUNT(*)
+              FROM wiki_attachments
+              WHERE wiki_page_row_id = ?
+            ),
+            updated_at = ?,
+            last_activity_at = ?
+        WHERE wiki_page_row_id = ?
+      `
+    ).bind(page.wiki_page_row_id, now, now, page.wiki_page_row_id)
+  ]);
+  return getWikiPageDetail(db, request, plantId, pageId, user);
+}
+
 export async function handleD1ApiRequest(request, env, { authenticateRequest } = {}) {
   const url = new URL(request.url);
   const db = getDb(env);
@@ -1649,18 +2923,28 @@ export async function handleD1ApiRequest(request, env, { authenticateRequest } =
     const meMatch = request.method === 'GET' && url.pathname === '/api/me';
     const meUpdateMatch = request.method === 'PATCH' && url.pathname === '/api/me';
     const plantsListMatch = request.method === 'GET' && url.pathname === '/api/plants';
+    const plantCreateMatch = request.method === 'POST' && url.pathname === '/api/plants';
     const bootstrapMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/bootstrap$/);
     const dailyScheduleMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/daily-schedules\/([^/]+)$/);
     const plantMembersMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/members$/);
+    const plantMemberCreateMatch = request.method === 'POST' && url.pathname.match(/^\/api\/plants\/([^/]+)\/members$/);
     const plantMemberUpdateMatch = request.method === 'PATCH' && url.pathname.match(/^\/api\/plants\/([^/]+)\/members\/([^/]+)$/);
+    const plantMemberDeleteMatch = request.method === 'DELETE' && url.pathname.match(/^\/api\/plants\/([^/]+)\/members\/([^/]+)$/);
+    const accessRequestsMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/access-requests$/);
+    const accessRequestUpdateMatch = request.method === 'PATCH' && url.pathname.match(/^\/api\/plants\/([^/]+)\/access-requests\/([^/]+)$/);
     const statusConfigMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/status-config$/);
     const statusConfigUpdateMatch = request.method === 'PUT' && url.pathname.match(/^\/api\/plants\/([^/]+)\/status-config$/);
+    const pressConfigMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/press-config$/);
+    const pressConfigUpdateMatch = request.method === 'PUT' && url.pathname.match(/^\/api\/plants\/([^/]+)\/press-config$/);
     const storeConfigMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/store-config$/);
     const storeConfigUpdateMatch = request.method === 'PUT' && url.pathname.match(/^\/api\/plants\/([^/]+)\/store-config$/);
     const roleAlertRoutingMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/role-alert-routing$/);
     const roleAlertRoutingUpdateMatch = request.method === 'PUT' && url.pathname.match(/^\/api\/plants\/([^/]+)\/role-alert-routing$/);
     const gamificationMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/gamification$/);
     const gamificationAwardMatch = request.method === 'POST' && url.pathname.match(/^\/api\/plants\/([^/]+)\/gamification\/award$/);
+    const gamificationAdminMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/gamification-admin$/);
+    const gamificationAdminUpdateMatch = request.method === 'PUT' && url.pathname.match(/^\/api\/plants\/([^/]+)\/gamification-admin$/);
+    const userDirectoryMatch = request.method === 'GET' && url.pathname === '/api/user-directory';
     const roleAlertsMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/role-alerts$/);
     const roleAlertCreateMatch = request.method === 'POST' && url.pathname.match(/^\/api\/plants\/([^/]+)\/role-alerts$/);
     const roleAlertUpdateMatch = request.method === 'PATCH' && url.pathname.match(/^\/api\/plants\/([^/]+)\/role-alerts\/([^/]+)$/);
@@ -1671,8 +2955,25 @@ export async function handleD1ApiRequest(request, env, { authenticateRequest } =
     const issueDeleteMatch = request.method === 'DELETE' && url.pathname.match(/^\/api\/plants\/([^/]+)\/issues\/([^/]+)$/);
     const eventsMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/issues\/([^/]+)\/events$/);
     const attachmentsMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/issues\/([^/]+)\/attachments$/);
+    const notesMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/notes$/);
+    const noteCreateMatch = request.method === 'POST' && url.pathname.match(/^\/api\/plants\/([^/]+)\/notes$/);
+    const noteUpdateMatch = request.method === 'PATCH' && url.pathname.match(/^\/api\/plants\/([^/]+)\/notes\/([^/]+)$/);
+    const noteDeleteMatch = request.method === 'DELETE' && url.pathname.match(/^\/api\/plants\/([^/]+)\/notes\/([^/]+)$/);
+    const noteAttachmentsMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/notes\/([^/]+)\/attachments$/);
+    const noteAttachmentCreateMatch = request.method === 'POST' && url.pathname.match(/^\/api\/plants\/([^/]+)\/notes\/([^/]+)\/attachments$/);
+    const noteAttachmentDeleteMatch = request.method === 'DELETE' && url.pathname.match(/^\/api\/plants\/([^/]+)\/notes\/([^/]+)\/attachments\/([^/]+)$/);
+    const conversationsMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/conversations$/);
+    const conversationCreateMatch = request.method === 'POST' && url.pathname.match(/^\/api\/plants\/([^/]+)\/conversations$/);
+    const conversationMessagesMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/conversations\/([^/]+)\/messages$/);
+    const conversationMessageCreateMatch = request.method === 'POST' && url.pathname.match(/^\/api\/plants\/([^/]+)\/conversations\/([^/]+)\/messages$/);
+    const conversationReadMatch = request.method === 'PATCH' && url.pathname.match(/^\/api\/plants\/([^/]+)\/conversations\/([^/]+)\/read$/);
+    const wikiPagesMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/wiki-pages$/);
+    const wikiPageMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/wiki-pages\/([^/]+)$/);
+    const wikiRevisionSaveMatch = request.method === 'POST' && url.pathname.match(/^\/api\/plants\/([^/]+)\/wiki-pages\/([^/]+)\/revisions$/);
+    const wikiPageDeleteMatch = request.method === 'DELETE' && url.pathname.match(/^\/api\/plants\/([^/]+)\/wiki-pages\/([^/]+)$/);
+    const wikiAttachmentCreateMatch = request.method === 'POST' && url.pathname.match(/^\/api\/plants\/([^/]+)\/wiki-pages\/([^/]+)\/attachments$/);
 
-    if (!meMatch && !meUpdateMatch && !plantsListMatch && !bootstrapMatch && !dailyScheduleMatch && !plantMembersMatch && !plantMemberUpdateMatch && !statusConfigMatch && !statusConfigUpdateMatch && !storeConfigMatch && !storeConfigUpdateMatch && !roleAlertRoutingMatch && !roleAlertRoutingUpdateMatch && !gamificationMatch && !gamificationAwardMatch && !roleAlertsMatch && !roleAlertCreateMatch && !roleAlertUpdateMatch && !issuesMatch && !issueCreateMatch && !issueMatch && !issueUpdateMatch && !issueDeleteMatch && !eventsMatch && !attachmentsMatch) {
+    if (!meMatch && !meUpdateMatch && !plantsListMatch && !plantCreateMatch && !bootstrapMatch && !dailyScheduleMatch && !plantMembersMatch && !plantMemberCreateMatch && !plantMemberUpdateMatch && !plantMemberDeleteMatch && !accessRequestsMatch && !accessRequestUpdateMatch && !statusConfigMatch && !statusConfigUpdateMatch && !pressConfigMatch && !pressConfigUpdateMatch && !storeConfigMatch && !storeConfigUpdateMatch && !roleAlertRoutingMatch && !roleAlertRoutingUpdateMatch && !gamificationMatch && !gamificationAwardMatch && !gamificationAdminMatch && !gamificationAdminUpdateMatch && !userDirectoryMatch && !roleAlertsMatch && !roleAlertCreateMatch && !roleAlertUpdateMatch && !issuesMatch && !issueCreateMatch && !issueMatch && !issueUpdateMatch && !issueDeleteMatch && !eventsMatch && !attachmentsMatch && !notesMatch && !noteCreateMatch && !noteUpdateMatch && !noteDeleteMatch && !noteAttachmentsMatch && !noteAttachmentCreateMatch && !noteAttachmentDeleteMatch && !conversationsMatch && !conversationCreateMatch && !conversationMessagesMatch && !conversationMessageCreateMatch && !conversationReadMatch && !wikiPagesMatch && !wikiPageMatch && !wikiRevisionSaveMatch && !wikiPageDeleteMatch && !wikiAttachmentCreateMatch) {
       return null;
     }
 
@@ -1690,6 +2991,9 @@ export async function handleD1ApiRequest(request, env, { authenticateRequest } =
     if (plantsListMatch) {
       return listPlants(db, user, request);
     }
+    if (plantCreateMatch) {
+      return createPlant(db, user, await request.json());
+    }
     if (bootstrapMatch) {
       return getPlantBootstrap(db, decodePathSegment(bootstrapMatch[1]), user);
     }
@@ -1699,14 +3003,32 @@ export async function handleD1ApiRequest(request, env, { authenticateRequest } =
     if (plantMembersMatch) {
       return listPlantMembers(db, request, decodePathSegment(plantMembersMatch[1]), user);
     }
+    if (plantMemberCreateMatch) {
+      return addPlantMember(db, decodePathSegment(plantMemberCreateMatch[1]), await request.json(), user);
+    }
     if (plantMemberUpdateMatch) {
       return updatePlantMember(db, decodePathSegment(plantMemberUpdateMatch[1]), decodePathSegment(plantMemberUpdateMatch[2]), await request.json(), user);
+    }
+    if (plantMemberDeleteMatch) {
+      return deletePlantMember(db, decodePathSegment(plantMemberDeleteMatch[1]), decodePathSegment(plantMemberDeleteMatch[2]), user);
+    }
+    if (accessRequestsMatch) {
+      return listAccessRequests(db, request, decodePathSegment(accessRequestsMatch[1]), user);
+    }
+    if (accessRequestUpdateMatch) {
+      return updateAccessRequest(db, decodePathSegment(accessRequestUpdateMatch[1]), decodePathSegment(accessRequestUpdateMatch[2]), await request.json(), user);
     }
     if (statusConfigMatch) {
       return getStatusConfig(db, decodePathSegment(statusConfigMatch[1]), user);
     }
     if (statusConfigUpdateMatch) {
       return updateStatusConfig(db, decodePathSegment(statusConfigUpdateMatch[1]), await request.json(), user);
+    }
+    if (pressConfigMatch) {
+      return getPressConfig(db, decodePathSegment(pressConfigMatch[1]), user);
+    }
+    if (pressConfigUpdateMatch) {
+      return updatePressConfig(db, decodePathSegment(pressConfigUpdateMatch[1]), await request.json(), user);
     }
     if (storeConfigMatch) {
       return getStoreConfig(db, decodePathSegment(storeConfigMatch[1]), user);
@@ -1725,6 +3047,15 @@ export async function handleD1ApiRequest(request, env, { authenticateRequest } =
     }
     if (gamificationAwardMatch) {
       return awardGamification(db, decodePathSegment(gamificationAwardMatch[1]), await request.json(), user);
+    }
+    if (gamificationAdminMatch) {
+      return getGamificationAdmin(db, decodePathSegment(gamificationAdminMatch[1]), user);
+    }
+    if (gamificationAdminUpdateMatch) {
+      return updateGamificationAdmin(db, decodePathSegment(gamificationAdminUpdateMatch[1]), await request.json(), user);
+    }
+    if (userDirectoryMatch) {
+      return listUserDirectory(db, user);
     }
     if (roleAlertsMatch) {
       return listRoleAlerts(db, request, decodePathSegment(roleAlertsMatch[1]), user);
@@ -1763,6 +3094,63 @@ export async function handleD1ApiRequest(request, env, { authenticateRequest } =
     }
     if (attachmentsMatch) {
       return listIssueAttachments(db, decodePathSegment(attachmentsMatch[1]), decodePathSegment(attachmentsMatch[2]), user);
+    }
+    if (notesMatch) {
+      return listNotes(db, request, decodePathSegment(notesMatch[1]), user);
+    }
+    if (noteCreateMatch) {
+      return createNote(db, decodePathSegment(noteCreateMatch[1]), await request.json(), user);
+    }
+    if (noteUpdateMatch) {
+      return updateNote(db, decodePathSegment(noteUpdateMatch[1]), decodePathSegment(noteUpdateMatch[2]), await request.json(), user);
+    }
+    if (noteDeleteMatch) {
+      return deleteNote(db, decodePathSegment(noteDeleteMatch[1]), decodePathSegment(noteDeleteMatch[2]), user);
+    }
+    if (noteAttachmentsMatch) {
+      return listNoteAttachments(db, decodePathSegment(noteAttachmentsMatch[1]), decodePathSegment(noteAttachmentsMatch[2]), user);
+    }
+    if (noteAttachmentCreateMatch) {
+      return createNoteAttachment(db, decodePathSegment(noteAttachmentCreateMatch[1]), decodePathSegment(noteAttachmentCreateMatch[2]), await request.json(), user);
+    }
+    if (noteAttachmentDeleteMatch) {
+      return deleteNoteAttachment(
+        db,
+        decodePathSegment(noteAttachmentDeleteMatch[1]),
+        decodePathSegment(noteAttachmentDeleteMatch[2]),
+        decodePathSegment(noteAttachmentDeleteMatch[3]),
+        user
+      );
+    }
+    if (conversationsMatch) {
+      return listConversations(db, request, decodePathSegment(conversationsMatch[1]), user);
+    }
+    if (conversationCreateMatch) {
+      return createConversation(db, decodePathSegment(conversationCreateMatch[1]), await request.json(), user);
+    }
+    if (conversationMessagesMatch) {
+      return listConversationMessages(db, decodePathSegment(conversationMessagesMatch[1]), decodePathSegment(conversationMessagesMatch[2]), user);
+    }
+    if (conversationMessageCreateMatch) {
+      return createConversationMessage(db, decodePathSegment(conversationMessageCreateMatch[1]), decodePathSegment(conversationMessageCreateMatch[2]), await request.json(), user);
+    }
+    if (conversationReadMatch) {
+      return markConversationRead(db, decodePathSegment(conversationReadMatch[1]), decodePathSegment(conversationReadMatch[2]), await request.json(), user);
+    }
+    if (wikiPagesMatch) {
+      return listWikiPages(db, request, decodePathSegment(wikiPagesMatch[1]), user);
+    }
+    if (wikiPageMatch) {
+      return getWikiPageDetail(db, request, decodePathSegment(wikiPageMatch[1]), decodePathSegment(wikiPageMatch[2]), user);
+    }
+    if (wikiRevisionSaveMatch) {
+      return saveWikiRevision(db, request, decodePathSegment(wikiRevisionSaveMatch[1]), decodePathSegment(wikiRevisionSaveMatch[2]), await request.json(), user);
+    }
+    if (wikiPageDeleteMatch) {
+      return deleteWikiPage(db, request, decodePathSegment(wikiPageDeleteMatch[1]), decodePathSegment(wikiPageDeleteMatch[2]), user);
+    }
+    if (wikiAttachmentCreateMatch) {
+      return createWikiAttachment(db, request, decodePathSegment(wikiAttachmentCreateMatch[1]), decodePathSegment(wikiAttachmentCreateMatch[2]), await request.json(), user);
     }
     return null;
   } catch (error) {

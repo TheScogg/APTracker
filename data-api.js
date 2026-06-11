@@ -194,6 +194,129 @@ export class SqlDataApi {
     });
   }
 
+  listNotes(plantId, params = {}) {
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') query.set(key, String(value));
+    });
+    const suffix = query.toString() ? `?${query}` : '';
+    return this.request(`/plants/${encodeURIComponent(plantId)}/notes${suffix}`);
+  }
+
+  createNote(plantId, payload) {
+    return this.request(`/plants/${encodeURIComponent(plantId)}/notes`, {
+      method: 'POST',
+      body: payload
+    });
+  }
+
+  updateNote(plantId, noteId, payload) {
+    return this.request(`/plants/${encodeURIComponent(plantId)}/notes/${encodeURIComponent(noteId)}`, {
+      method: 'PATCH',
+      body: payload
+    });
+  }
+
+  deleteNote(plantId, noteId) {
+    return this.request(`/plants/${encodeURIComponent(plantId)}/notes/${encodeURIComponent(noteId)}`, {
+      method: 'DELETE'
+    });
+  }
+
+  listNoteAttachments(plantId, noteId) {
+    return this.request(`/plants/${encodeURIComponent(plantId)}/notes/${encodeURIComponent(noteId)}/attachments`);
+  }
+
+  createNoteAttachment(plantId, noteId, payload) {
+    return this.request(`/plants/${encodeURIComponent(plantId)}/notes/${encodeURIComponent(noteId)}/attachments`, {
+      method: 'POST',
+      body: payload
+    });
+  }
+
+  deleteNoteAttachment(plantId, noteId, attachmentId) {
+    return this.request(`/plants/${encodeURIComponent(plantId)}/notes/${encodeURIComponent(noteId)}/attachments/${encodeURIComponent(attachmentId)}`, {
+      method: 'DELETE'
+    });
+  }
+
+  listConversations(plantId, params = {}) {
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') query.set(key, String(value));
+    });
+    const suffix = query.toString() ? `?${query}` : '';
+    return this.request(`/plants/${encodeURIComponent(plantId)}/conversations${suffix}`);
+  }
+
+  createConversation(plantId, payload) {
+    return this.request(`/plants/${encodeURIComponent(plantId)}/conversations`, {
+      method: 'POST',
+      body: payload
+    });
+  }
+
+  listConversationMessages(plantId, conversationId) {
+    return this.request(`/plants/${encodeURIComponent(plantId)}/conversations/${encodeURIComponent(conversationId)}/messages`);
+  }
+
+  createConversationMessage(plantId, conversationId, payload) {
+    return this.request(`/plants/${encodeURIComponent(plantId)}/conversations/${encodeURIComponent(conversationId)}/messages`, {
+      method: 'POST',
+      body: payload
+    });
+  }
+
+  markConversationRead(plantId, conversationId, payload) {
+    return this.request(`/plants/${encodeURIComponent(plantId)}/conversations/${encodeURIComponent(conversationId)}/read`, {
+      method: 'PATCH',
+      body: payload
+    });
+  }
+
+  listWikiPages(plantId, params = {}) {
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') query.set(key, String(value));
+    });
+    const suffix = query.toString() ? `?${query}` : '';
+    return this.request(`/plants/${encodeURIComponent(plantId)}/wiki-pages${suffix}`);
+  }
+
+  getWikiPage(plantId, pageId, params = {}) {
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') query.set(key, String(value));
+    });
+    const suffix = query.toString() ? `?${query}` : '';
+    return this.request(`/plants/${encodeURIComponent(plantId)}/wiki-pages/${encodeURIComponent(pageId)}${suffix}`);
+  }
+
+  saveWikiRevision(plantId, pageId, payload) {
+    return this.request(`/plants/${encodeURIComponent(plantId)}/wiki-pages/${encodeURIComponent(pageId)}/revisions`, {
+      method: 'POST',
+      body: payload
+    });
+  }
+
+  deleteWikiPage(plantId, pageId, params = {}) {
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') query.set(key, String(value));
+    });
+    const suffix = query.toString() ? `?${query}` : '';
+    return this.request(`/plants/${encodeURIComponent(plantId)}/wiki-pages/${encodeURIComponent(pageId)}${suffix}`, {
+      method: 'DELETE'
+    });
+  }
+
+  createWikiAttachment(plantId, pageId, payload) {
+    return this.request(`/plants/${encodeURIComponent(plantId)}/wiki-pages/${encodeURIComponent(pageId)}/attachments`, {
+      method: 'POST',
+      body: payload
+    });
+  }
+
   listRoleAlerts(plantId, params = {}) {
     const query = new URLSearchParams();
     Object.entries(params).forEach(([key, value]) => {
@@ -255,6 +378,23 @@ export class FirebaseDataApi {
   appendIssueEvent() { return this.unavailable('appendIssueEvent'); }
   listIssueAttachments() { return this.unavailable('listIssueAttachments'); }
   createIssueAttachment() { return this.unavailable('createIssueAttachment'); }
+  listNotes() { return this.unavailable('listNotes'); }
+  createNote() { return this.unavailable('createNote'); }
+  updateNote() { return this.unavailable('updateNote'); }
+  deleteNote() { return this.unavailable('deleteNote'); }
+  listNoteAttachments() { return this.unavailable('listNoteAttachments'); }
+  createNoteAttachment() { return this.unavailable('createNoteAttachment'); }
+  deleteNoteAttachment() { return this.unavailable('deleteNoteAttachment'); }
+  listConversations() { return this.unavailable('listConversations'); }
+  createConversation() { return this.unavailable('createConversation'); }
+  listConversationMessages() { return this.unavailable('listConversationMessages'); }
+  createConversationMessage() { return this.unavailable('createConversationMessage'); }
+  markConversationRead() { return this.unavailable('markConversationRead'); }
+  listWikiPages() { return this.unavailable('listWikiPages'); }
+  getWikiPage() { return this.unavailable('getWikiPage'); }
+  saveWikiRevision() { return this.unavailable('saveWikiRevision'); }
+  deleteWikiPage() { return this.unavailable('deleteWikiPage'); }
+  createWikiAttachment() { return this.unavailable('createWikiAttachment'); }
   listRoleAlerts() { return this.unavailable('listRoleAlerts'); }
   createRoleAlert() { return this.unavailable('createRoleAlert'); }
   updateRoleAlert() { return this.unavailable('updateRoleAlert'); }
