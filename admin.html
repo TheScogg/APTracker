@@ -639,6 +639,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, setPersistence, browserLocalPersistence, GoogleAuthProvider, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut as fbSignOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { createApiSessionClient } from "./auth-session-client.js";
 import {
   assignableStatusKeys,
   deepCopy,
@@ -896,6 +897,12 @@ const db = getFirestore(app);
 const auth = getAuth(app);
 setPersistence(auth, browserLocalPersistence).catch(() => {});
 const provider = new GoogleAuthProvider();
+const apiSessionClient = createApiSessionClient({
+  async getFirebaseIdToken() {
+    if (!currentUser?.getIdToken) throw new Error('Sign in is required.');
+    return currentUser.getIdToken();
+  }
+});
 provider.setCustomParameters({ prompt: 'select_account' });
 const DATA_BACKEND_SQL = 'sql';
 function selectedDataBackend() {
@@ -1156,8 +1163,8 @@ function adaptDailyScheduleGptOutput(raw) {
 }
 
 async function adminApiRequest(path, options = {}) {
-  if (!currentUser?.getIdToken) throw new Error('Sign in is required.');
-  const token = await currentUser.getIdToken();
+  const token = await apiSessionClient.getAccessToken();
+  if (!token) throw new Error('Sign in is required.');
   const headers = {
     ...(options.body ? { 'Content-Type': 'application/json' } : {}),
     Authorization: `Bearer ${token}`,
@@ -1294,14 +1301,21 @@ async function signInWithGoogle() {
 }
 
 async function doSignOut() {
+  apiSessionClient.clear();
   await fbSignOut(auth);
 }
 
 async function loadUserPlants() {
   if (shouldUseSqlAdmin()) {
-    currentThemeSelection = localStorage.getItem(THEME_STORAGE_KEY) || FALLBACK_THEME_KEY;
-    syncAdminTheme(currentThemeSelection, globalStoreDraft);
     const ctx = await adminApiRequest('/api/me');
+    const preferredTheme = String(ctx?.user?.themePrefs?.activeTheme || '').trim();
+    if (preferredTheme) {
+      currentThemeSelection = preferredTheme;
+      try { localStorage.setItem(THEME_STORAGE_KEY, preferredTheme); } catch {}
+    } else {
+      currentThemeSelection = localStorage.getItem(THEME_STORAGE_KEY) || FALLBACK_THEME_KEY;
+    }
+    syncAdminTheme(currentThemeSelection, globalStoreDraft);
     userPlants = Array.isArray(ctx?.plants)
       ? ctx.plants.map(plant => ({
           id: plant.plantId,
@@ -3993,6 +4007,7 @@ async function refreshAdminData() {
 
 onAuthStateChanged(auth, async user => {
   if (!user) {
+    apiSessionClient.clear();
     currentUser = null;
     document.getElementById('login-screen').classList.add('visible');
     document.getElementById('app-screen').classList.remove('visible');
@@ -4003,6 +4018,7 @@ onAuthStateChanged(auth, async user => {
   }
 
   currentUser = user;
+  void apiSessionClient.warm();
 
   if (!shouldUseSqlAdmin() && user.email) {
     setDoc(doc(db, 'userLookup', user.email.toLowerCase()), {

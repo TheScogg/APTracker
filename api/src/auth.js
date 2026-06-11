@@ -1,5 +1,6 @@
 import { cert, getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
+import { verifyAppSessionToken } from '../../session-auth.js';
 
 function firebaseAdminApp() {
   const existing = getApps()[0];
@@ -21,7 +22,15 @@ export async function authenticateRequest(request) {
   if (!match) {
     throw Object.assign(new Error('Missing bearer token'), { status: 401 });
   }
-  const decoded = await getAuth(firebaseAdminApp()).verifyIdToken(match[1]);
+  const token = match[1];
+  const sessionSecret = process.env.APP_SESSION_SECRET || process.env.AP_SESSION_SECRET || '';
+  const appSessionUser = await verifyAppSessionToken(token, sessionSecret);
+  if (appSessionUser?.uid) return appSessionUser;
+  throw Object.assign(new Error('Invalid or expired app session.'), { status: 401 });
+}
+
+export async function authenticateFirebaseIdToken(token) {
+  const decoded = await getAuth(firebaseAdminApp()).verifyIdToken(token);
   return {
     uid: decoded.uid,
     email: decoded.email || '',

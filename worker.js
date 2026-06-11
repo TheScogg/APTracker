@@ -1,4 +1,5 @@
 import { handleD1ApiRequest, importDailyScheduleToD1 } from './d1-api.js';
+import { signAppSessionToken, verifyAppSessionToken } from './session-auth.js';
 
 const FIREBASE_AUTH_ORIGIN = 'https://press-tracker-9d9c9.firebaseapp.com';
 const FIREBASE_PROJECT_ID = 'press-tracker-9d9c9';
@@ -1134,111 +1135,296 @@ function jsonResponse(data, init = {}) {
   });
 }
 
-function firestoreValueToJs(value) {
-  if (!value || typeof value !== 'object') return null;
-  if ('stringValue' in value) return value.stringValue;
-  if ('integerValue' in value) return Number(value.integerValue);
-  if ('doubleValue' in value) return Number(value.doubleValue);
-  if ('booleanValue' in value) return Boolean(value.booleanValue);
-  if ('timestampValue' in value) return value.timestampValue;
-  if ('nullValue' in value) return null;
-  if ('arrayValue' in value) return (value.arrayValue.values || []).map(firestoreValueToJs);
-  if ('mapValue' in value) return firestoreFieldsToJs(value.mapValue.fields || {});
-  return null;
+async function listUserD1FcmTokens(env, uid) {
+  const db = env.APTRACKER_DB || env.DB;
+  if (!db || !uid) return [];
+  const result = await db.prepare(`
+    SELECT token, token_id, provider, platform, notification_permission
+    FROM user_push_tokens
+    WHERE uid = ? AND provider = 'fcm'
+  `).bind(uid).all();
+  const rows = Array.isArray(result?.results) ? result.results : [];
+  return rows
+    .filter(row => row?.token)
+    .map(row => ({
+      token: row.token,
+      tokenId: row.token_id,
+      provider: row.provider,
+      platform: row.platform,
+      notificationPermission: row.notification_permission
+    }));
 }
 
-function firestoreFieldsToJs(fields = {}) {
-  const out = {};
-  for (const [key, value] of Object.entries(fields || {})) out[key] = firestoreValueToJs(value);
-  return out;
-}
-
-function firestoreDocToJs(doc) {
-  if (!doc?.fields) return null;
-  const data = firestoreFieldsToJs(doc.fields);
-  const parts = String(doc.name || '').split('/');
-  data.id = parts[parts.length - 1] || '';
-  return data;
-}
-
-function firestoreDocUrl(projectId, path) {
-  const encoded = String(path || '').split('/').map(encodeURIComponent).join('/');
-  return `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/${encoded}`;
-}
-
-async function getFirestoreDocument(env, path) {
-  const projectId = env.FIREBASE_PROJECT_ID || FIREBASE_PROJECT_ID;
-  const token = await getGoogleOAuthToken(env);
-  const res = await fetch(firestoreDocUrl(projectId, path), {
-    headers: { 'Authorization': 'Bearer ' + token }
-  });
-  if (res.status === 404) return null;
-  const data = await res.json();
-  if (!res.ok) throw new Error((data.error && data.error.message) || `Firestore read failed: ${res.status}`);
-  return firestoreDocToJs(data);
-}
-
-async function patchFirestoreDocument(env, path, fields) {
-  const projectId = env.FIREBASE_PROJECT_ID || FIREBASE_PROJECT_ID;
-  const token = await getGoogleOAuthToken(env);
-  const bodyFields = {};
-  const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(fields || {})) {
-    bodyFields[key] = firestoreValue(value);
-    params.append('updateMask.fieldPaths', key);
-  }
-  const res = await fetch(`${firestoreDocUrl(projectId, path)}?${params.toString()}`, {
-    method: 'PATCH',
-    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ fields: bodyFields })
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error((data.error && data.error.message) || `Firestore patch failed: ${res.status}`);
-  return data;
-}
-
-async function runFirestoreQuery(env, structuredQuery) {
-  const projectId = env.FIREBASE_PROJECT_ID || FIREBASE_PROJECT_ID;
-  const token = await getGoogleOAuthToken(env);
-  const res = await fetch(`https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents:runQuery`, {
-    method: 'POST',
-    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ structuredQuery })
-  });
-  const data = await res.json().catch(() => []);
-  if (!res.ok) {
-    const message = data?.error?.message || `Firestore query failed: ${res.status}`;
-    throw new Error(message);
-  }
-  return Array.isArray(data) ? data : [];
-}
-
-async function listUserFcmTokens(env, uid) {
-  const projectId = env.FIREBASE_PROJECT_ID || FIREBASE_PROJECT_ID;
-  const token = await getGoogleOAuthToken(env);
-  const url = `${firestoreDocUrl(projectId, `users/${uid}/fcmTokens`)}?pageSize=100`;
-  const res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token } });
-  if (res.status === 404) return [];
-  const data = await res.json();
-  if (!res.ok) throw new Error((data.error && data.error.message) || `FCM token read failed: ${res.status}`);
-  return (data.documents || [])
-    .map(firestoreDocToJs)
-    .filter(d => d?.token && d.provider === 'fcm');
-}
-
-async function authenticateFirebaseUser(request, env) {
+async function authenticateExchangeUser(request, env) {
   const authHeader = request.headers.get('Authorization') || '';
   const match = authHeader.match(/^Bearer\s+(.+)$/i);
   if (!match) throw new Error('Missing Firebase ID token.');
+  const bearerToken = match[1];
+  const sessionSecret = env.APP_SESSION_SECRET || env.AP_SESSION_SECRET || '';
+  const appSessionUser = await verifyAppSessionToken(bearerToken, sessionSecret);
+  if (appSessionUser?.uid) {
+    return {
+      localId: appSessionUser.uid,
+      email: appSessionUser.email || '',
+      displayName: appSessionUser.name || appSessionUser.email || appSessionUser.uid,
+      photoUrl: appSessionUser.picture || ''
+    };
+  }
   const apiKey = env.FIREBASE_WEB_API_KEY || FIREBASE_WEB_API_KEY;
   const res = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(apiKey)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ idToken: match[1] })
+    body: JSON.stringify({ idToken: bearerToken })
   });
   const data = await res.json();
   if (!res.ok || !data.users?.[0]?.localId) throw new Error('Invalid Firebase ID token.');
   return data.users[0];
+}
+
+async function authenticateAppRequest(request, env) {
+  const authHeader = request.headers.get('Authorization') || '';
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  if (!match) throw Object.assign(new Error('Missing app session token.'), { status: 401 });
+  const bearerToken = match[1];
+  const sessionSecret = env.APP_SESSION_SECRET || env.AP_SESSION_SECRET || '';
+  const appSessionUser = await verifyAppSessionToken(bearerToken, sessionSecret);
+  if (!appSessionUser?.uid) {
+    throw Object.assign(new Error('Invalid or expired app session.'), { status: 401 });
+  }
+  return {
+    localId: appSessionUser.uid,
+    email: appSessionUser.email || '',
+    displayName: appSessionUser.name || appSessionUser.email || appSessionUser.uid,
+    photoUrl: appSessionUser.picture || ''
+  };
+}
+
+async function handleSessionExchange(request, env) {
+  if (request.method !== 'POST') return jsonResponse({ error: 'POST required' }, { status: 405 });
+  try {
+    const user = await authenticateExchangeUser(request, env);
+    const sessionSecret = env.APP_SESSION_SECRET || env.AP_SESSION_SECRET || '';
+    if (!sessionSecret) {
+      return jsonResponse({ error: 'APP_SESSION_SECRET is not configured.' }, { status: 500 });
+    }
+    const session = await signAppSessionToken({
+      uid: user.localId,
+      email: user.email || '',
+      name: user.displayName || user.email || user.localId,
+      picture: user.photoUrl || ''
+    }, sessionSecret);
+    return jsonResponse({
+      sessionToken: session.token,
+      expiresAt: session.expiresAt
+    });
+  } catch (e) {
+    return jsonResponse({ error: e.message }, { status: 401 });
+  }
+}
+
+function getAttachmentBucket(env) {
+  return env.APTRACKER_ATTACHMENTS || env.ATTACHMENTS_BUCKET || null;
+}
+
+function getAttachmentSigningSecret(env) {
+  return env.ATTACHMENT_URL_SECRET || env.APP_SESSION_SECRET || env.AP_SESSION_SECRET || '';
+}
+
+async function sha256Base64Url(value) {
+  const bytes = value instanceof Uint8Array ? value : new TextEncoder().encode(String(value || ''));
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  let binary = '';
+  for (const byte of new Uint8Array(digest)) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+async function signAttachmentPath(path, env) {
+  const secret = getAttachmentSigningSecret(env);
+  if (!secret) throw new Error('APP_SESSION_SECRET or ATTACHMENT_URL_SECRET is required for attachment URL signing.');
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(String(path || '')));
+  let binary = '';
+  for (const byte of new Uint8Array(sig)) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+async function verifyAttachmentSignature(path, sig, env) {
+  if (!path || !sig) return false;
+  const expected = await signAttachmentPath(path, env);
+  return expected === sig;
+}
+
+function buildAttachmentObjectUrl(requestUrl, storagePath, env) {
+  const url = new URL('/api/storage/object', requestUrl);
+  url.searchParams.set('path', storagePath);
+  return signAttachmentPath(storagePath, env).then(sig => {
+    url.searchParams.set('sig', sig);
+    return url.toString();
+  });
+}
+
+function parseDataUrlPayload(dataUrl) {
+  const match = String(dataUrl || '').match(/^data:([^;,]+)?(?:;charset=[^;,]+)?;base64,(.+)$/i);
+  if (!match) throw Object.assign(new Error('Expected a base64 data URL.'), { status: 400 });
+  const contentType = match[1] || 'application/octet-stream';
+  const binary = atob(match[2]);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return { contentType, bytes };
+}
+
+async function requirePlantAccess(env, plantId, request, permissionName = null) {
+  const db = getD1Db(env);
+  if (!db) throw Object.assign(new Error('D1 binding not configured.'), { status: 500 });
+  const authUser = await authenticateAppRequest(request, env);
+  const user = {
+    uid: authUser.localId,
+    email: authUser.email || '',
+    name: authUser.displayName || authUser.email || authUser.localId
+  };
+  const row = await db.prepare(
+    `
+      SELECT is_active, permissions_json
+      FROM plant_members
+      WHERE plant_id = ? AND uid = ?
+      LIMIT 1
+    `
+  ).bind(String(plantId || ''), user.uid).first();
+  if (!row || !Number(row.is_active)) {
+    throw Object.assign(new Error('Plant access denied'), { status: 403 });
+  }
+  if (permissionName) {
+    let permissions = {};
+    try {
+      permissions = row.permissions_json ? JSON.parse(row.permissions_json) : {};
+    } catch {
+      permissions = {};
+    }
+    if (permissions[permissionName] !== true) {
+      throw Object.assign(new Error('Permission denied'), { status: 403 });
+    }
+  }
+  return user;
+}
+
+function normalizeAttachmentFileName(fileName, fallback = 'attachment.bin') {
+  const raw = String(fileName || '').trim();
+  const normalized = raw.replace(/[^\w.\-]+/g, '_').replace(/^_+|_+$/g, '');
+  return normalized || fallback;
+}
+
+async function handleAttachmentUpload(request, env, plantId) {
+  if (request.method !== 'POST') return jsonResponse({ error: 'POST required' }, { status: 405 });
+  const bucket = getAttachmentBucket(env);
+  if (!bucket) {
+    return jsonResponse({ error: 'Attachment bucket is not configured. Bind APTRACKER_ATTACHMENTS (R2) before switching storage.' }, { status: 501 });
+  }
+  try {
+    const body = await request.json();
+    const scope = String(body.scope || '').trim().toLowerCase();
+    const validScopes = new Set(['issue', 'note', 'wiki', 'conversation']);
+    if (!validScopes.has(scope)) {
+      throw Object.assign(new Error('scope must be one of: issue, note, wiki, conversation.'), { status: 400 });
+    }
+    const permissionName = scope === 'wiki' ? 'canEditIssue' : null;
+    const actor = await requirePlantAccess(env, plantId, request, permissionName);
+    const { contentType, bytes } = parseDataUrlPayload(body.dataUrl);
+    const declaredContentType = String(body.contentType || '').trim() || contentType;
+    const fileName = normalizeAttachmentFileName(body.fileName, `attachment-${Date.now()}.bin`);
+    const objectHash = await sha256Base64Url(bytes);
+    const entityId = String(body.issueId || body.noteId || body.pageId || body.conversationId || '').trim() || 'misc';
+    const wikiScope = String(body.wikiScope || body.scopeType || 'shared').trim().toLowerCase();
+    const pressId = String(body.pressId || '').trim();
+    let key = '';
+    if (scope === 'issue') {
+      key = `plants/${plantId}/issues/${entityId}/photos/${Date.now()}_${objectHash.slice(0, 12)}_${fileName}`;
+    } else if (scope === 'note') {
+      key = `plants/${plantId}/notes/${entityId}/attachments/${Date.now()}_${objectHash.slice(0, 12)}_${fileName}`;
+    } else if (scope === 'wiki') {
+      key = wikiScope === 'press'
+        ? `plants/${plantId}/presses/${pressId || 'unknown'}/wikiPages/${entityId}/attachments/${Date.now()}_${objectHash.slice(0, 12)}_${fileName}`
+        : `plants/${plantId}/wikiPages/${entityId}/attachments/${Date.now()}_${objectHash.slice(0, 12)}_${fileName}`;
+    } else {
+      key = `plants/${plantId}/conversations/${entityId}/photos/${Date.now()}_${objectHash.slice(0, 12)}_${fileName}`;
+    }
+    await bucket.put(key, bytes, {
+      httpMetadata: {
+        contentType: declaredContentType,
+        cacheControl: 'public, max-age=31536000, immutable'
+      },
+      customMetadata: {
+        plantId: String(plantId || ''),
+        scope,
+        entityId,
+        uploadedByUid: actor.uid,
+        uploadedByName: actor.name || actor.email || actor.uid
+      }
+    });
+    const downloadUrl = await buildAttachmentObjectUrl(request.url, key, env);
+    return jsonResponse({
+      ok: true,
+      attachment: {
+        storageBucket: 'r2',
+        storagePath: key,
+        contentType: declaredContentType,
+        sizeBytes: bytes.byteLength,
+        fileName,
+        uploadedBy: { uid: actor.uid, name: actor.name || actor.email || actor.uid },
+        uploadedAt: new Date().toISOString(),
+        url: downloadUrl,
+        downloadUrl
+      }
+    }, { status: 201 });
+  } catch (error) {
+    return jsonResponse({ error: error?.message || 'Attachment upload failed.' }, { status: error?.status || 500 });
+  }
+}
+
+async function handleAttachmentDelete(request, env, plantId) {
+  if (request.method !== 'DELETE') return jsonResponse({ error: 'DELETE required' }, { status: 405 });
+  const bucket = getAttachmentBucket(env);
+  if (!bucket) {
+    return jsonResponse({ error: 'Attachment bucket is not configured.' }, { status: 501 });
+  }
+  try {
+    await requirePlantAccess(env, plantId, request, null);
+    const body = await request.json();
+    const storagePath = String(body.storagePath || '').trim();
+    if (!storagePath || !storagePath.startsWith(`plants/${plantId}/`)) {
+      throw Object.assign(new Error('Invalid storagePath.'), { status: 400 });
+    }
+    await bucket.delete(storagePath);
+    return jsonResponse({ ok: true, storagePath });
+  } catch (error) {
+    return jsonResponse({ error: error?.message || 'Attachment delete failed.' }, { status: error?.status || 500 });
+  }
+}
+
+async function handleAttachmentObject(request, env) {
+  if (request.method !== 'GET') return new Response('Method not allowed', { status: 405 });
+  const bucket = getAttachmentBucket(env);
+  if (!bucket) return new Response('Attachment bucket is not configured.', { status: 404 });
+  const url = new URL(request.url);
+  const storagePath = String(url.searchParams.get('path') || '').trim();
+  const sig = String(url.searchParams.get('sig') || '').trim();
+  if (!storagePath || !sig || !(await verifyAttachmentSignature(storagePath, sig, env))) {
+    return new Response('Invalid attachment URL.', { status: 403 });
+  }
+  const object = await bucket.get(storagePath);
+  if (!object) return new Response('Not found', { status: 404 });
+  const headers = new Headers();
+  object.writeHttpMetadata(headers);
+  headers.set('etag', object.httpEtag);
+  if (!headers.has('Cache-Control')) {
+    headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+  }
+  return new Response(object.body, { status: 200, headers });
 }
 
 async function sendFcmToTokens(env, tokens, payload) {
@@ -1279,25 +1465,131 @@ async function sendFcmToTokens(env, tokens, payload) {
 }
 
 async function tokensForUsers(env, userIds) {
-  const tokenLists = await Promise.all(Array.from(new Set(userIds || [])).map(uid => listUserFcmTokens(env, uid)));
+  const tokenLists = await Promise.all(Array.from(new Set(userIds || [])).map(async uid => (
+    listUserD1FcmTokens(env, uid).catch(() => [])
+  )));
   return tokenLists.flat().map(t => t.token).filter(Boolean);
 }
 
-function firestoreRelativePathFromName(name) {
-  const marker = '/documents/';
-  const idx = String(name || '').indexOf(marker);
-  return idx >= 0 ? String(name).slice(idx + marker.length) : '';
+function getD1Db(env) {
+  return env.APTRACKER_DB || env.DB || null;
 }
 
-function plantIssuePathParts(relativePath) {
-  const parts = String(relativePath || '').split('/');
-  const plantIndex = parts.indexOf('plants');
-  const issueIndex = parts.indexOf('issues');
-  if (plantIndex < 0 || issueIndex < 0) return null;
+function parseJsonObject(value) {
+  if (!value) return null;
+  if (typeof value === 'object') return value;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function parseJsonArray(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function getD1NotificationDelivery(row) {
+  return parseJsonObject(row?.notification_delivery_json);
+}
+
+async function getD1RoleAlert(env, plantId, alertId) {
+  const db = getD1Db(env);
+  if (!db || !plantId || !alertId) return null;
+  const result = await db.prepare(`
+    SELECT *
+    FROM role_feed_alerts
+    WHERE plant_id = ? AND alert_id = ?
+    LIMIT 1
+  `).bind(plantId, alertId).first();
+  if (!result) return null;
   return {
-    plantId: parts[plantIndex + 1] || '',
-    issueId: parts[issueIndex + 1] || ''
+    row: result,
+    createdBy: parseJsonObject(result.created_by_json),
+    raw: parseJsonObject(result.raw_json),
+    recipientUserIds: parseJsonArray(result.recipient_user_ids_json),
+    notificationDelivery: getD1NotificationDelivery(result)
   };
+}
+
+async function getD1Conversation(env, plantId, conversationId) {
+  const db = getD1Db(env);
+  if (!db || !plantId || !conversationId) return null;
+  const result = await db.prepare(`
+    SELECT *
+    FROM conversations
+    WHERE plant_id = ? AND conversation_id = ?
+    LIMIT 1
+  `).bind(plantId, conversationId).first();
+  if (!result) return null;
+  return {
+    row: result,
+    memberIds: parseJsonArray(result.member_ids_json),
+    lastMessage: parseJsonObject(result.last_message_json)
+  };
+}
+
+async function getD1ConversationMessage(env, plantId, conversationId, messageId) {
+  const db = getD1Db(env);
+  if (!db || !plantId || !conversationId || !messageId) return null;
+  const result = await db.prepare(`
+    SELECT *
+    FROM conversation_messages
+    WHERE plant_id = ? AND conversation_id = ? AND message_id = ?
+    LIMIT 1
+  `).bind(plantId, conversationId, messageId).first();
+  if (!result) return null;
+  return {
+    row: result,
+    attachments: parseJsonArray(result.attachments_json),
+    mentions: parseJsonArray(result.mentions_json),
+    notificationDelivery: getD1NotificationDelivery(result)
+  };
+}
+
+async function patchD1RoleAlertNotificationDelivery(env, plantId, alertId, delivery) {
+  const db = getD1Db(env);
+  if (!db || !plantId || !alertId || !delivery) return false;
+  try {
+    await db.prepare(`
+      UPDATE role_feed_alerts
+      SET notification_delivery_json = ?,
+          updated_at = ?
+      WHERE plant_id = ? AND alert_id = ?
+    `).bind(JSON.stringify(delivery), new Date().toISOString(), plantId, alertId).run();
+    return true;
+  } catch (error) {
+    if (String(error?.message || '').includes('no such column')) {
+      return false;
+    }
+    throw error;
+  }
+}
+
+async function patchD1ConversationMessageNotificationDelivery(env, plantId, conversationId, messageId, delivery) {
+  const db = getD1Db(env);
+  if (!db || !plantId || !conversationId || !messageId || !delivery) return false;
+  try {
+    await db.prepare(`
+      UPDATE conversation_messages
+      SET notification_delivery_json = ?
+      WHERE plant_id = ? AND conversation_id = ? AND message_id = ?
+    `).bind(JSON.stringify(delivery), plantId, conversationId, messageId).run();
+    return true;
+  } catch (error) {
+    if (String(error?.message || '').includes('no such column')) {
+      return false;
+    }
+    throw error;
+  }
 }
 
 function addRecipientId(set, value) {
@@ -1332,35 +1624,85 @@ function issueTimerMessage(issue, plantId, issueId) {
   };
 }
 
-async function listPendingIssueTimers(env, limit = 100) {
-  const rows = await runFirestoreQuery(env, {
-    from: [{ collectionId: 'issues', allDescendants: true }],
-    where: {
-      fieldFilter: {
-        field: { fieldPath: 'timer.notificationStatus' },
-        op: 'EQUAL',
-        value: { stringValue: 'pending' }
+async function listPendingIssueTimersD1(env, limit = 100) {
+  const db = getD1Db(env);
+  if (!db) return [];
+  try {
+    const result = await db.prepare(`
+      SELECT *
+      FROM issues
+      WHERE timer_enabled = 1
+        AND timer_notification_status = 'pending'
+      ORDER BY timer_due_at_ms ASC, created_at ASC
+      LIMIT ?
+    `).bind(limit).all();
+    const rows = Array.isArray(result?.results) ? result.results : [];
+    return rows.map(row => ({
+      source: 'd1',
+      plantId: row.plant_id,
+      issueId: row.issue_id,
+      issue: {
+        machineCode: row.machine_code,
+        machine: row.machine_code,
+        note: row.note,
+        createdByUid: row.created_by_uid,
+        ownerUid: row.assigned_user_uid,
+        assignedToUid: row.assigned_user_uid,
+        timer: {
+          enabled: Boolean(row.timer_enabled),
+          startedAt: row.timer_started_at || null,
+          dueAt: row.timer_due_at || null,
+          dueAtMs: row.timer_due_at_ms == null ? null : Number(row.timer_due_at_ms),
+          durationMinutes: row.timer_duration_minutes == null ? null : Number(row.timer_duration_minutes),
+          notificationStatus: row.timer_notification_status,
+          notificationOwnerUid: row.timer_notification_owner_uid,
+          notificationRequestedBy: parseJsonObject(row.timer_notification_requested_by_json),
+          notificationDelivery: parseJsonObject(row.timer_notification_delivery_json)
+        }
       }
-    },
-    limit
-  });
-  return rows
-    .map(row => row.document)
-    .filter(Boolean)
-    .map(doc => ({
-      path: firestoreRelativePathFromName(doc.name),
-      issue: firestoreDocToJs(doc)
     }));
+  } catch (error) {
+    if (String(error?.message || '').includes('no such column')) {
+      return [];
+    }
+    throw error;
+  }
+}
+
+async function patchD1IssueTimerNotification(env, plantId, issueId, timerPatch) {
+  const db = getD1Db(env);
+  if (!db || !plantId || !issueId || !timerPatch) return false;
+  try {
+    await db.prepare(`
+      UPDATE issues
+      SET timer_notification_status = ?,
+          timer_notification_delivery_json = ?,
+          updated_at = ?
+      WHERE plant_id = ? AND issue_id = ?
+    `).bind(
+      timerPatch.notificationStatus || null,
+      JSON.stringify(timerPatch.notificationDelivery || null),
+      new Date().toISOString(),
+      plantId,
+      issueId
+    ).run();
+    return true;
+  } catch (error) {
+    if (String(error?.message || '').includes('no such column')) {
+      return false;
+    }
+    throw error;
+  }
 }
 
 async function processDueIssueTimers(env) {
   const nowMs = Date.now();
-  const pending = await listPendingIssueTimers(env);
+  const pending = await listPendingIssueTimersD1(env);
   const summary = { checked: pending.length, due: 0, attempted: 0, sent: 0, failed: 0, skipped: 0, errors: [] };
 
   for (const entry of pending) {
-    const { path, issue } = entry;
-    const pathParts = plantIssuePathParts(path);
+    const { issue } = entry;
+    const pathParts = { plantId: entry.plantId, issueId: entry.issueId };
     const timer = issue?.timer || {};
     const dueAtMs = Number(timer.dueAtMs || 0);
     if (!pathParts?.plantId || !pathParts?.issueId || !timer.enabled || !Number.isFinite(dueAtMs) || dueAtMs > nowMs) {
@@ -1378,36 +1720,31 @@ async function processDueIssueTimers(env) {
       summary.failed += result.failed;
 
       const delivery = {
-        sentAt: new Date(),
+        sentAt: new Date().toISOString(),
         recipientUserIds: recipients,
         attempted: result.attempted,
         sent: result.sent,
         failed: result.failed,
         errors: result.errors || []
       };
-      await patchFirestoreDocument(env, path, {
-        timer: {
-          ...timer,
-          notificationStatus: result.sent > 0 ? 'sent' : 'failed',
-          notificationDelivery: delivery
-        }
+      await patchD1IssueTimerNotification(env, pathParts.plantId, pathParts.issueId, {
+        notificationStatus: result.sent > 0 ? 'sent' : 'failed',
+        notificationDelivery: delivery
       });
     } catch (error) {
       summary.failed += 1;
       summary.errors.push({ issueId: pathParts.issueId, error: error.message });
-      await patchFirestoreDocument(env, path, {
-        timer: {
-          ...timer,
-          notificationStatus: 'failed',
-          notificationDelivery: {
-            sentAt: new Date(),
-            recipientUserIds: recipients,
-            attempted: 0,
-            sent: 0,
-            failed: 1,
-            errors: [{ error: error.message }]
-          }
-        }
+      const failedDelivery = {
+        sentAt: new Date().toISOString(),
+        recipientUserIds: recipients,
+        attempted: 0,
+        sent: 0,
+        failed: 1,
+        errors: [{ error: error.message }]
+      };
+      await patchD1IssueTimerNotification(env, pathParts.plantId, pathParts.issueId, {
+        notificationStatus: 'failed',
+        notificationDelivery: failedDelivery
       }).catch(() => {});
     }
   }
@@ -1418,7 +1755,7 @@ async function processDueIssueTimers(env) {
 async function handleFcmDueIssueTimers(request, env) {
   if (request.method !== 'POST') return jsonResponse({ error: 'POST required' }, { status: 405 });
   try {
-    await authenticateFirebaseUser(request, env);
+    await authenticateAppRequest(request, env);
     const summary = await processDueIssueTimers(env);
     return jsonResponse({ ok: true, ...summary });
   } catch (e) {
@@ -1429,33 +1766,47 @@ async function handleFcmDueIssueTimers(request, env) {
 async function handleFcmRoleAlert(request, env) {
   if (request.method !== 'POST') return jsonResponse({ error: 'POST required' }, { status: 405 });
   try {
-    const user = await authenticateFirebaseUser(request, env);
+    const user = await authenticateAppRequest(request, env);
     const { plantId, alertId } = await request.json();
     if (!plantId || !alertId) return jsonResponse({ error: 'plantId and alertId are required.' }, { status: 400 });
 
-    const alert = await getFirestoreDocument(env, `plants/${plantId}/roleFeedAlerts/${alertId}`);
-    if (!alert) return jsonResponse({ error: 'Alert not found.' }, { status: 404 });
-    if (alert.notificationDelivery?.sentAt) return jsonResponse({ skipped: true, reason: 'already-sent' });
-    if (alert.createdBy?.uid !== user.localId) return jsonResponse({ error: 'Only the alert creator can trigger push delivery.' }, { status: 403 });
+    const d1Alert = await getD1RoleAlert(env, plantId, alertId);
+    if (!d1Alert) return jsonResponse({ error: 'Alert not found.' }, { status: 404 });
+    if (d1Alert.notificationDelivery?.sentAt) return jsonResponse({ skipped: true, reason: 'already-sent' });
 
-    const recipients = (Array.isArray(alert.recipientUserIds) ? alert.recipientUserIds : []).filter(uid => uid && uid !== user.localId);
+    const createdByUid = String(d1Alert.createdBy?.uid || d1Alert.raw?.createdBy?.uid || '').trim();
+    if (createdByUid !== user.localId) {
+      return jsonResponse({ error: 'Only the alert creator can trigger push delivery.' }, { status: 403 });
+    }
+
+    const recipients = (Array.isArray(d1Alert.recipientUserIds)
+      ? d1Alert.recipientUserIds
+      : [])
+      .filter(uid => uid && uid !== user.localId);
     const tokens = await tokensForUsers(env, recipients);
-    const title = alert.feedLabel || 'AP Tracker Alert';
-    const body = `Press ${alert.machine || 'Unknown'}${alert.note ? ` - ${alert.note}` : ''}`;
+    const title = d1Alert.row.feed_label || d1Alert.row.title || d1Alert.raw?.feedLabel || 'AP Tracker Alert';
+    const body = d1Alert.row.body || d1Alert.raw?.note || d1Alert.raw?.body || 'New alert';
     const result = await sendFcmToTokens(env, tokens, {
       notification: { title, body },
-      data: { type: 'role-alert', plantId, alertId, issueId: alert.issueId || '', title, body, url: '/index.html' },
+      data: {
+        type: 'role-alert',
+        plantId,
+        alertId,
+        issueId: d1Alert.row.issue_id || d1Alert.raw?.issueId || '',
+        title,
+        body,
+        url: '/index.html'
+      },
       link: '/index.html'
     });
-    await patchFirestoreDocument(env, `plants/${plantId}/roleFeedAlerts/${alertId}`, {
-      notificationDelivery: {
-        sentAt: new Date(),
-        attempted: result.attempted,
-        sent: result.sent,
-        failed: result.failed,
-        errors: result.errors || []
-      }
-    });
+    const delivery = {
+      sentAt: new Date().toISOString(),
+      attempted: result.attempted,
+      sent: result.sent,
+      failed: result.failed,
+      errors: result.errors || []
+    };
+    await patchD1RoleAlertNotificationDelivery(env, plantId, alertId, delivery);
     return jsonResponse({ ok: true, ...result });
   } catch (e) {
     return jsonResponse({ error: e.message }, { status: 500 });
@@ -1465,39 +1816,47 @@ async function handleFcmRoleAlert(request, env) {
 async function handleFcmConversationMessage(request, env) {
   if (request.method !== 'POST') return jsonResponse({ error: 'POST required' }, { status: 405 });
   try {
-    const user = await authenticateFirebaseUser(request, env);
+    const user = await authenticateAppRequest(request, env);
     const { plantId, conversationId, messageId } = await request.json();
     if (!plantId || !conversationId || !messageId) {
       return jsonResponse({ error: 'plantId, conversationId, and messageId are required.' }, { status: 400 });
     }
 
-    const [conversation, message] = await Promise.all([
-      getFirestoreDocument(env, `plants/${plantId}/conversations/${conversationId}`),
-      getFirestoreDocument(env, `plants/${plantId}/conversations/${conversationId}/messages/${messageId}`)
+    const [d1Conversation, d1Message] = await Promise.all([
+      getD1Conversation(env, plantId, conversationId),
+      getD1ConversationMessage(env, plantId, conversationId, messageId)
     ]);
-    if (!conversation || !message) return jsonResponse({ error: 'Conversation or message not found.' }, { status: 404 });
-    if (message.notificationDelivery?.sentAt) return jsonResponse({ skipped: true, reason: 'already-sent' });
-    if (message.sender?.uid !== user.localId) return jsonResponse({ error: 'Only the sender can trigger push delivery.' }, { status: 403 });
+    if (!d1Conversation || !d1Message) return jsonResponse({ error: 'Conversation or message not found.' }, { status: 404 });
+    if (d1Message.notificationDelivery?.sentAt) return jsonResponse({ skipped: true, reason: 'already-sent' });
 
-    const recipients = (Array.isArray(conversation.memberIds) ? conversation.memberIds : []).filter(uid => uid && uid !== user.localId);
+    const senderUid = String(d1Message.row.sender_uid || '').trim();
+    if (senderUid !== user.localId) {
+      return jsonResponse({ error: 'Only the sender can trigger push delivery.' }, { status: 403 });
+    }
+
+    const recipients = (Array.isArray(d1Conversation.memberIds)
+      ? d1Conversation.memberIds
+      : [])
+      .filter(uid => uid && uid !== user.localId);
     const tokens = await tokensForUsers(env, recipients);
-    const senderName = message.sender?.name || 'Someone';
-    const title = conversation.type === 'dm' ? `Message from ${senderName}` : (conversation.title || 'AP Tracker Message');
-    const body = message.text || (Array.isArray(message.attachments) && message.attachments.length ? 'Sent a photo' : 'New message');
+    const senderName = d1Message.row.sender_name || 'Someone';
+    const title = d1Conversation.row.type === 'dm'
+      ? `Message from ${senderName}`
+      : (d1Conversation.row.title || 'AP Tracker Message');
+    const body = d1Message.row.body || (d1Message.attachments.length ? 'Sent a photo' : 'New message');
     const result = await sendFcmToTokens(env, tokens, {
       notification: { title, body },
       data: { type: 'conversation-message', plantId, conversationId, messageId, title, body, url: '/index.html' },
       link: '/index.html'
     });
-    await patchFirestoreDocument(env, `plants/${plantId}/conversations/${conversationId}/messages/${messageId}`, {
-      notificationDelivery: {
-        sentAt: new Date(),
-        attempted: result.attempted,
-        sent: result.sent,
-        failed: result.failed,
-        errors: result.errors || []
-      }
-    });
+    const delivery = {
+      sentAt: new Date().toISOString(),
+      attempted: result.attempted,
+      sent: result.sent,
+      failed: result.failed,
+      errors: result.errors || []
+    };
+    await patchD1ConversationMessageNotificationDelivery(env, plantId, conversationId, messageId, delivery);
     return jsonResponse({ ok: true, ...result });
   } catch (e) {
     return jsonResponse({ error: e.message }, { status: 500 });
@@ -1515,7 +1874,7 @@ export default {
     }
 
     const d1ApiResponse = await handleD1ApiRequest(request, env, {
-      authenticateRequest: authenticateFirebaseUser
+      authenticateRequest: authenticateAppRequest
     });
     if (d1ApiResponse) {
       return d1ApiResponse;
@@ -1523,6 +1882,20 @@ export default {
 
     if (url.pathname === '/api/ocr') {
       return handleOcr(request, env);
+    }
+    if (url.pathname === '/api/session/exchange') {
+      return handleSessionExchange(request, env);
+    }
+    const attachmentUploadMatch = request.method === 'POST' && url.pathname.match(/^\/api\/plants\/([^/]+)\/attachments\/upload$/);
+    if (attachmentUploadMatch) {
+      return handleAttachmentUpload(request, env, decodeURIComponent(attachmentUploadMatch[1]));
+    }
+    const attachmentDeleteMatch = request.method === 'DELETE' && url.pathname.match(/^\/api\/plants\/([^/]+)\/attachments\/object$/);
+    if (attachmentDeleteMatch) {
+      return handleAttachmentDelete(request, env, decodeURIComponent(attachmentDeleteMatch[1]));
+    }
+    if (url.pathname === '/api/storage/object') {
+      return handleAttachmentObject(request, env);
     }
     if (url.pathname === '/api/ocr/google') {
       return handleOcrGoogle(request, env);

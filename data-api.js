@@ -69,6 +69,20 @@ export class SqlDataApi {
     });
   }
 
+  purchaseStoreItem(payload) {
+    return this.request('/me/store-purchases', {
+      method: 'POST',
+      body: payload
+    });
+  }
+
+  registerPushToken(payload) {
+    return this.request('/me/push-tokens', {
+      method: 'POST',
+      body: payload
+    });
+  }
+
   listPlants(params = {}) {
     const query = new URLSearchParams();
     Object.entries(params).forEach(([key, value]) => {
@@ -198,6 +212,20 @@ export class SqlDataApi {
     return this.request(`/plants/${encodeURIComponent(plantId)}/issues/${encodeURIComponent(issueId)}/attachments`, {
       method: 'POST',
       body: attachment
+    });
+  }
+
+  uploadPlantAttachment(plantId, payload) {
+    return this.request(`/plants/${encodeURIComponent(plantId)}/attachments/upload`, {
+      method: 'POST',
+      body: payload
+    });
+  }
+
+  deleteStoredAttachmentObject(plantId, payload) {
+    return this.request(`/plants/${encodeURIComponent(plantId)}/attachments/object`, {
+      method: 'DELETE',
+      body: payload
     });
   }
 
@@ -364,6 +392,8 @@ export class FirebaseDataApi {
   getCurrentUserContext() { return this.unavailable('getCurrentUserContext'); }
   updateCurrentUserContext() { return this.unavailable('updateCurrentUserContext'); }
   createAccessRequests() { return this.unavailable('createAccessRequests'); }
+  purchaseStoreItem() { return this.unavailable('purchaseStoreItem'); }
+  registerPushToken() { return this.unavailable('registerPushToken'); }
   listPlants() { return this.unavailable('listPlants'); }
   listPlantMembers() { return this.unavailable('listPlantMembers'); }
   updatePlantMember() { return this.unavailable('updatePlantMember'); }
@@ -386,6 +416,8 @@ export class FirebaseDataApi {
   appendIssueEvent() { return this.unavailable('appendIssueEvent'); }
   listIssueAttachments() { return this.unavailable('listIssueAttachments'); }
   createIssueAttachment() { return this.unavailable('createIssueAttachment'); }
+  uploadPlantAttachment() { return this.unavailable('uploadPlantAttachment'); }
+  deleteStoredAttachmentObject() { return this.unavailable('deleteStoredAttachmentObject'); }
   listNotes() { return this.unavailable('listNotes'); }
   createNote() { return this.unavailable('createNote'); }
   updateNote() { return this.unavailable('updateNote'); }

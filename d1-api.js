@@ -362,6 +362,7 @@ function buildCurrentStatusFromIssue(issue = {}) {
 function buildIssueRowFromClient(plantId, issueId, issue = {}) {
   const currentStatus = buildCurrentStatusFromIssue(issue);
   const lifecycle = issue.lifecycle || {};
+  const timer = issue.timer && typeof issue.timer === 'object' ? issue.timer : null;
   const createdAt = asIso(issue.createdAt || issue.openedAt || currentStatus.enteredAt || issue.dateTime, nowIso());
   const updatedAt = asIso(issue.updatedAt || issue.editedAt || issue.reopenDateTime || issue.resolveDateTime || currentStatus.enteredAt, createdAt);
 
@@ -413,6 +414,15 @@ function buildIssueRowFromClient(plantId, issueId, issue = {}) {
     created_by_name: stringOrNull(issue.createdBy?.name || issue.userName),
     updated_by_uid: stringOrNull(issue.updatedBy?.uid),
     updated_by_name: stringOrNull(issue.updatedBy?.name || issue.editedBy),
+    timer_enabled: asBoolInt(timer?.enabled),
+    timer_started_at: asIso(timer?.startedAt),
+    timer_due_at: asIso(timer?.dueAt),
+    timer_due_at_ms: numberOrNull(timer?.dueAtMs),
+    timer_duration_minutes: numberOrNull(timer?.durationMinutes),
+    timer_notification_status: stringOrNull(timer?.notificationStatus),
+    timer_notification_owner_uid: stringOrNull(timer?.notificationOwnerUid),
+    timer_notification_requested_by_json: jsonString(timer?.notificationRequestedBy || null),
+    timer_notification_delivery_json: jsonString(timer?.notificationDelivery || null),
     created_at: createdAt,
     updated_at: updatedAt,
     schema_version: numberOrZero(issue.schemaVersion || 2)
@@ -657,7 +667,9 @@ function issueUpsertStatement() {
       assigned_user_name, serial_required, serial_captured, serial_value, reporting_date_key, reporting_week_key,
       reporting_month_key, reporting_shift_key, workflow_state, workflow_state_by_entry_json, workflow_state_history_json,
       legacy_status_history_json, latest_note_preview, tags_json, photo_count, created_by_uid, created_by_name,
-      updated_by_uid, updated_by_name, created_at, updated_at, schema_version
+      updated_by_uid, updated_by_name, timer_enabled, timer_started_at, timer_due_at, timer_due_at_ms,
+      timer_duration_minutes, timer_notification_status, timer_notification_owner_uid, timer_notification_requested_by_json,
+      timer_notification_delivery_json, created_at, updated_at, schema_version
     ) VALUES (
       ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?, ?,
@@ -666,7 +678,7 @@ function issueUpsertStatement() {
       ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?, ?, ?,
-      ?, ?, ?, ?
+      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
     )
     ON CONFLICT(issue_id) DO UPDATE SET
       press_id = excluded.press_id,
@@ -714,6 +726,15 @@ function issueUpsertStatement() {
       created_by_name = excluded.created_by_name,
       updated_by_uid = excluded.updated_by_uid,
       updated_by_name = excluded.updated_by_name,
+      timer_enabled = excluded.timer_enabled,
+      timer_started_at = excluded.timer_started_at,
+      timer_due_at = excluded.timer_due_at,
+      timer_due_at_ms = excluded.timer_due_at_ms,
+      timer_duration_minutes = excluded.timer_duration_minutes,
+      timer_notification_status = excluded.timer_notification_status,
+      timer_notification_owner_uid = excluded.timer_notification_owner_uid,
+      timer_notification_requested_by_json = excluded.timer_notification_requested_by_json,
+      timer_notification_delivery_json = excluded.timer_notification_delivery_json,
       created_at = excluded.created_at,
       updated_at = excluded.updated_at,
       schema_version = excluded.schema_version
@@ -729,7 +750,9 @@ function issueUpsertParams(row) {
     row.assigned_user_name, row.serial_required, row.serial_captured, row.serial_value, row.reporting_date_key, row.reporting_week_key,
     row.reporting_month_key, row.reporting_shift_key, row.workflow_state, row.workflow_state_by_entry_json, row.workflow_state_history_json,
     row.legacy_status_history_json, row.latest_note_preview, row.tags_json, row.photo_count, row.created_by_uid, row.created_by_name,
-    row.updated_by_uid, row.updated_by_name, row.created_at, row.updated_at, row.schema_version
+    row.updated_by_uid, row.updated_by_name, row.timer_enabled, row.timer_started_at, row.timer_due_at, row.timer_due_at_ms,
+    row.timer_duration_minutes, row.timer_notification_status, row.timer_notification_owner_uid, row.timer_notification_requested_by_json,
+    row.timer_notification_delivery_json, row.created_at, row.updated_at, row.schema_version
   ];
 }
 
@@ -921,9 +944,12 @@ async function getCurrentUserContext(db, user) {
         u.sso_number,
         u.photo_url,
         u.last_plant_id,
+        u.theme_prefs_json,
         u.requested_plant_ids_json,
         u.profile_onboarding_json,
         u.global_lifetime_xp,
+        u.global_xp_spent,
+        u.inventory_json,
         pm.plant_id,
         pm.role,
         pm.is_active,
@@ -968,9 +994,21 @@ async function updateCurrentUserContext(db, user, patch = {}) {
     updates.push('requested_plant_ids_json = ?');
     values.push(jsonOrNull(Array.isArray(patch.requestedPlantIds) ? patch.requestedPlantIds : []));
   }
+  if (Object.prototype.hasOwnProperty.call(patch, 'themePrefs')) {
+    updates.push('theme_prefs_json = ?');
+    values.push(jsonOrNull(patch.themePrefs && typeof patch.themePrefs === 'object' ? patch.themePrefs : null));
+  }
   if (Object.prototype.hasOwnProperty.call(patch, 'profileOnboarding')) {
     updates.push('profile_onboarding_json = ?');
     values.push(jsonOrNull(patch.profileOnboarding || null));
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'globalXpSpent')) {
+    updates.push('global_xp_spent = ?');
+    values.push(numberOrZero(patch.globalXpSpent));
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'inventory')) {
+    updates.push('inventory_json = ?');
+    values.push(jsonOrNull(patch.inventory && typeof patch.inventory === 'object' ? patch.inventory : null));
   }
 
   if (updates.length) {
@@ -1075,6 +1113,126 @@ async function createAccessRequests(db, user, body = {}) {
   ));
   await db.batch(statements);
   return jsonResponse({ ok: true, plantIds });
+}
+
+async function purchaseStoreItem(db, user, body = {}) {
+  await upsertAuthUserRow(db, user);
+  const itemId = stringOrNull(body.itemId);
+  const price = Math.max(0, numberOrZero(body.price));
+  if (!itemId) throw Object.assign(new Error('Missing itemId.'), { status: 400 });
+  if (!(price > 0)) throw Object.assign(new Error('Missing or invalid price.'), { status: 400 });
+
+  const row = await first(
+    db,
+    `
+      SELECT global_lifetime_xp, global_xp_spent, inventory_json
+      FROM users
+      WHERE uid = ?
+      LIMIT 1
+    `,
+    user.uid
+  );
+  const lifetimeXp = Number(row?.global_lifetime_xp || 0);
+  const xpSpent = Number(row?.global_xp_spent || 0);
+  const inventory = row?.inventory_json ? (JSON.parse(row.inventory_json) || {}) : {};
+  const unlockedItems = Array.isArray(inventory?.unlockedItems) ? inventory.unlockedItems.map(v => String(v || '')).filter(Boolean) : [];
+  if (unlockedItems.includes(itemId)) {
+    return jsonResponse({
+      ok: true,
+      alreadyOwned: true,
+      user: {
+        uid: user.uid,
+        globalLifetimeXp: lifetimeXp,
+        globalXpSpent: xpSpent,
+        inventory: {
+          unlockedItems,
+          activeMascot: inventory?.activeMascot || null
+        }
+      }
+    });
+  }
+  if ((lifetimeXp - xpSpent) < price) {
+    throw Object.assign(new Error('insufficient_xp'), { status: 409 });
+  }
+  const nextInventory = {
+    ...inventory,
+    unlockedItems: [...new Set([...unlockedItems, itemId])]
+  };
+  const now = nowIso();
+  const result = await run(
+    db,
+    `
+      UPDATE users
+      SET
+        global_xp_spent = ?,
+        inventory_json = ?,
+        updated_at = ?
+      WHERE uid = ?
+        AND COALESCE(global_xp_spent, 0) = ?
+        AND (COALESCE(global_lifetime_xp, 0) - COALESCE(global_xp_spent, 0)) >= ?
+    `,
+    xpSpent + price,
+    jsonOrNull(nextInventory),
+    now,
+    user.uid,
+    xpSpent,
+    price
+  );
+  if (!Number(result?.meta?.changes || 0)) {
+    throw Object.assign(new Error('insufficient_xp'), { status: 409 });
+  }
+  return jsonResponse({
+    ok: true,
+    alreadyOwned: false,
+    itemId,
+    user: {
+      uid: user.uid,
+      globalLifetimeXp: lifetimeXp,
+      globalXpSpent: xpSpent + price,
+      inventory: {
+        unlockedItems: nextInventory.unlockedItems,
+        activeMascot: nextInventory?.activeMascot || null
+      }
+    }
+  });
+}
+
+async function registerPushToken(db, user, body = {}) {
+  await upsertAuthUserRow(db, user);
+  const token = stringOrNull(body.token);
+  const tokenId = stringOrNull(body.tokenId);
+  if (!token || !tokenId) throw Object.assign(new Error('token and tokenId are required.'), { status: 400 });
+  const now = nowIso();
+  await run(
+    db,
+    `
+      INSERT INTO user_push_tokens (
+        uid, token_id, token, provider, platform, user_agent, notification_permission,
+        plant_ids_json, current_plant_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(uid, token_id) DO UPDATE SET
+        token = excluded.token,
+        provider = excluded.provider,
+        platform = excluded.platform,
+        user_agent = excluded.user_agent,
+        notification_permission = excluded.notification_permission,
+        plant_ids_json = excluded.plant_ids_json,
+        current_plant_id = excluded.current_plant_id,
+        updated_at = excluded.updated_at
+    `,
+    user.uid,
+    tokenId,
+    token,
+    stringOrNull(body.provider) || 'fcm',
+    stringOrNull(body.platform) || 'web',
+    stringOrNull(body.userAgent),
+    stringOrNull(body.notificationPermission),
+    jsonOrNull(Array.isArray(body.plantIds) ? body.plantIds : []),
+    stringOrNull(body.currentPlantId),
+    now,
+    now
+  );
+  return jsonResponse({ ok: true, tokenId });
 }
 
 async function listPlants(db, user, request) {
@@ -3073,6 +3231,8 @@ export async function handleD1ApiRequest(request, env, { authenticateRequest } =
   try {
     const meMatch = request.method === 'GET' && url.pathname === '/api/me';
     const meUpdateMatch = request.method === 'PATCH' && url.pathname === '/api/me';
+    const meStorePurchaseMatch = request.method === 'POST' && url.pathname === '/api/me/store-purchases';
+    const mePushTokenMatch = request.method === 'POST' && url.pathname === '/api/me/push-tokens';
     const accessRequestCreateSelfMatch = request.method === 'POST' && url.pathname === '/api/access-requests';
     const plantsListMatch = request.method === 'GET' && url.pathname === '/api/plants';
     const plantCreateMatch = request.method === 'POST' && url.pathname === '/api/plants';
@@ -3126,7 +3286,7 @@ export async function handleD1ApiRequest(request, env, { authenticateRequest } =
     const wikiPageDeleteMatch = request.method === 'DELETE' && url.pathname.match(/^\/api\/plants\/([^/]+)\/wiki-pages\/([^/]+)$/);
     const wikiAttachmentCreateMatch = request.method === 'POST' && url.pathname.match(/^\/api\/plants\/([^/]+)\/wiki-pages\/([^/]+)\/attachments$/);
 
-    if (!meMatch && !meUpdateMatch && !accessRequestCreateSelfMatch && !plantsListMatch && !plantCreateMatch && !bootstrapMatch && !dailyScheduleMatch && !plantMembersMatch && !plantMemberCreateMatch && !plantMemberUpdateMatch && !plantMemberDeleteMatch && !accessRequestsMatch && !accessRequestUpdateMatch && !statusConfigMatch && !statusConfigUpdateMatch && !pressConfigMatch && !pressConfigUpdateMatch && !storeConfigMatch && !storeConfigUpdateMatch && !roleAlertRoutingMatch && !roleAlertRoutingUpdateMatch && !gamificationMatch && !gamificationAwardMatch && !gamificationAdminMatch && !gamificationAdminUpdateMatch && !gamificationLeaderboardResetMatch && !userDirectoryMatch && !roleAlertsMatch && !roleAlertCreateMatch && !roleAlertUpdateMatch && !issuesMatch && !issueCreateMatch && !issueMatch && !issueUpdateMatch && !issueDeleteMatch && !eventsMatch && !attachmentsMatch && !notesMatch && !noteCreateMatch && !noteUpdateMatch && !noteDeleteMatch && !noteAttachmentsMatch && !noteAttachmentCreateMatch && !noteAttachmentDeleteMatch && !conversationsMatch && !conversationCreateMatch && !conversationMessagesMatch && !conversationMessageCreateMatch && !conversationReadMatch && !wikiPagesMatch && !wikiPageMatch && !wikiRevisionSaveMatch && !wikiPageDeleteMatch && !wikiAttachmentCreateMatch) {
+    if (!meMatch && !meUpdateMatch && !meStorePurchaseMatch && !mePushTokenMatch && !accessRequestCreateSelfMatch && !plantsListMatch && !plantCreateMatch && !bootstrapMatch && !dailyScheduleMatch && !plantMembersMatch && !plantMemberCreateMatch && !plantMemberUpdateMatch && !plantMemberDeleteMatch && !accessRequestsMatch && !accessRequestUpdateMatch && !statusConfigMatch && !statusConfigUpdateMatch && !pressConfigMatch && !pressConfigUpdateMatch && !storeConfigMatch && !storeConfigUpdateMatch && !roleAlertRoutingMatch && !roleAlertRoutingUpdateMatch && !gamificationMatch && !gamificationAwardMatch && !gamificationAdminMatch && !gamificationAdminUpdateMatch && !gamificationLeaderboardResetMatch && !userDirectoryMatch && !roleAlertsMatch && !roleAlertCreateMatch && !roleAlertUpdateMatch && !issuesMatch && !issueCreateMatch && !issueMatch && !issueUpdateMatch && !issueDeleteMatch && !eventsMatch && !attachmentsMatch && !notesMatch && !noteCreateMatch && !noteUpdateMatch && !noteDeleteMatch && !noteAttachmentsMatch && !noteAttachmentCreateMatch && !noteAttachmentDeleteMatch && !conversationsMatch && !conversationCreateMatch && !conversationMessagesMatch && !conversationMessageCreateMatch && !conversationReadMatch && !wikiPagesMatch && !wikiPageMatch && !wikiRevisionSaveMatch && !wikiPageDeleteMatch && !wikiAttachmentCreateMatch) {
       return null;
     }
 
@@ -3140,6 +3300,12 @@ export async function handleD1ApiRequest(request, env, { authenticateRequest } =
     }
     if (meUpdateMatch) {
       return updateCurrentUserContext(db, user, await request.json());
+    }
+    if (meStorePurchaseMatch) {
+      return purchaseStoreItem(db, user, await request.json());
+    }
+    if (mePushTokenMatch) {
+      return registerPushToken(db, user, await request.json());
     }
     if (accessRequestCreateSelfMatch) {
       return createAccessRequests(db, user, await request.json());

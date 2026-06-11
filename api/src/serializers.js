@@ -33,9 +33,12 @@ export function serializeUserContextRows(rows = []) {
       ssoNumber: first.sso_number,
       photoUrl: first.photo_url,
       lastPlantId: first.last_plant_id,
+      themePrefs: parseJson(first.theme_prefs_json, null),
       requestedPlantIds: parseJson(first.requested_plant_ids_json, []),
       profileOnboarding: parseJson(first.profile_onboarding_json, null),
-      globalLifetimeXp: Number(first.global_lifetime_xp || 0)
+      globalLifetimeXp: Number(first.global_lifetime_xp || 0),
+      globalXpSpent: Number(first.global_xp_spent || 0),
+      inventory: parseJson(first.inventory_json, null)
     },
     plants: rows
       .filter(row => row.plant_id)
@@ -321,6 +324,19 @@ export function serializeIssue(row) {
     createdByName: row.created_by_name,
     updatedByUid: row.updated_by_uid,
     updatedByName: row.updated_by_name,
+    timer: row.timer_enabled
+      ? {
+          enabled: Boolean(row.timer_enabled),
+          startedAt: toIso(row.timer_started_at),
+          dueAt: toIso(row.timer_due_at),
+          dueAtMs: row.timer_due_at_ms == null ? null : Number(row.timer_due_at_ms),
+          durationMinutes: row.timer_duration_minutes == null ? null : Number(row.timer_duration_minutes),
+          notificationStatus: row.timer_notification_status,
+          notificationOwnerUid: row.timer_notification_owner_uid,
+          notificationRequestedBy: parseJson(row.timer_notification_requested_by_json, null),
+          notificationDelivery: parseJson(row.timer_notification_delivery_json, null)
+        }
+      : null,
     createdAt: toIso(row.created_at),
     updatedAt: toIso(row.updated_at),
     schemaVersion: row.schema_version

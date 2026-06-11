@@ -6,6 +6,7 @@ import { getMessaging, getToken, isSupported as isMessagingSupported, onMessage 
 import { alphaColor, esc, extFromContentType, localDateStr, parseDataUrlMeta } from "./app-utils.js";
 import { createDropdownController } from "./dropdown-ui.js";
 import { createDataApi, DATA_BACKEND_SQL, selectedDataBackend } from "./data-api.js";
+import { createApiSessionClient } from "./auth-session-client.js";
 import { createFirebasePathHelpers } from "./firebase-paths.js";
 import { initExportTool } from "./export-tool.js";
 import { initIssueReminders } from "./issue-reminders.js";
@@ -146,11 +147,16 @@ const runTransaction = async (...args) => {
   markLocalWriteQueued();
   return out;
 };
+const apiSessionClient = createApiSessionClient({
+  async getFirebaseIdToken() {
+    if (!currentUser?.getIdToken) throw new Error('Sign in is required.');
+    return currentUser.getIdToken();
+  }
+});
 const dataApi = createDataApi({
   sql: {
     async getIdToken() {
-      if (!currentUser?.getIdToken) throw new Error('Sign in is required.');
-      return currentUser.getIdToken();
+      return apiSessionClient.getAccessToken();
     }
   }
 });
@@ -174,13 +180,19 @@ async function safeSqlRead(label, loader) {
   }
 }
 
+async function requireSqlRead(label, loader, missingMessage = '') {
+  const payload = await safeSqlRead(label, loader);
+  if (payload) return payload;
+  throw new Error(missingMessage || `D1 read failed for ${label}.`);
+}
+
 async function safeSqlBootstrapRead(label, loader) {
   if (!shouldUseSqlBootstrap()) return null;
   try {
     return await loader();
   } catch (error) {
-    console.warn(`SQL bootstrap read failed for ${label}; falling back to Firebase.`, error);
-    return null;
+    console.error(`SQL bootstrap read failed for ${label}. D1 is required for bootstrap in SQL mode.`, error);
+    throw error;
   }
 }
 
@@ -838,14 +850,16 @@ function scheduleIssueOutboxFlush() {
   }, 0);
 }
 
-async function postJsonWithAuth(url, payload = {}) {
-  if (!currentUser?.getIdToken) throw new Error('Sign in is required.');
-  const idToken = await currentUser.getIdToken();
+async function postJsonWithAuth(url, payload = {}, options = {}) {
+  const idToken = await apiSessionClient.getAccessToken();
+  if (!idToken) throw new Error('Sign in is required.');
+  const extraHeaders = options && typeof options.headers === 'object' ? options.headers : {};
   const res = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${idToken}`
+      'Authorization': `Bearer ${idToken}`,
+      ...extraHeaders
     },
     body: JSON.stringify(payload)
   });
@@ -909,18 +923,31 @@ async function registerFcmToken({ requestPermission = false } = {}) {
   if (!token) throw new Error('No FCM registration token was returned.');
 
   const tokenId = fcmTokenDocId(token);
-  await setDoc(doc(db, 'users', currentUser.uid, 'fcmTokens', tokenId), {
-    token,
-    tokenId,
-    provider: 'fcm',
-    platform: 'web',
-    userAgent: navigator.userAgent || '',
-    notificationPermission: Notification.permission,
-    plantIds: userPlants.map(p => p.id).filter(Boolean),
-    currentPlantId: currentPlantId || null,
-    updatedAt: serverTimestamp(),
-    createdAt: serverTimestamp()
-  }, { merge: true });
+  if (shouldUseSqlBootstrap()) {
+    await dataApi.registerPushToken({
+      token,
+      tokenId,
+      provider: 'fcm',
+      platform: 'web',
+      userAgent: navigator.userAgent || '',
+      notificationPermission: Notification.permission,
+      plantIds: userPlants.map(p => p.id).filter(Boolean),
+      currentPlantId: currentPlantId || null
+    });
+  } else {
+    await setDoc(doc(db, 'users', currentUser.uid, 'fcmTokens', tokenId), {
+      token,
+      tokenId,
+      provider: 'fcm',
+      platform: 'web',
+      userAgent: navigator.userAgent || '',
+      notificationPermission: Notification.permission,
+      plantIds: userPlants.map(p => p.id).filter(Boolean),
+      currentPlantId: currentPlantId || null,
+      updatedAt: serverTimestamp(),
+      createdAt: serverTimestamp()
+    }, { merge: true });
+  }
   return token;
 }
 
@@ -935,7 +962,11 @@ function scheduleFcmTokenRegistration() {
 async function sendRoleAlertPush(alertId) {
   if (!alertId || DEMO_MODE || NO_AUTH_MODE) return;
   try {
-    await postJsonWithAuth('/api/fcm/role-alert', { plantId: currentPlantId, alertId });
+    await postJsonWithAuth('/api/fcm/role-alert', { plantId: currentPlantId, alertId }, {
+      headers: shouldUseSqlStagingReads(currentPlantId)
+        ? { 'x-ap-data-backend': 'sql' }
+        : {}
+    });
   } catch (e) {
     console.warn('Role alert push failed', e);
   }
@@ -944,7 +975,11 @@ async function sendRoleAlertPush(alertId) {
 async function sendConversationPush(conversationId, messageId) {
   if (!conversationId || !messageId || DEMO_MODE || NO_AUTH_MODE) return;
   try {
-    await postJsonWithAuth('/api/fcm/conversation-message', { plantId: currentPlantId, conversationId, messageId });
+    await postJsonWithAuth('/api/fcm/conversation-message', { plantId: currentPlantId, conversationId, messageId }, {
+      headers: shouldUseSqlStagingReads(currentPlantId)
+        ? { 'x-ap-data-backend': 'sql' }
+        : {}
+    });
   } catch (e) {
     console.warn('Conversation push failed', e);
   }
@@ -1110,7 +1145,10 @@ async function loadPlantMembersForAlerts() {
   if (!currentPlantId) return [];
   if (shouldUseSqlStagingReads(currentPlantId)) {
     const payload = await safeSqlRead(`plant members ${currentPlantId}`, () => dataApi.listPlantMembers(currentPlantId, { active: true }));
-    return Array.isArray(payload?.members) ? payload.members : [];
+    if (!Array.isArray(payload?.members)) {
+      throw new Error(`Plant members are missing in D1 for plant ${currentPlantId}.`);
+    }
+    return payload.members;
   }
   const membersSnap = await getDocs(collection(db, 'plants', currentPlantId, 'members'));
   return membersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -1171,24 +1209,26 @@ async function getRoleAlertRoutingRules() {
     && (now - _roleAlertRulesCache.fetchedAt) < ROLE_ALERT_RULES_CACHE_MS) {
     return _roleAlertRulesCache.rules;
   }
-  try {
-    if (shouldUseSqlStagingReads(currentPlantId)) {
-      const sqlBootstrap = await ensureSqlPlantBootstrap(currentPlantId);
-      const bootstrapRules = _normalizeRoleAlertRules(sqlBootstrap?.roleAlertRouting?.rules || null);
-      if (bootstrapRules.length > 0) {
-        _roleAlertRulesCache.plantId = currentPlantId;
-        _roleAlertRulesCache.fetchedAt = now;
-        _roleAlertRulesCache.rules = bootstrapRules;
-        return bootstrapRules;
-      }
+  if (shouldUseSqlStagingReads(currentPlantId)) {
+    const sqlBootstrap = await ensureSqlPlantBootstrap(currentPlantId);
+    const bootstrapRules = _normalizeRoleAlertRules(sqlBootstrap?.roleAlertRouting?.rules || null);
+    if (bootstrapRules.length === 0) {
       const payload = await safeSqlRead(`role alert routing ${currentPlantId}`, () => dataApi.getRoleAlertRouting(currentPlantId));
       const sqlRules = _normalizeRoleAlertRules(payload?.roleAlertRouting?.rules || null);
-      const rules = sqlRules.length > 0 ? sqlRules : _normalizeRoleAlertRules(ROLE_ALERT_ROUTING_RULES_DEFAULT);
+      if (sqlRules.length === 0) {
+        throw new Error(`Role alert routing is missing in D1 for plant ${currentPlantId}.`);
+      }
       _roleAlertRulesCache.plantId = currentPlantId;
       _roleAlertRulesCache.fetchedAt = now;
-      _roleAlertRulesCache.rules = rules;
-      return rules;
+      _roleAlertRulesCache.rules = sqlRules;
+      return sqlRules;
     }
+    _roleAlertRulesCache.plantId = currentPlantId;
+    _roleAlertRulesCache.fetchedAt = now;
+    _roleAlertRulesCache.rules = bootstrapRules;
+    return bootstrapRules;
+  }
+  try {
     const snap = await getDoc(doc(db, 'plants', currentPlantId, 'config', 'roleAlertRouting'));
     const dbRules = _normalizeRoleAlertRules(snap.exists() ? snap.data()?.rules : null);
     const rules = dbRules.length > 0 ? dbRules : _normalizeRoleAlertRules(ROLE_ALERT_ROUTING_RULES_DEFAULT);
@@ -1510,7 +1550,11 @@ window.clearRoleAlertBadge = function() {
 async function _loadActiveRoleAlertsForCurrentUser() {
   if (!currentPlantId || !currentUser?.uid) return [];
   if (shouldUseSqlStagingReads(currentPlantId)) {
-    const payload = await safeSqlRead(`role alerts ${currentPlantId}`, () => dataApi.listRoleAlerts(currentPlantId, { limit: 80 }));
+    const payload = await requireSqlRead(
+      `role alerts ${currentPlantId}`,
+      () => dataApi.listRoleAlerts(currentPlantId, { limit: 80 }),
+      `Role alerts are missing in D1 for plant ${currentPlantId}.`
+    );
     const sourceAlerts = Array.isArray(payload?.alerts) ? payload.alerts : [];
     const alerts = [];
     for (const alert of sourceAlerts) {
@@ -2180,10 +2224,20 @@ async function loadDailyScheduleIndex(date) {
   if (dailyScheduleIndexState && dailyScheduleIndexState.plantId === currentPlantId && dailyScheduleIndexState.date === date) {
     return dailyScheduleIndexState;
   }
-  const sqlPayload = await safeSqlRead(`daily schedule ${currentPlantId}:${date}`, () => dataApi.getDailySchedule(currentPlantId, date));
+  const sqlPayload = shouldUseSqlStagingReads(currentPlantId)
+    ? await requireSqlRead(
+        `daily schedule ${currentPlantId}:${date}`,
+        () => dataApi.getDailySchedule(currentPlantId, date),
+        `Daily schedule lookup failed in D1 for plant ${currentPlantId} on ${date}.`
+      )
+    : null;
   if (sqlPayload?.schedule) {
     const { scheduled, lookupByPress } = buildScheduleIndexFromSectionRows(sqlPayload.sections || {});
     dailyScheduleIndexState = { plantId: currentPlantId, date, scheduled, lookupByPress };
+    return dailyScheduleIndexState;
+  }
+  if (shouldUseSqlStagingReads(currentPlantId)) {
+    dailyScheduleIndexState = { plantId: currentPlantId, date, scheduled: null, lookupByPress: new Map() };
     return dailyScheduleIndexState;
   }
   const dailyRef = doc(db, 'plants', currentPlantId, 'dailySchedules', date);
@@ -2449,6 +2503,54 @@ async function readFileAsDataUrl(file) {
   });
 }
 
+function isCloudflareStoredAttachment(att) {
+  const bucket = String(att?.storageBucket || '').trim().toLowerCase();
+  const url = String(att?.downloadUrl || att?.downloadURL || att?.url || att?.dataUrl || '').trim();
+  return bucket === 'r2' || url.includes('/api/storage/object?');
+}
+
+async function resolveAttachmentUrl(att) {
+  if (!att) return '';
+  const directUrl = String(att.downloadUrl || att.downloadURL || att.url || att.dataUrl || '').trim();
+  if (directUrl) return directUrl;
+  if (isCloudflareStoredAttachment(att)) return '';
+  if (!att.storagePath) return '';
+  try {
+    const attStorage = att.storageBucket ? getStorage(app, `gs://${att.storageBucket}`) : storage;
+    return await getDownloadURL(storageRef(attStorage, att.storagePath));
+  } catch (_) {
+    return '';
+  }
+}
+
+async function uploadAttachmentToPreferredStorage(plantId, payload) {
+  const useSqlStorage = shouldUseSqlStagingReads(plantId);
+  if (useSqlStorage) {
+    try {
+      const response = await dataApi.uploadPlantAttachment(plantId, payload);
+      if (response?.attachment?.storagePath) {
+        return response.attachment;
+      }
+    } catch (err) {
+      const isConfigGap = Number(err?.status || 0) === 501;
+      if (!isConfigGap) {
+        console.warn('Cloudflare attachment upload failed, falling back to Firebase Storage.', err);
+      }
+    }
+  }
+  return null;
+}
+
+async function deleteStoredAttachmentBlob(plantId, att) {
+  if (!att?.storagePath) return;
+  if (isCloudflareStoredAttachment(att) && shouldUseSqlStagingReads(plantId)) {
+    await dataApi.deleteStoredAttachmentObject(plantId, { storagePath: att.storagePath });
+    return;
+  }
+  const attStorage = att.storageBucket ? getStorage(app, `gs://${att.storageBucket}`) : storage;
+  await deleteObject(storageRef(attStorage, att.storagePath));
+}
+
 async function uploadIssuePhotosToStorage(issueId, photos, plantId = currentPlantId) {
   const out = [];
   for (let idx = 0; idx < (photos || []).length; idx++) {
@@ -2459,6 +2561,28 @@ async function uploadIssuePhotosToStorage(issueId, photos, plantId = currentPlan
     if (!meta) { out.push(p); continue; }
     const ext = extFromContentType(meta.contentType);
     const fileName = `${Date.now()}_${idx}.${ext}`;
+    const uploaded = await uploadAttachmentToPreferredStorage(plantId, {
+      scope: 'issue',
+      issueId,
+      fileName,
+      contentType: meta.contentType,
+      dataUrl: src
+    });
+    if (uploaded?.storagePath) {
+      out.push({
+        name: p.name || uploaded.fileName || fileName,
+        dataUrl: uploaded.downloadUrl || uploaded.url || '',
+        downloadUrl: uploaded.downloadUrl || uploaded.url || '',
+        storagePath: uploaded.storagePath,
+        storageBucket: uploaded.storageBucket || 'r2',
+        contentType: uploaded.contentType || meta.contentType,
+        sizeBytes: Number(uploaded.sizeBytes || meta.sizeBytes || 0),
+        source: 'r2',
+        takenAt: p.takenAt || p.timestamp || '',
+        uploadedAt: uploaded.uploadedAt || new Date().toISOString()
+      });
+      continue;
+    }
     const path = `plants/${plantId}/issues/${issueId}/photos/${fileName}`;
     let sRef = storageRef(storage, path);
     let url = '';
@@ -2476,6 +2600,7 @@ async function uploadIssuePhotosToStorage(issueId, photos, plantId = currentPlan
     out.push({
       name: p.name || fileName,
       dataUrl: url, // keep existing UI field name for backward-compatible rendering
+      downloadUrl: url,
       storagePath: path,
       storageBucket: sRef.bucket,
       contentType: meta.contentType,
@@ -2518,34 +2643,29 @@ const issueDetailsHydrationInFlight = new Map(); // issueId -> Promise<void>
 async function fetchAttachmentPhotos(issueId) {
   if (attachmentPhotoCache.has(issueId)) return attachmentPhotoCache.get(issueId);
   if (shouldUseSqlStagingReads()) {
-    const payload = await safeSqlRead(`attachments ${issueId}`, () => dataApi.listIssueAttachments(currentPlantId, issueId));
-    if (payload) {
-      const photos = [];
-      for (const att of (payload.attachments || [])) {
-        if (!att?.storagePath && !att?.downloadUrl) continue;
-        let downloadUrl = att.downloadUrl || '';
-        if (!downloadUrl && att.storagePath) {
-          try {
-            const attStorage = att.storageBucket ? getStorage(app, `gs://${att.storageBucket}`) : storage;
-            downloadUrl = await getDownloadURL(storageRef(attStorage, att.storagePath));
-          } catch (_) {
-            downloadUrl = '';
-          }
-        }
-        photos.push({
-          name: att.fileName || att.attachmentId || issueId,
-          dataUrl: downloadUrl,
-          storagePath: att.storagePath || '',
-          storageBucket: att.storageBucket || '',
-          contentType: att.contentType || '',
-          sizeBytes: Number(att.sizeBytes || 0),
-          takenAt: '',
-          uploadedAt: att.uploadedAt || ''
-        });
-      }
-      attachmentPhotoCache.set(issueId, photos);
-      return photos;
+    const payload = await requireSqlRead(
+      `attachments ${issueId}`,
+      () => dataApi.listIssueAttachments(currentPlantId, issueId),
+      `Issue attachments are missing in D1 for issue ${issueId}.`
+    );
+    const photos = [];
+    for (const att of (payload?.attachments || [])) {
+      if (!att?.storagePath && !att?.downloadUrl) continue;
+      const downloadUrl = await resolveAttachmentUrl(att);
+      photos.push({
+        name: att.fileName || att.attachmentId || issueId,
+        dataUrl: downloadUrl,
+        downloadUrl,
+        storagePath: att.storagePath || '',
+        storageBucket: att.storageBucket || '',
+        contentType: att.contentType || '',
+        sizeBytes: Number(att.sizeBytes || 0),
+        takenAt: '',
+        uploadedAt: att.uploadedAt || ''
+      });
     }
+    attachmentPhotoCache.set(issueId, photos);
+    return photos;
   }
   const snap = await getDocs(issueAttachmentsCol(issueId));
   if (snap.empty) {
@@ -2557,11 +2677,11 @@ async function fetchAttachmentPhotos(issueId) {
     const a = d.data() || {};
     if (!a.storagePath) continue;
     try {
-      const attStorage = a.storageBucket ? getStorage(app, `gs://${a.storageBucket}`) : storage;
-      const url = a.downloadURL || await getDownloadURL(storageRef(attStorage, a.storagePath));
+      const url = await resolveAttachmentUrl(a);
       photos.push({
         name: a.fileName || d.id,
         dataUrl: url,
+        downloadUrl: url,
         storagePath: a.storagePath,
         storageBucket: a.storageBucket || '',
         contentType: a.contentType || '',
@@ -2617,12 +2737,14 @@ function normalizeEventHistory(issue, events) {
 async function fetchIssueEventHistory(issue) {
   if (issueEventHistoryCache.has(issue.id)) return issueEventHistoryCache.get(issue.id);
   if (shouldUseSqlStagingReads()) {
-    const payload = await safeSqlRead(`events ${issue.id}`, () => dataApi.listIssueEvents(currentPlantId, issue.id));
-    if (payload) {
-      const history = normalizeEventHistory(issue, payload.events || []);
-      issueEventHistoryCache.set(issue.id, history);
-      return history;
-    }
+    const payload = await requireSqlRead(
+      `events ${issue.id}`,
+      () => dataApi.listIssueEvents(currentPlantId, issue.id),
+      `Issue events are missing in D1 for issue ${issue.id}.`
+    );
+    const history = normalizeEventHistory(issue, payload?.events || []);
+    issueEventHistoryCache.set(issue.id, history);
+    return history;
   }
   const q = query(issueEventsCol(issue.id), orderBy('eventAt', 'asc'));
   const snap = await getDocs(q);
@@ -2702,9 +2824,8 @@ async function loadUserPlants() {
   try {
     const sqlContext = await safeSqlBootstrapRead('current user context', () => dataApi.getCurrentUserContext());
     let userData = {};
-    let usingSqlBootstrap = false;
+    const usingSqlBootstrap = shouldUseSqlBootstrap();
     if (sqlContext?.user) {
-      usingSqlBootstrap = true;
       userData = {
         displayName: sqlContext.user.displayName || currentUser?.displayName || currentUser?.email || '',
         email: sqlContext.user.email || currentUser?.email || '',
@@ -2712,11 +2833,14 @@ async function loadUserPlants() {
         fullName: sqlContext.user.fullName || '',
         ssoNumber: sqlContext.user.ssoNumber || '',
         lastPlant: sqlContext.user.lastPlantId || '',
+        themePrefs: sqlContext.user.themePrefs || null,
         requestedPlantIds: Array.isArray(sqlContext.user.requestedPlantIds) ? sqlContext.user.requestedPlantIds : [],
         profileOnboarding: sqlContext.user.profileOnboarding || null,
-        globalLifetimeXp: Number(sqlContext.user.globalLifetimeXp || 0)
+        globalLifetimeXp: Number(sqlContext.user.globalLifetimeXp || 0),
+        globalXpSpent: Number(sqlContext.user.globalXpSpent || 0),
+        inventory: sqlContext.user.inventory || null
       };
-    } else {
+    } else if (!usingSqlBootstrap) {
       const userSnap = await getDoc(doc(db, 'users', currentUser.uid));
       userData = userSnap.exists() ? userSnap.data() : {};
     }
@@ -2748,6 +2872,14 @@ async function loadUserPlants() {
         ...currentUserProfileData,
         lastPlant: currentPlantId,
         plantIds: userPlants.map(p => p.id)
+      };
+    } else if (usingSqlBootstrap) {
+      userPlants = [];
+      currentPlantId = null;
+      currentUserProfileData = {
+        ...currentUserProfileData,
+        lastPlant: '',
+        plantIds: []
       };
     } else if (!usingSqlBootstrap && Array.isArray(userData.plantIds) && userData.plantIds.length > 0) {
       // ── New structure: fetch each plant doc for name/location ──
@@ -2801,6 +2933,9 @@ async function loadAvailablePlantsForOnboarding() {
       }))
       .filter(p => p.isActive)
       .sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
+  }
+  if (shouldUseSqlBootstrap()) {
+    return [...userPlants].sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
   }
   try {
     const snap = await getDocs(collection(db, 'plants'));
@@ -2894,6 +3029,17 @@ async function loadCurrentMember(plantId) {
     applyRoleUI();
     return;
   }
+  if (shouldUseSqlStagingReads(plantId)) {
+    const payload = await safeSqlRead(`member ${plantId}:${currentUser.uid}`, () => dataApi.listPlantMembers(plantId, { active: false }));
+    const member = (payload?.members || []).find(entry => (entry.uid || entry.id) === currentUser.uid) || null;
+    if (!member || member.isActive === false) {
+      throw new Error(`Current user is not an active D1 member for plant ${plantId}.`);
+    }
+    currentUserPermissions = { ...DEFAULT_PERMISSIONS, ...(member.permissions || {}) };
+    currentUserRole = normalizeMemberRole(member.role) || 'editor';
+    applyRoleUI();
+    return;
+  }
   try {
     const snap = await getDoc(plantMemberDocRef(plantId, currentUser.uid));
     if (snap.exists()) {
@@ -2940,6 +3086,16 @@ async function loadPlantPresses() {
   const sqlBootstrap = await ensureSqlPlantBootstrap(currentPlantId);
   if (sqlBootstrap?.pressConfig?.presses) {
     PRESSES = sqlBootstrap.pressConfig.presses;
+    ALL_MACHINES = Object.values(PRESSES).flat();
+    return;
+  }
+  if (shouldUseSqlStagingReads(currentPlantId)) {
+    const payload = await safeSqlRead(`press config ${currentPlantId}`, () => dataApi.getPressConfig(currentPlantId));
+    const sqlPresses = payload?.pressConfig?.presses || null;
+    if (!sqlPresses || typeof sqlPresses !== 'object') {
+      throw new Error(`Press config is missing in D1 for plant ${currentPlantId}.`);
+    }
+    PRESSES = sqlPresses;
     ALL_MACHINES = Object.values(PRESSES).flat();
     return;
   }
@@ -3284,17 +3440,17 @@ async function loadConfig() {
     return;
   }
   if (shouldUseSqlStagingReads(plantId)) {
-    try {
-      const payload = await safeSqlRead(`status config ${plantId}`, () => dataApi.getStatusConfig(plantId));
-      const loadedStatuses = normalizeLoadedStatuses(payload?.statusConfig?.statuses || {});
-      SUBCATEGORY_ROUTES = normalizeSubcategoryRoutes(payload?.statusConfig?.subcategoryRoutes, loadedStatuses);
-      STATUSES = syncStatusesFromSubcategoryRoutes(loadedStatuses, SUBCATEGORY_ROUTES);
-      rebuildDerivedStatus();
-      refreshStatusDependentUI();
-      return;
-    } catch (e) {
-      console.warn('SQL status config load failed:', e);
+    const payload = await safeSqlRead(`status config ${plantId}`, () => dataApi.getStatusConfig(plantId));
+    const sqlStatuses = payload?.statusConfig?.statuses || null;
+    if (!sqlStatuses || typeof sqlStatuses !== 'object') {
+      throw new Error(`Status config is missing in D1 for plant ${plantId}.`);
     }
+    const loadedStatuses = normalizeLoadedStatuses(sqlStatuses);
+    SUBCATEGORY_ROUTES = normalizeSubcategoryRoutes(payload?.statusConfig?.subcategoryRoutes, loadedStatuses);
+    STATUSES = syncStatusesFromSubcategoryRoutes(loadedStatuses, SUBCATEGORY_ROUTES);
+    rebuildDerivedStatus();
+    refreshStatusDependentUI();
+    return;
   }
   try {
     const snap = await getDoc(plantDoc('config', 'statuses'));
@@ -3738,7 +3894,11 @@ function stopGamificationListeners() {
 }
 
 function applySqlGamificationState(payload = {}) {
-  gameConfig = payload.config?.config || GAME_DEFAULT_CONFIG;
+  const sqlConfig = payload.config?.config || null;
+  if (!sqlConfig || typeof sqlConfig !== 'object') {
+    throw new Error(`Gamification config is missing in D1 for plant ${currentPlantId}.`);
+  }
+  gameConfig = sqlConfig;
   gameBadgeDefs = Array.isArray(gameConfig.badges) ? gameConfig.badges : DEFAULT_BADGE_DEFS;
   gameUserBadges = payload.badges?.earnedBadges || {};
   gameUserStats = payload.stats || { totals: { xp: 0, level: 1 }, streaks: { current: 0 } };
@@ -3778,7 +3938,10 @@ function startGamificationListeners() {
       }
       try {
         const payload = await safeSqlRead(`gamification ${currentPlantId}`, () => dataApi.getGamificationState(currentPlantId));
-        if (payload) applySqlGamificationState(payload);
+        if (!payload) {
+          throw new Error(`Gamification state is missing in D1 for plant ${currentPlantId}.`);
+        }
+        applySqlGamificationState(payload);
       } catch (e) {
         console.warn('Gamification SQL poll failed:', e?.message || e);
       }
@@ -4026,15 +4189,14 @@ async function awardGamification(reason, context = {}) {
 
 async function loadStoreConfig() {
   if (shouldUseSqlStagingReads(currentPlantId)) {
-    try {
-      const sqlBootstrap = await ensureSqlPlantBootstrap(currentPlantId);
-      const config = sqlBootstrap?.storeConfig?.config
-        || (await safeSqlRead(`store config ${currentPlantId}`, () => dataApi.getStoreConfig(currentPlantId)))?.storeConfig?.config
-        || DEFAULT_STORE_ITEMS;
-      storeItems = normalizeStoreItems(config.items || config);
-    } catch (e) {
-      storeItems = normalizeStoreItems(DEFAULT_STORE_ITEMS);
+    const sqlBootstrap = await ensureSqlPlantBootstrap(currentPlantId);
+    const config = sqlBootstrap?.storeConfig?.config
+      || (await safeSqlRead(`store config ${currentPlantId}`, () => dataApi.getStoreConfig(currentPlantId)))?.storeConfig?.config
+      || null;
+    if (!config || typeof config !== 'object') {
+      throw new Error(`Store config is missing in D1 for plant ${currentPlantId}.`);
     }
+    storeItems = normalizeStoreItems(config.items || config);
     ensureCurrentThemeAccess();
     restoreSavedThemeSelection();
     renderThemeChoices();
@@ -4173,6 +4335,34 @@ async function purchaseStoreItem(itemId) {
     return;
   }
   try {
+    if (shouldUseSqlBootstrap()) {
+      const payload = await dataApi.purchaseStoreItem({
+        itemId,
+        price: Number(item.price || 0)
+      });
+      userXpSpent = Number(payload?.user?.globalXpSpent || (userXpSpent + item.price));
+      const nextInventory = payload?.user?.inventory || {};
+      userInventory = {
+        unlockedItems: Array.isArray(nextInventory.unlockedItems) ? nextInventory.unlockedItems : [...new Set([...userInventory.unlockedItems, itemId])],
+        activeMascot: nextInventory.activeMascot || null
+      };
+      currentUserProfileData = {
+        ...currentUserProfileData,
+        globalXpSpent: userXpSpent,
+        inventory: userInventory
+      };
+      renderStoreCard();
+      updateStoreXpDisplay();
+      renderThemeChoices();
+      renderStoreModal();
+      updateActiveThemeChoice(readSavedTheme('midnight'));
+      showGameToast(`Unlocked ${item.name}!`);
+      if (item.type === 'theme') {
+        if (item.themeKey) applyTheme(item.themeKey);
+        else if (item.customVars) applyTheme(`storetheme_${item.id}`);
+      }
+      return;
+    }
     const userRef = doc(db, 'users', currentUser.uid);
     await runTransaction(db, async tx => {
       const snap = await tx.get(userRef);
@@ -4711,6 +4901,7 @@ async function doSignOut() {
   if (DEMO_MODE) {
     try { sessionStorage.setItem('demo_signed_out', 'true'); } catch (_) {}
   }
+  apiSessionClient.clear();
   await fbSignOut(auth);
 }
 
@@ -4985,6 +5176,7 @@ async function bootstrapNoAuthSession() {
 
 async function bootstrapSignedInSession(user) {
   currentUser = user;
+  void apiSessionClient.warm();
   document.getElementById('login-screen').classList.remove('visible');
   document.getElementById('app').classList.add('visible');
   applyUserIdentityToShell(user);
@@ -5781,6 +5973,7 @@ async function handleOnboardingSubmit(btn) {
 }
 
 onAuthStateChanged(auth, async user => {
+  if (!user) apiSessionClient.clear();
   if (DEMO_MODE) {
     const explicitlySignedOut = sessionStorage.getItem('demo_signed_out') === 'true';
     if (!user) {
@@ -5942,8 +6135,11 @@ async function loadIssueHistoryPage() {
 }
 
 async function refreshIssuesFromSql() {
-  const payload = await safeSqlRead(`issues ${currentPlantId}`, () => dataApi.listIssues(currentPlantId, { limit: 500 }));
-  if (!payload) return false;
+  const payload = await requireSqlRead(
+    `issues ${currentPlantId}`,
+    () => dataApi.listIssues(currentPlantId, { limit: 500 }),
+    `Issues are missing in D1 for plant ${currentPlantId}.`
+  );
   const nextSignature = JSON.stringify(payload.issues || []);
   const didPlantChange = lastSqlIssuePollPlantId !== currentPlantId;
   const didIssueSetChange = didPlantChange || lastSqlIssuePollSignature !== nextSignature;
@@ -12192,9 +12388,12 @@ function _syncThemePrefsToFirestore() {
     if (signature === _lastThemePrefsSyncSig) return;
     if (_themePrefsSyncTimer) clearTimeout(_themePrefsSyncTimer);
     _themePrefsSyncTimer = setTimeout(() => {
-      setDoc(doc(db, 'users', uid), {
-        themePrefs: payload
-      }, { merge: true })
+      const persist = shouldUseSqlBootstrap()
+        ? dataApi.updateCurrentUserContext({ themePrefs: payload })
+        : setDoc(doc(db, 'users', uid), {
+            themePrefs: payload
+          }, { merge: true });
+      Promise.resolve(persist)
         .then(() => { _lastThemePrefsSyncSig = signature; })
         .catch(() => {});
     }, 350);
@@ -13708,8 +13907,12 @@ window.watchConversations = (onConversations, { type = null } = {}, onError = nu
     const poll = async () => {
       if (!active || !currentPlantId) return;
       try {
-        const payload = await safeSqlRead(`conversations ${currentPlantId}`, () => dataApi.listConversations(currentPlantId, type ? { type } : {}));
-        if (payload && typeof onConversations === 'function') onConversations(payload.conversations || []);
+        const payload = await requireSqlRead(
+          `conversations ${currentPlantId}`,
+          () => dataApi.listConversations(currentPlantId, type ? { type } : {}),
+          `Conversations are missing in D1 for plant ${currentPlantId}.`
+        );
+        if (typeof onConversations === 'function') onConversations(payload.conversations || []);
       } catch (err) {
         console.warn('conversations poll error', err);
         if (typeof onError === 'function') onError(err);
@@ -13760,8 +13963,12 @@ window.openConversation = (conversationId, onMessages) => {
     const poll = async () => {
       if (!active || !currentPlantId || !conversationId) return;
       try {
-        const payload = await safeSqlRead(`conversation messages ${conversationId}`, () => dataApi.listConversationMessages(currentPlantId, conversationId));
-        if (payload && typeof onMessages === 'function') onMessages(payload.messages || []);
+        const payload = await requireSqlRead(
+          `conversation messages ${conversationId}`,
+          () => dataApi.listConversationMessages(currentPlantId, conversationId),
+          `Conversation messages are missing in D1 for conversation ${conversationId}.`
+        );
+        if (typeof onMessages === 'function') onMessages(payload.messages || []);
       } catch (err) {
         console.warn('conversation poll error', err);
       }
@@ -13914,7 +14121,11 @@ function _startMessagingInboxWatcher() {
     const poll = async () => {
       if (!active || !currentPlantId || !currentUser?.uid) return;
       try {
-        const payload = await safeSqlRead(`messaging inbox ${currentPlantId}`, () => dataApi.listConversations(currentPlantId));
+        const payload = await requireSqlRead(
+          `messaging inbox ${currentPlantId}`,
+          () => dataApi.listConversations(currentPlantId),
+          `Messaging inbox is missing in D1 for plant ${currentPlantId}.`
+        );
         const conversations = payload?.conversations || [];
         const unreadCount = _messagingUnreadTotal(conversations);
         _updateMessagingEntryBadges(unreadCount);
@@ -14464,14 +14675,27 @@ window.enableMessagingNotifications = async () => {
 };
 
 async function _uploadMessagingPhoto(file, conversationId) {
+  const dataUrl = await readFileAsDataUrl(file);
+  const uploaded = await uploadAttachmentToPreferredStorage(currentPlantId, {
+    scope: 'conversation',
+    conversationId,
+    fileName: file.name || 'image.jpg',
+    contentType: file.type || 'image/jpeg',
+    dataUrl
+  });
+  if (uploaded?.storagePath) {
+    return {
+      kind: 'image',
+      url: uploaded.downloadUrl || uploaded.url || '',
+      storagePath: uploaded.storagePath,
+      storageBucket: uploaded.storageBucket || 'r2',
+      fileName: uploaded.fileName || file.name || 'image.jpg',
+      contentType: uploaded.contentType || file.type || 'image/jpeg',
+      sizeBytes: Number(uploaded.sizeBytes || file.size || 0)
+    };
+  }
   const path = `plants/${currentPlantId}/conversations/${conversationId}/photos/${Date.now()}_${Math.random().toString(36).slice(2)}_${file.name || 'image.jpg'}`;
   const fileRef = storageRef(storage, path);
-  const dataUrl = await new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
   await uploadString(fileRef, dataUrl, 'data_url');
   const url = await getDownloadURL(fileRef);
   return {
@@ -15454,10 +15678,14 @@ async function loadPressWikiPageList() {
   const queryPressId = _pressWikiScope === WIKI_SCOPE_PRESS ? activePressId : _pressWikiModalPressId;
   let pages = [];
   if (shouldUseSqlStagingReads(currentPlantId)) {
-    const payload = await safeSqlRead(`wiki pages ${currentPlantId}:${_pressWikiScope}:${queryPressId || 'shared'}`, () => dataApi.listWikiPages(currentPlantId, {
-      scope: _pressWikiScope,
-      pressId: _pressWikiScope === WIKI_SCOPE_SHARED ? '' : queryPressId
-    }));
+    const payload = await requireSqlRead(
+      `wiki pages ${currentPlantId}:${_pressWikiScope}:${queryPressId || 'shared'}`,
+      () => dataApi.listWikiPages(currentPlantId, {
+        scope: _pressWikiScope,
+        pressId: _pressWikiScope === WIKI_SCOPE_SHARED ? '' : queryPressId
+      }),
+      `Wiki pages are missing in D1 for plant ${currentPlantId}.`
+    );
     pages = (payload?.pages || []).map(page => ({ ...page, id: page.id || page.pageId || '' }));
   } else {
     const pagesSnap = await getDocs(wikiPagesColForScope(_pressWikiScope, queryPressId));
@@ -15495,10 +15723,14 @@ async function loadPressWikiPage(pageId) {
     let revisions = [];
     let attachments = [];
     if (shouldUseSqlStagingReads(currentPlantId)) {
-      const payload = await safeSqlRead(`wiki page ${currentPlantId}:${pageId}`, () => dataApi.getWikiPage(currentPlantId, pageId, {
-        scope: _pressWikiScope,
-        pressId: _pressWikiScope === WIKI_SCOPE_SHARED ? '' : activePressId
-      }));
+      const payload = await requireSqlRead(
+        `wiki page ${currentPlantId}:${pageId}`,
+        () => dataApi.getWikiPage(currentPlantId, pageId, {
+          scope: _pressWikiScope,
+          pressId: _pressWikiScope === WIKI_SCOPE_SHARED ? '' : activePressId
+        }),
+        `Wiki page ${pageId} is missing in D1 for plant ${currentPlantId}.`
+      );
       page = payload?.page ? { ...payload.page, id: payload.page.id || payload.page.pageId || pageId } : null;
       revisions = (payload?.revisions || []).map(rev => ({ ...rev, id: rev.id || rev.revisionId || '' }));
       attachments = (payload?.attachments || []).map(att => ({ ...att, id: att.id || att.attachmentId || '' }));
@@ -15725,9 +15957,7 @@ async function deletePressWikiPage() {
       ? (_pressWikiAttachmentsCache || [])
       : (await getDocs(wikiAttachmentsColForScope(_pressWikiScope, _pressWikiScope === WIKI_SCOPE_PRESS ? activePressId : _pressWikiModalPressId, pageId))).docs.map(d => ({ id: d.id, ...(d.data() || {}) }));
     await Promise.allSettled(attachments.map(async a => {
-      if (!a?.storagePath) return;
-      const attStorage = a.storageBucket ? getStorage(app, `gs://${a.storageBucket}`) : storage;
-      await deleteObject(storageRef(attStorage, a.storagePath));
+      await deleteStoredAttachmentBlob(currentPlantId, a);
     }));
     if (shouldUseSqlStagingReads(currentPlantId)) {
       await dataApi.deleteWikiPage(currentPlantId, pageId, {
@@ -15959,20 +16189,41 @@ async function handlePressWikiFilesUpload(files, autoInsert) {
       if (!file.type.startsWith('image/')) continue;
       const attId = 'att_' + Date.now() + '_' + Math.floor(Math.random()*1000);
       const ext = file.name.split('.').pop() || 'png';
-      const path = wikiStoragePrefixForScope(_pressWikiScope, _pressWikiScope === WIKI_SCOPE_PRESS ? activePressId : _pressWikiModalPressId, _pressWikiSelectedPageId) + `/attachments/${attId}.${ext}`;
-      const sRef = storageRef(storage, path);
-      
-      await uploadBytesResumable(sRef, file);
-      const url = await getDownloadURL(sRef);
+      const dataUrl = await readFileAsDataUrl(file);
+      let uploadedBlob = await uploadAttachmentToPreferredStorage(currentPlantId, {
+        scope: 'wiki',
+        wikiScope: _pressWikiScope,
+        pageId: _pressWikiSelectedPageId,
+        pressId: _pressWikiScope === WIKI_SCOPE_SHARED ? '' : activePressId,
+        fileName: file.name || `wiki_attachment_${attId}.${ext}`,
+        contentType: file.type || 'image/png',
+        dataUrl
+      });
+      if (!uploadedBlob?.storagePath) {
+        const path = wikiStoragePrefixForScope(_pressWikiScope, _pressWikiScope === WIKI_SCOPE_PRESS ? activePressId : _pressWikiModalPressId, _pressWikiSelectedPageId) + `/attachments/${attId}.${ext}`;
+        const sRef = storageRef(storage, path);
+        await uploadString(sRef, dataUrl, 'data_url');
+        const url = await getDownloadURL(sRef);
+        uploadedBlob = {
+          storagePath: path,
+          storageBucket: sRef.bucket,
+          downloadUrl: url,
+          url,
+          contentType: file.type || 'image/png',
+          fileName: file.name || `wiki_attachment_${attId}.${ext}`,
+          uploadedAt: shouldUseSqlStagingReads(currentPlantId) ? new Date().toISOString() : serverTimestamp()
+        };
+      }
       
       const attDoc = {
         attachmentId: attId,
-        storagePath: path,
-        url: url,
-        contentType: file.type,
-        caption: file.name,
+        storagePath: uploadedBlob.storagePath,
+        storageBucket: uploadedBlob.storageBucket || '',
+        url: uploadedBlob.downloadUrl || uploadedBlob.url || '',
+        contentType: uploadedBlob.contentType || file.type,
+        caption: uploadedBlob.fileName || file.name,
         uploadedBy: currentActor(),
-        uploadedAt: shouldUseSqlStagingReads(currentPlantId) ? new Date().toISOString() : serverTimestamp()
+        uploadedAt: uploadedBlob.uploadedAt || (shouldUseSqlStagingReads(currentPlantId) ? new Date().toISOString() : serverTimestamp())
       };
       if (shouldUseSqlStagingReads(currentPlantId)) {
         await dataApi.createWikiAttachment(currentPlantId, _pressWikiSelectedPageId, {
@@ -17013,7 +17264,11 @@ async function _notesLoadAttachments(noteId) {
     return [];
   }
   if (shouldUseSqlStagingReads(currentPlantId)) {
-    const payload = await safeSqlRead(`note attachments ${noteId}`, () => dataApi.listNoteAttachments(currentPlantId, noteId));
+    const payload = await requireSqlRead(
+      `note attachments ${noteId}`,
+      () => dataApi.listNoteAttachments(currentPlantId, noteId),
+      `Note attachments are missing in D1 for note ${noteId}.`
+    );
     _notesAttachmentsCache = Array.isArray(payload?.attachments) ? payload.attachments.map(att => ({
       ...att,
       id: att.id || att.attachmentId || ''
@@ -17034,10 +17289,7 @@ async function _notesDeleteAttachment(attachmentId) {
   if (!att) return;
   if (!confirm('Remove this attachment?')) return;
   try {
-    if (att.storagePath) {
-      const attStorage = att.storageBucket ? getStorage(app, `gs://${att.storageBucket}`) : storage;
-      await deleteObject(storageRef(attStorage, att.storagePath));
-    }
+    await deleteStoredAttachmentBlob(currentPlantId, att);
     if (shouldUseSqlStagingReads(currentPlantId)) {
       await dataApi.deleteNoteAttachment(currentPlantId, noteId, attachmentId);
     } else {
@@ -17244,9 +17496,7 @@ async function _notesDeleteActiveNote() {
       ? (_notesAttachmentsCache || [])
       : (await getDocs(noteAttachmentsCol(note.id))).docs.map(d => d.data() || {});
     await Promise.allSettled(attachments.map(async att => {
-      if (!att.storagePath) return;
-      const attStorage = att.storageBucket ? getStorage(app, `gs://${att.storageBucket}`) : storage;
-      await deleteObject(storageRef(attStorage, att.storagePath));
+      await deleteStoredAttachmentBlob(currentPlantId, att);
     }));
     if (shouldUseSqlStagingReads(currentPlantId)) {
       await dataApi.deleteNote(currentPlantId, note.id);
@@ -17273,30 +17523,49 @@ async function _notesUploadAttachments(files) {
       if (!file?.type?.startsWith('image/')) continue;
       const attId = `att_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
       const ext = String(file.name || '').split('.').pop() || 'jpg';
-      const path = `${noteStoragePrefix(noteId)}/attachments/${attId}.${ext}`;
       const dataUrl = await readFileAsDataUrl(file);
-      let sRef = storageRef(storage, path);
-      try {
-        await uploadString(sRef, dataUrl, 'data_url');
-      } catch (err) {
-        const msg = String(err?.message || '');
-        const shouldTryFallback = storageFallback && (msg.includes('Permission denied') || msg.includes('storage/unauthorized') || msg.includes('storage/bucket-not-found'));
-        if (!shouldTryFallback) throw err;
-        sRef = storageRef(storageFallback, path);
-        await uploadString(sRef, dataUrl, 'data_url');
+      let uploadedBlob = await uploadAttachmentToPreferredStorage(currentPlantId, {
+        scope: 'note',
+        noteId,
+        fileName: file.name || `attachment_${uploaded.length + 1}.${ext}`,
+        contentType: file.type || 'image/jpeg',
+        dataUrl
+      });
+      if (!uploadedBlob?.storagePath) {
+        const path = `${noteStoragePrefix(noteId)}/attachments/${attId}.${ext}`;
+        let sRef = storageRef(storage, path);
+        try {
+          await uploadString(sRef, dataUrl, 'data_url');
+        } catch (err) {
+          const msg = String(err?.message || '');
+          const shouldTryFallback = storageFallback && (msg.includes('Permission denied') || msg.includes('storage/unauthorized') || msg.includes('storage/bucket-not-found'));
+          if (!shouldTryFallback) throw err;
+          sRef = storageRef(storageFallback, path);
+          await uploadString(sRef, dataUrl, 'data_url');
+        }
+        const url = await getDownloadURL(sRef);
+        uploadedBlob = {
+          storagePath: path,
+          storageBucket: sRef.bucket,
+          downloadUrl: url,
+          url,
+          contentType: file.type || 'image/jpeg',
+          sizeBytes: file.size || 0,
+          fileName: file.name || `attachment_${uploaded.length + 1}.${ext}`,
+          uploadedAt: shouldUseSqlStagingReads(currentPlantId) ? new Date().toISOString() : serverTimestamp()
+        };
       }
-      const url = await getDownloadURL(sRef);
       const attDoc = {
         id: attId,
         attachmentId: attId,
-        storagePath: path,
-        storageBucket: sRef.bucket,
-        url,
-        fileName: file.name || `attachment_${uploaded.length + 1}.${ext}`,
-        contentType: file.type || 'image/jpeg',
-        sizeBytes: file.size || 0,
+        storagePath: uploadedBlob.storagePath,
+        storageBucket: uploadedBlob.storageBucket || '',
+        url: uploadedBlob.downloadUrl || uploadedBlob.url || '',
+        fileName: uploadedBlob.fileName || file.name || `attachment_${uploaded.length + 1}.${ext}`,
+        contentType: uploadedBlob.contentType || file.type || 'image/jpeg',
+        sizeBytes: Number(uploadedBlob.sizeBytes || file.size || 0),
         uploadedBy: currentActor(),
-        uploadedAt: shouldUseSqlStagingReads(currentPlantId) ? new Date().toISOString() : serverTimestamp(),
+        uploadedAt: uploadedBlob.uploadedAt || (shouldUseSqlStagingReads(currentPlantId) ? new Date().toISOString() : serverTimestamp()),
         schemaVersion: 1
       };
       if (shouldUseSqlStagingReads(currentPlantId)) {
@@ -17434,8 +17703,12 @@ async function _notesStartListener() {
     };
     const poll = async () => {
       if (!active || token !== _notesLoadToken || !currentPlantId) return;
-      const payload = await safeSqlRead(`notes ${currentPlantId}`, () => dataApi.listNotes(currentPlantId, { includeArchived: true }));
-      if (payload) {
+      try {
+        const payload = await requireSqlRead(
+          `notes ${currentPlantId}`,
+          () => dataApi.listNotes(currentPlantId, { includeArchived: true }),
+          `Notes are missing in D1 for plant ${currentPlantId}.`
+        );
         _notesState.error = '';
         _notesState.notes = (payload.notes || []).map(note => _notesNormalizeDoc(note)).sort(_notesCompare);
         _notesRenderList();
@@ -17450,6 +17723,11 @@ async function _notesStartListener() {
           }
         }
         _notesEnsureActiveSelection();
+      } catch (err) {
+        console.warn('notes SQL poll error', err);
+        _notesState.error = String(err?.message || '');
+        _notesRenderList();
+        _notesSetStatus('Could not load notes', err?.message || '');
       }
       if (active) _notesPollTimer = setTimeout(poll, 5000);
     };
