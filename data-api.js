@@ -62,6 +62,13 @@ export class SqlDataApi {
     });
   }
 
+  createAccessRequests(payload) {
+    return this.request('/access-requests', {
+      method: 'POST',
+      body: payload
+    });
+  }
+
   listPlants(params = {}) {
     const query = new URLSearchParams();
     Object.entries(params).forEach(([key, value]) => {
@@ -356,6 +363,7 @@ export class FirebaseDataApi {
 
   getCurrentUserContext() { return this.unavailable('getCurrentUserContext'); }
   updateCurrentUserContext() { return this.unavailable('updateCurrentUserContext'); }
+  createAccessRequests() { return this.unavailable('createAccessRequests'); }
   listPlants() { return this.unavailable('listPlants'); }
   listPlantMembers() { return this.unavailable('listPlantMembers'); }
   updatePlantMember() { return this.unavailable('updatePlantMember'); }

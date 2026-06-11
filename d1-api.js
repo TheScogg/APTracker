@@ -881,6 +881,31 @@ async function upsertAuthUserRow(db, user) {
     stringOrNull(user.picture),
     nowIso()
   );
+  if (user.email) {
+    await run(
+      db,
+      `
+        INSERT INTO user_lookup (
+          email_normalized, uid, display_name, full_name, sso_number, photo_url, updated_at
+        )
+        SELECT LOWER(?), uid, COALESCE(display_name, ?), full_name, sso_number, COALESCE(photo_url, ?), ?
+        FROM users
+        WHERE uid = ?
+        ON CONFLICT(email_normalized) DO UPDATE SET
+          uid = excluded.uid,
+          display_name = COALESCE(excluded.display_name, user_lookup.display_name),
+          full_name = COALESCE(excluded.full_name, user_lookup.full_name),
+          sso_number = COALESCE(excluded.sso_number, user_lookup.sso_number),
+          photo_url = COALESCE(excluded.photo_url, user_lookup.photo_url),
+          updated_at = excluded.updated_at
+      `,
+      user.email,
+      stringOrNull(user.name),
+      stringOrNull(user.picture),
+      nowIso(),
+      user.uid
+    );
+  }
 }
 
 async function getCurrentUserContext(db, user) {
@@ -955,7 +980,82 @@ async function updateCurrentUserContext(db, user, patch = {}) {
     await run(db, `UPDATE users SET ${updates.join(', ')} WHERE uid = ?`, ...values);
   }
 
+  if (user.email) {
+    const refreshed = await first(db, 'SELECT * FROM users WHERE uid = ? LIMIT 1', user.uid);
+    await run(
+      db,
+      `
+        INSERT INTO user_lookup (
+          email_normalized, uid, display_name, full_name, sso_number, photo_url, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(email_normalized) DO UPDATE SET
+          uid = excluded.uid,
+          display_name = excluded.display_name,
+          full_name = excluded.full_name,
+          sso_number = excluded.sso_number,
+          photo_url = excluded.photo_url,
+          updated_at = excluded.updated_at
+      `,
+      String(user.email || '').toLowerCase(),
+      user.uid,
+      stringOrNull(refreshed?.display_name),
+      stringOrNull(refreshed?.full_name),
+      stringOrNull(refreshed?.sso_number),
+      stringOrNull(refreshed?.photo_url),
+      nowIso()
+    );
+  }
+
   return getCurrentUserContext(db, user);
+}
+
+async function createAccessRequests(db, user, body = {}) {
+  await upsertAuthUserRow(db, user);
+  const plantIds = Array.from(new Set((Array.isArray(body.plantIds) ? body.plantIds : []).map(v => String(v || '').trim()).filter(Boolean)));
+  if (!plantIds.length) throw Object.assign(new Error('Choose at least one plant.'), { status: 400 });
+  const fullName = stringOrNull(body.fullName);
+  const ssoNumber = stringOrNull(body.ssoNumber);
+  const displayName = stringOrNull(body.displayName) || fullName || stringOrNull(user.name) || stringOrNull(user.email);
+  const completedAt = asIso(body.profileOnboarding?.completedAt, nowIso());
+  await updateCurrentUserContext(db, user, {
+    displayName,
+    fullName,
+    ssoNumber,
+    requestedPlantIds: plantIds,
+    profileOnboarding: body.profileOnboarding || {
+      completed: true,
+      completedAt,
+      version: 1
+    }
+  });
+  const now = nowIso();
+  const statements = plantIds.map(plantId => db.prepare(
+    `
+      INSERT INTO access_requests (
+        plant_id, uid, status, display_name, full_name, sso_number, email, photo_url, requested_at, updated_at
+      ) VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(plant_id, uid) DO UPDATE SET
+        display_name = excluded.display_name,
+        full_name = excluded.full_name,
+        sso_number = excluded.sso_number,
+        email = excluded.email,
+        photo_url = excluded.photo_url,
+        updated_at = excluded.updated_at,
+        status = CASE WHEN access_requests.status = 'approved' THEN access_requests.status ELSE 'pending' END
+    `
+  ).bind(
+    plantId,
+    user.uid,
+    displayName,
+    fullName,
+    ssoNumber,
+    stringOrNull(user.email),
+    stringOrNull(user.picture),
+    now,
+    now
+  ));
+  await db.batch(statements);
+  return jsonResponse({ ok: true, plantIds });
 }
 
 async function listPlants(db, user, request) {
