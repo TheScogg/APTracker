@@ -41,12 +41,42 @@ export class SqlDataApi {
         : options.body
     });
     const text = await res.text();
-    const body = text ? JSON.parse(text) : null;
+    const contentType = String(res.headers.get('Content-Type') || '').toLowerCase();
+    let body = null;
+    if (text) {
+      if (contentType.includes('application/json')) {
+        try {
+          body = JSON.parse(text);
+        } catch {
+          throw new ApiError(`API returned invalid JSON for ${path}`, {
+            status: res.status,
+            body: { raw: text.slice(0, 500) }
+          });
+        }
+      } else {
+        body = { raw: text };
+      }
+    }
     if (!res.ok) {
-      throw new ApiError(body?.error || `API request failed with ${res.status}`, {
+      const htmlLike = typeof body?.raw === 'string' && body.raw.trim().startsWith('<');
+      throw new ApiError(
+        body?.error
+          || (htmlLike ? `API request failed with ${res.status} and returned HTML instead of JSON` : `API request failed with ${res.status}`),
+        {
         status: res.status,
         body
-      });
+        }
+      );
+    }
+    if (text && !contentType.includes('application/json')) {
+      const htmlLike = typeof body?.raw === 'string' && body.raw.trim().startsWith('<');
+      throw new ApiError(
+        htmlLike ? `API returned HTML instead of JSON for ${path}` : `API returned unexpected content type for ${path}`,
+        {
+          status: res.status,
+          body
+        }
+      );
     }
     return body;
   }
@@ -81,6 +111,10 @@ export class SqlDataApi {
       method: 'POST',
       body: payload
     });
+  }
+
+  getMigrationReadiness() {
+    return this.request('/migration-readiness');
   }
 
   listPlants(params = {}) {
@@ -394,6 +428,7 @@ export class FirebaseDataApi {
   createAccessRequests() { return this.unavailable('createAccessRequests'); }
   purchaseStoreItem() { return this.unavailable('purchaseStoreItem'); }
   registerPushToken() { return this.unavailable('registerPushToken'); }
+  getMigrationReadiness() { return this.unavailable('getMigrationReadiness'); }
   listPlants() { return this.unavailable('listPlants'); }
   listPlantMembers() { return this.unavailable('listPlantMembers'); }
   updatePlantMember() { return this.unavailable('updatePlantMember'); }

@@ -318,6 +318,7 @@
         <div class="page-tabs">
           <button class="page-tab-btn active" id="ptab-btn-plants" onclick="window.switchPageTab('plants',this)">Plants</button>
           <button class="page-tab-btn" id="ptab-btn-store" onclick="window.switchPageTab('store',this)">Store</button>
+          <button class="page-tab-btn" id="ptab-btn-migration" onclick="window.switchPageTab('migration',this)">Migration</button>
           <button class="page-tab-btn" id="ptab-btn-schedule" onclick="window.switchPageTab('schedule',this)">Schedule Import</button>
         </div>
 
@@ -335,6 +336,17 @@
             <h2>Global Store</h2>
             <p class="muted" style="margin-bottom:10px;">These store items apply across all plants.</p>
             <div id="store-editor-container"></div>
+          </div>
+        </div>
+
+        <div class="page-tab-pane" id="page-tab-migration">
+          <div class="card">
+            <h2>Migration Readiness</h2>
+            <p class="muted" style="margin-bottom:10px;">Checks the deployed Worker for D1/R2/session-auth readiness and highlights what still keeps the app tied to Firebase-era services.</p>
+            <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
+              <button class="btn" onclick="window.refreshMigrationReadiness()">Refresh</button>
+            </div>
+            <div id="migration-readiness-container"></div>
           </div>
         </div>
 
@@ -932,6 +944,7 @@ let pressDraftByPlant = new Map();
 let globalStoreDraft = [];
 let storeThemeEditorDraft = null;
 let storeThemeEditorIndex = -1;
+let migrationReadinessState = { loading: false, data: null, error: '' };
 const statusPanelOpen = {};
 const statusRowOpen = {};
 const statusEditorTab = {};
@@ -1308,6 +1321,12 @@ async function doSignOut() {
 async function loadUserPlants() {
   if (shouldUseSqlAdmin()) {
     const ctx = await adminApiRequest('/api/me');
+    if (!ctx?.user || typeof ctx.user !== 'object') {
+      throw new Error('Current user context is missing in D1.');
+    }
+    if (!Array.isArray(ctx?.plants)) {
+      throw new Error('User plant access list is missing in D1.');
+    }
     const preferredTheme = String(ctx?.user?.themePrefs?.activeTheme || '').trim();
     if (preferredTheme) {
       currentThemeSelection = preferredTheme;
@@ -1369,6 +1388,12 @@ async function loadMembersAndStatusesForAdminPlants() {
         adminApiRequest(`/api/plants/${encodeURIComponent(plantId)}/gamification-admin`)
       ]);
 
+      if (!Array.isArray(membersPayload?.members)) {
+        throw new Error(`Plant members are missing in D1 for plant ${plantId}.`);
+      }
+      if (!Array.isArray(requestsPayload?.accessRequests)) {
+        throw new Error(`Access requests are missing in D1 for plant ${plantId}.`);
+      }
       membersByPlant.set(plantId, Array.isArray(membersPayload?.members)
         ? membersPayload.members.map(member => ({ id: member.uid, userId: member.uid, ...member }))
         : []);
@@ -1381,13 +1406,19 @@ async function loadMembersAndStatusesForAdminPlants() {
           : []
       );
 
-      const rawStatuses = bootstrapPayload?.statusConfig?.statuses || deepCopy(DEFAULT_STATUSES);
+      const rawStatuses = bootstrapPayload?.statusConfig?.statuses || null;
+      if (!rawStatuses || typeof rawStatuses !== 'object') {
+        throw new Error(`Status config is missing in D1 for plant ${plantId}.`);
+      }
       const normalizedStatuses = normalizeStatusesForSave(rawStatuses);
       const normalizedRoutes = normalizeSubcategoryRoutes(bootstrapPayload?.statusConfig?.subcategoryRoutes || null, normalizedStatuses);
       statusDraftByPlant.set(plantId, syncStatusesFromSubcategoryRoutes(normalizedStatuses, normalizedRoutes));
       subcategoryRouteDraftByPlant.set(plantId, normalizedRoutes);
 
-      const gameConfig = bootstrapPayload?.gamificationConfig?.config || deepCopy(DEFAULT_GAME_CONFIG);
+      const gameConfig = bootstrapPayload?.gamificationConfig?.config || null;
+      if (!gameConfig || typeof gameConfig !== 'object') {
+        throw new Error(`Gamification config is missing in D1 for plant ${plantId}.`);
+      }
       gameDraftByPlant.set(plantId, {
         enabled: gameConfig.enabled !== false,
         weights: { ...deepCopy(DEFAULT_GAME_CONFIG.weights), ...(gameConfig.weights || {}) },
@@ -1396,12 +1427,16 @@ async function loadMembersAndStatusesForAdminPlants() {
         customRules: Array.isArray(gameConfig.customRules) ? gameConfig.customRules.map(r => ({ ...r })) : [],
         leaderboardPeriod: gameConfig.leaderboardPeriod || 'weekly',
       });
-      missionDraftByPlant.set(plantId, Array.isArray(gamificationPayload?.missions) ? gamificationPayload.missions.map(mission => ({ ...mission })) : []);
+      if (!Array.isArray(gamificationPayload?.missions)) {
+        throw new Error(`Gamification missions are missing in D1 for plant ${plantId}.`);
+      }
+      missionDraftByPlant.set(plantId, gamificationPayload.missions.map(mission => ({ ...mission })));
       const storedBadges = Array.isArray(gameConfig.badges) ? gameConfig.badges : null;
       badgeDraftByPlant.set(plantId, storedBadges ? storedBadges.map(b => ({ ...b })) : deepCopy(DEFAULT_BADGE_DEFS));
-      const rawPresses = bootstrapPayload?.pressConfig?.presses
-        ? bootstrapPayload.pressConfig.presses
-        : deepCopy(DEFAULT_PRESSES);
+      const rawPresses = bootstrapPayload?.pressConfig?.presses || null;
+      if (!rawPresses || typeof rawPresses !== 'object') {
+        throw new Error(`Press config is missing in D1 for plant ${plantId}.`);
+      }
       pressDraftByPlant.set(plantId, deepCopy(rawPresses));
       continue;
     }
@@ -1453,19 +1488,16 @@ async function loadMembersAndStatusesForAdminPlants() {
 
 async function loadGlobalStoreDraft() {
   if (shouldUseSqlAdmin()) {
-    try {
-      const sourcePlantId = adminPlantIds[0];
-      if (!sourcePlantId) {
-        globalStoreDraft = normalizeGlobalStoreItems(DEFAULT_STORE_ITEMS);
-      } else {
-        const payload = await adminApiRequest(`/api/plants/${encodeURIComponent(sourcePlantId)}/store-config`);
-        const rawItems = payload?.storeConfig?.config?.items || DEFAULT_STORE_ITEMS;
-        globalStoreDraft = normalizeGlobalStoreItems(rawItems);
-      }
-    } catch (e) {
-      console.warn('Failed to load D1 store config:', e);
-      globalStoreDraft = normalizeGlobalStoreItems(DEFAULT_STORE_ITEMS);
+    const sourcePlantId = adminPlantIds[0];
+    if (!sourcePlantId) {
+      throw new Error('No admin plant is available to load the D1 store config.');
     }
+    const payload = await adminApiRequest(`/api/plants/${encodeURIComponent(sourcePlantId)}/store-config`);
+    const rawItems = payload?.storeConfig?.config?.items || null;
+    if (!Array.isArray(rawItems)) {
+      throw new Error(`Store config is missing in D1 for plant ${sourcePlantId}.`);
+    }
+    globalStoreDraft = normalizeGlobalStoreItems(rawItems);
     storeThemeEditorDraft = null;
     storeThemeEditorIndex = -1;
     syncAdminTheme(currentThemeSelection, globalStoreDraft);
@@ -1523,8 +1555,11 @@ function getNextAvailableBuiltinThemeKey(excludeIndex = -1) {
 async function loadUserDirectory() {
   if (shouldUseSqlAdmin()) {
     const payload = await adminApiRequest('/api/user-directory');
+    if (!Array.isArray(payload?.users)) {
+      throw new Error('User directory is missing in D1.');
+    }
     const deduped = new Map();
-    (Array.isArray(payload?.users) ? payload.users : []).forEach(user => {
+    payload.users.forEach(user => {
       const uid = String(user.uid || '').trim();
       if (!uid || deduped.has(uid)) return;
       deduped.set(uid, {
@@ -2251,6 +2286,87 @@ function renderGlobalStoreEditor() {
     };
   }
   container.innerHTML = renderStoreEditor();
+}
+
+function renderMigrationReadiness() {
+  const container = document.getElementById('migration-readiness-container');
+  if (!container) return;
+  if (migrationReadinessState.loading) {
+    container.innerHTML = '<div class="muted">Checking deployment readiness…</div>';
+    return;
+  }
+  if (migrationReadinessState.error) {
+    container.innerHTML = `
+      <div class="feedback error" style="display:block;">
+        ${esc(migrationReadinessState.error)}
+      </div>`;
+    return;
+  }
+  const data = migrationReadinessState.data;
+  if (!data) {
+    container.innerHTML = '<div class="muted">No readiness data loaded yet.</div>';
+    return;
+  }
+  const boolPill = (value) => `<span style="display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700;background:${value ? 'rgba(34,197,94,0.14)' : 'rgba(239,68,68,0.14)'};color:${value ? '#15803d' : '#b91c1c'};">${value ? 'Ready' : 'Missing'}</span>`;
+  const summary = data.ready
+    ? '<div class="feedback ok" style="display:block;margin-bottom:10px;">Core SQL runtime is ready.</div>'
+    : '<div class="feedback error" style="display:block;margin-bottom:10px;">Core SQL runtime is not fully ready yet.</div>';
+  const bindings = Object.entries(data.bindings || {});
+  const runtimeDeps = Object.entries(data.runtimeDependencies || {});
+  const migrationState = Object.entries(data.migrationState || {});
+  const remainingSteps = Array.isArray(data.remainingSteps) ? data.remainingSteps : [];
+  container.innerHTML = `
+    ${summary}
+    <div style="display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));">
+      <div style="border:1px solid var(--border);border-radius:12px;padding:12px;">
+        <div class="section-title" style="margin-bottom:8px;">Bindings</div>
+        ${bindings.map(([key, value]) => `
+          <div style="display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);">
+            <span class="mono">${esc(key)}</span>
+            ${boolPill(!!value)}
+          </div>
+        `).join('')}
+      </div>
+      <div style="border:1px solid var(--border);border-radius:12px;padding:12px;">
+        <div class="section-title" style="margin-bottom:8px;">Runtime Dependencies</div>
+        ${runtimeDeps.map(([key, value]) => `
+          <div style="display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);">
+            <span class="mono">${esc(key)}</span>
+            ${boolPill(!!value)}
+          </div>
+        `).join('')}
+      </div>
+      <div style="border:1px solid var(--border);border-radius:12px;padding:12px;">
+        <div class="section-title" style="margin-bottom:8px;">Migration State</div>
+        ${migrationState.map(([key, value]) => `
+          <div style="display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);">
+            <span class="mono">${esc(key)}</span>
+            ${boolPill(!!value)}
+          </div>
+        `).join('')}
+      </div>
+    </div>
+    <div style="margin-top:14px;border:1px solid var(--border);border-radius:12px;padding:12px;">
+      <div class="section-title" style="margin-bottom:8px;">Remaining Steps</div>
+      ${remainingSteps.length
+        ? `<ul style="margin:0;padding-left:18px;">${remainingSteps.map(step => `<li style="margin-bottom:6px;">${esc(String(step || ''))}</li>`).join('')}</ul>`
+        : '<div class="muted">No remaining steps reported.</div>'}
+    </div>
+  `;
+}
+
+async function refreshMigrationReadiness() {
+  migrationReadinessState.loading = true;
+  migrationReadinessState.error = '';
+  renderMigrationReadiness();
+  try {
+    migrationReadinessState.data = await adminApiRequest('/api/migration-readiness');
+  } catch (e) {
+    migrationReadinessState.error = e?.message || 'Could not load migration readiness.';
+  } finally {
+    migrationReadinessState.loading = false;
+    renderMigrationReadiness();
+  }
 }
 
 window.openAddPlantModal = function() {
@@ -4003,6 +4119,7 @@ async function refreshAdminData() {
   await loadGlobalStoreDraft();
   renderPlantsUsers();
   renderGlobalStoreEditor();
+  await refreshMigrationReadiness();
 }
 
 onAuthStateChanged(auth, async user => {
@@ -4033,7 +4150,22 @@ onAuthStateChanged(auth, async user => {
   document.getElementById('app-screen').classList.add('visible');
   document.getElementById('whoami').textContent = `${user.displayName || user.email} (${user.email || user.uid})`;
 
-  await refreshAdminData();
+  try {
+    await refreshAdminData();
+  } catch (e) {
+    console.error('Admin bootstrap failed:', e);
+    feedback('login-feedback', 'error', e?.message || 'Could not load admin data.');
+    document.getElementById('denied-card').style.display = 'none';
+    document.getElementById('admin-content').style.display = '';
+    const container = document.getElementById('plants-users');
+    if (container) {
+      container.innerHTML = `
+        <div class="card">
+          <div class="section-title">Could Not Load Admin Data</div>
+          <p class="muted">${esc(String(e?.message || 'Unknown error'))}</p>
+        </div>`;
+    }
+  }
 });
 
 // ── Badge & Leaderboard helpers ───────────────────────────────────────────────

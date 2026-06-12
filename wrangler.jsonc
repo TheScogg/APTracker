@@ -22,13 +22,12 @@
       "database_id": "8f86cf6d-1bfc-45ba-883e-d249014b79a1"
     }
   ],
-  // Add this after creating an R2 bucket for attachments, for example:
-  // "r2_buckets": [
-  //   {
-  //     "binding": "APTRACKER_ATTACHMENTS",
-  //     "bucket_name": "ap-tracker-attachments"
-  //   }
-  // ],
+  "r2_buckets": [
+    {
+      "binding": "APTRACKER_ATTACHMENTS",
+      "bucket_name": "aptracker-attachments"
+    }
+  ],
   "compatibility_flags": [
     "nodejs_compat"
   ]

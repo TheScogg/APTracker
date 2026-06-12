@@ -209,6 +209,37 @@
     font-weight: 700;
     white-space: nowrap;
   }
+  .migration-status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border: 1px solid rgba(56,189,248,0.34);
+    border-radius: 999px;
+    background: rgba(56,189,248,0.10);
+    color: #7dd3fc;
+    font-family: 'Rajdhani', sans-serif;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .migration-status-pill.ok {
+    border-color: rgba(74,222,128,0.45);
+    background: rgba(74,222,128,0.10);
+    color: #4ade80;
+  }
+  .migration-status-pill.warn {
+    border-color: rgba(251,191,36,0.45);
+    background: rgba(251,191,36,0.10);
+    color: #facc15;
+  }
+  .migration-status-pill.info {
+    border-color: rgba(56,189,248,0.34);
+    background: rgba(56,189,248,0.10);
+    color: #7dd3fc;
+  }
   .demo-guide {
     margin: 10px 16px 12px;
     border: 1px solid color-mix(in srgb, var(--color-accent, var(--accent)) 28%, var(--color-border, var(--border)));
@@ -5174,16 +5205,61 @@
     background: var(--stc-accent, #f97316);
   }
   .stc-preview-ui {
-    position: absolute; inset: 12px; display: flex; flex-direction: column; gap: 6px;
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    box-sizing: border-box;
   }
-  .stc-ui-bar {
-    height: 8px; border-radius: 4px; width: 100%;
+  .stc-ui-header {
+    height: 22px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 10px;
+    box-sizing: border-box;
   }
-  .stc-ui-row { display: flex; align-items: center; gap: 6px; }
-  .stc-ui-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-  .stc-ui-dot-sm { width: 6px; height: 6px; }
-  .stc-ui-line { height: 5px; border-radius: 3px; flex: 1; }
-  .stc-ui-line-sm { height: 4px; }
+  .stc-ui-body {
+    flex: 1;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    box-sizing: border-box;
+  }
+  .stc-ui-card {
+    padding: 6px 8px;
+    border-radius: 6px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .stc-ui-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .stc-ui-nav {
+    height: 18px;
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    box-sizing: border-box;
+  }
+  .stc-ui-dot {
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .stc-ui-dot-sm {
+    width: 6px;
+    height: 6px;
+  }
+  .stc-ui-line-sm {
+    height: 4px;
+    border-radius: 2px;
+  }
   .stc-active-check {
     position: absolute; top: 6px; right: 8px;
     color: var(--stc-accent, #f97316); font-size: 14px; font-weight: 900;
@@ -6407,4 +6483,661 @@
 .game-toast.show {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
+}
+
+/* ── THEME APPEARANCE STUDIO DUAL-PANE LAYOUT ── */
+@media (min-width: 900px) {
+  .theme-editor-modal {
+    width: 960px !important;
+    max-width: 95vw !important;
+    max-height: 90vh !important;
+    display: grid !important;
+    grid-template-columns: 320px 1fr !important;
+    gap: 24px !important;
+    padding: 24px !important;
+    height: 720px !important;
+    overflow-y: hidden !important;
+  }
+  .te-preview-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    border-right: 1px solid var(--color-border, var(--border));
+    padding-right: 20px;
+    height: 100%;
+    justify-content: space-between;
+  }
+  .te-control-col {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-width: 0;
+  }
+  .te-tab-panels {
+    flex: 1;
+    overflow-y: auto;
+    padding-right: 8px;
+    margin-top: 14px;
+    min-height: 0;
+  }
+}
+
+@media (max-width: 899px) {
+  .te-preview-col {
+    display: none !important; /* Hide phone preview on smaller screens */
+  }
+  .te-control-col {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+  }
+}
+
+/* Phone Simulator Casing */
+.te-phone-casing {
+  position: relative;
+  width: 280px;
+  height: 560px;
+  border-radius: 36px;
+  background: #090b0e;
+  padding: 8px;
+  border: 4px solid #2d3139;
+  box-shadow: 0 16px 40px rgba(0,0,0,0.6), inset 0 0 8px rgba(255,255,255,0.05);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.te-phone-island {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 80px;
+  height: 14px;
+  background: black;
+  border-radius: 999px;
+  z-index: 100;
+}
+.te-phone-home-indicator {
+  position: absolute;
+  bottom: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 90px;
+  height: 4px;
+  background: #475569;
+  border-radius: 999px;
+  z-index: 100;
+}
+.te-phone-screen {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  background: var(--bg);
+  background-image: var(--bg-svg-image, none);
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: center;
+  border-radius: 28px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  font-family: var(--font-body, 'Nunito', sans-serif);
+  color: var(--text);
+  box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
+}
+
+/* Simulated UI Elements */
+.te-phone-status-bar {
+  height: 28px;
+  padding: 8px 16px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 9px;
+  font-weight: 600;
+  font-family: 'Share Tech Mono', monospace;
+  opacity: 0.8;
+  z-index: 10;
+}
+.te-phone-status-icons {
+  display: flex;
+  gap: 3px;
+}
+.te-phone-app-header {
+  padding: 8px 12px 6px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  z-index: 10;
+  background: var(--bg);
+}
+.te-phone-kicker {
+  font-size: 8px;
+  font-family: 'Share Tech Mono', monospace;
+  color: var(--text2);
+  text-transform: uppercase;
+}
+.te-phone-title {
+  font-size: 13px;
+  font-weight: 700;
+  font-family: var(--font-headings, 'Rajdhani', sans-serif);
+  color: var(--text);
+}
+.te-phone-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.te-phone-screen-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+.te-phone-screen-content::-webkit-scrollbar {
+  width: 0px;
+}
+
+/* Preview Card Style */
+.te-phone-card {
+  padding: 10px;
+  border-radius: var(--radius-card, 14px);
+  background: var(--glass-bg, var(--bg2));
+  backdrop-filter: blur(var(--glass-blur, 0px));
+  -webkit-backdrop-filter: blur(var(--glass-blur, 0px));
+  border: 1px solid var(--glass-border, var(--border));
+  box-shadow: var(--shadow-card, 0 2px 12px rgba(0,0,0,0.2));
+  transition: all 0.2s;
+}
+.te-phone-card-title {
+  font-size: 10px;
+  font-family: 'Share Tech Mono', monospace;
+  color: var(--text2);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+
+/* Simulated Mascot XP Widget */
+.te-phone-xp-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.te-phone-mascot-emoji {
+  font-size: 18px;
+}
+.te-phone-mascot-name {
+  font-size: 10px;
+  font-weight: 700;
+  font-family: var(--font-headings, 'Rajdhani', sans-serif);
+}
+.te-phone-xp-bar-wrap {
+  height: 5px;
+  border-radius: 99px;
+  background: rgba(255,255,255,0.08);
+  overflow: hidden;
+  margin: 2px 0;
+}
+.te-phone-xp-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent2, var(--accent)));
+  border-radius: 99px;
+}
+.te-phone-xp-label {
+  font-size: 8px;
+  font-family: 'Share Tech Mono', monospace;
+  color: var(--text2);
+}
+.te-phone-streak {
+  font-size: 8px;
+  font-family: 'Share Tech Mono', monospace;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  padding: 1px 4px;
+  border-radius: 4px;
+  font-weight: 700;
+}
+
+/* Simulated Press Deck grid */
+.te-phone-press-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+.te-phone-press-btn {
+  padding: 6px 2px;
+  border-radius: var(--radius-btn, 8px);
+  font-size: 9px;
+  font-weight: 700;
+  text-align: center;
+  font-family: var(--font-headings, 'Rajdhani', sans-serif);
+}
+.te-phone-press-btn.te-success {
+  background: var(--green-dim, rgba(34,197,94,0.15));
+  color: var(--green, #22c55e);
+  border: 1px solid color-mix(in srgb, var(--green) 30%, transparent);
+}
+.te-phone-press-btn.te-danger {
+  background: var(--red-dim, rgba(239,68,68,0.12));
+  color: var(--red, #ef4444);
+  border: 1px solid color-mix(in srgb, var(--red) 30%, transparent);
+}
+.te-phone-press-btn.te-info {
+  background: var(--blue-dim, rgba(59,130,246,0.12));
+  color: var(--blue, #3b82f6);
+  border: 1px solid color-mix(in srgb, var(--blue) 30%, transparent);
+}
+
+/* Simulated Issue Card */
+.te-phone-issue-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+.te-phone-issue-badge {
+  font-size: 7px;
+  font-family: 'Share Tech Mono', monospace;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-weight: 700;
+}
+.te-phone-issue-badge.te-warning {
+  background: var(--yellow-dim, rgba(234,179,8,0.12));
+  color: var(--yellow, #eab308);
+  border: 1px solid color-mix(in srgb, var(--yellow) 30%, transparent);
+}
+.te-phone-issue-time {
+  font-size: 7px;
+  color: var(--text2);
+}
+.te-phone-issue-title {
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.te-phone-issue-reporter {
+  font-size: 8px;
+  color: var(--text2);
+  margin-top: 1px;
+}
+.te-phone-issue-attachment {
+  margin-top: 6px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  background: rgba(0,0,0,0.1);
+  padding: 8px;
+  text-align: center;
+}
+.te-phone-attachment-placeholder {
+  font-size: 8px;
+  color: var(--text2);
+  font-family: 'Share Tech Mono', monospace;
+}
+
+/* Bottom Nav Bar mockup */
+.te-phone-bottom-nav {
+  height: 44px;
+  border-top: 1px solid var(--border);
+  background: var(--glass-bg, var(--bg2));
+  backdrop-filter: blur(var(--glass-blur, 0px));
+  -webkit-backdrop-filter: blur(var(--glass-blur, 0px));
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  padding: 2px 8px;
+  z-index: 10;
+  transition: all 0.2s;
+}
+.te-phone-nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  opacity: 0.5;
+  cursor: pointer;
+}
+.te-phone-nav-item.active {
+  opacity: 1;
+  color: var(--accent);
+}
+.te-phone-nav-item span:first-child {
+  font-size: 12px;
+}
+.te-phone-nav-item span:last-child {
+  font-size: 7px;
+  font-weight: 700;
+}
+.te-preview-info {
+  margin-top: 6px;
+  font-size: 10px;
+  font-family: 'Share Tech Mono', monospace;
+  color: var(--color-text-subtle, var(--text3));
+  text-align: center;
+}
+
+/* Nav styles configurations */
+.te-phone-screen.nav-top .te-phone-bottom-nav { display: none !important; }
+.te-phone-screen.nav-floating .te-phone-bottom-nav {
+  position: absolute;
+  bottom: 12px;
+  left: 10px;
+  right: 10px;
+  border-radius: 12px;
+  border: 1px solid var(--glass-border, var(--border));
+  height: 40px;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.3);
+}
+
+/* Tabs & Customizer styling */
+.te-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--color-border, var(--border));
+  margin-bottom: 12px;
+}
+.te-tab {
+  flex: 1;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--color-text-subtle, var(--text3));
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: 'Nunito', sans-serif;
+  text-align: center;
+}
+.te-tab:hover {
+  color: var(--color-text-muted, var(--text2));
+}
+.te-tab.active {
+  color: var(--color-accent, var(--accent));
+  border-bottom-color: var(--color-accent, var(--accent));
+}
+
+.te-tab-panel {
+  display: none;
+}
+.te-tab-panel.active {
+  display: block;
+}
+
+.te-panel-section {
+  background: var(--color-surface, var(--bg2));
+  border: 1px solid var(--color-border, var(--border));
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 14px;
+}
+.te-panel-section-title {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--color-text-subtle, var(--text3));
+  margin-bottom: 10px;
+  font-family: 'Share Tech Mono', monospace;
+}
+
+/* Design Tab Grid */
+.te-design-color-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 12px;
+}
+.te-color-picker-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.te-color-picker-box label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-muted, var(--text2));
+}
+.te-color-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--color-surface-raised, var(--bg3));
+  border: 1px solid var(--color-border, var(--border));
+  border-radius: 8px;
+  padding: 4px 6px;
+}
+.te-color-picker-row input[type="color"] {
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--color-border, var(--border));
+  border-radius: 4px;
+  padding: 0;
+  background: none;
+  cursor: pointer;
+}
+.te-color-hex-label {
+  font-size: 10px;
+  font-family: 'Share Tech Mono', monospace;
+  color: var(--color-text-subtle, var(--text3));
+}
+
+/* Font Pairing grid */
+.te-font-pairing-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+.te-font-btn {
+  background: var(--color-surface-raised, var(--bg3));
+  border: 1px solid var(--color-border, var(--border));
+  border-radius: 10px;
+  padding: 10px;
+  text-align: left;
+  cursor: pointer;
+  color: var(--color-text, var(--text));
+  transition: all 0.15s;
+}
+.te-font-btn:hover {
+  border-color: var(--color-text-muted, var(--text2));
+}
+.te-font-btn.active {
+  border-color: var(--color-accent, var(--accent));
+  box-shadow: 0 0 0 1px var(--color-accent, var(--accent));
+  background: color-mix(in srgb, var(--color-accent, var(--accent)) 8%, var(--color-surface-raised, var(--bg3)));
+}
+.te-font-preview {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+.te-font-label {
+  font-size: 11px;
+  font-weight: 700;
+}
+.te-font-desc {
+  font-size: 9px;
+  color: var(--color-text-subtle, var(--text3));
+}
+
+/* Radius / Shadow Buttons Groups */
+.te-slider-row {
+  margin-bottom: 12px;
+}
+.te-slider-label-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-muted, var(--text2));
+  margin-bottom: 6px;
+}
+.te-btn-group {
+  display: flex;
+  border: 1px solid var(--color-border, var(--border));
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--color-surface-raised, var(--bg3));
+}
+.te-btn-grp-opt {
+  flex: 1;
+  padding: 6px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-text-muted, var(--text2));
+  text-align: center;
+  transition: all 0.12s;
+  border-right: 1px solid var(--color-border, var(--border));
+  font-family: 'Nunito', sans-serif;
+}
+.te-btn-grp-opt:last-child {
+  border-right: none;
+}
+.te-btn-grp-opt:hover {
+  background: var(--color-surface, var(--bg2));
+  color: var(--color-text, var(--text));
+}
+.te-btn-grp-opt.active {
+  background: var(--color-accent, var(--accent));
+  color: var(--color-bg, var(--bg));
+  font-weight: 800;
+}
+
+/* Glassmorphism switch */
+.te-glass-toggle-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border, var(--border));
+  margin-bottom: 10px;
+}
+.te-glass-info {
+  display: flex;
+  flex-direction: column;
+}
+.te-glass-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-text-muted, var(--text2));
+}
+.te-glass-desc {
+  font-size: 9px;
+  color: var(--color-text-subtle, var(--text3));
+}
+.te-switch {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 20px;
+}
+.te-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.te-switch-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: var(--color-border, var(--border));
+  transition: .2s;
+  border-radius: 20px;
+}
+.te-switch-slider:before {
+  position: absolute;
+  content: "";
+  height: 14px;
+  width: 14px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: .2s;
+  border-radius: 50%;
+}
+.te-switch input:checked + .te-switch-slider {
+  background-color: var(--color-accent, var(--accent));
+}
+.te-switch input:checked + .te-switch-slider:before {
+  transform: translateX(16px);
+}
+
+.te-range-slider {
+  width: 100%;
+  accent-color: var(--color-accent, var(--accent));
+  height: 4px;
+  border-radius: 2px;
+  outline: none;
+  background: var(--color-border, var(--border));
+  cursor: pointer;
+}
+
+.te-reset-link {
+  font-size: 11px;
+  color: var(--color-accent, var(--accent));
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: 'Nunito', sans-serif;
+  margin-left: auto;
+  padding: 0;
+}
+.te-reset-link:hover {
+  text-decoration: underline;
+}
+
+/* Font styles definitions */
+.font-sans { font-family: 'Nunito', sans-serif !important; }
+.font-grotesk { font-family: 'Space Grotesk', sans-serif !important; }
+.font-serif { font-family: 'Playfair Display', serif !important; }
+.font-mono { font-family: 'Share Tech Mono', monospace !important; }
+
+/* ── THEME APPEARANCE STUDIO AP TRACKER OVERRIDES ── */
+body {
+  font-family: var(--font-body, 'Nunito', sans-serif) !important;
+}
+
+.modal-title, .logo-text, .game-drawer-title, .game-levelup-title, .game-mission-complete-name {
+  font-family: var(--font-headings, 'Rajdhani', sans-serif) !important;
+}
+
+/* Rounded corners overrides */
+.modal, .store-modal, .game-levelup-card, .game-mission-complete-card, .game-badge-complete-card, .admin-panel-inner, .embedded-admin-shell {
+  border-radius: var(--radius-card, 14px) !important;
+  box-shadow: var(--shadow-card, 0 24px 80px rgba(0,0,0,0.6)) !important;
+}
+
+.game-card, .row-panel, .hist-panel, .press-minicard, .issue-card, .notes-editor-card, .mc-schedule, .todo-editor, .te-phone-card {
+  border-radius: var(--radius-card, 14px) !important;
+  box-shadow: var(--shadow-card, 0 2px 12px rgba(0,0,0,0.2)) !important;
+}
+
+.btn, .google-btn, .plant-switcher-btn, .theme-choice, .te-saved-apply, .mc-issue-item, .row-tab, .log-compose-btn, .press-btn {
+  border-radius: var(--radius-btn, 8px) !important;
+}
+
+/* Glassmorphism filters overrides */
+.modal, .store-modal, .admin-panel-inner, .embedded-admin-shell, 
+.game-card, .row-panel, .hist-panel, .press-minicard, .issue-card, .notes-editor-card, .todo-editor {
+  background: var(--glass-bg, inherit) !important;
+  backdrop-filter: blur(var(--glass-blur, 0px)) !important;
+  -webkit-backdrop-filter: blur(var(--glass-blur, 0px)) !important;
+  border-color: var(--glass-border, var(--color-border, var(--border))) !important;
 }

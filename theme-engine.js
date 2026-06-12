@@ -47,10 +47,19 @@ export const THEME_EDITOR_CORE_VARS = [
   '--color-teal-soft',
   '--color-babyblue',
   '--color-babyblue-soft',
-  '--bg-svg'
+  '--bg-svg',
+  '--radius-card',
+  '--radius-btn',
+  '--font-body',
+  '--font-headings',
+  '--shadow-card',
+  '--glass-blur',
+  '--glass-bg',
+  '--glass-border',
+  '--glass-strength'
 ];
 
-const THEME_SOFT_TOKEN_MAP = {
+export const THEME_SOFT_TOKEN_MAP = {
   '--green-dim': '--color-success-soft',
   '--red-dim': '--color-danger-soft',
   '--blue-dim': '--color-info-soft',
@@ -87,7 +96,16 @@ export const THEME_DEFAULT_VARS = {
   '--teal': '#14b8a6',
   '--teal-dim': 'rgba(20,184,166,0.12)',
   '--babyblue': '#38bdf8',
-  '--babyblue-dim': 'rgba(56,189,248,0.12)'
+  '--babyblue-dim': 'rgba(56,189,248,0.12)',
+  '--radius-card': '14px',
+  '--radius-btn': '8px',
+  '--font-body': "'Nunito', sans-serif",
+  '--font-headings': "'Rajdhani', sans-serif",
+  '--shadow-card': '0 2px 12px rgba(0,0,0,0.2)',
+  '--glass-blur': '0px',
+  '--glass-bg': 'var(--bg2)',
+  '--glass-border': 'var(--border)',
+  '--glass-strength': '4'
 };
 
 const RAW_BUILT_IN_THEME_DEFS = [
@@ -620,30 +638,62 @@ export function getThemePreviewColors(theme) {
 
 export function normalizeThemeVars(vars = {}) {
   const out = { ...THEME_DEFAULT_VARS };
+  
+  // 1. Copy all variables directly to out first
   Object.entries(vars || {}).forEach(([key, value]) => {
     const normalizedKey = String(key || '').trim();
     if (!normalizedKey.startsWith('--')) return;
-    if (normalizedKey === '--bg-svg') {
-      out[normalizedKey] = String(value || '');
-      return;
-    }
-    const valueText = String(value || '').trim();
-    const legacyKey = Object.entries(THEME_TOKEN_MAP).find(([, token]) => token === normalizedKey)?.[0];
-    if (legacyKey) {
-      out[legacyKey] = valueText;
-      return;
-    }
-    out[normalizedKey] = valueText;
+    out[normalizedKey] = String(value || '').trim();
   });
 
+  // 2. Synchronize legacy and modern tokens based on what actually changed
   Object.entries(THEME_TOKEN_MAP).forEach(([legacyKey, tokenKey]) => {
-    if (out[tokenKey] && !out[legacyKey]) out[legacyKey] = out[tokenKey];
-    if (out[legacyKey]) out[tokenKey] = out[legacyKey];
+    const legacyVal = out[legacyKey];
+    const tokenVal = out[tokenKey];
+    const defaultLegacy = THEME_DEFAULT_VARS[legacyKey];
+    const defaultToken = THEME_DEFAULT_VARS[tokenKey];
+
+    const legacyChanged = legacyVal !== undefined && legacyVal !== defaultLegacy;
+    const tokenChanged = tokenVal !== undefined && tokenVal !== defaultToken;
+
+    if (legacyChanged && !tokenChanged) {
+      out[tokenKey] = legacyVal;
+    } else if (tokenChanged && !legacyChanged) {
+      out[legacyKey] = tokenVal;
+    } else {
+      if (vars[legacyKey] !== undefined) {
+        out[tokenKey] = legacyVal;
+      } else if (vars[tokenKey] !== undefined) {
+        out[legacyKey] = tokenVal;
+      } else if (legacyVal !== undefined) {
+        out[tokenKey] = legacyVal;
+      }
+    }
   });
 
+  // 3. Synchronize soft tokens
   Object.entries(THEME_SOFT_TOKEN_MAP).forEach(([legacyKey, tokenKey]) => {
-    if (out[tokenKey] && !out[legacyKey]) out[legacyKey] = out[tokenKey];
-    if (out[legacyKey]) out[tokenKey] = out[legacyKey];
+    const legacyVal = out[legacyKey];
+    const tokenVal = out[tokenKey];
+    const defaultLegacy = THEME_DEFAULT_VARS[legacyKey];
+    const defaultToken = THEME_DEFAULT_VARS[tokenKey];
+
+    const legacyChanged = legacyVal !== undefined && legacyVal !== defaultLegacy;
+    const tokenChanged = tokenVal !== undefined && tokenVal !== defaultToken;
+
+    if (legacyChanged && !tokenChanged) {
+      out[tokenKey] = legacyVal;
+    } else if (tokenChanged && !legacyChanged) {
+      out[legacyKey] = tokenVal;
+    } else {
+      if (vars[legacyKey] !== undefined) {
+        out[tokenKey] = legacyVal;
+      } else if (vars[tokenKey] !== undefined) {
+        out[legacyKey] = tokenVal;
+      } else if (legacyVal !== undefined) {
+        out[tokenKey] = legacyVal;
+      }
+    }
   });
 
   return out;

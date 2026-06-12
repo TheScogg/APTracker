@@ -678,7 +678,7 @@ function issueUpsertStatement() {
       ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?, ?, ?,
-      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
     )
     ON CONFLICT(issue_id) DO UPDATE SET
       press_id = excluded.press_id,
@@ -3226,9 +3226,9 @@ async function createWikiAttachment(db, request, plantId, pageId, body, user) {
 
 export async function handleD1ApiRequest(request, env, { authenticateRequest } = {}) {
   const url = new URL(request.url);
-  const db = getDb(env);
 
   try {
+    const db = getDb(env);
     const meMatch = request.method === 'GET' && url.pathname === '/api/me';
     const meUpdateMatch = request.method === 'PATCH' && url.pathname === '/api/me';
     const meStorePurchaseMatch = request.method === 'POST' && url.pathname === '/api/me/store-purchases';

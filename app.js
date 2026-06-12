@@ -29,7 +29,9 @@ import {
   removeThemeClasses,
   saveThemeSelection,
   themeLabelSansIcon,
-  getContrastRatio
+  getContrastRatio,
+  THEME_TOKEN_MAP,
+  THEME_SOFT_TOKEN_MAP
 } from "./theme-engine.js";
 import {
   normalizeSubcategoryRoutes as normalizeSharedSubcategoryRoutes,
@@ -196,11 +198,21 @@ async function safeSqlBootstrapRead(label, loader) {
   }
 }
 
+async function requireSqlBootstrapRead(label, loader, missingMessage = '', validator = null) {
+  const payload = await safeSqlBootstrapRead(label, loader);
+  if (validator ? validator(payload) : payload) return payload;
+  throw new Error(missingMessage || `D1 bootstrap data is missing for ${label}.`);
+}
+
 async function ensureSqlPlantBootstrap(plantId) {
   if (!shouldUseSqlStagingReads() || !plantId) return null;
   if (sqlPlantBootstrapCache.has(plantId)) return sqlPlantBootstrapCache.get(plantId);
-  const payload = await safeSqlRead(`plant bootstrap ${plantId}`, () => dataApi.loadPlantBootstrap(plantId));
-  if (payload) sqlPlantBootstrapCache.set(plantId, payload);
+  const payload = await requireSqlRead(
+    `plant bootstrap ${plantId}`,
+    () => dataApi.loadPlantBootstrap(plantId),
+    `Plant bootstrap is missing in D1 for plant ${plantId}.`
+  );
+  sqlPlantBootstrapCache.set(plantId, payload);
   return payload;
 }
 
@@ -437,6 +449,12 @@ const syncState = {
   lastError: null,
   manualText: 'Connecting...'
 };
+const migrationReadinessState = {
+  loading: false,
+  data: null,
+  error: '',
+  checkedAt: 0
+};
 
 function statusClassForSyncState(status) {
   if (status === 'live') return 'ok';
@@ -465,6 +483,78 @@ function applySyncBanner() {
   banner.dataset.syncStatus = syncState.status || 'connecting';
   dot.className = `sync-dot ${statusClassForSyncState(syncState.status)}`.trim();
   text.textContent = defaultSyncText();
+  renderMigrationStatusPill();
+}
+
+function migrationStatusPillTone() {
+  if (!shouldUseSqlBootstrap()) return '';
+  if (migrationReadinessState.error) return 'warn';
+  const data = migrationReadinessState.data;
+  if (!data) return migrationReadinessState.loading ? 'info' : 'warn';
+  const needsAttachmentCutover = !data?.bindings?.attachmentsR2;
+  const hasLegacyRuntime = Object.values(data?.runtimeDependencies || {}).some(Boolean);
+  if (needsAttachmentCutover) return 'warn';
+  if (hasLegacyRuntime) return 'info';
+  return 'ok';
+}
+
+function migrationStatusPillLabel() {
+  if (!shouldUseSqlBootstrap()) return '';
+  if (migrationReadinessState.loading && !migrationReadinessState.data) return 'SQL check...';
+  if (migrationReadinessState.error) return 'SQL readiness unknown';
+  const data = migrationReadinessState.data;
+  if (!data) return 'SQL readiness pending';
+  const remainingSteps = Array.isArray(data.remainingSteps) ? data.remainingSteps.filter(Boolean) : [];
+  if (remainingSteps.length > 0) return `SQL migration: ${remainingSteps.length} left`;
+  if (data.ready) return 'SQL ready';
+  return 'SQL migration active';
+}
+
+function migrationStatusPillTitle() {
+  if (!shouldUseSqlBootstrap()) return '';
+  if (migrationReadinessState.error) {
+    return `Could not load SQL migration readiness: ${migrationReadinessState.error}`;
+  }
+  const data = migrationReadinessState.data;
+  if (!data) return migrationReadinessState.loading ? 'Checking SQL migration readiness.' : 'SQL migration readiness has not been loaded yet.';
+  const lines = [];
+  const bindings = data.bindings || {};
+  const runtimeDependencies = data.runtimeDependencies || {};
+  const migrationState = data.migrationState || {};
+  lines.push(`D1 binding: ${bindings.d1 ? 'ready' : 'missing'}`);
+  lines.push(`R2 attachments: ${bindings.attachmentsR2 ? 'ready' : 'missing'}`);
+  lines.push(`App session secret: ${bindings.appSessionSecret ? 'ready' : 'missing'}`);
+  lines.push(`Firebase auth exchange: ${runtimeDependencies.firebaseAuthSessionExchange ? 'still enabled' : 'off'}`);
+  lines.push(`FCM push delivery: ${runtimeDependencies.fcmPushDelivery ? 'still enabled' : 'off'}`);
+  lines.push(`Attachment storage cutover: ${migrationState.attachmentStorageCloudflareReady ? 'ready' : 'not finished'}`);
+  const remainingSteps = Array.isArray(data.remainingSteps) ? data.remainingSteps.filter(Boolean) : [];
+  if (remainingSteps.length) {
+    lines.push('');
+    remainingSteps.forEach((step, index) => {
+      lines.push(`${index + 1}. ${step}`);
+    });
+  }
+  return lines.join('\n');
+}
+
+function renderMigrationStatusPill() {
+  const syncBanner = document.getElementById('sync-banner');
+  if (!syncBanner) return;
+  let pill = document.getElementById('migration-status-pill');
+  if (!shouldUseSqlBootstrap()) {
+    if (pill) pill.remove();
+    return;
+  }
+  if (!pill) {
+    pill = document.createElement('span');
+    pill.id = 'migration-status-pill';
+    pill.className = 'migration-status-pill';
+    syncBanner.insertBefore(pill, document.getElementById('app-version-indicator') || null);
+  }
+  const tone = migrationStatusPillTone();
+  pill.className = `migration-status-pill ${tone}`.trim();
+  pill.textContent = migrationStatusPillLabel();
+  pill.title = migrationStatusPillTitle();
 }
 
 function deriveSyncStatus() {
@@ -1144,7 +1234,11 @@ function _expandRoleAliases(roleKeys) {
 async function loadPlantMembersForAlerts() {
   if (!currentPlantId) return [];
   if (shouldUseSqlStagingReads(currentPlantId)) {
-    const payload = await safeSqlRead(`plant members ${currentPlantId}`, () => dataApi.listPlantMembers(currentPlantId, { active: true }));
+    const payload = await requireSqlRead(
+      `plant members ${currentPlantId}`,
+      () => dataApi.listPlantMembers(currentPlantId, { active: true }),
+      `Plant members are missing in D1 for plant ${currentPlantId}.`
+    );
     if (!Array.isArray(payload?.members)) {
       throw new Error(`Plant members are missing in D1 for plant ${currentPlantId}.`);
     }
@@ -1213,7 +1307,11 @@ async function getRoleAlertRoutingRules() {
     const sqlBootstrap = await ensureSqlPlantBootstrap(currentPlantId);
     const bootstrapRules = _normalizeRoleAlertRules(sqlBootstrap?.roleAlertRouting?.rules || null);
     if (bootstrapRules.length === 0) {
-      const payload = await safeSqlRead(`role alert routing ${currentPlantId}`, () => dataApi.getRoleAlertRouting(currentPlantId));
+      const payload = await requireSqlRead(
+        `role alert routing ${currentPlantId}`,
+        () => dataApi.getRoleAlertRouting(currentPlantId),
+        `Role alert routing is missing in D1 for plant ${currentPlantId}.`
+      );
       const sqlRules = _normalizeRoleAlertRules(payload?.roleAlertRouting?.rules || null);
       if (sqlRules.length === 0) {
         throw new Error(`Role alert routing is missing in D1 for plant ${currentPlantId}.`);
@@ -2007,7 +2105,11 @@ window.openRolePreferencesModal = async function() {
     const [categoryOptions, memberPayload] = await Promise.all([
       Promise.resolve(getAvailableCategoryOptionsForPreferences()),
       shouldUseSqlStagingReads(currentPlantId)
-        ? safeSqlRead(`member ${currentPlantId}:${currentUser.uid}`, () => dataApi.listPlantMembers(currentPlantId, { active: false }))
+        ? requireSqlRead(
+            `member ${currentPlantId}:${currentUser.uid}`,
+            () => dataApi.listPlantMembers(currentPlantId, { active: false }),
+            `Current user member record is missing in D1 for plant ${currentPlantId}.`
+          )
         : getDoc(plantMemberDocRef(currentPlantId, currentUser.uid))
     ]);
     const member = shouldUseSqlStagingReads(currentPlantId)
@@ -2822,7 +2924,14 @@ async function hydrateCurrentPlantView() {
 // self-migrates by writing plant docs + member docs and switching to plantIds.
 async function loadUserPlants() {
   try {
-    const sqlContext = await safeSqlBootstrapRead('current user context', () => dataApi.getCurrentUserContext());
+    const sqlContext = shouldUseSqlBootstrap()
+      ? await requireSqlBootstrapRead(
+          'current user context',
+          () => dataApi.getCurrentUserContext(),
+          'Current user bootstrap is missing in D1.',
+          payload => Boolean(payload?.user)
+        )
+      : null;
     let userData = {};
     const usingSqlBootstrap = shouldUseSqlBootstrap();
     if (sqlContext?.user) {
@@ -2922,8 +3031,15 @@ async function loadUserPlants() {
 
 async function loadAvailablePlantsForOnboarding() {
   if (DEMO_MODE || NO_AUTH_MODE) return [];
-  const sqlPlants = await safeSqlBootstrapRead('plant directory', () => dataApi.listPlants({ active: true }));
-  if (Array.isArray(sqlPlants?.plants) && sqlPlants.plants.length) {
+  const sqlPlants = shouldUseSqlBootstrap()
+    ? await requireSqlBootstrapRead(
+        'plant directory',
+        () => dataApi.listPlants({ active: true }),
+        'Plant directory is missing in D1.',
+        payload => Array.isArray(payload?.plants)
+      )
+    : null;
+  if (Array.isArray(sqlPlants?.plants)) {
     return sqlPlants.plants
       .map(plant => ({
         id: plant.plantId,
@@ -2933,9 +3049,6 @@ async function loadAvailablePlantsForOnboarding() {
       }))
       .filter(p => p.isActive)
       .sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
-  }
-  if (shouldUseSqlBootstrap()) {
-    return [...userPlants].sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
   }
   try {
     const snap = await getDocs(collection(db, 'plants'));
@@ -3030,7 +3143,11 @@ async function loadCurrentMember(plantId) {
     return;
   }
   if (shouldUseSqlStagingReads(plantId)) {
-    const payload = await safeSqlRead(`member ${plantId}:${currentUser.uid}`, () => dataApi.listPlantMembers(plantId, { active: false }));
+    const payload = await requireSqlRead(
+      `member ${plantId}:${currentUser.uid}`,
+      () => dataApi.listPlantMembers(plantId, { active: false }),
+      `Current user member record is missing in D1 for plant ${plantId}.`
+    );
     const member = (payload?.members || []).find(entry => (entry.uid || entry.id) === currentUser.uid) || null;
     if (!member || member.isActive === false) {
       throw new Error(`Current user is not an active D1 member for plant ${plantId}.`);
@@ -3090,7 +3207,11 @@ async function loadPlantPresses() {
     return;
   }
   if (shouldUseSqlStagingReads(currentPlantId)) {
-    const payload = await safeSqlRead(`press config ${currentPlantId}`, () => dataApi.getPressConfig(currentPlantId));
+    const payload = await requireSqlRead(
+      `press config ${currentPlantId}`,
+      () => dataApi.getPressConfig(currentPlantId),
+      `Press config is missing in D1 for plant ${currentPlantId}.`
+    );
     const sqlPresses = payload?.pressConfig?.presses || null;
     if (!sqlPresses || typeof sqlPresses !== 'object') {
       throw new Error(`Press config is missing in D1 for plant ${currentPlantId}.`);
@@ -3440,7 +3561,11 @@ async function loadConfig() {
     return;
   }
   if (shouldUseSqlStagingReads(plantId)) {
-    const payload = await safeSqlRead(`status config ${plantId}`, () => dataApi.getStatusConfig(plantId));
+    const payload = await requireSqlRead(
+      `status config ${plantId}`,
+      () => dataApi.getStatusConfig(plantId),
+      `Status config is missing in D1 for plant ${plantId}.`
+    );
     const sqlStatuses = payload?.statusConfig?.statuses || null;
     if (!sqlStatuses || typeof sqlStatuses !== 'object') {
       throw new Error(`Status config is missing in D1 for plant ${plantId}.`);
@@ -3937,7 +4062,11 @@ function startGamificationListeners() {
         return;
       }
       try {
-        const payload = await safeSqlRead(`gamification ${currentPlantId}`, () => dataApi.getGamificationState(currentPlantId));
+        const payload = await requireSqlRead(
+          `gamification ${currentPlantId}`,
+          () => dataApi.getGamificationState(currentPlantId),
+          `Gamification state is missing in D1 for plant ${currentPlantId}.`
+        );
         if (!payload) {
           throw new Error(`Gamification state is missing in D1 for plant ${currentPlantId}.`);
         }
@@ -4191,7 +4320,11 @@ async function loadStoreConfig() {
   if (shouldUseSqlStagingReads(currentPlantId)) {
     const sqlBootstrap = await ensureSqlPlantBootstrap(currentPlantId);
     const config = sqlBootstrap?.storeConfig?.config
-      || (await safeSqlRead(`store config ${currentPlantId}`, () => dataApi.getStoreConfig(currentPlantId)))?.storeConfig?.config
+      || (await requireSqlRead(
+        `store config ${currentPlantId}`,
+        () => dataApi.getStoreConfig(currentPlantId),
+        `Store config is missing in D1 for plant ${currentPlantId}.`
+      ))?.storeConfig?.config
       || null;
     if (!config || typeof config !== 'object') {
       throw new Error(`Store config is missing in D1 for plant ${currentPlantId}.`);
@@ -4578,14 +4711,31 @@ function _buildStoreThemeCard(theme, activeKey, spendable) {
       <div class="stc-preview-bg"></div>
       <div class="stc-preview-stripe"></div>
       <div class="stc-preview-ui">
-        <div class="stc-ui-bar" style="background:${accent}22"></div>
-        <div class="stc-ui-row">
-          <div class="stc-ui-dot" style="background:${accent}"></div>
-          <div class="stc-ui-line" style="background:${textColor}22"></div>
+        <!-- Header -->
+        <div class="stc-ui-header" style="background:${accent}25; border-bottom: 1.5px solid ${textColor}15;">
+          <div class="stc-ui-dot stc-ui-dot-sm" style="background:${accent}"></div>
+          <div class="stc-ui-line-sm" style="background:${textColor}; opacity: 0.6; width: 45%;"></div>
         </div>
-        <div class="stc-ui-row">
-          <div class="stc-ui-dot stc-ui-dot-sm" style="background:${textColor}44"></div>
-          <div class="stc-ui-line stc-ui-line-sm" style="background:${textColor}18"></div>
+        <!-- Cards List -->
+        <div class="stc-ui-body">
+          <div class="stc-ui-card" style="background:${textColor}0a; border: 1px solid ${textColor}15;">
+            <div class="stc-ui-row">
+              <div class="stc-ui-dot stc-ui-dot-sm" style="background:${accent}"></div>
+              <div class="stc-ui-line-sm" style="background:${textColor}; opacity: 0.8; width: 55%;"></div>
+            </div>
+            <div class="stc-ui-line-sm" style="background:${textColor}; opacity: 0.35; width: 85%;"></div>
+          </div>
+          <div class="stc-ui-card" style="background:${textColor}05; border: 1px solid ${textColor}0c; opacity: 0.8;">
+            <div class="stc-ui-row">
+              <div class="stc-ui-line-sm" style="background:${textColor}; opacity: 0.5; width: 35%;"></div>
+            </div>
+          </div>
+        </div>
+        <!-- Navigation -->
+        <div class="stc-ui-nav" style="background:${bg}; border-top: 1.5px solid ${textColor}15;">
+          <div class="stc-ui-dot stc-ui-dot-sm" style="background:${accent}"></div>
+          <div class="stc-ui-dot stc-ui-dot-sm" style="background:${textColor}; opacity: 0.3;"></div>
+          <div class="stc-ui-dot stc-ui-dot-sm" style="background:${textColor}; opacity: 0.3;"></div>
         </div>
       </div>
       ${isActive ? '<div class="stc-active-check">✓</div>' : ''}
@@ -4840,8 +4990,8 @@ const issueLogMasonicState = {
   positions: new Map()
 };
 
-const MAX_DIM = 1200;
-const JPEG_QUALITY = 0.82;
+const MAX_DIM = 1000;
+const JPEG_QUALITY = 0.70;
 
 // ── AUTH ──
 function resetGoogleSignInButton() {
@@ -5177,6 +5327,7 @@ async function bootstrapNoAuthSession() {
 async function bootstrapSignedInSession(user) {
   currentUser = user;
   void apiSessionClient.warm();
+  void refreshMigrationReadiness();
   document.getElementById('login-screen').classList.remove('visible');
   document.getElementById('app').classList.add('visible');
   applyUserIdentityToShell(user);
@@ -6335,6 +6486,33 @@ window.addEventListener('offline', () => {
   refreshSyncState({ status: 'offline', online: false, manualText: 'Offline - showing cached data' });
 });
 applySyncBanner();
+
+async function refreshMigrationReadiness() {
+  if (!shouldUseSqlBootstrap()) {
+    migrationReadinessState.loading = false;
+    migrationReadinessState.data = null;
+    migrationReadinessState.error = '';
+    migrationReadinessState.checkedAt = 0;
+    renderMigrationStatusPill();
+    return null;
+  }
+  migrationReadinessState.loading = true;
+  migrationReadinessState.error = '';
+  renderMigrationStatusPill();
+  try {
+    const payload = await dataApi.getMigrationReadiness();
+    migrationReadinessState.data = payload || null;
+    migrationReadinessState.checkedAt = Date.now();
+    return payload;
+  } catch (error) {
+    migrationReadinessState.error = error?.message || 'Could not load SQL migration readiness.';
+    migrationReadinessState.checkedAt = Date.now();
+    return null;
+  } finally {
+    migrationReadinessState.loading = false;
+    renderMigrationStatusPill();
+  }
+}
 
 // ── SCOPE TOGGLE ──
 window.setScope = s => {
@@ -8578,7 +8756,11 @@ function getMutableStatusHistory(issue) {
 
 async function getLatestIssueForStatusMutation(issueId, fallbackIssue) {
   if (shouldUseSqlStagingReads(currentPlantId)) {
-    const payload = await safeSqlRead(`issue ${issueId}`, () => dataApi.getIssue(currentPlantId, issueId));
+    const payload = await requireSqlRead(
+      `issue ${issueId}`,
+      () => dataApi.getIssue(currentPlantId, issueId),
+      `Issue ${issueId} is missing in D1 for plant ${currentPlantId}.`
+    );
     if (payload?.issue) return normalizeSqlIssueForApp(payload.issue);
     return fallbackIssue || null;
   }
@@ -12290,6 +12472,63 @@ function applyCustomThemeVars(vars) {
   return normalized;
 }
 
+function _teSetVarAndSync(cssVar, val) {
+  _teCurrentVars = _teCurrentVars || {};
+  if (val === undefined || val === null) {
+    delete _teCurrentVars[cssVar];
+  } else {
+    _teCurrentVars[cssVar] = val;
+  }
+  
+  // Sync legacy -> modern
+  const modernKey = THEME_TOKEN_MAP[cssVar] || THEME_SOFT_TOKEN_MAP[cssVar];
+  if (modernKey) {
+    if (val === undefined || val === null) {
+      delete _teCurrentVars[modernKey];
+    } else {
+      _teCurrentVars[modernKey] = val;
+    }
+    const inputEl = document.getElementById(`te-var-${modernKey.slice(2)}`);
+    if (inputEl) {
+      inputEl.value = val || '';
+      const colorEl = inputEl.nextElementSibling;
+      if (colorEl && colorEl.classList.contains('te-var-color')) {
+        const nextHex = _teToHexIfColor(val);
+        colorEl.style.visibility = nextHex ? 'visible' : 'hidden';
+        if (nextHex) colorEl.value = nextHex;
+      }
+    }
+  }
+  
+  // Sync modern -> legacy
+  const legacyKey = Object.entries(THEME_TOKEN_MAP).find(([, token]) => token === cssVar)?.[0] ||
+                    Object.entries(THEME_SOFT_TOKEN_MAP).find(([, token]) => token === cssVar)?.[0];
+  if (legacyKey) {
+    if (val === undefined || val === null) {
+      delete _teCurrentVars[legacyKey];
+    } else {
+      _teCurrentVars[legacyKey] = val;
+    }
+    const picker = document.getElementById(`te-color-${legacyKey.slice(2)}`);
+    if (picker) {
+      picker.value = _teToHexIfColor(val) || '#000000';
+      const labelId = picker.id.replace('te-color-', 'te-hex-');
+      const labelEl = document.getElementById(labelId);
+      if (labelEl) labelEl.textContent = val || '';
+    }
+    const inputEl = document.getElementById(`te-var-${legacyKey.slice(2)}`);
+    if (inputEl) {
+      inputEl.value = val || '';
+      const colorEl = inputEl.nextElementSibling;
+      if (colorEl && colorEl.classList.contains('te-var-color')) {
+        const nextHex = _teToHexIfColor(val);
+        colorEl.style.visibility = nextHex ? 'visible' : 'hidden';
+        if (nextHex) colorEl.value = nextHex;
+      }
+    }
+  }
+}
+
 function _teGetAllVariables() {
   const vars = new Set(THEME_EDITOR_CORE_VARS);
 
@@ -12727,10 +12966,31 @@ function renderAppearanceThemeGrid() {
           <div class="stc-preview-bg"></div>
           <div class="stc-preview-stripe"></div>
           <div class="stc-preview-ui">
-            <div class="stc-ui-bar" style="background:${accent}22"></div>
-            <div class="stc-ui-row">
-              <div class="stc-ui-dot" style="background:${accent}"></div>
-              <div class="stc-ui-line" style="background:${textColor}22"></div>
+            <!-- Header -->
+            <div class="stc-ui-header" style="background:${accent}25; border-bottom: 1.5px solid ${textColor}15;">
+              <div class="stc-ui-dot stc-ui-dot-sm" style="background:${accent}"></div>
+              <div class="stc-ui-line-sm" style="background:${textColor}; opacity: 0.6; width: 45%;"></div>
+            </div>
+            <!-- Cards List -->
+            <div class="stc-ui-body">
+              <div class="stc-ui-card" style="background:${textColor}0a; border: 1px solid ${textColor}15;">
+                <div class="stc-ui-row">
+                  <div class="stc-ui-dot stc-ui-dot-sm" style="background:${accent}"></div>
+                  <div class="stc-ui-line-sm" style="background:${textColor}; opacity: 0.8; width: 55%;"></div>
+                </div>
+                <div class="stc-ui-line-sm" style="background:${textColor}; opacity: 0.35; width: 85%;"></div>
+              </div>
+              <div class="stc-ui-card" style="background:${textColor}05; border: 1px solid ${textColor}0c; opacity: 0.8;">
+                <div class="stc-ui-row">
+                  <div class="stc-ui-line-sm" style="background:${textColor}; opacity: 0.5; width: 35%;"></div>
+                </div>
+              </div>
+            </div>
+            <!-- Navigation -->
+            <div class="stc-ui-nav" style="background:${bg}; border-top: 1.5px solid ${textColor}15;">
+              <div class="stc-ui-dot stc-ui-dot-sm" style="background:${accent}"></div>
+              <div class="stc-ui-dot stc-ui-dot-sm" style="background:${textColor}; opacity: 0.3;"></div>
+              <div class="stc-ui-dot stc-ui-dot-sm" style="background:${textColor}; opacity: 0.3;"></div>
             </div>
           </div>
           ${isActive ? '<div class="stc-active-check">✓</div>' : ''}
@@ -12772,6 +13032,12 @@ window.applyAppearanceTheme = function(themeKey) {
   if (sel) sel.value = baseKey;
   _teCurrentVars = { ...(THEME_VARS_MAP[baseKey] || THEME_VARS_MAP.midnight) };
   
+  _teEditingId = null;
+  const saveBtn = document.getElementById('te-save-btn');
+  if (saveBtn) saveBtn.textContent = '💾 Save';
+  const themeNameInput = document.getElementById('te-theme-name');
+  if (themeNameInput) themeNameInput.value = '';
+
   removeThemeClasses(THEME_KEYS);
   applyCustomThemeVars(_teCurrentVars);
 
@@ -12782,6 +13048,7 @@ window.applyAppearanceTheme = function(themeKey) {
   const svgField = document.getElementById('te-bg-svg-input');
   if (svgField) svgField.value = _teCurrentVars['--bg-svg'] || '';
   updateLiveContrastBadge();
+  _teSyncDesignTabFromCurrentVars();
 };
 
 window.resetThemeToBase = function() {
@@ -12804,6 +13071,7 @@ window.resetThemeToBase = function() {
     _renderTEVarsList();
     updateLiveContrastBadge();
     showGameToast('↺ Reset variables to base defaults');
+    _teSyncDesignTabFromCurrentVars();
   }
 };
 
@@ -12861,12 +13129,141 @@ window.importThemeCode = function() {
     renderThemeChoices();
     renderStoreModal();
     updateLiveContrastBadge();
+    _teSyncDesignTabFromCurrentVars();
     
     showGameToast('🎉 Theme imported successfully!');
   } catch (e) {
     alert('Failed to parse theme code. Make sure it was copied correctly.');
   }
 };
+
+function _teSyncDesignTabFromCurrentVars() {
+  if (!_teCurrentVars) return;
+  // Sync color pickers
+  const designPickers = document.querySelectorAll('#te-panel-design input[type="color"]');
+  designPickers.forEach(picker => {
+    const cssVar = picker.dataset.var;
+    const currentVal = _teCurrentVars[cssVar] || '';
+    picker.value = _teToHexIfColor(currentVal) || '#000000';
+    const labelId = picker.id.replace('te-color-', 'te-hex-');
+    const labelEl = document.getElementById(labelId);
+    if (labelEl) labelEl.textContent = picker.value;
+  });
+  
+  // Sync font pairings
+  const fontBtns = document.querySelectorAll('#te-panel-design .te-font-btn');
+  const activeFont = _teCurrentVars['--font-body'] || "'Nunito', sans-serif";
+  let fontKey = 'sans';
+  if (activeFont.includes('Space Grotesk')) fontKey = 'grotesk';
+  else if (activeFont.includes('Playfair')) fontKey = 'serif';
+  else if (activeFont.includes('Share Tech Mono')) fontKey = 'mono';
+  fontBtns.forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.font === fontKey);
+  });
+  
+  // Sync border radius
+  const radiusBtns = document.querySelectorAll('#te-group-radius .te-btn-grp-opt');
+  const activeRadiusVal = _teCurrentVars['--radius-card'] || '14px';
+  let radKey = 'md';
+  if (activeRadiusVal === '0px') radKey = 'none';
+  else if (activeRadiusVal === '6px') radKey = 'sm';
+  else if (activeRadiusVal === '22px') radKey = 'lg';
+  else if (activeRadiusVal === '36px') radKey = 'full';
+  
+  const radLabels = { none: 'None', sm: 'Slight', md: 'Rounded', lg: 'Curvy', full: 'Extreme' };
+  const radLabelEl = document.getElementById('te-lbl-radius');
+  if (radLabelEl) radLabelEl.textContent = radLabels[radKey];
+  radiusBtns.forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.val === radKey);
+  });
+  
+  // Sync drop shadows
+  const shadowBtns = document.querySelectorAll('#te-group-shadow .te-btn-grp-opt');
+  const activeShadow = _teCurrentVars['--shadow-card'] || '0 2px 12px rgba(0,0,0,0.2)';
+  let shdKey = 'md';
+  if (activeShadow === 'none') shdKey = 'none';
+  else if (activeShadow.includes('0.06')) shdKey = 'sm';
+  else if (activeShadow.includes('0.22')) shdKey = 'lg';
+  else if (activeShadow.includes('color-mix')) shdKey = 'colored';
+  
+  const shdLabels = { none: 'None', sm: 'Aura', md: 'Elevated', lg: 'Deep', colored: 'Glow' };
+  const shdLabelEl = document.getElementById('te-lbl-shadow');
+  if (shdLabelEl) shdLabelEl.textContent = shdLabels[shdKey];
+  shadowBtns.forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.val === shdKey);
+  });
+  
+  // Sync glassmorphism
+  const toggleGlass = document.getElementById('te-toggle-glass');
+  const sliderGlass = document.getElementById('te-slider-glass-strength');
+  const rowGlassStrength = document.getElementById('te-row-glass-strength');
+  const lblGlassStrength = document.getElementById('te-lbl-glass-strength');
+  
+  const glassBlurVal = _teCurrentVars['--glass-blur'] || '0px';
+  const isGlassActive = glassBlurVal !== '0px';
+  const glassStrengthVal = _teCurrentVars['--glass-strength'] || '4';
+  
+  if (toggleGlass) toggleGlass.checked = isGlassActive;
+  if (sliderGlass) sliderGlass.value = glassStrengthVal;
+  if (lblGlassStrength) lblGlassStrength.textContent = `${glassStrengthVal}/10`;
+  if (rowGlassStrength) rowGlassStrength.style.display = isGlassActive ? 'block' : 'none';
+  
+  // Sync nav style class
+  const navBtns = document.querySelectorAll('#te-group-nav .te-btn-grp-opt');
+  const activeNav = _teCurrentVars['--nav-style'] || 'bottom';
+  const phoneScreen = document.getElementById('te-phone-screen');
+  
+  if (phoneScreen) {
+    phoneScreen.classList.remove('nav-top', 'nav-floating');
+    if (activeNav === 'top') phoneScreen.classList.add('nav-top');
+    else if (activeNav === 'floating') phoneScreen.classList.add('nav-floating');
+  }
+  
+  const navLabels = { bottom: 'Bottom Bar', top: 'Top Header', floating: 'Floating Pill' };
+  const navLabelEl = document.getElementById('te-lbl-nav');
+  if (navLabelEl) navLabelEl.textContent = navLabels[activeNav];
+  navBtns.forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.val === activeNav);
+  });
+}
+
+function _teAutoSaveCurrentVars() {
+  if (!_teCurrentVars) return;
+  const activeTheme = readSavedTheme('midnight');
+  if (activeTheme.startsWith('custom_')) {
+    const customThemeId = activeTheme.slice('custom_'.length);
+    const data = _loadCustomThemes();
+    const idx = data.customThemes.findIndex(t => t.id === customThemeId);
+    if (idx >= 0) {
+      data.customThemes[idx].vars = normalizeThemeVars({ ..._teCurrentVars });
+      _saveCustomThemesStorage(data);
+      _renderTESavedList();
+      renderAppearanceCustomThemes();
+    }
+  } else {
+    // Auto-fork built-in theme
+    const data = _loadCustomThemes();
+    const baseName = THEME_OPTIONS.find(t => t.key === activeTheme)?.label || 'Custom Theme';
+    const cleanName = 'Custom ' + baseName.replace(/^[^\w\s]*/, '').trim();
+    const id = 'custom_' + Date.now();
+    const vars = normalizeThemeVars({ ..._teCurrentVars });
+    data.customThemes.push({ id, name: cleanName, vars, createdAt: Date.now() });
+    data.activeCustomId = id;
+    _saveCustomThemesStorage(data);
+    saveThemeSelection('custom_' + id);
+    _teEditingId = id;
+    
+    // Update input fields
+    const themeNameInput = document.getElementById('te-theme-name');
+    if (themeNameInput) themeNameInput.value = cleanName;
+    const saveBtn = document.getElementById('te-save-btn');
+    if (saveBtn) saveBtn.textContent = '💾 Update';
+    
+    _renderTESavedList();
+    renderAppearanceCustomThemes();
+    renderThemeChoices();
+  }
+}
 
 window.openThemeEditor = function() {
   const themeEditorModal = document.getElementById('theme-editor-modal');
@@ -12889,6 +13286,12 @@ window.openThemeEditor = function() {
     const found = data.customThemes.find(t => 'custom_' + t.id === _tePrevThemeKey);
     _teCurrentVars = found ? { ...found.vars } : { ...THEME_VARS_MAP.midnight };
     if (sel) sel.value = 'midnight';
+    if (found) {
+      _teEditingId = found.id;
+      if (saveBtn) saveBtn.textContent = '💾 Update';
+      const themeNameInput = document.getElementById('te-theme-name');
+      if (themeNameInput) themeNameInput.value = found.name;
+    }
   } else if (_tePrevThemeKey.startsWith('storetheme_')) {
     const storeTheme = getThemeCatalogEntry(_tePrevThemeKey);
     _teCurrentVars = storeTheme?.vars ? { ...storeTheme.vars } : { ...THEME_VARS_MAP.midnight };
@@ -12917,6 +13320,7 @@ window.openThemeEditor = function() {
             _teCurrentVars = _teCurrentVars || {};
             _teCurrentVars['--bg-svg'] = svgMarkup;
             applyCustomThemeVars(_teCurrentVars);
+            _teAutoSaveCurrentVars();
           }
         }
       });
@@ -12924,10 +13328,177 @@ window.openThemeEditor = function() {
     }
   }
 
+  // Initialize tabs switching logic
+  const tabs = document.querySelectorAll('#theme-editor-modal .te-tab');
+  tabs.forEach(tab => {
+    if (tab.dataset.hasTabListener) return;
+    tab.addEventListener('click', () => {
+      tabs.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      const target = tab.dataset.teTab;
+      document.querySelectorAll('#theme-editor-modal .te-tab-panel').forEach(panel => {
+        panel.classList.remove('active');
+      });
+      document.getElementById(`te-panel-${target}`)?.classList.add('active');
+    });
+    tab.dataset.hasTabListener = "true";
+  });
+
+  // Color Pickers on the Design Tab
+  const designPickers = document.querySelectorAll('#te-panel-design input[type="color"]');
+  designPickers.forEach(picker => {
+    const cssVar = picker.dataset.var;
+    const labelId = picker.id.replace('te-color-', 'te-hex-');
+    const labelEl = document.getElementById(labelId);
+    
+    if (picker.dataset.hasListener) return;
+    picker.addEventListener('input', (e) => {
+      const val = e.target.value;
+      _teSetVarAndSync(cssVar, val);
+      if (labelEl) labelEl.textContent = val;
+      applyCustomThemeVars(_teCurrentVars);
+      updateLiveContrastBadge();
+      _teAutoSaveCurrentVars();
+    });
+    picker.dataset.hasListener = "true";
+  });
+
+  // Font pairing buttons
+  const fontBtns = document.querySelectorAll('#te-panel-design .te-font-btn');
+  fontBtns.forEach(btn => {
+    if (btn.dataset.hasListener) return;
+    btn.addEventListener('click', () => {
+      fontBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const font = btn.dataset.font;
+      let bodyFont = "'Nunito', sans-serif";
+      let headFont = "'Rajdhani', sans-serif";
+      if (font === 'grotesk') {
+        bodyFont = "'Space Grotesk', sans-serif";
+        headFont = "'Space Grotesk', sans-serif";
+      } else if (font === 'serif') {
+        bodyFont = "'Playfair Display', serif";
+        headFont = "'Playfair Display', serif";
+      } else if (font === 'mono') {
+        bodyFont = "'Share Tech Mono', monospace";
+        headFont = "'Share Tech Mono', monospace";
+      }
+      _teCurrentVars['--font-body'] = bodyFont;
+      _teCurrentVars['--font-headings'] = headFont;
+      applyCustomThemeVars(_teCurrentVars);
+      _teAutoSaveCurrentVars();
+    });
+    btn.dataset.hasListener = "true";
+  });
+
+  // Border radius buttons
+  const radiusBtns = document.querySelectorAll('#te-group-radius .te-btn-grp-opt');
+  const radLabels = { none: 'None', sm: 'Slight', md: 'Rounded', lg: 'Curvy', full: 'Extreme' };
+  const radLabelEl = document.getElementById('te-lbl-radius');
+  radiusBtns.forEach(btn => {
+    if (btn.dataset.hasListener) return;
+    btn.addEventListener('click', () => {
+      radiusBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const val = btn.dataset.val;
+      if (radLabelEl) radLabelEl.textContent = radLabels[val];
+      let cardRad = '14px', btnRad = '8px';
+      if (val === 'none') { cardRad = '0px'; btnRad = '0px'; }
+      else if (val === 'sm') { cardRad = '6px'; btnRad = '4px'; }
+      else if (val === 'lg') { cardRad = '22px'; btnRad = '12px'; }
+      else if (val === 'full') { cardRad = '36px'; btnRad = '20px'; }
+      _teCurrentVars['--radius-card'] = cardRad;
+      _teCurrentVars['--radius-btn'] = btnRad;
+      applyCustomThemeVars(_teCurrentVars);
+      _teAutoSaveCurrentVars();
+    });
+    btn.dataset.hasListener = "true";
+  });
+
+  // Drop shadow buttons
+  const shadowBtns = document.querySelectorAll('#te-group-shadow .te-btn-grp-opt');
+  const shdLabels = { none: 'None', sm: 'Aura', md: 'Elevated', lg: 'Deep', colored: 'Glow' };
+  const shdLabelEl = document.getElementById('te-lbl-shadow');
+  shadowBtns.forEach(btn => {
+    if (btn.dataset.hasListener) return;
+    btn.addEventListener('click', () => {
+      shadowBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const val = btn.dataset.val;
+      if (shdLabelEl) shdLabelEl.textContent = shdLabels[val];
+      let shdVal = '0 2px 12px rgba(0,0,0,0.2)';
+      if (val === 'none') shdVal = 'none';
+      else if (val === 'sm') shdVal = '0 4px 16px rgba(0, 0, 0, 0.06)';
+      else if (val === 'lg') shdVal = '0 20px 48px rgba(0, 0, 0, 0.22)';
+      else if (val === 'colored') shdVal = '0 12px 24px color-mix(in srgb, var(--accent) 30%, transparent)';
+      _teCurrentVars['--shadow-card'] = shdVal;
+      applyCustomThemeVars(_teCurrentVars);
+      _teAutoSaveCurrentVars();
+    });
+    btn.dataset.hasListener = "true";
+  });
+
+  // Glassmorphism controls
+  const toggleGlass = document.getElementById('te-toggle-glass');
+  const sliderGlass = document.getElementById('te-slider-glass-strength');
+  const rowGlassStrength = document.getElementById('te-row-glass-strength');
+  const lblGlassStrength = document.getElementById('te-lbl-glass-strength');
+  const updateGlassParams = () => {
+    const active = toggleGlass.checked;
+    const strength = parseInt(sliderGlass.value);
+    if (rowGlassStrength) rowGlassStrength.style.display = active ? 'block' : 'none';
+    if (lblGlassStrength) lblGlassStrength.textContent = `${strength}/10`;
+    _teCurrentVars['--glass-strength'] = String(strength);
+    if (active) {
+      _teCurrentVars['--glass-blur'] = 'calc(var(--glass-strength) * 2px)';
+      _teCurrentVars['--glass-bg'] = 'color-mix(in srgb, var(--bg2) calc(100% - var(--glass-strength) * 8%), transparent)';
+      _teCurrentVars['--glass-border'] = 'color-mix(in srgb, var(--border) calc(20% + var(--glass-strength) * 5%), transparent)';
+    } else {
+      _teCurrentVars['--glass-blur'] = '0px';
+      _teCurrentVars['--glass-bg'] = 'var(--bg2)';
+      _teCurrentVars['--glass-border'] = 'var(--border)';
+    }
+    applyCustomThemeVars(_teCurrentVars);
+    _teAutoSaveCurrentVars();
+  };
+  if (toggleGlass && !toggleGlass.dataset.hasListener) {
+    toggleGlass.addEventListener('change', updateGlassParams);
+    toggleGlass.dataset.hasListener = "true";
+  }
+  if (sliderGlass && !sliderGlass.dataset.hasListener) {
+    sliderGlass.addEventListener('input', updateGlassParams);
+    sliderGlass.dataset.hasListener = "true";
+  }
+
+  // Nav Style buttons
+  const navBtns = document.querySelectorAll('#te-group-nav .te-btn-grp-opt');
+  const navLabels = { bottom: 'Bottom Bar', top: 'Top Header', floating: 'Floating Pill' };
+  const navLabelEl = document.getElementById('te-lbl-nav');
+  navBtns.forEach(btn => {
+    if (btn.dataset.hasListener) return;
+    btn.addEventListener('click', () => {
+      navBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const val = btn.dataset.val;
+      if (navLabelEl) navLabelEl.textContent = navLabels[val];
+      _teCurrentVars['--nav-style'] = val;
+      const phoneScreen = document.getElementById('te-phone-screen');
+      if (phoneScreen) {
+        phoneScreen.classList.remove('nav-top', 'nav-floating');
+        if (val === 'top') phoneScreen.classList.add('nav-top');
+        else if (val === 'floating') phoneScreen.classList.add('nav-floating');
+      }
+      applyCustomThemeVars(_teCurrentVars);
+      _teAutoSaveCurrentVars();
+    });
+    btn.dataset.hasListener = "true";
+  });
+
   _renderTEVarsList();
   _renderTESavedList();
   renderAppearanceThemeGrid();
   updateLiveContrastBadge();
+  _teSyncDesignTabFromCurrentVars();
 
   const themeNameInput = document.getElementById('te-theme-name');
   if (themeNameInput) themeNameInput.value = '';
@@ -12965,6 +13536,7 @@ document.getElementById('te-base-select')?.addEventListener('change', e => {
     _renderTEVarsList();
     applyCustomThemeVars(_teCurrentVars);
     updateLiveContrastBadge();
+    _teSyncDesignTabFromCurrentVars();
   }
 });
 
@@ -13044,12 +13616,13 @@ function _renderTEVarsList() {
       colorInput.style.visibility = colorHex ? 'visible' : 'hidden';
 
       textInput.addEventListener('input', e => {
-        _teCurrentVars[cssVar] = e.target.value.trim();
+        _teSetVarAndSync(cssVar, e.target.value.trim());
         const nextHex = _teToHexIfColor(_teCurrentVars[cssVar]);
         colorInput.style.visibility = nextHex ? 'visible' : 'hidden';
         if (nextHex) colorInput.value = nextHex;
         applyCustomThemeVars(_teCurrentVars);
         updateLiveContrastBadge();
+        _teAutoSaveCurrentVars();
       });
 
       const extendBackdropGuard = (ms = 400) => { _teIgnoreBackdropClickUntil = Date.now() + ms; };
@@ -13061,10 +13634,11 @@ function _renderTEVarsList() {
       colorInput.addEventListener('input', e => {
         _teColorPickerInteracting = true;
         extendBackdropGuard(5000);
-        _teCurrentVars[cssVar] = e.target.value;
+        _teSetVarAndSync(cssVar, e.target.value);
         textInput.value = e.target.value;
         applyCustomThemeVars(_teCurrentVars);
         updateLiveContrastBadge();
+        _teAutoSaveCurrentVars();
       });
       colorInput.addEventListener('change', () => {
         extendBackdropGuard(1500);
@@ -13077,10 +13651,10 @@ function _renderTEVarsList() {
 
       resetBtn.addEventListener('click', () => {
         if (baseVal) {
-          _teCurrentVars[cssVar] = baseVal;
+          _teSetVarAndSync(cssVar, baseVal);
           textInput.value = baseVal;
         } else {
-          delete _teCurrentVars[cssVar];
+          _teSetVarAndSync(cssVar, undefined);
           textInput.value = '';
         }
         const nextHex = _teToHexIfColor(textInput.value);
@@ -13088,6 +13662,7 @@ function _renderTEVarsList() {
         if (nextHex) colorInput.value = nextHex;
         applyCustomThemeVars(_teCurrentVars);
         updateLiveContrastBadge();
+        _teAutoSaveCurrentVars();
       });
 
       content.appendChild(row);
@@ -13105,6 +13680,7 @@ document.getElementById('te-bg-svg-input')?.addEventListener('input', e => {
   _teCurrentVars = _teCurrentVars || {};
   _teCurrentVars['--bg-svg'] = e.target.value || '';
   applyCustomThemeVars(_teCurrentVars);
+  _teAutoSaveCurrentVars();
 });
 
 window.saveCustomTheme = function() {
@@ -14484,7 +15060,11 @@ function _renderMessagingMemberPicks() {
 async function _messagingSelectableMembers() {
   if (NO_AUTH_MODE || !currentPlantId || !currentUser?.uid) return [];
   if (shouldUseSqlStagingReads(currentPlantId)) {
-    const payload = await safeSqlRead(`messaging members ${currentPlantId}`, () => dataApi.listPlantMembers(currentPlantId, { active: true }));
+    const payload = await requireSqlRead(
+      `messaging members ${currentPlantId}`,
+      () => dataApi.listPlantMembers(currentPlantId, { active: true }),
+      `Messaging members are missing in D1 for plant ${currentPlantId}.`
+    );
     return (payload?.members || [])
       .filter(m => m.uid !== currentUser.uid && m.isActive !== false)
       .sort((a, b) => String(_messagingUserLabel(a)).localeCompare(String(_messagingUserLabel(b))));

@@ -22,12 +22,12 @@
     }
   }
 </script>
-<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&family=Nunito:wght@300;400;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&family=Nunito:wght@300;400;600;700&family=Space+Grotesk:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,400..700;1,400..700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="./build-info.js?v=65b9b8d"></script>
+<script src="./build-info.js?v=fbee0a1-dirty"></script>
 <script src="./fcm-config.js?v=ae083d6"></script>
-<link rel="stylesheet" href="./styles.css?v=65b9b8d">
+<link rel="stylesheet" href="./styles.css?v=fbee0a1-dirty">
 </head>
 <body>
 
@@ -82,7 +82,7 @@
   <div id="sync-banner" class="visible">
     <div class="sync-dot" id="sync-dot"></div>
     <span id="sync-text" aria-live="polite">Connecting…</span>
-    <span id="app-version-indicator" class="app-version-indicator" title="Current commit version">rev: 65b9b8d</span>
+    <span id="app-version-indicator" class="app-version-indicator" title="Current commit version">rev: fbee0a1</span>
     <span id="firestore-io-indicator" class="firestore-io-indicator" title="Estimated Firestore operations for this session">R:0 W:0</span>
   </div>
 
@@ -1298,75 +1298,345 @@
 <!-- THEME EDITOR MODAL -->
 <div class="modal-overlay" id="appearance-modal">
   <div class="modal theme-editor-modal" id="theme-editor-modal">
-    <div class="modal-title" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
-      <span>🎨 Appearance</span>
-      <button style="background:none;border:none;color:var(--color-text-subtle, var(--text3));font-size:20px;cursor:pointer;line-height:1;" onclick="closeThemeEditor()">✕</button>
-    </div>
-
-    <div class="te-section">
-      <div class="te-section-label">Built-in Themes</div>
-      <div class="appearance-theme-grid" id="appearance-theme-grid"></div>
-    </div>
-
-    <div class="te-section">
-      <div class="te-section-label">Saved Custom Themes</div>
-      <div class="appearance-custom-list" id="appearance-custom-list"></div>
-      <div class="appearance-empty" id="appearance-custom-empty" style="display:none;">No saved custom themes yet.</div>
-    </div>
-
-    <div class="te-section">
-      <div class="te-section-label" style="display:flex;align-items:center;justify-content:space-between;">
-        <span>Theme Editor Base</span>
-        <button onclick="resetThemeToBase()" style="font-size:11px;color:var(--color-accent, var(--accent));background:none;border:none;cursor:pointer;font-family:'Nunito',sans-serif;white-space:nowrap;padding:0;" title="Reset variables to base theme values">↺ Reset to Base</button>
+    <!-- Left Column: Phone Preview -->
+    <div class="te-preview-col" id="te-preview-col">
+      <div class="te-phone-casing">
+        <div class="te-phone-island"></div>
+        <div class="te-phone-screen" id="te-phone-screen">
+          <!-- Status Bar -->
+          <div class="te-phone-status-bar">
+            <span>09:41</span>
+            <div class="te-phone-status-icons">
+              <span>📶</span>
+              <span>📶</span>
+              <span>🔋</span>
+            </div>
+          </div>
+          <!-- App Header -->
+          <div class="te-phone-app-header">
+            <div>
+              <div class="te-phone-kicker" id="te-phone-kicker">Louisville Plant 🇺🇸</div>
+              <div class="te-phone-title">AP Tracker</div>
+            </div>
+            <div class="te-phone-avatar">JS</div>
+          </div>
+          
+          <!-- Screen Content (Scrollable) -->
+          <div class="te-phone-screen-content">
+            <!-- XP/Mascot Widget -->
+            <div class="te-phone-card te-phone-xp-card">
+              <div class="te-phone-xp-header">
+                <span class="te-phone-mascot-emoji">😸</span>
+                <div style="flex:1; min-width:0;">
+                  <div class="te-phone-mascot-name" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Midget (Mascot)</div>
+                  <div class="te-phone-xp-bar-wrap">
+                    <div class="te-phone-xp-bar" style="width: 65%;"></div>
+                  </div>
+                  <div class="te-phone-xp-label">Lvl 4 • 650/1000 XP</div>
+                </div>
+                <div class="te-phone-streak">🔥 5d</div>
+              </div>
+            </div>
+            
+            <!-- Press Grid Widget -->
+            <div class="te-phone-card">
+              <div class="te-phone-card-title">Press Deck Plan</div>
+              <div class="te-phone-press-grid">
+                <div class="te-phone-press-btn te-success">Press 1</div>
+                <div class="te-phone-press-btn te-danger">Press 2</div>
+                <div class="te-phone-press-btn te-info">Press 3</div>
+              </div>
+            </div>
+            
+            <!-- Issue Card Widget -->
+            <div class="te-phone-card te-phone-issue-card">
+              <div class="te-phone-issue-header">
+                <span class="te-phone-issue-badge te-warning">⚠️ NEEDS INK</span>
+                <span class="te-phone-issue-time">12m ago</span>
+              </div>
+              <div class="te-phone-issue-title">Press #2 — Ink leak on roller assembly</div>
+              <div class="te-phone-issue-reporter">Reported by Chris Scoggins</div>
+              <div class="te-phone-issue-attachment">
+                <div class="te-phone-attachment-placeholder">🖼️ attachment_01.jpg</div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Bottom Tab Navigation -->
+          <div class="te-phone-bottom-nav" id="te-phone-bottom-nav">
+            <div class="te-phone-nav-item active">
+              <span>🏠</span>
+              <span>Floor</span>
+            </div>
+            <div class="te-phone-nav-item">
+              <span>📖</span>
+              <span>Wiki</span>
+            </div>
+            <div class="te-phone-nav-item">
+              <span>📝</span>
+              <span>Notes</span>
+            </div>
+            <div class="te-phone-nav-item">
+              <span>💬</span>
+              <span>Chat</span>
+            </div>
+          </div>
+        </div>
+        <div class="te-phone-home-indicator"></div>
       </div>
-      <div style="display:flex;gap:8px;align-items:center;">
-        <select id="te-base-select" class="te-base-select" style="flex:1;"></select>
-        <span id="te-contrast-display" class="te-contrast-badge"></span>
+      <div class="te-preview-info">
+        <span>📱 Active Theme Live Preview</span>
       </div>
     </div>
-
-    <div class="te-section">
-      <div class="te-section-label" style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
-        <span>Theme Variables</span>
-        <span id="te-var-count" class="te-var-count">0 vars</span>
+    
+    <!-- Right Column: Control Panel -->
+    <div class="te-control-col">
+      <div class="modal-title" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <span style="display:flex;align-items:center;gap:8px;">🎨 Appearance Studio</span>
+        <button style="background:none;border:none;color:var(--color-text-subtle, var(--text3));font-size:20px;cursor:pointer;line-height:1;" onclick="closeThemeEditor()">✕</button>
       </div>
-      <input id="te-theme-search" class="te-theme-search" type="search" placeholder="Search CSS variable (e.g. --accent)">
-      <div id="te-vars-list" class="te-vars-list"></div>
-    </div>
-
-    <div class="te-section">
-      <div class="te-section-label" style="display:flex;align-items:center;justify-content:space-between;">
-        <span>SVG Background (Any Theme)</span>
-        <select id="te-bg-svg-preset" style="background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:6px;padding:2px 6px;color:var(--color-text-muted, var(--text2));font-size:11px;font-family:'Nunito',sans-serif;outline:none;cursor:pointer;">
-          <option value="">-- Choose Preset Pattern --</option>
-          <option value="grid">Fine Grid</option>
-          <option value="dots">Matrix Dots</option>
-          <option value="scanlines">Retro Scanlines</option>
-          <option value="diagonal">Slanted Lines</option>
-        </select>
+      
+      <!-- Control Panel Tabs -->
+      <div class="te-tabs">
+        <button class="te-tab active" data-te-tab="design">Design</button>
+        <button class="te-tab" data-te-tab="presets">Presets</button>
+        <button class="te-tab" data-te-tab="advanced">Advanced</button>
+        <button class="te-tab" data-te-tab="background">Background</button>
       </div>
-      <textarea id="te-bg-svg-input" style="width:100%;min-height:90px;background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:10px;color:var(--color-text-muted, var(--text2));font-family:'Share Tech Mono',monospace;font-size:11px;margin-top:6px;" placeholder="Paste raw SVG markup (optional)."></textarea>
-    </div>
+      
+      <div class="te-tab-panels">
+        <!-- Tab 1: Design Panel -->
+        <div class="te-tab-panel active" id="te-panel-design">
+          <!-- Color Customizer -->
+          <div class="te-panel-section">
+            <div class="te-panel-section-title">Color Palettes</div>
+            <div class="te-design-color-grid">
+              <!-- Accent Colors -->
+              <div class="te-color-picker-box">
+                <label for="te-color-accent">Primary Accent</label>
+                <div class="te-color-picker-row">
+                  <input type="color" data-var="--accent" id="te-color-accent">
+                  <span class="te-color-hex-label" id="te-hex-accent">#f97316</span>
+                </div>
+              </div>
+              <div class="te-color-picker-box">
+                <label for="te-color-accent2">Secondary Accent</label>
+                <div class="te-color-picker-row">
+                  <input type="color" data-var="--accent2" id="te-color-accent2">
+                  <span class="te-color-hex-label" id="te-hex-accent2">#fb923c</span>
+                </div>
+              </div>
+              <!-- Canvas Backgrounds -->
+              <div class="te-color-picker-box">
+                <label for="te-color-bg">App Background</label>
+                <div class="te-color-picker-row">
+                  <input type="color" data-var="--bg" id="te-color-bg">
+                  <span class="te-color-hex-label" id="te-hex-bg">#0d1117</span>
+                </div>
+              </div>
+              <div class="te-color-picker-box">
+                <label for="te-color-bg2">Card Surface</label>
+                <div class="te-color-picker-row">
+                  <input type="color" data-var="--bg2" id="te-color-bg2">
+                  <span class="te-color-hex-label" id="te-hex-bg2">#161b22</span>
+                </div>
+              </div>
+              <div class="te-color-picker-box">
+                <label for="te-color-bg3">Raised Surface</label>
+                <div class="te-color-picker-row">
+                  <input type="color" data-var="--bg3" id="te-color-bg3">
+                  <span class="te-color-hex-label" id="te-hex-bg3">#1c2333</span>
+                </div>
+              </div>
+              <div class="te-color-picker-box">
+                <label for="te-color-border">Border Line</label>
+                <div class="te-color-picker-row">
+                  <input type="color" data-var="--border" id="te-color-border">
+                  <span class="te-color-hex-label" id="te-hex-border">#30363d</span>
+                </div>
+              </div>
+              <div class="te-color-picker-box">
+                <label for="te-color-text">Primary Text</label>
+                <div class="te-color-picker-row">
+                  <input type="color" data-var="--text" id="te-color-text">
+                  <span class="te-color-hex-label" id="te-hex-text">#e6edf3</span>
+                </div>
+              </div>
+              <div class="te-color-picker-box">
+                <label for="te-color-text2">Muted Text</label>
+                <div class="te-color-picker-row">
+                  <input type="color" data-var="--text2" id="te-color-text2">
+                  <span class="te-color-hex-label" id="te-hex-text2">#8b949e</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Typography Customizer -->
+          <div class="te-panel-section">
+            <div class="te-panel-section-title">Typography & Layout Font</div>
+            <div class="te-font-pairing-grid">
+              <button class="te-font-btn" data-font="sans" type="button">
+                <div class="te-font-preview font-sans">Aa</div>
+                <div class="te-font-label">Inter / Nunito</div>
+                <div class="te-font-desc">UI Standard</div>
+              </button>
+              <button class="te-font-btn" data-font="grotesk" type="button">
+                <div class="te-font-preview font-grotesk">Aa</div>
+                <div class="te-font-label">Space Grotesk</div>
+                <div class="te-font-desc">Tech Headings</div>
+              </button>
+              <button class="te-font-btn" data-font="serif" type="button">
+                <div class="te-font-preview font-serif">Aa</div>
+                <div class="te-font-label">Playfair Serif</div>
+                <div class="te-font-desc">Elegant Serif</div>
+              </button>
+              <button class="te-font-btn" data-font="mono" type="button">
+                <div class="te-font-preview font-mono">Aa</div>
+                <div class="te-font-label">Share Tech Mono</div>
+                <div class="te-font-desc">Terminal Mono</div>
+              </button>
+            </div>
+          </div>
+          
+          <!-- Visual Finishes Customizer -->
+          <div class="te-panel-section">
+            <div class="te-panel-section-title">Visual Finishes</div>
+            
+            <!-- Border Radius -->
+            <div class="te-slider-row">
+              <div class="te-slider-label-row">
+                <span>Corner Roundness</span>
+                <span id="te-lbl-radius">Rounded</span>
+              </div>
+              <div class="te-btn-group" id="te-group-radius">
+                <button class="te-btn-grp-opt" data-val="none" type="button">None</button>
+                <button class="te-btn-grp-opt" data-val="sm" type="button">Slight</button>
+                <button class="te-btn-grp-opt active" data-val="md" type="button">Rounded</button>
+                <button class="te-btn-grp-opt" data-val="lg" type="button">Curvy</button>
+                <button class="te-btn-grp-opt" data-val="full" type="button">Extreme</button>
+              </div>
+            </div>
+            
+            <!-- Shadows -->
+            <div class="te-slider-row">
+              <div class="te-slider-label-row">
+                <span>Drop Shadows</span>
+                <span id="te-lbl-shadow">Elevated</span>
+              </div>
+              <div class="te-btn-group" id="te-group-shadow">
+                <button class="te-btn-grp-opt" data-val="none" type="button">None</button>
+                <button class="te-btn-grp-opt" data-val="sm" type="button">Aura</button>
+                <button class="te-btn-grp-opt active" data-val="md" type="button">Elevated</button>
+                <button class="te-btn-grp-opt" data-val="lg" type="button">Deep</button>
+                <button class="te-btn-grp-opt" data-val="colored" type="button">Glow</button>
+              </div>
+            </div>
+            
+            <!-- Glassmorphism -->
+            <div class="te-glass-toggle-row">
+              <div class="te-glass-info">
+                <div class="te-glass-title">Glassmorphism Frosted Cards</div>
+                <div class="te-glass-desc">Apply transparent backdrop blur filter</div>
+              </div>
+              <label class="te-switch">
+                <input type="checkbox" id="te-toggle-glass">
+                <span class="te-switch-slider"></span>
+              </label>
+            </div>
+            
+            <div class="te-slider-row" id="te-row-glass-strength" style="display:none;">
+              <div class="te-slider-label-row">
+                <span>Frost Strength</span>
+                <span id="te-lbl-glass-strength">4/10</span>
+              </div>
+              <input type="range" min="1" max="10" value="4" class="te-range-slider" id="te-slider-glass-strength">
+            </div>
 
-    <div class="te-section">
-      <div class="te-section-label">Save / Update Theme</div>
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
-        <input id="te-theme-name" class="te-theme-search" type="text" placeholder="Theme name" style="flex:1;">
-        <button id="te-save-btn" class="btn btn-primary" type="button" onclick="saveCustomTheme()">💾 Save</button>
+            <!-- Nav Style (Bottom/Top Bar) -->
+            <div class="te-slider-row" style="margin-top: 14px;">
+              <div class="te-slider-label-row">
+                <span>Navigation Position</span>
+                <span id="te-lbl-nav">Bottom Bar</span>
+              </div>
+              <div class="te-btn-group" id="te-group-nav">
+                <button class="te-btn-grp-opt active" data-val="bottom" type="button">Bottom Bar</button>
+                <button class="te-btn-grp-opt" data-val="top" type="button">Top Header</button>
+                <button class="te-btn-grp-opt" data-val="floating" type="button">Floating Pill</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Tab 2: Presets Panel (Built-in + Saved Custom) -->
+        <div class="te-tab-panel" id="te-panel-presets">
+          <div class="te-panel-section">
+            <div class="te-panel-section-title">Built-in Presets</div>
+            <div class="appearance-theme-grid" id="appearance-theme-grid"></div>
+          </div>
+          <div class="te-panel-section">
+            <div class="te-panel-section-title" style="display:flex;align-items:center;justify-content:space-between;">
+              <span>Saved Custom Themes</span>
+              <button onclick="resetThemeToBase()" class="te-reset-link" type="button">↺ Reset variables to Base</button>
+            </div>
+            <div class="appearance-custom-list" id="appearance-custom-list"></div>
+            <div class="appearance-empty" id="appearance-custom-empty" style="display:none;">No saved custom themes yet.</div>
+          </div>
+          
+          <div class="te-panel-section">
+            <div class="te-panel-section-title">Theme Editor Base</div>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <select id="te-base-select" class="te-base-select" style="flex:1;"></select>
+              <span id="te-contrast-display" class="te-contrast-badge"></span>
+            </div>
+          </div>
+          
+          <div class="te-panel-section">
+            <div class="te-panel-section-title">Save Theme As</div>
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+              <input id="te-theme-name" class="te-theme-search" type="text" placeholder="Theme name" style="flex:1;">
+              <button id="te-save-btn" class="btn btn-primary" type="button" onclick="saveCustomTheme()">💾 Save</button>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <button class="btn btn-ghost" type="button" style="flex:1;font-size:11px;padding:6px 8px;" onclick="exportCurrentTheme()">📤 Export Code</button>
+              <button class="btn btn-ghost" type="button" style="flex:1;font-size:11px;padding:6px 8px;" onclick="importThemeCode()">📥 Import Code</button>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Tab 3: Advanced Variables (All variables scroll list) -->
+        <div class="te-tab-panel" id="te-panel-advanced">
+          <div class="te-panel-section" style="margin-bottom:0;">
+            <div class="te-panel-section-title" style="display:flex;justify-content:space-between;align-items:center;">
+              <span>Theme Variables</span>
+              <span id="te-var-count" class="te-var-count">0 vars</span>
+            </div>
+            <input id="te-theme-search" class="te-theme-search" type="search" placeholder="Search CSS variable (e.g. --accent)" style="margin-bottom:12px;">
+            <div id="te-vars-list" class="te-vars-list"></div>
+          </div>
+        </div>
+        
+        <!-- Tab 4: Background Patterns -->
+        <div class="te-tab-panel" id="te-panel-background">
+          <div class="te-panel-section">
+            <div class="te-panel-section-title" style="display:flex;align-items:center;justify-content:space-between;">
+              <span>SVG Background Pattern</span>
+              <select id="te-bg-svg-preset" style="cursor:pointer;">
+                <option value="">-- Choose Preset Pattern --</option>
+                <option value="grid">Fine Grid</option>
+                <option value="dots">Matrix Dots</option>
+                <option value="scanlines">Retro Scanlines</option>
+                <option value="diagonal">Slanted Lines</option>
+              </select>
+            </div>
+            <textarea id="te-bg-svg-input" style="width:100%;min-height:150px;background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:10px;color:var(--color-text-muted, var(--text2));font-family:'Share Tech Mono',monospace;font-size:11px;margin-top:6px;" placeholder="Paste raw SVG markup (optional)."></textarea>
+          </div>
+        </div>
       </div>
-      <div style="display:flex;gap:8px;align-items:center;">
-        <button class="btn btn-ghost" type="button" style="flex:1;font-size:11px;padding:6px 8px;" onclick="exportCurrentTheme()">📤 Export Code</button>
-        <button class="btn btn-ghost" type="button" style="flex:1;font-size:11px;padding:6px 8px;" onclick="importThemeCode()">📥 Import Code</button>
+      
+      <div class="modal-actions" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--color-border, var(--border));">
+        <button class="btn btn-ghost" onclick="closeThemeEditor()" type="button">Close Appearance Studio</button>
       </div>
-    </div>
-
-    <div class="te-section" id="te-saved-section" style="display:none;">
-      <div class="te-section-label">Editor Saved Themes</div>
-      <div id="te-saved-list" class="te-saved-list"></div>
-    </div>
-
-    <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeThemeEditor()">Close</button>
     </div>
   </div>
 </div>
@@ -1480,7 +1750,7 @@
   </div>
 </div>
 
-<script type="module" src="./app.js?v=65b9b8d"></script>
+<script type="module" src="./app.js?v=fbee0a1-dirty"></script>
 
 <!-- MASCOT CHARACTER CARD POPOVER -->
 <div class="mascot-popover-backdrop" id="mascot-popover-backdrop" onclick="if(event.target===this)closeMascotPopover()">

@@ -3295,8 +3295,8 @@ const issueLogMasonicState = {
   positions: new Map()
 };
 
-const MAX_DIM = 1200;
-const JPEG_QUALITY = 0.82;
+const MAX_DIM = 1000;
+const JPEG_QUALITY = 0.70;
 
 // ── AUTH ──
 function resetGoogleSignInButton() {

@@ -1427,6 +1427,47 @@ async function handleAttachmentObject(request, env) {
   return new Response(object.body, { status: 200, headers });
 }
 
+function migrationReadiness(env) {
+  const hasD1 = Boolean(env.APTRACKER_DB || env.DB);
+  const hasAttachmentBucket = Boolean(getAttachmentBucket(env));
+  const hasSessionSecret = Boolean(env.APP_SESSION_SECRET || env.AP_SESSION_SECRET);
+  const hasGoogleServiceAccount = Boolean(env.GOOGLE_SERVICE_ACCOUNT);
+  const hasFirebaseWebApiKey = Boolean(env.FIREBASE_WEB_API_KEY || FIREBASE_WEB_API_KEY);
+  return {
+    ready: hasD1 && hasSessionSecret,
+    bindings: {
+      d1: hasD1,
+      attachmentsR2: hasAttachmentBucket,
+      appSessionSecret: hasSessionSecret
+    },
+    runtimeDependencies: {
+      firebaseAuthSessionExchange: hasFirebaseWebApiKey,
+      fcmPushDelivery: hasGoogleServiceAccount
+    },
+    migrationState: {
+      sqlApiAuthOnly: true,
+      attachmentStorageCloudflareReady: hasAttachmentBucket,
+      fullyOffFirebaseAuth: false,
+      fullyOffFirebasePush: false
+    },
+    remainingSteps: [
+      ...(!hasAttachmentBucket ? ['Bind APTRACKER_ATTACHMENTS to an R2 bucket for attachment storage cutover.'] : []),
+      'Replace Firebase/Google sign-in if you want to fully leave Firebase Auth.',
+      'Replace FCM push delivery if you want to fully leave Firebase Cloud Messaging.'
+    ]
+  };
+}
+
+async function handleMigrationReadiness(request, env) {
+  if (request.method !== 'GET') return jsonResponse({ error: 'GET required' }, { status: 405 });
+  try {
+    await authenticateAppRequest(request, env);
+    return jsonResponse(migrationReadiness(env));
+  } catch (error) {
+    return jsonResponse({ error: error?.message || 'Unauthorized' }, { status: error?.status || 401 });
+  }
+}
+
 async function sendFcmToTokens(env, tokens, payload) {
   const uniqueTokens = Array.from(new Set((tokens || []).filter(Boolean)));
   if (!uniqueTokens.length) return { attempted: 0, sent: 0, failed: 0, errors: [] };
@@ -1866,85 +1907,95 @@ async function handleFcmConversationMessage(request, env) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    const isApiRequest = url.pathname.startsWith('/api/');
 
-    if (isAuthHelperRequest(url.pathname)) {
-      const upstreamUrl = new URL(url.pathname + url.search, FIREBASE_AUTH_ORIGIN);
-      const upstreamRequest = new Request(upstreamUrl.toString(), request);
-      return fetch(upstreamRequest);
-    }
-
-    const d1ApiResponse = await handleD1ApiRequest(request, env, {
-      authenticateRequest: authenticateAppRequest
-    });
-    if (d1ApiResponse) {
-      return d1ApiResponse;
-    }
-
-    if (url.pathname === '/api/ocr') {
-      return handleOcr(request, env);
-    }
-    if (url.pathname === '/api/session/exchange') {
-      return handleSessionExchange(request, env);
-    }
-    const attachmentUploadMatch = request.method === 'POST' && url.pathname.match(/^\/api\/plants\/([^/]+)\/attachments\/upload$/);
-    if (attachmentUploadMatch) {
-      return handleAttachmentUpload(request, env, decodeURIComponent(attachmentUploadMatch[1]));
-    }
-    const attachmentDeleteMatch = request.method === 'DELETE' && url.pathname.match(/^\/api\/plants\/([^/]+)\/attachments\/object$/);
-    if (attachmentDeleteMatch) {
-      return handleAttachmentDelete(request, env, decodeURIComponent(attachmentDeleteMatch[1]));
-    }
-    if (url.pathname === '/api/storage/object') {
-      return handleAttachmentObject(request, env);
-    }
-    if (url.pathname === '/api/ocr/google') {
-      return handleOcrGoogle(request, env);
-    }
-    if (url.pathname === '/api/ocr/document-ai') {
-      return handleOcrDocumentAi(request, env);
-    }
-    if (url.pathname === '/api/ocr/textract') {
-      return handleOcrTextract(request, env);
-    }
-    if (url.pathname === '/api/ai/convert') {
-      return handleAiConvert(request, env);
-    }
-    if (url.pathname === '/api/schedule-scan') {
-      return handleScheduleScan(request, env);
-    }
-    if (url.pathname === '/api/debug-image') {
-      return handleDebugImage(request, env);
-    }
-    if (url.pathname === '/api/import-schedule') {
-      return handleImportSchedule(request, env);
-    }
-    if (url.pathname === '/api/fcm/role-alert') {
-      return handleFcmRoleAlert(request, env);
-    }
-    if (url.pathname === '/api/fcm/conversation-message') {
-      return handleFcmConversationMessage(request, env);
-    }
-    if (url.pathname === '/api/fcm/due-issue-timers') {
-      return handleFcmDueIssueTimers(request, env);
-    }
-    if (url.pathname === '/api/debug') {
-      const info = {};
-      for (const key of Object.keys(env)) {
-        const val = env[key];
-        info[key] = typeof val === 'string' ? `string length ${val.length} (starts with ${val.slice(0, 6)}...)` : typeof val;
+    try {
+      if (isAuthHelperRequest(url.pathname)) {
+        const upstreamUrl = new URL(url.pathname + url.search, FIREBASE_AUTH_ORIGIN);
+        const upstreamRequest = new Request(upstreamUrl.toString(), request);
+        return fetch(upstreamRequest);
       }
-      // Also test the OAuth flow
-      try {
-        const token = await getGoogleOAuthToken(env);
-        info['OAuth_TEST'] = 'SUCCESS - token starts with ' + token.slice(0, 10) + '...';
-      } catch (e) {
-        info['OAuth_TEST'] = 'FAILED - ' + e.message;
-      }
-      return new Response(JSON.stringify(info, null, 2), { headers: { 'Content-Type': 'application/json' } });
-    }
 
-    const assetResponse = await env.ASSETS.fetch(request);
-    return withStaticCacheHeaders(assetResponse, url.pathname);
+      const d1ApiResponse = await handleD1ApiRequest(request, env, {
+        authenticateRequest: authenticateAppRequest
+      });
+      if (d1ApiResponse) {
+        return d1ApiResponse;
+      }
+
+      if (url.pathname === '/api/ocr') {
+        return handleOcr(request, env);
+      }
+      if (url.pathname === '/api/session/exchange') {
+        return handleSessionExchange(request, env);
+      }
+      if (url.pathname === '/api/migration-readiness') {
+        return handleMigrationReadiness(request, env);
+      }
+      const attachmentUploadMatch = request.method === 'POST' && url.pathname.match(/^\/api\/plants\/([^/]+)\/attachments\/upload$/);
+      if (attachmentUploadMatch) {
+        return handleAttachmentUpload(request, env, decodeURIComponent(attachmentUploadMatch[1]));
+      }
+      const attachmentDeleteMatch = request.method === 'DELETE' && url.pathname.match(/^\/api\/plants\/([^/]+)\/attachments\/object$/);
+      if (attachmentDeleteMatch) {
+        return handleAttachmentDelete(request, env, decodeURIComponent(attachmentDeleteMatch[1]));
+      }
+      if (url.pathname === '/api/storage/object') {
+        return handleAttachmentObject(request, env);
+      }
+      if (url.pathname === '/api/ocr/google') {
+        return handleOcrGoogle(request, env);
+      }
+      if (url.pathname === '/api/ocr/document-ai') {
+        return handleOcrDocumentAi(request, env);
+      }
+      if (url.pathname === '/api/ocr/textract') {
+        return handleOcrTextract(request, env);
+      }
+      if (url.pathname === '/api/ai/convert') {
+        return handleAiConvert(request, env);
+      }
+      if (url.pathname === '/api/schedule-scan') {
+        return handleScheduleScan(request, env);
+      }
+      if (url.pathname === '/api/debug-image') {
+        return handleDebugImage(request, env);
+      }
+      if (url.pathname === '/api/import-schedule') {
+        return handleImportSchedule(request, env);
+      }
+      if (url.pathname === '/api/fcm/role-alert') {
+        return handleFcmRoleAlert(request, env);
+      }
+      if (url.pathname === '/api/fcm/conversation-message') {
+        return handleFcmConversationMessage(request, env);
+      }
+      if (url.pathname === '/api/fcm/due-issue-timers') {
+        return handleFcmDueIssueTimers(request, env);
+      }
+      if (url.pathname === '/api/debug') {
+        const info = {};
+        for (const key of Object.keys(env)) {
+          const val = env[key];
+          info[key] = typeof val === 'string' ? `string length ${val.length} (starts with ${val.slice(0, 6)}...)` : typeof val;
+        }
+        try {
+          const token = await getGoogleOAuthToken(env);
+          info['OAuth_TEST'] = 'SUCCESS - token starts with ' + token.slice(0, 10) + '...';
+        } catch (e) {
+          info['OAuth_TEST'] = 'FAILED - ' + e.message;
+        }
+        return new Response(JSON.stringify(info, null, 2), { headers: { 'Content-Type': 'application/json' } });
+      }
+
+      const assetResponse = await env.ASSETS.fetch(request);
+      return withStaticCacheHeaders(assetResponse, url.pathname);
+    } catch (error) {
+      if (isApiRequest) {
+        return jsonResponse({ error: error?.message || 'Internal server error' }, { status: error?.status || 500 });
+      }
+      throw error;
+    }
   },
 
   async scheduled(event, env, ctx) {
