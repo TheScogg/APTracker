@@ -7,7 +7,7 @@ export function selectedDataBackend() {
   const params = new URLSearchParams(window.location.search || '');
   const fromQuery = String(params.get('dataBackend') || '').trim().toLowerCase();
   if (fromQuery === DATA_BACKEND_SQL || fromQuery === DATA_BACKEND_FIREBASE) return fromQuery;
-  return DATA_BACKEND_FIREBASE;
+  return DATA_BACKEND_SQL;
 }
 
 export class ApiError extends Error {

@@ -4318,16 +4318,20 @@ async function awardGamification(reason, context = {}) {
 
 async function loadStoreConfig() {
   if (shouldUseSqlStagingReads(currentPlantId)) {
-    const sqlBootstrap = await ensureSqlPlantBootstrap(currentPlantId);
-    const config = sqlBootstrap?.storeConfig?.config
-      || (await requireSqlRead(
-        `store config ${currentPlantId}`,
-        () => dataApi.getStoreConfig(currentPlantId),
-        `Store config is missing in D1 for plant ${currentPlantId}.`
-      ))?.storeConfig?.config
-      || null;
+    let config = null;
+    try {
+      const sqlBootstrap = await ensureSqlPlantBootstrap(currentPlantId);
+      config = sqlBootstrap?.storeConfig?.config;
+      if (!config) {
+        const payload = await dataApi.getStoreConfig(currentPlantId);
+        config = payload?.storeConfig?.config || null;
+      }
+    } catch (e) {
+      console.warn('Failed to load store config from D1:', e);
+    }
     if (!config || typeof config !== 'object') {
-      throw new Error(`Store config is missing in D1 for plant ${currentPlantId}.`);
+      console.warn(`Store config is missing in D1 for plant ${currentPlantId}. Falling back to default store items.`);
+      config = { items: DEFAULT_STORE_ITEMS };
     }
     storeItems = normalizeStoreItems(config.items || config);
     ensureCurrentThemeAccess();
