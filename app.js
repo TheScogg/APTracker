@@ -12887,10 +12887,12 @@ window.openAppearanceModal = function() {
   renderAppearanceCustomThemes();
   updateActiveThemeChoice(readSavedTheme('midnight'));
   document.getElementById('appearance-modal').classList.add('visible');
+  document.body.classList.add('appearance-open');
 };
 
 window.closeAppearanceModal = function() {
   document.getElementById('appearance-modal').classList.remove('visible');
+  document.body.classList.remove('appearance-open');
 };
 
 // ── THEME EDITOR (modal interaction) ──
@@ -13069,7 +13071,10 @@ window.resetThemeToBase = function() {
     const svgField = document.getElementById('te-bg-svg-input');
     if (svgField) svgField.value = _teCurrentVars['--bg-svg'] || '';
     const svgPreset = document.getElementById('te-bg-svg-preset');
-    if (svgPreset) svgPreset.value = '';
+    if (svgPreset) {
+      const currentSvg = _teCurrentVars['--bg-svg'] || '';
+      svgPreset.value = Object.keys(SVG_PRESETS).find(key => SVG_PRESETS[key] === currentSvg) || '';
+    }
 
     applyCustomThemeVars(_teCurrentVars);
     _renderTEVarsList();
@@ -13279,6 +13284,7 @@ window.openThemeEditor = function() {
   _teEditingId = null;
   const saveBtn = document.getElementById('te-save-btn');
   if (saveBtn) saveBtn.textContent = '💾 Save';
+  document.body.classList.add('appearance-open');
 
   // Populate base select
   const sel = document.getElementById('te-base-select');
@@ -13312,17 +13318,26 @@ window.openThemeEditor = function() {
 
   const svgPreset = document.getElementById('te-bg-svg-preset');
   if (svgPreset) {
-    svgPreset.value = '';
+    const currentSvg = _teCurrentVars['--bg-svg'] || '';
+    svgPreset.value = Object.keys(SVG_PRESETS).find(key => SVG_PRESETS[key] === currentSvg) || '';
     if (!svgPreset.dataset.hasListener) {
       svgPreset.addEventListener('change', e => {
         const val = e.target.value;
+        const input = document.getElementById('te-bg-svg-input');
         if (val && SVG_PRESETS[val]) {
           const svgMarkup = SVG_PRESETS[val];
-          const input = document.getElementById('te-bg-svg-input');
           if (input) {
             input.value = svgMarkup;
             _teCurrentVars = _teCurrentVars || {};
             _teCurrentVars['--bg-svg'] = svgMarkup;
+            applyCustomThemeVars(_teCurrentVars);
+            _teAutoSaveCurrentVars();
+          }
+        } else if (!val) {
+          if (input) {
+            input.value = '';
+            _teCurrentVars = _teCurrentVars || {};
+            _teCurrentVars['--bg-svg'] = '';
             applyCustomThemeVars(_teCurrentVars);
             _teAutoSaveCurrentVars();
           }
@@ -13518,6 +13533,7 @@ window.closeThemeEditor = function() {
   if (!themeEditorModal || !appearanceModal) return;
   themeEditorModal.classList.remove('visible');
   appearanceModal.classList.remove('visible');
+  document.body.classList.remove('appearance-open');
   // Revert to what was active before editor opened
   const saved = readSavedTheme('midnight');
   if (saved.startsWith('custom_')) {
