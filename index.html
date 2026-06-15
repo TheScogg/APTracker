@@ -25,9 +25,9 @@
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&family=Nunito:wght@300;400;600;700&family=Space+Grotesk:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,400..700;1,400..700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="./build-info.js?v=0d96f39-dirty"></script>
+<script src="./build-info.js?v=f502822-dirty"></script>
 <script src="./fcm-config.js?v=ae083d6"></script>
-<link rel="stylesheet" href="./styles.css?v=0d96f39-dirty">
+<link rel="stylesheet" href="./styles.css?v=f502822-dirty">
 </head>
 <body>
 
@@ -82,7 +82,7 @@
   <div id="sync-banner" class="visible">
     <div class="sync-dot" id="sync-dot"></div>
     <span id="sync-text" aria-live="polite">Connecting…</span>
-    <span id="app-version-indicator" class="app-version-indicator" title="Current commit version">rev: 0d96f39</span>
+    <span id="app-version-indicator" class="app-version-indicator" title="Current commit version">rev: f502822</span>
     <span id="firestore-io-indicator" class="firestore-io-indicator" title="Estimated Firestore operations for this session">R:0 W:0</span>
   </div>
 
@@ -435,82 +435,96 @@
 </div>
 
 <!-- ADD ISSUE MODAL -->
-<div class="modal-overlay" id="add-modal">
-  <div class="modal add-issue-modal">
-    <div class="modal-title" style="display:flex; justify-content:space-between; align-items:flex-start; padding-right:4px;">
-      <div><span id="add-modal-title-action">Log Issue</span> — <span class="modal-machine" id="modal-machine-name"></span></div>
-      <label class="issue-urgent-toggle" for="issue-urgent" title="Mark as Urgent">
-        <input id="issue-urgent" type="checkbox">
-        <span class="issue-urgent-pill icon-only" title="Urgent">🔥</span>
-      </label>
-    </div>
-    <label id="issue-note-label">What happened?</label>
-    <textarea id="issue-note" placeholder="Example: Hydraulic leak at press startup" rows="3"></textarea>
-    <div class="issue-quick-phrases" id="issue-quick-phrases"></div>
-    <label>Photos <span style="color:var(--color-text-subtle, var(--text3));font-size:9px;letter-spacing:0;text-transform:none;font-family:'Nunito',sans-serif">(optional)</span></label>
-    <div class="issue-attach-hint">Tap once for camera or library. Photos preview right here.</div>
-    <div class="photo-stack">
-      <div class="photo-btn-row">
-        <button class="photo-pick-btn photo-add-btn" id="log-photo-btn" type="button">➕ Add Photo</button>
+<div class="modal-overlay" id="add-modal" onclick="if(event.target===this)closeModal()">
+  <div class="phone add-issue-modal" id="add-modal-frame" onclick="event.stopPropagation()">
+    <div class="notes-drag-handle"></div>
+    <div class="app-container" id="add-modal-app-container" style="display:flex; flex-direction:column; overflow-y:auto; padding-top:0;">
+      <div class="modal-header-row tool-modal-nav-shell" style="flex-shrink:0; margin-bottom:16px;">
+        <button class="tool-modal-nav-btn tool-modal-nav-prev" type="button" data-shell-action="cycle-tool-modal" data-shell-value="prev" aria-label="Previous tool" title="Previous tool">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M9.5 3.5L5 8l4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="tool-modal-nav-title"><span id="add-modal-title-action">Log Issue</span> — <span class="modal-machine" id="modal-machine-name"></span></div>
+        <button class="tool-modal-nav-btn tool-modal-nav-next" type="button" data-shell-action="cycle-tool-modal" data-shell-value="next" aria-label="Next tool" title="Next tool">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6.5 3.5L11 8l-4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
       </div>
-      <div class="photo-source-row" id="log-photo-source-row">
-        <button class="photo-pick-btn photo-source-btn" id="log-camera-btn" type="button">📷 Camera</button>
-        <button class="photo-pick-btn photo-source-btn" id="log-library-btn" type="button">🖼️ Library</button>
+      
+      <div class="issue-urgent-row" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; background:var(--color-surface-raised, var(--bg3)); border:1px solid var(--color-border, var(--border)); border-radius:10px; padding:8px 12px; flex-shrink:0;">
+        <span style="font-family:'Nunito', sans-serif; font-size:13px; font-weight:700; color:var(--color-text, var(--text));">Mark as Urgent</span>
+        <label class="issue-urgent-toggle" for="issue-urgent" title="Mark as Urgent" style="margin:0; display:flex; align-items:center; justify-content:center;">
+          <input id="issue-urgent" type="checkbox" style="margin:0;">
+          <span class="issue-urgent-pill icon-only" style="width:32px; height:32px; font-size:16px; border-radius:8px;">🔥</span>
+        </label>
       </div>
-    </div>
-    <button class="issue-advanced-toggle" id="issue-advanced-toggle" type="button" onclick="toggleIssueAdvancedDetails()">
-      <span>More details</span>
-      <span class="issue-advanced-toggle-state" id="issue-advanced-toggle-state">Show</span>
-    </button>
-    <div class="issue-advanced-panel" id="issue-advanced-panel">
-      <div style="margin-bottom:14px">
-        <label style="margin-bottom:5px">When did it happen?</label>
-        <div style="display:flex;gap:8px;align-items:center">
-          <input type="date" id="issue-date" style="background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:7px 10px;color:var(--color-text, var(--text));font-family:'Nunito',sans-serif;font-size:13px;outline:none;flex:1;">
-          <input type="time" id="issue-time-input" style="background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:7px 10px;color:var(--color-text, var(--text));font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:120px;">
-          <button onclick="resetIssueDateTime()" style="font-size:11px;color:var(--color-accent, var(--accent));background:none;border:none;cursor:pointer;font-family:'Nunito',sans-serif;white-space:nowrap;padding:0;" title="Reset to now">↺ Now</button>
+      
+      <label id="issue-note-label">What happened?</label>
+      <textarea id="issue-note" placeholder="Example: Hydraulic leak at press startup" rows="3"></textarea>
+      <div class="issue-quick-phrases" id="issue-quick-phrases"></div>
+      <label>Photos <span style="color:var(--color-text-subtle, var(--text3));font-size:9px;letter-spacing:0;text-transform:none;font-family:'Nunito',sans-serif">(optional)</span></label>
+      <div class="issue-attach-hint">Tap once for camera or library. Photos preview right here.</div>
+      <div class="photo-stack">
+        <div class="photo-btn-row">
+          <button class="photo-pick-btn photo-add-btn" id="log-photo-btn" type="button">➕ Add Photo</button>
+        </div>
+        <div class="photo-source-row" id="log-photo-source-row">
+          <button class="photo-pick-btn photo-source-btn" id="log-camera-btn" type="button">📷 Camera</button>
+          <button class="photo-pick-btn photo-source-btn" id="log-library-btn" type="button">🖼️ Library</button>
         </div>
       </div>
-      <div style="margin-bottom:14px">
-        <label style="margin-bottom:5px">Shift</label>
-        <select id="issue-shift" style="background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:7px 10px;color:var(--color-text, var(--text));font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:100%;">
-          <option value="auto">Auto-detect from time</option>
-          <option value="first">1st Shift (5:54 AM – 1:54 PM)</option>
-          <option value="second">2nd Shift (1:54 PM – 9:54 PM)</option>
-          <option value="third">3rd Shift (9:54 PM – 5:54 AM)</option>
-        </select>
+      <button class="issue-advanced-toggle" id="issue-advanced-toggle" type="button" onclick="toggleIssueAdvancedDetails()">
+        <span>More details</span>
+        <span class="issue-advanced-toggle-state" id="issue-advanced-toggle-state">Show</span>
+      </button>
+      <div class="issue-advanced-panel" id="issue-advanced-panel">
+        <div style="margin-bottom:14px">
+          <label style="margin-bottom:5px">When did it happen?</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="date" id="issue-date" style="background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:7px 10px;color:var(--color-text, var(--text));font-family:'Nunito',sans-serif;font-size:13px;outline:none;flex:1;">
+            <input type="time" id="issue-time-input" style="background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:7px 10px;color:var(--color-text, var(--text));font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:120px;">
+            <button onclick="resetIssueDateTime()" style="font-size:11px;color:var(--color-accent, var(--accent));background:none;border:none;cursor:pointer;font-family:'Nunito',sans-serif;white-space:nowrap;padding:0;" title="Reset to now">↺ Now</button>
+          </div>
+        </div>
+        <div style="margin-bottom:14px">
+          <label style="margin-bottom:5px">Shift</label>
+          <select id="issue-shift" style="background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:7px 10px;color:var(--color-text, var(--text));font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:100%;">
+            <option value="auto">Auto-detect from time</option>
+            <option value="first">1st Shift (5:54 AM – 1:54 PM)</option>
+            <option value="second">2nd Shift (1:54 PM – 9:54 PM)</option>
+            <option value="third">3rd Shift (9:54 PM – 5:54 AM)</option>
+          </select>
+        </div>
+        <div style="margin-bottom:14px">
+          <label style="margin-bottom:5px">Check-back timer</label>
+          <select id="issue-timer-minutes" class="timer-select" style="background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:7px 10px;color:var(--color-text, var(--text));font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:100%;">
+            <option value="">No timer</option>
+            <option value="0.25">15 seconds</option>
+            <option value="0.5">30 seconds</option>
+            <option value="1">1 minute</option>
+            <option value="5">5 minutes</option>
+            <option value="15">15 minutes</option>
+            <option value="30">30 minutes</option>
+            <option value="60">1 hour</option>
+            <option value="120">2 hours</option>
+          </select>
+        </div>
       </div>
-      <div style="margin-bottom:14px">
-        <label style="margin-bottom:5px">Check-back timer</label>
-        <select id="issue-timer-minutes" class="timer-select" style="background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:7px 10px;color:var(--color-text, var(--text));font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:100%;">
-          <option value="">No timer</option>
-          <option value="0.25">15 seconds</option>
-          <option value="0.5">30 seconds</option>
-          <option value="1">1 minute</option>
-          <option value="5">5 minutes</option>
-          <option value="15">15 minutes</option>
-          <option value="30">30 minutes</option>
-          <option value="60">1 hour</option>
-          <option value="120">2 hours</option>
-        </select>
+      <div style="margin-bottom:4px">
+        <label style="margin-bottom:6px">Status <span style="color:var(--color-text-subtle, var(--text3));font-size:9px;letter-spacing:0;text-transform:none;font-family:'Nunito',sans-serif">(optional — defaults to Open)</span></label>
+        <div class="log-cat-selected" id="log-cat-selected">
+          <span class="log-cat-pill" id="log-cat-pill"></span>
+          <button class="log-cat-clear" id="log-cat-clear">✕ clear</button>
+        </div>
+        <div class="log-cat-all-row" id="log-cat-all-row"></div>
+        <div class="search-bar-row" id="search-bar-row"></div>
+        <div class="log-sub-row" id="log-sub-row"></div>
       </div>
-    </div>
-    <div style="margin-bottom:4px">
-      <label style="margin-bottom:6px">Status <span style="color:var(--color-text-subtle, var(--text3));font-size:9px;letter-spacing:0;text-transform:none;font-family:'Nunito',sans-serif">(optional — defaults to Open)</span></label>
-      <div class="log-cat-selected" id="log-cat-selected">
-        <span class="log-cat-pill" id="log-cat-pill"></span>
-        <button class="log-cat-clear" id="log-cat-clear">✕ clear</button>
+      <input type="file" id="log-camera-input" accept="image/*" capture="environment" style="display:none">
+      <input type="file" id="log-library-input" accept="image/*" multiple style="display:none">
+      <div class="photo-previews" id="photo-previews"></div>
+      <div class="modal-actions" style="margin-top:auto; padding-top:16px;">
+        <button class="btn btn-ghost" id="cancel-btn" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" id="submit-btn" onclick="submitIssue()">⚠ Log Issue</button>
       </div>
-      <div class="log-cat-all-row" id="log-cat-all-row"></div>
-      <div class="search-bar-row" id="search-bar-row"></div>
-      <div class="log-sub-row" id="log-sub-row"></div>
-    </div>
-    <input type="file" id="log-camera-input" accept="image/*" capture="environment" style="display:none">
-    <input type="file" id="log-library-input" accept="image/*" multiple style="display:none">
-    <div class="photo-previews" id="photo-previews"></div>
-    <div class="modal-actions">
-      <button class="btn btn-ghost" id="cancel-btn" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-primary" id="submit-btn" onclick="submitIssue()">⚠ Log Issue</button>
     </div>
   </div>
 </div>
@@ -1754,7 +1768,7 @@
   </div>
 </div>
 
-<script type="module" src="./app.js?v=0d96f39-dirty"></script>
+<script type="module" src="./app.js?v=f502822-dirty"></script>
 
 <!-- MASCOT CHARACTER CARD POPOVER -->
 <div class="mascot-popover-backdrop" id="mascot-popover-backdrop" onclick="if(event.target===this)closeMascotPopover()">
@@ -1781,6 +1795,34 @@
     </div>
   </div>
   <div class="spt-caret spt-caret-down" id="spt-caret-down" style="display:none"></div>
+</div>
+
+<!-- FLOATING PRESS ACTION HUB FOR MOBILE -->
+<div id="press-action-hub" class="press-hub-pill hidden">
+  <div class="press-hub-badge press-hub-select-wrapper" title="Change Press">
+    <span id="press-hub-name">--</span>
+    <span class="press-hub-arrow" style="margin-left: 4px; font-size: 8px; opacity: 0.8;">▼</span>
+    <select id="press-hub-select" class="press-hub-select-overlay" aria-label="Change Selected Press"></select>
+  </div>
+  <div class="press-hub-divider"></div>
+  <div class="press-hub-actions">
+    <button class="press-hub-btn btn-log" onclick="triggerLogIssue()" title="Log Issue">
+      <svg viewBox="0 0 16 16" fill="none" class="hub-btn-svg"><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>
+      <span class="btn-text">Log</span>
+    </button>
+    <button class="press-hub-btn btn-notes" onclick="triggerQuickNotes()" title="View Notes">
+      <svg viewBox="0 0 16 16" fill="none" class="hub-btn-svg"><path d="M3 2h10v10l-2 2H3V2z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5 5h6M5 8h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
+      <span class="btn-text">Notes</span>
+    </button>
+    <button class="press-hub-btn btn-wiki" onclick="triggerWiki()" title="View Wiki">
+      <svg viewBox="0 0 16 16" fill="none" class="hub-btn-svg"><path d="M3 2h10a1 1 0 011 1v8a1 1 0 01-1 1H5l-3 2V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
+      <span class="btn-text">Wiki</span>
+    </button>
+    <button class="press-hub-btn btn-hist" onclick="triggerHistory()" title="View Timeline">
+      <svg viewBox="0 0 16 16" fill="none" class="hub-btn-svg"><path d="M8 2v6l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/></svg>
+      <span class="btn-text">History</span>
+    </button>
+  </div>
 </div>
 
 </body>

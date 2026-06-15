@@ -1340,9 +1340,9 @@
   .row-tabs::-webkit-scrollbar { display: none; }
   .row-tab { flex-shrink: 0; font-family: 'Share Tech Mono', monospace; font-size: 11px; font-weight: 700; padding: 5px 11px; border-radius: 6px; border: 1px solid var(--color-border, var(--border)); background: var(--color-surface, var(--bg2)); color: var(--color-text-subtle, var(--text3)); cursor: pointer; transition: all 0.15s; user-select: none; display: flex; align-items: center; gap: 5px; }
   .row-tab:hover { border-color: var(--color-accent, var(--accent)); color: var(--color-accent, var(--accent)); }
-  .row-tab.active { border-color: var(--color-accent, var(--accent)); color: white; background: var(--color-accent, var(--accent)); }
+  .row-tab.active { border-color: var(--color-accent, var(--accent)) !important; color: white !important; background: var(--color-accent, var(--accent)) !important; box-shadow: var(--theme-active-shadow, none) !important; }
   .row-tab.has-issues { border-color: rgba(249,115,22,0.6); color: var(--color-accent, var(--accent)); }
-  .row-tab.has-issues.active { background: var(--color-accent, var(--accent)); border-color: var(--color-accent, var(--accent)); color: white; }
+  .row-tab.has-issues.active { background: var(--color-accent, var(--accent)) !important; border-color: var(--color-accent, var(--accent)) !important; color: white !important; box-shadow: var(--theme-active-shadow, none) !important; }
   .row-tab.collapse-all-tab { color: var(--color-text-subtle, var(--text3)); border-color: var(--color-border, var(--border)); font-size: 10px; padding: 5px 9px; }
   .row-tab.collapse-all-tab:hover { color: var(--color-text-muted, var(--text2)); border-color: var(--color-text-muted, var(--text2)); background: transparent; }
   .tab-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
@@ -2723,7 +2723,7 @@
     font-weight: 800;
     margin-top: 4px;
   }
-  .add-issue-modal { width: min(560px, 95vw); }
+
   .modal-title { font-family: 'Rajdhani', sans-serif; font-size: 20px; font-weight: 700; letter-spacing: 1px; margin-bottom: 5px; }
   .modal-machine { color: var(--color-accent, var(--accent)); }
   .modal-subtitle { font-size: 11px; color: var(--color-text-muted, var(--text2)); margin-bottom: 16px; font-family: 'Share Tech Mono', monospace; }
@@ -2821,7 +2821,9 @@
     position: relative;
     z-index: 5;
     overflow: visible;
-    touch-action: none;
+    touch-action: none !important;
+    user-select: none !important;
+    -webkit-user-select: none !important;
   }
   .notes-modal-header-copy {
     min-width: 0;
@@ -2951,6 +2953,9 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    touch-action: none !important;
+    user-select: none !important;
+    -webkit-user-select: none !important;
   }
   .press-wiki-header-content {
     display: flex;
@@ -4010,6 +4015,7 @@
     scrollbar-width: none;
     -ms-overflow-style: none;
     -webkit-overflow-scrolling: touch;
+    flex-shrink: 0;
   }
   .issue-quick-phrases::-webkit-scrollbar { display: none; }
   .issue-quick-phrase { 
@@ -4600,15 +4606,7 @@
       backdrop-filter: blur(10px);
       -webkit-backdrop-filter: blur(10px);
     }
-    .add-issue-modal {
-      width: 100vw;
-      max-width: 100vw;
-      max-height: calc(100dvh - 10px);
-      border-radius: 22px 22px 0 0;
-      padding: 18px 16px calc(16px + env(safe-area-inset-bottom));
-      margin-top: auto;
-      box-shadow: 0 -18px 48px rgba(0,0,0,0.45);
-    }
+
     .modal-actions {
       position: sticky;
       bottom: 0;
@@ -5815,6 +5813,8 @@
 .notes-drag-handle:active {
   cursor: grabbing;
 }
+#add-modal .notes-drag-handle,
+#notes-modal .notes-drag-handle,
 #press-wiki-modal .notes-drag-handle,
 #messaging-modal .notes-drag-handle,
 #role-alerts-modal .notes-drag-handle {
@@ -5824,16 +5824,21 @@
   margin: 12px auto 8px;
   background: color-mix(in srgb, var(--color-border, var(--border)) 68%, white 32%);
   box-shadow: 0 1px 0 rgba(255,255,255,0.05), inset 0 1px 0 rgba(255,255,255,0.18);
+  touch-action: none !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
 }
+#add-modal .notes-drag-handle::before,
+#notes-modal .notes-drag-handle::before,
 #press-wiki-modal .notes-drag-handle::before,
 #messaging-modal .notes-drag-handle::before,
 #role-alerts-modal .notes-drag-handle::before {
   content: '';
   display: block;
   width: 100%;
-  height: 22px;
-  margin-top: -7px;
-  margin-bottom: -7px;
+  height: 32px; /* Thicker touch target area (32px instead of 22px) for even easier grabbing */
+  margin-top: -12px;
+  margin-bottom: -12px;
 }
 
 /* Sync banner (AP-Tracker style) */
@@ -7174,4 +7179,182 @@ body {
   backdrop-filter: blur(var(--glass-blur, 0px)) !important;
   -webkit-backdrop-filter: blur(var(--glass-blur, 0px)) !important;
   border-color: var(--glass-border, var(--color-border, var(--border))) !important;
+}
+
+/* ── FLOATING PRESS ACTION HUB ── */
+.press-hub-pill {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) scale(1);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--glass-bg, var(--color-surface, var(--bg2))) !important;
+  backdrop-filter: blur(var(--glass-blur, 16px)) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(var(--glass-blur, 16px)) saturate(180%) !important;
+  border: 1px solid color-mix(in srgb, var(--color-accent, var(--accent)) 25%, var(--glass-border, var(--color-border, var(--border)))) !important;
+  border-radius: 9999px !important;
+  padding: 10px 20px;
+  box-shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.5), 
+              0 0 20px -2px var(--te-active-shadow, rgba(249, 115, 22, 0.25));
+  z-index: 1000;
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.2s ease;
+  pointer-events: auto;
+}
+
+.press-hub-pill.hidden {
+  transform: translateX(-50%) translateY(40px) scale(0.85);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Selected Machine Badge */
+.press-hub-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'Nunito', sans-serif;
+  font-weight: 800;
+  font-size: 13px;
+  color: #ffffff !important;
+  background: var(--color-accent, var(--accent)) !important;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.1), 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.press-hub-select-wrapper {
+  position: relative;
+  cursor: pointer;
+}
+
+.press-hub-select-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+}
+
+.press-hub-divider {
+  width: 1px;
+  height: 24px;
+  background: var(--color-border, var(--border));
+  opacity: 0.4;
+}
+
+/* Action Buttons */
+.press-hub-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.press-hub-btn {
+  background: transparent;
+  border: none;
+  color: var(--color-text, var(--text));
+  padding: 6px 14px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: 'Nunito', sans-serif;
+}
+
+.press-hub-btn:hover {
+  transform: scale(1.08) translateY(-1px);
+}
+
+.press-hub-btn:active {
+  transform: scale(0.92) !important;
+  filter: brightness(1.3);
+  transition: transform 0.05s ease;
+}
+
+.press-hub-btn.btn-log {
+  color: var(--color-danger, var(--red));
+}
+.press-hub-btn.btn-log:hover {
+  background: rgba(239, 68, 68, 0.12);
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.15);
+}
+
+.press-hub-btn.btn-notes {
+  color: var(--color-warning, var(--yellow));
+}
+.press-hub-btn.btn-notes:hover {
+  background: rgba(234, 179, 8, 0.12);
+  box-shadow: 0 0 12px rgba(234, 179, 8, 0.15);
+}
+
+.press-hub-btn.btn-wiki {
+  color: var(--color-teal, var(--teal));
+}
+.press-hub-btn.btn-wiki:hover {
+  background: rgba(20, 184, 166, 0.12);
+  box-shadow: 0 0 12px rgba(20, 184, 166, 0.15);
+}
+
+.press-hub-btn.btn-hist {
+  color: var(--color-info, var(--blue));
+}
+.press-hub-btn.btn-hist:hover {
+  background: rgba(59, 130, 246, 0.12);
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.15);
+}
+
+.hub-btn-svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+}
+
+/* Compact layout for mobile viewports to keep text labels visible alongside icons */
+@media (max-width: 580px) {
+  .press-hub-pill {
+    padding: 8px 12px;
+    gap: 6px;
+    bottom: 16px;
+  }
+  .press-hub-badge {
+    padding: 5px 10px;
+    font-size: 11px;
+  }
+  .press-hub-btn {
+    padding: 5px 8px;
+    font-size: 11px;
+    gap: 4px;
+  }
+  .hub-btn-svg {
+    width: 12px;
+    height: 12px;
+  }
+}
+
+/* Hide inline mini-card toolbar on mobile since it is redundant with the floating pill */
+@media (max-width: 900px) {
+  .mc-toolbar {
+    display: none !important;
+  }
+}
+
+/* Hide floating action pill on desktop since the inline minicard toolbar handles it */
+@media (min-width: 900px) {
+  .press-hub-pill {
+    display: none !important;
+  }
 }

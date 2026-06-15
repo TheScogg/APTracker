@@ -538,23 +538,8 @@ function migrationStatusPillTitle() {
 }
 
 function renderMigrationStatusPill() {
-  const syncBanner = document.getElementById('sync-banner');
-  if (!syncBanner) return;
-  let pill = document.getElementById('migration-status-pill');
-  if (!shouldUseSqlBootstrap()) {
-    if (pill) pill.remove();
-    return;
-  }
-  if (!pill) {
-    pill = document.createElement('span');
-    pill.id = 'migration-status-pill';
-    pill.className = 'migration-status-pill';
-    syncBanner.insertBefore(pill, document.getElementById('app-version-indicator') || null);
-  }
-  const tone = migrationStatusPillTone();
-  pill.className = `migration-status-pill ${tone}`.trim();
-  pill.textContent = migrationStatusPillLabel();
-  pill.title = migrationStatusPillTitle();
+  const pill = document.getElementById('migration-status-pill');
+  if (pill) pill.remove();
 }
 
 function deriveSyncStatus() {
@@ -6747,6 +6732,64 @@ window.setMapMode = mode => {
 // ── PRESS MINI-CARD STATE ──
 let activeMiniCard = null; // { machine, rowName }
 
+// ── FLOATING PRESS ACTION HUB STATE & FUNCTIONS ──
+let activePressHubMachine = null;
+
+function showPressActionHub(p) {
+  activePressHubMachine = p;
+  
+  // Highlight the pressed button on map
+  const btnEl = document.getElementById('press-' + p.replace(/[\s.]/g, '_'));
+  if (btnEl) btnEl.classList.add('selected');
+
+  // Update badge label
+  const nameEl = document.getElementById('press-hub-name');
+  if (nameEl) nameEl.textContent = p;
+
+  // Make the pill visible
+  const hubEl = document.getElementById('press-action-hub');
+  if (hubEl) hubEl.classList.remove('hidden');
+
+  // Sync select dropdown value
+  const hubSelect = document.getElementById('press-hub-select');
+  if (hubSelect) {
+    hubSelect.value = p;
+  }
+
+  // Define global action triggers scoped to this press
+  window.triggerLogIssue = () => {
+    deselectPressHub();
+    window.openAddModal?.(p);
+  };
+
+  window.triggerQuickNotes = () => {
+    deselectPressHub();
+    window.openNotesModalFromPress?.(p);
+  };
+
+  window.triggerWiki = () => {
+    deselectPressHub();
+    openPressWikiModal(toPressId(p), p);
+  };
+
+  window.triggerHistory = () => {
+    deselectPressHub();
+    showMachineHistory(p);
+  };
+}
+
+window.deselectPressHub = function() {
+  if (!activePressHubMachine) return;
+  
+  const hubEl = document.getElementById('press-action-hub');
+  if (hubEl) hubEl.classList.add('hidden');
+
+  const btnEl = document.getElementById('press-' + activePressHubMachine.replace(/[\s.]/g, '_'));
+  if (btnEl) btnEl.classList.remove('selected');
+
+  activePressHubMachine = null;
+};
+
 window.handlePressClick = p => {
   completeDemoGuideStep('floor');
   if (mapMode === 'hist') { showMachineHistory(p); return; }
@@ -6764,13 +6807,22 @@ window.handlePressClick = p => {
   if (!pressRow) { openAddModal(p); return; }
 
   // Toggle off if same press tapped again
-  if (activeMiniCard && activeMiniCard.machine === p) {
+  if ((activeMiniCard && activeMiniCard.machine === p) || (activePressHubMachine === p)) {
     closeMiniCard();
+    deselectPressHub();
     return;
   }
 
-  // Close any existing mini-card
+  // Close any existing mini-card and press hub
   closeMiniCard();
+  deselectPressHub();
+
+  // Automatically activate/expand the row if it's not active
+  if (!activeRows.has(pressRow)) {
+    activeRows.add(pressRow);
+    saveActiveRows();
+    updatePressStates();
+  }
 
   // Gather scoped issues for this press
   let scoped = issueScope==='mine' ? issues.filter(i=>i.userId===currentUser?.uid) : issues;
@@ -6940,10 +6992,17 @@ window.handlePressClick = p => {
   area.innerHTML = '';
   area.appendChild(card);
   area.classList.add('visible');
+
+  // If mobile view, also show the floating action pill
+  const isMobile = window.innerWidth < 900;
+  if (isMobile) {
+    showPressActionHub(p);
+  }
 };
 
 let _mcCloseTimer = null;
 function closeMiniCard() {
+  deselectPressHub();
   if (_mcCloseTimer) { clearTimeout(_mcCloseTimer); _mcCloseTimer = null; }
   if (!activeMiniCard) return;
   const areaId = 'mc-area-' + activeMiniCard.rowName.replace(/\s/g,'_');
@@ -7007,11 +7066,37 @@ function saveActiveRows() {
 function buildFloorMap() {
   // Populate machine filter dropdown
   const sel = document.getElementById('machine-filter');
-  sel.innerHTML = '<option value="">All Machines</option>';
+  if (sel) {
+    sel.innerHTML = '<option value="">All Machines</option>';
+  }
+
+  // Populate press hub select dropdown
+  const hubSelect = document.getElementById('press-hub-select');
+  if (hubSelect) {
+    hubSelect.innerHTML = '';
+  }
+
   Object.values(PRESSES).flat().forEach(p => {
-    const opt = document.createElement('option'); opt.value = p; opt.textContent = p;
-    sel.appendChild(opt);
+    if (sel) {
+      const opt = document.createElement('option'); opt.value = p; opt.textContent = p;
+      sel.appendChild(opt);
+    }
+    if (hubSelect) {
+      const hubOpt = document.createElement('option'); hubOpt.value = p; hubOpt.textContent = p;
+      hubSelect.appendChild(hubOpt);
+    }
   });
+
+  if (hubSelect && !hubSelect.dataset.hasListener) {
+    hubSelect.addEventListener('change', (e) => {
+      const selectedPress = e.target.value;
+      if (selectedPress) {
+        handlePressClick(selectedPress);
+      }
+    });
+    hubSelect.dataset.hasListener = "true";
+  }
+
   renderRowTabs();
 }
 
@@ -11947,8 +12032,9 @@ function closeUserMenus() {
   document.getElementById('theme-select-toggle')?.setAttribute('aria-expanded', 'false');
 }
 
-const TOOL_MODAL_ORDER = ['wiki', 'notes', 'todos', 'messages', 'alerts'];
+const TOOL_MODAL_ORDER = ['log', 'wiki', 'notes', 'todos', 'messages', 'alerts'];
 const _toolModalScrollState = {
+  log: { shellTop: 0 },
   wiki: { shellTop: 0 },
   notes: { listTop: 0, editorTop: 0 },
   todos: { listTop: 0 },
@@ -11957,6 +12043,7 @@ const _toolModalScrollState = {
 };
 
 function _toolModalCurrentKey() {
+  if (document.getElementById('add-modal')?.classList.contains('visible')) return 'log';
   if (document.getElementById('role-alerts-modal')?.classList.contains('visible')) return 'alerts';
   if (document.getElementById('messaging-modal')?.classList.contains('visible')) return 'messages';
   if (document.getElementById('todos-modal')?.classList.contains('visible')) return 'todos';
@@ -11967,6 +12054,8 @@ function _toolModalCurrentKey() {
 
 function _toolModalHasState(key) {
   switch (key) {
+    case 'log':
+      return Boolean(currentMachine || document.getElementById('issue-note')?.value || pendingPhotos?.length);
     case 'wiki':
       return Boolean(_pressWikiModalPressId || _pressWikiSelectedPageId || _pressWikiExpandedPageIds?.size || _pressWikiKnownTreeNodeIds?.size);
     case 'notes':
@@ -11988,6 +12077,9 @@ function _toolModalHasState(key) {
 
 function _toolModalCaptureScrollState(key) {
   switch (key) {
+    case 'log':
+      _toolModalScrollState.log.shellTop = document.querySelector('#add-modal-app-container')?.scrollTop || 0;
+      break;
     case 'wiki':
       _toolModalScrollState.wiki.shellTop = document.querySelector('#press-wiki-modal .notes-editor-panel')?.scrollTop || 0;
       break;
@@ -12011,6 +12103,11 @@ function _toolModalCaptureScrollState(key) {
 function _toolModalRestoreScrollState(key) {
   const apply = () => {
     switch (key) {
+      case 'log': {
+        const shell = document.querySelector('#add-modal-app-container');
+        if (shell) shell.scrollTop = _toolModalScrollState.log.shellTop || 0;
+        break;
+      }
       case 'wiki': {
         const shell = document.querySelector('#press-wiki-modal .notes-editor-panel');
         if (shell) shell.scrollTop = _toolModalScrollState.wiki.shellTop || 0;
@@ -12048,6 +12145,9 @@ function _toolModalRestoreScrollState(key) {
 
 async function _closeToolModalByKey(key) {
   switch (key) {
+    case 'log':
+      window.closeModal?.();
+      break;
     case 'wiki':
       window.closePressWikiModal?.({ preserveState: true });
       break;
@@ -12066,19 +12166,53 @@ async function _closeToolModalByKey(key) {
   }
 }
 
+function resolveMachineCode(m) {
+  if (!m) return '';
+  const str = String(m).trim();
+  if (str.toLowerCase() === 'shared-library' || str.toLowerCase() === 'undefined' || str.toLowerCase() === 'null') return '';
+  
+  // Try directly finding info if it is a press ID (e.g. "press_1_05")
+  const info = _pressWikiPressInfo(str);
+  if (info && info.machineCode) return info.machineCode;
+  
+  // Or check if toPressId of str is a known press
+  for (const machines of Object.values(PRESSES || {})) {
+    for (const machineCode of (machines || [])) {
+      if (toPressId(machineCode) === toPressId(str)) {
+        return machineCode;
+      }
+    }
+  }
+  return '';
+}
+
 async function _openToolModalByKey(key) {
   const preserveState = _toolModalHasState(key);
   switch (key) {
-    case 'wiki':
-      await (preserveState
-        ? window.openSharedLibraryWiki?.({ preserveState: true })
-        : window.openSharedLibraryWiki?.());
+    case 'log': {
+      const activeMachine = resolveMachineCode(currentMachine || _pressWikiModalPressId || _notesContext.machineCode || _notesContext.pressId || activePressHubMachine || '');
+      window.openAddModal?.(activeMachine);
       break;
-    case 'notes':
-      await (preserveState
-        ? window.openNotesModal?.({}, { preserveState: true })
-        : window.openNotesModal?.());
+    }
+    case 'wiki': {
+      const activeMachine = resolveMachineCode(currentMachine || _pressWikiModalPressId || _notesContext.machineCode || _notesContext.pressId || activePressHubMachine || '');
+      if (activeMachine) {
+        await window.openPressWikiModal?.(toPressId(activeMachine), activeMachine, { preserveState });
+      } else {
+        await (preserveState
+          ? window.openSharedLibraryWiki?.({ preserveState: true })
+          : window.openSharedLibraryWiki?.());
+      }
       break;
+    }
+    case 'notes': {
+      const activeMachine = resolveMachineCode(currentMachine || _pressWikiModalPressId || _notesContext.machineCode || _notesContext.pressId || activePressHubMachine || '');
+      const context = activeMachine ? { pressId: toPressId(activeMachine), machineCode: activeMachine } : {};
+      await (preserveState
+        ? window.openNotesModal?.(context, { preserveState: true })
+        : window.openNotesModal?.(context));
+      break;
+    }
     case 'todos':
       await (preserveState
         ? window.openTodosModal?.({ preserveState: true })
@@ -12126,7 +12260,8 @@ function _bindToolModalShellNavigation() {
     ['notes-editor-frame'],
     ['todos-frame'],
     ['messaging-modal'],
-    ['role-alerts-modal']
+    ['role-alerts-modal'],
+    ['add-modal-frame']
   ];
   bindings.forEach(id => {
     const el = document.getElementById(id);
@@ -14024,6 +14159,7 @@ document.querySelectorAll('.modal').forEach(modal => {
 const MOBILE_MODAL_SWIPE_BREAKPOINT = 700;
 const MOBILE_MODAL_SWIPE_CLOSES = {
   'add-modal': () => window.closeModal?.(),
+  'add-modal-frame': () => window.closeModal?.(),
   'edit-modal': () => window.closeEditModal?.(),
   'resolve-modal': () => window.closeResolveModal?.(),
   'reopen-modal': () => window.closeReopenModal?.(),
