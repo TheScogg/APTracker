@@ -40,9 +40,10 @@ export function initIssueReminders(deps) {
 
   function clear(issueId) {
     if (!issueId) return;
+    const previousTimer = applyLocalTimer(issueId, null);
     delete reminderMap[issueId];
     save();
-    persistTimerClear(issueId);
+    persistTimerClear(issueId, previousTimer);
   }
 
   function set(issueId, minutes) {
@@ -54,10 +55,20 @@ export function initIssueReminders(deps) {
       setAt: now,
       dueAt: now + parsedMinutes * 60 * 1000
     };
+    const payload = timerPayload(reminderMap[issueId]);
+    const previousTimer = applyLocalTimer(issueId, payload);
     save();
-    persistTimerSet(issueId, reminderMap[issueId]);
+    persistTimerSet(issueId, payload, previousTimer);
     requestPushRegistration();
     return true;
+  }
+
+  function applyLocalTimer(issueId, timer) {
+    const issue = getIssues().find(item => item?.id === issueId);
+    if (!issue) return null;
+    const previousTimer = issue.timer || null;
+    issue.timer = timer ? { ...timer } : null;
+    return previousTimer;
   }
 
   function issueTimerReminder(issueId) {
@@ -117,16 +128,22 @@ export function initIssueReminders(deps) {
     };
   }
 
-  function persistTimerSet(issueId, reminder) {
-    if (!issueId || !reminder?.dueAt || typeof updateDoc !== 'function' || typeof plantDoc !== 'function') return;
-    updateDoc(plantDoc('issues', issueId), { timer: timerPayload(reminder) })
-      .catch(error => console.warn('Issue reminder timer sync failed', error));
+  function persistTimerSet(issueId, timer, previousTimer = null) {
+    if (!issueId || !timer?.dueAtMs || typeof updateDoc !== 'function' || typeof plantDoc !== 'function') return;
+    updateDoc(plantDoc('issues', issueId), { timer })
+      .catch(error => {
+        applyLocalTimer(issueId, previousTimer);
+        console.warn('Issue reminder timer sync failed', error);
+      });
   }
 
-  function persistTimerClear(issueId) {
+  function persistTimerClear(issueId, previousTimer = null) {
     if (!issueId || typeof updateDoc !== 'function' || typeof plantDoc !== 'function') return;
     updateDoc(plantDoc('issues', issueId), { timer: null })
-      .catch(error => console.warn('Issue reminder timer clear sync failed', error));
+      .catch(error => {
+        applyLocalTimer(issueId, previousTimer);
+        console.warn('Issue reminder timer clear sync failed', error);
+      });
   }
 
   function requestPushRegistration() {

@@ -8221,10 +8221,13 @@ function parseTimerMinutes(rawValue) {
 function buildIssueTimer(minutes, baseDate = new Date(), existingTimer = null) {
   const m = parseTimerMinutes(minutes);
   if (!m) return null;
-  const startedAtMs = Number(existingTimer?.startedAtMs || 0);
-  const startMs = Number.isFinite(startedAtMs) && startedAtMs > 0
-    ? startedAtMs
-    : (baseDate instanceof Date ? baseDate.getTime() : Date.now());
+  const existingStartedAtMs = Number(existingTimer?.startedAtMs || 0);
+  const existingMinutes = parseTimerMinutes(existingTimer?.minutes);
+  const canReuseExistingStart = !!existingTimer?.enabled
+    && existingMinutes === m
+    && Number.isFinite(existingStartedAtMs)
+    && existingStartedAtMs > 0;
+  const startMs = canReuseExistingStart ? existingStartedAtMs : Date.now();
   const actor = currentActor();
   return {
     minutes: m,
