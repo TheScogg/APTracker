@@ -3401,13 +3401,21 @@ export async function handleD1ApiRequest(request, env, { authenticateRequest } =
       return getIssue(db, decodePathSegment(issueMatch[1]), decodePathSegment(issueMatch[2]), user);
     }
     if (issueUpdateMatch) {
+      const plantId = decodePathSegment(issueUpdateMatch[1]);
+      const issueId = decodePathSegment(issueUpdateMatch[2]);
+      const existing = await first(
+        db,
+        'SELECT issue_id FROM issues WHERE plant_id = ? AND issue_id = ? LIMIT 1',
+        plantId,
+        issueId
+      );
+      if (!existing) {
+        return jsonResponse({ error: 'Issue not found' }, { status: 404 });
+      }
       return upsertIssueWriteBundle(
         db,
-        decodePathSegment(issueUpdateMatch[1]),
-        {
-          ...(await request.json()),
-          issueId: decodePathSegment(issueUpdateMatch[2])
-        },
+        plantId,
+        { ...(await request.json()), issueId },
         user
       );
     }

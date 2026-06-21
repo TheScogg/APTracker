@@ -1,5 +1,8 @@
 const ISSUE_REMINDER_STORAGE_KEY = 'aptracker_issue_reminders_v1';
 const AUTO_HOT_GRACE_MS = 0;
+const TIMER_SCRUBBER_MAX_SECONDS = 30 * 60;
+const TIMER_SCRUBBER_STEP_SECONDS = 30;
+const TIMER_SCRUBBER_TICK_COUNT = (TIMER_SCRUBBER_MAX_SECONDS / TIMER_SCRUBBER_STEP_SECONDS) + 1;
 
 export function initIssueReminders(deps) {
   const {
@@ -14,14 +17,17 @@ export function initIssueReminders(deps) {
     serverTimestamp,
     currentActor,
     ensurePushEnabled,
-    autoHotIssue
+    autoHotIssue,
+    persistTimer,
+    isDemoMode
   } = deps;
 
   let reminderMap = {};
   const notified = new Set();
   const escalated = new Set();
   let modalIssueId = null;
-  const wheelValue = { hours: 0, mins: 0, secs: 0 };
+  let selectedSeconds = 0;
+  let scrubberPointerBound = false;
 
   function load() {
     try {
@@ -129,6 +135,15 @@ export function initIssueReminders(deps) {
   }
 
   function persistTimerSet(issueId, timer, previousTimer = null) {
+    if (isDemoMode) return;
+    if (typeof persistTimer === 'function') {
+      persistTimer(issueId, timer)
+        .catch(error => {
+          applyLocalTimer(issueId, previousTimer);
+          console.warn('Issue reminder timer sync failed', error);
+        });
+      return;
+    }
     if (!issueId || !timer?.dueAtMs || typeof updateDoc !== 'function' || typeof plantDoc !== 'function') return;
     updateDoc(plantDoc('issues', issueId), { timer })
       .catch(error => {
@@ -138,6 +153,15 @@ export function initIssueReminders(deps) {
   }
 
   function persistTimerClear(issueId, previousTimer = null) {
+    if (isDemoMode) return;
+    if (typeof persistTimer === 'function') {
+      persistTimer(issueId, null)
+        .catch(error => {
+          applyLocalTimer(issueId, previousTimer);
+          console.warn('Issue reminder timer clear sync failed', error);
+        });
+      return;
+    }
     if (!issueId || typeof updateDoc !== 'function' || typeof plantDoc !== 'function') return;
     updateDoc(plantDoc('issues', issueId), { timer: null })
       .catch(error => {
@@ -190,46 +214,129 @@ export function initIssueReminders(deps) {
     return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   }
 
-  function selectedWheelSeconds() {
-    return (Number(wheelValue.hours || 0) * 3600)
-      + (Number(wheelValue.mins || 0) * 60)
-      + Number(wheelValue.secs || 0);
-  }
-
   function updateTimerPreview() {
     const preview = document.getElementById('issue-reminder-preview');
     if (!preview) return;
-    const seconds = selectedWheelSeconds();
-    preview.textContent = formatSelectedClock(seconds);
-    preview.classList.toggle('empty', seconds <= 0);
+    preview.textContent = formatSelectedClock(selectedSeconds);
+    preview.classList.toggle('empty', selectedSeconds <= 0);
   }
 
-  function buildWheel(elId, max, key) {
-    const wheel = document.getElementById(elId);
-    if (!wheel) return;
-    wheel.innerHTML = '';
-    for (let i = 0; i <= max; i++) {
-      const item = document.createElement('div');
-      item.className = 'timer-wheel-item';
-      item.textContent = String(i);
-      item.dataset.value = String(i);
-      wheel.appendChild(item);
+  function updateScrubberLabels() {
+    const scale = document.getElementById('issue-reminder-scale-labels');
+    if (!scale || scale.childElementCount) return;
+    [5, 10, 15, 20, 25, 30].forEach(minute => {
+      const label = document.createElement('span');
+      label.className = 'timer-scrubber-scale-label';
+      if (minute >= 30) label.classList.add('edge-end');
+      label.textContent = String(minute);
+      label.style.left = `${(minute / 30) * 100}%`;
+      scale.appendChild(label);
+    });
+  }
+
+  function updateScrubberAria() {
+    const lane = document.getElementById('issue-reminder-scrubber');
+    if (!lane) return;
+    lane.setAttribute('aria-valuenow', String(Math.max(0, Math.round(selectedSeconds))));
+    lane.setAttribute('aria-valuetext', formatSelectedClock(selectedSeconds));
+  }
+
+  function renderScrubberBars() {
+    const barsWrap = document.getElementById('issue-reminder-bars');
+    const pointer = document.querySelector('#issue-reminder-scrubber .timer-scrubber-pointer');
+    if (!barsWrap) return;
+    if (!barsWrap.childElementCount) {
+      for (let i = 0; i < TIMER_SCRUBBER_TICK_COUNT; i++) {
+        const bar = document.createElement('div');
+        const isMajorTick = i > 0 && i % 10 === 0;
+        bar.className = `timer-scrubber-bar${isMajorTick ? ' major' : ''}`;
+        if (i === 0) bar.classList.add('edge-start');
+        if (i === TIMER_SCRUBBER_TICK_COUNT - 1) bar.classList.add('edge-end');
+        bar.dataset.index = String(i);
+        bar.dataset.seconds = String(i * TIMER_SCRUBBER_STEP_SECONDS);
+        bar.style.left = `${(i / (TIMER_SCRUBBER_TICK_COUNT - 1)) * 100}%`;
+        barsWrap.appendChild(bar);
+      }
     }
-    const updateValue = () => {
-      const itemHeight = 42;
-      const idx = Math.max(0, Math.min(max, Math.round(wheel.scrollTop / itemHeight)));
-      wheelValue[key] = idx;
-      wheel.querySelectorAll('.timer-wheel-item').forEach((el, i) => el.classList.toggle('active', i === idx));
-      updateTimerPreview();
-    };
-    wheel.onscroll = updateValue;
-    setTimeout(() => updateValue(), 0);
+    const clampedSeconds = Math.max(0, Math.min(TIMER_SCRUBBER_MAX_SECONDS, selectedSeconds));
+    const activeIndex = Math.round(clampedSeconds / TIMER_SCRUBBER_STEP_SECONDS);
+    barsWrap.querySelectorAll('.timer-scrubber-bar').forEach((bar, index) => {
+      bar.classList.toggle('active', index <= activeIndex);
+      bar.classList.toggle('future', index > activeIndex);
+      bar.classList.toggle('current', index === activeIndex);
+    });
+    if (pointer) {
+      const activeBar = barsWrap.children[activeIndex];
+      if (activeBar) {
+        pointer.style.left = `${activeBar.offsetLeft + (activeBar.offsetWidth / 2)}px`;
+      }
+    }
+    updateScrubberAria();
   }
 
-  function setWheelValue(elId, val) {
-    const wheel = document.getElementById(elId);
-    if (!wheel) return;
-    wheel.scrollTop = Math.max(0, Number(val || 0)) * 42;
+  function setSelectedSeconds(totalSeconds) {
+    selectedSeconds = Math.max(0, Math.round(Number(totalSeconds || 0)));
+    updateTimerPreview();
+    renderScrubberBars();
+  }
+
+  function scrubberSecondsFromClientX(clientX) {
+    const barsWrap = document.getElementById('issue-reminder-bars');
+    if (!barsWrap) return 0;
+    const rect = barsWrap.getBoundingClientRect();
+    if (!rect.width) return selectedSeconds;
+    const raw = (clientX - rect.left) / rect.width;
+    const clamped = Math.max(0, Math.min(1, raw));
+    const stepIndex = Math.round((clamped * TIMER_SCRUBBER_MAX_SECONDS) / TIMER_SCRUBBER_STEP_SECONDS);
+    return stepIndex * TIMER_SCRUBBER_STEP_SECONDS;
+  }
+
+  function bindScrubber() {
+    if (scrubberPointerBound) return;
+    const lane = document.getElementById('issue-reminder-scrubber');
+    if (!lane) return;
+    scrubberPointerBound = true;
+    updateScrubberLabels();
+    renderScrubberBars();
+
+    lane.addEventListener('click', event => {
+      if (event.target?.closest('.timer-scrubber-pointer')) return;
+      setSelectedSeconds(scrubberSecondsFromClientX(event.clientX));
+    });
+
+    lane.addEventListener('keydown', event => {
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') {
+        event.preventDefault();
+        setSelectedSeconds(selectedSeconds - TIMER_SCRUBBER_STEP_SECONDS);
+      } else if (event.key === 'ArrowRight' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        setSelectedSeconds(selectedSeconds + TIMER_SCRUBBER_STEP_SECONDS);
+      } else if (event.key === 'Home') {
+        event.preventDefault();
+        setSelectedSeconds(0);
+      } else if (event.key === 'End') {
+        event.preventDefault();
+        setSelectedSeconds(TIMER_SCRUBBER_MAX_SECONDS);
+      }
+    });
+
+    lane.addEventListener('pointerdown', event => {
+      if (event.pointerType === 'mouse' && event.button !== 0) return;
+      lane.setPointerCapture?.(event.pointerId);
+      setSelectedSeconds(scrubberSecondsFromClientX(event.clientX));
+      const move = moveEvent => {
+        setSelectedSeconds(scrubberSecondsFromClientX(moveEvent.clientX));
+      };
+      const finish = finishEvent => {
+        lane.releasePointerCapture?.(finishEvent.pointerId);
+        lane.removeEventListener('pointermove', move);
+        lane.removeEventListener('pointerup', finish);
+        lane.removeEventListener('pointercancel', finish);
+      };
+      lane.addEventListener('pointermove', move);
+      lane.addEventListener('pointerup', finish);
+      lane.addEventListener('pointercancel', finish);
+    });
   }
 
   function openModal(issueId) {
@@ -239,19 +346,14 @@ export function initIssueReminders(deps) {
     const current = state(issueId);
     const minutes = Math.max(0, Number(current?.minutes || 0));
     const totalSeconds = Math.round(minutes * 60);
-    buildWheel('issue-reminder-hours-wheel', 23, 'hours');
-    buildWheel('issue-reminder-mins-wheel', 59, 'mins');
-    buildWheel('issue-reminder-secs-wheel', 59, 'secs');
-    setWheelValue('issue-reminder-hours-wheel', Math.floor(totalSeconds / 3600));
-    setWheelValue('issue-reminder-mins-wheel', Math.floor((totalSeconds % 3600) / 60));
-    setWheelValue('issue-reminder-secs-wheel', totalSeconds % 60);
-    wheelValue.hours = Math.floor(totalSeconds / 3600);
-    wheelValue.mins = Math.floor((totalSeconds % 3600) / 60);
-    wheelValue.secs = totalSeconds % 60;
-    updateTimerPreview();
+    bindScrubber();
+    setSelectedSeconds(totalSeconds);
     const sub = document.getElementById('issue-reminder-modal-subtitle');
     if (sub) sub.textContent = `Press ${issue.machine || 'Unknown'} • pick a timer`;
+    const clearBtn = document.getElementById('issue-reminder-clear-btn');
+    if (clearBtn) clearBtn.style.display = current ? '' : 'none';
     document.getElementById('issue-reminder-modal')?.classList.add('visible');
+    requestAnimationFrame(() => document.getElementById('issue-reminder-scrubber')?.focus());
   }
 
   function closeModal() {
@@ -262,6 +364,7 @@ export function initIssueReminders(deps) {
   function setFromModal(minutes) {
     if (!modalIssueId) return;
     const parsedMinutes = parseTimerMinutes(minutes);
+    setSelectedSeconds(Math.round(parsedMinutes * 60));
     if (!set(modalIssueId, parsedMinutes)) return;
     showGameToast(`⏱ Reminder set for ${formatTimerMinutes(parsedMinutes)}.`);
     closeModal();
@@ -269,10 +372,7 @@ export function initIssueReminders(deps) {
   }
 
   function setFromModalCustom() {
-    const h = Number(wheelValue.hours || 0);
-    const m = Number(wheelValue.mins || 0);
-    const s = Number(wheelValue.secs || 0);
-    const total = parseTimerMinutes((h * 60) + m + (s / 60));
+    const total = parseTimerMinutes(selectedSeconds / 60);
     if (total <= 0) {
       showGameToast('Pick a time greater than 0 seconds.');
       return;
@@ -326,6 +426,14 @@ export function initIssueReminders(deps) {
       if (typeof autoHotIssue === 'function') {
         await autoHotIssue(issue, reminderState);
       } else {
+        if (isDemoMode) {
+          // Bypassed in demo mode to prevent permission error
+          issue.highPriority = true;
+          issue.priority = 'critical';
+          renderIssues();
+          showGameToast(`🚨 Hot: Press ${issue.machine || 'Unknown'}`);
+          return;
+        }
         await updateDoc(plantDoc('issues', issue.id), {
           highPriority: true,
           priority: 'critical',
@@ -397,8 +505,47 @@ export function initIssueReminders(deps) {
       const issueId = el.getAttribute('data-reminder-id');
       if (!issueId) return;
       const reminderState = state(issueId);
-      if (!reminderState) return;
+      if (!reminderState) {
+        // Clear text or set to Off
+        const isButtonTime = el.classList.contains('issue-reminder-time');
+        el.textContent = isButtonTime ? 'Off' : '';
+        
+        // Hide parent badge if it exists
+        const badge = el.closest('.timer-mini-badge');
+        if (badge) {
+          badge.style.display = 'none';
+        }
+        
+        // Update button style/label if it is in the footer
+        const btn = el.closest('.issue-reminder-btn');
+        if (btn) {
+          btn.classList.add('inactive');
+          btn.classList.remove('overdue');
+          const label = btn.querySelector('.issue-reminder-label');
+          if (label) label.textContent = 'Timer';
+        }
+        return;
+      }
+      
       el.textContent = formatClock(reminderState);
+      
+      // Ensure badge is visible and has correct class if it exists
+      const badge = el.closest('.timer-mini-badge');
+      if (badge) {
+        badge.style.display = '';
+        badge.classList.toggle('overdue', !!reminderState.isOverdue);
+      }
+      
+      // Ensure button has correct active classes/labels if in footer
+      const btn = el.closest('.issue-reminder-btn');
+      if (btn) {
+        btn.classList.remove('inactive');
+        btn.classList.toggle('overdue', !!reminderState.isOverdue);
+        const label = btn.querySelector('.issue-reminder-label');
+        if (label) {
+          label.textContent = reminderState.isOverdue ? 'Check now' : 'Check back';
+        }
+      }
     });
   }
 

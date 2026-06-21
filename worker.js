@@ -1429,7 +1429,6 @@ async function handleAttachmentObject(request, env) {
 
 function migrationReadiness(env) {
   const hasD1 = Boolean(env.APTRACKER_DB || env.DB);
-  const hasAttachmentBucket = Boolean(getAttachmentBucket(env));
   const hasSessionSecret = Boolean(env.APP_SESSION_SECRET || env.AP_SESSION_SECRET);
   const hasGoogleServiceAccount = Boolean(env.GOOGLE_SERVICE_ACCOUNT);
   const hasFirebaseWebApiKey = Boolean(env.FIREBASE_WEB_API_KEY || FIREBASE_WEB_API_KEY);
@@ -1437,7 +1436,6 @@ function migrationReadiness(env) {
     ready: hasD1 && hasSessionSecret,
     bindings: {
       d1: hasD1,
-      attachmentsR2: hasAttachmentBucket,
       appSessionSecret: hasSessionSecret
     },
     runtimeDependencies: {
@@ -1446,12 +1444,10 @@ function migrationReadiness(env) {
     },
     migrationState: {
       sqlApiAuthOnly: true,
-      attachmentStorageCloudflareReady: hasAttachmentBucket,
       fullyOffFirebaseAuth: false,
       fullyOffFirebasePush: false
     },
     remainingSteps: [
-      ...(!hasAttachmentBucket ? ['Bind APTRACKER_ATTACHMENTS to an R2 bucket for attachment storage cutover.'] : []),
       'Replace Firebase/Google sign-in if you want to fully leave Firebase Auth.',
       'Replace FCM push delivery if you want to fully leave Firebase Cloud Messaging.'
     ]

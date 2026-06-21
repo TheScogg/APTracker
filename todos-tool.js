@@ -396,6 +396,7 @@ export function initTodosTool({
   }
 
   function close(options = {}) {
+    if (_todoSearchTimer) { clearTimeout(_todoSearchTimer); _todoSearchTimer = null; }
     document.getElementById('todos-modal')?.classList.remove('visible');
     document.body.classList.remove('notes-open');
     if (!options.preserveState) resetState();
@@ -413,9 +414,14 @@ export function initTodosTool({
         void createFromQuick();
       }
     });
+    let _todoSearchTimer = null;
     document.getElementById('todo-search')?.addEventListener('input', e => {
       state.search = String(e.target.value || '');
-      renderList();
+      if (_todoSearchTimer) clearTimeout(_todoSearchTimer);
+      _todoSearchTimer = setTimeout(() => {
+        _todoSearchTimer = null;
+        renderList();
+      }, 150);
     });
     document.querySelectorAll('[data-todo-scope]').forEach(btn => {
       btn.addEventListener('click', () => {

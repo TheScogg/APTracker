@@ -9025,6 +9025,11 @@ function _teToHexIfColor(value) {
   return `#${toHex(m[1])}${toHex(m[2])}${toHex(m[3])}`;
 }
 
+function _getCustomThemeKey(id) {
+  if (!id) return '';
+  return id.startsWith('custom_') ? id : 'custom_' + id;
+}
+
 function _loadCustomThemes() {
   try { return JSON.parse(localStorage.getItem(CUSTOM_THEMES_KEY) || '{"customThemes":[],"activeCustomId":null}'); }
   catch(e) { return { customThemes: [], activeCustomId: null }; }
@@ -9137,7 +9142,7 @@ function updateActiveThemeChoice(theme) {
   });
   document.querySelectorAll('.appearance-custom-item').forEach(item => {
     const applyBtn = item.querySelector('.te-saved-apply');
-    item.classList.toggle('active', savedTheme === `custom_${applyBtn?.dataset?.id || ''}`);
+    item.classList.toggle('active', savedTheme === _getCustomThemeKey(applyBtn?.dataset?.id || ''));
   });
 }
 
@@ -9191,7 +9196,7 @@ function applyTheme(theme) {
   // Handle custom theme keys (stored as "custom_<id>")
   if (resolvedTheme && resolvedTheme.startsWith('custom_')) {
     const data = _loadCustomThemes();
-    const found = data.customThemes.find(t => 'custom_' + t.id === resolvedTheme);
+    const found = data.customThemes.find(t => _getCustomThemeKey(t.id) === resolvedTheme);
     if (found) {
       document.body.classList.remove(...THEME_KEYS.map(key => `theme-${key}`));
       applyCustomThemeVars(found.vars);
@@ -9242,7 +9247,7 @@ try {
   const saved = localStorage.getItem('pressTrackerTheme');
   if (saved && saved.startsWith('custom_')) {
     const data = _loadCustomThemes();
-    const found = data.customThemes.find(t => 'custom_' + t.id === saved);
+    const found = data.customThemes.find(t => _getCustomThemeKey(t.id) === saved);
     if (found) { document.body.classList.remove(...THEME_KEYS.map(key => `theme-${key}`)); applyCustomThemeVars(found.vars); document.body.dataset.themeMode = 'dark'; updateActiveThemeChoice(null); }
     else applyTheme('midnight');
   } else if (saved && saved.startsWith('storetheme_')) {
@@ -9261,7 +9266,7 @@ document.getElementById('appearance-custom-list')?.addEventListener('click', e =
   const applyBtn = e.target.closest('.te-saved-apply');
   const deleteBtn = e.target.closest('.te-saved-delete');
   if (applyBtn?.dataset?.id) {
-    applyTheme('custom_' + applyBtn.dataset.id);
+    applyTheme(_getCustomThemeKey(applyBtn.dataset.id));
     updateActiveThemeChoice(null);
     renderThemeChoices();
     renderStoreModal();
@@ -9272,7 +9277,7 @@ document.getElementById('appearance-custom-list')?.addEventListener('click', e =
     d.customThemes = d.customThemes.filter(t => t.id !== deleteBtn.dataset.id);
     if (d.activeCustomId === deleteBtn.dataset.id) d.activeCustomId = null;
     _saveCustomThemesStorage(d);
-    if ((localStorage.getItem('pressTrackerTheme') || '') === 'custom_' + deleteBtn.dataset.id) applyTheme('midnight');
+    if ((localStorage.getItem('pressTrackerTheme') || '') === _getCustomThemeKey(deleteBtn.dataset.id)) applyTheme('midnight');
     renderAppearanceCustomThemes();
     renderThemeChoices();
     renderStoreModal();
@@ -9357,7 +9362,7 @@ window.openThemeEditor = function() {
   // Seed vars from current theme (custom or built-in)
   if (_tePrevThemeKey.startsWith('custom_')) {
     const data = _loadCustomThemes();
-    const found = data.customThemes.find(t => 'custom_' + t.id === _tePrevThemeKey);
+    const found = data.customThemes.find(t => _getCustomThemeKey(t.id) === _tePrevThemeKey);
     _teCurrentVars = found ? { ...found.vars } : { ...THEME_VARS_MAP.midnight };
     if (sel) sel.value = 'midnight';
   } else if (_tePrevThemeKey.startsWith('storetheme_')) {
@@ -9394,7 +9399,7 @@ window.closeThemeEditor = function() {
   const saved = localStorage.getItem('pressTrackerTheme') || 'midnight';
   if (saved.startsWith('custom_')) {
     const data = _loadCustomThemes();
-    const found = data.customThemes.find(t => 'custom_' + t.id === saved);
+    const found = data.customThemes.find(t => _getCustomThemeKey(t.id) === saved);
     if (found) { applyCustomThemeVars(found.vars); return; }
   }
   applyTheme(saved);
@@ -9513,28 +9518,29 @@ document.getElementById('te-bg-svg-input')?.addEventListener('input', e => {
   applyCustomThemeVars(_teCurrentVars);
 });
 
-window.saveCustomTheme = function() {
+window.saveCustomTheme = function(asNew = false) {
   const nameEl = document.getElementById('te-theme-name');
   if (!nameEl) return;
   const name = nameEl.value.trim();
   if (!name) { nameEl.focus(); return; }
   const data = _loadCustomThemes();
-  if (_teEditingId) {
+  if (_teEditingId && !asNew) {
     const idx = data.customThemes.findIndex(t => t.id === _teEditingId);
     if (idx >= 0) data.customThemes[idx] = { ...data.customThemes[idx], name, vars: { ..._teCurrentVars } };
     _saveCustomThemesStorage(data);
     applyTheme('custom_' + _teEditingId);
-    _teEditingId = null;
     const saveBtn = document.getElementById('te-save-btn');
-    if (saveBtn) saveBtn.textContent = '💾 Save';
+    if (saveBtn) saveBtn.textContent = '💾 Update';
   } else {
     const id = 'custom_' + Date.now();
     data.customThemes.push({ id, name, vars: { ..._teCurrentVars }, createdAt: Date.now() });
     data.activeCustomId = id;
     _saveCustomThemesStorage(data);
     applyTheme('custom_' + id);
+    _teEditingId = id;
+    const saveBtn = document.getElementById('te-save-btn');
+    if (saveBtn) saveBtn.textContent = '💾 Update';
   }
-  nameEl.value = '';
   _renderTESavedList();
   renderAppearanceCustomThemes();
   renderThemeChoices();
@@ -9571,7 +9577,7 @@ function _renderTESavedList() {
       if (saveBtn) saveBtn.textContent = '💾 Update';
       _renderTEVarsList();
       const d = _loadCustomThemes(); d.activeCustomId = theme.id; _saveCustomThemesStorage(d);
-      applyTheme('custom_' + theme.id);
+      applyTheme(_getCustomThemeKey(theme.id));
       updateActiveThemeChoice(null);
       renderAppearanceCustomThemes();
       renderThemeChoices();
@@ -9582,7 +9588,7 @@ function _renderTESavedList() {
       d.customThemes = d.customThemes.filter(t => t.id !== theme.id);
       if (d.activeCustomId === theme.id) d.activeCustomId = null;
       _saveCustomThemesStorage(d);
-      if ((localStorage.getItem('pressTrackerTheme') || '') === 'custom_' + theme.id) applyTheme('midnight');
+      if ((localStorage.getItem('pressTrackerTheme') || '') === _getCustomThemeKey(theme.id)) applyTheme('midnight');
       _renderTESavedList();
       renderAppearanceCustomThemes();
       renderThemeChoices();

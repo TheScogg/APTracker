@@ -1,7 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, collectionGroup, updateDoc as rawUpdateDoc, deleteDoc as rawDeleteDoc, doc, getDoc as rawGetDoc, getDocs as rawGetDocs, setDoc as rawSetDoc, addDoc as rawAddDoc, onSnapshot as rawOnSnapshot, serverTimestamp, query, orderBy, where, writeBatch as rawWriteBatch, arrayUnion, arrayRemove, increment, limit, runTransaction as rawRunTransaction, startAfter } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getAuth, setPersistence, browserLocalPersistence, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut as fbSignOut, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getStorage, ref as storageRef, uploadString, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 import { getMessaging, getToken, isSupported as isMessagingSupported, onMessage } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 import { alphaColor, esc, extFromContentType, localDateStr, parseDataUrlMeta } from "./app-utils.js";
 import { createDropdownController } from "./dropdown-ui.js";
@@ -11,6 +10,9 @@ import { createFirebasePathHelpers } from "./firebase-paths.js";
 import { initExportTool } from "./export-tool.js";
 import { initIssueReminders } from "./issue-reminders.js";
 import { initTodosTool } from "./todos-tool.js";
+import { initMessagingTool } from "./messaging-tool.js";
+import { initWikiTool } from "./wiki-tool.js";
+import { initNotesTool } from "./notes-tool.js";
 import {
   normalizeChecklistItems,
   noteTextFromHtml as _noteTextFromHtml,
@@ -42,7 +44,6 @@ const firebaseConfig = {
   apiKey: "AIzaSyABjasNBbJnsqq4M_UxKruKrN6-O2FXCwc",
   authDomain: "press-tracker-9d9c9.firebaseapp.com",
   projectId: "press-tracker-9d9c9",
-  storageBucket: "press-tracker-9d9c9.firebasestorage.app",
   messagingSenderId: "943200266003",
   appId: "1:943200266003:web:4d24eab551a3fb145c1ce6"
 };
@@ -51,12 +52,8 @@ const app = initializeApp(firebaseConfig);
 const db = initializeFirestore(app, {
   localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
 });
-const storage = getStorage(app);
-const storageFallback = firebaseConfig.storageBucket && firebaseConfig.storageBucket.includes('.appspot.com')
-  ? null
-  : getStorage(app, `gs://${firebaseConfig.projectId}.appspot.com`);
 const auth = getAuth(app);
-void setPersistence(auth, browserLocalPersistence).catch(() => {});
+void setPersistence(auth, browserLocalPersistence).catch(() => { });
 const provider = new GoogleAuthProvider();
 provider.setCustomParameters({ prompt: "select_account" });
 const FCM_VAPID_KEY = String(window.AP_TRACKER_FCM_CONFIG?.vapidKey || '').trim();
@@ -410,6 +407,7 @@ function sqlEventPayload(type, payload = {}) {
 }
 
 async function commitSqlIssueWrite(issueId, issue, { attachments = [], replaceAttachments = false, events = [], permissionName } = {}) {
+  if (_deletedIssueIds.has(issueId)) return null;
   const payload = await dataApi.updateIssue(currentPlantId, issueId, {
     issueId,
     issue,
@@ -491,9 +489,7 @@ function migrationStatusPillTone() {
   if (migrationReadinessState.error) return 'warn';
   const data = migrationReadinessState.data;
   if (!data) return migrationReadinessState.loading ? 'info' : 'warn';
-  const needsAttachmentCutover = !data?.bindings?.attachmentsR2;
   const hasLegacyRuntime = Object.values(data?.runtimeDependencies || {}).some(Boolean);
-  if (needsAttachmentCutover) return 'warn';
   if (hasLegacyRuntime) return 'info';
   return 'ok';
 }
@@ -522,11 +518,9 @@ function migrationStatusPillTitle() {
   const runtimeDependencies = data.runtimeDependencies || {};
   const migrationState = data.migrationState || {};
   lines.push(`D1 binding: ${bindings.d1 ? 'ready' : 'missing'}`);
-  lines.push(`R2 attachments: ${bindings.attachmentsR2 ? 'ready' : 'missing'}`);
   lines.push(`App session secret: ${bindings.appSessionSecret ? 'ready' : 'missing'}`);
   lines.push(`Firebase auth exchange: ${runtimeDependencies.firebaseAuthSessionExchange ? 'still enabled' : 'off'}`);
   lines.push(`FCM push delivery: ${runtimeDependencies.fcmPushDelivery ? 'still enabled' : 'off'}`);
-  lines.push(`Attachment storage cutover: ${migrationState.attachmentStorageCloudflareReady ? 'ready' : 'not finished'}`);
   const remainingSteps = Array.isArray(data.remainingSteps) ? data.remainingSteps.filter(Boolean) : [];
   if (remainingSteps.length) {
     lines.push('');
@@ -704,11 +698,11 @@ function buildLocalIssuePayloadFromDraft(issueId, draft, photos = []) {
     }],
     ...(statusKey === 'resolved'
       ? {
-          workflowState: 'finished',
-          workflowStateByEntry: { [workflowId]: 'finished' },
-          workflowStateByEntryHistory: { [workflowId]: { finished: { by: actor, at: draft.createdAtIso || new Date().toISOString() } } },
-          workflowStateHistory: { finished: { by: actor, at: draft.createdAtIso || new Date().toISOString() } }
-        }
+        workflowState: 'finished',
+        workflowStateByEntry: { [workflowId]: 'finished' },
+        workflowStateByEntryHistory: { [workflowId]: { finished: { by: actor, at: draft.createdAtIso || new Date().toISOString() } } },
+        workflowStateHistory: { finished: { by: actor, at: draft.createdAtIso || new Date().toISOString() } }
+      }
       : { workflowStateByEntry: { [workflowId]: null } }),
     ...(draft.isUrgent ? { highPriority: true, priority: 'critical' } : {}),
     schemaVersion: 2,
@@ -760,11 +754,11 @@ function buildServerIssuePayloadFromDraft(issueId, draft, uploadedPhotos = []) {
     }],
     ...(statusKey === 'resolved'
       ? {
-          workflowState: 'finished',
-          workflowStateByEntry: { [workflowId]: 'finished' },
-          workflowStateByEntryHistory: { [workflowId]: { finished: { by: actor, at: serverTimestamp() } } },
-          workflowStateHistory: { finished: { by: actor, at: serverTimestamp() } }
-        }
+        workflowState: 'finished',
+        workflowStateByEntry: { [workflowId]: 'finished' },
+        workflowStateByEntryHistory: { [workflowId]: { finished: { by: actor, at: serverTimestamp() } } },
+        workflowStateHistory: { finished: { by: actor, at: serverTimestamp() } }
+      }
       : { workflowStateByEntry: { [workflowId]: null } }),
     ...(draft.isUrgent ? { highPriority: true, priority: 'critical' } : {}),
     ...buildIssueV2Compat({
@@ -939,7 +933,7 @@ async function postJsonWithAuth(url, payload = {}, options = {}) {
     body: JSON.stringify(payload)
   });
   let data = null;
-  try { data = await res.json(); } catch (_) {}
+  try { data = await res.json(); } catch (_) { }
   if (!res.ok) throw new Error(data?.error || `Request failed (${res.status})`);
   return data;
 }
@@ -1098,6 +1092,16 @@ function getWorkflowActorForEntry(issue, entry, state, isCurrent = false) {
   if (isCurrent && issue?.workflowStateHistory?.[state]?.by) return issue.workflowStateHistory[state].by;
   const statusKey = String(entry?.status || '').trim().toLowerCase();
   return statusKey ? issue?.workflowStateByStatusHistory?.[statusKey]?.[state]?.by || null : null;
+}
+
+function getWorkflowStateTimestamp(issue, entry, state, isCurrent = false) {
+  if (!state) return null;
+  const workflowId = getEntryWorkflowId(entry);
+  const entryTs = workflowId && issue?.workflowStateByEntryHistory?.[workflowId]?.[state]?.at;
+  if (entryTs) return entryTs;
+  if (isCurrent && issue?.workflowStateHistory?.[state]?.at) return issue.workflowStateHistory[state].at;
+  const statusKey = String(entry?.status || '').trim().toLowerCase();
+  return statusKey ? issue?.workflowStateByStatusHistory?.[statusKey]?.[state]?.at || null : null;
 }
 
 function isCurrentWorkflowEntry(entryIndex, historyLength, entry, issue) {
@@ -1541,10 +1545,10 @@ function _renderRoleAlertCard(alert) {
               <span>${esc(alert.plantName || currentPlantName || 'Plant')}</span>
               <span>${esc(alert.createdAtLabel || 'Time unknown')}</span>
               ${isResolved
-                ? `<span>${acceptedByName ? `Resolved by ${esc(acceptedByName)}` : 'Resolved'}</span>`
-                : (isAccepted
-                  ? `<span>${acceptedByName ? `Accepted by ${esc(acceptedByName)}` : 'Accepted'}</span>`
-                  : '<span>Needs response</span>')}
+      ? `<span>${acceptedByName ? `Resolved by ${esc(acceptedByName)}` : 'Resolved'}</span>`
+      : (isAccepted
+        ? `<span>${acceptedByName ? `Accepted by ${esc(acceptedByName)}` : 'Accepted'}</span>`
+        : '<span>Needs response</span>')}
             </div>
           </div>
           <div class="role-alert-card-note">${esc(noteText)}</div>
@@ -1625,7 +1629,7 @@ function _scheduleRoleAlertBadgeRefresh() {
   }, 250);
 }
 
-window.clearRoleAlertBadge = function() {
+window.clearRoleAlertBadge = function () {
   _unreadRoleAlertCount = 0;
   _updateRoleAlertBadge();
 };
@@ -1661,11 +1665,11 @@ async function _loadActiveRoleAlertsForCurrentUser() {
       const issueNote = issue?.note || '';
       const workflowAcceptedBy = workflowState === 'accepted'
         ? (
-            (alertWorkflowId && issue?.workflowStateByEntryHistory?.[alertWorkflowId]?.accepted?.by) ||
-            issue?.workflowStateHistory?.accepted?.by ||
-            issue?.workflowStateByStatusHistory?.[alertStatusKey]?.accepted?.by ||
-            null
-          )
+          (alertWorkflowId && issue?.workflowStateByEntryHistory?.[alertWorkflowId]?.accepted?.by) ||
+          issue?.workflowStateHistory?.accepted?.by ||
+          issue?.workflowStateByStatusHistory?.[alertStatusKey]?.accepted?.by ||
+          null
+        )
         : null;
       alerts.push({
         id: alert.alertId,
@@ -1727,11 +1731,11 @@ async function _loadActiveRoleAlertsForCurrentUser() {
       : '';
     const workflowAcceptedBy = workflowState === 'accepted'
       ? (
-          (alertWorkflowId && issue && issue.workflowStateByEntryHistory && issue.workflowStateByEntryHistory[alertWorkflowId] && issue.workflowStateByEntryHistory[alertWorkflowId].accepted && issue.workflowStateByEntryHistory[alertWorkflowId].accepted.by) ||
-          (issue && issue.workflowStateHistory && issue.workflowStateHistory.accepted && issue.workflowStateHistory.accepted.by) ||
-          (issue && issue.workflowStateByStatusHistory && issue.workflowStateByStatusHistory[alertStatusKey] && issue.workflowStateByStatusHistory[alertStatusKey].accepted && issue.workflowStateByStatusHistory[alertStatusKey].accepted.by) ||
-          null
-        )
+        (alertWorkflowId && issue && issue.workflowStateByEntryHistory && issue.workflowStateByEntryHistory[alertWorkflowId] && issue.workflowStateByEntryHistory[alertWorkflowId].accepted && issue.workflowStateByEntryHistory[alertWorkflowId].accepted.by) ||
+        (issue && issue.workflowStateHistory && issue.workflowStateHistory.accepted && issue.workflowStateHistory.accepted.by) ||
+        (issue && issue.workflowStateByStatusHistory && issue.workflowStateByStatusHistory[alertStatusKey] && issue.workflowStateByStatusHistory[alertStatusKey].accepted && issue.workflowStateByStatusHistory[alertStatusKey].accepted.by) ||
+        null
+      )
       : null;
     alerts.push({
       id: d.id,
@@ -1881,12 +1885,12 @@ async function _openRoleAlertInboxModalInternal({ resetToggle = true } = {}) {
   })();
 }
 
-window.openRoleAlertInboxModal = async function(options = {}) {
+window.openRoleAlertInboxModal = async function (options = {}) {
   await _openRoleAlertInboxModalInternal({ resetToggle: !options.preserveState });
   completeDemoGuideStep('tools');
 };
 
-window.retryRoleAlertInboxModal = async function() {
+window.retryRoleAlertInboxModal = async function () {
   if (!document.getElementById('role-alerts-modal')?.classList.contains('visible')) {
     await _openRoleAlertInboxModalInternal({ resetToggle: false });
     return;
@@ -1894,11 +1898,11 @@ window.retryRoleAlertInboxModal = async function() {
   await _openRoleAlertInboxModalInternal({ resetToggle: false });
 };
 
-window.toggleRoleAlertPrototype = function() {
+window.toggleRoleAlertPrototype = function () {
   // Deprecated shim for old cached builds.
 };
 
-window.setRoleAlertsShowAccepted = async function(showAccepted) {
+window.setRoleAlertsShowAccepted = async function (showAccepted) {
   _roleAlertsShowAccepted = !!showAccepted;
   _updateRoleAlertModalToggleUI();
   if (_roleAlertsCache.length) {
@@ -1908,12 +1912,12 @@ window.setRoleAlertsShowAccepted = async function(showAccepted) {
   }
 };
 
-window.closeRoleAlertInboxModal = function() {
+window.closeRoleAlertInboxModal = function () {
   _roleAlertsLoadToken += 1;
   _setRoleAlertsModalVisible(false);
 };
 
-window.focusIssueFromAlert = function(issueId) {
+window.focusIssueFromAlert = function (issueId) {
   const focusId = String(issueId || '').trim();
   if (!focusId) return;
   _roleAlertFocusIssueId = focusId;
@@ -1930,7 +1934,7 @@ window.focusIssueFromAlert = function(issueId) {
   });
 };
 
-window.deleteRoleAlert = async function(alertId, categoryKey, statusKey) {
+window.deleteRoleAlert = async function (alertId, categoryKey, statusKey) {
   if (!currentPlantId || !alertId || !currentUser?.uid) return;
   try {
     if (shouldUseSqlStagingReads(currentPlantId)) {
@@ -1962,7 +1966,7 @@ window.deleteRoleAlert = async function(alertId, categoryKey, statusKey) {
   }
 };
 
-window.acceptRoleAlert = async function(issueId, statusKey, workflowId = '') {
+window.acceptRoleAlert = async function (issueId, statusKey, workflowId = '') {
   if (!issueId || !statusKey) return;
   try {
     const updatedWorkflowId = normalizeWorkflowId(workflowId)
@@ -1980,7 +1984,7 @@ window.acceptRoleAlert = async function(issueId, statusKey, workflowId = '') {
   }
 };
 
-window.unacceptRoleAlert = async function(issueId, statusKey, workflowId = '') {
+window.unacceptRoleAlert = async function (issueId, statusKey, workflowId = '') {
   if (!issueId || !statusKey) return;
   try {
     const updatedWorkflowId = normalizeWorkflowId(workflowId)
@@ -2020,7 +2024,7 @@ function startRoleFeedAlertsWatcher() {
               new Notification(alert.feedLabel || 'New Alert', {
                 body: `${alert.machine || 'Press'} · ${alert.note || alert.statusKey || ''}`.trim()
               });
-            } catch (_) {}
+            } catch (_) { }
           }
         });
       } catch (err) {
@@ -2059,7 +2063,7 @@ function startRoleFeedAlertsWatcher() {
       if ('Notification' in window && Notification.permission === 'granted') {
         try {
           new Notification(data.feedLabel || 'New Alert', { body: `${data.machine || 'Press'} · ${data.note || data.statusKey || ''}`.trim() });
-        } catch (_) {}
+        } catch (_) { }
       }
     });
   }, err => {
@@ -2079,7 +2083,7 @@ function getAvailableCategoryOptionsForPreferences() {
     .sort((a, b) => a.label.localeCompare(b.label));
 }
 
-window.openRolePreferencesModal = async function() {
+window.openRolePreferencesModal = async function () {
   const modal = document.getElementById('role-prefs-modal');
   const list = document.getElementById('role-prefs-list');
   const msg = document.getElementById('role-prefs-msg');
@@ -2091,10 +2095,10 @@ window.openRolePreferencesModal = async function() {
       Promise.resolve(getAvailableCategoryOptionsForPreferences()),
       shouldUseSqlStagingReads(currentPlantId)
         ? requireSqlRead(
-            `member ${currentPlantId}:${currentUser.uid}`,
-            () => dataApi.listPlantMembers(currentPlantId, { active: false }),
-            `Current user member record is missing in D1 for plant ${currentPlantId}.`
-          )
+          `member ${currentPlantId}:${currentUser.uid}`,
+          () => dataApi.listPlantMembers(currentPlantId, { active: false }),
+          `Current user member record is missing in D1 for plant ${currentPlantId}.`
+        )
         : getDoc(plantMemberDocRef(currentPlantId, currentUser.uid))
     ]);
     const member = shouldUseSqlStagingReads(currentPlantId)
@@ -2103,7 +2107,7 @@ window.openRolePreferencesModal = async function() {
     _rolePrefsDraft = Array.isArray(member.alertCategorySubscriptions)
       ? member.alertCategorySubscriptions.map(v => String(v || '').trim().toLowerCase()).filter(Boolean)
       : [];
-    const finalOptions = categoryOptions.length ? categoryOptions : [{ key:'maintenance', label:'Maintenance' }];
+    const finalOptions = categoryOptions.length ? categoryOptions : [{ key: 'maintenance', label: 'Maintenance' }];
     list.innerHTML = finalOptions.map(opt => `
       <label style="display:flex;align-items:center;gap:8px;background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:10px;padding:8px 10px;">
         <input type="checkbox" data-role-key="${esc(opt.key)}" ${_rolePrefsDraft.includes(opt.key) ? 'checked' : ''}>
@@ -2118,11 +2122,11 @@ window.openRolePreferencesModal = async function() {
   }
 };
 
-window.closeRolePreferencesModal = function() {
+window.closeRolePreferencesModal = function () {
   document.getElementById('role-prefs-modal')?.classList.remove('visible');
 };
 
-window.saveRolePreferences = async function() {
+window.saveRolePreferences = async function () {
   const msg = document.getElementById('role-prefs-msg');
   if (!currentPlantId || !currentUser?.uid || !msg) return;
   const selected = Array.from(document.querySelectorAll('#role-prefs-list input[type=\"checkbox\"]:checked'))
@@ -2153,20 +2157,19 @@ window.saveRolePreferences = async function() {
 
 // Default press layout — used when creating a new plant or if Firestore has none
 const DEFAULT_PRESSES = {
-  "Row 1": ["1.01","1.02","1.03","1.04","1.05","1.06","1.07","1.08","1.09","1.10","1.11","1.12","1.13","1.14","1.15","1.16","1.17"],
-  "Row 2": ["2.01","2.02","2.03","2.04","2.05","2.06","2.07","2.08","2.09","2.10","2.11","2.12","2.13","2.14","2.15","2.16","2.17","2.18","2.19","2.20","2.21","2.22"],
-  "Row 3": ["3.01","3.02","3.03","3.04","3.05","3.06","3.07","3.08","3.09","3.10","3.12","3.13","3.14","3.15","3.16","3.17","3.18","3.19"],
-  "Row 4": ["4.01","4.02","4.03","4.04","4.05","4.06","4.07","4.08","4.09","4.10","4.11","4.12","4.13","4.14","4.15","4.16","4.17"],
-  "Row 5": ["5.01","5.02","5.03","5.04","5.05","5.06","5.07","5.08","5.09","5.10","5.11","5.12"],
-  "Row 6": ["6.01","6.02","6.03","6.05","6.06","6.07"],
-  "Other": ["Auto Cell","BR-1","CR-1","CR-2"]
+  "Row 1": ["1.01", "1.02", "1.03", "1.04", "1.05", "1.06", "1.07", "1.08", "1.09", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15", "1.16", "1.17"],
+  "Row 2": ["2.01", "2.02", "2.03", "2.04", "2.05", "2.06", "2.07", "2.08", "2.09", "2.10", "2.11", "2.12", "2.13", "2.14", "2.15", "2.16", "2.17", "2.18", "2.19", "2.20", "2.21", "2.22"],
+  "Row 3": ["3.01", "3.02", "3.03", "3.04", "3.05", "3.06", "3.07", "3.08", "3.09", "3.10", "3.12", "3.13", "3.14", "3.15", "3.16", "3.17", "3.18", "3.19"],
+  "Row 4": ["4.01", "4.02", "4.03", "4.04", "4.05", "4.06", "4.07", "4.08", "4.09", "4.10", "4.11", "4.12", "4.13", "4.14", "4.15", "4.16", "4.17"],
+  "Row 5": ["5.01", "5.02", "5.03", "5.04", "5.05", "5.06", "5.07", "5.08", "5.09", "5.10", "5.11", "5.12"],
+  "Row 6": ["6.01", "6.02", "6.03", "6.05", "6.06", "6.07"],
+  "Other": ["Auto Cell", "BR-1", "CR-1", "CR-2"]
 };
 
 let PRESSES = { ...DEFAULT_PRESSES };
 let ALL_MACHINES = Object.values(PRESSES).flat();
 const WIKI_SCOPE_PRESS = 'press';
 const WIKI_SCOPE_SHARED = 'shared';
-let _pressWikiScope = WIKI_SCOPE_PRESS;
 
 // Firestore path helpers — all data scoped under plants/{plantId}/
 const firebasePaths = createFirebasePathHelpers({
@@ -2236,7 +2239,7 @@ function shouldSyncUserLookup(email) {
     if (Number.isFinite(last) && now - last < USER_LOOKUP_HEARTBEAT_MS) return false;
     localStorage.setItem(key, String(now));
     return true;
-  } catch(e) {
+  } catch (e) {
     return true;
   }
 }
@@ -2264,7 +2267,7 @@ async function loadDailyScheduledPresses(date) {
   try {
     const index = await loadDailyScheduleIndex(date);
     scheduledPressesState = { plantId: currentPlantId, date, scheduled: index?.scheduled ?? null };
-  } catch(e) {
+  } catch (e) {
     console.warn('loadDailyScheduledPresses failed:', e);
     scheduledPressesState = { plantId: currentPlantId, date, scheduled: null };
   }
@@ -2313,10 +2316,10 @@ async function loadDailyScheduleIndex(date) {
   }
   const sqlPayload = shouldUseSqlStagingReads(currentPlantId)
     ? await requireSqlRead(
-        `daily schedule ${currentPlantId}:${date}`,
-        () => dataApi.getDailySchedule(currentPlantId, date),
-        `Daily schedule lookup failed in D1 for plant ${currentPlantId} on ${date}.`
-      )
+      `daily schedule ${currentPlantId}:${date}`,
+      () => dataApi.getDailySchedule(currentPlantId, date),
+      `Daily schedule lookup failed in D1 for plant ${currentPlantId} on ${date}.`
+    )
     : null;
   if (sqlPayload?.schedule) {
     const { scheduled, lookupByPress } = buildScheduleIndexFromSectionRows(sqlPayload.sections || {});
@@ -2551,7 +2554,7 @@ window.toggleSecondaryStatus = async (id, statusKey) => {
       updatedAt: serverTimestamp(),
       updatedBy: currentActor()
     });
-  } catch(e) { setSyncStatus('err', 'Error: ' + e.message); }
+  } catch (e) { setSyncStatus('err', 'Error: ' + e.message); }
 };
 // ── END SECONDARY STATUS HELPERS ──
 
@@ -2596,46 +2599,29 @@ function isCloudflareStoredAttachment(att) {
   return bucket === 'r2' || url.includes('/api/storage/object?');
 }
 
-async function resolveAttachmentUrl(att) {
+function resolveAttachmentUrl(att) {
   if (!att) return '';
   const directUrl = String(att.downloadUrl || att.downloadURL || att.url || att.dataUrl || '').trim();
   if (directUrl) return directUrl;
   if (isCloudflareStoredAttachment(att)) return '';
-  if (!att.storagePath) return '';
-  try {
-    const attStorage = att.storageBucket ? getStorage(app, `gs://${att.storageBucket}`) : storage;
-    return await getDownloadURL(storageRef(attStorage, att.storagePath));
-  } catch (_) {
-    return '';
-  }
+  return '';
 }
 
 async function uploadAttachmentToPreferredStorage(plantId, payload) {
-  const useSqlStorage = shouldUseSqlStagingReads(plantId);
-  if (useSqlStorage) {
-    try {
-      const response = await dataApi.uploadPlantAttachment(plantId, payload);
-      if (response?.attachment?.storagePath) {
-        return response.attachment;
-      }
-    } catch (err) {
-      const isConfigGap = Number(err?.status || 0) === 501;
-      if (!isConfigGap) {
-        console.warn('Cloudflare attachment upload failed, falling back to Firebase Storage.', err);
-      }
-    }
+  const response = await dataApi.uploadPlantAttachment(plantId, payload);
+  if (response?.attachment?.storagePath) {
+    return response.attachment;
   }
-  return null;
+  throw new Error('R2 upload returned no storage path.');
 }
 
 async function deleteStoredAttachmentBlob(plantId, att) {
   if (!att?.storagePath) return;
-  if (isCloudflareStoredAttachment(att) && shouldUseSqlStagingReads(plantId)) {
+  if (isCloudflareStoredAttachment(att)) {
     await dataApi.deleteStoredAttachmentObject(plantId, { storagePath: att.storagePath });
     return;
   }
-  const attStorage = att.storageBucket ? getStorage(app, `gs://${att.storageBucket}`) : storage;
-  await deleteObject(storageRef(attStorage, att.storagePath));
+  console.warn('Attempted to delete non-R2 attachment. Storage path:', att.storagePath);
 }
 
 async function uploadIssuePhotosToStorage(issueId, photos, plantId = currentPlantId) {
@@ -2655,46 +2641,17 @@ async function uploadIssuePhotosToStorage(issueId, photos, plantId = currentPlan
       contentType: meta.contentType,
       dataUrl: src
     });
-    if (uploaded?.storagePath) {
-      out.push({
-        name: p.name || uploaded.fileName || fileName,
-        dataUrl: uploaded.downloadUrl || uploaded.url || '',
-        downloadUrl: uploaded.downloadUrl || uploaded.url || '',
-        storagePath: uploaded.storagePath,
-        storageBucket: uploaded.storageBucket || 'r2',
-        contentType: uploaded.contentType || meta.contentType,
-        sizeBytes: Number(uploaded.sizeBytes || meta.sizeBytes || 0),
-        source: 'r2',
-        takenAt: p.takenAt || p.timestamp || '',
-        uploadedAt: uploaded.uploadedAt || new Date().toISOString()
-      });
-      continue;
-    }
-    const path = `plants/${plantId}/issues/${issueId}/photos/${fileName}`;
-    let sRef = storageRef(storage, path);
-    let url = '';
-    try {
-      await uploadString(sRef, src, 'data_url');
-      url = await getDownloadURL(sRef);
-    } catch (err) {
-      const msg = String(err?.message || '');
-      const shouldTryFallback = storageFallback && (msg.includes('Permission denied') || msg.includes('storage/unauthorized') || msg.includes('storage/bucket-not-found'));
-      if (!shouldTryFallback) throw err;
-      sRef = storageRef(storageFallback, path);
-      await uploadString(sRef, src, 'data_url');
-      url = await getDownloadURL(sRef);
-    }
     out.push({
-      name: p.name || fileName,
-      dataUrl: url, // keep existing UI field name for backward-compatible rendering
-      downloadUrl: url,
-      storagePath: path,
-      storageBucket: sRef.bucket,
-      contentType: meta.contentType,
-      sizeBytes: meta.sizeBytes,
-      source: 'storage',
+      name: p.name || uploaded.fileName || fileName,
+      dataUrl: uploaded.downloadUrl || uploaded.url || '',
+      downloadUrl: uploaded.downloadUrl || uploaded.url || '',
+      storagePath: uploaded.storagePath,
+      storageBucket: uploaded.storageBucket || 'r2',
+      contentType: uploaded.contentType || meta.contentType,
+      sizeBytes: Number(uploaded.sizeBytes || meta.sizeBytes || 0),
+      source: 'r2',
       takenAt: p.takenAt || p.timestamp || '',
-      uploadedAt: new Date().toISOString()
+      uploadedAt: uploaded.uploadedAt || new Date().toISOString()
     });
   }
   return out;
@@ -2809,7 +2766,7 @@ function normalizeEventHistory(issue, events) {
     try {
       if (ev.eventAt?.toDate) dateTime = fmtDate(ev.eventAt.toDate());
       else if (ev.eventAt) dateTime = fmtDate(new Date(ev.eventAt));
-    } catch (_) {}
+    } catch (_) { }
     out.push({
       status: toStatus,
       subStatus: toSub,
@@ -2911,11 +2868,11 @@ async function loadUserPlants() {
   try {
     const sqlContext = shouldUseSqlBootstrap()
       ? await requireSqlBootstrapRead(
-          'current user context',
-          () => dataApi.getCurrentUserContext(),
-          'Current user bootstrap is missing in D1.',
-          payload => Boolean(payload?.user)
-        )
+        'current user context',
+        () => dataApi.getCurrentUserContext(),
+        'Current user bootstrap is missing in D1.',
+        payload => Boolean(payload?.user)
+      )
       : null;
     let userData = {};
     const usingSqlBootstrap = shouldUseSqlBootstrap();
@@ -3004,7 +2961,7 @@ async function loadUserPlants() {
     _syncCurrentUserMembershipProfile(userPlants.map(p => p.id)).catch(e => {
       console.warn('Could not sync membership profile fields', e);
     });
-  } catch(e) {
+  } catch (e) {
     console.warn('Error loading plants', e);
     currentPlantId = null;
     currentPlantName = '';
@@ -3018,11 +2975,11 @@ async function loadAvailablePlantsForOnboarding() {
   if (DEMO_MODE || NO_AUTH_MODE) return [];
   const sqlPlants = shouldUseSqlBootstrap()
     ? await requireSqlBootstrapRead(
-        'plant directory',
-        () => dataApi.listPlants({ active: true }),
-        'Plant directory is missing in D1.',
-        payload => Array.isArray(payload?.plants)
-      )
+      'plant directory',
+      () => dataApi.listPlants({ active: true }),
+      'Plant directory is missing in D1.',
+      payload => Array.isArray(payload?.plants)
+    )
     : null;
   if (Array.isArray(sqlPlants?.plants)) {
     return sqlPlants.plants
@@ -3113,7 +3070,7 @@ async function _migratePlantsToNewStructure(plants) {
     // Switch user doc from plants array to plantIds array
     batch.set(doc(db, 'users', currentUser.uid), { plantIds: plants.map(p => p.id) }, { merge: true });
     await batch.commit();
-  } catch(e) {
+  } catch (e) {
     console.warn('Plant structure migration failed (non-fatal):', e);
   }
 }
@@ -3158,7 +3115,7 @@ async function loadCurrentMember(plantId) {
       currentUserRole = 'admin';
       currentUserPermissions = { ...DEFAULT_PERMISSIONS };
     }
-  } catch(e) {
+  } catch (e) {
     console.warn('Could not load member doc, defaulting to admin', e);
     currentUserRole = 'admin';
     currentUserPermissions = { ...DEFAULT_PERMISSIONS };
@@ -3213,7 +3170,7 @@ async function loadPlantPresses() {
       PRESSES = { ...DEFAULT_PRESSES };
     }
     ALL_MACHINES = Object.values(PRESSES).flat();
-  } catch(e) {
+  } catch (e) {
     console.warn('Press layout load failed, using defaults', e);
     PRESSES = { ...DEFAULT_PRESSES };
     ALL_MACHINES = Object.values(PRESSES).flat();
@@ -3240,13 +3197,14 @@ async function switchPlant(plantId) {
       console.warn('Could not persist last plant in D1', e);
     }
   } else {
-    try { await setDoc(doc(db, 'users', currentUser.uid), { lastPlant: currentPlantId }, { merge: true }); } catch(e) {}
+    try { await setDoc(doc(db, 'users', currentUser.uid), { lastPlant: currentPlantId }, { merge: true }); } catch (e) { }
   }
-  try { localStorage.setItem('apTrackerLastPlant', currentPlantId); } catch(e) {}
+  try { localStorage.setItem('apTrackerLastPlant', currentPlantId); } catch (e) { }
   buildPlantDropdown();
   closePlantDropdown();
   issues = [];
   issuesById.clear();
+  _deletedIssueIds.clear();
   issueHistoryCursor = null;
   issueHistoryFetchInFlight = null;
   attachmentPhotoCache.clear();
@@ -3265,7 +3223,7 @@ async function switchPlant(plantId) {
   startGamificationListeners();
   startListener();
   scheduleIssueOutboxFlush();
-  _startMessagingInboxWatcher();
+  messagingTool.startInboxWatcher();
   startRoleFeedAlertsWatcher();
   refreshVisibleData();
 }
@@ -3286,7 +3244,7 @@ function buildPlantDropdown() {
   sorted.forEach(p => {
     const btn = document.createElement('button');
     btn.className = 'plant-opt' + (p.id === currentPlantId ? ' active' : '');
-    btn.innerHTML = `<span class="plant-opt-check">${p.id === currentPlantId ? '✓' : ''}</span><span class="plant-opt-name">${esc(p.name)}</span>${p.location ? '<span class="plant-opt-loc">'+esc(p.location)+'</span>' : ''}`;
+    btn.innerHTML = `<span class="plant-opt-check">${p.id === currentPlantId ? '✓' : ''}</span><span class="plant-opt-name">${esc(p.name)}</span>${p.location ? '<span class="plant-opt-loc">' + esc(p.location) + '</span>' : ''}`;
     btn.onclick = () => switchPlant(p.id);
     dd.appendChild(btn);
   });
@@ -3312,17 +3270,17 @@ document.addEventListener('click', e => {
 // ── SINGLE SOURCE OF TRUTH FOR STATUSES ──
 // Loaded from Firestore config doc on startup. Edit via the admin panel (user menu → Manage Statuses).
 let STATUSES = {
-  open:            { label:'Open',             shortLabel:'Open',         icon:'●',  cssColor:'var(--color-danger, var(--red))',      swipeColor:'#ef4444', floorCls:'has-open',            cls:'status-open',            subs:['New Fault / Issue','Pending Triage','Scheduled Mold Change','Re-opened'],                                               statLabel:'Open',          order:0 },
-  alert:           { label:'Alert',            shortLabel:'Alert',        icon:'🚨', cssColor:'#dc2626',         swipeColor:'#dc2626', floorCls:'has-alert',           cls:'status-alert',           subs:['Mold Protection Fault','E-Stop / Safety Hazard','Press Down - Critical','Major Oil / Fluid Leak'],                   statLabel:'Alert',         order:1 },
-  attention:       { label:'Attention',        shortLabel:'Attention',    icon:'◇',  cssColor:'#0ea5e9',         swipeColor:'#0ea5e9', floorCls:'has-attention',       cls:'status-attention',       subs:['Watch Item','Needs Follow-up','Housekeeping','PM Opportunity','Operator Note','Check Next Run'],                  statLabel:'Attention',     order:1.5 },
-  controlman:      { label:'Controlman',       shortLabel:'Controlman',   icon:'🎛️', cssColor:'var(--color-babyblue, var(--babyblue))', swipeColor:'#38bdf8', floorCls:'has-controlman',      cls:'status-controlman',      subs:['Color Change','Mold Change','Robot / EOAT (End of Arm Tooling) Fault','Vision System / Camera Error','Conveyor / Auxiliary Comm Loss','PLC / HMI Error'], statLabel:'Controlman',    order:2 },
-  maintenance:     { label:'Maintenance',      shortLabel:'Maintenance',  icon:'🔧', cssColor:'var(--color-warning, var(--yellow))',   swipeColor:'#eab308', floorCls:'has-maintenance',     cls:'status-maintenance',     subs:['Hydraulic Leak / Pressure Drop','Heater Band / Thermocouple Failure','Barrel / Screw / Check Ring Issue','Chiller / Thermolator Failure'], statLabel:'Maintenance',   order:3 },
-  materials:       { label:'Materials',        shortLabel:'Materials',    icon:'📦', cssColor:'#8b5cf6',         swipeColor:'#8b5cf6', floorCls:'has-materials',       cls:'status-materials',       subs:['Resin Moisture / Drying Issue','Colorant / Masterbatch Ratio Error','Vacuum / Material Loader Blockage','Wrong Resin / Regrind Issue'], statLabel:'Materials',     order:4 },
-  processengineer: { label:'Process Engineer', shortLabel:'Process Eng.', icon:'⚙️', cssColor:'var(--color-purple, var(--purple))',   swipeColor:'#a855f7', floorCls:'has-processengineer', cls:'status-processengineer', subs:['Fill / Pack Pressure Adjustment','Temperature Profile Tuning','Cycle Time Optimization','Process Drift / Instability'], statLabel:'Process Eng.',  order:5 },
-  quality:         { label:'Quality',          shortLabel:'Quality',      icon:'✨', cssColor:'#06b6d4',         swipeColor:'#06b6d4', floorCls:'has-quality',         cls:'status-quality',         subs:['Short Shot / Non-fill','Flash / Burrs','Sink Marks / Voids','Splay / Silver Streaks','Burn Marks / Degradation','Warp / Dimensional Out-of-Spec'], statLabel:'Quality',       order:6 },
-  startup:         { label:'Startup',          shortLabel:'Startup',      icon:'🚀', cssColor:'var(--color-teal, var(--teal))',     swipeColor:'#14b8a6', floorCls:'has-startup',         cls:'status-startup',         subs:['Purging / Color Change','Mold Heat-Up / Stabilization','First Article Inspection (FAI)','Robot Homing / Path Setup'], statLabel:'Startup',       order:7 },
-  tooldie:         { label:'Tool & Die',       shortLabel:'Tool & Die',   icon:'🔩', cssColor:'var(--color-orange, var(--orange))',   swipeColor:'#f97316', floorCls:'has-tooldie',         cls:'status-tooldie',         subs:['Broken / Bent Ejector Pin','Hot Runner / Gate Issue','Water Leak in Mold','Stuck Part / Sprue','Mold Greasing / PM'], statLabel:'Tool & Die',    order:8 },
-  resolved:        { label:'Resolved',         shortLabel:'Resolved',     icon:'✓',  cssColor:'var(--color-success, var(--green))',    swipeColor:'#22c55e', floorCls:'all-resolved',        cls:'status-resolved',        subs:['Process Parameter Adjusted','Mold Cleaned / Repaired','Hardware Replaced','Temporary Workaround'],                      statLabel:'Resolved',      order:9 },
+  open: { label: 'Open', shortLabel: 'Open', icon: '●', cssColor: 'var(--color-danger, var(--red))', swipeColor: '#ef4444', floorCls: 'has-open', cls: 'status-open', subs: ['New Fault / Issue', 'Pending Triage', 'Scheduled Mold Change', 'Re-opened'], statLabel: 'Open', order: 0 },
+  alert: { label: 'Alert', shortLabel: 'Alert', icon: '🚨', cssColor: '#dc2626', swipeColor: '#dc2626', floorCls: 'has-alert', cls: 'status-alert', subs: ['Mold Protection Fault', 'E-Stop / Safety Hazard', 'Press Down - Critical', 'Major Oil / Fluid Leak'], statLabel: 'Alert', order: 1 },
+  attention: { label: 'Attention', shortLabel: 'Attention', icon: '◇', cssColor: '#0ea5e9', swipeColor: '#0ea5e9', floorCls: 'has-attention', cls: 'status-attention', subs: ['Watch Item', 'Needs Follow-up', 'Housekeeping', 'PM Opportunity', 'Operator Note', 'Check Next Run'], statLabel: 'Attention', order: 1.5 },
+  controlman: { label: 'Controlman', shortLabel: 'Controlman', icon: '🎛️', cssColor: 'var(--color-babyblue, var(--babyblue))', swipeColor: '#38bdf8', floorCls: 'has-controlman', cls: 'status-controlman', subs: ['Color Change', 'Mold Change', 'Robot / EOAT (End of Arm Tooling) Fault', 'Vision System / Camera Error', 'Conveyor / Auxiliary Comm Loss', 'PLC / HMI Error'], statLabel: 'Controlman', order: 2 },
+  maintenance: { label: 'Maintenance', shortLabel: 'Maintenance', icon: '🔧', cssColor: 'var(--color-warning, var(--yellow))', swipeColor: '#eab308', floorCls: 'has-maintenance', cls: 'status-maintenance', subs: ['Hydraulic Leak / Pressure Drop', 'Heater Band / Thermocouple Failure', 'Barrel / Screw / Check Ring Issue', 'Chiller / Thermolator Failure'], statLabel: 'Maintenance', order: 3 },
+  materials: { label: 'Materials', shortLabel: 'Materials', icon: '📦', cssColor: '#8b5cf6', swipeColor: '#8b5cf6', floorCls: 'has-materials', cls: 'status-materials', subs: ['Resin Moisture / Drying Issue', 'Colorant / Masterbatch Ratio Error', 'Vacuum / Material Loader Blockage', 'Wrong Resin / Regrind Issue'], statLabel: 'Materials', order: 4 },
+  processengineer: { label: 'Process Engineer', shortLabel: 'Process Eng.', icon: '⚙️', cssColor: 'var(--color-purple, var(--purple))', swipeColor: '#a855f7', floorCls: 'has-processengineer', cls: 'status-processengineer', subs: ['Fill / Pack Pressure Adjustment', 'Temperature Profile Tuning', 'Cycle Time Optimization', 'Process Drift / Instability'], statLabel: 'Process Eng.', order: 5 },
+  quality: { label: 'Quality', shortLabel: 'Quality', icon: '✨', cssColor: '#06b6d4', swipeColor: '#06b6d4', floorCls: 'has-quality', cls: 'status-quality', subs: ['Short Shot / Non-fill', 'Flash / Burrs', 'Sink Marks / Voids', 'Splay / Silver Streaks', 'Burn Marks / Degradation', 'Warp / Dimensional Out-of-Spec'], statLabel: 'Quality', order: 6 },
+  startup: { label: 'Startup', shortLabel: 'Startup', icon: '🚀', cssColor: 'var(--color-teal, var(--teal))', swipeColor: '#14b8a6', floorCls: 'has-startup', cls: 'status-startup', subs: ['Purging / Color Change', 'Mold Heat-Up / Stabilization', 'First Article Inspection (FAI)', 'Robot Homing / Path Setup'], statLabel: 'Startup', order: 7 },
+  tooldie: { label: 'Tool & Die', shortLabel: 'Tool & Die', icon: '🔩', cssColor: 'var(--color-orange, var(--orange))', swipeColor: '#f97316', floorCls: 'has-tooldie', cls: 'status-tooldie', subs: ['Broken / Bent Ejector Pin', 'Hot Runner / Gate Issue', 'Water Leak in Mold', 'Stuck Part / Sprue', 'Mold Greasing / PM'], statLabel: 'Tool & Die', order: 8 },
+  resolved: { label: 'Resolved', shortLabel: 'Resolved', icon: '✓', cssColor: 'var(--color-success, var(--green))', swipeColor: '#22c55e', floorCls: 'all-resolved', cls: 'status-resolved', subs: ['Process Parameter Adjusted', 'Mold Cleaned / Repaired', 'Hardware Replaced', 'Temporary Workaround'], statLabel: 'Resolved', order: 9 },
 };
 const DEFAULT_STATUSES = JSON.parse(JSON.stringify(STATUSES));
 const CANONICAL_OPTIONAL_STATUSES = {
@@ -3335,52 +3293,52 @@ const MASCOTS = {
   maintenance: {
     name: 'TORCH', color: '#eab308',
     tagline: '"The floor runs hot. So do I."',
-    svg(w=180,h=180){return `<svg width="${w}" height="${h}" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="90" cy="165" rx="38" ry="6" fill="rgba(0,0,0,0.4)"/><g class="mascot-flame-body"><path d="M90 155 C50 155 28 128 30 100 C32 78 44 65 50 50 C56 35 52 18 58 10 C62 4 68 8 66 18 C64 28 70 24 74 16 C78 8 84 12 82 22 C80 32 88 28 88 18 C88 10 96 8 96 18 C96 28 102 22 100 12 C98 4 106 2 108 12 C112 28 120 38 128 55 C136 72 150 88 150 108 C150 135 126 155 90 155Z" fill="#1a1600" stroke="#eab308" stroke-width="2.5"/><path d="M90 145 C62 145 46 126 48 104 C50 86 60 74 66 62 C70 52 68 38 72 30 C76 22 80 28 78 36 C76 44 82 40 84 32 C86 24 92 28 90 36 C88 44 96 40 94 30 C92 22 100 20 100 32 C100 42 108 36 106 26 C108 38 118 52 122 70 C128 90 134 104 132 116 C130 135 114 145 90 145Z" fill="rgba(245,166,35,0.18)"/><ellipse cx="90" cy="100" rx="32" ry="34" fill="#111000"/><ellipse cx="78" cy="96" rx="8" ry="9" fill="#eab308"/><ellipse cx="102" cy="96" rx="8" ry="9" fill="#eab308"/><circle cx="78" cy="97" r="4.5" fill="#0f1117"/><circle cx="102" cy="97" r="4.5" fill="#0f1117"/><circle cx="80" cy="94" r="2" fill="white" opacity="0.8"/><circle cx="104" cy="94" r="2" fill="white" opacity="0.8"/><path d="M76 112 Q90 121 104 112" stroke="#eab308" stroke-width="3" stroke-linecap="round" fill="none"/><rect x="82" y="114" width="7" height="5" rx="2" fill="#eab308"/><rect x="91" y="114" width="7" height="5" rx="2" fill="#eab308"/><ellipse cx="90" cy="48" rx="30" ry="11" fill="#eab308"/><rect x="62" y="44" width="56" height="10" rx="5" fill="#ca8a04"/><rect x="58" y="51" width="64" height="5" rx="2.5" fill="#eab308" opacity="0.55"/></g><g class="mascot-wrench-anim"><rect x="70" y="140" width="40" height="12" rx="6" fill="#1a1600" stroke="#eab308" stroke-width="2"/><circle cx="70" cy="146" r="8" fill="#1a1600" stroke="#eab308" stroke-width="2"/><circle cx="70" cy="146" r="4" fill="transparent" stroke="#eab308" stroke-width="2"/><circle cx="110" cy="146" r="8" fill="#1a1600" stroke="#eab308" stroke-width="2"/><circle cx="110" cy="146" r="4" fill="transparent" stroke="#eab308" stroke-width="2"/></g></svg>`;}
+    svg(w = 180, h = 180) { return `<svg width="${w}" height="${h}" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="90" cy="165" rx="38" ry="6" fill="rgba(0,0,0,0.4)"/><g class="mascot-flame-body"><path d="M90 155 C50 155 28 128 30 100 C32 78 44 65 50 50 C56 35 52 18 58 10 C62 4 68 8 66 18 C64 28 70 24 74 16 C78 8 84 12 82 22 C80 32 88 28 88 18 C88 10 96 8 96 18 C96 28 102 22 100 12 C98 4 106 2 108 12 C112 28 120 38 128 55 C136 72 150 88 150 108 C150 135 126 155 90 155Z" fill="#1a1600" stroke="#eab308" stroke-width="2.5"/><path d="M90 145 C62 145 46 126 48 104 C50 86 60 74 66 62 C70 52 68 38 72 30 C76 22 80 28 78 36 C76 44 82 40 84 32 C86 24 92 28 90 36 C88 44 96 40 94 30 C92 22 100 20 100 32 C100 42 108 36 106 26 C108 38 118 52 122 70 C128 90 134 104 132 116 C130 135 114 145 90 145Z" fill="rgba(245,166,35,0.18)"/><ellipse cx="90" cy="100" rx="32" ry="34" fill="#111000"/><ellipse cx="78" cy="96" rx="8" ry="9" fill="#eab308"/><ellipse cx="102" cy="96" rx="8" ry="9" fill="#eab308"/><circle cx="78" cy="97" r="4.5" fill="#0f1117"/><circle cx="102" cy="97" r="4.5" fill="#0f1117"/><circle cx="80" cy="94" r="2" fill="white" opacity="0.8"/><circle cx="104" cy="94" r="2" fill="white" opacity="0.8"/><path d="M76 112 Q90 121 104 112" stroke="#eab308" stroke-width="3" stroke-linecap="round" fill="none"/><rect x="82" y="114" width="7" height="5" rx="2" fill="#eab308"/><rect x="91" y="114" width="7" height="5" rx="2" fill="#eab308"/><ellipse cx="90" cy="48" rx="30" ry="11" fill="#eab308"/><rect x="62" y="44" width="56" height="10" rx="5" fill="#ca8a04"/><rect x="58" y="51" width="64" height="5" rx="2.5" fill="#eab308" opacity="0.55"/></g><g class="mascot-wrench-anim"><rect x="70" y="140" width="40" height="12" rx="6" fill="#1a1600" stroke="#eab308" stroke-width="2"/><circle cx="70" cy="146" r="8" fill="#1a1600" stroke="#eab308" stroke-width="2"/><circle cx="70" cy="146" r="4" fill="transparent" stroke="#eab308" stroke-width="2"/><circle cx="110" cy="146" r="8" fill="#1a1600" stroke="#eab308" stroke-width="2"/><circle cx="110" cy="146" r="4" fill="transparent" stroke="#eab308" stroke-width="2"/></g></svg>`; }
   },
   tooldie: {
     name: 'GAUGE', color: '#f97316',
     tagline: '"Everything spins around precision."',
-    svg(w=180,h=180){return `<svg width="${w}" height="${h}" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="90" cy="170" rx="32" ry="5" fill="rgba(0,0,0,0.4)"/><g class="mascot-gear-outer"><circle cx="90" cy="86" r="74" fill="none" stroke="#c2410c" stroke-width="3"/><rect x="86" y="7" width="8" height="14" rx="2" fill="#c2410c"/><rect x="86" y="151" width="8" height="14" rx="2" fill="#c2410c"/><rect x="7" y="82" width="14" height="8" rx="2" fill="#c2410c"/><rect x="151" y="82" width="14" height="8" rx="2" fill="#c2410c"/><rect x="30" y="26" width="8" height="14" rx="2" fill="#c2410c" transform="rotate(45 34 33)"/><rect x="130" y="130" width="8" height="14" rx="2" fill="#c2410c" transform="rotate(45 134 137)"/><rect x="130" y="26" width="8" height="14" rx="2" fill="#c2410c" transform="rotate(-45 134 33)"/><rect x="30" y="130" width="8" height="14" rx="2" fill="#c2410c" transform="rotate(-45 34 137)"/><rect x="14" y="55" width="14" height="8" rx="2" fill="#c2410c" transform="rotate(30 21 59)"/><rect x="150" y="115" width="14" height="8" rx="2" fill="#c2410c" transform="rotate(30 157 119)"/><rect x="150" y="55" width="14" height="8" rx="2" fill="#c2410c" transform="rotate(-30 157 59)"/><rect x="14" y="115" width="14" height="8" rx="2" fill="#c2410c" transform="rotate(-30 21 119)"/></g><g class="mascot-gear-inner"><circle cx="90" cy="86" r="50" fill="none" stroke="#ea580c" stroke-width="2"/><rect x="87" y="31" width="6" height="10" rx="2" fill="#ea580c"/><rect x="87" y="131" width="6" height="10" rx="2" fill="#ea580c"/><rect x="35" y="83" width="10" height="6" rx="2" fill="#ea580c"/><rect x="135" y="83" width="10" height="6" rx="2" fill="#ea580c"/><rect x="51" y="47" width="6" height="10" rx="2" fill="#ea580c" transform="rotate(45 54 52)"/><rect x="123" y="119" width="6" height="10" rx="2" fill="#ea580c" transform="rotate(45 126 124)"/><rect x="123" y="47" width="6" height="10" rx="2" fill="#ea580c" transform="rotate(-45 126 52)"/><rect x="51" y="119" width="6" height="10" rx="2" fill="#ea580c" transform="rotate(-45 54 124)"/></g><g class="mascot-gauge-body"><circle cx="90" cy="86" r="36" fill="#1c0d00" stroke="#f97316" stroke-width="2.5"/><circle cx="78" cy="82" r="13" fill="rgba(251,191,36,0.08)" stroke="#fdba74" stroke-width="2.5"/><circle cx="102" cy="82" r="13" fill="rgba(251,191,36,0.08)" stroke="#fdba74" stroke-width="2.5"/><line x1="91" y1="82" x2="89" y2="82" stroke="#fdba74" stroke-width="2.5" stroke-linecap="round"/><line x1="65" y1="82" x2="56" y2="84" stroke="#fdba74" stroke-width="2" stroke-linecap="round"/><line x1="115" y1="82" x2="124" y2="84" stroke="#fdba74" stroke-width="2" stroke-linecap="round"/><circle cx="78" cy="82" r="6" fill="#f97316"/><circle cx="102" cy="82" r="6" fill="#f97316"/><circle cx="78" cy="82" r="3.5" fill="#0f1117"/><circle cx="102" cy="82" r="3.5" fill="#0f1117"/><circle cx="79.5" cy="80" r="1.5" fill="white" opacity="0.7"/><circle cx="103.5" cy="80" r="1.5" fill="white" opacity="0.7"/><line x1="80" y1="98" x2="100" y2="98" stroke="#f97316" stroke-width="3" stroke-linecap="round"/><rect x="40" y="98" width="18" height="8" rx="4" fill="#1c0d00" stroke="#f97316" stroke-width="1.5"/><rect x="122" y="98" width="18" height="8" rx="4" fill="#1c0d00" stroke="#f97316" stroke-width="1.5"/><rect x="75" y="120" width="13" height="18" rx="6" fill="#1c0d00" stroke="#f97316" stroke-width="1.5"/><rect x="92" y="120" width="13" height="18" rx="6" fill="#1c0d00" stroke="#f97316" stroke-width="1.5"/><rect x="72" y="132" width="19" height="10" rx="4" fill="#431407"/><rect x="89" y="132" width="19" height="10" rx="4" fill="#431407"/><rect x="72" y="132" width="7" height="10" rx="3" fill="#ea580c"/><rect x="89" y="132" width="7" height="10" rx="3" fill="#ea580c"/></g></svg>`;}
+    svg(w = 180, h = 180) { return `<svg width="${w}" height="${h}" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="90" cy="170" rx="32" ry="5" fill="rgba(0,0,0,0.4)"/><g class="mascot-gear-outer"><circle cx="90" cy="86" r="74" fill="none" stroke="#c2410c" stroke-width="3"/><rect x="86" y="7" width="8" height="14" rx="2" fill="#c2410c"/><rect x="86" y="151" width="8" height="14" rx="2" fill="#c2410c"/><rect x="7" y="82" width="14" height="8" rx="2" fill="#c2410c"/><rect x="151" y="82" width="14" height="8" rx="2" fill="#c2410c"/><rect x="30" y="26" width="8" height="14" rx="2" fill="#c2410c" transform="rotate(45 34 33)"/><rect x="130" y="130" width="8" height="14" rx="2" fill="#c2410c" transform="rotate(45 134 137)"/><rect x="130" y="26" width="8" height="14" rx="2" fill="#c2410c" transform="rotate(-45 134 33)"/><rect x="30" y="130" width="8" height="14" rx="2" fill="#c2410c" transform="rotate(-45 34 137)"/><rect x="14" y="55" width="14" height="8" rx="2" fill="#c2410c" transform="rotate(30 21 59)"/><rect x="150" y="115" width="14" height="8" rx="2" fill="#c2410c" transform="rotate(30 157 119)"/><rect x="150" y="55" width="14" height="8" rx="2" fill="#c2410c" transform="rotate(-30 157 59)"/><rect x="14" y="115" width="14" height="8" rx="2" fill="#c2410c" transform="rotate(-30 21 119)"/></g><g class="mascot-gear-inner"><circle cx="90" cy="86" r="50" fill="none" stroke="#ea580c" stroke-width="2"/><rect x="87" y="31" width="6" height="10" rx="2" fill="#ea580c"/><rect x="87" y="131" width="6" height="10" rx="2" fill="#ea580c"/><rect x="35" y="83" width="10" height="6" rx="2" fill="#ea580c"/><rect x="135" y="83" width="10" height="6" rx="2" fill="#ea580c"/><rect x="51" y="47" width="6" height="10" rx="2" fill="#ea580c" transform="rotate(45 54 52)"/><rect x="123" y="119" width="6" height="10" rx="2" fill="#ea580c" transform="rotate(45 126 124)"/><rect x="123" y="47" width="6" height="10" rx="2" fill="#ea580c" transform="rotate(-45 126 52)"/><rect x="51" y="119" width="6" height="10" rx="2" fill="#ea580c" transform="rotate(-45 54 124)"/></g><g class="mascot-gauge-body"><circle cx="90" cy="86" r="36" fill="#1c0d00" stroke="#f97316" stroke-width="2.5"/><circle cx="78" cy="82" r="13" fill="rgba(251,191,36,0.08)" stroke="#fdba74" stroke-width="2.5"/><circle cx="102" cy="82" r="13" fill="rgba(251,191,36,0.08)" stroke="#fdba74" stroke-width="2.5"/><line x1="91" y1="82" x2="89" y2="82" stroke="#fdba74" stroke-width="2.5" stroke-linecap="round"/><line x1="65" y1="82" x2="56" y2="84" stroke="#fdba74" stroke-width="2" stroke-linecap="round"/><line x1="115" y1="82" x2="124" y2="84" stroke="#fdba74" stroke-width="2" stroke-linecap="round"/><circle cx="78" cy="82" r="6" fill="#f97316"/><circle cx="102" cy="82" r="6" fill="#f97316"/><circle cx="78" cy="82" r="3.5" fill="#0f1117"/><circle cx="102" cy="82" r="3.5" fill="#0f1117"/><circle cx="79.5" cy="80" r="1.5" fill="white" opacity="0.7"/><circle cx="103.5" cy="80" r="1.5" fill="white" opacity="0.7"/><line x1="80" y1="98" x2="100" y2="98" stroke="#f97316" stroke-width="3" stroke-linecap="round"/><rect x="40" y="98" width="18" height="8" rx="4" fill="#1c0d00" stroke="#f97316" stroke-width="1.5"/><rect x="122" y="98" width="18" height="8" rx="4" fill="#1c0d00" stroke="#f97316" stroke-width="1.5"/><rect x="75" y="120" width="13" height="18" rx="6" fill="#1c0d00" stroke="#f97316" stroke-width="1.5"/><rect x="92" y="120" width="13" height="18" rx="6" fill="#1c0d00" stroke="#f97316" stroke-width="1.5"/><rect x="72" y="132" width="19" height="10" rx="4" fill="#431407"/><rect x="89" y="132" width="19" height="10" rx="4" fill="#431407"/><rect x="72" y="132" width="7" height="10" rx="3" fill="#ea580c"/><rect x="89" y="132" width="7" height="10" rx="3" fill="#ea580c"/></g></svg>`; }
   },
   controlman: {
     name: 'SETTER', color: '#38bdf8',
     tagline: '"Two halves. One perfect part."',
-    svg(w=180,h=180){return `<svg width="${w}" height="${h}" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="90" cy="172" rx="34" ry="5" fill="rgba(0,0,0,0.35)"/><ellipse cx="90" cy="96" rx="18" ry="22" fill="rgba(56,189,248,0.2)" stroke="#38bdf8" stroke-width="1" opacity="0.6"/><ellipse class="mascot-mold-seam" cx="90" cy="96" rx="10" ry="14" fill="rgba(56,189,248,0.35)"/><g class="mascot-mold-left"><path d="M90 30 L52 46 L44 80 L44 115 L52 148 L90 162 Z" fill="#071e2a" stroke="#38bdf8" stroke-width="2.5"/><line x1="56" y1="60" x2="78" y2="60" stroke="#38bdf8" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.5"/><line x1="52" y1="80" x2="78" y2="80" stroke="#38bdf8" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.5"/><line x1="52" y1="100" x2="78" y2="100" stroke="#38bdf8" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.5"/><line x1="52" y1="120" x2="78" y2="120" stroke="#38bdf8" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.5"/><circle cx="62" cy="72" r="3" fill="#38bdf8" opacity="0.6"/><circle cx="62" cy="110" r="3" fill="#38bdf8" opacity="0.6"/><ellipse cx="68" cy="86" rx="9" ry="10" fill="#38bdf8"/><circle cx="68" cy="87" r="5" fill="#0f1117"/><circle cx="70" cy="84" r="2" fill="white" opacity="0.7"/><rect x="26" y="88" width="22" height="9" rx="4.5" fill="#071e2a" stroke="#38bdf8" stroke-width="1.8"/><rect x="56" y="148" width="14" height="20" rx="6" fill="#071e2a" stroke="#38bdf8" stroke-width="1.8"/><rect x="52" y="161" width="21" height="10" rx="4" fill="#0c3d6e"/><rect x="52" y="161" width="8" height="10" rx="3" fill="#38bdf8" opacity="0.7"/></g><g class="mascot-mold-right"><path d="M90 30 L128 46 L136 80 L136 115 L128 148 L90 162 Z" fill="#071e2a" stroke="#38bdf8" stroke-width="2.5"/><line x1="102" y1="60" x2="124" y2="60" stroke="#38bdf8" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.5"/><line x1="102" y1="80" x2="128" y2="80" stroke="#38bdf8" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.5"/><line x1="102" y1="100" x2="128" y2="100" stroke="#38bdf8" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.5"/><line x1="102" y1="120" x2="128" y2="120" stroke="#38bdf8" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.5"/><circle cx="118" cy="72" r="3" fill="#38bdf8" opacity="0.6"/><circle cx="118" cy="110" r="3" fill="#38bdf8" opacity="0.6"/><ellipse cx="112" cy="86" rx="9" ry="10" fill="#38bdf8"/><circle cx="112" cy="87" r="5" fill="#0f1117"/><circle cx="114" cy="84" r="2" fill="white" opacity="0.7"/><rect x="132" y="88" width="22" height="9" rx="4.5" fill="#071e2a" stroke="#38bdf8" stroke-width="1.8"/><rect x="110" y="148" width="14" height="20" rx="6" fill="#071e2a" stroke="#38bdf8" stroke-width="1.8"/><rect x="107" y="161" width="21" height="10" rx="4" fill="#0c3d6e"/><rect x="107" y="161" width="8" height="10" rx="3" fill="#38bdf8" opacity="0.7"/></g><path d="M78 112 Q90 120 102 112" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round" fill="none"/><line x1="90" y1="30" x2="90" y2="162" stroke="#38bdf8" stroke-width="1" stroke-dasharray="5 4" opacity="0.3"/></svg>`;}
+    svg(w = 180, h = 180) { return `<svg width="${w}" height="${h}" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="90" cy="172" rx="34" ry="5" fill="rgba(0,0,0,0.35)"/><ellipse cx="90" cy="96" rx="18" ry="22" fill="rgba(56,189,248,0.2)" stroke="#38bdf8" stroke-width="1" opacity="0.6"/><ellipse class="mascot-mold-seam" cx="90" cy="96" rx="10" ry="14" fill="rgba(56,189,248,0.35)"/><g class="mascot-mold-left"><path d="M90 30 L52 46 L44 80 L44 115 L52 148 L90 162 Z" fill="#071e2a" stroke="#38bdf8" stroke-width="2.5"/><line x1="56" y1="60" x2="78" y2="60" stroke="#38bdf8" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.5"/><line x1="52" y1="80" x2="78" y2="80" stroke="#38bdf8" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.5"/><line x1="52" y1="100" x2="78" y2="100" stroke="#38bdf8" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.5"/><line x1="52" y1="120" x2="78" y2="120" stroke="#38bdf8" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.5"/><circle cx="62" cy="72" r="3" fill="#38bdf8" opacity="0.6"/><circle cx="62" cy="110" r="3" fill="#38bdf8" opacity="0.6"/><ellipse cx="68" cy="86" rx="9" ry="10" fill="#38bdf8"/><circle cx="68" cy="87" r="5" fill="#0f1117"/><circle cx="70" cy="84" r="2" fill="white" opacity="0.7"/><rect x="26" y="88" width="22" height="9" rx="4.5" fill="#071e2a" stroke="#38bdf8" stroke-width="1.8"/><rect x="56" y="148" width="14" height="20" rx="6" fill="#071e2a" stroke="#38bdf8" stroke-width="1.8"/><rect x="52" y="161" width="21" height="10" rx="4" fill="#0c3d6e"/><rect x="52" y="161" width="8" height="10" rx="3" fill="#38bdf8" opacity="0.7"/></g><g class="mascot-mold-right"><path d="M90 30 L128 46 L136 80 L136 115 L128 148 L90 162 Z" fill="#071e2a" stroke="#38bdf8" stroke-width="2.5"/><line x1="102" y1="60" x2="124" y2="60" stroke="#38bdf8" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.5"/><line x1="102" y1="80" x2="128" y2="80" stroke="#38bdf8" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.5"/><line x1="102" y1="100" x2="128" y2="100" stroke="#38bdf8" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.5"/><line x1="102" y1="120" x2="128" y2="120" stroke="#38bdf8" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.5"/><circle cx="118" cy="72" r="3" fill="#38bdf8" opacity="0.6"/><circle cx="118" cy="110" r="3" fill="#38bdf8" opacity="0.6"/><ellipse cx="112" cy="86" rx="9" ry="10" fill="#38bdf8"/><circle cx="112" cy="87" r="5" fill="#0f1117"/><circle cx="114" cy="84" r="2" fill="white" opacity="0.7"/><rect x="132" y="88" width="22" height="9" rx="4.5" fill="#071e2a" stroke="#38bdf8" stroke-width="1.8"/><rect x="110" y="148" width="14" height="20" rx="6" fill="#071e2a" stroke="#38bdf8" stroke-width="1.8"/><rect x="107" y="161" width="21" height="10" rx="4" fill="#0c3d6e"/><rect x="107" y="161" width="8" height="10" rx="3" fill="#38bdf8" opacity="0.7"/></g><path d="M78 112 Q90 120 102 112" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round" fill="none"/><line x1="90" y1="30" x2="90" y2="162" stroke="#38bdf8" stroke-width="1" stroke-dasharray="5 4" opacity="0.3"/></svg>`; }
   },
   startup: {
     name: 'CINDER', color: '#14b8a6',
     tagline: '"Cold metal? Not on my watch."',
-    svg(w=180,h=180){return `<svg width="${w}" height="${h}" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="90" cy="170" rx="32" ry="5" fill="rgba(0,0,0,0.35)"/><circle class="mascot-heat-ring-3" cx="90" cy="90" r="70" fill="none" stroke="#14b8a6" stroke-width="2" stroke-dasharray="9 6" opacity="0.25"/><circle class="mascot-heat-ring-2" cx="90" cy="90" r="55" fill="none" stroke="#14b8a6" stroke-width="3" stroke-dasharray="11 5" opacity="0.4"/><circle class="mascot-heat-ring-1" cx="90" cy="90" r="40" fill="none" stroke="#14b8a6" stroke-width="4" stroke-dasharray="12 4" opacity="0.65"/><g class="mascot-ramp-body"><circle cx="90" cy="90" r="30" fill="rgba(20,184,166,0.12)" stroke="#14b8a6" stroke-width="0.5"/><circle cx="90" cy="90" r="27" fill="#071a18" stroke="#14b8a6" stroke-width="2.5"/><path d="M73 76 Q79 70 85 74" stroke="#14b8a6" stroke-width="2.5" stroke-linecap="round" fill="none"/><path d="M95 74 Q101 70 107 76" stroke="#14b8a6" stroke-width="2.5" stroke-linecap="round" fill="none"/><ellipse cx="80" cy="86" rx="8" ry="8.5" fill="#14b8a6"/><ellipse cx="100" cy="86" rx="8" ry="8.5" fill="#14b8a6"/><circle cx="80" cy="87" r="4.5" fill="#0f1117"/><circle cx="100" cy="87" r="4.5" fill="#0f1117"/><circle cx="82" cy="84" r="2" fill="white" opacity="0.8"/><circle cx="102" cy="84" r="2" fill="white" opacity="0.8"/><path d="M74 101 Q90 114 106 101" stroke="#14b8a6" stroke-width="3" stroke-linecap="round" fill="none"/><rect x="80" y="104" width="8" height="5" rx="2" fill="#14b8a6"/><rect x="90" y="104" width="8" height="5" rx="2" fill="#14b8a6"/><g class="mascot-heat-waves"><path d="M70 52 Q74 44 78 52 Q82 44 86 52" stroke="#14b8a6" stroke-width="2" stroke-linecap="round" fill="none" opacity="0.8"/><path d="M84 48 Q88 40 92 48 Q96 40 100 48" stroke="#14b8a6" stroke-width="2.5" stroke-linecap="round" fill="none"/><path d="M98 52 Q102 44 106 52 Q110 44 114 52" stroke="#14b8a6" stroke-width="2" stroke-linecap="round" fill="none" opacity="0.8"/></g><rect x="44" y="84" width="21" height="9" rx="4.5" fill="#071a18" stroke="#14b8a6" stroke-width="1.8"/><rect x="115" y="84" width="21" height="9" rx="4.5" fill="#071a18" stroke="#14b8a6" stroke-width="1.8"/><rect x="77" y="116" width="12" height="18" rx="5" fill="#071a18" stroke="#14b8a6" stroke-width="1.8"/><rect x="91" y="116" width="12" height="18" rx="5" fill="#071a18" stroke="#14b8a6" stroke-width="1.8"/><rect x="73" y="128" width="20" height="9" rx="4" fill="#0a3530"/><rect x="87" y="128" width="20" height="9" rx="4" fill="#0a3530"/><rect x="73" y="128" width="8" height="9" rx="3" fill="#14b8a6" opacity="0.7"/><rect x="87" y="128" width="8" height="9" rx="3" fill="#14b8a6" opacity="0.7"/></g></svg>`;}
+    svg(w = 180, h = 180) { return `<svg width="${w}" height="${h}" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="90" cy="170" rx="32" ry="5" fill="rgba(0,0,0,0.35)"/><circle class="mascot-heat-ring-3" cx="90" cy="90" r="70" fill="none" stroke="#14b8a6" stroke-width="2" stroke-dasharray="9 6" opacity="0.25"/><circle class="mascot-heat-ring-2" cx="90" cy="90" r="55" fill="none" stroke="#14b8a6" stroke-width="3" stroke-dasharray="11 5" opacity="0.4"/><circle class="mascot-heat-ring-1" cx="90" cy="90" r="40" fill="none" stroke="#14b8a6" stroke-width="4" stroke-dasharray="12 4" opacity="0.65"/><g class="mascot-ramp-body"><circle cx="90" cy="90" r="30" fill="rgba(20,184,166,0.12)" stroke="#14b8a6" stroke-width="0.5"/><circle cx="90" cy="90" r="27" fill="#071a18" stroke="#14b8a6" stroke-width="2.5"/><path d="M73 76 Q79 70 85 74" stroke="#14b8a6" stroke-width="2.5" stroke-linecap="round" fill="none"/><path d="M95 74 Q101 70 107 76" stroke="#14b8a6" stroke-width="2.5" stroke-linecap="round" fill="none"/><ellipse cx="80" cy="86" rx="8" ry="8.5" fill="#14b8a6"/><ellipse cx="100" cy="86" rx="8" ry="8.5" fill="#14b8a6"/><circle cx="80" cy="87" r="4.5" fill="#0f1117"/><circle cx="100" cy="87" r="4.5" fill="#0f1117"/><circle cx="82" cy="84" r="2" fill="white" opacity="0.8"/><circle cx="102" cy="84" r="2" fill="white" opacity="0.8"/><path d="M74 101 Q90 114 106 101" stroke="#14b8a6" stroke-width="3" stroke-linecap="round" fill="none"/><rect x="80" y="104" width="8" height="5" rx="2" fill="#14b8a6"/><rect x="90" y="104" width="8" height="5" rx="2" fill="#14b8a6"/><g class="mascot-heat-waves"><path d="M70 52 Q74 44 78 52 Q82 44 86 52" stroke="#14b8a6" stroke-width="2" stroke-linecap="round" fill="none" opacity="0.8"/><path d="M84 48 Q88 40 92 48 Q96 40 100 48" stroke="#14b8a6" stroke-width="2.5" stroke-linecap="round" fill="none"/><path d="M98 52 Q102 44 106 52 Q110 44 114 52" stroke="#14b8a6" stroke-width="2" stroke-linecap="round" fill="none" opacity="0.8"/></g><rect x="44" y="84" width="21" height="9" rx="4.5" fill="#071a18" stroke="#14b8a6" stroke-width="1.8"/><rect x="115" y="84" width="21" height="9" rx="4.5" fill="#071a18" stroke="#14b8a6" stroke-width="1.8"/><rect x="77" y="116" width="12" height="18" rx="5" fill="#071a18" stroke="#14b8a6" stroke-width="1.8"/><rect x="91" y="116" width="12" height="18" rx="5" fill="#071a18" stroke="#14b8a6" stroke-width="1.8"/><rect x="73" y="128" width="20" height="9" rx="4" fill="#0a3530"/><rect x="87" y="128" width="20" height="9" rx="4" fill="#0a3530"/><rect x="73" y="128" width="8" height="9" rx="3" fill="#14b8a6" opacity="0.7"/><rect x="87" y="128" width="8" height="9" rx="3" fill="#14b8a6" opacity="0.7"/></g></svg>`; }
   },
   quality: {
     name: 'SPEC', color: '#06b6d4',
     tagline: '"I see everything. Everything."',
-    svg(w=180,h=180){return `<svg width="${w}" height="${h}" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="90" cy="172" rx="28" ry="5" fill="rgba(0,0,0,0.3)"/><g class="mascot-mag-body"><ellipse class="mascot-scan-beam" cx="82" cy="76" rx="44" ry="44" fill="rgba(6,182,212,0.08)"/><circle cx="82" cy="76" r="52" fill="#071520" stroke="#06b6d4" stroke-width="4"/><path d="M50 50 Q66 44 78 52" stroke="white" stroke-width="2.5" stroke-linecap="round" fill="none" opacity="0.15"/><ellipse cx="82" cy="33" rx="14" ry="10" fill="#06b6d4" opacity="0.85"/><rect x="78" y="30" width="8" height="14" rx="4" fill="#06b6d4"/><ellipse cx="70" cy="72" rx="9" ry="10" fill="#06b6d4"/><ellipse cx="94" cy="72" rx="9" ry="10" fill="#06b6d4"/><circle cx="70" cy="73" r="5" fill="#0f1117"/><circle cx="94" cy="73" r="5" fill="#0f1117"/><circle cx="72" cy="70" r="2.2" fill="white" opacity="0.8"/><circle cx="96" cy="70" r="2.2" fill="white" opacity="0.8"/><path d="M60 60 Q70 56 79 60" stroke="#06b6d4" stroke-width="2.5" stroke-linecap="round" fill="none"/><path d="M85 60 Q94 56 104 60" stroke="#06b6d4" stroke-width="2.5" stroke-linecap="round" fill="none"/><path d="M68 90 Q82 97 96 90" stroke="#06b6d4" stroke-width="2.5" stroke-linecap="round" fill="none"/><rect x="12" y="92" width="26" height="34" rx="4" fill="#071520" stroke="#06b6d4" stroke-width="1.8"/><rect x="18" y="88" width="14" height="6" rx="3" fill="#06b6d4" opacity="0.8"/><line x1="18" y1="102" x2="32" y2="102" stroke="#06b6d4" stroke-width="1.5" opacity="0.7"/><line x1="18" y1="108" x2="32" y2="108" stroke="#06b6d4" stroke-width="1.5" opacity="0.7"/><rect x="78" y="126" width="16" height="38" rx="8" fill="#071520" stroke="#06b6d4" stroke-width="2.5"/><line x1="81" y1="136" x2="91" y2="136" stroke="#06b6d4" stroke-width="1.5" opacity="0.5"/><line x1="81" y1="142" x2="91" y2="142" stroke="#06b6d4" stroke-width="1.5" opacity="0.5"/><line x1="81" y1="148" x2="91" y2="148" stroke="#06b6d4" stroke-width="1.5" opacity="0.5"/><rect x="66" y="158" width="22" height="10" rx="5" fill="#0e4d6b"/><rect x="88" y="158" width="22" height="10" rx="5" fill="#0e4d6b"/><rect x="66" y="158" width="9" height="10" rx="4" fill="#06b6d4" opacity="0.6"/><rect x="88" y="158" width="9" height="10" rx="4" fill="#06b6d4" opacity="0.6"/></g></svg>`;}
+    svg(w = 180, h = 180) { return `<svg width="${w}" height="${h}" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="90" cy="172" rx="28" ry="5" fill="rgba(0,0,0,0.3)"/><g class="mascot-mag-body"><ellipse class="mascot-scan-beam" cx="82" cy="76" rx="44" ry="44" fill="rgba(6,182,212,0.08)"/><circle cx="82" cy="76" r="52" fill="#071520" stroke="#06b6d4" stroke-width="4"/><path d="M50 50 Q66 44 78 52" stroke="white" stroke-width="2.5" stroke-linecap="round" fill="none" opacity="0.15"/><ellipse cx="82" cy="33" rx="14" ry="10" fill="#06b6d4" opacity="0.85"/><rect x="78" y="30" width="8" height="14" rx="4" fill="#06b6d4"/><ellipse cx="70" cy="72" rx="9" ry="10" fill="#06b6d4"/><ellipse cx="94" cy="72" rx="9" ry="10" fill="#06b6d4"/><circle cx="70" cy="73" r="5" fill="#0f1117"/><circle cx="94" cy="73" r="5" fill="#0f1117"/><circle cx="72" cy="70" r="2.2" fill="white" opacity="0.8"/><circle cx="96" cy="70" r="2.2" fill="white" opacity="0.8"/><path d="M60 60 Q70 56 79 60" stroke="#06b6d4" stroke-width="2.5" stroke-linecap="round" fill="none"/><path d="M85 60 Q94 56 104 60" stroke="#06b6d4" stroke-width="2.5" stroke-linecap="round" fill="none"/><path d="M68 90 Q82 97 96 90" stroke="#06b6d4" stroke-width="2.5" stroke-linecap="round" fill="none"/><rect x="12" y="92" width="26" height="34" rx="4" fill="#071520" stroke="#06b6d4" stroke-width="1.8"/><rect x="18" y="88" width="14" height="6" rx="3" fill="#06b6d4" opacity="0.8"/><line x1="18" y1="102" x2="32" y2="102" stroke="#06b6d4" stroke-width="1.5" opacity="0.7"/><line x1="18" y1="108" x2="32" y2="108" stroke="#06b6d4" stroke-width="1.5" opacity="0.7"/><rect x="78" y="126" width="16" height="38" rx="8" fill="#071520" stroke="#06b6d4" stroke-width="2.5"/><line x1="81" y1="136" x2="91" y2="136" stroke="#06b6d4" stroke-width="1.5" opacity="0.5"/><line x1="81" y1="142" x2="91" y2="142" stroke="#06b6d4" stroke-width="1.5" opacity="0.5"/><line x1="81" y1="148" x2="91" y2="148" stroke="#06b6d4" stroke-width="1.5" opacity="0.5"/><rect x="66" y="158" width="22" height="10" rx="5" fill="#0e4d6b"/><rect x="88" y="158" width="22" height="10" rx="5" fill="#0e4d6b"/><rect x="66" y="158" width="9" height="10" rx="4" fill="#06b6d4" opacity="0.6"/><rect x="88" y="158" width="9" height="10" rx="4" fill="#06b6d4" opacity="0.6"/></g></svg>`; }
   },
   processengineer: {
     name: 'SIGMA', color: '#a855f7',
     tagline: '"The trend line never lies. Usually."',
-    svg(w=180,h=180){return `<svg width="${w}" height="${h}" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="90" cy="172" rx="36" ry="5" fill="rgba(0,0,0,0.3)"/><g class="mascot-sigma-body"><rect x="20" y="90" width="140" height="74" rx="8" fill="#12083a" stroke="#a855f7" stroke-width="1.5" opacity="0.7"/><line x1="20" y1="110" x2="160" y2="110" stroke="#a855f7" stroke-width="0.5" opacity="0.3"/><line x1="20" y1="127" x2="160" y2="127" stroke="#a855f7" stroke-width="0.5" opacity="0.3"/><line x1="20" y1="144" x2="160" y2="144" stroke="#a855f7" stroke-width="0.5" opacity="0.3"/><line x1="55" y1="90" x2="55" y2="164" stroke="#a855f7" stroke-width="0.5" opacity="0.3"/><line x1="90" y1="90" x2="90" y2="164" stroke="#a855f7" stroke-width="0.5" opacity="0.3"/><line x1="125" y1="90" x2="125" y2="164" stroke="#a855f7" stroke-width="0.5" opacity="0.3"/><rect x="30" y="138" width="10" height="22" rx="2" fill="#a855f7" opacity="0.5"/><rect x="44" y="122" width="10" height="38" rx="2" fill="#a855f7" opacity="0.7"/><rect x="58" y="110" width="10" height="50" rx="2" fill="#a855f7" opacity="0.9"/><rect x="72" y="118" width="10" height="42" rx="2" fill="#a855f7" opacity="0.75"/><rect x="86" y="104" width="10" height="56" rx="2" fill="#a855f7"/><rect x="100" y="112" width="10" height="48" rx="2" fill="#a855f7" opacity="0.8"/><rect x="114" y="120" width="10" height="40" rx="2" fill="#a855f7" opacity="0.65"/><rect x="128" y="128" width="10" height="32" rx="2" fill="#a855f7" opacity="0.5"/><rect x="142" y="116" width="10" height="44" rx="2" fill="#a855f7" opacity="0.7"/><polyline class="mascot-wave-line" points="35,137 49,121 63,109 77,117 91,103 105,111 119,119 133,127 147,115" stroke="#d8b4fe" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle class="mascot-data-node" cx="35" cy="137" r="4" fill="#d8b4fe" style="animation-delay:0s"/><circle class="mascot-data-node" cx="63" cy="109" r="4" fill="#d8b4fe" style="animation-delay:0.4s"/><circle class="mascot-data-node" cx="91" cy="103" r="4" fill="#d8b4fe" style="animation-delay:0.8s"/><circle class="mascot-data-node" cx="119" cy="119" r="4" fill="#d8b4fe" style="animation-delay:1.2s"/><circle class="mascot-data-node" cx="147" cy="115" r="4" fill="#d8b4fe" style="animation-delay:1.6s"/><circle cx="90" cy="60" r="30" fill="#190c34" stroke="#a855f7" stroke-width="2.5"/><path d="M64 46 Q72 28 90 32 Q108 28 116 46" fill="#a855f7" opacity="0.5"/><circle cx="79" cy="59" r="10" fill="none" stroke="#a855f7" stroke-width="2.2"/><circle cx="101" cy="59" r="10" fill="none" stroke="#a855f7" stroke-width="2.2"/><line x1="89" y1="59" x2="91" y2="59" stroke="#a855f7" stroke-width="2" stroke-linecap="round"/><line x1="69" y1="59" x2="62" y2="61" stroke="#a855f7" stroke-width="1.8" stroke-linecap="round"/><line x1="111" y1="59" x2="118" y2="61" stroke="#a855f7" stroke-width="1.8" stroke-linecap="round"/><circle cx="79" cy="60" r="5.5" fill="#d8b4fe" opacity="0.9"/><circle cx="101" cy="60" r="5.5" fill="#d8b4fe" opacity="0.9"/><circle cx="79" cy="60" r="3" fill="#0f1117"/><circle cx="101" cy="60" r="3" fill="#0f1117"/><circle cx="80.5" cy="58" r="1.5" fill="white" opacity="0.7"/><circle cx="102.5" cy="58" r="1.5" fill="white" opacity="0.7"/><path d="M80 74 Q90 79 100 74" stroke="#a855f7" stroke-width="2" stroke-linecap="round" fill="none"/><rect x="0" y="106" width="24" height="9" rx="4.5" fill="#190c34" stroke="#a855f7" stroke-width="1.8"/><rect x="156" y="106" width="24" height="9" rx="4.5" fill="#190c34" stroke="#a855f7" stroke-width="1.8"/></g></svg>`;}
+    svg(w = 180, h = 180) { return `<svg width="${w}" height="${h}" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="90" cy="172" rx="36" ry="5" fill="rgba(0,0,0,0.3)"/><g class="mascot-sigma-body"><rect x="20" y="90" width="140" height="74" rx="8" fill="#12083a" stroke="#a855f7" stroke-width="1.5" opacity="0.7"/><line x1="20" y1="110" x2="160" y2="110" stroke="#a855f7" stroke-width="0.5" opacity="0.3"/><line x1="20" y1="127" x2="160" y2="127" stroke="#a855f7" stroke-width="0.5" opacity="0.3"/><line x1="20" y1="144" x2="160" y2="144" stroke="#a855f7" stroke-width="0.5" opacity="0.3"/><line x1="55" y1="90" x2="55" y2="164" stroke="#a855f7" stroke-width="0.5" opacity="0.3"/><line x1="90" y1="90" x2="90" y2="164" stroke="#a855f7" stroke-width="0.5" opacity="0.3"/><line x1="125" y1="90" x2="125" y2="164" stroke="#a855f7" stroke-width="0.5" opacity="0.3"/><rect x="30" y="138" width="10" height="22" rx="2" fill="#a855f7" opacity="0.5"/><rect x="44" y="122" width="10" height="38" rx="2" fill="#a855f7" opacity="0.7"/><rect x="58" y="110" width="10" height="50" rx="2" fill="#a855f7" opacity="0.9"/><rect x="72" y="118" width="10" height="42" rx="2" fill="#a855f7" opacity="0.75"/><rect x="86" y="104" width="10" height="56" rx="2" fill="#a855f7"/><rect x="100" y="112" width="10" height="48" rx="2" fill="#a855f7" opacity="0.8"/><rect x="114" y="120" width="10" height="40" rx="2" fill="#a855f7" opacity="0.65"/><rect x="128" y="128" width="10" height="32" rx="2" fill="#a855f7" opacity="0.5"/><rect x="142" y="116" width="10" height="44" rx="2" fill="#a855f7" opacity="0.7"/><polyline class="mascot-wave-line" points="35,137 49,121 63,109 77,117 91,103 105,111 119,119 133,127 147,115" stroke="#d8b4fe" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle class="mascot-data-node" cx="35" cy="137" r="4" fill="#d8b4fe" style="animation-delay:0s"/><circle class="mascot-data-node" cx="63" cy="109" r="4" fill="#d8b4fe" style="animation-delay:0.4s"/><circle class="mascot-data-node" cx="91" cy="103" r="4" fill="#d8b4fe" style="animation-delay:0.8s"/><circle class="mascot-data-node" cx="119" cy="119" r="4" fill="#d8b4fe" style="animation-delay:1.2s"/><circle class="mascot-data-node" cx="147" cy="115" r="4" fill="#d8b4fe" style="animation-delay:1.6s"/><circle cx="90" cy="60" r="30" fill="#190c34" stroke="#a855f7" stroke-width="2.5"/><path d="M64 46 Q72 28 90 32 Q108 28 116 46" fill="#a855f7" opacity="0.5"/><circle cx="79" cy="59" r="10" fill="none" stroke="#a855f7" stroke-width="2.2"/><circle cx="101" cy="59" r="10" fill="none" stroke="#a855f7" stroke-width="2.2"/><line x1="89" y1="59" x2="91" y2="59" stroke="#a855f7" stroke-width="2" stroke-linecap="round"/><line x1="69" y1="59" x2="62" y2="61" stroke="#a855f7" stroke-width="1.8" stroke-linecap="round"/><line x1="111" y1="59" x2="118" y2="61" stroke="#a855f7" stroke-width="1.8" stroke-linecap="round"/><circle cx="79" cy="60" r="5.5" fill="#d8b4fe" opacity="0.9"/><circle cx="101" cy="60" r="5.5" fill="#d8b4fe" opacity="0.9"/><circle cx="79" cy="60" r="3" fill="#0f1117"/><circle cx="101" cy="60" r="3" fill="#0f1117"/><circle cx="80.5" cy="58" r="1.5" fill="white" opacity="0.7"/><circle cx="102.5" cy="58" r="1.5" fill="white" opacity="0.7"/><path d="M80 74 Q90 79 100 74" stroke="#a855f7" stroke-width="2" stroke-linecap="round" fill="none"/><rect x="0" y="106" width="24" height="9" rx="4.5" fill="#190c34" stroke="#a855f7" stroke-width="1.8"/><rect x="156" y="106" width="24" height="9" rx="4.5" fill="#190c34" stroke="#a855f7" stroke-width="1.8"/></g></svg>`; }
   },
   materials: {
     name: 'LIFT', color: '#8b5cf6',
     tagline: '"I don\'t drive the forklift. I am the forklift."',
-    svg(w=180,h=180){return `<svg width="${w}" height="${h}" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="90" cy="176" rx="50" ry="5" fill="rgba(0,0,0,0.45)"/><g class="mascot-lift-chassis"><rect x="24" y="112" width="124" height="44" rx="10" fill="#160c20" stroke="#8b5cf6" stroke-width="2.5"/><rect x="32" y="120" width="30" height="28" rx="4" fill="rgba(139,92,246,0.1)" stroke="#8b5cf6" stroke-width="1"/><rect x="68" y="120" width="30" height="28" rx="4" fill="rgba(139,92,246,0.1)" stroke="#8b5cf6" stroke-width="1"/><rect x="104" y="120" width="36" height="28" rx="4" fill="rgba(139,92,246,0.15)" stroke="#8b5cf6" stroke-width="1"/><line x1="108" y1="126" x2="136" y2="126" stroke="#8b5cf6" stroke-width="1.2" opacity="0.6"/><line x1="108" y1="130" x2="136" y2="130" stroke="#8b5cf6" stroke-width="1.2" opacity="0.6"/><line x1="108" y1="134" x2="136" y2="134" stroke="#8b5cf6" stroke-width="1.2" opacity="0.6"/><line x1="108" y1="138" x2="136" y2="138" stroke="#8b5cf6" stroke-width="1.2" opacity="0.6"/><line x1="108" y1="142" x2="136" y2="142" stroke="#8b5cf6" stroke-width="1.2" opacity="0.6"/><rect x="138" y="116" width="18" height="36" rx="6" fill="#160c20" stroke="#8b5cf6" stroke-width="2"/></g><g class="mascot-lift-wheel" style="transform-origin:52px 160px"><circle cx="52" cy="160" r="18" fill="#111" stroke="#8b5cf6" stroke-width="2.5"/><circle cx="52" cy="160" r="10" fill="#160c20" stroke="#8b5cf6" stroke-width="1.5"/><line x1="52" y1="142" x2="52" y2="178" stroke="#8b5cf6" stroke-width="1.5" opacity="0.5"/><line x1="34" y1="160" x2="70" y2="160" stroke="#8b5cf6" stroke-width="1.5" opacity="0.5"/></g><g class="mascot-lift-wheel" style="transform-origin:128px 160px;animation-delay:-0.3s"><circle cx="128" cy="160" r="18" fill="#111" stroke="#8b5cf6" stroke-width="2.5"/><circle cx="128" cy="160" r="10" fill="#160c20" stroke="#8b5cf6" stroke-width="1.5"/><line x1="128" y1="142" x2="128" y2="178" stroke="#8b5cf6" stroke-width="1.5" opacity="0.5"/><line x1="110" y1="160" x2="146" y2="160" stroke="#8b5cf6" stroke-width="1.5" opacity="0.5"/></g><g class="mascot-lift-chassis"><rect x="20" y="52" width="10" height="72" rx="3" fill="#160c20" stroke="#8b5cf6" stroke-width="1.8"/><rect x="34" y="52" width="10" height="72" rx="3" fill="#160c20" stroke="#8b5cf6" stroke-width="1.8"/><line x1="20" y1="70" x2="44" y2="70" stroke="#8b5cf6" stroke-width="1.5" opacity="0.5"/><line x1="20" y1="90" x2="44" y2="90" stroke="#8b5cf6" stroke-width="1.5" opacity="0.5"/><line x1="20" y1="110" x2="44" y2="110" stroke="#8b5cf6" stroke-width="1.5" opacity="0.5"/></g><g class="mascot-lift-forks"><rect x="6" y="96" width="46" height="6" rx="3" fill="#8b5cf6"/><rect x="6" y="106" width="46" height="6" rx="3" fill="#8b5cf6"/><rect x="2" y="80" width="52" height="16" rx="3" fill="#1e0f38" stroke="#8b5cf6" stroke-width="1.5" opacity="0.8"/><rect x="8" y="70" width="40" height="12" rx="2" fill="#1e0f38" stroke="#8b5cf6" stroke-width="1" opacity="0.6"/></g><g class="mascot-lift-chassis"><rect x="58" y="64" width="80" height="52" rx="14" fill="#160c20" stroke="#8b5cf6" stroke-width="2.5"/><rect x="58" y="76" width="80" height="7" fill="#8b5cf6" opacity="0.3"/><rect x="58" y="100" width="80" height="7" fill="#8b5cf6" opacity="0.3"/><circle cx="98" cy="44" r="28" fill="#160c20" stroke="#8b5cf6" stroke-width="2.5"/><ellipse cx="98" cy="22" rx="30" ry="10" fill="#8b5cf6"/><rect x="70" y="18" width="56" height="10" rx="5" fill="#7c3aed"/><rect x="66" y="25" width="64" height="5" rx="2.5" fill="#8b5cf6" opacity="0.55"/><ellipse cx="86" cy="44" rx="9" ry="10" fill="#8b5cf6"/><ellipse cx="110" cy="44" rx="9" ry="10" fill="#8b5cf6"/><circle cx="86" cy="45" r="5" fill="#0f1117"/><circle cx="110" cy="45" r="5" fill="#0f1117"/><circle cx="88" cy="42" r="2.2" fill="white" opacity="0.8"/><circle cx="112" cy="42" r="2.2" fill="white" opacity="0.8"/><path d="M80 58 Q98 70 116 58" stroke="#8b5cf6" stroke-width="3.5" stroke-linecap="round" fill="none"/><rect x="138" y="72" width="26" height="11" rx="5.5" fill="#160c20" stroke="#8b5cf6" stroke-width="2"/></g></svg>`;}
+    svg(w = 180, h = 180) { return `<svg width="${w}" height="${h}" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="90" cy="176" rx="50" ry="5" fill="rgba(0,0,0,0.45)"/><g class="mascot-lift-chassis"><rect x="24" y="112" width="124" height="44" rx="10" fill="#160c20" stroke="#8b5cf6" stroke-width="2.5"/><rect x="32" y="120" width="30" height="28" rx="4" fill="rgba(139,92,246,0.1)" stroke="#8b5cf6" stroke-width="1"/><rect x="68" y="120" width="30" height="28" rx="4" fill="rgba(139,92,246,0.1)" stroke="#8b5cf6" stroke-width="1"/><rect x="104" y="120" width="36" height="28" rx="4" fill="rgba(139,92,246,0.15)" stroke="#8b5cf6" stroke-width="1"/><line x1="108" y1="126" x2="136" y2="126" stroke="#8b5cf6" stroke-width="1.2" opacity="0.6"/><line x1="108" y1="130" x2="136" y2="130" stroke="#8b5cf6" stroke-width="1.2" opacity="0.6"/><line x1="108" y1="134" x2="136" y2="134" stroke="#8b5cf6" stroke-width="1.2" opacity="0.6"/><line x1="108" y1="138" x2="136" y2="138" stroke="#8b5cf6" stroke-width="1.2" opacity="0.6"/><line x1="108" y1="142" x2="136" y2="142" stroke="#8b5cf6" stroke-width="1.2" opacity="0.6"/><rect x="138" y="116" width="18" height="36" rx="6" fill="#160c20" stroke="#8b5cf6" stroke-width="2"/></g><g class="mascot-lift-wheel" style="transform-origin:52px 160px"><circle cx="52" cy="160" r="18" fill="#111" stroke="#8b5cf6" stroke-width="2.5"/><circle cx="52" cy="160" r="10" fill="#160c20" stroke="#8b5cf6" stroke-width="1.5"/><line x1="52" y1="142" x2="52" y2="178" stroke="#8b5cf6" stroke-width="1.5" opacity="0.5"/><line x1="34" y1="160" x2="70" y2="160" stroke="#8b5cf6" stroke-width="1.5" opacity="0.5"/></g><g class="mascot-lift-wheel" style="transform-origin:128px 160px;animation-delay:-0.3s"><circle cx="128" cy="160" r="18" fill="#111" stroke="#8b5cf6" stroke-width="2.5"/><circle cx="128" cy="160" r="10" fill="#160c20" stroke="#8b5cf6" stroke-width="1.5"/><line x1="128" y1="142" x2="128" y2="178" stroke="#8b5cf6" stroke-width="1.5" opacity="0.5"/><line x1="110" y1="160" x2="146" y2="160" stroke="#8b5cf6" stroke-width="1.5" opacity="0.5"/></g><g class="mascot-lift-chassis"><rect x="20" y="52" width="10" height="72" rx="3" fill="#160c20" stroke="#8b5cf6" stroke-width="1.8"/><rect x="34" y="52" width="10" height="72" rx="3" fill="#160c20" stroke="#8b5cf6" stroke-width="1.8"/><line x1="20" y1="70" x2="44" y2="70" stroke="#8b5cf6" stroke-width="1.5" opacity="0.5"/><line x1="20" y1="90" x2="44" y2="90" stroke="#8b5cf6" stroke-width="1.5" opacity="0.5"/><line x1="20" y1="110" x2="44" y2="110" stroke="#8b5cf6" stroke-width="1.5" opacity="0.5"/></g><g class="mascot-lift-forks"><rect x="6" y="96" width="46" height="6" rx="3" fill="#8b5cf6"/><rect x="6" y="106" width="46" height="6" rx="3" fill="#8b5cf6"/><rect x="2" y="80" width="52" height="16" rx="3" fill="#1e0f38" stroke="#8b5cf6" stroke-width="1.5" opacity="0.8"/><rect x="8" y="70" width="40" height="12" rx="2" fill="#1e0f38" stroke="#8b5cf6" stroke-width="1" opacity="0.6"/></g><g class="mascot-lift-chassis"><rect x="58" y="64" width="80" height="52" rx="14" fill="#160c20" stroke="#8b5cf6" stroke-width="2.5"/><rect x="58" y="76" width="80" height="7" fill="#8b5cf6" opacity="0.3"/><rect x="58" y="100" width="80" height="7" fill="#8b5cf6" opacity="0.3"/><circle cx="98" cy="44" r="28" fill="#160c20" stroke="#8b5cf6" stroke-width="2.5"/><ellipse cx="98" cy="22" rx="30" ry="10" fill="#8b5cf6"/><rect x="70" y="18" width="56" height="10" rx="5" fill="#7c3aed"/><rect x="66" y="25" width="64" height="5" rx="2.5" fill="#8b5cf6" opacity="0.55"/><ellipse cx="86" cy="44" rx="9" ry="10" fill="#8b5cf6"/><ellipse cx="110" cy="44" rx="9" ry="10" fill="#8b5cf6"/><circle cx="86" cy="45" r="5" fill="#0f1117"/><circle cx="110" cy="45" r="5" fill="#0f1117"/><circle cx="88" cy="42" r="2.2" fill="white" opacity="0.8"/><circle cx="112" cy="42" r="2.2" fill="white" opacity="0.8"/><path d="M80 58 Q98 70 116 58" stroke="#8b5cf6" stroke-width="3.5" stroke-linecap="round" fill="none"/><rect x="138" y="72" width="26" height="11" rx="5.5" fill="#160c20" stroke="#8b5cf6" stroke-width="2"/></g></svg>`; }
   },
   alert: {
     name: 'HAZARD', color: '#dc2626',
     tagline: '"Nobody pushes me and walks away happy."',
-    svg(w=180,h=180){return `<svg width="${w}" height="${h}" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="90" cy="174" rx="36" ry="5" fill="rgba(0,0,0,0.4)"/><circle class="mascot-estop-ring" cx="90" cy="84" r="72" fill="none" stroke="#dc2626" stroke-width="1.5" stroke-dasharray="6 5" opacity="0.35"/><rect x="60" y="118" width="60" height="52" rx="6" fill="#1a0000" stroke="#dc2626" stroke-width="2"/><line x1="62" y1="128" x2="118" y2="128" stroke="#fbbf24" stroke-width="7" opacity="0.4"/><line x1="62" y1="144" x2="118" y2="144" stroke="#fbbf24" stroke-width="7" opacity="0.4"/><line x1="62" y1="160" x2="118" y2="160" stroke="#fbbf24" stroke-width="7" opacity="0.4"/><ellipse cx="90" cy="117" rx="37" ry="7.5" fill="#1a0000" stroke="#fbbf24" stroke-width="3"/><rect x="76" y="100" width="28" height="22" rx="4" fill="#1a0000" stroke="#dc2626" stroke-width="2"/><g class="mascot-estop-body"><circle cx="90" cy="85" r="44" fill="#7f1d1d"/><circle cx="90" cy="82" r="44" fill="#dc2626"/><circle cx="90" cy="82" r="40" fill="#ef4444"/><ellipse cx="77" cy="67" rx="14" ry="8" fill="rgba(255,255,255,0.16)" transform="rotate(-20 77 67)"/><ellipse cx="76" cy="82" rx="8" ry="9.5" fill="#1a0000"/><ellipse cx="104" cy="82" rx="8" ry="9.5" fill="#1a0000"/><circle cx="76" cy="83" r="5.5" fill="white"/><circle cx="104" cy="83" r="5.5" fill="white"/><circle cx="78" cy="81" r="2.5" fill="#1a0000"/><circle cx="106" cy="81" r="2.5" fill="#1a0000"/><circle cx="79" cy="79.5" r="1" fill="white" opacity="0.8"/><circle cx="107" cy="79.5" r="1" fill="white" opacity="0.8"/><path d="M68 72 Q76 67 84 70" stroke="#1a0000" stroke-width="3" stroke-linecap="round" fill="none"/><path d="M96 70 Q104 67 112 72" stroke="#1a0000" stroke-width="3" stroke-linecap="round" fill="none"/><path d="M76 97 Q90 91 104 97" stroke="#1a0000" stroke-width="3" stroke-linecap="round" fill="none"/><rect x="82" y="93" width="6" height="4" rx="1.5" fill="#1a0000"/><rect x="92" y="93" width="6" height="4" rx="1.5" fill="#1a0000"/></g><circle class="mascot-estop-ring" cx="90" cy="82" r="47" fill="none" stroke="#fbbf24" stroke-width="2.5" stroke-dasharray="8 6" opacity="0.75"/></svg>`;}
+    svg(w = 180, h = 180) { return `<svg width="${w}" height="${h}" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="90" cy="174" rx="36" ry="5" fill="rgba(0,0,0,0.4)"/><circle class="mascot-estop-ring" cx="90" cy="84" r="72" fill="none" stroke="#dc2626" stroke-width="1.5" stroke-dasharray="6 5" opacity="0.35"/><rect x="60" y="118" width="60" height="52" rx="6" fill="#1a0000" stroke="#dc2626" stroke-width="2"/><line x1="62" y1="128" x2="118" y2="128" stroke="#fbbf24" stroke-width="7" opacity="0.4"/><line x1="62" y1="144" x2="118" y2="144" stroke="#fbbf24" stroke-width="7" opacity="0.4"/><line x1="62" y1="160" x2="118" y2="160" stroke="#fbbf24" stroke-width="7" opacity="0.4"/><ellipse cx="90" cy="117" rx="37" ry="7.5" fill="#1a0000" stroke="#fbbf24" stroke-width="3"/><rect x="76" y="100" width="28" height="22" rx="4" fill="#1a0000" stroke="#dc2626" stroke-width="2"/><g class="mascot-estop-body"><circle cx="90" cy="85" r="44" fill="#7f1d1d"/><circle cx="90" cy="82" r="44" fill="#dc2626"/><circle cx="90" cy="82" r="40" fill="#ef4444"/><ellipse cx="77" cy="67" rx="14" ry="8" fill="rgba(255,255,255,0.16)" transform="rotate(-20 77 67)"/><ellipse cx="76" cy="82" rx="8" ry="9.5" fill="#1a0000"/><ellipse cx="104" cy="82" rx="8" ry="9.5" fill="#1a0000"/><circle cx="76" cy="83" r="5.5" fill="white"/><circle cx="104" cy="83" r="5.5" fill="white"/><circle cx="78" cy="81" r="2.5" fill="#1a0000"/><circle cx="106" cy="81" r="2.5" fill="#1a0000"/><circle cx="79" cy="79.5" r="1" fill="white" opacity="0.8"/><circle cx="107" cy="79.5" r="1" fill="white" opacity="0.8"/><path d="M68 72 Q76 67 84 70" stroke="#1a0000" stroke-width="3" stroke-linecap="round" fill="none"/><path d="M96 70 Q104 67 112 72" stroke="#1a0000" stroke-width="3" stroke-linecap="round" fill="none"/><path d="M76 97 Q90 91 104 97" stroke="#1a0000" stroke-width="3" stroke-linecap="round" fill="none"/><rect x="82" y="93" width="6" height="4" rx="1.5" fill="#1a0000"/><rect x="92" y="93" width="6" height="4" rx="1.5" fill="#1a0000"/></g><circle class="mascot-estop-ring" cx="90" cy="82" r="47" fill="none" stroke="#fbbf24" stroke-width="2.5" stroke-dasharray="8 6" opacity="0.75"/></svg>`; }
   },
   open: {
     name: 'KLAX', color: '#ef4444',
     tagline: '"I don\'t make the trouble. I just announce it."',
-    svg(w=180,h=180){return `<svg width="${w}" height="${h}" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="90" cy="172" rx="30" ry="5" fill="rgba(0,0,0,0.35)"/><path class="mascot-bell-wave2" d="M22 112 Q22 26 90 12 Q158 26 158 112" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round"/><path class="mascot-bell-wave1" d="M38 118 Q38 44 90 32 Q142 44 142 118" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round"/><g class="mascot-bell-body"><path d="M52 148 Q46 82 90 66 Q134 82 128 148Z" fill="#1a0000" stroke="#ef4444" stroke-width="2.5"/><path d="M54 148 Q48 86 90 70 Q132 86 126 148Z" fill="#ef4444"/><ellipse cx="72" cy="96" rx="10" ry="16" fill="rgba(255,255,255,0.13)" transform="rotate(-15 72 96)"/><ellipse cx="90" cy="148" rx="40" ry="10" fill="#ef4444" stroke="#dc2626" stroke-width="2.5"/><ellipse cx="78" cy="118" rx="8" ry="8.5" fill="#dc2626"/><ellipse cx="102" cy="118" rx="8" ry="8.5" fill="#dc2626"/><circle cx="78" cy="119" r="4.5" fill="#0f1117"/><circle cx="102" cy="119" r="4.5" fill="#0f1117"/><circle cx="80" cy="117" r="2" fill="white" opacity="0.8"/><circle cx="104" cy="117" r="2" fill="white" opacity="0.8"/><path d="M70 108 Q78 104 86 107" stroke="#dc2626" stroke-width="2.5" stroke-linecap="round" fill="none"/><path d="M94 107 Q102 104 110 108" stroke="#dc2626" stroke-width="2.5" stroke-linecap="round" fill="none"/><path d="M76 130 Q90 140 104 130" stroke="#dc2626" stroke-width="3" stroke-linecap="round" fill="none"/><rect x="86" y="146" width="8" height="14" rx="4" fill="#dc2626"/><circle cx="90" cy="162" r="6" fill="#dc2626" stroke="#1a0000" stroke-width="2"/><rect x="82" y="60" width="16" height="12" rx="4" fill="#7f1d1d"/></g></svg>`;}
+    svg(w = 180, h = 180) { return `<svg width="${w}" height="${h}" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="90" cy="172" rx="30" ry="5" fill="rgba(0,0,0,0.35)"/><path class="mascot-bell-wave2" d="M22 112 Q22 26 90 12 Q158 26 158 112" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round"/><path class="mascot-bell-wave1" d="M38 118 Q38 44 90 32 Q142 44 142 118" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round"/><g class="mascot-bell-body"><path d="M52 148 Q46 82 90 66 Q134 82 128 148Z" fill="#1a0000" stroke="#ef4444" stroke-width="2.5"/><path d="M54 148 Q48 86 90 70 Q132 86 126 148Z" fill="#ef4444"/><ellipse cx="72" cy="96" rx="10" ry="16" fill="rgba(255,255,255,0.13)" transform="rotate(-15 72 96)"/><ellipse cx="90" cy="148" rx="40" ry="10" fill="#ef4444" stroke="#dc2626" stroke-width="2.5"/><ellipse cx="78" cy="118" rx="8" ry="8.5" fill="#dc2626"/><ellipse cx="102" cy="118" rx="8" ry="8.5" fill="#dc2626"/><circle cx="78" cy="119" r="4.5" fill="#0f1117"/><circle cx="102" cy="119" r="4.5" fill="#0f1117"/><circle cx="80" cy="117" r="2" fill="white" opacity="0.8"/><circle cx="104" cy="117" r="2" fill="white" opacity="0.8"/><path d="M70 108 Q78 104 86 107" stroke="#dc2626" stroke-width="2.5" stroke-linecap="round" fill="none"/><path d="M94 107 Q102 104 110 108" stroke="#dc2626" stroke-width="2.5" stroke-linecap="round" fill="none"/><path d="M76 130 Q90 140 104 130" stroke="#dc2626" stroke-width="3" stroke-linecap="round" fill="none"/><rect x="86" y="146" width="8" height="14" rx="4" fill="#dc2626"/><circle cx="90" cy="162" r="6" fill="#dc2626" stroke="#1a0000" stroke-width="2"/><rect x="82" y="60" width="16" height="12" rx="4" fill="#7f1d1d"/></g></svg>`; }
   },
   resolved: {
     name: 'CLEAR', color: '#22c55e',
     tagline: '"Case closed. Press on."',
-    svg(w=180,h=180){return `<svg width="${w}" height="${h}" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="90" cy="172" rx="32" ry="5" fill="rgba(0,0,0,0.3)"/><circle class="mascot-clear-glow" cx="90" cy="80" r="66" fill="rgba(34,197,94,0.06)"/><circle class="mascot-clear-glow" cx="90" cy="80" r="54" fill="rgba(34,197,94,0.09)" style="animation-delay:0.8s"/><rect x="74" y="140" width="32" height="30" rx="5" fill="#0a1f0f" stroke="#22c55e" stroke-width="2"/><rect x="70" y="136" width="40" height="10" rx="3" fill="#0a1f0f" stroke="#22c55e" stroke-width="2"/><line x1="82" y1="150" x2="98" y2="150" stroke="#22c55e" stroke-width="1.5" opacity="0.5"/><line x1="82" y1="158" x2="98" y2="158" stroke="#22c55e" stroke-width="1.5" opacity="0.5"/><rect x="82" y="130" width="16" height="14" rx="4" fill="#0a1f0f" stroke="#22c55e" stroke-width="2"/><g class="mascot-clear-dome"><circle cx="90" cy="80" r="52" fill="#0a1f0f" stroke="#22c55e" stroke-width="3"/><circle cx="90" cy="80" r="48" fill="#16a34a"/><circle cx="90" cy="80" r="44" fill="#22c55e"/><ellipse cx="75" cy="62" rx="14" ry="9" fill="rgba(255,255,255,0.18)" transform="rotate(-20 75 62)"/><ellipse cx="76" cy="80" rx="8" ry="8.5" fill="#0a1f0f"/><ellipse cx="104" cy="80" rx="8" ry="8.5" fill="#0a1f0f"/><circle cx="76" cy="81" r="5" fill="white"/><circle cx="104" cy="81" r="5" fill="white"/><circle cx="78" cy="79" r="2.5" fill="#0a1f0f"/><circle cx="106" cy="79" r="2.5" fill="#0a1f0f"/><circle cx="79" cy="78" r="1" fill="white" opacity="0.8"/><circle cx="107" cy="78" r="1" fill="white" opacity="0.8"/><path d="M70 70 Q76 66 82 69" stroke="#0a1f0f" stroke-width="2.5" stroke-linecap="round" fill="none"/><path d="M98 69 Q104 66 110 70" stroke="#0a1f0f" stroke-width="2.5" stroke-linecap="round" fill="none"/><path d="M74 94 Q90 106 106 94" stroke="#0a1f0f" stroke-width="3.5" stroke-linecap="round" fill="none"/><rect x="80" y="96" width="7" height="5" rx="2" fill="#0a1f0f"/><rect x="93" y="96" width="7" height="5" rx="2" fill="#0a1f0f"/></g><path class="mascot-clear-ray" d="M32 80 L16 80" stroke="#22c55e" stroke-width="3" stroke-linecap="round"/><path class="mascot-clear-ray" d="M148 80 L164 80" stroke="#22c55e" stroke-width="3" stroke-linecap="round" style="animation-delay:0.4s"/><path class="mascot-clear-ray" d="M48 37 L36 25" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" style="animation-delay:0.8s"/><path class="mascot-clear-ray" d="M132 37 L144 25" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" style="animation-delay:1.2s"/><path class="mascot-clear-ray" d="M90 24 L90 8" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" style="animation-delay:1.6s"/></svg>`;}
+    svg(w = 180, h = 180) { return `<svg width="${w}" height="${h}" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="90" cy="172" rx="32" ry="5" fill="rgba(0,0,0,0.3)"/><circle class="mascot-clear-glow" cx="90" cy="80" r="66" fill="rgba(34,197,94,0.06)"/><circle class="mascot-clear-glow" cx="90" cy="80" r="54" fill="rgba(34,197,94,0.09)" style="animation-delay:0.8s"/><rect x="74" y="140" width="32" height="30" rx="5" fill="#0a1f0f" stroke="#22c55e" stroke-width="2"/><rect x="70" y="136" width="40" height="10" rx="3" fill="#0a1f0f" stroke="#22c55e" stroke-width="2"/><line x1="82" y1="150" x2="98" y2="150" stroke="#22c55e" stroke-width="1.5" opacity="0.5"/><line x1="82" y1="158" x2="98" y2="158" stroke="#22c55e" stroke-width="1.5" opacity="0.5"/><rect x="82" y="130" width="16" height="14" rx="4" fill="#0a1f0f" stroke="#22c55e" stroke-width="2"/><g class="mascot-clear-dome"><circle cx="90" cy="80" r="52" fill="#0a1f0f" stroke="#22c55e" stroke-width="3"/><circle cx="90" cy="80" r="48" fill="#16a34a"/><circle cx="90" cy="80" r="44" fill="#22c55e"/><ellipse cx="75" cy="62" rx="14" ry="9" fill="rgba(255,255,255,0.18)" transform="rotate(-20 75 62)"/><ellipse cx="76" cy="80" rx="8" ry="8.5" fill="#0a1f0f"/><ellipse cx="104" cy="80" rx="8" ry="8.5" fill="#0a1f0f"/><circle cx="76" cy="81" r="5" fill="white"/><circle cx="104" cy="81" r="5" fill="white"/><circle cx="78" cy="79" r="2.5" fill="#0a1f0f"/><circle cx="106" cy="79" r="2.5" fill="#0a1f0f"/><circle cx="79" cy="78" r="1" fill="white" opacity="0.8"/><circle cx="107" cy="78" r="1" fill="white" opacity="0.8"/><path d="M70 70 Q76 66 82 69" stroke="#0a1f0f" stroke-width="2.5" stroke-linecap="round" fill="none"/><path d="M98 69 Q104 66 110 70" stroke="#0a1f0f" stroke-width="2.5" stroke-linecap="round" fill="none"/><path d="M74 94 Q90 106 106 94" stroke="#0a1f0f" stroke-width="3.5" stroke-linecap="round" fill="none"/><rect x="80" y="96" width="7" height="5" rx="2" fill="#0a1f0f"/><rect x="93" y="96" width="7" height="5" rx="2" fill="#0a1f0f"/></g><path class="mascot-clear-ray" d="M32 80 L16 80" stroke="#22c55e" stroke-width="3" stroke-linecap="round"/><path class="mascot-clear-ray" d="M148 80 L164 80" stroke="#22c55e" stroke-width="3" stroke-linecap="round" style="animation-delay:0.4s"/><path class="mascot-clear-ray" d="M48 37 L36 25" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" style="animation-delay:0.8s"/><path class="mascot-clear-ray" d="M132 37 L144 25" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" style="animation-delay:1.2s"/><path class="mascot-clear-ray" d="M90 24 L90 8" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" style="animation-delay:1.6s"/></svg>`; }
   },
 };
 
@@ -3584,7 +3542,7 @@ async function loadConfig() {
 
       SUBCATEGORY_ROUTES = normalizeSubcategoryRoutes(data.subcategoryRoutes, migratedStatuses);
       STATUSES = syncStatusesFromSubcategoryRoutes(migratedStatuses, SUBCATEGORY_ROUTES);
-      
+
       // Since we just changed the available statuses,
       // we must rebuild the logic that buttons depend on
       rebuildDerivedStatus();
@@ -3632,7 +3590,7 @@ async function loadConfig() {
     console.error("Error loading config:", e);
   }
 }
-    
+
 function buildStatusFilterPills() {
   const container = document.getElementById('stat-pills-row');
   if (!container) return;
@@ -3664,7 +3622,7 @@ async function saveConfig() {
 function rebuildDerivedStatus() {
   // Rebuild ALL_STATUSES and STATUS_ORDER after STATUSES changes
   window._ALL_STATUSES = getAlphabetizedStatusKeys({ includeOpen: false, includeResolved: false });
-  window._STATUS_ORDER = Object.entries(STATUSES).sort((a,b)=>a[1].order-b[1].order).map(([k])=>k);
+  window._STATUS_ORDER = Object.entries(STATUSES).sort((a, b) => a[1].order - b[1].order).map(([k]) => k);
   buildStatusFilterPills();
   buildSubToCats();
 
@@ -3875,15 +3833,15 @@ function showLevelUpCelebration(level) {
 
 function launchConfetti(container, count = 55) {
   if (!container) return;
-  const colors = ['#a855f7','#3b82f6','#22c55e','#eab308','#f97316','#ef4444','#38bdf8','#ec4899'];
+  const colors = ['#a855f7', '#3b82f6', '#22c55e', '#eab308', '#f97316', '#ef4444', '#38bdf8', '#ec4899'];
   for (let i = 0; i < count; i++) {
     const piece = document.createElement('div');
     piece.className = 'confetti-piece';
     const color = colors[i % colors.length];
-    const left   = Math.random() * 100;
-    const dur    = 1.4 + Math.random() * 1.4;
-    const delay  = Math.random() * 0.9;
-    const size   = 6 + Math.floor(Math.random() * 8);
+    const left = Math.random() * 100;
+    const dur = 1.4 + Math.random() * 1.4;
+    const delay = Math.random() * 0.9;
+    const size = 6 + Math.floor(Math.random() * 8);
     piece.style.cssText = `left:${left}%;width:${size}px;height:${size}px;background:${color};` +
       `animation-duration:${dur}s;animation-delay:${delay}s;` +
       `border-radius:${Math.random() > 0.5 ? '50%' : '2px'};`;
@@ -3919,7 +3877,7 @@ function showBadgeEarnedCelebration(badge) {
       <span class="game-badge-icon">${badge.icon || '🏅'}</span>
       <div class="game-mission-complete-name">${esc(badge.name)}</div>
       <div style="font-size:12px;color:var(--color-text-muted, var(--text2));margin-top:4px;">${esc(badge.description || '')}</div>
-      ${Number(badge.xpReward||0) ? `<div class="game-mission-complete-xp" style="margin-top:8px;">+${badge.xpReward} XP</div>` : ''}
+      ${Number(badge.xpReward || 0) ? `<div class="game-mission-complete-xp" style="margin-top:8px;">+${badge.xpReward} XP</div>` : ''}
     </div>`;
   document.body.appendChild(overlay);
   launchConfetti(overlay.querySelector('.confetti-container'), 45);
@@ -3936,13 +3894,13 @@ function updateGamePillBadge(show) {
 function checkBadgeTrigger(badge, stats) {
   const threshold = Number(badge.threshold || 1);
   switch (badge.triggerType) {
-    case 'xp_milestone':        return Number(stats.totals?.xp || 0) >= threshold;
-    case 'level_reached':       return Number(stats.totals?.level || 1) >= threshold;
-    case 'streak_days':         return Number(stats.streaks?.current || 0) >= threshold;
-    case 'issues_resolved':     return Number(stats.totals?.issuesResolved || 0) >= threshold;
-    case 'photos_attached':     return Number(stats.totals?.photosAttached || 0) >= threshold;
-    case 'issues_created':      return Number(stats.totals?.issuesCreated || 0) >= threshold;
-    case 'missions_completed':  return Number(stats.totals?.missionsCompleted || 0) >= threshold;
+    case 'xp_milestone': return Number(stats.totals?.xp || 0) >= threshold;
+    case 'level_reached': return Number(stats.totals?.level || 1) >= threshold;
+    case 'streak_days': return Number(stats.streaks?.current || 0) >= threshold;
+    case 'issues_resolved': return Number(stats.totals?.issuesResolved || 0) >= threshold;
+    case 'photos_attached': return Number(stats.totals?.photosAttached || 0) >= threshold;
+    case 'issues_created': return Number(stats.totals?.issuesCreated || 0) >= threshold;
+    case 'missions_completed': return Number(stats.totals?.missionsCompleted || 0) >= threshold;
     default: return false;
   }
 }
@@ -4253,9 +4211,9 @@ async function awardGamification(reason, context = {}) {
       schemaVersion: 1
     });
     const totalsCounters = { xp: increment(totalDelta) };
-    if (reason === 'issue_resolved')                totalsCounters.issuesResolved = increment(1);
-    if (reason === 'issue_created_complete')        totalsCounters.issuesCreated = increment(1);
-    if (reason === 'photo_attached')                totalsCounters.photosAttached = increment(1);
+    if (reason === 'issue_resolved') totalsCounters.issuesResolved = increment(1);
+    if (reason === 'issue_created_complete') totalsCounters.issuesCreated = increment(1);
+    if (reason === 'photo_attached') totalsCounters.photosAttached = increment(1);
     if (reason === 'serial_captured_when_required') totalsCounters.serialsCaptured = increment(1);
     batch.set(statsRef, {
       userId: currentUser.uid,
@@ -4340,7 +4298,7 @@ async function loadStoreConfig() {
       const legacySnap = await getDoc(legacyPlantStoreConfigDoc());
       storeItems = normalizeStoreItems(legacySnap.exists() ? legacySnap.data().items : DEFAULT_STORE_ITEMS);
     }
-  } catch(e) {
+  } catch (e) {
     storeItems = normalizeStoreItems(DEFAULT_STORE_ITEMS);
   }
   ensureCurrentThemeAccess();
@@ -4511,7 +4469,7 @@ async function purchaseStoreItem(itemId) {
       if (item.themeKey) applyTheme(item.themeKey);
       else if (item.customVars) applyTheme(`storetheme_${item.id}`);
     }
-  } catch(e) {
+  } catch (e) {
     if (e?.message === 'insufficient_xp') showGameToast('Not enough XP!');
     else console.warn('Purchase failed:', e);
   }
@@ -4549,8 +4507,8 @@ function renderStoreCard() {
       </div>
       <div class="store-item-action">
         ${owned
-          ? `<span class="store-item-owned">✓ Owned</span>`
-          : `<button class="store-buy-btn${canAfford ? '' : ' cant-afford'}" onclick="purchaseStoreItem('${item.id}')" ${canAfford ? '' : 'disabled'}>${item.price} XP</button>`}
+        ? `<span class="store-item-owned">✓ Owned</span>`
+        : `<button class="store-buy-btn${canAfford ? '' : ' cant-afford'}" onclick="purchaseStoreItem('${item.id}')" ${canAfford ? '' : 'disabled'}>${item.price} XP</button>`}
       </div>
     </div>`;
   }).join('');
@@ -4691,8 +4649,8 @@ function _buildStoreThemeCard(theme, activeKey, spendable) {
 
   const clickHandler = owned
     ? (theme.source === 'store-custom' && theme.storeItemId
-        ? `onclick="applyStoreThemeItem('${theme.storeItemId}')"`
-        : `onclick="applyTheme('${theme.key}');renderStoreModal();"`)
+      ? `onclick="applyStoreThemeItem('${theme.storeItemId}')"`
+      : `onclick="applyTheme('${theme.key}');renderStoreModal();"`)
     : '';
 
   return `<div class="${cardCls}" role="button" tabindex="0" ${clickHandler}>
@@ -4833,9 +4791,9 @@ window.confirmStorePurchase = confirmStorePurchase;
 // To add per-plant schedules later: populate PLANT_SHIFT_SCHEDULES[plantId] in switchPlant()
 // after reading from Firestore (e.g. plants/{plantId}/config/shifts).
 const DEFAULT_SHIFT_SCHEDULE = [
-  { key: 'first',  label: '1st Shift', shortLabel: '1st', startMinutes: 5*60+54, color: '#3b82f6' },
-  { key: 'second', label: '2nd Shift', shortLabel: '2nd', startMinutes: 13*60+54, color: '#f59e0b' },
-  { key: 'third',  label: '3rd Shift', shortLabel: '3rd', startMinutes: 21*60+54, color: '#8b5cf6' },
+  { key: 'first', label: '1st Shift', shortLabel: '1st', startMinutes: 5 * 60 + 54, color: '#3b82f6' },
+  { key: 'second', label: '2nd Shift', shortLabel: '2nd', startMinutes: 13 * 60 + 54, color: '#f59e0b' },
+  { key: 'third', label: '3rd Shift', shortLabel: '3rd', startMinutes: 21 * 60 + 54, color: '#8b5cf6' },
 ];
 const PLANT_SHIFT_SCHEDULES = {}; // keyed by plantId; empty = use DEFAULT_SHIFT_SCHEDULE
 
@@ -4859,6 +4817,7 @@ function getShiftForTime(date, schedule) {
 
 let issues = [];
 const issuesById = new Map();
+const _deletedIssueIds = new Set();
 let issueHistoryCursor = null;
 let issueHistoryFetchInFlight = null;
 let issueDisplayLimit = 50;
@@ -4956,13 +4915,13 @@ let gameBadgeDefs = [];
 let gameUserBadges = {};
 
 const DEFAULT_BADGE_DEFS = [
-  { id: 'badge_first_resolve',  name: 'First Responder', icon: '✅', description: 'Resolve your first issue',   triggerType: 'issues_resolved',  threshold: 1,   xpReward: 25,  isEnabled: true },
-  { id: 'badge_streak_3',       name: 'On a Roll',       icon: '🔥', description: 'Maintain a 3-day streak',  triggerType: 'streak_days',      threshold: 3,   xpReward: 30,  isEnabled: true },
-  { id: 'badge_streak_10',      name: 'Committed',       icon: '💪', description: '10-day streak',             triggerType: 'streak_days',      threshold: 10,  xpReward: 100, isEnabled: true },
-  { id: 'badge_photo_pro',      name: 'Photo Pro',       icon: '📸', description: 'Attach 50 photos',          triggerType: 'photos_attached',  threshold: 50,  xpReward: 75,  isEnabled: true },
-  { id: 'badge_level_5',        name: 'Veteran',         icon: '⭐', description: 'Reach Level 5',             triggerType: 'level_reached',    threshold: 5,   xpReward: 150, isEnabled: true },
-  { id: 'badge_xp_500',         name: 'XP Hunter',       icon: '⚡', description: 'Earn 500 total XP',         triggerType: 'xp_milestone',     threshold: 500, xpReward: 50,  isEnabled: true },
-  { id: 'badge_resolver_10',    name: 'Problem Solver',  icon: '🏆', description: 'Resolve 10 issues',         triggerType: 'issues_resolved',  threshold: 10,  xpReward: 100, isEnabled: true },
+  { id: 'badge_first_resolve', name: 'First Responder', icon: '✅', description: 'Resolve your first issue', triggerType: 'issues_resolved', threshold: 1, xpReward: 25, isEnabled: true },
+  { id: 'badge_streak_3', name: 'On a Roll', icon: '🔥', description: 'Maintain a 3-day streak', triggerType: 'streak_days', threshold: 3, xpReward: 30, isEnabled: true },
+  { id: 'badge_streak_10', name: 'Committed', icon: '💪', description: '10-day streak', triggerType: 'streak_days', threshold: 10, xpReward: 100, isEnabled: true },
+  { id: 'badge_photo_pro', name: 'Photo Pro', icon: '📸', description: 'Attach 50 photos', triggerType: 'photos_attached', threshold: 50, xpReward: 75, isEnabled: true },
+  { id: 'badge_level_5', name: 'Veteran', icon: '⭐', description: 'Reach Level 5', triggerType: 'level_reached', threshold: 5, xpReward: 150, isEnabled: true },
+  { id: 'badge_xp_500', name: 'XP Hunter', icon: '⚡', description: 'Earn 500 total XP', triggerType: 'xp_milestone', threshold: 500, xpReward: 50, isEnabled: true },
+  { id: 'badge_resolver_10', name: 'Problem Solver', icon: '🏆', description: 'Resolve 10 issues', triggerType: 'issues_resolved', threshold: 10, xpReward: 100, isEnabled: true },
 ];
 const GAME_DEFAULT_CONFIG = {
   enabled: true,
@@ -4996,10 +4955,10 @@ async function signInWithGoogle() {
   const btn = document.getElementById('google-signin-btn');
   if (!btn) return;
   btn.disabled = true; btn.textContent = 'Signing in…';
-  try { 
+  try {
     await signInWithPopup(auth, provider);
   }
-  catch(e) {
+  catch (e) {
     console.error('Sign in error:', e.code, e.message);
     resetGoogleSignInButton();
   }
@@ -5013,7 +4972,7 @@ if (googleSignInBtn) {
 const demoLoginBtn = document.getElementById('demo-login-btn');
 if (demoLoginBtn) {
   demoLoginBtn.addEventListener('click', () => {
-    try { sessionStorage.removeItem('demo_signed_out'); } catch (_) {}
+    try { sessionStorage.removeItem('demo_signed_out'); } catch (_) { }
     if (DEMO_MODE) {
       signInAnonymously(auth).catch(e => {
         console.error('Demo anon sign-in failed:', e);
@@ -5038,7 +4997,7 @@ async function doSignOut() {
   stopStatusConfigListener();
   stopGamificationListeners();
   if (DEMO_MODE) {
-    try { sessionStorage.setItem('demo_signed_out', 'true'); } catch (_) {}
+    try { sessionStorage.setItem('demo_signed_out', 'true'); } catch (_) { }
   }
   apiSessionClient.clear();
   await fbSignOut(auth);
@@ -5329,7 +5288,7 @@ async function bootstrapSignedInSession(user) {
       displayName: user.displayName || '',
       email: user.email,
       lastSeen: serverTimestamp()
-    }, { merge: true }).catch(() => {});
+    }, { merge: true }).catch(() => { });
   }
 
   // Build once before plant load to ensure machine controls exist,
@@ -5391,9 +5350,9 @@ async function bootstrapSignedInSession(user) {
   startGamificationListeners();
   startListener();
   scheduleIssueOutboxFlush();
-  _startMessagingInboxWatcher();
+  messagingTool.startInboxWatcher();
   startRoleFeedAlertsWatcher();
-  _bindMessagingKeyboardShortcut();
+  messagingTool.bindKeyboardShortcut();
   setTodayDate();
   scheduleFcmTokenRegistration();
   if (!localStorage.getItem(TUTORIAL_KEY)) setTimeout(() => window.openTutorial(), 900);
@@ -5461,7 +5420,7 @@ function hydrateOfflineDemoSandbox() {
 function seedInMemoryDemoIssues() {
   console.log('Seeding demo issues in-memory as offline fallback...');
   const now = new Date();
-  
+
   const sampleIssues = [
     {
       id: 'sample_alert_robot_estop',
@@ -5677,7 +5636,7 @@ async function bootstrapDemoSession(user) {
     seedInMemoryDemoIssues();
     setSyncStatus('ok', 'Offline Demo Sandbox - loaded local demo data');
   }
-  
+
   setTodayDate();
   buildDemoGuide();
 }
@@ -5763,7 +5722,7 @@ function readDemoGuideDone() {
 }
 
 function saveDemoGuideDone(done) {
-  try { localStorage.setItem(DEMO_GUIDE_KEY, JSON.stringify([...done])); } catch (_) {}
+  try { localStorage.setItem(DEMO_GUIDE_KEY, JSON.stringify([...done])); } catch (_) { }
 }
 
 function triggerDemoTaskCelebration() {
@@ -5778,12 +5737,12 @@ function triggerDemoTaskCelebration() {
 function markDemoGuideStep(key) {
   const done = readDemoGuideDone();
   if (done.has(key)) return;
-  
+
   done.add(key);
   saveDemoGuideDone(done);
-  
+
   try { triggerDemoTaskCelebration(); } catch (e) { console.error('Celebration failed:', e); }
-  
+
   // Auto-advance if the completed step was the current active step
   const completedIdx = DEMO_GUIDE_STEPS.findIndex(step => step.key === key);
   if (completedIdx === window.currentDemoStepIndex) {
@@ -5808,7 +5767,7 @@ window.completeDemoGuideStep = completeDemoGuideStep;
 window.DEMO_GUIDE_STEPS = DEMO_GUIDE_STEPS;
 
 function resetDemoGuideProgress() {
-  try { localStorage.removeItem(DEMO_GUIDE_KEY); } catch (_) {}
+  try { localStorage.removeItem(DEMO_GUIDE_KEY); } catch (_) { }
   window.currentDemoStepIndex = 0;
   renderDemoGuideProgress(new Set());
 }
@@ -5835,13 +5794,13 @@ function renderDemoGuideProgress(done = readDemoGuideDone()) {
   if (count) {
     count.textContent = `Task ${window.currentDemoStepIndex + 1}/${DEMO_GUIDE_STEPS.length} (${done.size} done)`;
   }
-  
+
   const pct = (done.size / DEMO_GUIDE_STEPS.length) * 100;
   const progressBar = wrap.querySelector('#demo-guide-progress-bar');
   if (progressBar) {
     progressBar.style.width = `${pct}%`;
   }
-  
+
   const allComplete = done.size >= DEMO_GUIDE_STEPS.length;
   wrap.classList.toggle('complete', allComplete);
   wrap.classList.toggle('show-onboarding', allComplete);
@@ -5999,14 +5958,14 @@ async function handleOnboardingSubmit(btn) {
     nameInput.focus();
     return;
   }
-  
+
   btn.disabled = true;
   btn.textContent = "Authenticating...";
-  
+
   try {
     // Prevent the Demo Mode auth listener from signing out the Google user
     sessionStorage.setItem('demo_onboarding_in_progress', 'true');
-    
+
     // 1. Sign in with Google to get permanent user credentials
     let user;
     if (window.__testGoogleUser) {
@@ -6016,19 +5975,19 @@ async function handleOnboardingSubmit(btn) {
       user = result.user;
     }
     if (!user) throw new Error("Google Authentication failed.");
-    
+
     btn.textContent = "Creating plant...";
-    
+
     // 2. Create the new Plant document & configurations sequentially
     const plantId = plantName.toLowerCase().replace(/[^a-z0-9]/g, '_') + '_' + Date.now().toString(36);
-    
+
     const defaultPermissions = {
       isAdmin: true,
       canResolve: true,
       canEditTimeline: true,
       canDeleteIssues: true
     };
-    
+
     // Set plant doc metadata
     await setDoc(doc(db, 'plants', plantId), {
       name: plantName,
@@ -6036,7 +5995,7 @@ async function handleOnboardingSubmit(btn) {
       createdAt: serverTimestamp(),
       isActive: true
     });
-    
+
     // Set members doc (User is Admin/Owner of the new plant)
     await setDoc(plantMemberDocRef(plantId, user.uid), {
       userId: user.uid,
@@ -6049,14 +6008,14 @@ async function handleOnboardingSubmit(btn) {
       addedAt: serverTimestamp(),
       permissions: defaultPermissions
     });
-    
+
     // Initialize config documents (now that member doc exists, security rules will pass!)
     await setDoc(doc(db, 'plants', plantId, 'config', 'presses'), { presses: DEFAULT_PRESSES });
     await setDoc(doc(db, 'plants', plantId, 'config', 'statuses'), {
       statuses: deepCopy(DEFAULT_STATUSES),
       subcategoryRoutes: {}
     });
-    
+
     // Initialize gamification config
     const defaultGameConfig = {
       rules: {
@@ -6073,7 +6032,7 @@ async function handleOnboardingSubmit(btn) {
       ...defaultGameConfig,
       updatedAt: serverTimestamp()
     });
-    
+
     // Set user profile doc
     await setDoc(doc(db, 'users', user.uid), {
       displayName: user.displayName || '',
@@ -6082,7 +6041,7 @@ async function handleOnboardingSubmit(btn) {
       role: userRole,
       lastPlant: plantId
     }, { merge: true });
-    
+
     // Explicitly remove demo plant from their permanent list
     try {
       await setDoc(doc(db, 'users', user.uid), {
@@ -6091,16 +6050,16 @@ async function handleOnboardingSubmit(btn) {
     } catch (e) {
       console.warn("Failed to remove demo plant ID:", e);
     }
-    
+
     // Clear flags
     sessionStorage.removeItem('demo_onboarding_in_progress');
     sessionStorage.removeItem('demo_signed_out');
-    
+
     // Redirect out of demo mode by stripping "?demo=1" and setting the newly created plant ID
     const url = new URL(window.location.href);
     url.searchParams.delete('demo');
     url.searchParams.set('plant', plantId);
-    
+
     btn.textContent = "Done! Redirecting...";
     window.location.href = url.toString();
   } catch (e) {
@@ -6121,13 +6080,13 @@ onAuthStateChanged(auth, async user => {
         stopRoleFeedAlertsWatcher();
         clearRoleAlertBadge();
         stopStatusConfigListener();
-        if (_messagingInboxUnsubscribe) { _messagingInboxUnsubscribe(); _messagingInboxUnsubscribe = null; }
-        _updateMessagingEntryBadges(0);
+        messagingTool.stopInboxWatcher();
         currentUser = null;
         document.getElementById('login-screen').classList.add('visible');
         document.getElementById('app').classList.remove('visible');
         issues = [];
         issuesById.clear();
+        _deletedIssueIds.clear();
         issueHistoryCursor = null;
         issueHistoryFetchInFlight = null;
         attachmentPhotoCache.clear();
@@ -6178,13 +6137,13 @@ onAuthStateChanged(auth, async user => {
     stopRoleFeedAlertsWatcher();
     clearRoleAlertBadge();
     stopStatusConfigListener();
-    if (_messagingInboxUnsubscribe) { _messagingInboxUnsubscribe(); _messagingInboxUnsubscribe = null; }
-    _updateMessagingEntryBadges(0);
+    messagingTool.stopInboxWatcher();
     currentUser = null;
     document.getElementById('login-screen').classList.add('visible');
     document.getElementById('app').classList.remove('visible');
     issues = [];
     issuesById.clear();
+    _deletedIssueIds.clear();
     issueHistoryCursor = null;
     issueHistoryFetchInFlight = null;
     attachmentPhotoCache.clear();
@@ -6506,7 +6465,7 @@ async function refreshMigrationReadiness() {
 // ── SCOPE TOGGLE ──
 window.setScope = s => {
   issueScope = s;
-  ['all','mine'].forEach(x => document.getElementById('scope-'+x).classList.toggle('active', x===s));
+  ['all', 'mine'].forEach(x => document.getElementById('scope-' + x).classList.toggle('active', x === s));
   renderIssues(); updatePressStates(); updateStats();
   completeDemoGuideStep('filters');
 };
@@ -6559,7 +6518,7 @@ window.setShiftFilter = s => {
 // ── PERIOD TOGGLE ──
 window.setPeriod = (s, options = {}) => {
   issuePeriod = s;
-  ['today','24h','week','month','all'].forEach(x => document.getElementById('period-'+x).classList.toggle('active', x===s));
+  ['today', '24h', 'week', 'month', 'all'].forEach(x => document.getElementById('period-' + x).classList.toggle('active', x === s));
   document.getElementById('period-date').classList.remove('active');
   if (s === 'today') {
     document.getElementById('date-filter').value = localDateStr(new Date());
@@ -6575,7 +6534,7 @@ window.setPeriod = (s, options = {}) => {
 
 window.onCalendarPick = val => {
   if (!val) return;
-  ['today','24h','week','month','all'].forEach(x => document.getElementById('period-'+x).classList.remove('active'));
+  ['today', '24h', 'week', 'month', 'all'].forEach(x => document.getElementById('period-' + x).classList.remove('active'));
   document.getElementById('period-date').classList.add('active');
   issuePeriod = 'date';
   updatePeriodTriggerLabel(val);
@@ -6597,7 +6556,7 @@ window.clearDate = () => {
   document.getElementById('date-filter').value = '';
   updatePeriodTriggerLabel('all');
   issuePeriod = 'all';
-  ['today','24h','week','month','all'].forEach(x => document.getElementById('period-'+x).classList.toggle('active', x==='all'));
+  ['today', '24h', 'week', 'month', 'all'].forEach(x => document.getElementById('period-' + x).classList.toggle('active', x === 'all'));
   renderIssues(); updatePressStates(); updateStats();
   loadDailyScheduledPresses(localDateStr(new Date()));
 };
@@ -6609,9 +6568,9 @@ function periodFilter(i) {
   const dateVal = document.getElementById('date-filter')?.value || '';
   if (issuePeriod === 'today') return i.dateKey === localDateStr(new Date());
   if (issuePeriod === 'date' && dateVal) return i.dateKey === dateVal;
-  if (issuePeriod === '24h')   return ts >= now - 24*60*60*1000;
-  if (issuePeriod === 'week')  return ts >= now - 7*24*60*60*1000;
-  if (issuePeriod === 'month') return ts >= now - 30*24*60*60*1000;
+  if (issuePeriod === '24h') return ts >= now - 24 * 60 * 60 * 1000;
+  if (issuePeriod === 'week') return ts >= now - 7 * 24 * 60 * 60 * 1000;
+  if (issuePeriod === 'month') return ts >= now - 30 * 24 * 60 * 60 * 1000;
   return true; // 'all'
 }
 
@@ -6698,17 +6657,17 @@ function applyPressContributionVisual(btn, machineCode) {
 window.setMapMode = mode => {
   const prevMode = mapMode;
   mapMode = mode;
-  document.getElementById('mode-log').className = 'map-mode-btn' + (mode==='log' ? ' active-log' : '');
-  document.getElementById('mode-hist').className = 'map-mode-btn' + (mode==='hist' ? ' active-hist' : '');
-  document.getElementById('mode-notes').className = 'map-mode-btn' + (mode==='notes' ? ' active-hist' : '');
-  document.getElementById('floor-map-label').textContent = mode==='log'
+  document.getElementById('mode-log').className = 'map-mode-btn' + (mode === 'log' ? ' active-log' : '');
+  document.getElementById('mode-hist').className = 'map-mode-btn' + (mode === 'hist' ? ' active-hist' : '');
+  document.getElementById('mode-notes').className = 'map-mode-btn' + (mode === 'notes' ? ' active-hist' : '');
+  document.getElementById('floor-map-label').textContent = mode === 'log'
     ? 'FLOOR MAP — CLICK A PRESS TO REPORT AN ISSUE'
-    : mode==='hist'
+    : mode === 'hist'
       ? 'FLOOR MAP — CLICK A PRESS TO VIEW TIMELINE'
       : 'FLOOR MAP — USER WIKI CONTRIBUTIONS';
   // Update all press button hover styles
   document.querySelectorAll('.press-btn').forEach(btn => {
-    btn.classList.toggle('hist-mode', mode==='hist');
+    btn.classList.toggle('hist-mode', mode === 'hist');
   });
   if (mode === 'notes') {
     void refreshPressContributionIndex(true).then(() => renderRowPanels());
@@ -6737,7 +6696,7 @@ let activePressHubMachine = null;
 
 function showPressActionHub(p) {
   activePressHubMachine = p;
-  
+
   // Highlight the pressed button on map
   const btnEl = document.getElementById('press-' + p.replace(/[\s.]/g, '_'));
   if (btnEl) btnEl.classList.add('selected');
@@ -6778,9 +6737,9 @@ function showPressActionHub(p) {
   };
 }
 
-window.deselectPressHub = function() {
+window.deselectPressHub = function () {
   if (!activePressHubMachine) return;
-  
+
   const hubEl = document.getElementById('press-action-hub');
   if (hubEl) hubEl.classList.add('hidden');
 
@@ -6825,17 +6784,17 @@ window.handlePressClick = p => {
   }
 
   // Gather scoped issues for this press
-  let scoped = issueScope==='mine' ? issues.filter(i=>i.userId===currentUser?.uid) : issues;
+  let scoped = issueScope === 'mine' ? issues.filter(i => i.userId === currentUser?.uid) : issues;
   scoped = scoped.filter(periodFilter);
   const pressIssues = scoped.filter(i => i.machine === p);
   const openIssues = pressIssues.filter(i => currentStatusKey(i) !== 'resolved');
 
   // Highlight the pressed button
-  const btnEl = document.getElementById('press-'+p.replace(/[\s.]/g,'_'));
+  const btnEl = document.getElementById('press-' + p.replace(/[\s.]/g, '_'));
   if (btnEl) btnEl.classList.add('selected');
 
   // Find the mini-card area for this row
-  const areaId = 'mc-area-' + pressRow.replace(/\s/g,'_');
+  const areaId = 'mc-area-' + pressRow.replace(/\s/g, '_');
   const area = document.getElementById(areaId);
   if (!area) { openAddModal(p); return; }
 
@@ -6875,7 +6834,7 @@ window.handlePressClick = p => {
     const col = getStatusColor(sk);
     const statusPill = document.createElement('span');
     statusPill.className = 'mc-status-pill';
-    statusPill.style.cssText = 'color:'+col+';border-color:'+alphaColor(col,0.4)+';background:'+alphaColor(col,0.1)+';';
+    statusPill.style.cssText = 'color:' + col + ';border-color:' + alphaColor(col, 0.4) + ';background:' + alphaColor(col, 0.1) + ';';
     statusPill.textContent = st.label;
     top.appendChild(statusPill);
   } else {
@@ -6926,11 +6885,11 @@ window.handlePressClick = p => {
       note.className = 'mc-issue-note';
       note.textContent = issue.note || '';
       item.appendChild(note);
-      const lastEntry = issue.statusHistory && issue.statusHistory.length > 0 ? issue.statusHistory[issue.statusHistory.length-1] : null;
+      const lastEntry = issue.statusHistory && issue.statusHistory.length > 0 ? issue.statusHistory[issue.statusHistory.length - 1] : null;
       if (lastEntry && lastEntry.subStatus) {
         const sub = document.createElement('span');
         sub.className = 'mc-issue-sub';
-        sub.style.cssText = 'color:'+col+';border-color:'+alphaColor(col,0.4)+';';
+        sub.style.cssText = 'color:' + col + ';border-color:' + alphaColor(col, 0.4) + ';';
         sub.textContent = lastEntry.subStatus;
         item.appendChild(sub);
       }
@@ -6972,7 +6931,7 @@ window.handlePressClick = p => {
         dot.className = 'mc-notes-dot';
         wikiBtn.appendChild(dot);
       }
-    } catch(e) {}
+    } catch (e) { }
   })();
   toolbar.appendChild(wikiBtn);
   const notesBtn = document.createElement('button');
@@ -7005,13 +6964,13 @@ function closeMiniCard() {
   deselectPressHub();
   if (_mcCloseTimer) { clearTimeout(_mcCloseTimer); _mcCloseTimer = null; }
   if (!activeMiniCard) return;
-  const areaId = 'mc-area-' + activeMiniCard.rowName.replace(/\s/g,'_');
+  const areaId = 'mc-area-' + activeMiniCard.rowName.replace(/\s/g, '_');
   const area = document.getElementById(areaId);
   if (area) {
     area.classList.remove('visible');
     _mcCloseTimer = setTimeout(() => { if (!area.classList.contains('visible')) area.innerHTML = ''; _mcCloseTimer = null; }, 250);
   }
-  const btnEl = document.getElementById('press-'+activeMiniCard.machine.replace(/[\s.]/g,'_'));
+  const btnEl = document.getElementById('press-' + activeMiniCard.machine.replace(/[\s.]/g, '_'));
   if (btnEl) btnEl.classList.remove('selected');
   activeMiniCard = null;
 }
@@ -7048,19 +7007,19 @@ window.closeMachineHistory = () => {
 // ── ROW TAB STATE ──
 // Load persisted row state
 let savedRows = [];
-try { savedRows = JSON.parse(localStorage.getItem('activeRows') || '[]'); } catch(e) {}
+try { savedRows = JSON.parse(localStorage.getItem('activeRows') || '[]'); } catch (e) { }
 const activeRows = new Set(savedRows);
 let savedResolvedRows = [];
-try { savedResolvedRows = JSON.parse(localStorage.getItem('showResolvedRows') || '[]'); } catch(e) {}
+try { savedResolvedRows = JSON.parse(localStorage.getItem('showResolvedRows') || '[]'); } catch (e) { }
 const showResolvedRows = new Set(savedResolvedRows);
-function saveResolvedRows() { try { localStorage.setItem('showResolvedRows', JSON.stringify([...showResolvedRows])); } catch(e) {} }
+function saveResolvedRows() { try { localStorage.setItem('showResolvedRows', JSON.stringify([...showResolvedRows])); } catch (e) { } }
 let savedHideUnscheduledRows = [];
-try { savedHideUnscheduledRows = JSON.parse(localStorage.getItem('hideUnscheduledRows') || '[]'); } catch(e) {}
+try { savedHideUnscheduledRows = JSON.parse(localStorage.getItem('hideUnscheduledRows') || '[]'); } catch (e) { }
 const hideUnscheduledRows = new Set(savedHideUnscheduledRows);
-function saveHideUnscheduledRows() { try { localStorage.setItem('hideUnscheduledRows', JSON.stringify([...hideUnscheduledRows])); } catch(e) {} }
+function saveHideUnscheduledRows() { try { localStorage.setItem('hideUnscheduledRows', JSON.stringify([...hideUnscheduledRows])); } catch (e) { } }
 
 function saveActiveRows() {
-  try { localStorage.setItem('activeRows', JSON.stringify([...activeRows])); } catch(e) {}
+  try { localStorage.setItem('activeRows', JSON.stringify([...activeRows])); } catch (e) { }
 }
 
 function buildFloorMap() {
@@ -7120,7 +7079,7 @@ function renderRowTabs() {
     const isActive = activeRows.has(rowName);
     const tab = document.createElement('button');
     tab.className = 'row-tab' + (hasIssues ? ' has-issues' : '') + (isActive ? ' active' : '');
-    
+
     tab.onclick = () => {
       completeDemoGuideStep('floor');
       if (activeRows.has(rowName)) activeRows.delete(rowName);
@@ -7136,9 +7095,9 @@ function renderRowTabs() {
       dot.className = 'tab-pulse';
       tab.appendChild(dot);
     } else if (hasIssues && isActive) {
-      tab.appendChild(Object.assign(document.createElement('span'), {className:'tab-dot'}));
+      tab.appendChild(Object.assign(document.createElement('span'), { className: 'tab-dot' }));
     }
-    
+
     tab.appendChild(document.createTextNode(rowName.replace('Row ', 'R')));
     tabsEl.appendChild(tab);
   }
@@ -7160,9 +7119,9 @@ function renderRowTabs() {
 }
 
 function rowHasOpenIssues(rowName) {
-  let scoped = issueScope==='mine' ? issues.filter(i=>i.userId===currentUser?.uid) : issues;
+  let scoped = issueScope === 'mine' ? issues.filter(i => i.userId === currentUser?.uid) : issues;
   scoped = scoped.filter(periodFilter);
-  return PRESSES[rowName]?.some(m => scoped.some(i=>i.machine===m && currentStatusKey(i)!=='resolved'));
+  return PRESSES[rowName]?.some(m => scoped.some(i => i.machine === m && currentStatusKey(i) !== 'resolved'));
 }
 
 // ── PILL EXPAND STATE ──
@@ -7290,11 +7249,11 @@ function renderRowPanels() {
   closeRowStatusOverflow();
   activeMiniCard = null;
 
-  let scoped = issueScope==='mine' ? issues.filter(i=>i.userId===currentUser?.uid) : issues;
+  let scoped = issueScope === 'mine' ? issues.filter(i => i.userId === currentUser?.uid) : issues;
   scoped = scoped.filter(periodFilter);
 
   const STATUS_PILL_LABELS = Object.fromEntries(Object.keys(STATUSES).map(k => [k, getStatusDef(k).icon + ' ' + getStatusLabel(k, 'short')]));
-  const ORDER = window._STATUS_ORDER.filter(k=>k!=='resolved');
+  const ORDER = window._STATUS_ORDER.filter(k => k !== 'resolved');
   const orderIndex = new Map(ORDER.map((sk, idx) => [sk, idx]));
   const visibleLimit = getRowStatusVisibleLimit();
 
@@ -7323,15 +7282,15 @@ function renderRowPanels() {
     // Compute and render status pills inline (secondary statuses also counted)
     const counts = {};
     presses.forEach(m => {
-      scoped.filter(i=>i.machine===m).forEach(i => {
+      scoped.filter(i => i.machine === m).forEach(i => {
         getActiveStatuses(i).forEach(as => {
-          counts[as.statusKey] = (counts[as.statusKey]||0) + 1;
+          counts[as.statusKey] = (counts[as.statusKey] || 0) + 1;
         });
       });
     });
     const pillsWrap = document.createElement('div');
     pillsWrap.className = 'row-status-pills';
-    pillsWrap.id = 'rowpills-' + rowName.replace(/\s/g,'_');
+    pillsWrap.id = 'rowpills-' + rowName.replace(/\s/g, '_');
     const expandAreas = {};
     const statusEntries = ORDER
       .map(sk => {
@@ -7411,7 +7370,7 @@ function renderRowPanels() {
         note.textContent = issue.note || '';
         mi.appendChild(note);
         // Sub-status chip
-        const lastEntry = issue.statusHistory && issue.statusHistory.length > 0 ? issue.statusHistory[issue.statusHistory.length-1] : null;
+        const lastEntry = issue.statusHistory && issue.statusHistory.length > 0 ? issue.statusHistory[issue.statusHistory.length - 1] : null;
         if (lastEntry && lastEntry.subStatus) {
           const sub = document.createElement('span');
           sub.className = 'mini-issue-sub';
@@ -7492,7 +7451,7 @@ function renderRowPanels() {
     visiblePresses.forEach(m => {
       const btn = document.createElement('button');
       btn.className = 'press-btn';
-      btn.id = 'press-'+m.replace(/[\s.]/g,'_');
+      btn.id = 'press-' + m.replace(/[\s.]/g, '_');
       btn.onclick = () => handlePressClick(m);
 
       // Number label
@@ -7502,9 +7461,9 @@ function renderRowPanels() {
       btn.appendChild(numEl);
 
       // Gather all non-resolved issues for this press
-      const mi = scoped.filter(i=>i.machine===m);
-      const anyOpen = mi.filter(i=>currentStatusKey(i)!=='resolved');
-      const anyResolved = mi.filter(i=>currentStatusKey(i)==='resolved');
+      const mi = scoped.filter(i => i.machine === m);
+      const anyOpen = mi.filter(i => currentStatusKey(i) !== 'resolved');
+      const anyResolved = mi.filter(i => currentStatusKey(i) === 'resolved');
 
       // Build status color list for bar segments — primary + secondary per issue
       const statusColors = [];
@@ -7549,8 +7508,8 @@ function renderRowPanels() {
       }
 
       // hist-mode class if needed
-      if (mapMode==='hist' || mapMode==='notes') btn.classList.add('hist-mode');
-      if (mapMode==='notes') applyPressContributionVisual(btn, m);
+      if (mapMode === 'hist' || mapMode === 'notes') btn.classList.add('hist-mode');
+      if (mapMode === 'notes') applyPressContributionVisual(btn, m);
       // Mark presses not appearing in today's daily schedule
       if (unscheduledSet && !unscheduledSet.has(m)) {
         btn.classList.add('not-scheduled');
@@ -7562,7 +7521,7 @@ function renderRowPanels() {
     // Mini-card overlay area for press quick-view
     const mcArea = document.createElement('div');
     mcArea.className = 'press-minicard-area';
-    mcArea.id = 'mc-area-' + rowName.replace(/\s/g,'_');
+    mcArea.id = 'mc-area-' + rowName.replace(/\s/g, '_');
     panel.appendChild(mcArea);
     // Append pill expand areas after presses
     ORDER.forEach(sk => {
@@ -7585,14 +7544,14 @@ function resizeImage(file) {
     reader.onload = e => {
       const img = new Image();
       img.onload = () => {
-        let {width,height} = img;
-        if (width>MAX_DIM||height>MAX_DIM) {
-          if (width>height) { height=Math.round(height*MAX_DIM/width); width=MAX_DIM; }
-          else { width=Math.round(width*MAX_DIM/height); height=MAX_DIM; }
+        let { width, height } = img;
+        if (width > MAX_DIM || height > MAX_DIM) {
+          if (width > height) { height = Math.round(height * MAX_DIM / width); width = MAX_DIM; }
+          else { width = Math.round(width * MAX_DIM / height); height = MAX_DIM; }
         }
-        const c = document.createElement('canvas'); c.width=width; c.height=height;
-        c.getContext('2d').drawImage(img,0,0,width,height);
-        resolve(c.toDataURL('image/jpeg',JPEG_QUALITY));
+        const c = document.createElement('canvas'); c.width = width; c.height = height;
+        c.getContext('2d').drawImage(img, 0, 0, width, height);
+        resolve(c.toDataURL('image/jpeg', JPEG_QUALITY));
       };
       img.src = e.target.result;
     };
@@ -7627,7 +7586,7 @@ let issueLogPrefs = loadIssueLogPrefs();
 function saveIssueLogPrefs() {
   try {
     localStorage.setItem(ISSUE_LOG_PREFS_KEY, JSON.stringify(issueLogPrefs));
-  } catch (_) {}
+  } catch (_) { }
 }
 
 function setIssueAdvancedDetailsExpanded(on) {
@@ -7638,7 +7597,7 @@ function setIssueAdvancedDetailsExpanded(on) {
   if (state) state.textContent = issueAdvancedExpanded ? 'Hide' : 'Show';
 }
 
-window.toggleIssueAdvancedDetails = function() {
+window.toggleIssueAdvancedDetails = function () {
   setIssueAdvancedDetailsExpanded(!issueAdvancedExpanded);
   issueLogPrefs.advancedOpen = issueAdvancedExpanded;
   saveIssueLogPrefs();
@@ -7720,12 +7679,12 @@ window.openAddModal = m => {
   if (isSearchMode) { closeSearch(); }
   closeSubcategorySheet();
   subcategorySheetState = { open: false, statusKey: '', selectedSub: '' };
-  currentMachine=m; pendingPhotos=[];
+  currentMachine = m; pendingPhotos = [];
   logCatKey = issueLogPrefs.lastStatusKey || null;
   logCatSub = issueLogPrefs.lastStatusSub || null;
-  document.getElementById('issue-note').value='';
-  document.getElementById('photo-previews').innerHTML='';
-  document.getElementById('modal-machine-name').textContent=m;
+  document.getElementById('issue-note').value = '';
+  document.getElementById('photo-previews').innerHTML = '';
+  document.getElementById('modal-machine-name').textContent = m;
   document.getElementById('log-photo-source-row')?.classList.remove('visible');
   applyIssueLogDefaults();
   renderIssueQuickPhrases();
@@ -7763,7 +7722,7 @@ function renderLogCatButtons() {
       }
     }
     btn.innerHTML = `<span class="log-cat-icon">${st.icon}</span><span class="log-cat-label">${getStatusLabel(key, 'short')}</span>`;
-    addTapListener(btn, ()=>logCatSelectStatus(key));
+    addTapListener(btn, () => logCatSelectStatus(key));
     row.appendChild(btn);
   });
 
@@ -7802,14 +7761,14 @@ function renderLogSubChips() {
     row.className = 'log-sub-row';
     return;
   }
-  
+
   row.className = 'subcategory-grid visible';
   row.style.marginTop = '4px';
   row.style.marginBottom = '8px';
   applyColumnMajorGridLayout(row, subs.length, 2);
-  
+
   const activeColor = getStatusColor(logCatKey);
-  
+
   subs.forEach(sub => {
     const item = document.createElement('button');
     item.type = 'button';
@@ -8089,7 +8048,7 @@ function confirmSubcategorySheet(useNoSub = false) {
 function updateLogCatPill() {
   const sel = document.getElementById('log-cat-selected');
   const pill = document.getElementById('log-cat-pill');
-  if (!sel||!pill) return;
+  if (!sel || !pill) return;
   if (isSearchMode) {
     sel.classList.add('visible');
     pill.textContent = '🔍 Searching…';
@@ -8105,8 +8064,8 @@ function updateLogCatPill() {
   const st = getStatusDef(logCatKey);
   const col = getStatusColor(logCatKey);
   sel.classList.add('visible');
-  pill.textContent = st.icon+' '+getStatusLabel(logCatKey, 'short')+(logCatSub?' › '+logCatSub:'');
-  pill.style.color=col; pill.style.borderColor=alphaColor(col,0.53); pill.style.background=alphaColor(col,0.08);
+  pill.textContent = st.icon + ' ' + getStatusLabel(logCatKey, 'short') + (logCatSub ? ' › ' + logCatSub : '');
+  pill.style.color = col; pill.style.borderColor = alphaColor(col, 0.53); pill.style.background = alphaColor(col, 0.08);
   updateAddModalIssueLanguage();
 }
 
@@ -8141,7 +8100,7 @@ function logCatSelectStatus(key) {
   const subs = getStatusSubs(key);
   logCatKey = key;
   logCatSub = prevKey === key && subs.includes(logCatSub) ? logCatSub : '';
-  
+
   issueLogPrefs.lastStatusKey = key;
   issueLogPrefs.lastStatusSub = logCatSub;
   saveIssueLogPrefs();
@@ -8153,24 +8112,24 @@ function logCatSelectStatus(key) {
   scrollAddModalToBottom();
 }
 
-document.getElementById('log-cat-clear')?.addEventListener('touchend', e=>{
+document.getElementById('log-cat-clear')?.addEventListener('touchend', e => {
   e.preventDefault();
   if (isSearchMode) { closeSearch(); return; }
   closeSubcategorySheet();
-  logCatKey=null;logCatSub=null;
+  logCatKey = null; logCatSub = null;
   issueLogPrefs.lastStatusKey = '';
   issueLogPrefs.lastStatusSub = '';
   saveIssueLogPrefs();
-  renderLogCatButtons();renderLogSubChips();updateLogCatPill();
-},{passive:false});
-document.getElementById('log-cat-clear')?.addEventListener('click', ()=>{
+  renderLogCatButtons(); renderLogSubChips(); updateLogCatPill();
+}, { passive: false });
+document.getElementById('log-cat-clear')?.addEventListener('click', () => {
   if (isSearchMode) { closeSearch(); return; }
   closeSubcategorySheet();
-  logCatKey=null;logCatSub=null;
+  logCatKey = null; logCatSub = null;
   issueLogPrefs.lastStatusKey = '';
   issueLogPrefs.lastStatusSub = '';
   saveIssueLogPrefs();
-  renderLogCatButtons();renderLogSubChips();updateLogCatPill();
+  renderLogCatButtons(); renderLogSubChips(); updateLogCatPill();
 });
 document.getElementById('log-cat-selected')?.addEventListener('click', e => {
   if (e.target.closest?.('#log-cat-clear')) return;
@@ -8183,19 +8142,19 @@ window.closeModal = () => {
   document.getElementById('add-modal').classList.remove('visible');
   document.getElementById('log-photo-source-row')?.classList.remove('visible');
   closeSubcategorySheet();
-  pendingPhotos=[];
-  currentMachine=null;
+  pendingPhotos = [];
+  currentMachine = null;
   issueLogPrefs.lastStatusKey = logCatKey || issueLogPrefs.lastStatusKey || '';
   issueLogPrefs.lastStatusSub = logCatSub || issueLogPrefs.lastStatusSub || '';
   saveIssueLogPrefs();
-  logCatKey=null;
-  logCatSub=null;
+  logCatKey = null;
+  logCatSub = null;
 };
 
-window.resetIssueDateTime = function() {
-  const {dateStr,timeStr} = toLocalDTInputs(new Date());
-  document.getElementById('issue-date').value=dateStr;
-  document.getElementById('issue-time-input').value=timeStr;
+window.resetIssueDateTime = function () {
+  const { dateStr, timeStr } = toLocalDTInputs(new Date());
+  document.getElementById('issue-date').value = dateStr;
+  document.getElementById('issue-time-input').value = timeStr;
   const shift = document.getElementById('issue-shift');
   if (shift && shift.dataset.autoApplied === '1') {
     shift.value = getShiftForTime(new Date(), getShiftSchedule(currentPlantId));
@@ -8203,13 +8162,13 @@ window.resetIssueDateTime = function() {
 };
 
 function toLocalDTInputs(d) {
-  const pad = n=>String(n).padStart(2,'0');
-  return { dateStr: d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()), timeStr: pad(d.getHours())+':'+pad(d.getMinutes()) };
+  const pad = n => String(n).padStart(2, '0');
+  return { dateStr: d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()), timeStr: pad(d.getHours()) + ':' + pad(d.getMinutes()) };
 }
 function getIssueDateFromInputs(dateId, timeId) {
   const dateStr = document.getElementById(dateId).value;
   const timeStr = document.getElementById(timeId).value || '00:00';
-  return dateStr ? new Date(dateStr+'T'+timeStr+':00') : new Date();
+  return dateStr ? new Date(dateStr + 'T' + timeStr + ':00') : new Date();
 }
 
 function parseTimerMinutes(rawValue) {
@@ -8253,7 +8212,62 @@ const issueReminders = initIssueReminders({
   issueEventsCol,
   serverTimestamp,
   currentActor,
-  ensurePushEnabled: () => registerFcmToken({ requestPermission: true })
+  ensurePushEnabled: () => registerFcmToken({ requestPermission: true }),
+  isDemoMode: DEMO_MODE,
+  persistTimer: async (issueId, timer) => {
+    if (shouldUseSqlStagingReads(currentPlantId)) {
+      const issue = issuesById.get(issueId);
+      if (issue) {
+        const nextIssue = { ...issue, timer };
+        await commitSqlIssueWrite(issueId, nextIssue);
+      }
+    } else {
+      await updateDoc(plantDoc('issues', issueId), { timer });
+    }
+  },
+  autoHotIssue: async (issue, reminderState) => {
+    if (shouldUseSqlStagingReads(currentPlantId)) {
+      const nextIssue = {
+        ...issue,
+        highPriority: true,
+        priority: 'critical'
+      };
+      await commitSqlIssueWrite(issue.id, nextIssue, {
+        events: [{
+          eventId: `${issue.id}:escalated`,
+          eventType: 'issue_priority_changed',
+          eventAt: new Date().toISOString(),
+          actorUid: 'system-timer',
+          actorName: 'System Timer',
+          payload: {
+            fromHighPriority: !!issue.highPriority,
+            fromPriority: issue.priority || null,
+            toHighPriority: true,
+            toPriority: 'critical',
+            escalationReason: 'timer_expired_unacknowledged',
+            reminderDueAt: Number(reminderState.dueAt)
+          }
+        }]
+      });
+    } else {
+      const batch = writeBatch(db);
+      batch.update(plantDoc('issues', issue.id), {
+        highPriority: true,
+        priority: 'critical',
+        priorityChangedAt: serverTimestamp(),
+        priorityChangedBy: currentActor()
+      });
+      queueIssueEvent(batch, issue.id, 'issue_priority_changed', {
+        fromHighPriority: !!issue.highPriority,
+        fromPriority: issue.priority || null,
+        toHighPriority: true,
+        toPriority: 'critical',
+        escalationReason: 'timer_expired_unacknowledged',
+        reminderDueAt: Number(reminderState.dueAt)
+      });
+      await batch.commit();
+    }
+  }
 });
 
 function clearIssueReminder(issueId) {
@@ -8321,25 +8335,25 @@ document.getElementById('issue-advanced-toggle')?.addEventListener('click', () =
   saveIssueLogPrefs();
 });
 document.getElementById('log-photo-btn')?.addEventListener('click', () => openIssuePhotoSourceMenu());
-document.getElementById('log-camera-btn')?.addEventListener('touchend', e=>{e.preventDefault();openIssuePhotoSourceMenu(false);document.getElementById('log-camera-input').click();},{passive:false});
-document.getElementById('log-camera-btn')?.addEventListener('click', ()=>{openIssuePhotoSourceMenu(false);document.getElementById('log-camera-input').click();});
-document.getElementById('log-library-btn')?.addEventListener('touchend', e=>{e.preventDefault();openIssuePhotoSourceMenu(false);document.getElementById('log-library-input').click();},{passive:false});
-document.getElementById('log-library-btn')?.addEventListener('click', ()=>{openIssuePhotoSourceMenu(false);document.getElementById('log-library-input').click();});
+document.getElementById('log-camera-btn')?.addEventListener('touchend', e => { e.preventDefault(); openIssuePhotoSourceMenu(false); document.getElementById('log-camera-input').click(); }, { passive: false });
+document.getElementById('log-camera-btn')?.addEventListener('click', () => { openIssuePhotoSourceMenu(false); document.getElementById('log-camera-input').click(); });
+document.getElementById('log-library-btn')?.addEventListener('touchend', e => { e.preventDefault(); openIssuePhotoSourceMenu(false); document.getElementById('log-library-input').click(); }, { passive: false });
+document.getElementById('log-library-btn')?.addEventListener('click', () => { openIssuePhotoSourceMenu(false); document.getElementById('log-library-input').click(); });
 
 // photos - add modal
-document.getElementById('log-camera-input').addEventListener('change', function(){ handleFiles(this.files, pendingPhotos, 'photo-previews'); this.value=''; });
-document.getElementById('log-library-input').addEventListener('change', function(){ handleFiles(this.files, pendingPhotos, 'photo-previews'); this.value=''; });
+document.getElementById('log-camera-input').addEventListener('change', function () { handleFiles(this.files, pendingPhotos, 'photo-previews'); this.value = ''; });
+document.getElementById('log-library-input').addEventListener('change', function () { handleFiles(this.files, pendingPhotos, 'photo-previews'); this.value = ''; });
 
 // photos - edit modal
-document.getElementById('edit-photo-input').addEventListener('change', function(){ handleFiles(this.files, editPhotos, 'edit-photo-previews'); });
+document.getElementById('edit-photo-input').addEventListener('change', function () { handleFiles(this.files, editPhotos, 'edit-photo-previews'); });
 document.getElementById('edit-status-camera-btn')?.addEventListener('click', () => document.getElementById('edit-status-camera-input')?.click());
 document.getElementById('edit-status-library-btn')?.addEventListener('click', () => document.getElementById('edit-status-library-input')?.click());
-document.getElementById('edit-status-camera-input')?.addEventListener('change', function(){ handleFiles(this.files, editStatusPhotos, 'edit-status-photo-previews'); this.value=''; });
-document.getElementById('edit-status-library-input')?.addEventListener('change', function(){ handleFiles(this.files, editStatusPhotos, 'edit-status-photo-previews'); this.value=''; });
+document.getElementById('edit-status-camera-input')?.addEventListener('change', function () { handleFiles(this.files, editStatusPhotos, 'edit-status-photo-previews'); this.value = ''; });
+document.getElementById('edit-status-library-input')?.addEventListener('change', function () { handleFiles(this.files, editStatusPhotos, 'edit-status-photo-previews'); this.value = ''; });
 const edz = document.getElementById('edit-drop-zone');
-edz.addEventListener('dragover', e=>{e.preventDefault();edz.classList.add('drag-over');});
-edz.addEventListener('dragleave', ()=>edz.classList.remove('drag-over'));
-edz.addEventListener('drop', e=>{e.preventDefault();edz.classList.remove('drag-over');handleFiles(e.dataTransfer.files,editPhotos,'edit-photo-previews');});
+edz.addEventListener('dragover', e => { e.preventDefault(); edz.classList.add('drag-over'); });
+edz.addEventListener('dragleave', () => edz.classList.remove('drag-over'));
+edz.addEventListener('drop', e => { e.preventDefault(); edz.classList.remove('drag-over'); handleFiles(e.dataTransfer.files, editPhotos, 'edit-photo-previews'); });
 
 async function handleFiles(files, arr, previewId) {
   for (const file of Array.from(files)) {
@@ -8351,20 +8365,20 @@ async function handleFiles(files, arr, previewId) {
 }
 
 function renderPreviews(arr, previewId) {
-  const c = document.getElementById(previewId); c.innerHTML='';
-  arr.forEach((p,i) => {
-    const wrap=document.createElement('div'); wrap.className='photo-preview-item';
-    const img=document.createElement('img'); img.className='photo-preview-img'; img.src=p.dataUrl || p.downloadURL || '';
-    const rm=document.createElement('button'); rm.className='photo-remove'; rm.textContent='✕';
-    rm.onclick=()=>{ arr.splice(i,1); renderPreviews(arr,previewId); };
+  const c = document.getElementById(previewId); c.innerHTML = '';
+  arr.forEach((p, i) => {
+    const wrap = document.createElement('div'); wrap.className = 'photo-preview-item';
+    const img = document.createElement('img'); img.className = 'photo-preview-img'; img.src = p.dataUrl || p.downloadURL || '';
+    const rm = document.createElement('button'); rm.className = 'photo-remove'; rm.textContent = '✕';
+    rm.onclick = () => { arr.splice(i, 1); renderPreviews(arr, previewId); };
     wrap.appendChild(img); wrap.appendChild(rm); c.appendChild(wrap);
   });
 }
 
 function setSubmitting(on) {
-  document.getElementById('submit-btn').disabled=on;
-  document.getElementById('cancel-btn').disabled=on;
-  document.getElementById('submit-btn').innerHTML=on
+  document.getElementById('submit-btn').disabled = on;
+  document.getElementById('cancel-btn').disabled = on;
+  document.getElementById('submit-btn').innerHTML = on
     ? '<span class="spinner"></span> Saving…'
     : (logCatKey === 'attention' ? '◇ Log Attention' : '⚠ Log Issue');
 }
@@ -8378,7 +8392,7 @@ window.submitIssue = async () => {
   }
   setSubmitting(true);
   try {
-    const d = getIssueDateFromInputs('issue-date','issue-time-input');
+    const d = getIssueDateFromInputs('issue-date', 'issue-time-input');
     const initialStatus = logCatKey || 'open';
     const initialSubStatus = logCatSub || '';
     const note = document.getElementById('issue-note').value.trim() || 'No Description Provided';
@@ -8402,7 +8416,7 @@ window.submitIssue = async () => {
       shift,
       timer: buildIssueTimer(timerMinutes, d),
       userId: currentUser.uid,
-      userName: currentUser.displayName||currentUser.email,
+      userName: currentUser.displayName || currentUser.email,
       actor,
       initialStatus,
       initialSubStatus,
@@ -8504,8 +8518,8 @@ window.submitIssue = async () => {
         }
       }, 50);
     }
-  } catch(e) {
-    setSyncStatus('err','Error saving locally: '+e.message);
+  } catch (e) {
+    setSyncStatus('err', 'Error saving locally: ' + e.message);
     setSubmitting(false);
   } finally {
     if (document.getElementById('add-modal')?.classList.contains('visible')) setSubmitting(false);
@@ -8515,7 +8529,7 @@ window.submitIssue = async () => {
 // ── EDIT MODAL ──
 window.openEditModal = async id => {
   if (!currentUserPermissions.canEditIssue) return;
-  const issue = issues.find(i=>i.id===id);
+  const issue = issues.find(i => i.id === id);
   if (!issue) return;
   let photoList = issue.photos || [];
   if (photoList.length === 0 && Number(issue.photoCount || 0) > 0) {
@@ -8523,38 +8537,38 @@ window.openEditModal = async id => {
     issue.photos = photoList;
   }
   editTargetId = id;
-  editPhotos = (photoList||[]).map(p=>({name:p.name,dataUrl:p.dataUrl,storagePath:p.storagePath||'',storageBucket:p.storageBucket||'',contentType:p.contentType||'',sizeBytes:Number(p.sizeBytes||0)}));
+  editPhotos = (photoList || []).map(p => ({ name: p.name, dataUrl: p.dataUrl, storagePath: p.storagePath || '', storageBucket: p.storageBucket || '', contentType: p.contentType || '', sizeBytes: Number(p.sizeBytes || 0) }));
   document.getElementById('edit-machine-name').textContent = issue.machine;
-  document.getElementById('edit-note').value = issue.note||'';
+  document.getElementById('edit-note').value = issue.note || '';
   // Parse existing date back into inputs
   try {
     const d = new Date(issue.timestamp);
-    const {dateStr,timeStr} = toLocalDTInputs(d);
+    const { dateStr, timeStr } = toLocalDTInputs(d);
     document.getElementById('edit-date').value = dateStr;
     document.getElementById('edit-time-input').value = timeStr;
-  } catch(e) {}
-  renderPreviews(editPhotos,'edit-photo-previews');
-  document.getElementById('edit-photo-input').value='';
+  } catch (e) { }
+  renderPreviews(editPhotos, 'edit-photo-previews');
+  document.getElementById('edit-photo-input').value = '';
   document.getElementById('edit-shift').value = issue.shift || 'auto';
   document.getElementById('edit-timer-minutes').value = String(getIssueReminderMinutes(id) || '');
   const btn = document.getElementById('edit-submit-btn');
-  btn.disabled=false; btn.innerHTML='💾 Save Changes';
+  btn.disabled = false; btn.innerHTML = '💾 Save Changes';
   document.getElementById('edit-modal').classList.add('visible');
 };
-window.closeEditModal = () => { document.getElementById('edit-modal').classList.remove('visible'); editTargetId=null; editPhotos=[]; };
+window.closeEditModal = () => { document.getElementById('edit-modal').classList.remove('visible'); editTargetId = null; editPhotos = []; };
 
 window.saveEdit = async () => {
   const note = document.getElementById('edit-note').value.trim();
   if (!note) { document.getElementById('edit-note').focus(); return; }
   const btn = document.getElementById('edit-submit-btn');
-  btn.disabled=true; btn.innerHTML='<span class="spinner"></span> Saving…';
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Saving…';
   try {
     if (guardOfflinePhotos(editPhotos, 'Issue photos')) {
-      btn.disabled=false; btn.innerHTML='💾 Save Changes';
+      btn.disabled = false; btn.innerHTML = '💾 Save Changes';
       return;
     }
-    const d = getIssueDateFromInputs('edit-date','edit-time-input');
-    const issue = issues.find(i=>i.id===editTargetId);
+    const d = getIssueDateFromInputs('edit-date', 'edit-time-input');
+    const issue = issues.find(i => i.id === editTargetId);
     const last = currentStatus(issue || {});
     const shiftSel = document.getElementById('edit-shift').value;
     const shift = shiftSel === 'auto' ? getShiftForTime(d, getShiftSchedule(currentPlantId)) : shiftSel;
@@ -8567,7 +8581,7 @@ window.saveEdit = async () => {
         shift,
         timer: buildIssueTimer(timerMinutes, d, issue?.timer || null),
         photoCount: uploadedPhotos.length,
-        editedAt: fmtDate(new Date()), editedBy: currentUser.displayName||currentUser.email,
+        editedAt: fmtDate(new Date()), editedBy: currentUser.displayName || currentUser.email,
         ...buildIssueV2CompatLocal({
           machineCode: issue?.machine || currentMachine,
           statusKey: last?.status || currentStatusKey(issue || {}),
@@ -8598,7 +8612,7 @@ window.saveEdit = async () => {
       shift,
       timer: buildIssueTimer(timerMinutes, d, issue?.timer || null),
       photoCount: uploadedPhotos.length,
-      editedAt: fmtDate(new Date()), editedBy: currentUser.displayName||currentUser.email,
+      editedAt: fmtDate(new Date()), editedBy: currentUser.displayName || currentUser.email,
       ...buildIssueV2Compat({
         machineCode: issue?.machine || currentMachine,
         statusKey: last?.status || currentStatusKey(issue || {}),
@@ -8609,7 +8623,7 @@ window.saveEdit = async () => {
       })
     };
     const batch = writeBatch(db);
-    batch.update(plantDoc('issues',editTargetId), issuePatch);
+    batch.update(plantDoc('issues', editTargetId), issuePatch);
     queueAttachmentDocs(batch, editTargetId, uploadedPhotos);
     queueIssueEvent(batch, editTargetId, 'issue_edited', {
       fieldsChanged: ['note', 'photos', 'dateTime', 'dateKey', 'timestamp']
@@ -8625,29 +8639,29 @@ window.saveEdit = async () => {
     refreshVisibleData();
     if (!syncState.online) setSyncStatus('syncing', 'Syncing - local changes pending');
     closeEditModal();
-  } catch(e) {
-    setSyncStatus('err','Error saving: '+e.message);
-    btn.disabled=false; btn.innerHTML='💾 Save Changes';
+  } catch (e) {
+    setSyncStatus('err', 'Error saving: ' + e.message);
+    btn.disabled = false; btn.innerHTML = '💾 Save Changes';
   }
 };
 
 // ── RESOLVE ──
 window.openResolveModal = id => {
   if (!currentUserPermissions.canResolveIssue) return;
-  resolveTargetId=id;
-  const issue=issues.find(i=>i.id===id);
-  document.getElementById('resolve-machine-label').textContent='Press '+issue.machine+' — logged '+issue.dateTime;
-  document.getElementById('resolve-note').value='';
-  const btn=document.getElementById('resolve-confirm-btn'); btn.disabled=false; btn.innerHTML='Mark Resolved';
+  resolveTargetId = id;
+  const issue = issues.find(i => i.id === id);
+  document.getElementById('resolve-machine-label').textContent = 'Press ' + issue.machine + ' — logged ' + issue.dateTime;
+  document.getElementById('resolve-note').value = '';
+  const btn = document.getElementById('resolve-confirm-btn'); btn.disabled = false; btn.innerHTML = 'Mark Resolved';
   document.getElementById('resolve-modal').classList.add('visible');
 };
-window.closeResolveModal = () => { document.getElementById('resolve-modal').classList.remove('visible'); resolveTargetId=null; };
+window.closeResolveModal = () => { document.getElementById('resolve-modal').classList.remove('visible'); resolveTargetId = null; };
 window.confirmResolve = async () => {
-  const note=document.getElementById('resolve-note').value.trim();
-  const btn=document.getElementById('resolve-confirm-btn');
-  btn.disabled=true; btn.innerHTML='<span class="spinner"></span> Saving…';
+  const note = document.getElementById('resolve-note').value.trim();
+  const btn = document.getElementById('resolve-confirm-btn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Saving…';
   try {
-    const issue = issues.find(i=>i.id===resolveTargetId);
+    const issue = issues.find(i => i.id === resolveTargetId);
     const last = currentStatus(issue || {});
     const resolvedAtText = fmtDate(new Date());
     const resolvedWorkflowId = createWorkflowId('resolved');
@@ -8703,7 +8717,7 @@ window.confirmResolve = async () => {
       return;
     }
     const batch = writeBatch(db);
-    batch.update(plantDoc('issues',resolveTargetId), issuePatch);
+    batch.update(plantDoc('issues', resolveTargetId), issuePatch);
     queueIssueEvent(batch, resolveTargetId, 'issue_resolved', { resolutionNote: note || 'Resolved (no details provided)' });
     queueIssueEvent(batch, resolveTargetId, 'status_changed', {
       fromStatusKey: last?.status || currentStatusKey(issue || {}),
@@ -8721,29 +8735,29 @@ window.confirmResolve = async () => {
     if (!syncState.online) setSyncStatus('syncing', 'Syncing - local changes pending');
     awardGamification('issue_resolved', { issueId: resolveTargetId, dedupeSuffix: resolvedAtText, tags: ['issue:resolved', 'status:resolved'] }).catch(e => console.warn('gamification resolve award failed', e));
     closeResolveModal();
-  } catch(e) { setSyncStatus('err','Error: '+e.message); btn.disabled=false; btn.innerHTML='Mark Resolved'; }
+  } catch (e) { setSyncStatus('err', 'Error: ' + e.message); btn.disabled = false; btn.innerHTML = 'Mark Resolved'; }
 };
 
 // ── REOPEN ──
 window.openReopenModal = id => {
   if (!currentUserPermissions.canResolveIssue) return;
-  reopenTargetId=id;
-  const issue=issues.find(i=>i.id===id);
-  document.getElementById('reopen-machine-label').textContent='Press '+issue.machine;
-  document.getElementById('reopen-note').value='';
-  const btn=document.getElementById('reopen-confirm-btn'); btn.disabled=false; btn.innerHTML='Re-open Issue';
+  reopenTargetId = id;
+  const issue = issues.find(i => i.id === id);
+  document.getElementById('reopen-machine-label').textContent = 'Press ' + issue.machine;
+  document.getElementById('reopen-note').value = '';
+  const btn = document.getElementById('reopen-confirm-btn'); btn.disabled = false; btn.innerHTML = 'Re-open Issue';
   document.getElementById('reopen-modal').classList.add('visible');
 };
-window.closeReopenModal = () => { document.getElementById('reopen-modal').classList.remove('visible'); reopenTargetId=null; };
+window.closeReopenModal = () => { document.getElementById('reopen-modal').classList.remove('visible'); reopenTargetId = null; };
 window.confirmReopen = async () => {
-  const note=document.getElementById('reopen-note').value.trim();
-  const btn=document.getElementById('reopen-confirm-btn');
-  btn.disabled=true; btn.innerHTML='<span class="spinner"></span> Saving…';
+  const note = document.getElementById('reopen-note').value.trim();
+  const btn = document.getElementById('reopen-confirm-btn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Saving…';
   try {
-    const issue=issues.find(i=>i.id===reopenTargetId);
+    const issue = issues.find(i => i.id === reopenTargetId);
     const last = currentStatus(issue || {});
-    const resolveHistory=issue.resolveHistory||[];
-    resolveHistory.push({resolveNote:issue.resolveNote,resolveDateTime:issue.resolveDateTime,resolvedBy:issue.resolvedBy||''});
+    const resolveHistory = issue.resolveHistory || [];
+    resolveHistory.push({ resolveNote: issue.resolveNote, resolveDateTime: issue.resolveDateTime, resolvedBy: issue.resolvedBy || '' });
     const reopenStatusKey = last?.status && last.status !== 'resolved' ? last.status : 'open';
     const reopenSubStatus = last?.status && last.status !== 'resolved' ? (last.subStatus || '') : '';
     const reopenDateTime = fmtDate(new Date());
@@ -8751,8 +8765,8 @@ window.confirmReopen = async () => {
     const statusHistory = getMutableStatusHistory(issue);
     statusHistory.push({ status: reopenStatusKey, subStatus: reopenSubStatus, note: note || '', dateTime: reopenDateTime, by: currentUser.displayName || currentUser.email, workflowId: reopenWorkflowId });
     const issuePatch = {
-      reopenNote:note||'',reopenDateTime,
-      reopenedBy:currentUser.displayName||currentUser.email,resolveHistory,
+      reopenNote: note || '', reopenDateTime,
+      reopenedBy: currentUser.displayName || currentUser.email, resolveHistory,
       statusHistory,
       workflowState: null,
       [`workflowStateByEntry.${reopenWorkflowId}`]: null,
@@ -8768,8 +8782,8 @@ window.confirmReopen = async () => {
     };
     if (shouldUseSqlStagingReads(currentPlantId)) {
       const nextIssue = applyIssuePatchLocally(issue, {
-        reopenNote:note||'',reopenDateTime,
-        reopenedBy:currentUser.displayName||currentUser.email,resolveHistory,
+        reopenNote: note || '', reopenDateTime,
+        reopenedBy: currentUser.displayName || currentUser.email, resolveHistory,
         statusHistory,
         workflowState: null,
         workflowStateByEntry: { ...(issue?.workflowStateByEntry || {}), [reopenWorkflowId]: null },
@@ -8793,7 +8807,7 @@ window.confirmReopen = async () => {
       return;
     }
     const batch = writeBatch(db);
-    batch.update(plantDoc('issues',reopenTargetId), issuePatch);
+    batch.update(plantDoc('issues', reopenTargetId), issuePatch);
     queueIssueEvent(batch, reopenTargetId, 'issue_reopened', { reason: note || '' });
     await batch.commit();
     if (issue) {
@@ -8804,7 +8818,7 @@ window.confirmReopen = async () => {
     if (!syncState.online) setSyncStatus('syncing', 'Syncing - local changes pending');
     awardGamification('issue_reopened', { issueId: reopenTargetId, dedupeSuffix: reopenDateTime, tags: ['issue:reopened', `status:${reopenStatusKey}`] }).catch(e => console.warn('gamification reopen award failed', e));
     closeReopenModal();
-  } catch(e) { setSyncStatus('err','Error: '+e.message); btn.disabled=false; btn.innerHTML='Re-open Issue'; }
+  } catch (e) { setSyncStatus('err', 'Error: ' + e.message); btn.disabled = false; btn.innerHTML = 'Re-open Issue'; }
 };
 
 // ── STATUS HISTORY ──
@@ -8824,7 +8838,7 @@ function currentStatus(issue) {
       by: issue.currentStatus.enteredBy?.name || ''
     };
   }
-  return { status: currentStatusKey(issue), subStatus: '', note:'', dateTime:'', by:'' };
+  return { status: currentStatusKey(issue), subStatus: '', note: '', dateTime: '', by: '' };
 }
 
 function getMutableStatusHistory(issue) {
@@ -8884,11 +8898,11 @@ function buildAddStatusEntryMutation(baseIssue, fallbackIssue, entry, status, su
       statusHistory: history,
       ...(status === 'resolved'
         ? {
-            workflowState: 'finished',
-            'workflowStateHistory.finished': { by: currentActor(), at: serverTimestamp() },
-            [`workflowStateByEntry.${entry.workflowId}`]: 'finished',
-            [`workflowStateByEntryHistory.${entry.workflowId}.finished`]: { by: currentActor(), at: serverTimestamp() }
-          }
+          workflowState: 'finished',
+          'workflowStateHistory.finished': { by: currentActor(), at: serverTimestamp() },
+          [`workflowStateByEntry.${entry.workflowId}`]: 'finished',
+          [`workflowStateByEntryHistory.${entry.workflowId}.finished`]: { by: currentActor(), at: serverTimestamp() }
+        }
         : { workflowState: null }),
       ...(status !== 'resolved' ? { [`workflowStateByEntry.${entry.workflowId}`]: null } : {}),
       ...(status !== 'resolved' && prevWorkflowId && prevWorkflowState
@@ -8941,9 +8955,9 @@ window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
         },
         workflowStateByEntryHistory: mutation.issuePatch.workflowState === 'finished'
           ? {
-              ...(issue?.workflowStateByEntryHistory || {}),
-              [entry.workflowId]: { ...((issue?.workflowStateByEntryHistory || {})[entry.workflowId] || {}), finished: { by: currentActor(), at: new Date().toISOString() } }
-            }
+            ...(issue?.workflowStateByEntryHistory || {}),
+            [entry.workflowId]: { ...((issue?.workflowStateByEntryHistory || {})[entry.workflowId] || {}), finished: { by: currentActor(), at: new Date().toISOString() } }
+          }
           : { ...(issue?.workflowStateByEntryHistory || {}) }
       };
       const nextIssue = applyIssuePatchLocally(issue, {
@@ -9049,12 +9063,12 @@ window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
     awardGamification('status_changed_valid', { issueId: id, dedupeSuffix: entry.dateTime || String(Date.now()), tags: ['status:changed', `status:${status}`] }).catch(e => console.warn('gamification award failed', e));
     if (status === 'resolved') awardGamification('issue_resolved', { issueId: id, dedupeSuffix: 'status-resolved', tags: ['issue:resolved', 'status:resolved'] }).catch(e => console.warn('gamification resolve award failed', e));
     if (status && status !== 'open') completeDemoGuideStep('route');
-  } catch(e) { setSyncStatus('err','Error: '+e.message); }
+  } catch (e) { setSyncStatus('err', 'Error: ' + e.message); }
 };
 
 // Update an existing history entry
 window.updateStatusEntry = async (id, idx, status, subStatus, note, dateTime, photos = null) => {
-  const issue = issues.find(i=>i.id===id);
+  const issue = issues.find(i => i.id === id);
   if (!issue) return;
   const latestIssue = await getLatestIssueForStatusMutation(id, issue);
   const history = getMutableStatusHistory(latestIssue || issue);
@@ -9071,7 +9085,7 @@ window.updateStatusEntry = async (id, idx, status, subStatus, note, dateTime, ph
   }
   if (!history[idx]) return;
   const prev = currentStatus(latestIssue || issue);
-  history[idx] = { ...history[idx], status, subStatus: subStatus||'', note: note||'' };
+  history[idx] = { ...history[idx], status, subStatus: subStatus || '', note: note || '' };
   if (dateTime) history[idx].dateTime = dateTime;
   if (Array.isArray(photos)) history[idx].photos = photos;
   // Recalculate current status from last entry
@@ -9119,7 +9133,7 @@ window.updateStatusEntry = async (id, idx, status, subStatus, note, dateTime, ph
       })
     };
     const batch = writeBatch(db);
-    batch.update(plantDoc('issues',id), issuePatch);
+    batch.update(plantDoc('issues', id), issuePatch);
     if ((prev?.status || 'open') !== (last.status || 'open') || (prev?.subStatus || '') !== (last.subStatus || '')) {
       queueIssueEvent(batch, id, 'status_changed', {
         fromStatusKey: prev?.status || currentStatusKey(latestIssue || issue),
@@ -9135,12 +9149,12 @@ window.updateStatusEntry = async (id, idx, status, subStatus, note, dateTime, ph
     rebuildIssuesArrayFromMap();
     refreshVisibleData();
     if (!syncState.online) setSyncStatus('syncing', 'Syncing - local changes pending');
-  } catch(e) { setSyncStatus('err','Error: '+e.message); }
+  } catch (e) { setSyncStatus('err', 'Error: ' + e.message); }
 };
 
 // Remove a history entry (cannot remove the only entry)
 window.removeStatusEntry = async (id, idx) => {
-  const issue = issues.find(i=>i.id===id);
+  const issue = issues.find(i => i.id === id);
   if (!issue) return;
   const latestIssue = await getLatestIssueForStatusMutation(id, issue);
   const history = getMutableStatusHistory(latestIssue || issue);
@@ -9190,7 +9204,7 @@ window.removeStatusEntry = async (id, idx) => {
       })
     };
     const batch = writeBatch(db);
-    batch.update(plantDoc('issues',id), issuePatch);
+    batch.update(plantDoc('issues', id), issuePatch);
     if ((prev?.status || 'open') !== (last.status || 'open') || (prev?.subStatus || '') !== (last.subStatus || '')) {
       queueIssueEvent(batch, id, 'status_changed', {
         fromStatusKey: prev?.status || currentStatusKey(latestIssue || issue),
@@ -9202,7 +9216,7 @@ window.removeStatusEntry = async (id, idx) => {
     }
     await batch.commit();
     issueEventHistoryCache.delete(id);
-  } catch(e) { setSyncStatus('err','Error: '+e.message); }
+  } catch (e) { setSyncStatus('err', 'Error: ' + e.message); }
 };
 
 // Promote a historical status entry to be the current status.
@@ -9298,7 +9312,7 @@ window.setStatusCurrentFromHistory = async (id, idx) => {
     issueEventHistoryCache.delete(id);
     await awardGamification('status_changed_valid', { issueId: id, dedupeSuffix: `set-current-${Date.now()}`, tags: ['status:changed', `status:${nextEntry.status}`] });
   } catch (e) {
-    setSyncStatus('err','Error: '+e.message);
+    setSyncStatus('err', 'Error: ' + e.message);
   }
 };
 
@@ -9315,11 +9329,11 @@ window.commitAddEntry = async (id) => {
   if (!p.status) return;
   // Read note, sub, and date/time directly from DOM
   const noteEl = document.getElementById('pending-note-' + id);
-  const subEl  = document.getElementById('pending-sub-'  + id);
+  const subEl = document.getElementById('pending-sub-' + id);
   const dateEl = document.getElementById('pending-date-' + id);
   const timeEl = document.getElementById('pending-time-' + id);
   const note = noteEl ? noteEl.value.trim() : (p.note || '');
-  const sub  = subEl  ? subEl.value         : (p.subStatus || '');
+  const sub = subEl ? subEl.value : (p.subStatus || '');
   let dt = null;
   if (dateEl?.value) {
     const tVal = timeEl?.value || '00:00';
@@ -9354,29 +9368,29 @@ window.startEditEntry = (id, idx) => {
     by: issue.currentStatus?.enteredBy?.name || ''
   } : null);
   if (!entry) return;
-  
+
   editingStatusEntry = { issueId: id, entryIndex: idx };
-  
+
   // Populate modal
   const statusSelect = document.getElementById('edit-status-select');
   statusSelect.innerHTML = getAlphabetizedStatusKeys().map(k => {
     const v = STATUSES[k];
     return `<option value="${k}" ${k === entry.status ? 'selected' : ''}>${v.icon} ${v.label}</option>`;
   }).join('');
-  
+
   // Handle sub-status
   updateEditStatusSubOptions();
   statusSelect.onchange = updateEditStatusSubOptions;
-  
+
   const subSelect = document.getElementById('edit-status-sub');
   if (subSelect && entry.subStatus) {
     subSelect.value = entry.subStatus;
   }
-  
+
   document.getElementById('edit-status-note').value = entry.note || '';
   editStatusPhotos = Array.isArray(entry.photos) ? entry.photos.map(p => ({ ...p })) : [];
   renderPreviews(editStatusPhotos, 'edit-status-photo-previews');
-  
+
   // Parse date/time
   if (entry.dateTime) {
     try {
@@ -9384,9 +9398,9 @@ window.startEditEntry = (id, idx) => {
       const dt = toLocalDTInputs(d);
       document.getElementById('edit-status-date').value = dt.dateStr;
       document.getElementById('edit-status-time').value = dt.timeStr;
-    } catch(e) {}
+    } catch (e) { }
   }
-  
+
   document.getElementById('edit-status-modal').classList.add('visible');
 };
 
@@ -9395,7 +9409,7 @@ function updateEditStatusSubOptions() {
   const selectedStatus = statusSelect.value;
   const subs = getStatusSubs(selectedStatus);
   const subWrap = document.getElementById('edit-status-sub-wrap');
-  
+
   if (subs.length > 0) {
     subWrap.innerHTML = `
       <label>Sub-status (optional)</label>
@@ -9419,20 +9433,20 @@ window.closeEditStatusModal = () => {
 window.saveEditStatusEntry = async () => {
   if (!editingStatusEntry) return;
   const { issueId, entryIndex } = editingStatusEntry;
-  
+
   const status = document.getElementById('edit-status-select').value;
   const subSelect = document.getElementById('edit-status-sub');
   const subStatus = subSelect ? subSelect.value : '';
   const note = document.getElementById('edit-status-note').value;
   const dateStr = document.getElementById('edit-status-date').value;
   const timeStr = document.getElementById('edit-status-time').value;
-  
+
   let dateTime = null;
   if (dateStr) {
     const tVal = timeStr || '00:00';
     dateTime = fmtDate(new Date(dateStr + 'T' + tVal + ':00'));
   }
-  
+
   const newStatusPhotos = editStatusPhotos.filter(p => p.dataUrl);
   if (guardOfflinePhotos(newStatusPhotos, 'Status photos')) return;
   const existingStatusPhotos = editStatusPhotos.filter(p => !p.dataUrl);
@@ -9451,11 +9465,11 @@ window.saveEditStatusEntry = async () => {
 
 window.cancelEditEntry = (id, idx) => { /* no longer needed - using modal */ };
 window.commitEditEntry = async (id, idx) => {
-  const selEl = document.getElementById('tl-edit-sel-'+id+'-'+idx);
-  const subEl = document.getElementById('tl-edit-sub-'+id+'-'+idx);
-  const noteEl = document.getElementById('tl-edit-note-'+id+'-'+idx);
-  const dateEl = document.getElementById('tl-edit-date-'+id+'-'+idx);
-  const timeEl = document.getElementById('tl-edit-time-'+id+'-'+idx);
+  const selEl = document.getElementById('tl-edit-sel-' + id + '-' + idx);
+  const subEl = document.getElementById('tl-edit-sub-' + id + '-' + idx);
+  const noteEl = document.getElementById('tl-edit-note-' + id + '-' + idx);
+  const dateEl = document.getElementById('tl-edit-date-' + id + '-' + idx);
+  const timeEl = document.getElementById('tl-edit-time-' + id + '-' + idx);
   if (!selEl) return;
   const status = selEl.value;
   const subStatus = subEl ? subEl.value : '';
@@ -9464,21 +9478,21 @@ window.commitEditEntry = async (id, idx) => {
     const tVal = timeEl?.value || '00:00';
     dt = fmtDate(new Date(dateEl.value + 'T' + tVal + ':00'));
   }
-  await updateStatusEntry(id, idx, status, subStatus, noteEl?.value||'', dt);
-  delete editingEntry[id+'_'+idx];
+  await updateStatusEntry(id, idx, status, subStatus, noteEl?.value || '', dt);
+  delete editingEntry[id + '_' + idx];
   renderIssues();
 };
 
 // Legacy compat shims (kept so old Firestore docs still work)
-window.setIssueStatus = async (id, status, sub) => { await addStatusEntry(id, status, sub||'', ''); };
+window.setIssueStatus = async (id, status, sub) => { await addStatusEntry(id, status, sub || '', ''); };
 window.clearIssueStatus = async id => { await addStatusEntry(id, 'open', '', 'Cleared status'); };
 window.toggleSubStatus = async (id, status) => { await addStatusEntry(id, status, '', ''); };
 window.setSubStatus = async (id, sub) => {
-  const issue = issues.find(i=>i.id===id);
+  const issue = issues.find(i => i.id === id);
   if (!issue) return;
   const prev = currentStatus(issue);
   const history = getMutableStatusHistory(issue);
-  if (history.length > 0) { history[history.length-1].subStatus = sub; }
+  if (history.length > 0) { history[history.length - 1].subStatus = sub; }
   const last = history[history.length - 1] || { status: currentStatusKey(issue), subStatus: sub, note: '' };
   try {
     const issuePatch = {
@@ -9493,7 +9507,7 @@ window.setSubStatus = async (id, sub) => {
       })
     };
     const batch = writeBatch(db);
-    batch.update(plantDoc('issues',id), issuePatch);
+    batch.update(plantDoc('issues', id), issuePatch);
     if ((prev?.subStatus || '') !== (sub || '')) {
       queueIssueEvent(batch, id, 'status_changed', {
         fromStatusKey: prev?.status || currentStatusKey(issue),
@@ -9510,7 +9524,7 @@ window.setSubStatus = async (id, sub) => {
     if (!syncState.online) setSyncStatus('syncing', 'Syncing - local changes pending');
     awardGamification('status_changed_valid', { issueId: id, dedupeSuffix: 'set-sub', tags: ['status:changed', `status:${last.status || 'open'}`, `sub:${sub || ''}`] }).catch(e => console.warn('gamification sub-status award failed', e));
   }
-  catch(e) { setSyncStatus('err','Error updating: '+e.message); }
+  catch (e) { setSyncStatus('err', 'Error updating: ' + e.message); }
 };
 
 // ── WORKFLOW STATE ──
@@ -9539,7 +9553,7 @@ window.setWorkflowState = async (id, state) => {
       updatedBy: actor
     });
     completeDemoGuideStep('workflow');
-  } catch(e) {
+  } catch (e) {
     setSyncStatus('err', 'Error updating workflow: ' + e.message);
   }
 };
@@ -9602,57 +9616,57 @@ async function setWorkflowStateForEntryLocator(issueId, state, locateEntry) {
       updatedWorkflowId = workflowId;
       didWrite = true;
     } else {
-    await runTransaction(db, async tx => {
-      const ref = plantDoc('issues', issueId);
-      const snap = await tx.get(ref);
-      const base = snap.exists() ? { ...(issue || {}), ...snap.data() } : issue;
-      if (!base) return;
-      const history = getMutableStatusHistory(base);
-      let entryIndex = locateEntry(history, base);
-      if (entryIndex < 0) return;
-      if (!history[entryIndex]) {
-        const current = currentStatus(base);
-        history[entryIndex] = {
-          status: current?.status || currentStatusKey(base),
-          subStatus: current?.subStatus || '',
-          note: current?.note || '',
-          dateTime: current?.dateTime || base?.dateTime || fmtDate(new Date()),
-          by: current?.by || base?.userName || ''
-        };
-      }
-      const entry = { ...history[entryIndex] };
-      let workflowId = getEntryWorkflowId(entry);
-      const needsWorkflowId = !workflowId;
-      if (!workflowId) {
-        workflowId = createWorkflowId(entry.status);
-        entry.workflowId = workflowId;
-        history[entryIndex] = entry;
-      }
-      const isCurrentEntry = isCurrentWorkflowEntry(entryIndex, history.length, entry, base);
-      const current = getWorkflowStateForEntry(base, entry, isCurrentEntry);
-      if (current === state && !needsWorkflowId) {
-        updatedWorkflowId = workflowId;
-        return;
-      }
-      const patch = {
-        statusHistory: history,
-        [`workflowStateByEntry.${workflowId}`]: state,
-        [`workflowStateByEntryHistory.${workflowId}.${state}`]: { by: actor, at: serverTimestamp() },
-        updatedAt: serverTimestamp(),
-        updatedBy: actor
-      };
-      if (isCurrentEntry) {
-        patch.workflowState = state;
-        patch[`workflowStateHistory.${state}`] = { by: actor, at: serverTimestamp() };
-        if (entry.status) {
-          patch[`workflowStateByStatus.${entry.status}`] = state;
-          patch[`workflowStateByStatusHistory.${entry.status}.${state}`] = { by: actor, at: serverTimestamp() };
+      await runTransaction(db, async tx => {
+        const ref = plantDoc('issues', issueId);
+        const snap = await tx.get(ref);
+        const base = snap.exists() ? { ...(issue || {}), ...snap.data() } : issue;
+        if (!base) return;
+        const history = getMutableStatusHistory(base);
+        let entryIndex = locateEntry(history, base);
+        if (entryIndex < 0) return;
+        if (!history[entryIndex]) {
+          const current = currentStatus(base);
+          history[entryIndex] = {
+            status: current?.status || currentStatusKey(base),
+            subStatus: current?.subStatus || '',
+            note: current?.note || '',
+            dateTime: current?.dateTime || base?.dateTime || fmtDate(new Date()),
+            by: current?.by || base?.userName || ''
+          };
         }
-      }
-      tx.update(ref, patch);
-      updatedWorkflowId = workflowId;
-      didWrite = true;
-    });
+        const entry = { ...history[entryIndex] };
+        let workflowId = getEntryWorkflowId(entry);
+        const needsWorkflowId = !workflowId;
+        if (!workflowId) {
+          workflowId = createWorkflowId(entry.status);
+          entry.workflowId = workflowId;
+          history[entryIndex] = entry;
+        }
+        const isCurrentEntry = isCurrentWorkflowEntry(entryIndex, history.length, entry, base);
+        const current = getWorkflowStateForEntry(base, entry, isCurrentEntry);
+        if (current === state && !needsWorkflowId) {
+          updatedWorkflowId = workflowId;
+          return;
+        }
+        const patch = {
+          statusHistory: history,
+          [`workflowStateByEntry.${workflowId}`]: state,
+          [`workflowStateByEntryHistory.${workflowId}.${state}`]: { by: actor, at: serverTimestamp() },
+          updatedAt: serverTimestamp(),
+          updatedBy: actor
+        };
+        if (isCurrentEntry) {
+          patch.workflowState = state;
+          patch[`workflowStateHistory.${state}`] = { by: actor, at: serverTimestamp() };
+          if (entry.status) {
+            patch[`workflowStateByStatus.${entry.status}`] = state;
+            patch[`workflowStateByStatusHistory.${entry.status}.${state}`] = { by: actor, at: serverTimestamp() };
+          }
+        }
+        tx.update(ref, patch);
+        updatedWorkflowId = workflowId;
+        didWrite = true;
+      });
     }
     if (didWrite && updatedWorkflowId) {
       await awardGamification('workflow_step_advance', { issueId, dedupeSuffix: `${updatedWorkflowId}:${state}`, tags: ['workflow:advance', `workflow:${state}`] });
@@ -9721,7 +9735,7 @@ window.setWorkflowStateForStatus = async (issueId, statusKey, state) => {
     await updateDoc(plantDoc('issues', issueId), patch);
     await awardGamification('workflow_step_advance', { issueId, dedupeSuffix: `${statusKey}:${state}`, tags: ['workflow:advance', `workflow:${state}`] });
     completeDemoGuideStep('workflow');
-  } catch(e) {
+  } catch (e) {
     setSyncStatus('err', 'Error updating workflow: ' + e.message);
   }
 };
@@ -9772,12 +9786,12 @@ window.cycleWorkflowState = async (id) => {
   const currentIndex = WORKFLOW_STATES.indexOf(currentState);
   const nextIndex = (currentIndex + 1) % WORKFLOW_STATES.length;
   const nextState = WORKFLOW_STATES[nextIndex];
-  
+
   try {
     await updateDoc(plantDoc('issues', id), { workflowState: nextState });
     await awardGamification('workflow_step_advance', { issueId: id, dedupeSuffix: `${currentState}->${nextState}`, tags: ['workflow:advance', `workflow:${nextState}`] });
     completeDemoGuideStep('workflow');
-  } catch(e) {
+  } catch (e) {
     setSyncStatus('err', 'Error updating workflow: ' + e.message);
   }
 };
@@ -9805,7 +9819,7 @@ window.togglePriority = async (id) => {
       return;
     }
     await updateDoc(plantDoc('issues', id), { highPriority: !issue.highPriority });
-  } catch(e) {
+  } catch (e) {
     setSyncStatus('err', 'Error updating priority: ' + e.message);
   }
 };
@@ -9868,9 +9882,9 @@ async function _issueMmsAttachments(issue, maxFiles = 3) {
     if (!source) continue;
     try {
       if (String(source).startsWith('data:')) {
-      attachments.push({
-        name: photo?.name || `issue-photo-${idx + 1}.jpg`,
-        type: String(source).slice(5, String(source).indexOf(';')) || 'image/jpeg',
+        attachments.push({
+          name: photo?.name || `issue-photo-${idx + 1}.jpg`,
+          type: String(source).slice(5, String(source).indexOf(';')) || 'image/jpeg',
           dataUrl: source,
           url: photo?.url || ''
         });
@@ -10046,7 +10060,7 @@ async function _performSmsFallback(messageWithLink, recipientPhones = []) {
     try {
       await navigator.clipboard?.writeText(messageWithLink);
       alert('Could not open your texting app. Message copied to clipboard.');
-    } catch (__){
+    } catch (__) {
       prompt('Could not open texting app. Copy this message:', messageWithLink);
     }
   }
@@ -10199,13 +10213,23 @@ window.deleteIssue = async id => {
   if (!confirm('Delete this issue permanently?')) return;
   try {
     if (shouldUseSqlStagingReads(currentPlantId)) {
-      await dataApi.deleteIssue(currentPlantId, id);
+      const cachedIssue = issuesById.get(id);
+      _deletedIssueIds.add(id);
       clearIssueReminder(id);
       issuesById.delete(id);
       issueEventHistoryCache.delete(id);
       issueDetailsHydrationInFlight.delete(id);
       rebuildIssuesArrayFromMap();
       refreshVisibleData();
+      try {
+        await dataApi.deleteIssue(currentPlantId, id);
+      } catch (e) {
+        _deletedIssueIds.delete(id);
+        if (cachedIssue) issuesById.set(id, cachedIssue);
+        rebuildIssuesArrayFromMap();
+        refreshVisibleData();
+        throw e;
+      }
       return;
     }
     const batch = writeBatch(db);
@@ -10220,21 +10244,21 @@ window.deleteIssue = async id => {
     rebuildIssuesArrayFromMap();
     refreshVisibleData();
   }
-  catch(e) { setSyncStatus('err','Error deleting: '+e.message); }
+  catch (e) { setSyncStatus('err', 'Error deleting: ' + e.message); }
 };
 
 // ── STAT FILTER TOGGLE ──
 window.toggleStatFilter = s => {
-  const sf=document.getElementById('status-filter');
-  sf.value = sf.value===s ? '' : s;
+  const sf = document.getElementById('status-filter');
+  sf.value = sf.value === s ? '' : s;
   updateStatPillStyles(); renderIssues(); updateFilterBadge();
   completeDemoGuideStep('filters');
 };
 
 function updateStatPillStyles() {
-  const sf=document.getElementById('status-filter').value;
-  Object.entries(STATUSES).forEach(([key, st])=>{
-    const pill=document.getElementById('pill-'+key);
+  const sf = document.getElementById('status-filter').value;
+  Object.entries(STATUSES).forEach(([key, st]) => {
+    const pill = document.getElementById('pill-' + key);
     if (!pill) return;
     const col = st.swipeColor || st.cssColor || st.color;
     if (sf === key) {
@@ -10311,26 +10335,26 @@ function applySortOrder(arr, sort) {
 
 // ── RENDER ──
 function renderIssues() {
-  const search=document.getElementById('search-input').value.toLowerCase();
-  const mf=document.getElementById('machine-filter').value;
-  const sf=document.getElementById('status-filter').value;
-  const sort=currentSort;
+  const search = document.getElementById('search-input').value.toLowerCase();
+  const mf = document.getElementById('machine-filter').value;
+  const sf = document.getElementById('status-filter').value;
+  const sort = currentSort;
   const openSwipeSnapshot = captureOpenSwipeSnapshot();
 
   // Build set of machines in active rows (for Active Rows filter)
   const activeRowMachines = new Set();
   if (issueRowScope === 'active' && activeRows.size > 0) {
     activeRows.forEach(rowName => {
-      (PRESSES[rowName]||[]).forEach(m => activeRowMachines.add(m));
+      (PRESSES[rowName] || []).forEach(m => activeRowMachines.add(m));
     });
   }
 
-  let filtered=issues.filter(i=>{
-    if (issueScope==='mine' && i.userId!==currentUser?.uid) return false;
+  let filtered = issues.filter(i => {
+    if (issueScope === 'mine' && i.userId !== currentUser?.uid) return false;
     if (issueShiftFilter !== 'all' && i.shift !== issueShiftFilter) return false;
     if (!periodFilter(i)) return false;
     if (issueRowScope === 'active' && activeRows.size > 0 && !activeRowMachines.has(i.machine)) return false;
-    if (mf && i.machine!==mf) return false;
+    if (mf && i.machine !== mf) return false;
     if (sf && !issueHasActiveStatus(i, sf)) return false;
     if (search) {
       const machineText = String(i.machine || '').toLowerCase();
@@ -10346,12 +10370,12 @@ function renderIssues() {
   // Always float resolved issues to the bottom (unless sorting by status)
   if (sort !== 'status' && sort !== 'longest-open') {
     const isResolved = i => currentStatusKey(i) === 'resolved';
-    filtered.sort((a,b) => isResolved(a) - isResolved(b));
+    filtered.sort((a, b) => isResolved(a) - isResolved(b));
   }
   // Float high-priority (non-resolved) issues to the very top
   {
     const isResolved = i => currentStatusKey(i) === 'resolved';
-    filtered.sort((a,b) => {
+    filtered.sort((a, b) => {
       const aR = isResolved(a), bR = isResolved(b);
       if (aR || bR) return 0; // don't disturb resolved ordering
       return (b.highPriority ? 1 : 0) - (a.highPriority ? 1 : 0);
@@ -10379,26 +10403,26 @@ function renderIssues() {
   const totalFiltered = filtered.length;
   const visible = filtered.slice(0, issueDisplayLimit);
 
-  const list=document.getElementById('issues-list');
+  const list = document.getElementById('issues-list');
   document.getElementById('issue-count').textContent = issueDisplayLimit < totalFiltered
     ? `${issueDisplayLimit} of ${totalFiltered} issues`
-    : `${totalFiltered} issue${totalFiltered!==1?'s':''}`;
+    : `${totalFiltered} issue${totalFiltered !== 1 ? 's' : ''}`;
 
   list.classList.remove('masonic-enabled');
   list.style.height = '';
 
-  if (filtered.length===0) {
+  if (filtered.length === 0) {
     const _sigmaHtml = MASCOTS.processengineer?.svg(110, 110) || '<div class="empty-state-icon">📋</div>';
-    list.innerHTML=`<div class="empty-state"><div class="mascot-empty-wrap">${_sigmaHtml}</div><div class="empty-state-text">No issues match your filters.</div></div>`;
+    list.innerHTML = `<div class="empty-state"><div class="mascot-empty-wrap">${_sigmaHtml}</div><div class="empty-state-text">No issues match your filters.</div></div>`;
     return;
   }
 
-  const expanded=new Set();
-  document.querySelectorAll('.issue-body.visible').forEach(el=>expanded.add(el.id.replace('body-','')));
+  const expanded = new Set();
+  document.querySelectorAll('.issue-body.visible').forEach(el => expanded.add(el.id.replace('body-', '')));
   openSwipeRow = null;
-  list.innerHTML='';
+  list.innerHTML = '';
 
-  const STATUS_CONFIG = Object.fromEntries(Object.entries(STATUSES).map(([k,v])=>[k,{label:v.label,cls:v.cls,icon:v.icon,color:v.cssColor,subs:v.subs}]));
+  const STATUS_CONFIG = Object.fromEntries(Object.entries(STATUSES).map(([k, v]) => [k, { label: v.label, cls: v.cls, icon: v.icon, color: v.cssColor, subs: v.subs }]));
   // Fallback for any orphaned status keys not in current STATUSES config
   const STATUS_CONFIG_SAFE = new Proxy(STATUS_CONFIG, {
     get(target, key) {
@@ -10413,24 +10437,24 @@ function renderIssues() {
   }).join('');
   function subOptions(statusKey, selectedSub) {
     const cfg = STATUS_CONFIG[statusKey];
-    if (!cfg||!cfg.subs.length) return '';
-    return '<select class="tl-mini-select" style="margin-top:4px;" onchange="this.dataset.sub=this.value" data-sub="'+esc(selectedSub||'')+'">'
-      +'<option value="">Sub-status (optional)</option>'
-      +cfg.subs.map(s=>`<option value="${s}"${s===selectedSub?' selected':''}>${s}</option>`).join('')
-      +'</select>';
+    if (!cfg || !cfg.subs.length) return '';
+    return '<select class="tl-mini-select" style="margin-top:4px;" onchange="this.dataset.sub=this.value" data-sub="' + esc(selectedSub || '') + '">'
+      + '<option value="">Sub-status (optional)</option>'
+      + cfg.subs.map(s => `<option value="${s}"${s === selectedSub ? ' selected' : ''}>${s}</option>`).join('')
+      + '</select>';
   }
 
   visible.forEach(issue => {
-    const wasOpen=expanded.has(issue.id);
-    const isMyIssue=issue.userId===currentUser?.uid;
+    const wasOpen = expanded.has(issue.id);
+    const isMyIssue = issue.userId === currentUser?.uid;
     const isAlertFocus = !!issue.__alertFocus;
     const isLocalIssue = !!(issue.__localPending || issue.__localSyncStatus);
     const reminderState = getIssueReminderState(issue.id);
     const isTimerOverdue = !!reminderState?.isOverdue;
-    const row=document.createElement('div'); row.className='issue-row'; row.dataset.id = issue.id;
+    const row = document.createElement('div'); row.className = 'issue-row'; row.dataset.id = issue.id;
     if (isAlertFocus) row.classList.add('alert-focus-issue');
-    const card=document.createElement('div');
-    card.className='issue-card'+(issueIsResolvedV2(issue)?' resolved':'')+(issue.highPriority?' high-priority':'')+(isTimerOverdue?' timer-overdue':'')+(isAlertFocus?' alert-focus-card':'')+(isLocalIssue?' local-pending':'')+(issue.__localSyncStatus === 'failed'?' sync-failed':'');
+    const card = document.createElement('div');
+    card.className = 'issue-card' + (issueIsResolvedV2(issue) ? ' resolved' : '') + (issue.highPriority ? ' high-priority' : '') + (isTimerOverdue ? ' timer-overdue' : '') + (isAlertFocus ? ' alert-focus-card' : '') + (isLocalIssue ? ' local-pending' : '') + (issue.__localSyncStatus === 'failed' ? ' sync-failed' : '');
 
     const _photoList = (issue.photos || []).map(p => ({
       url: p.dataUrl || p.downloadURL || p.url || '',
@@ -10440,8 +10464,8 @@ function renderIssues() {
     })).filter(p => p.url);
     if (_photoList.length) window._issuePhotos = window._issuePhotos || {};
     if (_photoList.length) window._issuePhotos[issue.id] = _photoList;
-    const photosHtml=_photoList.length
-      ? `<div class="issue-photos">${_photoList.map((photo,i)=>`<img class="issue-photo-thumb" src="${photo.url}" loading="lazy" onclick="openLightbox(${i},'${issue.id}')">`).join('')}</div>` : '';
+    const photosHtml = _photoList.length
+      ? `<div class="issue-photos">${_photoList.map((photo, i) => `<img class="issue-photo-thumb" src="${photo.url}" loading="lazy" onclick="openLightbox(${i},'${issue.id}')">`).join('')}</div>` : '';
 
     // Authoritative current status from issue.currentStatus (v2) or lifecycle fallback
     const currentKey = currentStatusKey(issue);
@@ -10450,8 +10474,8 @@ function renderIssues() {
     const history = issue.statusHistory && issue.statusHistory.length > 0
       ? issue.statusHistory
       : issue.eventHistory && issue.eventHistory.length > 0
-      ? issue.eventHistory
-      : [{
+        ? issue.eventHistory
+        : [{
           status: currentKey,
           subStatus: currentSubKey,
           note: issue.currentStatus?.notePreview || '',
@@ -10465,13 +10489,13 @@ function renderIssues() {
     const needsSynthetic = (history[history.length - 1]?.status || 'open') !== currentKey;
     const displayHistory = needsSynthetic
       ? [...history, {
-          status: currentKey,
-          subStatus: currentSubKey,
-          note: issue.currentStatus?.notePreview || '',
-          dateTime: issue.currentStatus?.enteredDateTime || '',
-          by: issue.currentStatus?.enteredBy?.name || '',
-          _synthetic: true
-        }]
+        status: currentKey,
+        subStatus: currentSubKey,
+        note: issue.currentStatus?.notePreview || '',
+        dateTime: issue.currentStatus?.enteredDateTime || '',
+        by: issue.currentStatus?.enteredBy?.name || '',
+        _synthetic: true
+      }]
       : history;
     const workflowStatusCounts = displayHistory.reduce((counts, entry) => {
       const key = String(entry?.status || '');
@@ -10489,17 +10513,17 @@ function renderIssues() {
       return getWorkflowActorForEntry(issue, entry, state, isCurrent);
     };
 
-    const lastEntry = displayHistory[displayHistory.length-1];
+    const lastEntry = displayHistory[displayHistory.length - 1];
     const scfg = STATUS_CONFIG_SAFE[currentKey];
-    const sc = { ...scfg, label: scfg.label + (currentSubKey ? ' › '+currentSubKey : '') };
+    const sc = { ...scfg, label: scfg.label + (currentSubKey ? ' › ' + currentSubKey : '') };
 
-    const editedNote = issue.editedAt ? `<div style="font-size:10px;color:var(--color-text-subtle, var(--text3));margin-top:3px;font-family:'Share Tech Mono',monospace">edited ${issue.editedAt}${issue.editedBy?' by '+esc(issue.editedBy):''}</div>` : '';
+    const editedNote = issue.editedAt ? `<div style="font-size:10px;color:var(--color-text-subtle, var(--text3));margin-top:3px;font-family:'Share Tech Mono',monospace">edited ${issue.editedAt}${issue.editedBy ? ' by ' + esc(issue.editedBy) : ''}</div>` : '';
 
     // Helper to parse a formatted date string back into input values
     function parseDTForInputs(dtStr) {
-      if (!dtStr) { const n=new Date(); return toLocalDTInputs(n); }
-      try { const d=new Date(dtStr); if(isNaN(d.getTime())) { const n=new Date(); return toLocalDTInputs(n); } return toLocalDTInputs(d); }
-      catch(e) { const n=new Date(); return toLocalDTInputs(n); }
+      if (!dtStr) { const n = new Date(); return toLocalDTInputs(n); }
+      try { const d = new Date(dtStr); if (isNaN(d.getTime())) { const n = new Date(); return toLocalDTInputs(n); } return toLocalDTInputs(d); }
+      catch (e) { const n = new Date(); return toLocalDTInputs(n); }
     }
 
     // Workflow state configuration
@@ -10508,10 +10532,10 @@ function renderIssues() {
     const workflowState = workflowDisplayState(currentEntry, true);
     const hasNoWorkflowState = !workflowState;
     const workflowConfig = {
-      called:      { icon: '🔔', label: 'Called',      cssState: 'called' },
-      accepted:    { icon: '👋', label: 'Accepted',    cssState: 'accepted' },
+      called: { icon: '🔔', label: 'Called', cssState: 'called' },
+      accepted: { icon: '👋', label: 'Accepted', cssState: 'accepted' },
       'in-progress': { icon: '🔧', label: 'In Progress', cssState: 'in-progress' },
-      finished:    { icon: '✓',  label: 'Finished',    cssState: 'finished' }
+      finished: { icon: '✓', label: 'Finished', cssState: 'finished' }
     };
     const wfOrder = ['called', 'accepted', 'in-progress', 'finished'];
     const wfCurrentIdx = workflowState ? wfOrder.indexOf(workflowState) : -1;
@@ -10531,9 +10555,9 @@ function renderIssues() {
       const wfCfg = workflowConfig[entryWorkflowState] || workflowConfig.called;
       const wfColor = !entryWorkflowState ? '#6b7280'
         : entryWorkflowState === 'called' ? '#eab308'
-        : entryWorkflowState === 'accepted' ? '#22c55e'
-        : entryWorkflowState === 'in-progress' ? '#3b82f6'
-        : '#a855f7';
+          : entryWorkflowState === 'accepted' ? '#22c55e'
+            : entryWorkflowState === 'in-progress' ? '#3b82f6'
+              : '#a855f7';
 
       // Left bar color: workflow state color for regular entries, status color for resolved
       const barColor = isResolvedEntry ? cfg.color : wfColor;
@@ -10557,16 +10581,16 @@ function renderIssues() {
         ${wfBadge}
         <div>
           <div class="tl-header">
-            <span class="tl-status-label" style="color:${cfg.color}">${cfg.label}${entry.subStatus?' › '+esc(entry.subStatus):''}${entryMaterialBadge}</span>
+            <span class="tl-status-label" style="color:${cfg.color}">${cfg.label}${entry.subStatus ? ' › ' + esc(entry.subStatus) : ''}${entryMaterialBadge}</span>
           </div>
-          <div class="tl-time">${entry.dateTime||''}${entry.by?' — '+esc(entry.by):''}</div>
-          ${entry.note?`<div class="tl-note-text">"${esc(entry.note)}"</div>`:''}
-          ${Array.isArray(entry.photos) && entry.photos.length ? `<div class="issue-photos" style="margin-top:6px;">${entry.photos.map((p,i)=>`<img class="issue-photo-thumb" src="${esc(p.downloadURL || p.dataUrl || '')}" loading="lazy" alt="${esc(p.name || `Status photo ${i+1}`)}" onclick="openLightbox(${i}, [${entry.photos.map(sp => `{url:'${esc(sp.downloadURL || sp.dataUrl || '')}',takenAt:'${esc(sp.takenAt || sp.timestamp || '')}',uploadedAt:'${esc(sp.uploadedAt || sp.createdAt || '')}'}`).join(',')}])">`).join('')}</div>` : ''}
+          <div class="tl-time">${entry.dateTime || ''}${entry.by ? ' — ' + esc(entry.by) : ''}</div>
+          ${entry.note ? `<div class="tl-note-text">"${esc(entry.note)}"</div>` : ''}
+          ${Array.isArray(entry.photos) && entry.photos.length ? `<div class="issue-photos" style="margin-top:6px;">${entry.photos.map((p, i) => `<img class="issue-photo-thumb" src="${esc(p.downloadURL || p.dataUrl || '')}" loading="lazy" alt="${esc(p.name || `Status photo ${i + 1}`)}" onclick="openLightbox(${i}, [${entry.photos.map(sp => `{url:'${esc(sp.downloadURL || sp.dataUrl || '')}',takenAt:'${esc(sp.takenAt || sp.timestamp || '')}',uploadedAt:'${esc(sp.uploadedAt || sp.createdAt || '')}'}`).join(',')}])">`).join('')}</div>` : ''}
           ${currentUserPermissions.canEditIssue ? `<div style="display:flex;gap:5px;margin-top:6px;">
             ${!isResolvedEntry && !isCurrent ? `<button class="tl-edit-btn" onclick="setStatusCurrentFromHistory('${issue.id}',${trueIdx})">Set current</button>` : ''}
             ${!isResolvedEntry && entryWorkflowState === 'finished' ? `<button class="tl-edit-btn" onclick="setWorkflowStateForEntry('${issue.id}',${trueIdx},'called')">Un-finish</button>` : ''}
             <button class="tl-edit-btn" onclick="startEditEntry('${issue.id}',${trueIdx})">✏ Edit</button>
-            <button class="tl-remove-btn" onclick="removeStatusEntry('${issue.id}',${trueIdx})" ${isSynthetic||history.length<=1?'disabled':''}>🗑 Delete</button>
+            <button class="tl-remove-btn" onclick="removeStatusEntry('${issue.id}',${trueIdx})" ${isSynthetic || history.length <= 1 ? 'disabled' : ''}>🗑 Delete</button>
           </div>` : ''}
         </div>
       </div>`;
@@ -10581,9 +10605,9 @@ function renderIssues() {
       ? `<div class="tl-add-row">
           <select class="tl-mini-select" onchange="setPendingStatus('${issue.id}','status',this.value)">
             <option value="">Status…</option>
-            ${getAlphabetizedStatusKeys().map(k=>`<option value="${k}"${k===pend.status?' selected':''}>${STATUS_CONFIG[k].icon} ${STATUS_CONFIG[k].label}</option>`).join('')}
+            ${getAlphabetizedStatusKeys().map(k => `<option value="${k}"${k === pend.status ? ' selected' : ''}>${STATUS_CONFIG[k].icon} ${STATUS_CONFIG[k].label}</option>`).join('')}
           </select>
-          ${pendSubs.length?`<select class="tl-mini-select" id="pending-sub-${issue.id}"><option value="">Sub-status…</option>${pendSubs.map(s=>`<option value="${s}"${s===pend.subStatus?' selected':''}>${s}</option>`).join('')}</select>`:''}
+          ${pendSubs.length ? `<select class="tl-mini-select" id="pending-sub-${issue.id}"><option value="">Sub-status…</option>${pendSubs.map(s => `<option value="${s}"${s === pend.subStatus ? ' selected' : ''}>${s}</option>`).join('')}</select>` : ''}
           <input class="tl-mini-input" id="pending-note-${issue.id}" placeholder="Note (optional)…">
           <div style="display:flex;gap:4px;align-items:center;width:100%;">
             <input type="date" class="tl-mini-input" id="pending-date-${issue.id}" value="${pendNowDT.dateStr}" style="flex:1;min-width:110px;">
@@ -10596,6 +10620,8 @@ function renderIssues() {
           <button class="tl-mini-btn" style="background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));color:var(--color-text-muted, var(--text2));padding:4px 11px;" onclick="setPendingStatus('${issue.id}','status','')">+ Add status entry</button>
         </div>`;
 
+    const hasTimer = !!reminderState;
+    const priorityButtonHtml = `<button class="priority-btn priority-btn-inline${(issue.highPriority || isTimerOverdue) ? ' active' : ''}" onclick="event.stopPropagation(); ${isLocalIssue ? '' : `togglePriority('${issue.id}')`}" ${isLocalIssue ? 'disabled' : ''} title="${isLocalIssue ? 'Sync before changing priority' : isTimerOverdue ? 'Timer overdue - clear timer to stop pulse' : (issue.highPriority ? 'Remove high priority' : 'Mark as high priority')}">!</button>`;
     const resolveHtml = `<div class="status-timeline">
       <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--color-text-muted, var(--text2));margin-bottom:8px;">Status History</div>
       <div class="tl-list">
@@ -10604,13 +10630,16 @@ function renderIssues() {
       ${addRowHtml}
     </div>
     <div class="action-row issue-footer-actions" style="margin-top:10px;">
-      <button class="issue-reminder-btn${reminderState?.isOverdue ? ' overdue' : ''}" onclick="event.stopPropagation(); openIssueReminderModal('${issue.id}')" title="Set check-back timer">
-        <span class="issue-reminder-icon">⏱</span>
-        <span class="issue-reminder-copy">
-          <span class="issue-reminder-label">${reminderState?.isOverdue ? 'Check now' : 'Check back'}</span>
-          <span class="issue-reminder-time" data-reminder-id="${issue.id}">${formatReminderClock(reminderState)}</span>
-        </span>
-      </button>
+      <div class="issue-footer-actions-left">
+        <button class="issue-reminder-btn${!hasTimer ? ' inactive' : isTimerOverdue ? ' overdue' : ''}" onclick="event.stopPropagation(); openIssueReminderModal('${issue.id}')" title="${hasTimer ? 'Modify check-back timer' : 'Set check-back timer'}">
+          <span class="issue-reminder-icon">⏱</span>
+          <span class="issue-reminder-copy">
+            <span class="issue-reminder-label">${!hasTimer ? 'Timer' : isTimerOverdue ? 'Check now' : 'Check back'}</span>
+            <span class="issue-reminder-time" data-reminder-id="${issue.id}">${hasTimer ? formatReminderClock(reminderState) : 'Off'}</span>
+          </span>
+        </button>
+        ${priorityButtonHtml}
+      </div>
       ${canEdit ? `<div class="issue-footer-actions-right">
       <button class="btn btn-edit" onclick="openEditModal('${issue.id}')">✏️ Edit</button>
       ${DEMO_MODE ? '' : `<button class="btn btn-danger" onclick="deleteIssue('${issue.id}')">🗑 Delete</button>`}
@@ -10618,25 +10647,29 @@ function renderIssues() {
     </div>`;
 
     const datePart = issue.dateTime ? issue.dateTime.replace(/,\s*\d{4}/, '') : '';
-    const submitterHtml=issue.userName?`<span class="issue-submitter">${esc(issue.userName.split(' ')[0])}${isMyIssue?' (you)':''}</span>`:'';
+    const issueAgeTimestamp = issue.createdAt || issue.openedAt || issue.updatedAt || issue.dateTime || '';
+    const relativeAge = _relativeTimeCompact(issueAgeTimestamp);
+    const submitterHtml = issue.userName ? `<span class="issue-submitter">${esc(issue.userName.split(' ')[0])}${isMyIssue ? ' (you)' : ''}</span>` : '';
     const alertFocusHtml = isAlertFocus ? `<span class="issue-alert-focus-badge">Outside current time frame</span>` : '';
 
     // Secondary status keys (needed by workflow rows below)
     const secKeys = getSecondaryStatuses(issue).filter(k => k !== 'resolved');
 
     // Build compact 4-step header buttons with state label below
-    const wfActor = workflowDisplayActor(currentEntry, workflowState, true);
+    const wfAge = workflowState && workflowState !== 'finished'
+      ? _relativeTimeCompact(getWorkflowStateTimestamp(issue, currentEntry, workflowState, true))
+      : '';
     const wfHeaderHtml = `<div class="wf-steps-wrap" onclick="event.stopPropagation()">
       <div class="wf-steps-row">
         ${hasNoWorkflowState ? `<div class="wf-prompt-arrow" id="wf-arrow-${issue.id}"></div>` : ''}
         <div class="wf-steps">${wfOrder.map(state => {
-          const cfg = workflowConfig[state];
-          const cls = state === workflowState ? `active ${cfg.cssState}` : isCompleted(state) ? 'completed' : 'pending';
-          return `<button class="wf-step-btn ${cls}" onclick="handleWfStepClick(event,'${issue.id}',${currentEntryIndex},'${state}')" title="${cfg.label}">${cfg.icon}</button>`;
-        }).join('')}</div>
+      const cfg = workflowConfig[state];
+      const cls = state === workflowState ? `active ${cfg.cssState}` : isCompleted(state) ? 'completed' : 'pending';
+      return `<button class="wf-step-btn ${cls}" onclick="handleWfStepClick(event,'${issue.id}',${currentEntryIndex},'${state}')" title="${cfg.label}">${cfg.icon}</button>`;
+    }).join('')}</div>
       </div>
       <div class="wf-state-label ${workflowState ? workflowConfig[workflowState].cssState : ''}">${workflowState ? workflowConfig[workflowState].label : ''}</div>
-      <div class="wf-state-meta ${workflowState ? workflowConfig[workflowState].cssState : ""}">${formatWorkflowActor(wfActor)}</div>
+      ${wfAge ? `<div class="wf-state-age ${workflowState ? workflowConfig[workflowState].cssState : ""}">${esc(wfAge)}</div>` : ''}
     </div>`;
 
     // Per-status workflow rows for the card header. Finished statuses stay in
@@ -10650,23 +10683,25 @@ function renderIssues() {
       });
 
     const wfHistoryRowsHtml = historicalWorkflowEntries.map(({ entry, idx }) => {
-          const sKey = entry.status;
-          const sCfg = STATUS_CONFIG_SAFE[sKey];
-          const sColor = getStatusColor(sKey);
-          const sState = workflowDisplayState(entry, false);
-          const sCurrentIdx = sState ? wfOrder.indexOf(sState) : -1;
-          const sSubLabel = entry.subStatus || '';
-          const sActor = workflowDisplayActor(entry, sState, false);
-          const btnHtml = wfOrder.map(st => {
-            const cfg = workflowConfig[st];
-            const cls = st === sState ? `active ${cfg.cssState}` : (sState && wfOrder.indexOf(st) < sCurrentIdx) ? 'completed' : 'pending';
-            return `<button class="wf-step-btn ${cls}" onclick="event.stopPropagation(); setWorkflowStateForEntry('${issue.id}',${idx},'${st}')" title="${cfg.label}">${cfg.icon}</button>`;
-          }).join('');
-          const sStateLabel = sState ? workflowConfig[sState].label : 'Not Started';
-          const sStateClass = sState ? workflowConfig[sState].cssState : '';
-          return `<div class="wf-status-row${sState === 'finished' ? ' finished-checkered' : ''}">
+      const sKey = entry.status;
+      const sCfg = STATUS_CONFIG_SAFE[sKey];
+      const sColor = getStatusColor(sKey);
+      const sState = workflowDisplayState(entry, false);
+      const sCurrentIdx = sState ? wfOrder.indexOf(sState) : -1;
+      const sSubLabel = entry.subStatus || '';
+      const sAge = sState && sState !== 'finished'
+        ? _relativeTimeCompact(getWorkflowStateTimestamp(issue, entry, sState, false))
+        : '';
+      const btnHtml = wfOrder.map(st => {
+        const cfg = workflowConfig[st];
+        const cls = st === sState ? `active ${cfg.cssState}` : (sState && wfOrder.indexOf(st) < sCurrentIdx) ? 'completed' : 'pending';
+        return `<button class="wf-step-btn ${cls}" onclick="event.stopPropagation(); setWorkflowStateForEntry('${issue.id}',${idx},'${st}')" title="${cfg.label}">${cfg.icon}</button>`;
+      }).join('');
+      const sStateLabel = sState ? workflowConfig[sState].label : 'Not Started';
+      const sStateClass = sState ? workflowConfig[sState].cssState : '';
+      return `<div class="wf-status-row${sState === 'finished' ? ' finished-checkered' : ''}">
             <div class="wf-status-row-info">
-              <div class="issue-status" style="color:${sColor};border-color:${sColor};background:${alphaColor(sColor,0.12)}">
+              <div class="issue-status" style="color:${sColor};border-color:${sColor};background:${alphaColor(sColor, 0.12)}">
                 <span class="issue-status-main">${sCfg.icon} ${esc(sCfg.label)}</span>
               </div>
               ${sSubLabel ? `<span class="issue-status-sub" style="color:${sColor};">${esc(sSubLabel)}</span>` : ''}
@@ -10674,10 +10709,10 @@ function renderIssues() {
             <div class="wf-steps-wrap" onclick="event.stopPropagation()">
               <div class="wf-steps">${btnHtml}</div>
               <div class="wf-state-label ${sStateClass}">${sStateLabel}</div>
-              <div class="wf-state-meta ${sStateClass}">${sState ? formatWorkflowActor(sActor) : ''}</div>
+              ${sAge ? `<div class="wf-state-age ${sStateClass}">${esc(sAge)}</div>` : ''}
             </div>
           </div>`;
-        }).join('');
+    }).join('');
 
     // Split status label from sub-status for two-line display
     const baseLabel = scfg.label;
@@ -10687,10 +10722,10 @@ function renderIssues() {
     const visibleSecKeys = secKeys.filter(k => wfByStatus[k] !== 'finished');
     const secDotsHtml = visibleSecKeys.length > 0
       ? `<div class="secondary-status-dots">${visibleSecKeys.map(k => {
-          const cfg = STATUS_CONFIG_SAFE[k];
-          const col = getStatusColor(k);
-          return `<span class="secondary-dot" style="color:${col};border-color:${col};background:${alphaColor(col,0.12)}">${cfg.icon} ${cfg.label}</span>`;
-        }).join('')}</div>`
+        const cfg = STATUS_CONFIG_SAFE[k];
+        const col = getStatusColor(k);
+        return `<span class="secondary-dot" style="color:${col};border-color:${col};background:${alphaColor(col, 0.12)}">${cfg.icon} ${cfg.label}</span>`;
+      }).join('')}</div>`
       : '';
 
     let foundSerialNumber = '';
@@ -10712,10 +10747,19 @@ function renderIssues() {
       if (!isMaterialsWorkflow || !foundSerialNumber) return subLabel;
       return `${subLabel} ${foundSerialNumber}`;
     })();
+    const routeHtml = `<div class="issue-route-row">
+      <div class="issue-route" aria-label="Issue category and subcategory">
+        <div class="issue-route-category-line">
+          <span class="issue-route-category" style="color:${sc.color}; border-color:color-mix(in srgb, ${sc.color} 30%, transparent); background:color-mix(in srgb, ${sc.color} 12%, transparent);">${esc(baseLabel)}</span>
+        </div>
+        ${subLabel ? `<div class="issue-route-subcategory">${esc(subLabel)}</div>` : ''}
+      </div>
+      ${relativeAge ? `<span class="issue-age" title="${esc(datePart || relativeAge)}">${esc(relativeAge)}</span>` : ''}
+    </div>`;
 
     const currentWfRowHtml = `<div class="wf-status-row${workflowState === 'finished' ? ' finished-checkered' : ''}">
       <div class="wf-status-row-info">
-        <div class="issue-status" style="color:${sc.color};border-color:${sc.color};background:${alphaColor(sc.color,0.12)}">
+        <div class="issue-status" style="color:${sc.color};border-color:${sc.color};background:${alphaColor(sc.color, 0.12)}">
           <span class="issue-status-main">${sc.icon} ${baseLabel}</span>
         </div>
         ${subLabelWithSerial ? `<span class="issue-status-sub" style="color:${sc.color};">${esc(subLabelWithSerial)}</span>` : ''}
@@ -10742,20 +10786,20 @@ function renderIssues() {
       ? `<span class="local-sync-badge ${issue.__localSyncStatus === 'failed' ? 'failed' : ''}">${issue.__localSyncStatus === 'failed' ? 'Sync failed' : issue.__localSyncStatus === 'syncing' ? 'Uploading' : 'Pending sync'}</span>`
       : '';
 
-    card.innerHTML=`
+    card.innerHTML = `
       <div class="issue-card-header" onclick="toggleCard('${issue.id}')">
         <div class="issue-card-top">
           <div class="issue-machine-tag">${esc(issue.machine)}</div>
           <div class="issue-meta">
-            <div class="issue-note-preview">${esc(issue.note)}</div>
-            <div class="issue-time">${datePart} ${submitterHtml}${shiftBadgeHtml}${timerBadgeHtml}${localSyncBadgeHtml}${(issue.photos||[]).length?`<span class="photo-count-badge">📷 ${issue.photos.length}</span>`:''}${issue.editedAt?'<span style="color:var(--color-text-subtle, var(--text3))">(edited)</span>':''}${alertFocusHtml}</div>
+            ${routeHtml}
           </div>
-          <button class="priority-btn${(issue.highPriority || isTimerOverdue)?' active':''}" onclick="event.stopPropagation(); ${isLocalIssue ? '' : `togglePriority('${issue.id}')`}" ${isLocalIssue ? 'disabled' : ''} title="${isLocalIssue?'Sync before changing priority':isTimerOverdue?'Timer overdue - clear timer to stop pulse':(issue.highPriority?'Remove high priority':'Mark as high priority')}">!</button>
-          <div class="issue-expand-icon ${wasOpen?'open':''}" id="chevron-${issue.id}">▼</div>
+          <div class="issue-expand-icon ${wasOpen ? 'open' : ''}" id="chevron-${issue.id}">▼</div>
         </div>
+        <div class="issue-note-preview">${esc(issue.note)}</div>
+        <div class="issue-time">${submitterHtml}${shiftBadgeHtml}${timerBadgeHtml}${localSyncBadgeHtml}${(issue.photos || []).length ? `<span class="photo-count-badge">📷 ${issue.photos.length}</span>` : ''}${issue.editedAt ? '<span style="color:var(--color-text-subtle, var(--text3))">(edited)</span>' : ''}${alertFocusHtml}</div>
         ${wfStatusRowsHtml}
       </div>
-      <div class="issue-body ${wasOpen?'visible':''}" id="body-${issue.id}">
+      <div class="issue-body ${wasOpen ? 'visible' : ''}" id="body-${issue.id}">
         <!-- Full width content -->
         <div class="issue-full-note">${esc(issue.note)}</div>
         ${editedNote}
@@ -10995,12 +11039,12 @@ function renderIssues() {
           catInner.classList.add('has-selection');
           catPanel.classList.add('has-subs');
 
-    const subInner = subPanel.querySelector('.swipe-sub-inner');
-    subInner.innerHTML = '';
-    subInner.className = 'swipe-sub-inner subcategory-grid'; 
-    applyColumnMajorGridLayout(subInner, getStatusSubs(statusKey).length + 1, 2);
-          
-    const activeColor = getStatusColor(statusKey);
+          const subInner = subPanel.querySelector('.swipe-sub-inner');
+          subInner.innerHTML = '';
+          subInner.className = 'swipe-sub-inner subcategory-grid';
+          applyColumnMajorGridLayout(subInner, getStatusSubs(statusKey).length + 1, 2);
+
+          const activeColor = getStatusColor(statusKey);
 
           // Sub chips (alphabetized for consistent scan order)
           const sortedSubs = [...getStatusSubs(statusKey)].sort((a, b) => String(a || '').localeCompare(String(b || ''), undefined, { sensitivity: 'base' }));
@@ -11037,7 +11081,7 @@ function renderIssues() {
                 addStatusEntry(issue.id, statusKey, sub, '');
               }
             };
-            
+
             addTapListener(chip, handleSubClick);
             chip.addEventListener('click', handleSubClick); // Mouse support
           });
@@ -11052,7 +11096,7 @@ function renderIssues() {
           addStatusEntry(issue.id, statusKey, '', '');
         }
       };
-      
+
       addTapListener(tile, handleTileClick);
       tile.addEventListener('click', handleTileClick); // Mouse support
     });
@@ -11124,20 +11168,20 @@ function renderIssues() {
 
     card.addEventListener('touchend', e => {
       card.classList.remove('dragging');
-      
+
       if (!tracking || !isHoriz) {
         tracking = false;
         card.classList.remove('peeking');
         card.style.transform = '';
         return;
       }
-      
+
       // Prevent any click events from firing
       e.preventDefault();
       tracking = false;
 
       const dx = e.changedTouches[0].clientX - sx;
-      
+
       // Snap back
       card.style.transform = '';
       card.classList.remove('peeking', 'peeking-right');
@@ -11167,7 +11211,7 @@ function renderIssues() {
       if (e.target.matches('input, select, textarea, button')) {
         return;
       }
-      
+
       mouseDown = true;
       mouseStartX = e.clientX;
       mouseCurrentX = 0;
@@ -11263,7 +11307,7 @@ function renderIssues() {
   scheduleIssueLogRelayout(40);
 }
 
-window.loadMoreIssues = function() {
+window.loadMoreIssues = function () {
   issueDisplayLimit += PAGE_SIZE;
   renderIssues();
 };
@@ -11310,13 +11354,13 @@ window.toggleCard = id => {
   // Don't toggle if a swipe gesture just completed or card is swiped open
   if (_swipeJustHappened) { _swipeJustHappened = false; return; }
   if (openSwipeRow) return;
-  const bodyEl = document.getElementById('body-'+id);
-  const chevronEl = document.getElementById('chevron-'+id);
+  const bodyEl = document.getElementById('body-' + id);
+  const chevronEl = document.getElementById('chevron-' + id);
   const willOpen = bodyEl ? !bodyEl.classList.contains('visible') : false;
   bodyEl?.classList.toggle('visible');
   chevronEl?.classList.toggle('open');
   if (willOpen) {
-    ensureIssueDetailsHydrated(id).catch(() => {});
+    ensureIssueDetailsHydrated(id).catch(() => { });
     setTimeout(() => {
       const cardEl = bodyEl?.closest('.issue-card');
       if (cardEl) {
@@ -11492,18 +11536,18 @@ function issueIsResolvedV2(issue) {
 }
 
 function updateStats() {
-  let scoped = issueScope==='mine' ? issues.filter(i=>i.userId===currentUser?.uid) : issues;
+  let scoped = issueScope === 'mine' ? issues.filter(i => i.userId === currentUser?.uid) : issues;
   scoped = scoped.filter(periodFilter);
-  document.getElementById('stat-open').textContent              = scoped.filter(i=>issueHasActiveStatus(i,'open')).length+' Open';
-  document.getElementById('stat-resolved').textContent          = scoped.filter(i=>issueHasActiveStatus(i,'resolved')).length+' Resolved';
+  document.getElementById('stat-open').textContent = scoped.filter(i => issueHasActiveStatus(i, 'open')).length + ' Open';
+  document.getElementById('stat-resolved').textContent = scoped.filter(i => issueHasActiveStatus(i, 'resolved')).length + ' Resolved';
   // Loop through every key currently in the database-driven STATUSES object
-    Object.keys(STATUSES).forEach(key => {
-      const el = document.getElementById('stat-' + key);
-      if (el) {
-        const count = scoped.filter(i => issueHasActiveStatus(i, key)).length;
-        el.textContent = `${count} ${getStatusLabel(key, 'stat')}`;
-      }
-    });
+  Object.keys(STATUSES).forEach(key => {
+    const el = document.getElementById('stat-' + key);
+    if (el) {
+      const count = scoped.filter(i => issueHasActiveStatus(i, key)).length;
+      el.textContent = `${count} ${getStatusLabel(key, 'stat')}`;
+    }
+  });
 }
 
 // ── MASCOT POPOVER ──
@@ -11511,7 +11555,7 @@ function openMascotPopover(e, statusKey, contextType, issueId) {
   e.stopPropagation();
   const m = MASCOTS[statusKey];
   if (!m) return;
-  const popover  = document.getElementById('mascot-popover');
+  const popover = document.getElementById('mascot-popover');
   const backdrop = document.getElementById('mascot-popover-backdrop');
   if (!popover || !backdrop) return;
   popover.style.setProperty('--mascot-accent', m.color);
@@ -11537,10 +11581,10 @@ function openMascotPopover(e, statusKey, contextType, issueId) {
   } else if (contextType === 'issue') {
     const issue = issues.find(i => i.id === issueId);
     const cs = issue?.currentStatus || {};
-    const setBy  = cs.enteredBy?.name || issue?.userName || '—';
-    const setAt  = cs.enteredDateTime || issue?.dateTime || '—';
-    const sub    = cs.subLabel || cs.subStatusKey || '';
-    const note   = cs.notePreview || '';
+    const setBy = cs.enteredBy?.name || issue?.userName || '—';
+    const setAt = cs.enteredDateTime || issue?.dateTime || '—';
+    const sub = cs.subLabel || cs.subStatusKey || '';
+    const note = cs.notePreview || '';
     badgeLabel = 'STATUS DETAILS';
     contextHtml = `
       <div class="mascot-popover-fact">
@@ -11581,7 +11625,26 @@ document.addEventListener('keydown', e => {
     closeMascotPopover();
     if (document.getElementById('spotlight-overlay')?.classList.contains('visible')) window.closeTutorial();
   }
+  const target = e.target;
+  const typing = !!(target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable));
+  if (!typing && e.key === '?') {
+    e.preventDefault();
+    toggleShortcutsOverlay();
+  }
 });
+
+function toggleShortcutsOverlay() {
+  const overlay = document.getElementById('shortcuts-overlay');
+  if (!overlay) return;
+  overlay.classList.toggle('visible');
+}
+
+function closeShortcutsOverlay() {
+  const overlay = document.getElementById('shortcuts-overlay');
+  if (overlay) overlay.classList.remove('visible');
+}
+
+window.closeShortcutsOverlay = closeShortcutsOverlay;
 
 // ── SPOTLIGHT TUTORIAL ──
 const TUTORIAL_KEY = 'aptracker_tutorial_v1';
@@ -11705,7 +11768,7 @@ function _sptResolveTarget(step) {
   return null;
 }
 
-window.openTutorial = function(step = 0) {
+window.openTutorial = function (step = 0) {
   const overlay = document.getElementById('spotlight-overlay');
   const wrap = document.getElementById('spt-wrap');
   const card = document.getElementById('spt-card');
@@ -11719,7 +11782,7 @@ window.openTutorial = function(step = 0) {
   _renderSptStep();
 };
 
-window.closeTutorial = function() {
+window.closeTutorial = function () {
   _sptRunHook(SPOTLIGHT_STEPS[_sptStep]?.afterLeave);
   localStorage.setItem(TUTORIAL_KEY, '1');
   document.getElementById('spotlight-overlay')?.classList.remove('visible');
@@ -11728,14 +11791,14 @@ window.closeTutorial = function() {
   if (hl) { hl.style.transition = 'none'; hl.style.opacity = '0'; hl.classList.remove('active'); }
 };
 
-window.tutorialNext = function() {
+window.tutorialNext = function () {
   if (_sptStep >= SPOTLIGHT_STEPS.length - 1) { window.closeTutorial(); return; }
   _sptRunHook(SPOTLIGHT_STEPS[_sptStep]?.afterLeave);
   _sptStep++;
   _renderSptStep();
 };
 
-window.tutorialBack = function() {
+window.tutorialBack = function () {
   if (_sptStep <= 0) return;
   _sptRunHook(SPOTLIGHT_STEPS[_sptStep]?.afterLeave);
   _sptStep--;
@@ -11751,12 +11814,12 @@ function _renderSptStep() {
 
   const accentEl = document.getElementById('spt-accent');
   const mascotEl = document.getElementById('spt-mascot');
-  const headEl   = document.getElementById('spt-headline');
-  const bodyEl   = document.getElementById('spt-body');
-  const progEl   = document.getElementById('spt-progress');
-  const nextBtn  = document.getElementById('spt-next');
-  const backBtn  = document.getElementById('spt-back');
-  const card     = document.getElementById('spt-card');
+  const headEl = document.getElementById('spt-headline');
+  const bodyEl = document.getElementById('spt-body');
+  const progEl = document.getElementById('spt-progress');
+  const nextBtn = document.getElementById('spt-next');
+  const backBtn = document.getElementById('spt-back');
+  const card = document.getElementById('spt-card');
 
   if (accentEl) accentEl.style.background = accent;
   card?.style.setProperty('--spt-accent', accent);
@@ -11800,17 +11863,17 @@ function _renderSptStep() {
 }
 
 function _positionSpotlight(step) {
-  const hl    = document.getElementById('spotlight-hl');
-  const wrap  = document.getElementById('spt-wrap');
-  const cup   = document.getElementById('spt-caret-up');
+  const hl = document.getElementById('spotlight-hl');
+  const wrap = document.getElementById('spt-wrap');
+  const cup = document.getElementById('spt-caret-up');
   const cdown = document.getElementById('spt-caret-down');
-  const pad   = step.padding ?? 10;
+  const pad = step.padding ?? 10;
   const target = _sptResolveTarget(step);
 
   if (!target) {
     if (hl) { hl.style.transition = 'none'; hl.style.opacity = '0'; hl.classList.remove('active'); }
     if (wrap) { wrap.style.top = '50%'; wrap.style.left = '50%'; wrap.style.transform = 'translate(-50%, -50%)'; }
-    if (cup)   cup.style.display   = 'none';
+    if (cup) cup.style.display = 'none';
     if (cdown) cdown.style.display = 'none';
     return;
   }
@@ -11819,16 +11882,16 @@ function _positionSpotlight(step) {
   target.scrollIntoView({ behavior: 'smooth', block: step.scrollBlock || 'nearest' });
 
   setTimeout(() => {
-    const r  = target.getBoundingClientRect();
+    const r = target.getBoundingClientRect();
     const vw = window.innerWidth;
     const vh = window.innerHeight;
     const wasHidden = !hl?.classList.contains('active');
 
     if (hl) {
       if (wasHidden) { hl.style.transition = 'none'; }
-      hl.style.top    = `${r.top - pad}px`;
-      hl.style.left   = `${r.left - pad}px`;
-      hl.style.width  = `${r.width + pad * 2}px`;
+      hl.style.top = `${r.top - pad}px`;
+      hl.style.left = `${r.left - pad}px`;
+      hl.style.width = `${r.width + pad * 2}px`;
       hl.style.height = `${r.height + pad * 2}px`;
       if (wasHidden) { void hl.offsetWidth; hl.style.transition = ''; }
       hl.style.opacity = '1';
@@ -11836,8 +11899,8 @@ function _positionSpotlight(step) {
     }
 
     if (!wrap) return;
-    const tW  = wrap.offsetWidth || Math.min(300, vw - 24);
-    const tH  = document.getElementById('spt-card')?.offsetHeight || 240;
+    const tW = wrap.offsetWidth || Math.min(300, vw - 24);
+    const tH = document.getElementById('spt-card')?.offsetHeight || 240;
     const gap = 12;
     const left = Math.max(12, Math.min(r.left + r.width / 2 - tW / 2, vw - tW - 12));
     const caretLeft = Math.max(12, Math.min(r.left + r.width / 2 - left - 9, tW - 28));
@@ -11849,16 +11912,16 @@ function _positionSpotlight(step) {
     let preferredTop;
     if (placeBelow) {
       preferredTop = r.bottom + pad + gap;
-      if (cup)   { cup.style.display   = 'block'; cup.style.left = `${caretLeft}px`; }
-      if (cdown)   cdown.style.display = 'none';
+      if (cup) { cup.style.display = 'block'; cup.style.left = `${caretLeft}px`; }
+      if (cdown) cdown.style.display = 'none';
     } else {
       preferredTop = r.top - pad - gap - tH;
       if (cdown) { cdown.style.display = 'block'; cdown.style.left = `${caretLeft}px`; }
-      if (cup)     cup.style.display   = 'none';
+      if (cup) cup.style.display = 'none';
     }
     const clampedTop = Math.max(12, Math.min(vh - tH - 12, preferredTop));
     if (clampedTop !== preferredTop) {
-      if (cup)   cup.style.display = 'none';
+      if (cup) cup.style.display = 'none';
       if (cdown) cdown.style.display = 'none';
     }
     wrap.style.top = `${clampedTop}px`;
@@ -11979,17 +12042,17 @@ function closeMobilePeriodMenu() {
 }
 
 function fmtDate(d) {
-  return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})+' '+
-    d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true});
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' ' +
+    d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
 }
 
 function toggleUserDropdown() {
-  const pill=document.getElementById('user-pill');
-  const dropdown=document.getElementById('user-dropdown');
+  const pill = document.getElementById('user-pill');
+  const dropdown = document.getElementById('user-dropdown');
   closeHeaderQuickMenu();
-  const isOpen=dropdown.classList.contains('visible');
-  dropdown.classList.toggle('visible',!isOpen);
-  pill.classList.toggle('open',!isOpen);
+  const isOpen = dropdown.classList.contains('visible');
+  dropdown.classList.toggle('visible', !isOpen);
+  pill.classList.toggle('open', !isOpen);
   if (isOpen) {
     document.getElementById('theme-select-grid')?.classList.remove('open');
     document.getElementById('theme-select-toggle')?.classList.remove('open');
@@ -11998,7 +12061,7 @@ function toggleUserDropdown() {
 }
 const _pillWrap = document.getElementById('user-pill-wrap');
 if (_pillWrap) {
-  _pillWrap.addEventListener('pointerdown', function(e) {
+  _pillWrap.addEventListener('pointerdown', function (e) {
     if (e.target.closest('#user-pill')) {
       toggleUserDropdown();
       e.stopPropagation();
@@ -12036,6 +12099,7 @@ function closeUserMenus() {
 }
 
 const TOOL_MODAL_ORDER = ['log', 'wiki', 'notes', 'todos', 'messages', 'alerts'];
+const STORAGE_KEY_PREFIX = 'apt_scroll_';
 const _toolModalScrollState = {
   log: { shellTop: 0 },
   wiki: { shellTop: 0 },
@@ -12051,7 +12115,7 @@ function _toolModalCurrentKey() {
   if (document.getElementById('messaging-modal')?.classList.contains('visible')) return 'messages';
   if (document.getElementById('todos-modal')?.classList.contains('visible')) return 'todos';
   if (document.getElementById('press-wiki-modal')?.classList.contains('visible')) return 'wiki';
-  if (document.getElementById('notes-editor-modal')?.classList.contains('visible') || document.getElementById('notes-modal')?.classList.contains('visible')) return 'notes';
+  if (document.getElementById('notes-modal')?.classList.contains('visible')) return 'notes';
   return null;
 }
 
@@ -12060,13 +12124,13 @@ function _toolModalHasState(key) {
     case 'log':
       return Boolean(currentMachine || document.getElementById('issue-note')?.value || pendingPhotos?.length);
     case 'wiki':
-      return Boolean(_pressWikiModalPressId || _pressWikiSelectedPageId || _pressWikiExpandedPageIds?.size || _pressWikiKnownTreeNodeIds?.size);
+      return wikiTool.hasState();
     case 'notes':
-      return Boolean(_notesState.notes.length || _notesState.currentNote?.id || _notesState.activeNoteId || _notesState.view === 'editor' || _notesState.search || _notesState.filter !== 'all' || _notesState.previewMode);
+      return notesTool.hasState();
     case 'todos':
       return todosTool.hasState();
     case 'messages':
-      return Boolean(_messagingState.conversations.length || _messagingState.activeConversationId || _messagingState.selectedPhoto || _messagingState.selectedDmUid || _messagingState.selectedGroupMembers?.size);
+      return messagingTool.hasState();
     case 'alerts':
       return Boolean(
         _roleAlertsCache.length ||
@@ -12076,6 +12140,20 @@ function _toolModalHasState(key) {
     default:
       return false;
   }
+}
+
+function _toolModalScrollPersist(key) {
+  try { sessionStorage.setItem(STORAGE_KEY_PREFIX + key, JSON.stringify(_toolModalScrollState[key] || {})); } catch (_) {}
+}
+
+function _toolModalScrollLoad(key) {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY_PREFIX + key);
+    if (raw) {
+      const saved = JSON.parse(raw);
+      if (_toolModalScrollState[key]) Object.assign(_toolModalScrollState[key], saved);
+    }
+  } catch (_) {}
 }
 
 function _toolModalCaptureScrollState(key) {
@@ -12088,7 +12166,7 @@ function _toolModalCaptureScrollState(key) {
       break;
     case 'notes':
       _toolModalScrollState.notes.listTop = document.querySelector('#notes-list')?.scrollTop || 0;
-      _toolModalScrollState.notes.editorTop = document.querySelector('#notes-editor-modal .notes-editor-panel')?.scrollTop || 0;
+      _toolModalScrollState.notes.editorTop = document.querySelector('#notes-phone-editor-panel')?.scrollTop || 0;
       break;
     case 'todos':
       _toolModalScrollState.todos.listTop = document.querySelector('#todos-list')?.scrollTop || 0;
@@ -12101,9 +12179,11 @@ function _toolModalCaptureScrollState(key) {
       _toolModalScrollState.alerts.listTop = document.querySelector('#role-alerts-list')?.scrollTop || 0;
       break;
   }
+  _toolModalScrollPersist(key);
 }
 
 function _toolModalRestoreScrollState(key) {
+  _toolModalScrollLoad(key);
   const apply = () => {
     switch (key) {
       case 'log': {
@@ -12118,7 +12198,7 @@ function _toolModalRestoreScrollState(key) {
       }
       case 'notes': {
         const list = document.querySelector('#notes-list');
-        const editor = document.querySelector('#notes-editor-modal .notes-editor-panel');
+        const editor = document.querySelector('#notes-phone-editor-panel');
         if (list) list.scrollTop = _toolModalScrollState.notes.listTop || 0;
         if (editor) editor.scrollTop = _toolModalScrollState.notes.editorTop || 0;
         break;
@@ -12147,6 +12227,7 @@ function _toolModalRestoreScrollState(key) {
 }
 
 async function _closeToolModalByKey(key) {
+  _toolModalCaptureScrollState(key);
   switch (key) {
     case 'log':
       window.closeModal?.();
@@ -12173,11 +12254,11 @@ function resolveMachineCode(m) {
   if (!m) return '';
   const str = String(m).trim();
   if (str.toLowerCase() === 'shared-library' || str.toLowerCase() === 'undefined' || str.toLowerCase() === 'null') return '';
-  
+
   // Try directly finding info if it is a press ID (e.g. "press_1_05")
-  const info = _pressWikiPressInfo(str);
+  const info = wikiTool.pressInfo(str);
   if (info && info.machineCode) return info.machineCode;
-  
+
   // Or check if toPressId of str is a known press
   for (const machines of Object.values(PRESSES || {})) {
     for (const machineCode of (machines || [])) {
@@ -12193,12 +12274,12 @@ async function _openToolModalByKey(key) {
   const preserveState = _toolModalHasState(key);
   switch (key) {
     case 'log': {
-      const activeMachine = resolveMachineCode(currentMachine || _pressWikiModalPressId || _notesContext.machineCode || _notesContext.pressId || activePressHubMachine || '');
+      const activeMachine = resolveMachineCode(currentMachine || wikiTool.state.modalPressId || notesTool.context.machineCode || notesTool.context.pressId || activePressHubMachine || '');
       window.openAddModal?.(activeMachine);
       break;
     }
     case 'wiki': {
-      const activeMachine = resolveMachineCode(currentMachine || _pressWikiModalPressId || _notesContext.machineCode || _notesContext.pressId || activePressHubMachine || '');
+      const activeMachine = resolveMachineCode(currentMachine || wikiTool.state.modalPressId || notesTool.context.machineCode || notesTool.context.pressId || activePressHubMachine || '');
       if (activeMachine) {
         await window.openPressWikiModal?.(toPressId(activeMachine), activeMachine, { preserveState });
       } else {
@@ -12209,7 +12290,7 @@ async function _openToolModalByKey(key) {
       break;
     }
     case 'notes': {
-      const activeMachine = resolveMachineCode(currentMachine || _pressWikiModalPressId || _notesContext.machineCode || _notesContext.pressId || activePressHubMachine || '');
+      const activeMachine = resolveMachineCode(currentMachine || wikiTool.state.modalPressId || notesTool.context.machineCode || notesTool.context.pressId || activePressHubMachine || '');
       const context = activeMachine ? { pressId: toPressId(activeMachine), machineCode: activeMachine } : {};
       await (preserveState
         ? window.openNotesModal?.(context, { preserveState: true })
@@ -12279,6 +12360,17 @@ if (document.readyState === 'loading') {
 } else {
   _bindToolModalShellNavigation();
 }
+
+document.addEventListener('keydown', e => {
+  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+  const target = e.target;
+  const typing = !!(target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable));
+  if (typing) return;
+  const anyToolOpen = !!_toolModalCurrentKey();
+  if (!anyToolOpen) return;
+  e.preventDefault();
+  void _cycleToolModal(e.key === 'ArrowLeft' ? -1 : 1);
+});
 
 function closeUserDropdownOnly() {
   document.getElementById('user-dropdown')?.classList.remove('visible');
@@ -12468,7 +12560,7 @@ document.addEventListener('click', e => {
   }
 });
 document.addEventListener('click', e => {
-  const wrap=document.getElementById('user-pill-wrap');
+  const wrap = document.getElementById('user-pill-wrap');
   if (wrap && !wrap.contains(e.target)) {
     closeUserDropdownOnly();
   }
@@ -12479,7 +12571,7 @@ document.addEventListener('click', e => {
     closeHeaderQuickMenu();
   }
 });
-const signoutBtn=document.getElementById('signout-btn');
+const signoutBtn = document.getElementById('signout-btn');
 if (signoutBtn) signoutBtn.addEventListener('click', doSignOut);
 
 // ── THEME SELECTION ──
@@ -12621,7 +12713,7 @@ function _teSetVarAndSync(cssVar, val) {
   } else {
     _teCurrentVars[cssVar] = val;
   }
-  
+
   // Sync legacy -> modern
   const modernKey = THEME_TOKEN_MAP[cssVar] || THEME_SOFT_TOKEN_MAP[cssVar];
   if (modernKey) {
@@ -12641,10 +12733,10 @@ function _teSetVarAndSync(cssVar, val) {
       }
     }
   }
-  
+
   // Sync modern -> legacy
   const legacyKey = Object.entries(THEME_TOKEN_MAP).find(([, token]) => token === cssVar)?.[0] ||
-                    Object.entries(THEME_SOFT_TOKEN_MAP).find(([, token]) => token === cssVar)?.[0];
+    Object.entries(THEME_SOFT_TOKEN_MAP).find(([, token]) => token === cssVar)?.[0];
   if (legacyKey) {
     if (val === undefined || val === null) {
       delete _teCurrentVars[legacyKey];
@@ -12739,14 +12831,19 @@ function normalizeCustomThemeStorage(data = {}) {
   return { customThemes, activeCustomId };
 }
 
+function _getCustomThemeKey(id) {
+  if (!id) return '';
+  return id.startsWith('custom_') ? id : 'custom_' + id;
+}
+
 function _loadCustomThemes() {
   try { return normalizeCustomThemeStorage(JSON.parse(localStorage.getItem(CUSTOM_THEMES_KEY) || '{"customThemes":[],"activeCustomId":null}')); }
-  catch(e) { return normalizeCustomThemeStorage(); }
+  catch (e) { return normalizeCustomThemeStorage(); }
 }
 
 function _saveCustomThemesStorage(data) {
   const normalized = normalizeCustomThemeStorage(data);
-  try { localStorage.setItem(CUSTOM_THEMES_KEY, JSON.stringify(normalized)); } catch(e) {}
+  try { localStorage.setItem(CUSTOM_THEMES_KEY, JSON.stringify(normalized)); } catch (e) { }
   _syncThemePrefsToFirestore();
   return normalized;
 }
@@ -12772,13 +12869,13 @@ function _syncThemePrefsToFirestore() {
       const persist = shouldUseSqlBootstrap()
         ? dataApi.updateCurrentUserContext({ themePrefs: payload })
         : setDoc(doc(db, 'users', uid), {
-            themePrefs: payload
-          }, { merge: true });
+          themePrefs: payload
+        }, { merge: true });
       Promise.resolve(persist)
         .then(() => { _lastThemePrefsSyncSig = signature; })
-        .catch(() => {});
+        .catch(() => { });
     }, 350);
-  } catch(e) {}
+  } catch (e) { }
 }
 
 function _applyFirestoreThemePrefs(prefs) {
@@ -12787,11 +12884,11 @@ function _applyFirestoreThemePrefs(prefs) {
     if (Array.isArray(prefs.customThemes)) {
       const local = _loadCustomThemes();
       const normalized = normalizeCustomThemeStorage({ ...local, customThemes: prefs.customThemes });
-      try { localStorage.setItem(CUSTOM_THEMES_KEY, JSON.stringify(normalized)); } catch(e) {}
+      try { localStorage.setItem(CUSTOM_THEMES_KEY, JSON.stringify(normalized)); } catch (e) { }
       renderAppearanceCustomThemes();
     }
     if (prefs.activeTheme) applyTheme(prefs.activeTheme);
-  } catch(e) {}
+  } catch (e) { }
 }
 
 function renderThemeChoices() {
@@ -12852,7 +12949,7 @@ function updateActiveThemeChoice(theme) {
   });
   document.querySelectorAll('.appearance-custom-item').forEach(item => {
     const applyBtn = item.querySelector('.te-saved-apply');
-    item.classList.toggle('active', savedTheme === `custom_${applyBtn?.dataset?.id || ''}`);
+    item.classList.toggle('active', savedTheme === _getCustomThemeKey(applyBtn?.dataset?.id || ''));
   });
 }
 
@@ -12906,7 +13003,7 @@ function applyTheme(theme) {
   // Handle custom theme keys (stored as "custom_<id>")
   if (resolvedTheme && resolvedTheme.startsWith('custom_')) {
     const data = _loadCustomThemes();
-    const found = data.customThemes.find(t => 'custom_' + t.id === resolvedTheme);
+    const found = data.customThemes.find(t => _getCustomThemeKey(t.id) === resolvedTheme);
     if (found) {
       removeThemeClasses(THEME_KEYS);
       applyCustomThemeVars(found.vars);
@@ -12961,7 +13058,7 @@ try {
   const saved = readSavedTheme('');
   if (saved && saved.startsWith('custom_')) {
     const data = _loadCustomThemes();
-    const found = data.customThemes.find(t => 'custom_' + t.id === saved);
+    const found = data.customThemes.find(t => _getCustomThemeKey(t.id) === saved);
     if (found) { removeThemeClasses(THEME_KEYS); applyCustomThemeVars(found.vars); document.body.dataset.themeMode = 'dark'; updateActiveThemeChoice(null); }
     else applyTheme('midnight');
   } else if (saved && saved.startsWith('storetheme_')) {
@@ -12969,7 +13066,7 @@ try {
   } else {
     applyTheme(saved || 'midnight');
   }
-} catch(e) { applyTheme('midnight'); }
+} catch (e) { applyTheme('midnight'); }
 updateThemeModeUI();
 renderThemeChoices();
 renderAppearanceCustomThemes();
@@ -12980,7 +13077,7 @@ document.getElementById('appearance-custom-list')?.addEventListener('click', e =
   const applyBtn = e.target.closest('.te-saved-apply');
   const deleteBtn = e.target.closest('.te-saved-delete');
   if (applyBtn?.dataset?.id) {
-    applyTheme('custom_' + applyBtn.dataset.id);
+    applyTheme(_getCustomThemeKey(applyBtn.dataset.id));
     updateActiveThemeChoice(null);
     renderThemeChoices();
     renderStoreModal();
@@ -12991,7 +13088,7 @@ document.getElementById('appearance-custom-list')?.addEventListener('click', e =
     d.customThemes = d.customThemes.filter(t => t.id !== deleteBtn.dataset.id);
     if (d.activeCustomId === deleteBtn.dataset.id) d.activeCustomId = null;
     _saveCustomThemesStorage(d);
-    if (readSavedTheme('') === 'custom_' + deleteBtn.dataset.id) applyTheme('midnight');
+    if (readSavedTheme('') === _getCustomThemeKey(deleteBtn.dataset.id)) applyTheme('midnight');
     renderAppearanceCustomThemes();
     renderThemeChoices();
     renderStoreModal();
@@ -13018,7 +13115,7 @@ document.getElementById('theme-quick-toggle')?.addEventListener('click', () => {
   _syncThemePrefsToFirestore();
 });
 
-window.openAppearanceModal = function() {
+window.openAppearanceModal = function () {
   document.getElementById('user-dropdown').classList.remove('visible');
   document.getElementById('user-pill').classList.remove('open');
   renderThemeChoices();
@@ -13028,7 +13125,7 @@ window.openAppearanceModal = function() {
   document.body.classList.add('appearance-open');
 };
 
-window.closeAppearanceModal = function() {
+window.closeAppearanceModal = function () {
   document.getElementById('appearance-modal').classList.remove('visible');
   document.body.classList.remove('appearance-open');
 };
@@ -13098,12 +13195,12 @@ function renderAppearanceThemeGrid() {
   if (!grid) return;
   const availableThemes = getThemeCatalog().filter(theme => theme.isOwned && theme.source === 'builtin');
   const activeSelection = readSavedTheme('midnight');
-  
+
   grid.innerHTML = availableThemes.map(theme => {
     const [bg, accent, textColor] = getThemePreviewColors(theme);
     const isActive = theme.key === activeSelection;
     const nameOnly = theme.shortLabel || themeLabelSansIcon(theme.label);
-    
+
     return `
       <div class="store-theme-card ${isActive ? 'stc-active' : ''}" role="button" onclick="applyAppearanceTheme('${theme.key}')">
         <div class="stc-preview" style="--stc-bg:${bg}; --stc-accent:${accent}; --stc-text:${textColor}">
@@ -13150,32 +13247,49 @@ function renderAppearanceThemeGrid() {
 function updateLiveContrastBadge() {
   const display = document.getElementById('te-contrast-display');
   if (!display) return;
-  
+
   const baseKey = document.getElementById('te-base-select')?.value || 'midnight';
   const baseVars = THEME_VARS_MAP[baseKey] || THEME_VARS_MAP.midnight || {};
-  
+
   const bg = _teCurrentVars?.['--color-bg'] || _teCurrentVars?.['--bg'] || baseVars['--color-bg'] || baseVars['--bg'] || '#0d1117';
   const text = _teCurrentVars?.['--color-text'] || _teCurrentVars?.['--text'] || baseVars['--color-text'] || baseVars['--text'] || '#e6edf3';
-  
+
   try {
     const ratio = getContrastRatio(bg, text);
-    const pass = ratio >= 4.5;
-    display.textContent = `${ratio.toFixed(1)}:1 ${pass ? 'Pass' : 'Fail'}`;
-    display.className = `te-contrast-badge ${pass ? 'te-contrast-pass' : 'te-contrast-fail'}`;
-    display.title = pass ? 'WCAG 2.0 AA Contrast Compliant' : 'Low Contrast Warning: Text may be hard to read';
+    let grade = 'Fail';
+    let statusClass = 'te-contrast-fail';
+    let titleMsg = 'Low Contrast Warning: Text may be hard to read';
+
+    if (ratio >= 7.0) {
+      grade = 'AAA Pass';
+      statusClass = 'te-contrast-aaa';
+      titleMsg = 'WCAG AAA Compliant (Enhanced Contrast >= 7.0:1)';
+    } else if (ratio >= 4.5) {
+      grade = 'AA Pass';
+      statusClass = 'te-contrast-aa';
+      titleMsg = 'WCAG AA Compliant (Standard Contrast >= 4.5:1)';
+    } else if (ratio >= 3.0) {
+      grade = 'Large Pass (AA)';
+      statusClass = 'te-contrast-warning';
+      titleMsg = 'Passes WCAG AA for large text only (>= 3.0:1)';
+    }
+
+    display.textContent = `${ratio.toFixed(1)}:1 ${grade}`;
+    display.className = `te-contrast-badge ${statusClass}`;
+    display.title = titleMsg;
   } catch (e) {
     display.textContent = 'N/A';
     display.className = 'te-contrast-badge te-contrast-fail';
   }
 }
 
-window.applyAppearanceTheme = function(themeKey) {
+window.applyAppearanceTheme = function (themeKey) {
   applyTheme(themeKey);
   const baseKey = THEME_KEYS.includes(themeKey) ? themeKey : 'midnight';
   const sel = document.getElementById('te-base-select');
   if (sel) sel.value = baseKey;
   _teCurrentVars = { ...(THEME_VARS_MAP[baseKey] || THEME_VARS_MAP.midnight) };
-  
+
   _teEditingId = null;
   const saveBtn = document.getElementById('te-save-btn');
   if (saveBtn) saveBtn.textContent = '💾 Save';
@@ -13188,14 +13302,14 @@ window.applyAppearanceTheme = function(themeKey) {
   _renderTEVarsList();
   renderAppearanceThemeGrid();
   renderAppearanceCustomThemes();
-  
+
   const svgField = document.getElementById('te-bg-svg-input');
   if (svgField) svgField.value = _teCurrentVars['--bg-svg'] || '';
   updateLiveContrastBadge();
   _teSyncDesignTabFromCurrentVars();
 };
 
-window.resetThemeToBase = function() {
+window.resetThemeToBase = function () {
   const baseKey = document.getElementById('te-base-select')?.value || 'midnight';
   const base = THEME_VARS_MAP[baseKey];
   if (base) {
@@ -13205,7 +13319,7 @@ window.resetThemeToBase = function() {
     if (saveBtn) saveBtn.textContent = '💾 Save';
     const themeNameInput = document.getElementById('te-theme-name');
     if (themeNameInput) themeNameInput.value = '';
-    
+
     const svgField = document.getElementById('te-bg-svg-input');
     if (svgField) svgField.value = _teCurrentVars['--bg-svg'] || '';
     const svgPreset = document.getElementById('te-bg-svg-preset');
@@ -13222,7 +13336,7 @@ window.resetThemeToBase = function() {
   }
 };
 
-window.exportCurrentTheme = function() {
+window.exportCurrentTheme = function () {
   const nameEl = document.getElementById('te-theme-name');
   const name = (nameEl ? nameEl.value.trim() : '') || 'My Custom Theme';
   const dataToExport = {
@@ -13241,7 +13355,7 @@ window.exportCurrentTheme = function() {
   }
 };
 
-window.importThemeCode = function() {
+window.importThemeCode = function () {
   const code = prompt('Paste your theme code (base64) here:');
   if (!code) return;
   try {
@@ -13250,7 +13364,7 @@ window.importThemeCode = function() {
       alert('Invalid theme code format.');
       return;
     }
-    
+
     const data = _loadCustomThemes();
     const id = 'custom_' + Date.now();
     data.customThemes.push({
@@ -13261,15 +13375,15 @@ window.importThemeCode = function() {
     });
     data.activeCustomId = id;
     _saveCustomThemesStorage(data);
-    applyTheme('custom_' + id);
-    
+    applyTheme(_getCustomThemeKey(id));
+
     _teEditingId = id;
     _teCurrentVars = { ...parsed.vars };
     const themeNameInput = document.getElementById('te-theme-name');
     if (themeNameInput) themeNameInput.value = parsed.name;
     const saveBtn = document.getElementById('te-save-btn');
     if (saveBtn) saveBtn.textContent = '💾 Update';
-    
+
     _renderTEVarsList();
     renderAppearanceThemeGrid();
     renderAppearanceCustomThemes();
@@ -13277,7 +13391,7 @@ window.importThemeCode = function() {
     renderStoreModal();
     updateLiveContrastBadge();
     _teSyncDesignTabFromCurrentVars();
-    
+
     showGameToast('🎉 Theme imported successfully!');
   } catch (e) {
     alert('Failed to parse theme code. Make sure it was copied correctly.');
@@ -13296,7 +13410,7 @@ function _teSyncDesignTabFromCurrentVars() {
     const labelEl = document.getElementById(labelId);
     if (labelEl) labelEl.textContent = picker.value;
   });
-  
+
   // Sync font pairings
   const fontBtns = document.querySelectorAll('#te-panel-design .te-font-btn');
   const activeFont = _teCurrentVars['--font-body'] || "'Nunito', sans-serif";
@@ -13307,7 +13421,7 @@ function _teSyncDesignTabFromCurrentVars() {
   fontBtns.forEach(btn => {
     btn.classList.toggle('active', btn.dataset.font === fontKey);
   });
-  
+
   // Sync border radius
   const radiusBtns = document.querySelectorAll('#te-group-radius .te-btn-grp-opt');
   const activeRadiusVal = _teCurrentVars['--radius-card'] || '14px';
@@ -13316,14 +13430,14 @@ function _teSyncDesignTabFromCurrentVars() {
   else if (activeRadiusVal === '6px') radKey = 'sm';
   else if (activeRadiusVal === '22px') radKey = 'lg';
   else if (activeRadiusVal === '36px') radKey = 'full';
-  
+
   const radLabels = { none: 'None', sm: 'Slight', md: 'Rounded', lg: 'Curvy', full: 'Extreme' };
   const radLabelEl = document.getElementById('te-lbl-radius');
   if (radLabelEl) radLabelEl.textContent = radLabels[radKey];
   radiusBtns.forEach(btn => {
     btn.classList.toggle('active', btn.dataset.val === radKey);
   });
-  
+
   // Sync drop shadows
   const shadowBtns = document.querySelectorAll('#te-group-shadow .te-btn-grp-opt');
   const activeShadow = _teCurrentVars['--shadow-card'] || '0 2px 12px rgba(0,0,0,0.2)';
@@ -13332,40 +13446,40 @@ function _teSyncDesignTabFromCurrentVars() {
   else if (activeShadow.includes('0.06')) shdKey = 'sm';
   else if (activeShadow.includes('0.22')) shdKey = 'lg';
   else if (activeShadow.includes('color-mix')) shdKey = 'colored';
-  
+
   const shdLabels = { none: 'None', sm: 'Aura', md: 'Elevated', lg: 'Deep', colored: 'Glow' };
   const shdLabelEl = document.getElementById('te-lbl-shadow');
   if (shdLabelEl) shdLabelEl.textContent = shdLabels[shdKey];
   shadowBtns.forEach(btn => {
     btn.classList.toggle('active', btn.dataset.val === shdKey);
   });
-  
+
   // Sync glassmorphism
   const toggleGlass = document.getElementById('te-toggle-glass');
   const sliderGlass = document.getElementById('te-slider-glass-strength');
   const rowGlassStrength = document.getElementById('te-row-glass-strength');
   const lblGlassStrength = document.getElementById('te-lbl-glass-strength');
-  
+
   const glassBlurVal = _teCurrentVars['--glass-blur'] || '0px';
   const isGlassActive = glassBlurVal !== '0px';
   const glassStrengthVal = _teCurrentVars['--glass-strength'] || '4';
-  
+
   if (toggleGlass) toggleGlass.checked = isGlassActive;
   if (sliderGlass) sliderGlass.value = glassStrengthVal;
   if (lblGlassStrength) lblGlassStrength.textContent = `${glassStrengthVal}/10`;
   if (rowGlassStrength) rowGlassStrength.style.display = isGlassActive ? 'block' : 'none';
-  
+
   // Sync nav style class
   const navBtns = document.querySelectorAll('#te-group-nav .te-btn-grp-opt');
   const activeNav = _teCurrentVars['--nav-style'] || 'bottom';
   const phoneScreen = document.getElementById('te-phone-screen');
-  
+
   if (phoneScreen) {
     phoneScreen.classList.remove('nav-top', 'nav-floating');
     if (activeNav === 'top') phoneScreen.classList.add('nav-top');
     else if (activeNav === 'floating') phoneScreen.classList.add('nav-floating');
   }
-  
+
   const navLabels = { bottom: 'Bottom Bar', top: 'Top Header', floating: 'Floating Pill' };
   const navLabelEl = document.getElementById('te-lbl-nav');
   if (navLabelEl) navLabelEl.textContent = navLabels[activeNav];
@@ -13378,9 +13492,8 @@ function _teAutoSaveCurrentVars() {
   if (!_teCurrentVars) return;
   const activeTheme = readSavedTheme('midnight');
   if (activeTheme.startsWith('custom_')) {
-    const customThemeId = activeTheme.slice('custom_'.length);
     const data = _loadCustomThemes();
-    const idx = data.customThemes.findIndex(t => t.id === customThemeId);
+    const idx = data.customThemes.findIndex(t => _getCustomThemeKey(t.id) === activeTheme);
     if (idx >= 0) {
       data.customThemes[idx].vars = normalizeThemeVars({ ..._teCurrentVars });
       _saveCustomThemesStorage(data);
@@ -13397,22 +13510,22 @@ function _teAutoSaveCurrentVars() {
     data.customThemes.push({ id, name: cleanName, vars, createdAt: Date.now() });
     data.activeCustomId = id;
     _saveCustomThemesStorage(data);
-    saveThemeSelection('custom_' + id);
+    saveThemeSelection(_getCustomThemeKey(id));
     _teEditingId = id;
-    
+
     // Update input fields
     const themeNameInput = document.getElementById('te-theme-name');
     if (themeNameInput) themeNameInput.value = cleanName;
     const saveBtn = document.getElementById('te-save-btn');
     if (saveBtn) saveBtn.textContent = '💾 Update';
-    
+
     _renderTESavedList();
     renderAppearanceCustomThemes();
     renderThemeChoices();
   }
 }
 
-window.openThemeEditor = function() {
+window.openThemeEditor = function () {
   const themeEditorModal = document.getElementById('theme-editor-modal');
   const appearanceModal = document.getElementById('appearance-modal');
   if (!themeEditorModal || !appearanceModal) return;
@@ -13431,7 +13544,7 @@ window.openThemeEditor = function() {
   // Seed vars from current theme (custom or built-in)
   if (_tePrevThemeKey.startsWith('custom_')) {
     const data = _loadCustomThemes();
-    const found = data.customThemes.find(t => 'custom_' + t.id === _tePrevThemeKey);
+    const found = data.customThemes.find(t => _getCustomThemeKey(t.id) === _tePrevThemeKey);
     _teCurrentVars = found ? { ...found.vars } : { ...THEME_VARS_MAP.midnight };
     if (sel) sel.value = 'midnight';
     if (found) {
@@ -13507,7 +13620,7 @@ window.openThemeEditor = function() {
     const cssVar = picker.dataset.var;
     const labelId = picker.id.replace('te-color-', 'te-hex-');
     const labelEl = document.getElementById(labelId);
-    
+
     if (picker.dataset.hasListener) return;
     picker.addEventListener('input', (e) => {
       const val = e.target.value;
@@ -13658,14 +13771,16 @@ window.openThemeEditor = function() {
   _teSyncDesignTabFromCurrentVars();
 
   const themeNameInput = document.getElementById('te-theme-name');
-  if (themeNameInput) themeNameInput.value = '';
+  if (themeNameInput && !_tePrevThemeKey.startsWith('custom_')) {
+    themeNameInput.value = '';
+  }
   const svgField = document.getElementById('te-bg-svg-input');
   if (svgField) svgField.value = _teCurrentVars['--bg-svg'] || '';
   appearanceModal.classList.add('visible');
   themeEditorModal.classList.add('visible');
 };
 
-window.closeThemeEditor = function() {
+window.closeThemeEditor = function () {
   const themeEditorModal = document.getElementById('theme-editor-modal');
   const appearanceModal = document.getElementById('appearance-modal');
   if (!themeEditorModal || !appearanceModal) return;
@@ -13676,7 +13791,7 @@ window.closeThemeEditor = function() {
   const saved = readSavedTheme('midnight');
   if (saved.startsWith('custom_')) {
     const data = _loadCustomThemes();
-    const found = data.customThemes.find(t => 'custom_' + t.id === saved);
+    const found = data.customThemes.find(t => _getCustomThemeKey(t.id) === saved);
     if (found) { applyCustomThemeVars(found.vars); return; }
   }
   applyTheme(saved);
@@ -13706,7 +13821,7 @@ function _renderTEVarsList() {
   const baseKey = document.getElementById('te-base-select')?.value || 'midnight';
   const baseVars = THEME_VARS_MAP[baseKey] || THEME_VARS_MAP.midnight || {};
   const search = String(document.getElementById('te-theme-search')?.value || '').trim().toLowerCase();
-  
+
   const allVars = _teGetAllVariables().filter(cssVar => !search || cssVar.toLowerCase().includes(search));
   const countEl = document.getElementById('te-var-count');
   if (countEl) countEl.textContent = `${allVars.length} var${allVars.length === 1 ? '' : 's'}`;
@@ -13736,18 +13851,21 @@ function _renderTEVarsList() {
 
   Object.entries(groupAssignments).forEach(([groupName, groupVars], gIdx) => {
     if (!groupVars.length) return;
-    
+
     const accordion = document.createElement('div');
     accordion.className = 'te-accordion' + (search || gIdx === 0 ? ' open' : '');
-    
+
     const header = document.createElement('div');
     header.className = 'te-accordion-header';
     header.innerHTML = `<span>${groupName} (${groupVars.length})</span><span class="te-accordion-icon">▶</span>`;
     header.onclick = () => accordion.classList.toggle('open');
-    
+
     const content = document.createElement('div');
     content.className = 'te-accordion-content';
-    
+    const inner = document.createElement('div');
+    inner.className = 'te-accordion-inner';
+    content.appendChild(inner);
+
     groupVars.forEach(cssVar => {
       const currentVal = _teCurrentVars?.[cssVar] || baseVars[cssVar] || getComputedStyle(document.documentElement).getPropertyValue(cssVar).trim() || '';
       const baseVal = baseVars[cssVar] || '';
@@ -13823,9 +13941,9 @@ function _renderTEVarsList() {
         _teAutoSaveCurrentVars();
       });
 
-      content.appendChild(row);
+      inner.appendChild(row);
     });
-    
+
     accordion.appendChild(header);
     accordion.appendChild(content);
     container.appendChild(accordion);
@@ -13841,28 +13959,29 @@ document.getElementById('te-bg-svg-input')?.addEventListener('input', e => {
   _teAutoSaveCurrentVars();
 });
 
-window.saveCustomTheme = function() {
+window.saveCustomTheme = function (asNew = false) {
   const nameEl = document.getElementById('te-theme-name');
   if (!nameEl) return;
   const name = nameEl.value.trim();
   if (!name) { nameEl.focus(); return; }
   const data = _loadCustomThemes();
-  if (_teEditingId) {
+  if (_teEditingId && !asNew) {
     const idx = data.customThemes.findIndex(t => t.id === _teEditingId);
     if (idx >= 0) data.customThemes[idx] = { ...data.customThemes[idx], name, vars: normalizeThemeVars(_teCurrentVars || {}) };
     _saveCustomThemesStorage(data);
-    applyTheme('custom_' + _teEditingId);
-    _teEditingId = null;
+    applyTheme(_getCustomThemeKey(_teEditingId));
     const saveBtn = document.getElementById('te-save-btn');
-    if (saveBtn) saveBtn.textContent = '💾 Save';
+    if (saveBtn) saveBtn.textContent = '💾 Update';
   } else {
     const id = 'custom_' + Date.now();
     data.customThemes.push({ id, name, vars: normalizeThemeVars(_teCurrentVars || {}), createdAt: Date.now() });
     data.activeCustomId = id;
     _saveCustomThemesStorage(data);
-    applyTheme('custom_' + id);
+    applyTheme(_getCustomThemeKey(id));
+    _teEditingId = id;
+    const saveBtn = document.getElementById('te-save-btn');
+    if (saveBtn) saveBtn.textContent = '💾 Update';
   }
-  nameEl.value = '';
   _renderTESavedList();
   renderAppearanceCustomThemes();
   renderThemeChoices();
@@ -13895,7 +14014,7 @@ function _renderTESavedList() {
       if (saveBtn) saveBtn.textContent = '💾 Update';
       _renderTEVarsList();
       const d = _loadCustomThemes(); d.activeCustomId = theme.id; _saveCustomThemesStorage(d);
-      applyTheme('custom_' + theme.id);
+      applyTheme(_getCustomThemeKey(theme.id));
       updateActiveThemeChoice(null);
       renderAppearanceCustomThemes();
       renderThemeChoices();
@@ -13906,7 +14025,7 @@ function _renderTESavedList() {
       d.customThemes = d.customThemes.filter(t => t.id !== theme.id);
       if (d.activeCustomId === theme.id) d.activeCustomId = null;
       _saveCustomThemesStorage(d);
-      if (readSavedTheme('') === 'custom_' + theme.id) applyTheme('midnight');
+      if (readSavedTheme('') === _getCustomThemeKey(theme.id)) applyTheme('midnight');
       _renderTESavedList();
       renderAppearanceCustomThemes();
       renderThemeChoices();
@@ -13947,8 +14066,8 @@ window.clearAllFilters = (options = {}) => {
   issueRowScope = 'all';
   currentSort = 'newest';
 
-  ['all','mine'].forEach(x => document.getElementById('scope-'+x)?.classList.toggle('active', x === 'all'));
-  ['today','24h','week','month','all'].forEach(x => document.getElementById('period-'+x)?.classList.toggle('active', x === 'today'));
+  ['all', 'mine'].forEach(x => document.getElementById('scope-' + x)?.classList.toggle('active', x === 'all'));
+  ['today', '24h', 'week', 'month', 'all'].forEach(x => document.getElementById('period-' + x)?.classList.toggle('active', x === 'today'));
   document.getElementById('period-date')?.classList.remove('active');
   document.getElementById('scope-view-all')?.classList.toggle('active', true);
   document.getElementById('scope-view-active')?.classList.toggle('active', false);
@@ -14064,17 +14183,17 @@ document.getElementById('machine-filter').addEventListener('change', () => {
   renderIssues(); updateFilterBadge();
   completeDemoGuideStep('filters');
 });
-document.getElementById('status-filter').addEventListener('change', ()=>{ updateStatPillStyles(); renderIssues(); updateFilterBadge(); completeDemoGuideStep('filters'); });
+document.getElementById('status-filter').addEventListener('change', () => { updateStatPillStyles(); renderIssues(); updateFilterBadge(); completeDemoGuideStep('filters'); });
 
 // ── SORT DROPDOWN ──
 const SORT_OPTIONS = [
-  { value: 'newest',           label: 'Newest first' },
-  { value: 'oldest',           label: 'Oldest first' },
-  { value: 'machine',          label: 'By machine' },
-  { value: 'status',           label: 'By status' },
-  { value: 'longest-open',     label: 'Longest open' },
-  { value: 'submitter',        label: 'By submitter' },
-  { value: 'most-updates',     label: 'Most updates' },
+  { value: 'newest', label: 'Newest first' },
+  { value: 'oldest', label: 'Oldest first' },
+  { value: 'machine', label: 'By machine' },
+  { value: 'status', label: 'By status' },
+  { value: 'longest-open', label: 'Longest open' },
+  { value: 'submitter', label: 'By submitter' },
+  { value: 'most-updates', label: 'Most updates' },
   { value: 'recently-updated', label: 'Recently updated' },
 ];
 let currentSort = 'newest';
@@ -14104,7 +14223,7 @@ function buildSortDropdown() {
 
 function setSort(val) {
   currentSort = val;
-  document.getElementById('sort-label').textContent = SORT_OPTIONS.find(o=>o.value===val)?.label || 'Sort';
+  document.getElementById('sort-label').textContent = SORT_OPTIONS.find(o => o.value === val)?.label || 'Sort';
   // Sync the filter drawer select
   const sel = document.getElementById('sort-select');
   if (sel) sel.value = val;
@@ -14115,7 +14234,7 @@ function setSort(val) {
 }
 
 // Sync from filter drawer select to header dropdown
-document.getElementById('sort-select')?.addEventListener('change', function() {
+document.getElementById('sort-select')?.addEventListener('change', function () {
   setSort(this.value);
 });
 
@@ -14147,12 +14266,12 @@ window.setIssueRowScope = s => {
   renderIssues(); updateStats();
 };
 
-document.getElementById('add-modal').addEventListener('click',    e=>{if(e.target===document.getElementById('add-modal'))    closeModal();});
-document.getElementById('edit-modal').addEventListener('click',   e=>{if(e.target===document.getElementById('edit-modal'))   closeEditModal();});
-document.getElementById('resolve-modal').addEventListener('click',e=>{if(e.target===document.getElementById('resolve-modal'))closeResolveModal();});
-document.getElementById('reopen-modal').addEventListener('click', e=>{if(e.target===document.getElementById('reopen-modal')) closeReopenModal();});
-document.getElementById('edit-status-modal').addEventListener('click', e=>{if(e.target===document.getElementById('edit-status-modal')) closeEditStatusModal();});
-document.getElementById('sms-compose-modal')?.addEventListener('click', e=>{ if(e.target===document.getElementById('sms-compose-modal')) closeSmsComposer(true); });
+document.getElementById('add-modal').addEventListener('click', e => { if (e.target === document.getElementById('add-modal')) closeModal(); });
+document.getElementById('edit-modal').addEventListener('click', e => { if (e.target === document.getElementById('edit-modal')) closeEditModal(); });
+document.getElementById('resolve-modal').addEventListener('click', e => { if (e.target === document.getElementById('resolve-modal')) closeResolveModal(); });
+document.getElementById('reopen-modal').addEventListener('click', e => { if (e.target === document.getElementById('reopen-modal')) closeReopenModal(); });
+document.getElementById('edit-status-modal').addEventListener('click', e => { if (e.target === document.getElementById('edit-status-modal')) closeEditStatusModal(); });
+document.getElementById('sms-compose-modal')?.addEventListener('click', e => { if (e.target === document.getElementById('sms-compose-modal')) closeSmsComposer(true); });
 
 // Prevent modal content clicks from bubbling to overlay
 document.querySelectorAll('.modal').forEach(modal => {
@@ -14314,7 +14433,7 @@ function _mobileModalSwipeStart(event) {
   _mobileModalSwipeState.startOpacity = modal.style.opacity || '';
   document.body.classList.add('modal-swipe-dragging');
 
-  try { modal.setPointerCapture?.(event.pointerId); } catch (_) {}
+  try { modal.setPointerCapture?.(event.pointerId); } catch (_) { }
 }
 
 function _mobileModalSwipeMove(event) {
@@ -14387,7 +14506,7 @@ document.addEventListener('pointermove', _mobileModalSwipeMove, true);
 document.addEventListener('pointerup', _mobileModalSwipeEnd, true);
 document.addEventListener('pointercancel', _mobileModalSwipeEnd, true);
 
-document.addEventListener('keydown', e=>{ if(e.key==='Escape'){closeModal();closeEditModal();closeResolveModal();closeReopenModal();closeLightbox();closeSortDropdown();closeExportModal();closeSerialModal();closeEditStatusModal();closeNotesModal();closeSmsComposer(true);window.closeMessagingModal?.();window.closeConversation?.();closeAppearanceModal();closeThemeEditor();closeRolePreferencesModal();closeRoleAlertInboxModal();} });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeModal(); closeEditModal(); closeResolveModal(); closeReopenModal(); closeLightbox(); closeSortDropdown(); closeExportModal(); closeSerialModal(); closeEditStatusModal(); closeNotesModal(); closeSmsComposer(true); window.closeMessagingModal?.(); window.closeConversation?.(); closeAppearanceModal(); closeThemeEditor(); closeRolePreferencesModal(); closeRoleAlertInboxModal(); closeShortcutsOverlay(); } });
 
 document.getElementById('theme-editor-modal')?.addEventListener('click', e => {
   const modal = document.getElementById('theme-editor-modal');
@@ -14418,40 +14537,40 @@ function requiresSerialNumber(statusKey, sub) {
 
 
 const SERIAL_MATERIAL_OPTIONS = {
-  STK44875: { location:[1], rack:'1', quantity:0 },
-  STK44880: { location:[1], rack:'1', quantity:0 },
-  STK4140959PG: { location:[2], rack:'1', quantity:0 },
-  STK44144: { location:[2,3,4], rack:'1', quantity:0 },
-  STK44190: { location:[4,5], rack:'1', quantity:0 },
-  STK44224: { location:[6,7], rack:'2', quantity:0 },
-  STK44836: { location:[8,9], rack:'2', quantity:0 },
-  STK4500STP: { location:[10], rack:'2', quantity:0 },
-  STK44866: { location:[11], rack:'2', quantity:0 },
-  STK44136: { location:[11], rack:'2', quantity:0 },
-  STK44216: { location:[12,13], rack:'2', quantity:0 },
-  STK44196: { location:[13], rack:'2', quantity:0 },
-  STK44820: { location:[13], rack:'2', quantity:0 },
-  STK44300: { location:[14], rack:'2', quantity:0 },
-  STK44219: { location:[15], rack:'3', quantity:0 },
-  STK47503: { location:[16], rack:'3', quantity:0 },
-  STK3X5030: { location:[16], rack:'3', quantity:0 },
-  STK3X758: { location:[16], rack:'3', quantity:0 },
-  STK44138: { location:[17], rack:'3', quantity:0 },
-  STK44193: { location:[17], rack:'3', quantity:0 },
-  STK44864: { location:[17], rack:'3', quantity:0 },
-  STK44222: { location:[18], rack:'3', quantity:0 },
-  STK44851: { location:[18], rack:'3', quantity:0 },
-  STK44182: { location:[19], rack:'3', quantity:0 },
-  STK4140958: { location:[19], rack:'3', quantity:0 },
-  STK44251: { location:[20], rack:'3', quantity:0 },
-  STK44221: { location:[20], rack:'3', quantity:0 },
-  STK44838: { location:[20], rack:'3', quantity:0 }
+  STK44875: { location: [1], rack: '1', quantity: 0 },
+  STK44880: { location: [1], rack: '1', quantity: 0 },
+  STK4140959PG: { location: [2], rack: '1', quantity: 0 },
+  STK44144: { location: [2, 3, 4], rack: '1', quantity: 0 },
+  STK44190: { location: [4, 5], rack: '1', quantity: 0 },
+  STK44224: { location: [6, 7], rack: '2', quantity: 0 },
+  STK44836: { location: [8, 9], rack: '2', quantity: 0 },
+  STK4500STP: { location: [10], rack: '2', quantity: 0 },
+  STK44866: { location: [11], rack: '2', quantity: 0 },
+  STK44136: { location: [11], rack: '2', quantity: 0 },
+  STK44216: { location: [12, 13], rack: '2', quantity: 0 },
+  STK44196: { location: [13], rack: '2', quantity: 0 },
+  STK44820: { location: [13], rack: '2', quantity: 0 },
+  STK44300: { location: [14], rack: '2', quantity: 0 },
+  STK44219: { location: [15], rack: '3', quantity: 0 },
+  STK47503: { location: [16], rack: '3', quantity: 0 },
+  STK3X5030: { location: [16], rack: '3', quantity: 0 },
+  STK3X758: { location: [16], rack: '3', quantity: 0 },
+  STK44138: { location: [17], rack: '3', quantity: 0 },
+  STK44193: { location: [17], rack: '3', quantity: 0 },
+  STK44864: { location: [17], rack: '3', quantity: 0 },
+  STK44222: { location: [18], rack: '3', quantity: 0 },
+  STK44851: { location: [18], rack: '3', quantity: 0 },
+  STK44182: { location: [19], rack: '3', quantity: 0 },
+  STK4140958: { location: [19], rack: '3', quantity: 0 },
+  STK44251: { location: [20], rack: '3', quantity: 0 },
+  STK44221: { location: [20], rack: '3', quantity: 0 },
+  STK44838: { location: [20], rack: '3', quantity: 0 }
 };
 
 function populateSerialMaterialOptions() {
   const select = document.getElementById('serial-select');
   if (!select) return;
-  const entries = Object.entries(SERIAL_MATERIAL_OPTIONS).sort((a,b)=>a[0].localeCompare(b[0]));
+  const entries = Object.entries(SERIAL_MATERIAL_OPTIONS).sort((a, b) => a[0].localeCompare(b[0]));
   select.innerHTML = '<option value="">Select a material...</option>' + entries.map(([code, meta]) => {
     const locationText = Array.isArray(meta.location) ? meta.location.join(', ') : '';
     return `<option value="${esc(code)}">${esc(code)} — Rack ${esc(meta.rack)} / Loc ${esc(locationText)}</option>`;
@@ -14527,15 +14646,13 @@ window.confirmSerialModal = async () => {
 };
 
 // Close serial modal on overlay click and escape
-document.getElementById('serial-modal')?.addEventListener('click', e => { if(e.target===document.getElementById('serial-modal')) closeSerialModal(); });
+document.getElementById('serial-modal')?.addEventListener('click', e => { if (e.target === document.getElementById('serial-modal')) closeSerialModal(); });
 
 // ── CONVERSATIONS (DM + GROUP + PRESS CHANNELS) ──
 let _conversationListUnsubscribe = null;
 let _conversationThreadUnsubscribe = null;
-let _messagingInboxUnsubscribe = null;
 let _conversationListPollTimer = null;
 let _conversationThreadPollTimer = null;
-let _messagingInboxPollTimer = null;
 
 function _conversationType(inputType) {
   const normalized = String(inputType || 'group').trim().toLowerCase();
@@ -14620,7 +14737,7 @@ window.createConversation = async ({ type = 'group', title = '', memberIds = [],
 };
 
 window.watchConversations = (onConversations, { type = null } = {}, onError = null) => {
-  if (!_requireChatContext()) return () => {};
+  if (!_requireChatContext()) return () => { };
   if (_conversationListUnsubscribe) {
     _conversationListUnsubscribe();
     _conversationListUnsubscribe = null;
@@ -14675,7 +14792,7 @@ window.watchConversations = (onConversations, { type = null } = {}, onError = nu
 };
 
 window.openConversation = (conversationId, onMessages) => {
-  if (!_requireChatContext()) return () => {};
+  if (!_requireChatContext()) return () => { };
   if (!conversationId) throw new Error('conversationId is required.');
   if (_conversationThreadUnsubscribe) {
     _conversationThreadUnsubscribe();
@@ -14797,723 +14914,56 @@ window.closeConversationList = () => {
   if (_conversationListUnsubscribe) { _conversationListUnsubscribe(); _conversationListUnsubscribe = null; }
 };
 
-// ── MESSAGING MODAL (UI refresh) ──
-const _messagingState = {
-  conversations: [],
-  activeConversationId: null,
-  selectedPhoto: null,
-  lastSeenByConversation: {},
-  tab: 'all',
-  search: '',
-  selectableMembers: [],
-  selectedDmUid: null,
-  selectedGroupMembers: new Set()
-};
-
-function _updateMessagingEntryBadges(unreadCount = 0) {
-  const safeCount = Math.max(0, Number(unreadCount) || 0);
-  document.querySelectorAll('[data-messages-trigger]').forEach(el => {
-    el.classList.toggle('messages-has-unread', safeCount > 0);
-  });
-  document.querySelectorAll('[data-messages-badge]').forEach(el => {
-    if (!safeCount) {
-      el.style.display = 'none';
-      el.textContent = '0';
-      return;
-    }
-    el.style.display = 'inline-flex';
-    el.textContent = safeCount > 99 ? '99+' : String(safeCount);
-  });
-}
-
-function _messagingUnreadTotal(conversations = []) {
-  return (conversations || []).reduce((sum, conv) => sum + (_messagingUnreadCount(conv) ? 1 : 0), 0);
-}
-
-function _startMessagingInboxWatcher() {
-  if (_messagingInboxUnsubscribe) {
-    _messagingInboxUnsubscribe();
-    _messagingInboxUnsubscribe = null;
-  }
-  if (_messagingInboxPollTimer) {
-    clearTimeout(_messagingInboxPollTimer);
-    _messagingInboxPollTimer = null;
-  }
-  if (!currentPlantId || !currentUser?.uid) {
-    _updateMessagingEntryBadges(0);
-    return;
-  }
-  if (shouldUseSqlStagingReads(currentPlantId)) {
-    let active = true;
-    _messagingInboxUnsubscribe = () => {
-      active = false;
-      if (_messagingInboxPollTimer) {
-        clearTimeout(_messagingInboxPollTimer);
-        _messagingInboxPollTimer = null;
-      }
-      _messagingInboxUnsubscribe = null;
-    };
-    const poll = async () => {
-      if (!active || !currentPlantId || !currentUser?.uid) return;
-      try {
-        const payload = await requireSqlRead(
-          `messaging inbox ${currentPlantId}`,
-          () => dataApi.listConversations(currentPlantId),
-          `Messaging inbox is missing in D1 for plant ${currentPlantId}.`
-        );
-        const conversations = payload?.conversations || [];
-        const unreadCount = _messagingUnreadTotal(conversations);
-        _updateMessagingEntryBadges(unreadCount);
-        const tabBadge = document.getElementById('messaging-tab-all-badge');
-        if (tabBadge) {
-          tabBadge.textContent = unreadCount > 99 ? '99+' : String(unreadCount);
-          tabBadge.style.display = unreadCount ? 'inline-flex' : 'none';
-        }
-      } catch (err) {
-        console.warn('messaging inbox poll error', err);
-        _updateMessagingEntryBadges(0);
-      }
-      if (active) _messagingInboxPollTimer = setTimeout(poll, 5000);
-    };
-    void poll();
-    return;
-  }
-  const q = query(
-    conversationsCol(),
-    where('memberIds', 'array-contains', currentUser.uid),
-    orderBy('lastMessageAt', 'desc')
-  );
-  _messagingInboxUnsubscribe = onSnapshot(q, snap => {
-    const conversations = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    const unreadCount = _messagingUnreadTotal(conversations);
-    _updateMessagingEntryBadges(unreadCount);
-    const tabBadge = document.getElementById('messaging-tab-all-badge');
-    if (tabBadge) {
-      tabBadge.textContent = unreadCount > 99 ? '99+' : String(unreadCount);
-      tabBadge.style.display = unreadCount ? 'inline-flex' : 'none';
-    }
-  }, err => {
-    console.warn('messaging inbox watcher error', err);
-    _updateMessagingEntryBadges(0);
-  });
-}
-
-function _bindMessagingKeyboardShortcut() {
-  if (window.__messagingShortcutBound) return;
-  window.__messagingShortcutBound = true;
-  document.addEventListener('keydown', e => {
-    const target = e.target;
-    const typing = !!(target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable));
-    if (typing) return;
-    const openShortcut = (e.key.toLowerCase() === 'k' && (e.metaKey || e.ctrlKey));
-    if (!openShortcut) return;
-    e.preventDefault();
-    window.openMessagingModal();
-    setTimeout(() => document.getElementById('messaging-search')?.focus(), 30);
-  });
-}
-
-function _messagingSetError(message = '') {
-  const el = document.getElementById('messaging-error');
-  if (el) el.textContent = message;
-}
-
-function _messagingUserLabel(member = {}) {
-  return member.displayName || member.name || member.email || member.uid || 'User';
-}
-
-function _messagingUserPhoto(member = {}) {
-  return member.photoURL || member.photoUrl || member.avatarUrl || member.avatarURL || member.picture || '';
-}
-
-function _messagingInitials(name = '') {
-  return String(name || 'U').split(' ').filter(Boolean).map(x => x[0]).join('').slice(0, 2).toUpperCase();
-}
-
-function _messagingColor(seed = '') {
-  const palette = ['#007AFF','#34C759','#FF9500','#FF3B30','#AF52DE','#5AC8FA','#FF2D55','#00C7BE'];
-  const idx = String(seed).split('').reduce((a, c) => a + c.charCodeAt(0), 0) % palette.length;
-  return palette[idx];
-}
-
-function _fmtMsgTime(ts) {
+// ── MESSAGING TOOL ──
+function _relativeTime(ts) {
   if (!ts) return '';
-  const d = ts.toDate ? ts.toDate() : new Date(ts?.seconds ? ts.seconds * 1000 : ts);
-  if (Number.isNaN(+d)) return '';
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const ms = compatTimestampMillis(ts);
+  if (!Number.isFinite(ms) || ms <= 0) return '';
+  const diff = Date.now() - ms;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return mins + 'm ago';
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return hrs + 'h ago';
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return days + 'd ago';
+  return new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-function _fmtMsgDateSep(ts) {
-  if (!ts) return '';
-  const d = ts.toDate ? ts.toDate() : new Date(ts?.seconds ? ts.seconds * 1000 : ts);
-  const now = new Date();
-  const diffDays = Math.floor((new Date(now.toDateString()) - new Date(d.toDateString())) / 86400000);
-  if (diffDays === 0) return 'Today';
-  if (diffDays === 1) return 'Yesterday';
-  return d.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
+function _relativeTimeCompact(ts) {
+  const label = _relativeTime(ts);
+  if (!label) return '';
+  return label.replace(/\s+ago$/i, '');
 }
 
-function _messagingSetPhotoPreview(file = null) {
-  _messagingState.selectedPhoto = file || null;
-  const wrap = document.getElementById('messaging-photo-preview');
-  if (!wrap) return;
-  if (!file) {
-    wrap.innerHTML = '';
-    return;
-  }
-  const objectUrl = URL.createObjectURL(file);
-  wrap.innerHTML = `<div class="msg-reaction" style="display:inline-flex;margin:8px 0;">📷 ${esc(file.name || 'image')}</div><img src="${objectUrl}" alt="selected photo preview" style="max-width:180px;border-radius:10px;border:1px solid var(--color-border, var(--border));margin-top:6px;">`;
-}
-
-function _messagingNotifyIncoming(message, conversationName) {
-  showGameToast(`💬 ${conversationName}: ${(message?.sender?.name || 'Someone')} sent a message`);
-  if (!('Notification' in window) || Notification.permission !== 'granted') return;
-  try {
-    new Notification(conversationName, {
-      body: message.text || (message.attachments?.length ? 'Sent a photo' : 'New message')
-    });
-  } catch (e) {
-    console.warn('Notification failed', e);
-  }
-}
-
-function _messagingMemberByUid(uid) {
-  if (!uid) return null;
-  if (uid === currentUser?.uid) {
-    return {
-      uid,
-      displayName: currentUser?.displayName || currentUser?.email || 'You',
-      email: currentUser?.email || '',
-      photoURL: currentUser?.photoURL || ''
-    };
-  }
-  return _messagingState.selectableMembers.find(m => m.uid === uid) || null;
-}
-
-function _messagingPersonAvatar(member = {}, size = 40) {
-  const label = _messagingUserLabel(member);
-  const photo = _messagingUserPhoto(member);
-  if (photo) {
-    return `<div class="msg-avatar" style="position:relative;"><img class="msg-avatar-img" src="${esc(photo)}" alt="${esc(label)}" style="width:${size}px;height:${size}px;border-radius:50%;"></div>`;
-  }
-  return `<div class="msg-avatar" style="position:relative;"><div class="msg-avatar-initials" style="background:${_messagingColor(member.uid || label)};width:${size}px;height:${size}px;">${esc(_messagingInitials(label))}</div></div>`;
-}
-
-function _messagingConversationName(conv) {
-  if (!conv) return 'Conversation';
-  if (conv.type === 'dm') {
-    const otherUid = (conv.memberIds || []).find(uid => uid !== currentUser?.uid);
-    const other = _messagingMemberByUid(otherUid);
-    return _messagingUserLabel(other || { uid: otherUid, name: conv.title || 'Direct Message' });
-  }
-  if (conv.type === 'press') return conv.title || `Press ${conv.pressId || ''}`.trim() || 'Press Chat';
-  return conv.title || 'Group Chat';
-}
-
-function _messagingFilteredConversations() {
-  const tab = _messagingState.tab;
-  const q = String(_messagingState.search || '').trim().toLowerCase();
-  const sorted = [..._messagingState.conversations].sort((a, b) => {
-    const at = a.lastMessageAt?.toMillis?.() ?? a.lastMessageAt?.seconds * 1000 ?? (a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0);
-    const bt = b.lastMessageAt?.toMillis?.() ?? b.lastMessageAt?.seconds * 1000 ?? (b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0);
-    return bt - at;
-  });
-  return sorted.filter(conv => {
-    if (tab === 'dms' && conv.type !== 'dm') return false;
-    if (tab === 'groups' && conv.type === 'dm') return false;
-    if (!q) return true;
-    const name = _messagingConversationName(conv).toLowerCase();
-    const preview = String(conv.lastMessage?.textPreview || '').toLowerCase();
-    return name.includes(q) || preview.includes(q);
-  });
-}
-
-function _messagingUnreadCount(conv) {
-  const lastId = conv?.lastMessage?.id;
-  const lastSenderUid = conv?.lastMessage?.sender?.uid || conv?.lastMessage?.senderUid;
-  if (!lastId || !lastSenderUid || lastSenderUid === currentUser?.uid) return 0;
-  const lastReadId = conv?.myMembership?.lastReadMessageId || _messagingState.lastSeenByConversation[conv.id] || null;
-  return lastReadId === lastId ? 0 : 1;
-}
-
-function _messagingAvatarHtml(conv, size = 40) {
-  if (!conv) return '';
-  if (conv.type !== 'dm') {
-    const others = (conv.memberIds || []).filter(uid => uid !== currentUser?.uid).slice(0, 4);
-    const cells = others.map(uid => {
-      const m = _messagingMemberByUid(uid);
-      const label = _messagingUserLabel(m || { uid });
-      const photo = _messagingUserPhoto(m || {});
-      if (photo) {
-        return `<div class="msg-group-avatar-cell" style="padding:0;overflow:hidden;background:var(--bg4);"><img src="${esc(photo)}" alt="${esc(label)}" style="width:100%;height:100%;object-fit:cover;"></div>`;
-      }
-      return `<div class="msg-group-avatar-cell" style="background:${_messagingColor(uid)}">${esc(_messagingInitials(label))}</div>`;
-    }).join('');
-    return `<div class="msg-group-avatar" style="width:${size}px;height:${size}px;">${cells || '<div class="msg-group-avatar-cell" style="grid-column:1/3;background:var(--bg4)">GR</div>'}</div>`;
-  }
-  const otherUid = (conv.memberIds || []).find(uid => uid !== currentUser?.uid);
-  const other = _messagingMemberByUid(otherUid) || { uid: otherUid, name: 'User' };
-  return _messagingPersonAvatar(other, size);
-}
-
-function _renderMessagingConversations() {
-  const list = document.getElementById('messaging-conversations-list');
-  if (!list) return;
-  const conversations = _messagingFilteredConversations();
-  if (!conversations.length) {
-    list.innerHTML = '<div class="msg-empty"><div class="msg-empty-icon">💬</div><div class="msg-empty-text">No conversations yet.</div></div>';
-    return;
-  }
-  list.innerHTML = conversations.map(conv => {
-    const unread = _messagingUnreadCount(conv);
-    const isActive = conv.id === _messagingState.activeConversationId;
-    const name = _messagingConversationName(conv);
-    const preview = conv.lastMessage?.textPreview || 'No messages yet';
-    const time = conv.lastMessageAt ? _relativeTime(conv.lastMessageAt) : '';
-    return `<div class="msg-convo-row ${isActive ? 'active' : ''}" data-convo-id="${esc(conv.id)}">
-      ${_messagingAvatarHtml(conv)}
-      <div class="msg-convo-info">
-        <div class="msg-convo-name-row">
-          <span class="msg-convo-name">${esc(name)}</span>
-          <span class="msg-convo-time">${esc(time)}</span>
-        </div>
-        <div class="msg-convo-preview ${unread ? 'unread' : ''}">${esc(preview)}</div>
-      </div>
-      ${unread ? '<div class="msg-unread-dot"></div>' : ''}
-    </div>`;
-  }).join('');
-
-  list.querySelectorAll('.msg-convo-row').forEach(row => {
-    row.addEventListener('click', () => {
-      const convoId = row.getAttribute('data-convo-id');
-      if (convoId) _selectMessagingConversation(convoId);
-      if (window.innerWidth <= 600) document.getElementById('msg-list-panel')?.classList.add('hidden');
-    });
-  });
-}
-
-function _renderMessagingThreadHeader(conv) {
-  const title = document.getElementById('messaging-thread-title');
-  const sub = document.getElementById('messaging-thread-sub');
-  const avatar = document.getElementById('messaging-thread-avatar');
-  const header = document.getElementById('messaging-thread-header');
-  if (!title || !sub || !avatar || !header) return;
-  if (!conv) {
-    header.style.display = 'none';
-    title.textContent = 'Select a conversation';
-    sub.textContent = '';
-    avatar.innerHTML = '';
-    return;
-  }
-  header.style.display = 'flex';
-  title.textContent = _messagingConversationName(conv);
-  const memberCount = Array.isArray(conv.memberIds) ? conv.memberIds.length : 0;
-  sub.textContent = conv.type === 'dm' ? 'Direct message' : `${memberCount} members`;
-  avatar.innerHTML = _messagingAvatarHtml(conv, 36);
-}
-
-function _renderMessagingMessages(messages) {
-  const panel = document.getElementById('messaging-thread-messages');
-  if (!panel) return;
-  if (!messages.length) {
-    panel.innerHTML = '<div class="msg-empty"><div class="msg-empty-icon">💬</div><div class="msg-empty-text">No messages yet. Start the conversation.</div></div>';
-    return;
-  }
-  const convo = _messagingState.conversations.find(c => c.id === _messagingState.activeConversationId);
-  let prevDate = '';
-  const html = [];
-  messages.forEach(msg => {
-    const dt = msg.createdAt?.toDate ? msg.createdAt.toDate() : new Date(msg.createdAt?.seconds ? msg.createdAt.seconds * 1000 : msg.createdAt);
-    const dateKey = dt.toDateString();
-    if (dateKey !== prevDate) {
-      html.push(`<div class="msg-date-sep">${esc(_fmtMsgDateSep(msg.createdAt))}</div>`);
-      prevDate = dateKey;
-    }
-    const mine = msg.sender?.uid === currentUser?.uid;
-    const senderName = mine ? 'You' : (msg.sender?.name || _messagingUserLabel(_messagingMemberByUid(msg.sender?.uid) || {}));
-    const avatar = mine ? '' : `<div class="msg-row-avatar">${_messagingAvatarHtml({ type: 'dm', memberIds: [currentUser?.uid, msg.sender?.uid] }, 28)}</div>`;
-    const attachments = (msg.attachments || []).filter(att => att.kind === 'image' && att.url)
-      .map(att => `<img class="messaging-msg-image" src="${esc(att.url)}" alt="${esc(att.fileName || 'image')}" style="max-width:200px;border-radius:10px;border:1px solid var(--color-border, var(--border));margin-top:4px;">`).join('');
-    html.push(`<div class="msg-row ${mine ? 'sent' : 'recv'}">
-      ${avatar}
-      <div class="msg-bubble-group">
-        ${(!mine && convo?.type !== 'dm') ? `<div class="msg-sender-name">${esc(senderName)}</div>` : ''}
-        <div class="msg-bubble-wrap">
-          <div class="msg-bubble ${mine ? 'sent' : 'recv'}">${esc(msg.text || '')}</div>
-          ${attachments}
-        </div>
-        <div class="msg-bubble-time">${esc(_fmtMsgTime(msg.createdAt))}</div>
-      </div>
-    </div>`);
-  });
-  panel.innerHTML = html.join('');
-  panel.scrollTop = panel.scrollHeight;
-}
-
-function _selectMessagingConversation(conversationId) {
-  _messagingState.activeConversationId = conversationId;
-  const selected = _messagingState.conversations.find(c => c.id === conversationId);
-  _renderMessagingConversations();
-  _renderMessagingThreadHeader(selected);
-  openConversation(conversationId, messages => {
-    _renderMessagingMessages(messages);
-    const lastMessage = messages[messages.length - 1] || null;
-    const lastId = lastMessage?.id || null;
-    const seenId = _messagingState.lastSeenByConversation[conversationId] || null;
-    if (lastMessage && seenId && lastMessage.id !== seenId && lastMessage.sender?.uid !== currentUser?.uid) {
-      _messagingNotifyIncoming(lastMessage, _messagingConversationName(selected));
-    }
-    if (lastMessage) _messagingState.lastSeenByConversation[conversationId] = lastMessage.id;
-    if (lastId && lastId !== seenId) {
-      markConversationRead(conversationId, lastId).catch(err => console.warn('markConversationRead failed', err));
-    }
-  });
-}
-
-function _renderMessagingMemberPicks() {
-  const dmWrap = document.getElementById('messaging-dm-list');
-  const groupWrap = document.getElementById('messaging-group-members');
-  if (dmWrap) {
-    dmWrap.innerHTML = _messagingState.selectableMembers.map(m => {
-      const label = _messagingUserLabel(m);
-      const checked = _messagingState.selectedDmUid === m.uid;
-      return `<div class="msg-member-row ${checked ? 'selected' : ''}" data-dm-uid="${esc(m.uid)}">
-        ${_messagingPersonAvatar(m, 36)}
-        <div style="font-size:14px;font-weight:600;">${esc(label)}</div>
-        <div class="msg-member-check">${checked ? '✓' : ''}</div>
-      </div>`;
-    }).join('');
-    dmWrap.querySelectorAll('[data-dm-uid]').forEach(row => {
-      row.addEventListener('click', () => {
-        _messagingState.selectedDmUid = row.getAttribute('data-dm-uid');
-        _renderMessagingMemberPicks();
-      });
-    });
-  }
-
-  if (groupWrap) {
-    groupWrap.innerHTML = _messagingState.selectableMembers.map(m => {
-      const label = _messagingUserLabel(m);
-      const checked = _messagingState.selectedGroupMembers.has(m.uid);
-      return `<div class="msg-member-row ${checked ? 'selected' : ''}" data-group-uid="${esc(m.uid)}">
-        ${_messagingPersonAvatar(m, 36)}
-        <div style="font-size:14px;font-weight:600;">${esc(label)}</div>
-        <div class="msg-member-check">${checked ? '✓' : ''}</div>
-      </div>`;
-    }).join('');
-    groupWrap.querySelectorAll('[data-group-uid]').forEach(row => {
-      row.addEventListener('click', () => {
-        const uid = row.getAttribute('data-group-uid');
-        if (_messagingState.selectedGroupMembers.has(uid)) _messagingState.selectedGroupMembers.delete(uid);
-        else _messagingState.selectedGroupMembers.add(uid);
-        _renderMessagingMemberPicks();
-      });
-    });
-  }
-
-  document.getElementById('messaging-create-dm-btn').disabled = !_messagingState.selectedDmUid;
-  const groupName = String(document.getElementById('messaging-group-name')?.value || '').trim();
-  document.getElementById('messaging-create-group-btn').disabled = !groupName || _messagingState.selectedGroupMembers.size < 1;
-}
-
-async function _messagingSelectableMembers() {
-  if (NO_AUTH_MODE || !currentPlantId || !currentUser?.uid) return [];
-  if (shouldUseSqlStagingReads(currentPlantId)) {
-    const payload = await requireSqlRead(
-      `messaging members ${currentPlantId}`,
-      () => dataApi.listPlantMembers(currentPlantId, { active: true }),
-      `Messaging members are missing in D1 for plant ${currentPlantId}.`
-    );
-    return (payload?.members || [])
-      .filter(m => m.uid !== currentUser.uid && m.isActive !== false)
-      .sort((a, b) => String(_messagingUserLabel(a)).localeCompare(String(_messagingUserLabel(b))));
-  }
-  const membersSnap = await getDocs(collection(db, 'plants', currentPlantId, 'members'));
-  return membersSnap.docs
-    .map(d => ({ uid: d.id, ...d.data() }))
-    .filter(m => m.uid !== currentUser.uid && m.isActive !== false)
-    .sort((a, b) => String(_messagingUserLabel(a)).localeCompare(String(_messagingUserLabel(b))));
-}
-
-async function _messagingLoadMemberSelectors({ preserveSelection = false } = {}) {
-  _messagingState.selectableMembers = await _messagingSelectableMembers();
-  if (!preserveSelection) {
-    _messagingState.selectedDmUid = null;
-    _messagingState.selectedGroupMembers = new Set();
-  }
-  _renderMessagingMemberPicks();
-}
-
-window.openMessagingModal = (options = {}) => {
-  const preserveState = !!options.preserveState;
-  _bindToolModalShellNavigation();
-  const modal = document.getElementById('messaging-modal');
-  if (modal) modal.classList.add('visible');
-  document.body.classList.add('messaging-open');
-  completeDemoGuideStep('tools');
-  _messagingSetError('');
-  if (!preserveState) _messagingSetPhotoPreview(null);
-  document.getElementById('msg-list-panel')?.classList.remove('hidden');
-  if (NO_AUTH_MODE || !currentPlantId || !currentUser?.uid) {
-    _messagingState.conversations = [];
-    _messagingState.activeConversationId = null;
-    _messagingState.selectableMembers = [];
-    _renderMessagingConversations();
-    _renderMessagingThreadHeader(null);
-    const panel = document.getElementById('messaging-thread-messages');
-    if (panel) panel.innerHTML = '<div class="msg-empty"><div class="msg-empty-icon">💬</div><div class="msg-empty-text">Messaging is disabled until a plant and signed-in user are available.</div></div>';
-    _messagingSetError('Messaging is disabled in no-auth mode.');
-    return;
-  }
-  _messagingLoadMemberSelectors({ preserveSelection: preserveState }).catch(err => {
-    console.warn('messaging member load failed', err);
-    _messagingSetError(`Could not load members: ${err?.message || 'permission denied'}`);
-  });
-
-  const panel = document.getElementById('messaging-thread-messages');
-  if (panel) panel.innerHTML = '<div class="msg-empty"><div class="msg-empty-text">Loading…</div></div>';
-
-  watchConversations(conversations => {
-    _messagingState.conversations = conversations;
-    conversations.forEach(conv => {
-      const lastReadMessageId = conv?.myMembership?.lastReadMessageId || null;
-      if (lastReadMessageId) _messagingState.lastSeenByConversation[conv.id] = lastReadMessageId;
-    });
-    const stillExists = conversations.some(c => c.id === _messagingState.activeConversationId);
-    if (!stillExists) _messagingState.activeConversationId = conversations[0]?.id || null;
-    _renderMessagingConversations();
-    if (_messagingState.activeConversationId) {
-      _selectMessagingConversation(_messagingState.activeConversationId);
-    } else {
-      _renderMessagingThreadHeader(null);
-      if (panel) panel.innerHTML = '<div class="msg-empty"><div class="msg-empty-icon">💬</div><div class="msg-empty-text">Create a conversation to begin messaging.</div></div>';
-    }
-  }, {}, err => {
-    _messagingSetError(`Could not load conversations: ${err?.message || 'permission denied'}`);
-    _renderMessagingThreadHeader(null);
-    if (panel) panel.innerHTML = '<div class="msg-empty"><div class="msg-empty-text">Conversation access is currently denied.</div></div>';
-  });
-};
-
-window.closeMessagingModal = (options = {}) => {
-  document.getElementById('messaging-modal')?.classList.remove('visible');
-  document.body.classList.remove('messaging-open');
-  hideMessagingSheets();
-  if (!options.preserveState) {
-    _messagingSetPhotoPreview(null);
-  }
-  closeConversation();
-  closeConversationList();
-};
-
-window.sendMessagingModalMessage = async () => {
-  const ta = document.getElementById('messaging-input');
-  const text = String(ta?.value || '').trim();
-  if (!text && !_messagingState.selectedPhoto) return;
-  if (!_messagingState.activeConversationId) {
-    _messagingSetError('Select or create a conversation first.');
-    return;
-  }
-  try {
-    _messagingSetError('');
-    let attachments = [];
-    if (_messagingState.selectedPhoto) {
-      const photo = await _uploadMessagingPhoto(_messagingState.selectedPhoto, _messagingState.activeConversationId);
-      attachments = [photo];
-    }
-    await sendConversationMessage(_messagingState.activeConversationId, text || '', { attachments });
-    if (ta) {
-      ta.value = '';
-      ta.style.height = 'auto';
-    }
-    _messagingSetPhotoPreview(null);
-  } catch (err) {
-    console.warn('sendMessagingModalMessage failed', err);
-    _messagingSetError(`Could not send message: ${err?.message || 'permission denied'}`);
-  }
-};
-
-window.createMessagingDm = async () => {
-  _messagingSetError('');
-  if (!currentPlantId || !currentUser?.uid) {
-    _messagingSetError('Sign in and select a plant before creating a DM.');
-    return;
-  }
-  if (!_messagingState.selectedDmUid) {
-    _messagingSetError('Select someone to message.');
-    return;
-  }
-  try {
-    const conversationId = await createConversation({ type: 'dm', memberIds: [_messagingState.selectedDmUid] });
-    hideMessagingSheets();
-    _messagingState.activeConversationId = conversationId;
-    _selectMessagingConversation(conversationId);
-  } catch (err) {
-    console.warn('createMessagingDm failed', err);
-    _messagingSetError(`Could not create DM: ${err?.message || 'permission denied'}`);
-  }
-};
-
-window.createMessagingGroup = async () => {
-  _messagingSetError('');
-  if (!currentPlantId || !currentUser?.uid) {
-    _messagingSetError('Sign in and select a plant before creating a group.');
-    return;
-  }
-  const groupTitle = String(document.getElementById('messaging-group-name')?.value || '').trim();
-  const memberIds = Array.from(_messagingState.selectedGroupMembers);
-  if (!groupTitle) {
-    _messagingSetError('Enter a group name.');
-    return;
-  }
-  if (!memberIds.length) {
-    _messagingSetError('Select at least one member for the group.');
-    return;
-  }
-  try {
-    const conversationId = await createConversation({ type: 'group', title: groupTitle, memberIds });
-    document.getElementById('messaging-group-name').value = '';
-    hideMessagingSheets();
-    _messagingState.activeConversationId = conversationId;
-    _selectMessagingConversation(conversationId);
-  } catch (err) {
-    console.warn('createMessagingGroup failed', err);
-    _messagingSetError(`Could not create group: ${err?.message || 'permission denied'}`);
-  }
-};
-
-window.showMessagingNewDm = () => {
-  const sheet = document.getElementById('messaging-new-dm');
-  if (sheet) sheet.classList.add('visible');
-  document.getElementById('messaging-new-group')?.classList.remove('visible');
-  _renderMessagingMemberPicks();
-};
-
-window.showMessagingNewGroup = () => {
-  const sheet = document.getElementById('messaging-new-group');
-  if (sheet) sheet.classList.add('visible');
-  document.getElementById('messaging-new-dm')?.classList.remove('visible');
-  _renderMessagingMemberPicks();
-};
-
-window.hideMessagingSheets = () => {
-  const dm = document.getElementById('messaging-new-dm');
-  const group = document.getElementById('messaging-new-group');
-  if (dm) dm.classList.remove('visible');
-  if (group) group.classList.remove('visible');
-};
-
-window.enableMessagingNotifications = async () => {
-  try {
-    await registerFcmToken({ requestPermission: true });
-    _messagingSetError('');
-    showGameToast('🔔 Push alerts enabled');
-  } catch (err) {
-    _messagingSetError(err?.message || 'Notification permission was not granted.');
-  }
-};
-
-async function _uploadMessagingPhoto(file, conversationId) {
-  const dataUrl = await readFileAsDataUrl(file);
-  const uploaded = await uploadAttachmentToPreferredStorage(currentPlantId, {
-    scope: 'conversation',
-    conversationId,
-    fileName: file.name || 'image.jpg',
-    contentType: file.type || 'image/jpeg',
-    dataUrl
-  });
-  if (uploaded?.storagePath) {
-    return {
-      kind: 'image',
-      url: uploaded.downloadUrl || uploaded.url || '',
-      storagePath: uploaded.storagePath,
-      storageBucket: uploaded.storageBucket || 'r2',
-      fileName: uploaded.fileName || file.name || 'image.jpg',
-      contentType: uploaded.contentType || file.type || 'image/jpeg',
-      sizeBytes: Number(uploaded.sizeBytes || file.size || 0)
-    };
-  }
-  const path = `plants/${currentPlantId}/conversations/${conversationId}/photos/${Date.now()}_${Math.random().toString(36).slice(2)}_${file.name || 'image.jpg'}`;
-  const fileRef = storageRef(storage, path);
-  await uploadString(fileRef, dataUrl, 'data_url');
-  const url = await getDownloadURL(fileRef);
-  return {
-    kind: 'image',
-    url,
-    storagePath: path,
-    fileName: file.name || 'image.jpg',
-    contentType: file.type || 'image/jpeg',
-    sizeBytes: file.size || 0
-  };
-}
-
-document.getElementById('messaging-modal')?.addEventListener('click', e => {
-  if (e.target === document.getElementById('messaging-modal')) closeMessagingModal();
+const messagingTool = initMessagingTool({
+  getCurrentUser: () => currentUser,
+  getCurrentPlantId: () => currentPlantId,
+  NO_AUTH_MODE,
+  esc,
+  _relativeTime,
+  showGameToast,
+  completeDemoGuideStep,
+  readFileAsDataUrl,
+  _bindToolModalShellNavigation,
+  shouldUseSqlStagingReads,
+  requireSqlRead,
+  dataApi,
+  collection, getDocs, onSnapshot, query, where, orderBy, serverTimestamp,
+  conversationsCol,
+  uploadAttachmentToPreferredStorage,
+  registerFcmToken,
+  db
 });
-
-document.getElementById('messaging-new-dm')?.addEventListener('click', e => {
-  if (e.target === e.currentTarget) hideMessagingSheets();
-});
-
-document.getElementById('messaging-new-group')?.addEventListener('click', e => {
-  if (e.target === e.currentTarget) hideMessagingSheets();
-});
-
-document.getElementById('messaging-create-dm-btn')?.addEventListener('click', () => createMessagingDm());
-document.getElementById('messaging-create-group-btn')?.addEventListener('click', () => createMessagingGroup());
-
-document.getElementById('messaging-tabs')?.addEventListener('click', e => {
-  const btn = e.target.closest('[data-tab]');
-  if (!btn) return;
-  _messagingState.tab = btn.getAttribute('data-tab') || 'all';
-  document.querySelectorAll('#messaging-tabs .msg-tab').forEach(tabBtn => tabBtn.classList.toggle('active', tabBtn === btn));
-  _renderMessagingConversations();
-});
-
-document.getElementById('messaging-search')?.addEventListener('input', e => {
-  _messagingState.search = e.target.value || '';
-  _renderMessagingConversations();
-});
-
-document.getElementById('messaging-back-btn')?.addEventListener('click', () => {
-  document.getElementById('msg-list-panel')?.classList.remove('hidden');
-});
-
-document.getElementById('messaging-group-name')?.addEventListener('input', () => _renderMessagingMemberPicks());
-
-document.getElementById('messaging-input')?.addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    sendMessagingModalMessage();
-  }
-});
-
-document.getElementById('messaging-input')?.addEventListener('input', e => {
-  e.target.style.height = 'auto';
-  e.target.style.height = Math.min(e.target.scrollHeight, 100) + 'px';
-});
-
-document.getElementById('messaging-photo-input')?.addEventListener('change', e => {
-  const file = e.target?.files?.[0] || null;
-  _messagingSetPhotoPreview(file);
-});
-
-// ── PRESS NOTES ──
-// Toggle between 'a' (Logbook) and 'b' (Team Channel) to switch prototypes
-
-let _pressWikiModalPressId = null;
-let _pressWikiSelectedPressId = null;
-let _pressWikiSelectedPageId = null;
-let _pressWikiCanEdit = false;
-let _pressWikiAttachmentsCache = [];
-let _pressWikiMachineCode = null;
-let _pressWikiRenderedBodyRaw = '';
-let _pressWikiPageListCache = [];
-let _pressWikiExpandedPageIds = new Set();
-let _pressWikiKnownTreeNodeIds = new Set();
-let _pressWikiPickerOpen = false;
-let _pressWikiPressPickerOpen = false;
-const PRESS_WIKI_SHARED_INDEX_PAGE_ID = 'shared-library-index';
+window.openMessagingModal = messagingTool.open;
+window.closeMessagingModal = messagingTool.close;
+window.sendMessagingModalMessage = messagingTool.sendMessage;
+window.createMessagingDm = messagingTool.createDm;
+window.createMessagingGroup = messagingTool.createGroup;
+window.showMessagingNewDm = messagingTool.showNewDm;
+window.showMessagingNewGroup = messagingTool.showNewGroup;
+window.hideMessagingSheets = messagingTool.hideSheets;
+window.enableMessagingNotifications = messagingTool.enableNotifications;
 
 function getCurrentOpenMachine() {
   const filterMachine = String(document.getElementById('machine-filter')?.value || '').trim();
@@ -15557,3352 +15007,51 @@ const todosTool = initTodosTool({
 window.openTodosModal = todosTool.open;
 window.closeTodosModal = todosTool.close;
 
-let _notesLoadToken = 0;
-let _notesSaveTimer = null;
-let _notesUnsubscribe = null;
-let _notesPollTimer = null;
-let _notesAttachmentsCache = [];
-let _notesContext = { pressId: null, issueId: null, label: 'Plant-wide' };
-const _notesState = {
-  notes: [],
-  activeNoteId: null,
-  view: 'list',
-  filter: 'all',
-  search: '',
-  saving: false,
-  lastSavedAt: null,
-  draftChecklistId: 1,
-  dirty: false,
-  creating: false,
-  previewMode: false,
-  lockContext: false,
-  error: '',
-  currentNote: null
-};
-
-function _notesIsMobileLayout() {
-  return window.innerWidth <= 860;
-}
-
-function _notesSyncLayout() {
-  const editorModal = document.getElementById('notes-editor-modal');
-  if (!editorModal) return;
-  const isEditor = _notesState.view === 'editor' && !!_notesState.currentNote?.id;
-  editorModal.classList.toggle('visible', isEditor);
-}
-
-window.closeNotesEditorModal = function() {
-  _notesSetView('list');
-  _notesRenderEditor(null);
-  _notesRenderList();
-};
-
-function _notesSetView(view) {
-  _notesState.view = view === 'editor' ? 'editor' : 'list';
-  _notesSyncLayout();
-}
-
-function _pressWikiScopeLabel(scope = _pressWikiScope) {
-  return scope === WIKI_SCOPE_SHARED ? 'Shared Library' : 'This Press';
-}
-
-function _pressWikiBaseTitle(scope = _pressWikiScope) {
-  return scope === WIKI_SCOPE_SHARED ? 'Shared Library' : 'Shift Notes';
-}
-
-function _pressWikiEmptySelectionMessage(scope = _pressWikiScope) {
-  return scope === WIKI_SCOPE_SHARED
-    ? 'The shared library is empty. Create the first page to seed it.'
-    : 'Choose a press to view its wiki pages.';
-}
-
-function _pressWikiIsKnownPressId(pressId) {
-  const target = String(pressId || '').trim();
-  if (!target) return false;
-  return Object.values(PRESSES || {}).some(machines => (machines || []).some(machineCode => toPressId(machineCode) === target));
-}
-
-function _pressWikiPressInfo(pressId) {
-  const target = String(pressId || '').trim();
-  if (!target) return null;
-  for (const [rowName, machines] of Object.entries(PRESSES || {})) {
-    for (const machineCode of (machines || [])) {
-      if (toPressId(machineCode) === target) {
-        return {
-          pressId: target,
-          machineCode: String(machineCode || '').trim(),
-          rowName: String(rowName || '').trim(),
-          label: String(machineCode || '').trim()
-        };
-      }
-    }
-  }
-  return null;
-}
-
-function _pressWikiDefaultSharedPageId(sourcePages = _pressWikiPageListCache) {
-  const pages = Array.isArray(sourcePages) ? sourcePages : [];
-  const targetSlug = _pressWikiSlugify('Shared Library Index');
-  const match = pages.find(page => {
-    const pageTitle = String(page?.title || '').trim();
-    const pageSlug = _pressWikiSlugify(page?.slug || page?.id || pageTitle);
-    return page?.id === PRESS_WIKI_SHARED_INDEX_PAGE_ID ||
-      pageSlug === targetSlug ||
-      _pressWikiSlugify(pageTitle) === targetSlug;
-  });
-  return match?.id || PRESS_WIKI_SHARED_INDEX_PAGE_ID;
-}
-
-function _pressWikiRowSortValue(rowName) {
-  const raw = String(rowName || '').trim();
-  const match = raw.match(/(\d+)/);
-  if (match) return Number(match[1]);
-  if (!raw) return Number.MAX_SAFE_INTEGER - 1;
-  if (raw.toLowerCase() === 'other') return Number.MAX_SAFE_INTEGER;
-  return 1000 + raw.toLowerCase().charCodeAt(0);
-}
-
-function _pressWikiActivePressId() {
-  if (_pressWikiScope !== WIKI_SCOPE_PRESS) return null;
-  if (_pressWikiSelectedPressId && _pressWikiIsKnownPressId(_pressWikiSelectedPressId)) return _pressWikiSelectedPressId;
-  if (_pressWikiIsKnownPressId(_pressWikiModalPressId)) return _pressWikiModalPressId;
-  return null;
-}
-
-function _pressWikiSetPressPickerOpen(open) {
-  _pressWikiPressPickerOpen = Boolean(open) && _pressWikiScope === WIKI_SCOPE_PRESS;
-  const wrap = document.querySelector('.press-wiki-press-picker-wrap');
-  const btn = document.getElementById('press-wiki-scope-press');
-  if (wrap) {
-    wrap.classList.toggle('visible', _pressWikiPressPickerOpen);
-    wrap.style.display = _pressWikiPressPickerOpen ? 'flex' : 'none';
-  }
-  if (btn) btn.setAttribute('aria-expanded', String(_pressWikiPressPickerOpen));
-  renderPressWikiPressPicker();
-}
-
-function _pressWikiSyncPressPickerSummary() {
-  const panelCopy = document.getElementById('press-wiki-press-picker-panel-copy');
-  if (!panelCopy) return;
-  panelCopy.textContent = _pressWikiActivePressId()
-    ? 'Pick a different press to switch wiki context.'
-    : 'Pick a press to load its wiki.';
-}
-
-async function _pressWikiSelectPress(pressId) {
-  const info = _pressWikiPressInfo(pressId);
-  if (!info) return;
-  _pressWikiSelectedPressId = info.pressId;
-  _pressWikiModalPressId = info.pressId;
-  _pressWikiMachineCode = info.machineCode;
-  _pressWikiSetPressPickerOpen(false);
-  _pressWikiSetScope(WIKI_SCOPE_PRESS, { reload: false });
-  await loadPressWikiPageList();
-  if (_pressWikiSelectedPageId) {
-    await loadPressWikiPage(_pressWikiSelectedPageId);
-  } else {
-    renderPressWikiEmptySelection(_pressWikiEmptySelectionMessage());
-  }
-}
-
-function renderPressWikiPressPicker() {
-  const wrap = document.querySelector('.press-wiki-press-picker-wrap');
-  const treeEl = document.getElementById('press-wiki-press-picker-tree');
-  const closeBtn = document.getElementById('press-wiki-press-picker-close');
-  const pressBtn = document.getElementById('press-wiki-scope-press');
-  if (!wrap || !treeEl || !pressBtn) return;
-  const activePressId = _pressWikiActivePressId();
-  const showPicker = _pressWikiScope === WIKI_SCOPE_PRESS && _pressWikiPressPickerOpen;
-
-  wrap.style.display = showPicker ? '' : 'none';
-  treeEl.innerHTML = '';
-
-  if (!showPicker) {
-    return;
-  }
-
-  wrap.classList.add('visible');
-  wrap.setAttribute('aria-hidden', 'false');
-
-  _pressWikiSyncPressPickerSummary();
-  if (closeBtn) {
-    closeBtn.onclick = () => _pressWikiSetPressPickerOpen(false);
-  }
-
-  const rowEntries = Object.entries(PRESSES || {})
-    .map(([rowName, machines]) => ({
-      rowName: String(rowName || '').trim(),
-      rowSort: _pressWikiRowSortValue(rowName),
-      machines: (machines || []).map(machineCode => String(machineCode || '').trim()).filter(Boolean)
-    }))
-    .sort((a, b) => a.rowSort - b.rowSort || a.rowName.localeCompare(b.rowName));
-
-  if (!rowEntries.length) {
-    treeEl.innerHTML = '<div class="press-wiki-press-picker-empty">No presses found in this plant.</div>';
-    return;
-  }
-
-  rowEntries.forEach(({ rowName, machines }) => {
-    if (!machines.length) return;
-    const section = document.createElement('div');
-    section.className = 'press-wiki-press-picker-row';
-    const label = document.createElement('div');
-    label.className = 'press-wiki-press-picker-row-label';
-    label.textContent = rowName;
-    const grid = document.createElement('div');
-    grid.className = 'press-wiki-press-picker-grid';
-    machines.forEach(machineCode => {
-      const pressId = toPressId(machineCode);
-      const item = document.createElement('button');
-      item.type = 'button';
-      item.className = `press-wiki-press-picker-item ${activePressId === pressId ? 'active' : ''}`;
-      item.setAttribute('aria-current', activePressId === pressId ? 'true' : 'false');
-      item.textContent = machineCode || pressId;
-      item.onclick = () => {
-        void _pressWikiSelectPress(pressId);
-      };
-      grid.appendChild(item);
-    });
-    section.appendChild(label);
-    section.appendChild(grid);
-    treeEl.appendChild(section);
-  });
-}
-
-function _pressWikiNormalizeParentId(value) {
-  const trimmed = String(value || '').trim();
-  return trimmed ? trimmed : null;
-}
-
-function _pressWikiSortValue(page, fallbackIndex = 0) {
-  const raw = Number(page?.sortOrder);
-  return Number.isFinite(raw) ? raw : fallbackIndex;
-}
-
-function _pressWikiComparePages(a, b) {
-  const sortDelta = _pressWikiSortValue(a) - _pressWikiSortValue(b);
-  if (sortDelta !== 0) return sortDelta;
-  const titleDelta = String(a.title || '').localeCompare(String(b.title || ''));
-  if (titleDelta !== 0) return titleDelta;
-  return String(a.id || '').localeCompare(String(b.id || ''));
-}
-
-function _pressWikiBuildTree(sourcePages = _pressWikiPageListCache) {
-  const nodesById = new Map();
-  const parentById = new Map();
-  const childrenById = new Map();
-  const roots = [];
-
-  sourcePages.forEach((page, index) => {
-    if (!page?.id) return;
-    nodesById.set(page.id, {
-      ...page,
-      parentPageId: _pressWikiNormalizeParentId(page.parentPageId),
-      sortOrder: Number.isFinite(Number(page.sortOrder)) ? Number(page.sortOrder) : index
-    });
-  });
-
-  nodesById.forEach((page, pageId) => {
-    const parentId = page.parentPageId && nodesById.has(page.parentPageId) && page.parentPageId !== pageId
-      ? page.parentPageId
-      : null;
-    parentById.set(pageId, parentId);
-    if (parentId) {
-      if (!childrenById.has(parentId)) childrenById.set(parentId, []);
-      childrenById.get(parentId).push(page);
-    } else {
-      roots.push(page);
-    }
-  });
-
-  const sortList = list => list.sort(_pressWikiComparePages);
-  sortList(roots);
-  childrenById.forEach(sortList);
-  return { nodesById, parentById, childrenById, roots };
-}
-
-function _pressWikiDescendants(pageId, childrenById, output = new Set()) {
-  const children = childrenById.get(pageId) || [];
-  children.forEach(child => {
-    if (!child?.id || output.has(child.id)) return;
-    output.add(child.id);
-    _pressWikiDescendants(child.id, childrenById, output);
-  });
-  return output;
-}
-
-function _pressWikiAncestors(pageId, parentById) {
-  const output = [];
-  const seen = new Set();
-  let parentId = parentById.get(pageId) || null;
-  while (parentId && !seen.has(parentId)) {
-    output.push(parentId);
-    seen.add(parentId);
-    parentId = parentById.get(parentId) || null;
-  }
-  return output;
-}
-
-function _pressWikiPickerLabelForScope(scope = _pressWikiScope) {
-  return scope === WIKI_SCOPE_SHARED ? 'Shared Library' : _pressWikiPressLabel();
-}
-
-function _pressWikiPickerTrail(tree, pageId = _pressWikiSelectedPageId) {
-  const page = tree?.nodesById?.get(pageId) || null;
-  if (!page) {
-    const pageCount = _pressWikiPageListCache.length;
-    return {
-      title: _pressWikiScope === WIKI_SCOPE_PRESS && !_pressWikiActivePressId()
-        ? 'Choose a press'
-        : 'No page selected',
-      path: _pressWikiPickerLabelForScope(_pressWikiScope),
-      count: `${pageCount} page${pageCount === 1 ? '' : 's'}`
-    };
-  }
-  const ancestorNodes = _pressWikiAncestors(pageId, tree.parentById)
-    .reverse()
-    .map(id => tree.nodesById.get(id))
-    .filter(Boolean);
-  return {
-    title: page.title || page.id || 'Untitled',
-    path: [
-      _pressWikiPickerLabelForScope(page.scope || _pressWikiScope),
-      ...ancestorNodes.map(node => node.title || node.id || 'Untitled')
-    ].join(' / '),
-    count: `${_pressWikiPageListCache.length} page${_pressWikiPageListCache.length === 1 ? '' : 's'}`
-  };
-}
-
-function _pressWikiSetPickerOpen(open) {
-  _pressWikiPickerOpen = Boolean(open);
-  const wrap = document.querySelector('.press-wiki-picker-wrap');
-  const btn = document.getElementById('press-wiki-picker-btn');
-  const panel = document.getElementById('press-wiki-picker-panel');
-  if (wrap) wrap.classList.toggle('open', _pressWikiPickerOpen);
-  if (btn) btn.setAttribute('aria-expanded', String(_pressWikiPickerOpen));
-  if (panel) {
-    panel.classList.toggle('visible', _pressWikiPickerOpen);
-    panel.setAttribute('aria-hidden', String(!_pressWikiPickerOpen));
-  }
-}
-
-function _pressWikiSyncPickerSummary(tree = null) {
-  const titleEl = document.getElementById('press-wiki-picker-title');
-  const pathEl = document.getElementById('press-wiki-picker-path');
-  const countEl = document.getElementById('press-wiki-picker-count');
-  if (!titleEl || !pathEl || !countEl) return;
-  const summary = _pressWikiPickerTrail(tree, _pressWikiSelectedPageId);
-  titleEl.textContent = summary.title;
-  pathEl.textContent = summary.path;
-  countEl.textContent = summary.count;
-}
-
-function _pressWikiRenderPickerNode(parentEl, node, tree, depth = 0) {
-  const children = tree.childrenById.get(node.id) || [];
-  const wrapper = document.createElement('div');
-  wrapper.className = 'press-wiki-picker-node';
-  wrapper.style.setProperty('--press-wiki-depth', String(depth));
-
-  const row = document.createElement('div');
-  row.className = `press-wiki-picker-row ${node.id === _pressWikiSelectedPageId ? 'active' : ''}`;
-  row.style.setProperty('--press-wiki-depth', String(depth));
-
-  const toggle = document.createElement('button');
-  toggle.type = 'button';
-  toggle.className = 'press-wiki-picker-toggle';
-  toggle.disabled = !children.length;
-  toggle.setAttribute('aria-label', children.length
-    ? (_pressWikiExpandedPageIds.has(node.id) ? 'Collapse section' : 'Expand section')
-    : 'Leaf page');
-  toggle.textContent = children.length ? (_pressWikiExpandedPageIds.has(node.id) ? '▾' : '▸') : '•';
-  if (!children.length) toggle.classList.add('leaf');
-  toggle.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (!children.length) return;
-    if (_pressWikiExpandedPageIds.has(node.id)) _pressWikiExpandedPageIds.delete(node.id);
-    else _pressWikiExpandedPageIds.add(node.id);
-    renderPressWikiPageTree();
-  });
-
-  const main = document.createElement('button');
-  main.type = 'button';
-  main.className = 'press-wiki-picker-main';
-  main.setAttribute('aria-current', node.id === _pressWikiSelectedPageId ? 'page' : 'false');
-  main.addEventListener('click', async (e) => {
-    e.stopPropagation();
-    await loadPressWikiPage(node.id);
-    _pressWikiSetPickerOpen(false);
-  });
-
-  const copy = document.createElement('div');
-  copy.className = 'press-wiki-picker-main-copy';
-  const title = document.createElement('div');
-  title.className = 'press-wiki-picker-row-title';
-  title.textContent = node.title || node.id || 'Untitled';
-  const meta = document.createElement('div');
-  meta.className = 'press-wiki-picker-row-meta';
-  meta.textContent = `${children.length ? `${children.length} child${children.length === 1 ? '' : 'ren'} · ` : ''}${node.id}`;
-  copy.appendChild(title);
-  copy.appendChild(meta);
-  main.appendChild(copy);
-
-  const badges = document.createElement('div');
-  badges.className = 'press-wiki-picker-row-badges';
-  const showSharedBadge = node.scope === WIKI_SCOPE_SHARED && node.id === PRESS_WIKI_SHARED_INDEX_PAGE_ID;
-  if (node.scope === WIKI_SCOPE_SHARED || node.scope === WIKI_SCOPE_PRESS) {
-    const scopeBadge = document.createElement('span');
-    scopeBadge.className = `press-wiki-picker-scope ${node.scope === WIKI_SCOPE_SHARED ? 'shared' : 'press'}`;
-    scopeBadge.textContent = showSharedBadge ? 'Shared' : 'Press';
-    if (showSharedBadge || node.scope === WIKI_SCOPE_PRESS) badges.appendChild(scopeBadge);
-  }
-  if (node.id === _pressWikiSelectedPageId) {
-    const currentBadge = document.createElement('span');
-    currentBadge.className = 'press-wiki-picker-current';
-    currentBadge.textContent = 'Current';
-    badges.appendChild(currentBadge);
-  }
-  main.appendChild(badges);
-
-  row.appendChild(toggle);
-  row.appendChild(main);
-  row.addEventListener('click', async () => {
-    await loadPressWikiPage(node.id);
-    _pressWikiSetPickerOpen(false);
-  });
-  wrapper.appendChild(row);
-
-  if (children.length) {
-    const childWrap = document.createElement('div');
-    childWrap.className = 'press-wiki-picker-children';
-    childWrap.style.display = _pressWikiExpandedPageIds.has(node.id) ? 'grid' : 'none';
-    children.forEach(child => _pressWikiRenderPickerNode(childWrap, child, tree, depth + 1));
-    wrapper.appendChild(childWrap);
-  }
-
-  parentEl.appendChild(wrapper);
-}
-
-function _pressWikiExpandDefaults(tree) {
-  tree.nodesById.forEach((page, pageId) => {
-    if (!_pressWikiKnownTreeNodeIds.has(pageId) && (tree.childrenById.get(pageId) || []).length > 0) {
-      _pressWikiExpandedPageIds.add(pageId);
-    }
-    _pressWikiKnownTreeNodeIds.add(pageId);
-  });
-}
-
-function _pressWikiRenderTreeNode(parentEl, node, tree, depth = 0) {
-  const children = tree.childrenById.get(node.id) || [];
-  const wrapper = document.createElement('div');
-  wrapper.style.display = 'flex';
-  wrapper.style.flexDirection = 'column';
-  wrapper.style.gap = '2px';
-
-  const row = document.createElement('div');
-  row.style.width = '100%';
-  row.style.display = 'flex';
-  row.style.alignItems = 'center';
-  row.style.gap = '8px';
-  row.style.padding = `10px 12px 10px ${12 + depth * 18}px`;
-  row.style.borderBottom = '1px solid var(--color-border, var(--border))';
-  row.style.background = node.id === _pressWikiSelectedPageId ? 'color-mix(in srgb, var(--ios-blue) 14%, transparent)' : 'transparent';
-  row.style.color = 'var(--color-text, var(--text))';
-  row.style.cursor = 'pointer';
-  row.style.textAlign = 'left';
-
-  const spacer = document.createElement('span');
-  spacer.style.width = '22px';
-  spacer.style.flex = '0 0 auto';
-
-  if (children.length) {
-    const toggle = document.createElement('button');
-    toggle.type = 'button';
-    toggle.textContent = _pressWikiExpandedPageIds.has(node.id) ? '▾' : '▸';
-    toggle.style.width = '22px';
-    toggle.style.height = '22px';
-    toggle.style.borderRadius = '6px';
-    toggle.style.border = '1px solid var(--color-border, var(--border))';
-    toggle.style.background = 'var(--color-surface, var(--bg2))';
-    toggle.style.color = 'var(--color-text-muted, var(--text2))';
-    toggle.style.display = 'inline-flex';
-    toggle.style.alignItems = 'center';
-    toggle.style.justifyContent = 'center';
-    toggle.onclick = (e) => {
-      e.stopPropagation();
-      if (_pressWikiExpandedPageIds.has(node.id)) _pressWikiExpandedPageIds.delete(node.id);
-      else _pressWikiExpandedPageIds.add(node.id);
-      renderPressWikiPageTree();
-    };
-    row.appendChild(toggle);
-  } else {
-    row.appendChild(spacer);
-  }
-
-  const main = document.createElement('div');
-  main.style.flex = '1';
-  main.style.minWidth = '0';
-  const title = document.createElement('div');
-  title.style.fontSize = '14px';
-  title.style.fontWeight = '700';
-  title.style.lineHeight = '1.2';
-  title.textContent = node.title || node.id || 'Untitled';
-  const meta = document.createElement('div');
-  meta.style.fontSize = '11px';
-  meta.style.color = 'var(--color-text-subtle, var(--text3))';
-  meta.style.fontFamily = "'Share Tech Mono', monospace";
-  meta.textContent = `Photos: ${node.photoCount || 0}`;
-  main.appendChild(title);
-  main.appendChild(meta);
-  row.appendChild(main);
-
-  if (node.scope === WIKI_SCOPE_SHARED && node.id === PRESS_WIKI_SHARED_INDEX_PAGE_ID) {
-    const badge = document.createElement('span');
-    badge.className = 'scope-link-badge';
-    badge.textContent = 'Shared';
-    row.appendChild(badge);
-  }
-
-  row.onclick = () => loadPressWikiPage(node.id);
-  wrapper.appendChild(row);
-
-  if (children.length) {
-    const childWrap = document.createElement('div');
-    childWrap.style.display = _pressWikiExpandedPageIds.has(node.id) ? 'block' : 'none';
-    childWrap.style.marginLeft = '0';
-    children.forEach(child => _pressWikiRenderTreeNode(childWrap, child, tree, depth + 1));
-    wrapper.appendChild(childWrap);
-  }
-
-  parentEl.appendChild(wrapper);
-}
-
-function renderPressWikiPageTree() {
-  const panel = document.getElementById('press-wiki-picker-panel');
-  const treeEl = document.getElementById('press-wiki-picker-tree');
-  const btn = document.getElementById('press-wiki-picker-btn');
-  if (!panel || !treeEl) return;
-  treeEl.innerHTML = '';
-  if (btn) btn.disabled = _pressWikiScope === WIKI_SCOPE_PRESS && !_pressWikiActivePressId();
-
-  if (_pressWikiScope === WIKI_SCOPE_PRESS && !_pressWikiActivePressId()) {
-    panel.classList.add('empty');
-    treeEl.innerHTML = '<div class="press-wiki-picker-empty">Choose a press first.</div>';
-    _pressWikiSyncPickerSummary(null);
-    return;
-  }
-
-  if (!_pressWikiPageListCache.length) {
-    panel.classList.add('empty');
-    treeEl.innerHTML = '<div class="press-wiki-picker-empty">No pages found in this scope.</div>';
-    _pressWikiSyncPickerSummary(null);
-    return;
-  }
-
-  panel.classList.remove('empty');
-
-  const tree = _pressWikiBuildTree(_pressWikiPageListCache);
-  _pressWikiExpandDefaults(tree);
-  if (_pressWikiSelectedPageId) {
-    _pressWikiAncestors(_pressWikiSelectedPageId, tree.parentById).forEach(id => _pressWikiExpandedPageIds.add(id));
-  }
-
-  if (!tree.nodesById.has(_pressWikiSelectedPageId)) {
-    _pressWikiSelectedPageId = tree.roots[0]?.id || null;
-  }
-
-  _pressWikiSyncPickerSummary(tree);
-  tree.roots.forEach(node => _pressWikiRenderPickerNode(treeEl, node, tree, 0));
-}
-
-document.getElementById('press-wiki-picker-btn')?.addEventListener('click', e => {
-  e.stopPropagation();
-  _pressWikiSetPickerOpen(!_pressWikiPickerOpen);
+// ── WIKI TOOL ──
+const wikiTool = initWikiTool({
+  getCurrentUser: () => currentUser,
+  getCurrentPlantId: () => currentPlantId,
+  getCurrentUserRole: () => currentUserRole,
+  getPresses: () => PRESSES,
+  toPressId, esc, alphaColor, localDateStr,
+  completeDemoGuideStep, readFileAsDataUrl,
+  uploadAttachmentToPreferredStorage,
+  _bindToolModalShellNavigation,
+  shouldUseSqlStagingReads, requireSqlRead, dataApi,
+  doc, collection, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc,
+  onSnapshot, query, where, orderBy, limit, serverTimestamp, writeBatch, runTransaction, increment,
+  firebasePaths, db, parseDataUrlMeta, extFromContentType,
+  _closeToolModalByKey, _cycleToolModal, closeUserMenus, closeSortDropdown, _relativeTime,
+  pressWikiPagesCol, pressWikiPageDoc, pressWikiRevisionsCol, pressWikiAttachmentsCol,
+  wikiCollectionPath, wikiPagesColForScope, wikiPageDocForScope,
+  wikiRevisionsColForScope, wikiAttachmentsColForScope, wikiStoragePrefixForScope
 });
-
-function _pressWikiPressLabel() {
-  return _pressWikiMachineCode ? `Press ${_pressWikiMachineCode}` : 'This Press';
-}
-
-function _pressWikiSyncScopeBadge(scope = _pressWikiScope) {
-  const badge = document.getElementById('press-wiki-scope-badge');
-  if (!badge) return;
-  const isShared = scope === WIKI_SCOPE_SHARED;
-  badge.style.display = isShared ? 'inline-flex' : 'none';
-  badge.title = isShared ? 'Open the shared library view' : '';
-  badge.onclick = isShared ? () => _pressWikiSetScope(WIKI_SCOPE_SHARED) : null;
-}
-
-function _pressWikiSetScope(scope, { reload = true } = {}) {
-  _pressWikiScope = scope === WIKI_SCOPE_SHARED ? WIKI_SCOPE_SHARED : WIKI_SCOPE_PRESS;
-  const pressBtn = document.getElementById('press-wiki-scope-press');
-  const sharedBtn = document.getElementById('press-wiki-scope-shared');
-  const isShared = _pressWikiScope === WIKI_SCOPE_SHARED;
-  [pressBtn, sharedBtn].forEach(btn => {
-    if (!btn) return;
-    btn.style.background = 'var(--color-surface-raised, var(--bg3))';
-    btn.style.borderColor = 'var(--color-border, var(--border))';
-    btn.style.color = 'var(--color-text-muted, var(--text2))';
-  });
-  if (pressBtn) {
-    pressBtn.style.background = !isShared ? 'var(--color-accent, var(--accent))' : 'var(--color-surface-raised, var(--bg3))';
-    pressBtn.style.borderColor = !isShared ? 'var(--color-accent, var(--accent))' : 'var(--color-border, var(--border))';
-    pressBtn.style.color = !isShared ? 'white' : 'var(--color-text-muted, var(--text2))';
-  }
-  if (sharedBtn) {
-    sharedBtn.style.background = isShared ? 'var(--color-accent, var(--accent))' : 'var(--color-surface-raised, var(--bg3))';
-    sharedBtn.style.borderColor = isShared ? 'var(--color-accent, var(--accent))' : 'var(--color-border, var(--border))';
-    sharedBtn.style.color = isShared ? 'white' : 'var(--color-text-muted, var(--text2))';
-  }
-  const pressLabelBtn = document.getElementById('press-wiki-scope-press');
-  if (pressLabelBtn) pressLabelBtn.textContent = _pressWikiPressLabel();
-  if (isShared) _pressWikiSetPressPickerOpen(false);
-  const hasActivePressContext = _pressWikiScope === WIKI_SCOPE_SHARED || !!_pressWikiActivePressId();
-  const actionsBtn = document.getElementById('press-wiki-actions-btn');
-  const newBtn = document.getElementById('press-wiki-new-page-btn');
-  const editBtn = document.getElementById('press-wiki-edit-btn');
-  const cmsBtn = document.getElementById('press-wiki-cms-btn');
-  if (actionsBtn) actionsBtn.disabled = !_pressWikiCanEdit || !hasActivePressContext;
-  if (newBtn) newBtn.disabled = !_pressWikiCanEdit || !hasActivePressContext;
-  if (editBtn) editBtn.disabled = !_pressWikiCanEdit || !hasActivePressContext;
-  if (cmsBtn) cmsBtn.disabled = !_pressWikiCanEdit || !hasActivePressContext;
-  renderPressWikiPressPicker();
-  if (reload && _pressWikiModalPressId) {
-    if (_pressWikiScope === WIKI_SCOPE_PRESS && !_pressWikiActivePressId()) {
-      renderPressWikiEmptySelection(_pressWikiEmptySelectionMessage());
-      return;
-    }
-    loadPressWikiPageList()
-      .then(() => (_pressWikiSelectedPageId ? loadPressWikiPage(_pressWikiSelectedPageId) : renderPressWikiEmptySelection()))
-      .catch(err => console.warn('scope reload failed', err));
-  }
-}
-
-function _pressWikiSlugify(value) {
-  return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-}
-
-function _pressWikiResolveLinkTarget(href) {
-  const raw = String(href || '').trim();
-  if (!raw) return null;
-  if (/^(https?:|mailto:|tel:|#)/i.test(raw)) return { kind: 'external', href: raw };
-  const rawSlug = _pressWikiSlugify(raw);
-  const match = _pressWikiPageListCache.find(page => {
-    const title = String(page.title || '').trim();
-    return page.id === raw || page.id === rawSlug || title.toLowerCase() === raw.toLowerCase() || _pressWikiSlugify(title) === rawSlug;
-  });
-  return match ? { kind: 'internal', pageId: match.id } : { kind: 'internal', pageId: raw };
-}
-
-function _pressWikiAppendInlineMarkdown(parent, text) {
-  const raw = String(text || '');
-  const tokenRe = /(\*\*[\s\S]+?\*\*|\[[^\]]+\]\([^)]+\))/g;
-  let lastIndex = 0;
-  const appendText = chunk => {
-    if (chunk) parent.appendChild(document.createTextNode(chunk));
-  };
-  for (const match of raw.matchAll(tokenRe)) {
-    const token = match[0];
-    appendText(raw.slice(lastIndex, match.index));
-    if (token.startsWith('**')) {
-      const strong = document.createElement('strong');
-      strong.textContent = token.slice(2, -2);
-      parent.appendChild(strong);
-    } else {
-      const linkMatch = token.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
-      if (linkMatch) {
-        const label = linkMatch[1];
-        const href = linkMatch[2];
-        const target = _pressWikiResolveLinkTarget(href);
-        const a = document.createElement('a');
-        a.textContent = label;
-        a.href = target?.kind === 'external' ? target.href : '#';
-        a.style.color = 'var(--ios-blue)';
-        a.style.textDecoration = 'underline';
-        a.style.cursor = 'pointer';
-        a.addEventListener('click', evt => {
-          if (target?.kind === 'external') return;
-          evt.preventDefault();
-          if (target?.pageId) loadPressWikiPage(target.pageId);
-        });
-        parent.appendChild(a);
-      } else {
-        appendText(token);
-      }
-    }
-    lastIndex = match.index + token.length;
-  }
-  appendText(raw.slice(lastIndex));
-}
-
-function _pressWikiAppendMarkdownBlock(bodyEl, line) {
-  const trimmed = String(line || '').trim();
-  if (!trimmed) return false;
-
-  const imgMatch = trimmed.match(/^!\[(.*?)\]\((https?:\/\/[^\s)]+)\)$/);
-  if (imgMatch) {
-    const figure = document.createElement('figure');
-    figure.style.margin = '8px 0';
-    const img = document.createElement('img');
-    img.src = imgMatch[2];
-    img.alt = imgMatch[1] || 'wiki image';
-    img.style.maxWidth = '100%';
-    img.style.borderRadius = '10px';
-    img.style.cursor = 'zoom-in';
-    img.onclick = () => openLightbox(0, [imgMatch[2]]);
-    figure.appendChild(img);
-    if (imgMatch[1]) {
-      const cap = document.createElement('figcaption');
-      cap.style.fontSize = '12px';
-      cap.style.color = 'var(--color-text-subtle, var(--text3))';
-      cap.style.marginTop = '4px';
-      cap.textContent = imgMatch[1];
-      figure.appendChild(cap);
-    }
-    bodyEl.appendChild(figure);
-    return true;
-  }
-
-  const headingMatch = trimmed.match(/^(#{1,3})\s+(.*)$/);
-  if (headingMatch) {
-    const level = headingMatch[1].length;
-    const heading = document.createElement(`h${level}`);
-    heading.style.margin = level === 1 ? '10px 0 8px' : '8px 0 6px';
-    heading.style.lineHeight = '1.2';
-    heading.style.fontSize = level === 1 ? '18px' : level === 2 ? '16px' : '14px';
-    heading.style.fontWeight = '700';
-    _pressWikiAppendInlineMarkdown(heading, headingMatch[2]);
-    bodyEl.appendChild(heading);
-    return true;
-  }
-
-  if (/^---+$/.test(trimmed)) {
-    const hr = document.createElement('hr');
-    hr.style.border = 'none';
-    hr.style.borderTop = '1px solid var(--color-border, var(--border))';
-    hr.style.margin = '10px 0';
-    bodyEl.appendChild(hr);
-    return true;
-  }
-
-  return false;
-}
-
-function renderPressWikiEmptySelection(message = _pressWikiEmptySelectionMessage()) {
-  const titleEl = document.getElementById('press-wiki-title');
-  const metaEl = document.getElementById('press-wiki-meta');
-  const bodyEl = document.getElementById('press-wiki-body');
-  const revisionsEl = document.getElementById('press-wiki-revisions');
-  const attachmentsEl = document.getElementById('press-wiki-attachments');
-  if (titleEl) titleEl.textContent = 'No page selected';
-  if (metaEl) metaEl.textContent = `${_pressWikiScopeLabel(_pressWikiScope)} · No page selected`;
-  if (bodyEl) {
-    bodyEl.innerHTML = '';
-    const empty = document.createElement('div');
-    empty.style.color = 'var(--color-text-subtle, var(--text3))';
-    empty.style.fontSize = '13px';
-    empty.style.lineHeight = '1.45';
-    empty.textContent = message;
-    bodyEl.appendChild(empty);
-  }
-  if (revisionsEl) revisionsEl.innerHTML = '';
-  if (attachmentsEl) attachmentsEl.innerHTML = '';
-  _pressWikiRenderedBodyRaw = '';
-  _pressWikiAttachmentsCache = [];
-}
-
-function _notesEl(base) { return document.getElementById(base + '-' + NOTES_VARIANT); }
-
-function _relativeTime(ts) {
-  if (!ts) return '';
-  const ms = ts.toMillis ? ts.toMillis() : (ts.seconds ? ts.seconds * 1000 : +ts);
-  const diff = Date.now() - ms;
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return mins + 'm ago';
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return hrs + 'h ago';
-  const days = Math.floor(hrs / 24);
-  if (days < 7) return days + 'd ago';
-  return new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
-
-async function openPressWikiModal(pressId, machineCode, options = {}) {
-  if (!currentPlantId) return;
-  _bindToolModalShellNavigation();
-  const preserveState = !!options.preserveState && Boolean(_pressWikiModalPressId || _pressWikiSelectedPageId || _pressWikiScope);
-  const initialScope = preserveState
-    ? _pressWikiScope
-    : (options.scope === WIKI_SCOPE_SHARED ? WIKI_SCOPE_SHARED : WIKI_SCOPE_PRESS);
-  const initialTitle = String(options.title || '').trim() || _pressWikiBaseTitle(initialScope);
-  const knownPressId = preserveState
-    ? (_pressWikiScope === WIKI_SCOPE_PRESS ? (_pressWikiIsKnownPressId(_pressWikiModalPressId) ? String(_pressWikiModalPressId).trim() : null) : null)
-    : (_pressWikiIsKnownPressId(pressId) ? String(pressId).trim() : null);
-  const initialPageId = preserveState
-    ? (_pressWikiSelectedPageId || (initialScope === WIKI_SCOPE_SHARED ? PRESS_WIKI_SHARED_INDEX_PAGE_ID : null))
-    : (String(options.pageId || '').trim() || (initialScope === WIKI_SCOPE_SHARED ? PRESS_WIKI_SHARED_INDEX_PAGE_ID : null));
-  if (!preserveState) {
-    _pressWikiModalPressId = initialScope === WIKI_SCOPE_SHARED ? 'shared-library' : (knownPressId || null);
-    _pressWikiSelectedPressId = initialScope === WIKI_SCOPE_PRESS ? knownPressId : null;
-    _pressWikiSelectedPageId = initialPageId;
-    _pressWikiMachineCode = initialScope === WIKI_SCOPE_PRESS ? String(machineCode || '').trim() : '';
-    _pressWikiExpandedPageIds = new Set();
-    _pressWikiKnownTreeNodeIds = new Set();
-  }
-  _pressWikiSetScope(initialScope, { reload: false });
-  const modal = document.getElementById('press-wiki-modal');
-  const titleEl = document.getElementById('press-wiki-title');
-  const metaEl = document.getElementById('press-wiki-meta');
-  const bodyEl = document.getElementById('press-wiki-body');
-  const revisionsEl = document.getElementById('press-wiki-revisions');
-  const attachmentsEl = document.getElementById('press-wiki-attachments');
-  if (!modal || !titleEl || !metaEl || !bodyEl || !revisionsEl || !attachmentsEl) return;
-  _pressWikiCanEdit = (currentUserRole === 'admin' || currentUserRole === 'editor');
-  if (!preserveState) {
-    togglePressWikiEditor(false);
-    togglePressWikiCreateRow(false);
-  }
-  closePressWikiActionsMenu();
-  const editBtn = document.getElementById('press-wiki-edit-btn');
-  const newBtn = document.getElementById('press-wiki-new-page-btn');
-  const cmsBtn = document.getElementById('press-wiki-cms-btn');
-  if (editBtn) editBtn.style.display = _pressWikiCanEdit ? '' : 'none';
-  if (newBtn) newBtn.style.display = _pressWikiCanEdit ? '' : 'none';
-  if (cmsBtn) cmsBtn.style.display = _pressWikiCanEdit ? '' : 'none';
-  const actionsWrap = document.getElementById('press-wiki-actions-wrap');
-  if (actionsWrap) actionsWrap.style.display = _pressWikiCanEdit ? 'inline-flex' : 'none';
-  _setPressWikiError('');
-  if (!preserveState) {
-    titleEl.textContent = initialTitle;
-    metaEl.textContent = initialScope === WIKI_SCOPE_SHARED
-      ? 'Plant-wide shared knowledge surface'
-      : (_pressWikiPressInfo(_pressWikiActivePressId())?.machineCode
-        ? `Press ${_pressWikiPressInfo(_pressWikiActivePressId()).machineCode} · ${_pressWikiScopeLabel()}`
-        : 'Choose a press to view its wiki pages.');
-  }
-  _pressWikiSyncScopeBadge();
-  _pressWikiSetScope(_pressWikiScope, { reload: false });
-  _pressWikiSetPickerOpen(false);
-  _pressWikiSetPressPickerOpen(false);
-  bodyEl.textContent = 'Loading wiki...';
-  revisionsEl.innerHTML = '';
-  attachmentsEl.innerHTML = '';
-  _setPressWikiModalVisible(true);
-  try {
-    if (_pressWikiScope === WIKI_SCOPE_PRESS && !_pressWikiActivePressId()) {
-      renderPressWikiEmptySelection(_pressWikiEmptySelectionMessage());
-    } else {
-      await loadPressWikiPageList();
-      if (_pressWikiSelectedPageId) {
-        await loadPressWikiPage(_pressWikiSelectedPageId);
-      } else {
-        renderPressWikiEmptySelection(_pressWikiEmptySelectionMessage());
-      }
-    }
-    renderPressWikiPressPicker();
-  } catch (e) {
-    console.error('openPressWikiModal error', e);
-    bodyEl.textContent = 'Could not load wiki content.';
-  }
-}
-
-async function loadPressWikiPageList() {
-  const activePressId = _pressWikiActivePressId();
-  if (_pressWikiScope === WIKI_SCOPE_PRESS && !activePressId) {
-    _pressWikiPageListCache = [];
-    renderPressWikiPageTree();
-    renderPressWikiPressPicker();
-    return [];
-  }
-  if (!_pressWikiModalPressId) return [];
-  const queryPressId = _pressWikiScope === WIKI_SCOPE_PRESS ? activePressId : _pressWikiModalPressId;
-  let pages = [];
-  if (shouldUseSqlStagingReads(currentPlantId)) {
-    const payload = await requireSqlRead(
-      `wiki pages ${currentPlantId}:${_pressWikiScope}:${queryPressId || 'shared'}`,
-      () => dataApi.listWikiPages(currentPlantId, {
-        scope: _pressWikiScope,
-        pressId: _pressWikiScope === WIKI_SCOPE_SHARED ? '' : queryPressId
-      }),
-      `Wiki pages are missing in D1 for plant ${currentPlantId}.`
-    );
-    pages = (payload?.pages || []).map(page => ({ ...page, id: page.id || page.pageId || '' }));
-  } else {
-    const pagesSnap = await getDocs(wikiPagesColForScope(_pressWikiScope, queryPressId));
-    pages = pagesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-  }
-  _pressWikiPageListCache = pages;
-  if (!pages.length) {
-    _pressWikiSelectedPageId = null;
-  } else if (!pages.some(page => page.id === _pressWikiSelectedPageId)) {
-    _pressWikiSelectedPageId = _pressWikiScope === WIKI_SCOPE_SHARED
-      ? _pressWikiDefaultSharedPageId(pages)
-      : (pages[0]?.id || null);
-  }
-  renderPressWikiPageTree();
-  renderPressWikiPressPicker();
-  return pages;
-}
-
-async function loadPressWikiPage(pageId) {
-  const activePressId = _pressWikiActivePressId();
-  if ((_pressWikiScope === WIKI_SCOPE_PRESS && !activePressId) || !pageId) return;
-  _pressWikiSelectedPageId = pageId;
-  renderPressWikiPageTree();
-  const titleEl = document.getElementById('press-wiki-title');
-  const metaEl = document.getElementById('press-wiki-meta');
-  const bodyEl = document.getElementById('press-wiki-body');
-  const revisionsEl = document.getElementById('press-wiki-revisions');
-  const attachmentsEl = document.getElementById('press-wiki-attachments');
-  if (!titleEl || !metaEl || !bodyEl || !revisionsEl || !attachmentsEl) return;
-  _renderPressWikiBody('Loading wiki...');
-  revisionsEl.innerHTML = '';
-  attachmentsEl.innerHTML = '';
-  try {
-    let page = null;
-    let revisions = [];
-    let attachments = [];
-    if (shouldUseSqlStagingReads(currentPlantId)) {
-      const payload = await requireSqlRead(
-        `wiki page ${currentPlantId}:${pageId}`,
-        () => dataApi.getWikiPage(currentPlantId, pageId, {
-          scope: _pressWikiScope,
-          pressId: _pressWikiScope === WIKI_SCOPE_SHARED ? '' : activePressId
-        }),
-        `Wiki page ${pageId} is missing in D1 for plant ${currentPlantId}.`
-      );
-      page = payload?.page ? { ...payload.page, id: payload.page.id || payload.page.pageId || pageId } : null;
-      revisions = (payload?.revisions || []).map(rev => ({ ...rev, id: rev.id || rev.revisionId || '' }));
-      attachments = (payload?.attachments || []).map(att => ({ ...att, id: att.id || att.attachmentId || '' }));
-    } else {
-      const pageRef = wikiPageDocForScope(_pressWikiScope, _pressWikiScope === WIKI_SCOPE_PRESS ? activePressId : _pressWikiModalPressId, pageId);
-      const pageSnap = await getDoc(pageRef);
-      if (!pageSnap.exists()) {
-        _pressWikiSelectedPageId = null;
-        renderPressWikiEmptySelection(_pressWikiEmptySelectionMessage());
-        _pressWikiSyncScopeBadge(_pressWikiScope);
-        return;
-      }
-      page = pageSnap.data() || {};
-      const revSnap = await getDocs(query(wikiRevisionsColForScope(_pressWikiScope, _pressWikiScope === WIKI_SCOPE_PRESS ? activePressId : _pressWikiModalPressId, pageId), orderBy('editedAt', 'desc'), limit(30)));
-      revisions = revSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const attachSnap = await getDocs(query(wikiAttachmentsColForScope(_pressWikiScope, _pressWikiScope === WIKI_SCOPE_PRESS ? activePressId : _pressWikiModalPressId, pageId), orderBy('uploadedAt', 'desc'), limit(24)));
-      attachments = attachSnap.docs.map(d => ({ id: d.id, ...(d.data() || {}) }));
-    }
-    if (!page) {
-      _pressWikiSelectedPageId = null;
-      renderPressWikiEmptySelection(_pressWikiEmptySelectionMessage());
-      _pressWikiSyncScopeBadge(_pressWikiScope);
-      return;
-    }
-    const currentRevisionId = page.currentRevisionId || null;
-    titleEl.textContent = page.title || pageId;
-    metaEl.textContent = `${_pressWikiScopeLabel(page.scope || _pressWikiScope)} · Updated ${_relativeTime(page.updatedAt) || 'recently'}`;
-    _pressWikiSyncScopeBadge(page.scope || _pressWikiScope);
-    const currentRevision = revisions.find(r => r.id === currentRevisionId) || revisions[0] || null;
-    _renderPressWikiBody(currentRevision?.body || 'No revision body available.');
-    revisionsEl.innerHTML = revisions.length ? '' : '<div style="color:var(--color-text-subtle, var(--text3));">No revisions yet.</div>';
-    revisions.forEach(rev => {
-      const row = document.createElement('button');
-      row.type = 'button';
-      row.className = 'btn btn-ghost';
-      row.style.display = 'block';
-      row.style.width = '100%';
-      row.style.textAlign = 'left';
-      row.style.marginBottom = '6px';
-      row.textContent = `${_relativeTime(rev.editedAt) || 'just now'} · ${rev.editedBy?.name || 'Unknown'} · ${rev.changeNote || 'Update'}`;
-      row.onclick = () => { _renderPressWikiBody(rev.body || ''); };
-      revisionsEl.appendChild(row);
-    });
-    _pressWikiAttachmentsCache = attachments;
-    _pressWikiAttachmentsCache.forEach((data, idx) => {
-      if (!data.url) return;
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'notes-photo-thumb-btn';
-      btn.title = data.caption || `Attachment ${idx + 1}`;
-      const img = document.createElement('img');
-      img.className = 'notes-photo-thumb';
-      img.src = data.url;
-      img.alt = data.caption || `Attachment ${idx + 1}`;
-      btn.appendChild(img);
-      btn.onclick = () => openLightbox(0, [data.url]);
-      attachmentsEl.appendChild(btn);
-    });
-    renderPressWikiPhotoPicker();
-    renderPressWikiPageTree();
-  } catch (e) {
-    console.error('loadPressWikiPage error', e);
-    _renderPressWikiBody('Could not load wiki content.');
-  }
-}
-
-function _renderPressWikiBody(text) {
-  const bodyEl = document.getElementById('press-wiki-body');
-  if (!bodyEl) return;
-  const raw = String(text || '');
-  _pressWikiRenderedBodyRaw = raw;
-  bodyEl.innerHTML = '';
-  bodyEl.style.whiteSpace = 'normal';
-  const lines = raw.split('\n');
-  let currentList = null;
-  let currentListType = null;
-  const closeList = () => { currentList = null; currentListType = null; };
-  lines.forEach(line => {
-    const trimmed = String(line || '').trim();
-    if (!trimmed) {
-      closeList();
-      const spacer = document.createElement('div');
-      spacer.style.height = '8px';
-      bodyEl.appendChild(spacer);
-      return;
-    }
-    if (_pressWikiAppendMarkdownBlock(bodyEl, line)) {
-      closeList();
-      return;
-    }
-    const ulMatch = trimmed.match(/^[-*]\s+(.*)$/);
-    const olMatch = trimmed.match(/^\d+\.\s+(.*)$/);
-    if (ulMatch || olMatch) {
-      const listType = olMatch ? 'ol' : 'ul';
-      const itemText = (olMatch || ulMatch)[1];
-      if (!currentList || currentListType !== listType) {
-        closeList();
-        currentListType = listType;
-        currentList = document.createElement(listType);
-        currentList.style.margin = '6px 0 6px 22px';
-        currentList.style.paddingLeft = listType === 'ol' ? '20px' : '18px';
-        bodyEl.appendChild(currentList);
-      }
-      const li = document.createElement('li');
-      li.style.margin = '2px 0';
-      _pressWikiAppendInlineMarkdown(li, itemText);
-      currentList.appendChild(li);
-      return;
-    }
-    closeList();
-    const p = document.createElement('div');
-    p.style.margin = '6px 0';
-    _pressWikiAppendInlineMarkdown(p, line);
-    bodyEl.appendChild(p);
-  });
-}
-
-window.insertMarkdown = function(textareaId, prefix, suffix) {
-  const ta = document.getElementById(textareaId);
-  if (!ta) return;
-  const start = ta.selectionStart ?? ta.value.length;
-  const end = ta.selectionEnd ?? ta.value.length;
-  const selectedText = ta.value.slice(start, end);
-  const replacement = prefix + selectedText + suffix;
-  ta.value = ta.value.slice(0, start) + replacement + ta.value.slice(end);
-  ta.focus();
-  const newPos = start + prefix.length + selectedText.length;
-  ta.setSelectionRange(newPos, newPos);
-};
-
-window.closePressWikiModal = (options = {}) => {
-  _setPressWikiModalVisible(false);
-  _pressWikiSetPickerOpen(false);
-  _pressWikiSetPressPickerOpen(false);
-  closePressWikiActionsMenu();
-  if (options.preserveState) return;
-  _pressWikiModalPressId = null;
-  _pressWikiSelectedPressId = null;
-};
-
-async function savePressWikiRevision() {
-  if (!_pressWikiCanEdit) return;
-  const activePressId = _pressWikiActivePressId();
-  if (!_pressWikiSelectedPageId || !currentUser || (_pressWikiScope === WIKI_SCOPE_PRESS && !activePressId)) return;
-  const title = String(document.getElementById('press-wiki-edit-title')?.value || '').trim();
-  const body = String(document.getElementById('press-wiki-edit-body')?.value || '').trim();
-  const rawChangeNote = String(document.getElementById('press-wiki-edit-change-note')?.value || '').trim();
-  if (!body) return _setPressWikiError('Body is required.');
-  const fallbackActorName = String(currentActor()?.name || currentUser?.displayName || currentUser?.email || 'Unknown').trim() || 'Unknown';
-  const now = new Date();
-  const dd = String(now.getDate()).padStart(2, '0');
-  const mm = String(now.getMonth() + 1).padStart(2, '0');
-  const yy = String(now.getFullYear()).slice(-2);
-  const changeNote = rawChangeNote || `${fallbackActorName} : ${dd}/${mm}/${yy}`;
-  if (shouldUseSqlStagingReads(currentPlantId)) {
-    await dataApi.saveWikiRevision(currentPlantId, _pressWikiSelectedPageId, {
-      scope: _pressWikiScope,
-      pressId: _pressWikiScope === WIKI_SCOPE_SHARED ? '' : activePressId,
-      title,
-      body,
-      changeNote,
-      actor: currentActor()
-    });
-  } else {
-    const pageRef = wikiPageDocForScope(_pressWikiScope, _pressWikiScope === WIKI_SCOPE_PRESS ? activePressId : _pressWikiModalPressId, _pressWikiSelectedPageId);
-    const revisionRef = doc(wikiRevisionsColForScope(_pressWikiScope, _pressWikiScope === WIKI_SCOPE_PRESS ? activePressId : _pressWikiModalPressId, _pressWikiSelectedPageId));
-    await runTransaction(db, async tx => {
-      const snap = await tx.get(pageRef);
-      const prevRevisionId = snap.exists() ? (snap.data()?.currentRevisionId || null) : null;
-      const existingParentId = snap.exists() ? _pressWikiNormalizeParentId(snap.data()?.parentPageId) : null;
-      const existingSortOrder = snap.exists() ? (Number.isFinite(Number(snap.data()?.sortOrder)) ? Number(snap.data()?.sortOrder) : 0) : 0;
-      tx.set(revisionRef, { body, changeNote, prevRevisionId, editedBy: currentActor(), editedAt: serverTimestamp() });
-      tx.set(pageRef, {
-        title: title || snap.data()?.title || _pressWikiSelectedPageId,
-        slug: _pressWikiSelectedPageId,
-        machineCode: _pressWikiScope === WIKI_SCOPE_SHARED ? '' : (_pressWikiPressInfo(activePressId)?.machineCode || _pressWikiMachineCode || ''),
-        scope: _pressWikiScope,
-        pressId: _pressWikiScope === WIKI_SCOPE_SHARED ? null : activePressId,
-        currentRevisionId: revisionRef.id,
-        updatedBy: currentActor(),
-        updatedAt: serverTimestamp(),
-        lastActivityAt: serverTimestamp(),
-        photoCount: snap.exists() ? (snap.data()?.photoCount || 0) : 0,
-        createdBy: snap.exists() ? (snap.data()?.createdBy || currentActor()) : currentActor(),
-        createdAt: snap.exists() ? (snap.data()?.createdAt || serverTimestamp()) : serverTimestamp(),
-        parentPageId: existingParentId,
-        sortOrder: existingSortOrder,
-        schemaVersion: 2
-      }, { merge: true });
-    });
-  }
-  togglePressWikiEditor(false);
-  await loadPressWikiPageList();
-  await loadPressWikiPage(_pressWikiSelectedPageId);
-  _setPressWikiError('');
-}
-
-async function _deleteWikiDocsInBatches(colRef) {
-  while (true) {
-    const snap = await getDocs(query(colRef, limit(400)));
-    if (snap.empty) return;
-    const batch = writeBatch(db);
-    snap.docs.forEach(d => batch.delete(d.ref));
-    await batch.commit();
-    if (snap.size < 400) return;
-  }
-}
-
-async function deletePressWikiPage() {
-  if (!_pressWikiCanEdit) return;
-  const activePressId = _pressWikiActivePressId();
-  if (!_pressWikiSelectedPageId || !currentUser || (_pressWikiScope === WIKI_SCOPE_PRESS && !activePressId)) return;
-  const pageId = _pressWikiSelectedPageId;
-  if (_pressWikiPageListCache.some(page => _pressWikiNormalizeParentId(page.parentPageId) === pageId)) {
-    _setPressWikiError('Move child pages first before deleting this page.');
-    return;
-  }
-  const pageTitle = document.getElementById('press-wiki-title')?.textContent || pageId;
-  const ok = confirm(`Delete "${pageTitle}"? This will remove the page, its revisions, and its attachments.`);
-  if (!ok) return;
-  _setPressWikiError('');
-  try {
-    const attachments = shouldUseSqlStagingReads(currentPlantId)
-      ? (_pressWikiAttachmentsCache || [])
-      : (await getDocs(wikiAttachmentsColForScope(_pressWikiScope, _pressWikiScope === WIKI_SCOPE_PRESS ? activePressId : _pressWikiModalPressId, pageId))).docs.map(d => ({ id: d.id, ...(d.data() || {}) }));
-    await Promise.allSettled(attachments.map(async a => {
-      await deleteStoredAttachmentBlob(currentPlantId, a);
-    }));
-    if (shouldUseSqlStagingReads(currentPlantId)) {
-      await dataApi.deleteWikiPage(currentPlantId, pageId, {
-        scope: _pressWikiScope,
-        pressId: _pressWikiScope === WIKI_SCOPE_SHARED ? '' : activePressId
-      });
-    } else {
-      await _deleteWikiDocsInBatches(wikiAttachmentsColForScope(_pressWikiScope, _pressWikiScope === WIKI_SCOPE_PRESS ? activePressId : _pressWikiModalPressId, pageId));
-      await _deleteWikiDocsInBatches(wikiRevisionsColForScope(_pressWikiScope, _pressWikiScope === WIKI_SCOPE_PRESS ? activePressId : _pressWikiModalPressId, pageId));
-      await deleteDoc(wikiPageDocForScope(_pressWikiScope, _pressWikiScope === WIKI_SCOPE_PRESS ? activePressId : _pressWikiModalPressId, pageId));
-    }
-    _pressWikiSelectedPageId = null;
-    await loadPressWikiPageList();
-    if (_pressWikiSelectedPageId) {
-      await loadPressWikiPage(_pressWikiSelectedPageId);
-    } else {
-      renderPressWikiEmptySelection();
-    }
-    togglePressWikiEditor(false);
-  } catch (e) {
-    console.error('deletePressWikiPage error', e);
-    _setPressWikiError('Could not delete the page.');
-  }
-}
-
-function togglePressWikiEditor(show) {
-  const editor = document.getElementById('press-wiki-editor');
-  if (!editor) return;
-  if (show && !_pressWikiCanEdit) return;
-  editor.style.display = show ? 'block' : 'none';
-  if (!show) return;
-  document.getElementById('press-wiki-edit-title').value = document.getElementById('press-wiki-title')?.textContent || '';
-  document.getElementById('press-wiki-edit-body').value = _pressWikiCurrentBodyText();
-  document.getElementById('press-wiki-edit-change-note').value = '';
-  renderPressWikiPhotoPicker();
-}
-
-function _pressWikiCurrentBodyText() {
-  return String(_pressWikiRenderedBodyRaw || '');
-}
-
-function _pressWikiSqlParams(pageId = _pressWikiSelectedPageId) {
-  return {
-    scope: _pressWikiScope === WIKI_SCOPE_SHARED ? WIKI_SCOPE_SHARED : WIKI_SCOPE_PRESS,
-    pressId: _pressWikiScope === WIKI_SCOPE_SHARED ? '' : (_pressWikiActivePressId() || ''),
-    pageId: String(pageId || '').trim()
-  };
-}
-
-function togglePressWikiCreateRow(show) {
-  const row = document.getElementById('press-wiki-new-page-row');
-  if (!row) return;
-  row.style.display = show ? 'flex' : 'none';
-  if (show) {
-    const inp = document.getElementById('press-wiki-new-page-id');
-    if (inp) inp.value = '';
-  }
-}
-
-function _setPressWikiError(msg) {
-  const el = document.getElementById('press-wiki-error');
-  if (!el) return;
-  const text = String(msg || '').trim();
-  el.textContent = text;
-  el.style.display = text ? 'block' : 'none';
-}
-
-function _setPressWikiModalVisible(isVisible) {
-  const modal = document.getElementById('press-wiki-modal');
-  if (!modal) return;
-  modal.classList.toggle('visible', !!isVisible);
-  document.body.classList.toggle('press-wiki-open', !!isVisible);
-}
-
-async function createPressWikiPageFromInput() {
-  if (!_pressWikiCanEdit) return;
-  const activePressId = _pressWikiActivePressId();
-  if (_pressWikiScope === WIKI_SCOPE_PRESS && !activePressId) {
-    _setPressWikiError('Choose a press before creating a page.');
-    return;
-  }
-  const inp = document.getElementById('press-wiki-new-page-id');
-  const raw = String(inp?.value || '');
-  const pageId = raw.trim().toLowerCase().replace(/[^a-z0-9-_]/g, '-').replace(/-+/g, '-');
-  if (!pageId) return _setPressWikiError('Enter a valid page id (letters, numbers, dash, underscore).');
-  _pressWikiSelectedPageId = pageId;
-  togglePressWikiCreateRow(false);
-  await loadPressWikiPageList();
-  if (!shouldUseSqlStagingReads(currentPlantId)) {
-    await loadPressWikiPage(pageId);
-  } else {
-    document.getElementById('press-wiki-title').textContent = pageId;
-    _renderPressWikiBody('');
-    _pressWikiAttachmentsCache = [];
-    renderPressWikiPhotoPicker();
-  }
-  togglePressWikiEditor(true);
-  _setPressWikiError('');
-}
-
-function renderPressWikiPhotoPicker() {
-  const picker = document.getElementById('press-wiki-photo-picker');
-  if (!picker) return;
-  if (!_pressWikiCanEdit || !_pressWikiAttachmentsCache.length || document.getElementById('press-wiki-editor')?.style.display === 'none') {
-    picker.style.display = 'none';
-    picker.innerHTML = '';
-    return;
-  }
-  picker.style.display = 'block';
-  picker.innerHTML = '<div style="font-size:12px;color:var(--color-text-subtle, var(--text3));margin-bottom:6px;">Insert from press wiki photos</div>';
-  _pressWikiAttachmentsCache.forEach((a, idx) => {
-    if (!a.url) return;
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'notes-photo-thumb-btn';
-    btn.title = a.caption || `Photo ${idx + 1}`;
-    btn.style.marginRight = '6px';
-    const img = document.createElement('img');
-    img.className = 'notes-photo-thumb';
-    img.src = a.url;
-    img.alt = a.caption || `Photo ${idx + 1}`;
-    btn.appendChild(img);
-    btn.onclick = () => insertWikiPhotoIntoEditor(a);
-    picker.appendChild(btn);
-  });
-}
-
-function insertWikiPhotoIntoEditor(photo) {
-  const ta = document.getElementById('press-wiki-edit-body');
-  if (!ta || !photo?.url) return;
-  const snippet = `![${photo.caption || 'Photo'}](${photo.url})`;
-  const start = ta.selectionStart ?? ta.value.length;
-  const end = ta.selectionEnd ?? ta.value.length;
-  ta.value = ta.value.slice(0, start) + snippet + ta.value.slice(end);
-  ta.focus();
-  const pos = start + snippet.length;
-  ta.setSelectionRange(pos, pos);
-}
-
-
-
-
-document.getElementById('press-wiki-modal')?.addEventListener('click', e => {
-  if (e.target === document.getElementById('press-wiki-modal')) closePressWikiModal();
+window.openPressWikiModal = wikiTool.open;
+window.closePressWikiModal = wikiTool.close;
+window.openSharedLibraryWiki = wikiTool.openSharedLibrary;
+// ── NOTES TOOL ──
+const notesTool = initNotesTool({
+  getCurrentUser: () => currentUser,
+  getCurrentPlantId: () => currentPlantId,
+  getIssues: () => issues,
+  getCurrentOpenMachine, getCurrentOpenIssue, currentActor,
+  toPressId, esc, localDateStr,
+  completeDemoGuideStep, readFileAsDataUrl,
+  uploadAttachmentToPreferredStorage,
+  deleteStoredAttachmentBlob, _relativeTime, _bindToolModalShellNavigation,
+  closeUserMenus, closeSortDropdown,
+  shouldUseSqlStagingReads, requireSqlRead, dataApi,
+  doc, collection, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc,
+  onSnapshot, query, where, orderBy, limit, serverTimestamp, writeBatch, increment,
+  notesCol, noteDoc, noteAttachmentsCol, noteStoragePrefix,
+  db,
+  normalizeChecklistItems, _noteTextFromHtml, sanitizeNoteHtml
 });
-document.addEventListener('click', e => {
-  const pickerWrap = document.querySelector('.press-wiki-picker-wrap');
-  if (pickerWrap && !pickerWrap.contains(e.target)) _pressWikiSetPickerOpen(false);
-  const pressPickerWrap = document.querySelector('.press-wiki-press-picker-wrap');
-  const pressPickerBtn = document.getElementById('press-wiki-scope-press');
-  if (pressPickerWrap && !pressPickerWrap.contains(e.target) && !(pressPickerBtn && pressPickerBtn.contains(e.target))) {
-    _pressWikiSetPressPickerOpen(false);
-  }
-});
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') _pressWikiSetPickerOpen(false);
-  if (e.key === 'Escape') _pressWikiSetPressPickerOpen(false);
-});
-document.getElementById('press-wiki-edit-btn')?.addEventListener('click', () => {
-  closePressWikiActionsMenu();
-  togglePressWikiEditor(true);
-});
-document.getElementById('press-wiki-cancel-edit-btn')?.addEventListener('click', () => togglePressWikiEditor(false));
-document.getElementById('press-wiki-save-btn')?.addEventListener('click', () => savePressWikiRevision());
-document.getElementById('press-wiki-delete-btn')?.addEventListener('click', () => deletePressWikiPage());
-document.getElementById('press-wiki-insert-photo-btn')?.addEventListener('click', () => {
-  document.getElementById('press-wiki-file-input')?.click();
-});
-
-document.getElementById('press-wiki-file-input')?.addEventListener('change', async (e) => {
-  await handlePressWikiFilesUpload(e.target.files, false);
-  e.target.value = '';
-});
-
-function togglePressWikiActionsMenu() {
-  const wrap = document.getElementById('press-wiki-actions-wrap');
-  const menu = document.getElementById('press-wiki-actions-menu');
-  const btn = document.getElementById('press-wiki-actions-btn');
-  if (!wrap || !menu || !btn) return;
-  const isOpen = menu.classList.contains('visible');
-  menu.classList.toggle('visible', !isOpen);
-  btn.classList.toggle('open', !isOpen);
-  btn.setAttribute('aria-expanded', String(!isOpen));
-}
-
-function closePressWikiActionsMenu() {
-  const menu = document.getElementById('press-wiki-actions-menu');
-  const btn = document.getElementById('press-wiki-actions-btn');
-  if (!menu || !btn) return;
-  menu.classList.remove('visible');
-  btn.classList.remove('open');
-  btn.setAttribute('aria-expanded', 'false');
-}
-
-document.getElementById('press-wiki-actions-btn')?.addEventListener('click', e => {
-  e.stopPropagation();
-  togglePressWikiActionsMenu();
-});
-
-const wikiEditBody = document.getElementById('press-wiki-edit-body');
-if (wikiEditBody) {
-  wikiEditBody.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    wikiEditBody.style.borderColor = 'var(--color-accent, var(--accent))';
-    wikiEditBody.style.background = 'var(--color-surface, var(--bg2))';
-  });
-  wikiEditBody.addEventListener('dragleave', (e) => {
-    e.preventDefault();
-    wikiEditBody.style.borderColor = 'var(--color-border, var(--border))';
-    wikiEditBody.style.background = 'var(--color-surface-raised, var(--bg3))';
-  });
-  wikiEditBody.addEventListener('drop', async (e) => {
-    e.preventDefault();
-    wikiEditBody.style.borderColor = 'var(--color-border, var(--border))';
-    wikiEditBody.style.background = 'var(--color-surface-raised, var(--bg3))';
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      await handlePressWikiFilesUpload(e.dataTransfer.files, true);
-    }
-  });
-}
-
-async function handlePressWikiFilesUpload(files, autoInsert) {
-  const activePressId = _pressWikiActivePressId();
-  if (!files || !files.length || !_pressWikiSelectedPageId || (_pressWikiScope === WIKI_SCOPE_PRESS && !activePressId)) return;
-  _setPressWikiError("Uploading photos...");
-  try {
-    let uploadedCount = 0;
-    for (const file of files) {
-      if (!file.type.startsWith('image/')) continue;
-      const attId = 'att_' + Date.now() + '_' + Math.floor(Math.random()*1000);
-      const ext = file.name.split('.').pop() || 'png';
-      const dataUrl = await readFileAsDataUrl(file);
-      let uploadedBlob = await uploadAttachmentToPreferredStorage(currentPlantId, {
-        scope: 'wiki',
-        wikiScope: _pressWikiScope,
-        pageId: _pressWikiSelectedPageId,
-        pressId: _pressWikiScope === WIKI_SCOPE_SHARED ? '' : activePressId,
-        fileName: file.name || `wiki_attachment_${attId}.${ext}`,
-        contentType: file.type || 'image/png',
-        dataUrl
-      });
-      if (!uploadedBlob?.storagePath) {
-        const path = wikiStoragePrefixForScope(_pressWikiScope, _pressWikiScope === WIKI_SCOPE_PRESS ? activePressId : _pressWikiModalPressId, _pressWikiSelectedPageId) + `/attachments/${attId}.${ext}`;
-        const sRef = storageRef(storage, path);
-        await uploadString(sRef, dataUrl, 'data_url');
-        const url = await getDownloadURL(sRef);
-        uploadedBlob = {
-          storagePath: path,
-          storageBucket: sRef.bucket,
-          downloadUrl: url,
-          url,
-          contentType: file.type || 'image/png',
-          fileName: file.name || `wiki_attachment_${attId}.${ext}`,
-          uploadedAt: shouldUseSqlStagingReads(currentPlantId) ? new Date().toISOString() : serverTimestamp()
-        };
-      }
-      
-      const attDoc = {
-        attachmentId: attId,
-        storagePath: uploadedBlob.storagePath,
-        storageBucket: uploadedBlob.storageBucket || '',
-        url: uploadedBlob.downloadUrl || uploadedBlob.url || '',
-        contentType: uploadedBlob.contentType || file.type,
-        caption: uploadedBlob.fileName || file.name,
-        uploadedBy: currentActor(),
-        uploadedAt: uploadedBlob.uploadedAt || (shouldUseSqlStagingReads(currentPlantId) ? new Date().toISOString() : serverTimestamp())
-      };
-      if (shouldUseSqlStagingReads(currentPlantId)) {
-        await dataApi.createWikiAttachment(currentPlantId, _pressWikiSelectedPageId, {
-          ...attDoc,
-          scope: _pressWikiScope,
-          pressId: _pressWikiScope === WIKI_SCOPE_SHARED ? '' : activePressId
-        });
-      } else {
-        await setDoc(doc(db, ...wikiStoragePrefixForScope(_pressWikiScope, _pressWikiScope === WIKI_SCOPE_PRESS ? activePressId : _pressWikiModalPressId, _pressWikiSelectedPageId).split('/'), 'attachments', attId), attDoc);
-      }
-      uploadedCount++;
-      
-      if (autoInsert) {
-        const md = `\n![${attDoc.caption}](${attDoc.url})\n`;
-        const pos = wikiEditBody.selectionStart;
-        const text = wikiEditBody.value;
-        wikiEditBody.value = text.slice(0, pos) + md + text.slice(pos);
-        wikiEditBody.focus();
-        const newPos = pos + md.length;
-        wikiEditBody.setSelectionRange(newPos, newPos);
-      }
-    }
-    
-    if (uploadedCount > 0 && !shouldUseSqlStagingReads(currentPlantId)) {
-      const pageRef = wikiPageDocForScope(_pressWikiScope, _pressWikiScope === WIKI_SCOPE_PRESS ? activePressId : _pressWikiModalPressId, _pressWikiSelectedPageId);
-      const snap = await getDoc(pageRef);
-      if (snap.exists()) {
-        const currentCount = snap.data()?.photoCount || 0;
-        await updateDoc(pageRef, { photoCount: currentCount + uploadedCount });
-      }
-    }
-    
-    _setPressWikiError('');
-    await loadPressWikiPage(_pressWikiSelectedPageId);
-  } catch (err) {
-    _setPressWikiError("Upload failed: " + err.message);
-  }
-}
-document.getElementById('press-wiki-new-page-btn')?.addEventListener('click', () => {
-  closePressWikiActionsMenu();
-  togglePressWikiCreateRow(true);
-});
-document.getElementById('press-wiki-cancel-create-page-btn')?.addEventListener('click', () => togglePressWikiCreateRow(false));
-document.getElementById('press-wiki-create-page-btn')?.addEventListener('click', () => createPressWikiPageFromInput());
-document.getElementById('press-wiki-scope-press')?.addEventListener('click', e => {
-  e.stopPropagation();
-  if (_pressWikiScope !== WIKI_SCOPE_PRESS) {
-    _pressWikiSetScope(WIKI_SCOPE_PRESS);
-  }
-  _pressWikiSetPressPickerOpen(!_pressWikiPressPickerOpen);
-});
-document.getElementById('press-wiki-scope-shared')?.addEventListener('click', () => _pressWikiSetScope(WIKI_SCOPE_SHARED));
-document.getElementById('press-wiki-press-picker-close')?.addEventListener('click', e => {
-  e.stopPropagation();
-  _pressWikiSetPressPickerOpen(false);
-});
-document.getElementById('press-wiki-cms-btn')?.addEventListener('click', () => {
-  closePressWikiActionsMenu();
-  if (!_pressWikiModalPressId) return;
-  const url = `wiki-cms.html?plantId=${encodeURIComponent(currentPlantId)}&pressId=${encodeURIComponent(_pressWikiScope === WIKI_SCOPE_PRESS ? _pressWikiModalPressId : '')}&pageId=${encodeURIComponent(_pressWikiSelectedPageId || '')}&scope=${encodeURIComponent(_pressWikiScope)}`;
-  window.location.href = url;
-});
-
-function _bindPressWikiToolNavButtons() {
-  const prevBtn = document.getElementById('press-wiki-prev-tool-btn');
-  const nextBtn = document.getElementById('press-wiki-next-tool-btn');
-  if (prevBtn && prevBtn.dataset.toolNavBound !== '1') {
-    prevBtn.dataset.toolNavBound = '1';
-    prevBtn.addEventListener('click', e => {
-      e.preventDefault();
-      e.stopPropagation();
-      void _cycleToolModal(-1);
-    });
-  }
-  if (nextBtn && nextBtn.dataset.toolNavBound !== '1') {
-    nextBtn.dataset.toolNavBound = '1';
-    nextBtn.addEventListener('click', e => {
-      e.preventDefault();
-      e.stopPropagation();
-      void _cycleToolModal(1);
-    });
-  }
-}
-
-_bindPressWikiToolNavButtons();
-
-window.openSharedLibraryWiki = async function(options = {}) {
-  if (!currentPlantId) return;
-  closeUserMenus();
-  closeSortDropdown();
-  window.closeExportDropdown?.();
-  await openPressWikiModal('shared-library', '', {
-    scope: WIKI_SCOPE_SHARED,
-    title: 'Shared Library',
-    pageId: PRESS_WIKI_SHARED_INDEX_PAGE_ID,
-    preserveState: !!options.preserveState
-  });
-  completeDemoGuideStep('tools');
-};
-
-document.addEventListener('click', e => {
-  const wrap = document.getElementById('press-wiki-actions-wrap');
-  if (wrap && !wrap.contains(e.target)) closePressWikiActionsMenu();
-});
-
-// ── NOTES MODAL ──
-function _notesContextTitle(context = _notesContext) {
-  if (!context) return 'Plant-wide';
-  if (context.issueId) return context.label || 'Issue notes';
-  if (context.pressId) return context.label || 'Press notes';
-  return context.label || 'Plant-wide';
-}
-
-function _notesOpenPressContext() {
-  if (_notesContext.pressId) {
-    return {
-      pressId: _notesContext.pressId,
-      machineCode: _notesContext.machineCode || _notesContext.label?.replace(/^Press\s*[·-]?\s*/i, '') || ''
-    };
-  }
-  const issue = getCurrentOpenIssue();
-  const machineCode = issue?.machine || getCurrentOpenMachine();
-  const pressId = issue?.pressId || (machineCode ? toPressId(machineCode) : '');
-  return pressId ? { pressId, machineCode } : null;
-}
-
-function _notesOpenIssueContext() {
-  if (_notesContext.issueId) {
-    const issue = issues.find(i => i.id === _notesContext.issueId) || null;
-    const machineCode = issue?.machine || _notesContext.machineCode || '';
-    const pressId = issue?.pressId || _notesContext.pressId || (machineCode ? toPressId(machineCode) : '');
-    return { issueId: _notesContext.issueId, pressId, machineCode };
-  }
-  const issue = getCurrentOpenIssue();
-  if (!issue?.id) return null;
-  const machineCode = issue.machine || '';
-  return {
-    issueId: issue.id,
-    pressId: issue.pressId || (machineCode ? toPressId(machineCode) : ''),
-    machineCode
-  };
-}
-
-function _notesNormalizeDoc(note = {}) {
-  const checklistItems = normalizeChecklistItems(note.checklistItems);
-  const tags = Array.isArray(note.tags)
-    ? note.tags.map(tag => String(tag || '').trim()).filter(Boolean)
-    : String(note.tags || '').split(',').map(tag => tag.trim()).filter(Boolean);
-  const bodyHtml = sanitizeNoteHtml(note.bodyHtml || note.body || '');
-  const bodyText = String(note.bodyText || _noteTextFromHtml(bodyHtml) || '').trim();
-  const machineCode = String(note.machineCode || '').trim();
-  const pressId = String(note.pressId || '').trim();
-  const issueId = String(note.issueId || '').trim();
-  return {
-    id: note.id,
-    title: String(note.title || 'Untitled Note').trim() || 'Untitled Note',
-    bodyHtml,
-    bodyText,
-    checklistItems,
-    tags,
-    pressId,
-    machineCode,
-    issueId,
-    isPinned: Boolean(note.isPinned),
-    isArchived: Boolean(note.isArchived),
-    photoCount: Number(note.photoCount || 0),
-    searchText: String(note.searchText || '').toLowerCase(),
-    createdBy: note.createdBy || null,
-    createdAt: note.createdAt || null,
-    updatedBy: note.updatedBy || null,
-    updatedAt: note.updatedAt || null,
-    schemaVersion: Number(note.schemaVersion || 1)
-  };
-}
-
-function _notesSortValue(note) {
-  const updatedAt = note?.updatedAt?.toMillis?.()
-    ?? note?.updatedAt?.seconds * 1000
-    ?? (note?.updatedAt ? new Date(note.updatedAt).getTime() : 0);
-  return {
-    pinned: note?.isPinned ? 1 : 0,
-    archived: note?.isArchived ? 1 : 0,
-    updatedAt,
-    title: String(note?.title || '').toLowerCase()
-  };
-}
-
-function _notesCreateClientId(prefix = 'note') {
-  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function _notesCompare(a, b) {
-  const pa = _notesSortValue(a);
-  const pb = _notesSortValue(b);
-  if (pa.pinned !== pb.pinned) return pb.pinned - pa.pinned;
-  if (pa.archived !== pb.archived) return pa.archived - pb.archived;
-  if (pa.updatedAt !== pb.updatedAt) return pb.updatedAt - pa.updatedAt;
-  return pa.title.localeCompare(pb.title);
-}
-
-function _notesCurrentContextMatches(note) {
-  if (!note) return false;
-  if (_notesContext.issueId) {
-    const issueMatch = note.issueId === _notesContext.issueId;
-    const pressMatch = _notesContext.pressId ? note.pressId === _notesContext.pressId : false;
-    return issueMatch || pressMatch;
-  }
-  if (_notesContext.pressId) return note.pressId === _notesContext.pressId;
-  return true;
-}
-
-function _notesMatchesFilter(note) {
-  if (!note) return false;
-  const filter = _notesState.filter;
-  if (filter === 'pinned' && !note.isPinned) return false;
-  if (filter === 'archived' && !note.isArchived) return false;
-  if (filter === 'linked') {
-    if (_notesContext.pressId || _notesContext.issueId) return _notesCurrentContextMatches(note);
-    if (!note.pressId && !note.issueId) return false;
-  }
-  const q = String(_notesState.search || '').trim().toLowerCase();
-  if (!q) return true;
-  const issue = note.issueId ? issues.find(i => i.id === note.issueId) : null;
-  const haystack = [
-    note.title,
-    note.bodyText,
-    note.tags.join(' '),
-    note.checklistItems.map(item => item.text).join(' '),
-    note.pressId,
-    note.machineCode,
-    note.issueId,
-    issue?.machine || '',
-    issue?.note || ''
-  ].join(' ').toLowerCase();
-  return haystack.includes(q);
-}
-
-function _notesVisibleNotes() {
-  return (_notesState.notes || []).filter(_notesMatchesFilter).sort(_notesCompare);
-}
-
-function _notesDisplayTime(ts) {
-  return _relativeTime(ts) || 'just now';
-}
-
-function _notesDisplayContextChip(note) {
-  if (!note) return '';
-  if (note.issueId) {
-    const issue = issues.find(i => i.id === note.issueId);
-    return issue
-      ? `Issue · ${issue.machine || issue.pressId || issue.id}`
-      : `Issue · ${note.issueId}`;
-  }
-  if (note.pressId) {
-    return `Press · ${note.machineCode || note.pressId}`;
-  }
-  return '';
-}
-
-function _notesContextLabelForModal() {
-  return _notesContextTitle(_notesContext);
-}
-
-function _notesSplitTags(value = '') {
-  return Array.from(new Set(
-    String(value || '')
-      .split(',')
-      .map(tag => tag.trim().replace(/^#/, ''))
-      .filter(Boolean)
-  ));
-}
-
-function _notesKnownTags() {
-  const tags = new Set();
-  (_notesState.notes || []).forEach(note => {
-    (note?.tags || []).forEach(tag => {
-      const clean = String(tag || '').trim().replace(/^#/, '');
-      if (clean) tags.add(clean);
-    });
-  });
-  (_notesState.currentNote?.tags || []).forEach(tag => {
-    const clean = String(tag || '').trim().replace(/^#/, '');
-    if (clean) tags.add(clean);
-  });
-  return Array.from(tags).sort((a, b) => a.localeCompare(b));
-}
-
-function _notesTagQuery() {
-  const tagsEl = document.getElementById('notes-tags');
-  if (!tagsEl) return '';
-  const raw = String(tagsEl.value || '');
-  const parts = raw.split(',');
-  return String(parts[parts.length - 1] || '').trim().replace(/^#/, '');
-}
-
-function _notesRenderTagChips(note = _notesState.currentNote) {
-  const wrap = document.getElementById('notes-tag-chips');
-  if (!wrap) return;
-  wrap.innerHTML = '';
-  const tags = Array.isArray(note?.tags) ? note.tags : [];
-  if (!tags.length) {
-    const empty = document.createElement('div');
-    empty.className = 'notes-tag-empty';
-    empty.textContent = 'No tags yet. Add one below or type # in the note body.';
-    wrap.appendChild(empty);
-    return;
-  }
-  tags.forEach(tag => {
-    const chip = document.createElement('span');
-    chip.className = 'notes-tag-chip';
-    const label = document.createElement('span');
-    label.textContent = `#${tag}`;
-    chip.appendChild(label);
-    const remove = document.createElement('button');
-    remove.type = 'button';
-    remove.textContent = '✕';
-    remove.title = `Remove ${tag}`;
-    remove.addEventListener('click', () => {
-      if (!_notesState.currentNote) return;
-      const tagsEl = document.getElementById('notes-tags');
-      const current = _notesSplitTags(tagsEl?.value || '');
-      const next = current.filter(item => item.toLowerCase() !== String(tag).toLowerCase());
-      _notesState.currentNote.tags = next;
-      if (tagsEl) tagsEl.value = next.map(t => `#${t}`).join(', ');
-      _notesRenderTagChips(_notesState.currentNote);
-      _notesRenderTagSuggestions(_notesState.currentNote);
-      _notesState.dirty = true;
-      _notesQueueAutosave();
-      _notesRenderList();
-    });
-    chip.appendChild(remove);
-    wrap.appendChild(chip);
-  });
-}
-
-function _notesRenderTagSuggestions(note = _notesState.currentNote) {
-  const wrap = document.getElementById('notes-tag-suggestions');
-  if (!wrap) return;
-  wrap.innerHTML = '';
-  const currentTags = new Set((note?.tags || []).map(tag => String(tag || '').trim().replace(/^#/, '')).filter(Boolean).map(tag => tag.toLowerCase()));
-  const query = _notesTagQuery().toLowerCase();
-  const known = _notesKnownTags().filter(tag => !currentTags.has(tag.toLowerCase()));
-  const filtered = query
-    ? known.filter(tag => tag.toLowerCase().includes(query))
-    : known.slice(0, 6);
-  if (!filtered.length) {
-    const hint = document.createElement('div');
-    hint.className = 'notes-tag-empty';
-    hint.textContent = query ? 'No matching tags.' : 'Suggested tags will appear here as you use them.';
-    wrap.appendChild(hint);
-    return;
-  }
-  filtered.slice(0, 8).forEach(tag => {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'notes-tag-suggestion';
-    btn.textContent = `#${tag}`;
-    btn.addEventListener('click', () => {
-      if (!_notesState.currentNote) return;
-      const tagsEl = document.getElementById('notes-tags');
-      if (!tagsEl) return;
-      const existing = _notesSplitTags(tagsEl.value);
-      if (!existing.includes(tag)) existing.push(tag);
-      tagsEl.value = existing.map(t => `#${t}`).join(', ');
-      _notesState.currentNote.tags = existing;
-      _notesRenderTagChips(_notesState.currentNote);
-      _notesRenderTagSuggestions(_notesState.currentNote);
-      _notesState.dirty = true;
-      _notesQueueAutosave();
-      _notesRenderList();
-    });
-    wrap.appendChild(btn);
-  });
-}
-
-function _notesTemplateData(templateKey = 'blank') {
-  switch (templateKey) {
-    case 'follow_up':
-      return {
-        title: 'Follow-up',
-        bodyHtml: '<p>Follow up on the open item after the next run.</p>',
-        tags: ['follow-up'],
-        checklistItems: [
-          { id: `chk_${Date.now()}_a`, text: 'Confirm next check-in', done: false }
-        ]
-      };
-    case 'parts_needed':
-      return {
-        title: 'Parts Needed',
-        bodyHtml: '<p>List the parts, consumables, or approvals needed before this can move.</p>',
-        tags: ['parts', 'materials'],
-        checklistItems: [
-          { id: `chk_${Date.now()}_b`, text: 'Confirm part number', done: false },
-          { id: `chk_${Date.now()}_c`, text: 'Check availability', done: false }
-        ]
-      };
-    case 'shift_handoff':
-      return {
-        title: 'Shift Handoff',
-        bodyHtml: '<p>Summarize status, blockers, and the next shift action.</p>',
-        tags: ['handoff', 'shift'],
-        checklistItems: [
-          { id: `chk_${Date.now()}_d`, text: 'Leave status for the next shift', done: false }
-        ]
-      };
-    case 'issue_summary':
-      return {
-        title: 'Issue Summary',
-        bodyHtml: '<p>Summarize the issue, impact, and next step.</p>',
-        tags: ['summary', 'issue'],
-        checklistItems: [
-          { id: `chk_${Date.now()}_e`, text: 'Capture current impact', done: false },
-          { id: `chk_${Date.now()}_f`, text: 'Capture next action', done: false }
-        ]
-      };
-    default:
-      return { title: '', bodyHtml: '', tags: [], checklistItems: [] };
-  }
-}
-
-function _notesSetMenuOpen(menuId, open) {
-  const menu = document.getElementById(menuId);
-  const btn = document.getElementById('notes-actions-menu-btn');
-  if (!menu || !btn) return;
-  menu.classList.toggle('visible', !!open);
-  btn.classList.toggle('open', !!open);
-  btn.setAttribute('aria-expanded', String(!!open));
-}
-
-function _notesCloseMenus(exceptMenuId = null) {
-  if (exceptMenuId !== 'notes-actions-menu') _notesSetMenuOpen('notes-actions-menu', false);
-}
-
-function _notesSetPreviewMode(on) {
-  _notesState.previewMode = !!on;
-  const card = document.querySelector('.notes-editor-card-main');
-  const btn = document.getElementById('notes-preview-btn');
-  const body = document.getElementById('notes-body');
-  const preview = document.getElementById('notes-body-preview');
-  if (card) card.classList.toggle('previewing', _notesState.previewMode);
-  if (btn) {
-    btn.classList.toggle('active', _notesState.previewMode);
-    btn.setAttribute('aria-pressed', String(_notesState.previewMode));
-  }
-  if (body) body.hidden = _notesState.previewMode;
-  if (preview) preview.hidden = !_notesState.previewMode;
-}
-
-function _notesRenderBodyPreview(note = _notesState.currentNote) {
-  const wrap = document.getElementById('notes-body-preview');
-  if (!wrap) return;
-  const html = sanitizeNoteHtml(note?.bodyHtml || '');
-  const text = _noteTextFromHtml(html);
-  wrap.innerHTML = html || '<div class="notes-body-preview-empty">Preview appears here when enabled.</div>';
-  wrap.classList.toggle('empty', !text);
-}
-
-function _notesSyncEditorHeaderTitle(noteTitle = '') {
-  const headerTitleEl = document.getElementById('notes-editor-title');
-  if (!headerTitleEl) return;
-  const title = String(noteTitle || '').trim();
-  headerTitleEl.textContent = title || 'New Note';
-}
-
-function _notesRenderContextSummary(note = _notesState.currentNote) {
-  const summaryEl = document.getElementById('notes-context-summary');
-  const helpEl = document.getElementById('notes-context-help');
-  const pressBtn = document.getElementById('notes-link-press-btn');
-  const issueBtn = document.getElementById('notes-link-issue-btn');
-  if (!summaryEl) return;
-  if (note?.issueId) {
-    const issue = issues.find(i => i.id === note.issueId);
-    summaryEl.textContent = `Linked to issue ${issue?.machine || note.issueId}`;
-    if (helpEl) helpEl.textContent = 'This note is attached to the selected issue.';
-    if (pressBtn) pressBtn.textContent = _notesContext.pressId ? 'Relink to Open Press' : 'Link Open Press';
-    if (issueBtn) issueBtn.textContent = 'Linked to Issue';
-    return;
-  }
-  if (note?.pressId) {
-    const matchesCurrentPress = Boolean(_notesContext.pressId && note.pressId === _notesContext.pressId);
-    summaryEl.textContent = matchesCurrentPress
-      ? `Linked to the open press ${note.machineCode || note.pressId}`
-      : `Linked to press ${note.machineCode || note.pressId}`;
-    if (helpEl) helpEl.textContent = matchesCurrentPress
-      ? 'The note will stay attached to the press you are viewing.'
-      : 'This note is linked to a different press than the one currently open.';
-    if (pressBtn) pressBtn.textContent = matchesCurrentPress ? 'Keep Open Press Link' : 'Relink to Open Press';
-    if (issueBtn) issueBtn.textContent = _notesContext.issueId ? 'Link Open Issue' : 'Issue Not Open';
-    return;
-  }
-  if (_notesContext.pressId || _notesContext.issueId) {
-    summaryEl.textContent = `${_notesContextTitle(_notesContext)} note`;
-    if (helpEl) helpEl.textContent = 'Attach this note to the current press or issue if it belongs with the floor work.';
-    if (pressBtn) pressBtn.textContent = 'Link Open Press';
-    if (issueBtn) issueBtn.textContent = 'Link Open Issue';
-    return;
-  }
-  summaryEl.textContent = 'Plant-wide note';
-  if (helpEl) helpEl.textContent = 'Use this note without attaching it to a press or issue.';
-  if (pressBtn) pressBtn.textContent = 'Link Open Press';
-  if (issueBtn) issueBtn.textContent = 'Link Open Issue';
-}
-
-function _notesApplyTemplate(templateKey = 'blank') {
-  if (!_notesState.currentNote) return;
-  const template = _notesTemplateData(templateKey);
-  const titleEl = document.getElementById('notes-title');
-  const tagsEl = document.getElementById('notes-tags');
-  const bodyEl = document.getElementById('notes-body');
-  const currentTitle = String(titleEl?.value || '').trim();
-  const currentBody = String(bodyEl?.innerHTML || '').trim();
-  if (titleEl && (!currentTitle || templateKey !== 'blank')) titleEl.value = template.title || currentTitle;
-  if (tagsEl) {
-    const tags = _notesSplitTags(tagsEl.value);
-    template.tags.forEach(tag => { if (!tags.includes(tag)) tags.push(tag); });
-    tagsEl.value = tags.map(tag => `#${tag}`).join(', ');
-    _notesState.currentNote.tags = tags;
-  }
-  if (bodyEl && (!currentBody || templateKey !== 'blank')) bodyEl.innerHTML = template.bodyHtml || '';
-  if (_notesState.currentNote) {
-    const nextTitle = titleEl?.value || _notesState.currentNote.title;
-    _notesState.currentNote.title = nextTitle;
-    _notesState.currentNote.bodyHtml = sanitizeNoteHtml(bodyEl?.innerHTML || '');
-    _notesState.currentNote.bodyText = _noteTextFromHtml(_notesState.currentNote.bodyHtml);
-    _notesState.currentNote.checklistItems = template.checklistItems.length
-      ? template.checklistItems.map(item => ({ ...item }))
-      : normalizeChecklistItems(_notesState.currentNote.checklistItems);
-    _notesSyncEditorHeaderTitle(nextTitle);
-  }
-  _notesRenderTagChips(_notesState.currentNote);
-  _notesRenderTagSuggestions(_notesState.currentNote);
-  _notesRenderChecklist(_notesState.currentNote);
-  _notesRenderBodyPreview(_notesState.currentNote);
-  _notesState.dirty = true;
-  _notesQueueAutosave();
-  _notesRenderList();
-}
-
-function _notesRenderList() {
-  const listEl = document.getElementById('notes-list');
-  if (!listEl) return;
-  const visibleNotes = _notesVisibleNotes();
-  if (!visibleNotes.length) {
-    const empty = document.createElement('div');
-    empty.className = 'notes-list-empty';
-    if (_notesState.error) {
-      empty.textContent = 'Notes are unavailable for this plant right now.';
-    } else {
-      empty.textContent = _notesState.search || _notesState.filter !== 'all'
-        ? 'No notes match this filter yet.'
-        : 'No notes yet. Tap New Note to start your notebook.';
-    }
-    listEl.innerHTML = '';
-    listEl.appendChild(empty);
-    return;
-  }
-  listEl.innerHTML = '';
-  visibleNotes.forEach(note => {
-    const btn = document.createElement('div');
-    btn.className = `note-card ${note.id === _notesState.activeNoteId ? 'active' : ''}`;
-    btn.addEventListener('click', () => {
-      void _notesSelectNote(note.id);
-    });
-
-    const top = document.createElement('div');
-    top.className = 'note-title';
-    
-    const titleSpan = document.createElement('span');
-    titleSpan.textContent = note.title || 'Untitled Note';
-    top.appendChild(titleSpan);
-
-    if (note.isPinned) {
-      const pinIcon = document.createElement('span');
-      pinIcon.className = 'pin-icon';
-      pinIcon.textContent = '📌';
-      top.appendChild(pinIcon);
-    }
-
-    const preview = document.createElement('div');
-    preview.className = 'note-preview';
-    const bodyPreview = note.bodyText || note.checklistItems.map(item => item.text).filter(Boolean).join(' • ');
-    preview.textContent = bodyPreview || 'No content yet.';
-
-    const meta = document.createElement('div');
-    meta.className = 'note-meta';
-
-    const tagsDiv = document.createElement('div');
-    tagsDiv.className = 'tags';
-    
-    // Add context/badge tags to the tags list as well
-    if (note.pressId || note.issueId) {
-      const linkedTag = document.createElement('span');
-      linkedTag.className = 'tag';
-      linkedTag.textContent = note.issueId ? '#issue' : '#press';
-      tagsDiv.appendChild(linkedTag);
-    }
-    if (note.isArchived) {
-      const archTag = document.createElement('span');
-      archTag.className = 'tag';
-      archTag.textContent = '#archived';
-      tagsDiv.appendChild(archTag);
-    }
-    if (Array.isArray(note.tags)) {
-      note.tags.forEach(t => {
-        const tagSpan = document.createElement('span');
-        tagSpan.className = 'tag';
-        tagSpan.textContent = `#${t}`;
-        tagsDiv.appendChild(tagSpan);
-      });
-    }
-
-    const time = document.createElement('div');
-    time.className = 'timestamp';
-    time.textContent = _notesDisplayTime(note.updatedAt);
-
-    meta.appendChild(tagsDiv);
-    meta.appendChild(time);
-
-    btn.appendChild(top);
-    btn.appendChild(preview);
-    btn.appendChild(meta);
-    listEl.appendChild(btn);
-  });
-}
-
-function _notesSetStatus(message, updatedMessage = '') {
-  const statusEl = document.getElementById('notes-editor-save-state');
-  const updatedEl = document.getElementById('notes-editor-updated');
-  if (statusEl) statusEl.textContent = message || '';
-  if (updatedEl) updatedEl.textContent = updatedMessage || '';
-  if (statusEl) {
-    const isSaving = /saving/i.test(message || '');
-    const isError = /could not|failed|unavailable/i.test(message || '');
-    const isOffline = !navigator.onLine && !isSaving && !isError;
-    statusEl.classList.toggle('is-saving', isSaving);
-    statusEl.classList.toggle('is-error', isError);
-    statusEl.classList.toggle('is-offline', isOffline);
-  }
-}
-
-function _notesRenderContextChips(note = _notesState.currentNote) {
-  const wrap = document.getElementById('notes-context-chips');
-  if (!wrap) return;
-  wrap.innerHTML = '';
-  const chips = [];
-  if (_notesContext.pressId || _notesContext.issueId) {
-    chips.push({
-      label: _notesContextLabelForModal(),
-      removable: false
-    });
-  }
-  if (note?.pressId) {
-    chips.push({
-      label: `Press · ${note.machineCode || note.pressId}`,
-      removable: true,
-      onRemove: () => {
-        note.pressId = '';
-        note.machineCode = '';
-        void _notesSaveActiveNote({ immediate: true });
-      }
-    });
-  }
-  if (note?.issueId) {
-    const issue = issues.find(i => i.id === note.issueId);
-    chips.push({
-      label: `Issue · ${issue?.machine || note.issueId}`,
-      removable: true,
-      onRemove: () => {
-        note.issueId = '';
-        void _notesSaveActiveNote({ immediate: true });
-      }
-    });
-  }
-  if (!chips.length) {
-    const chip = document.createElement('span');
-    chip.className = 'notes-context-chip';
-    chip.textContent = 'No linked context';
-    wrap.appendChild(chip);
-    return;
-  }
-  chips.forEach(item => {
-    const chip = document.createElement('span');
-    chip.className = 'notes-context-chip';
-    const label = document.createElement('span');
-    label.textContent = item.label;
-    chip.appendChild(label);
-    if (item.removable) {
-      const remove = document.createElement('button');
-      remove.type = 'button';
-      remove.textContent = '✕';
-      remove.addEventListener('click', () => item.onRemove?.());
-      chip.appendChild(remove);
-    }
-    wrap.appendChild(chip);
-  });
-}
-
-function _notesRenderChecklist(note = _notesState.currentNote) {
-  const wrap = document.getElementById('notes-checklist');
-  if (!wrap) return;
-  wrap.innerHTML = '';
-  const items = normalizeChecklistItems(note?.checklistItems || []);
-  if (!items.length) {
-    const empty = document.createElement('div');
-    empty.className = 'notes-checklist-empty';
-    empty.textContent = 'Add quick checkboxes for follow-ups, parts, or reminders.';
-    wrap.appendChild(empty);
-    return;
-  }
-  items.forEach(item => {
-    const row = document.createElement('div');
-    row.className = 'notes-check-item';
-    const cb = document.createElement('input');
-    cb.type = 'checkbox';
-    cb.checked = Boolean(item.done);
-    cb.addEventListener('change', () => {
-      const current = _notesState.currentNote?.checklistItems || [];
-      const next = current.map(chk => chk.id === item.id ? { ...chk, done: cb.checked } : chk);
-      if (_notesState.currentNote) _notesState.currentNote.checklistItems = next;
-      void _notesSaveActiveNote({ immediate: false });
-    });
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.className = 'notes-check-text';
-    input.value = item.text || '';
-    input.placeholder = 'Checklist item';
-    input.addEventListener('input', () => {
-      const current = _notesState.currentNote?.checklistItems || [];
-      const next = current.map(chk => chk.id === item.id ? { ...chk, text: input.value } : chk);
-      if (_notesState.currentNote) _notesState.currentNote.checklistItems = next;
-      _notesState.dirty = true;
-      _notesQueueAutosave();
-    });
-    const remove = document.createElement('button');
-    remove.type = 'button';
-    remove.className = 'notes-check-remove';
-    remove.textContent = '✕';
-    remove.addEventListener('click', () => {
-      const current = _notesState.currentNote?.checklistItems || [];
-      const next = current.filter(chk => chk.id !== item.id);
-      if (_notesState.currentNote) _notesState.currentNote.checklistItems = next;
-      _notesRenderChecklist(_notesState.currentNote);
-      _notesState.dirty = true;
-      _notesQueueAutosave();
-    });
-    row.appendChild(cb);
-    row.appendChild(input);
-    row.appendChild(remove);
-    wrap.appendChild(row);
-  });
-}
-
-function _notesRenderAttachments() {
-  const wrap = document.getElementById('notes-attachments');
-  if (!wrap) return;
-  wrap.innerHTML = '';
-  if (!_notesAttachmentsCache.length) {
-    const empty = document.createElement('div');
-    empty.className = 'notes-checklist-empty';
-    empty.textContent = 'Attachments will appear here after upload.';
-    wrap.appendChild(empty);
-    return;
-  }
-  _notesAttachmentsCache.forEach((att, idx) => {
-    const tile = document.createElement('div');
-    tile.className = 'notes-attachment';
-    const img = document.createElement('img');
-    img.className = 'notes-attachment-thumb';
-    img.src = att.url || att.downloadURL || '';
-    img.alt = att.fileName || `Attachment ${idx + 1}`;
-    img.addEventListener('click', () => {
-      const photos = _notesAttachmentsCache.map(a => ({
-        url: a.url || a.downloadURL || '',
-        uploadedAt: a.uploadedAt || a.createdAt || ''
-      })).filter(a => a.url);
-      openLightbox(idx, photos);
-    });
-    const label = document.createElement('div');
-    label.className = 'notes-attachment-label';
-    label.textContent = att.fileName || att.caption || `Attachment ${idx + 1}`;
-    const remove = document.createElement('button');
-    remove.type = 'button';
-    remove.className = 'notes-attachment-remove';
-    remove.textContent = 'Remove';
-    remove.addEventListener('click', () => void _notesDeleteAttachment(att.id));
-    tile.appendChild(img);
-    tile.appendChild(label);
-    tile.appendChild(remove);
-    wrap.appendChild(tile);
-  });
-}
-
-function _notesRenderEditor(note = null) {
-  const titleEl = document.getElementById('notes-title');
-  const tagsEl = document.getElementById('notes-tags');
-  const bodyEl = document.getElementById('notes-body');
-  const previewEl = document.getElementById('notes-body-preview');
-  const pinBtn = document.getElementById('notes-pin-btn');
-  const archiveBtn = document.getElementById('notes-archive-btn');
-  const deleteBtn = document.getElementById('notes-delete-btn');
-  const backBtn = document.getElementById('notes-back-btn');
-  if (!titleEl || !tagsEl || !bodyEl || !pinBtn || !archiveBtn || !deleteBtn) return;
-
-  const prevNoteId = _notesState.currentNote?.id || null;
-  const activeEl = document.activeElement;
-  const titleFocused = activeEl === titleEl;
-  const tagsFocused = activeEl === tagsEl;
-  const bodyFocused = activeEl === bodyEl;
-  const sameActiveNote = Boolean(note?.id) && note.id === prevNoteId;
-
-  _notesState.currentNote = note ? { ...note, checklistItems: normalizeChecklistItems(note.checklistItems) } : null;
-  if (!note) _notesAttachmentsCache = [];
-  if (!sameActiveNote) _notesState.previewMode = false;
-  _notesState.dirty = false;
-  _notesSetStatus(note ? 'Saved' : 'Select a note to begin.', note ? `Updated ${_notesDisplayTime(note.updatedAt)}` : '');
-  _notesSyncEditorHeaderTitle(note?.title || '');
-
-  const nextTitle = note?.title || '';
-  const nextTags = Array.isArray(note?.tags) ? note.tags.join(', ') : '';
-  const nextBodyHtml = note?.bodyHtml || '';
-
-  if (!sameActiveNote || !titleFocused) titleEl.value = nextTitle;
-  if (!sameActiveNote || !tagsFocused) tagsEl.value = nextTags;
-  if (!sameActiveNote || !bodyFocused) bodyEl.innerHTML = nextBodyHtml;
-  bodyEl.classList.toggle('empty', !note?.bodyHtml);
-  if (previewEl) previewEl.hidden = !_notesState.previewMode;
-  _notesSyncEditorHeaderTitle(titleEl.value || nextTitle);
-  pinBtn.textContent = note?.isPinned ? 'Unpin' : 'Pin';
-  archiveBtn.textContent = note?.isArchived ? 'Unarchive' : 'Archive';
-  deleteBtn.disabled = !note?.id;
-  titleEl.disabled = !note?.id;
-  tagsEl.disabled = !note?.id;
-  bodyEl.contentEditable = note?.id ? 'true' : 'false';
-  bodyEl.dataset.placeholder = note?.id ? 'Write something useful...' : 'Select a note to begin.';
-  if (backBtn) backBtn.disabled = !note?.id;
-  document.getElementById('notes-checklist-btn')?.toggleAttribute('disabled', !note?.id);
-  document.getElementById('notes-add-checklist-btn')?.toggleAttribute('disabled', !note?.id);
-  document.getElementById('notes-add-checklist-inline-btn')?.toggleAttribute('disabled', !note?.id);
-  document.getElementById('notes-checklist-input')?.toggleAttribute('disabled', !note?.id);
-  document.getElementById('notes-photo-btn')?.toggleAttribute('disabled', !note?.id);
-  document.getElementById('notes-link-press-btn')?.toggleAttribute('disabled', !note?.id || !_notesOpenPressContext());
-  document.getElementById('notes-link-issue-btn')?.toggleAttribute('disabled', !note?.id || !_notesOpenIssueContext());
-  _notesRenderTagChips(note);
-  _notesRenderTagSuggestions(note);
-  _notesRenderContextChips(note);
-  _notesRenderContextSummary(note);
-  _notesRenderChecklist(note);
-  _notesRenderAttachments();
-  _notesRenderBodyPreview(note);
-  _notesSetPreviewMode(_notesState.previewMode && !!note?.id);
-  _notesSyncLayout();
-}
-
-function _notesFocusBody() {
-  const bodyEl = document.getElementById('notes-body');
-  if (!bodyEl) return;
-  const sel = window.getSelection();
-  const hasBodySelection = Boolean(sel && sel.rangeCount > 0 && bodyEl.contains(sel.anchorNode));
-  bodyEl.focus();
-  if (hasBodySelection) return;
-  const range = document.createRange();
-  range.selectNodeContents(bodyEl);
-  range.collapse(false);
-  sel.removeAllRanges();
-  sel.addRange(range);
-}
-
-function _notesFocusTitle() {
-  const titleEl = document.getElementById('notes-title');
-  if (!titleEl) return;
-  titleEl.focus();
-  titleEl.select?.();
-}
-
-function _notesDetectFormats() {
-  const sel = window.getSelection();
-  const fmts = { bold: false, italic: false, underline: false, bullet: false };
-  if (!sel || !sel.rangeCount) return fmts;
-  function walk(node) {
-    while (node && node.nodeType === Node.ELEMENT_NODE) {
-      const t = node.tagName;
-      if (t === 'B' || t === 'STRONG') fmts.bold = true;
-      if (t === 'I' || t === 'EM') fmts.italic = true;
-      if (t === 'U') fmts.underline = true;
-      if (t === 'UL' || t === 'OL') fmts.bullet = true;
-      if (t === 'BODY') break;
-      node = node.parentElement;
-    }
-  }
-  for (let i = 0; i < sel.rangeCount; i++) {
-    const r = sel.getRangeAt(i);
-    if (r.collapsed) { walk(r.startContainer); }
-    else { walk(r.startContainer); walk(r.endContainer); }
-  }
-  return fmts;
-}
-
-function _notesIsInTag(tagName) {
-  const sel = window.getSelection();
-  if (!sel || !sel.rangeCount) return false;
-  const tag = tagName.toUpperCase();
-  for (let i = 0; i < sel.rangeCount; i++) {
-    const r = sel.getRangeAt(i);
-    const check = node => {
-      while (node && node.nodeType === Node.ELEMENT_NODE) {
-        if (node.tagName === tag) return true;
-        if (node.tagName === 'BODY') break;
-        node = node.parentElement;
-      }
-      return false;
-    };
-    if (r.collapsed) { if (check(r.startContainer)) return true; }
-    else { if (check(r.startContainer) || check(r.endContainer)) return true; }
-  }
-  return false;
-}
-
-function _notesWrapFormat(tagName) {
-  const sel = window.getSelection();
-  if (!sel.rangeCount) return;
-  const range = sel.getRangeAt(0);
-  if (range.collapsed) return;
-  const frag = range.extractContents();
-  const wrapper = document.createElement(tagName);
-  wrapper.appendChild(frag);
-  range.insertNode(wrapper);
-  sel.removeAllRanges();
-  const nr = document.createRange();
-  nr.selectNodeContents(wrapper);
-  sel.addRange(nr);
-}
-
-function _notesUnwrapFormat(tagName) {
-  const sel = window.getSelection();
-  if (!sel.rangeCount) return;
-  const range = sel.getRangeAt(0);
-  if (range.collapsed) return;
-  const bodyEl = document.getElementById('notes-body');
-  if (!bodyEl) return;
-  const frag = range.extractContents();
-  function stripTag(node, tag) {
-    if (!node || node.nodeType !== Node.ELEMENT_NODE) return node;
-    if (node.tagName === tag) {
-      const df = document.createDocumentFragment();
-      Array.from(node.childNodes).forEach(c => df.appendChild(stripTag(c, tag)));
-      return df;
-    }
-    const clone = node.cloneNode(false);
-    Array.from(node.childNodes).forEach(c => clone.appendChild(stripTag(c, tag)));
-    return clone;
-  }
-  const cleaned = stripTag(frag, tagName.toUpperCase());
-  range.insertNode(cleaned);
-  _notesCleanupEmptyTags(bodyEl);
-  sel.removeAllRanges();
-  bodyEl.focus();
-}
-
-function _notesCleanupEmptyTags(root) {
-  if (!root) return;
-  root.querySelectorAll('b, i, u, strong, em').forEach(el => {
-    if (!el.textContent.trim() && !el.children.length) {
-      el.parentNode?.removeChild(el);
-    }
-  });
-}
-
-function _notesApplyInlineFormat(tagName) {
-  const bodyEl = document.getElementById('notes-body');
-  const sel = window.getSelection();
-  if (!bodyEl || !sel || !sel.rangeCount) return;
-  const range = sel.getRangeAt(0);
-  if (!bodyEl.contains(range.commonAncestorContainer)) return;
-  if (range.collapsed) {
-    const cmdMap = { B: 'bold', I: 'italic', U: 'underline' };
-    try { document.execCommand('styleWithCSS', false, false); } catch (_) {}
-    document.execCommand(cmdMap[tagName] || 'bold', false, null);
-    return;
-  }
-  if (_notesIsInTag(tagName)) {
-    _notesUnwrapFormat(tagName);
-  } else {
-    _notesWrapFormat(tagName);
-  }
-}
-
-function _notesToolbarCommand(command) {
-  const bodyEl = document.getElementById('notes-body');
-  if (!bodyEl) return;
-  bodyEl.focus();
-  const inlineTags = { bold: 'B', italic: 'I', underline: 'U' };
-  const tag = inlineTags[command];
-  if (tag) {
-    _notesApplyInlineFormat(tag);
-  } else {
-    try { document.execCommand('styleWithCSS', false, false); } catch (_) {}
-    document.execCommand(command, false, null);
-  }
-  _notesSyncFormatButtons();
-  _notesState.dirty = true;
-  _notesQueueAutosave();
-}
-
-function _notesSyncFormatButtons() {
-  const boldBtn = document.getElementById('notes-bold-btn');
-  const italicBtn = document.getElementById('notes-italic-btn');
-  const underlineBtn = document.getElementById('notes-underline-btn');
-  const bulletBtn = document.getElementById('notes-bullet-btn');
-  if (!boldBtn || !italicBtn) return;
-  const bodyEl = document.getElementById('notes-body');
-  const sel = window.getSelection();
-  const inBody = Boolean(sel && sel.rangeCount > 0 && bodyEl && bodyEl.contains(sel.anchorNode));
-  if (!inBody) {
-    [boldBtn, italicBtn, underlineBtn, bulletBtn].forEach(b => {
-      if (!b) return;
-      b.classList.remove('active');
-      b.setAttribute('aria-pressed', 'false');
-    });
-    return;
-  }
-  const fmts = _notesDetectFormats();
-  const sync = (btn, val) => {
-    if (!btn) return;
-    btn.classList.toggle('active', val);
-    btn.setAttribute('aria-pressed', String(val));
-  };
-  sync(boldBtn, fmts.bold);
-  sync(italicBtn, fmts.italic);
-  sync(underlineBtn, fmts.underline);
-  sync(bulletBtn, fmts.bullet);
-}
-
-async function _notesLoadAttachments(noteId) {
-  _notesAttachmentsCache = [];
-  const noteAttachmentsEl = document.getElementById('notes-attachments');
-  if (!noteId || !noteAttachmentsEl) {
-    _notesRenderAttachments();
-    return [];
-  }
-  if (shouldUseSqlStagingReads(currentPlantId)) {
-    const payload = await requireSqlRead(
-      `note attachments ${noteId}`,
-      () => dataApi.listNoteAttachments(currentPlantId, noteId),
-      `Note attachments are missing in D1 for note ${noteId}.`
-    );
-    _notesAttachmentsCache = Array.isArray(payload?.attachments) ? payload.attachments.map(att => ({
-      ...att,
-      id: att.id || att.attachmentId || ''
-    })) : [];
-    _notesRenderAttachments();
-    return _notesAttachmentsCache;
-  }
-  const snap = await getDocs(query(noteAttachmentsCol(noteId), orderBy('uploadedAt', 'desc')));
-  _notesAttachmentsCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  _notesRenderAttachments();
-  return _notesAttachmentsCache;
-}
-
-async function _notesDeleteAttachment(attachmentId) {
-  if (!_notesState.currentNote?.id || !attachmentId) return;
-  const noteId = _notesState.currentNote.id;
-  const att = _notesAttachmentsCache.find(item => item.id === attachmentId);
-  if (!att) return;
-  if (!confirm('Remove this attachment?')) return;
-  try {
-    await deleteStoredAttachmentBlob(currentPlantId, att);
-    if (shouldUseSqlStagingReads(currentPlantId)) {
-      await dataApi.deleteNoteAttachment(currentPlantId, noteId, attachmentId);
-    } else {
-      await deleteDoc(doc(noteAttachmentsCol(noteId), attachmentId));
-    }
-    _notesAttachmentsCache = _notesAttachmentsCache.filter(item => item.id !== attachmentId);
-    if (_notesState.currentNote) _notesState.currentNote.photoCount = _notesAttachmentsCache.length;
-    _notesRenderAttachments();
-    await _notesSaveActiveNote({ immediate: true });
-  } catch (e) {
-    console.warn('delete note attachment failed', e);
-    showGameToast(`Could not remove attachment: ${e?.message || 'error'}`);
-  }
-}
-
-function _notesQueueAutosave() {
-  if (!_notesState.currentNote?.id) return;
-  _notesState.dirty = true;
-  _notesState.saving = true;
-  _notesSetStatus('Saving…', '');
-  if (_notesSaveTimer) clearTimeout(_notesSaveTimer);
-  _notesSaveTimer = setTimeout(() => {
-    void _notesSaveActiveNote({ immediate: false });
-  }, 650);
-}
-
-function _notesBuildPayload(note, { persistCreatedAt = false } = {}) {
-  const titleEl = document.getElementById('notes-title');
-  const tagsEl = document.getElementById('notes-tags');
-  const bodyEl = document.getElementById('notes-body');
-  const title = String(titleEl?.value || note?.title || '').trim() || 'Untitled Note';
-  const bodyHtml = sanitizeNoteHtml(String(bodyEl?.innerHTML || note?.bodyHtml || ''));
-  const bodyText = _noteTextFromHtml(bodyHtml);
-  const tags = _notesSplitTags(tagsEl?.value || '');
-  const checklistItems = normalizeChecklistItems(note?.checklistItems || []);
-  const actor = currentActor();
-  const searchText = [
-    title,
-    bodyText,
-    tags.join(' '),
-    checklistItems.map(item => item.text).join(' '),
-    note?.pressId || '',
-    note?.machineCode || '',
-    note?.issueId || ''
-  ].join(' ').toLowerCase();
-  const useSql = shouldUseSqlStagingReads(currentPlantId);
-  return {
-    id: note?.id || '',
-    noteId: note?.id || '',
-    title,
-    bodyHtml,
-    bodyText,
-    tags,
-    checklistItems,
-    pressId: note?.pressId || '',
-    machineCode: note?.machineCode || '',
-    issueId: note?.issueId || '',
-    isPinned: Boolean(note?.isPinned),
-    isArchived: Boolean(note?.isArchived),
-    photoCount: Number(note?.photoCount || 0),
-    searchText,
-    updatedAt: useSql ? new Date().toISOString() : serverTimestamp(),
-    updatedBy: actor,
-    schemaVersion: 1,
-    ...(persistCreatedAt ? {
-      createdAt: note?.createdAt || (useSql ? new Date().toISOString() : serverTimestamp()),
-      createdBy: note?.createdBy || actor
-    } : {})
-  };
-}
-
-async function _notesSaveActiveNote({ immediate = false } = {}) {
-  if (!_notesState.currentNote?.id || !currentPlantId) return;
-  const note = _notesState.currentNote;
-  const payload = _notesBuildPayload(note, { persistCreatedAt: !note.createdAt });
-  try {
-    if (_notesSaveTimer) {
-      clearTimeout(_notesSaveTimer);
-      _notesSaveTimer = null;
-    }
-    if (immediate) _notesSetStatus('Saving…', '');
-    if (shouldUseSqlStagingReads(currentPlantId)) {
-      const response = await dataApi.updateNote(currentPlantId, note.id, payload);
-      if (response?.note) {
-        _notesState.currentNote = _notesNormalizeDoc(response.note);
-        _notesState.notes = (_notesState.notes || [])
-          .filter(item => item.id !== note.id)
-          .concat(_notesState.currentNote)
-          .sort(_notesCompare);
-      }
-    } else {
-      await setDoc(noteDoc(note.id), payload, { merge: true });
-    }
-    _notesState.dirty = false;
-    _notesState.saving = false;
-    _notesState.lastSavedAt = new Date();
-    _notesSetStatus('Saved', `Updated ${_notesDisplayTime(_notesState.lastSavedAt)}`);
-    _notesRenderList();
-  } catch (e) {
-    _notesState.saving = false;
-    _notesSetStatus('Could not save note', e?.message || '');
-    console.warn('note save failed', e);
-  }
-}
-
-async function _notesSetContextLink(kind) {
-  if (!_notesState.currentNote?.id) return;
-  if (kind === 'press') {
-    const context = _notesOpenPressContext();
-    if (!context) return;
-    _notesState.currentNote.pressId = context.pressId || '';
-    _notesState.currentNote.machineCode = context.machineCode || '';
-  } else if (kind === 'issue') {
-    const context = _notesOpenIssueContext();
-    if (!context) return;
-    _notesState.currentNote.issueId = context.issueId || '';
-    _notesState.currentNote.pressId = context.pressId || _notesState.currentNote.pressId || '';
-    _notesState.currentNote.machineCode = context.machineCode || _notesState.currentNote.machineCode || '';
-  }
-  _notesState.dirty = true;
-  await _notesSaveActiveNote({ immediate: true });
-  _notesRenderEditor(_notesState.currentNote);
-}
-
-async function _notesTogglePin() {
-  if (!_notesState.currentNote?.id) return;
-  _notesState.currentNote.isPinned = !_notesState.currentNote.isPinned;
-  await _notesSaveActiveNote({ immediate: true });
-  _notesRenderEditor(_notesState.currentNote);
-}
-
-async function _notesToggleArchive() {
-  if (!_notesState.currentNote?.id) return;
-  _notesState.currentNote.isArchived = !_notesState.currentNote.isArchived;
-  await _notesSaveActiveNote({ immediate: true });
-  _notesRenderEditor(_notesState.currentNote);
-}
-
-async function _notesCreateNewNote(templateKey = 'blank') {
-  if (!currentPlantId || !_notesState.notes) return;
-  const noteId = shouldUseSqlStagingReads(currentPlantId) ? _notesCreateClientId('note') : doc(notesCol()).id;
-  const pressId = _notesContext.pressId || '';
-  const issueId = _notesContext.issueId || '';
-  const issue = issueId ? issues.find(i => i.id === issueId) : null;
-  const machineCode = issue?.machine || _notesContext.label?.replace(/^Press\s+/i, '') || '';
-  const template = _notesTemplateData(templateKey);
-  const contextLabel = _notesContext.issueId
-    ? `Issue ${machineCode || issueId}`
-    : (_notesContext.pressId ? `Press ${machineCode || pressId}` : '');
-  const title = contextLabel
-    ? (template.title ? `${template.title} · ${contextLabel}` : contextLabel)
-    : (template.title || 'New Note');
-  const tags = Array.from(new Set([
-    ...(template.tags || []),
-    ...(pressId ? ['press'] : []),
-    ...(issueId ? ['issue'] : [])
-  ]));
-  const draft = {
-    id: noteId,
-    title,
-    bodyHtml: template.bodyHtml || '',
-    bodyText: _noteTextFromHtml(template.bodyHtml || ''),
-    checklistItems: normalizeChecklistItems(template.checklistItems || []),
-    tags,
-    pressId,
-    machineCode,
-    issueId,
-    isPinned: false,
-    isArchived: false,
-    photoCount: 0,
-    searchText: title.toLowerCase(),
-    createdAt: shouldUseSqlStagingReads(currentPlantId) ? new Date().toISOString() : serverTimestamp(),
-    createdBy: currentActor(),
-    updatedAt: shouldUseSqlStagingReads(currentPlantId) ? new Date().toISOString() : serverTimestamp(),
-    updatedBy: currentActor(),
-    schemaVersion: 1
-  };
-  _notesState.creating = true;
-  _notesState.activeNoteId = noteId;
-  _notesSetView('editor');
-  _notesRenderEditor(_notesNormalizeDoc(draft));
-  queueMicrotask(_notesFocusTitle);
-  if (shouldUseSqlStagingReads(currentPlantId)) {
-    const response = await dataApi.createNote(currentPlantId, draft);
-    const saved = _notesNormalizeDoc(response?.note || draft);
-    _notesState.notes = (_notesState.notes || []).filter(note => note.id !== saved.id).concat(saved).sort(_notesCompare);
-    _notesState.currentNote = saved;
-  } else {
-    await setDoc(noteDoc(noteId), draft);
-  }
-  await _notesLoadAttachments(noteId);
-  _notesState.creating = false;
-  _notesRenderList();
-  _notesSetStatus('Saved', 'New note created');
-}
-
-async function _notesDeleteActiveNote() {
-  if (!_notesState.currentNote?.id) return;
-  const note = _notesState.currentNote;
-  const ok = confirm(`Delete "${note.title || 'Untitled Note'}"? This will remove the note and its attachments.`);
-  if (!ok) return;
-  try {
-    const attachments = shouldUseSqlStagingReads(currentPlantId)
-      ? (_notesAttachmentsCache || [])
-      : (await getDocs(noteAttachmentsCol(note.id))).docs.map(d => d.data() || {});
-    await Promise.allSettled(attachments.map(async att => {
-      await deleteStoredAttachmentBlob(currentPlantId, att);
-    }));
-    if (shouldUseSqlStagingReads(currentPlantId)) {
-      await dataApi.deleteNote(currentPlantId, note.id);
-      _notesState.notes = (_notesState.notes || []).filter(item => item.id !== note.id);
-    } else {
-      await _deleteWikiDocsInBatches(noteAttachmentsCol(note.id));
-      await deleteDoc(noteDoc(note.id));
-    }
-    _notesState.activeNoteId = null;
-    _notesRenderEditor(null);
-    _notesRenderList();
-  } catch (e) {
-    console.warn('delete note failed', e);
-    showGameToast(`Could not delete note: ${e?.message || 'error'}`);
-  }
-}
-
-async function _notesUploadAttachments(files) {
-  const noteId = _notesState.currentNote?.id;
-  if (!noteId || !files || !files.length) return;
-  const uploaded = [];
-  try {
-    for (const file of files) {
-      if (!file?.type?.startsWith('image/')) continue;
-      const attId = `att_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-      const ext = String(file.name || '').split('.').pop() || 'jpg';
-      const dataUrl = await readFileAsDataUrl(file);
-      let uploadedBlob = await uploadAttachmentToPreferredStorage(currentPlantId, {
-        scope: 'note',
-        noteId,
-        fileName: file.name || `attachment_${uploaded.length + 1}.${ext}`,
-        contentType: file.type || 'image/jpeg',
-        dataUrl
-      });
-      if (!uploadedBlob?.storagePath) {
-        const path = `${noteStoragePrefix(noteId)}/attachments/${attId}.${ext}`;
-        let sRef = storageRef(storage, path);
-        try {
-          await uploadString(sRef, dataUrl, 'data_url');
-        } catch (err) {
-          const msg = String(err?.message || '');
-          const shouldTryFallback = storageFallback && (msg.includes('Permission denied') || msg.includes('storage/unauthorized') || msg.includes('storage/bucket-not-found'));
-          if (!shouldTryFallback) throw err;
-          sRef = storageRef(storageFallback, path);
-          await uploadString(sRef, dataUrl, 'data_url');
-        }
-        const url = await getDownloadURL(sRef);
-        uploadedBlob = {
-          storagePath: path,
-          storageBucket: sRef.bucket,
-          downloadUrl: url,
-          url,
-          contentType: file.type || 'image/jpeg',
-          sizeBytes: file.size || 0,
-          fileName: file.name || `attachment_${uploaded.length + 1}.${ext}`,
-          uploadedAt: shouldUseSqlStagingReads(currentPlantId) ? new Date().toISOString() : serverTimestamp()
-        };
-      }
-      const attDoc = {
-        id: attId,
-        attachmentId: attId,
-        storagePath: uploadedBlob.storagePath,
-        storageBucket: uploadedBlob.storageBucket || '',
-        url: uploadedBlob.downloadUrl || uploadedBlob.url || '',
-        fileName: uploadedBlob.fileName || file.name || `attachment_${uploaded.length + 1}.${ext}`,
-        contentType: uploadedBlob.contentType || file.type || 'image/jpeg',
-        sizeBytes: Number(uploadedBlob.sizeBytes || file.size || 0),
-        uploadedBy: currentActor(),
-        uploadedAt: uploadedBlob.uploadedAt || (shouldUseSqlStagingReads(currentPlantId) ? new Date().toISOString() : serverTimestamp()),
-        schemaVersion: 1
-      };
-      if (shouldUseSqlStagingReads(currentPlantId)) {
-        const response = await dataApi.createNoteAttachment(currentPlantId, noteId, attDoc);
-        uploaded.push(response?.attachment ? {
-          ...response.attachment,
-          id: response.attachment.id || response.attachment.attachmentId || attId
-        } : attDoc);
-      } else {
-        await setDoc(doc(noteAttachmentsCol(noteId), attId), attDoc);
-        uploaded.push(attDoc);
-      }
-    }
-    _notesAttachmentsCache = [..._notesAttachmentsCache, ...uploaded];
-    if (_notesState.currentNote) _notesState.currentNote.photoCount = _notesAttachmentsCache.length;
-    _notesRenderAttachments();
-    const current = _notesState.currentNote;
-    if (current) current.photoCount = _notesAttachmentsCache.length;
-    await _notesSaveActiveNote({ immediate: true });
-  } catch (e) {
-    console.warn('note attachment upload failed', e);
-    showGameToast(`Could not attach photo: ${e?.message || 'error'}`);
-  }
-}
-
-function _notesSyncFilterButtons() {
-  document.querySelectorAll('[data-notes-filter]').forEach(btn => {
-    btn.classList.toggle('active', btn.getAttribute('data-notes-filter') === _notesState.filter);
-  });
-}
-
-async function _notesSelectNote(noteId) {
-  if (!noteId) {
-    _notesState.activeNoteId = null;
-    _notesRenderEditor(null);
-    _notesRenderList();
-    return;
-  }
-  if (_notesState.currentNote?.id && _notesState.dirty) {
-    await _notesSaveActiveNote({ immediate: true });
-  }
-  const note = _notesState.notes.find(n => n.id === noteId) || null;
-  if (!note) return;
-  _notesState.activeNoteId = noteId;
-  _notesSetView('editor');
-  _notesState.currentNote = { ...note, checklistItems: normalizeChecklistItems(note.checklistItems) };
-  _notesAttachmentsCache = [];
-  _notesRenderEditor(_notesState.currentNote);
-  await _notesLoadAttachments(noteId);
-  _notesRenderList();
-  const editorPanel = document.querySelector('.notes-editor-panel');
-  if (editorPanel && window.innerWidth <= 860) {
-    editorPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
-}
-
-function _notesEnsureActiveSelection() {
-  const visible = _notesVisibleNotes();
-  if (_notesState.activeNoteId && visible.some(note => note.id === _notesState.activeNoteId)) return;
-  if (_notesIsMobileLayout()) {
-    _notesState.activeNoteId = null;
-    _notesRenderEditor(null);
-    _notesSyncLayout();
-    return;
-  }
-  const firstVisible = visible[0] || null;
-  if (firstVisible) {
-    void _notesSelectNote(firstVisible.id);
-    return;
-  }
-  _notesState.activeNoteId = null;
-  _notesRenderEditor(null);
-}
-
-function _notesSetVisible(isVisible) {
-  const modal = document.getElementById('notes-modal');
-  const editorModal = document.getElementById('notes-editor-modal');
-  if (!modal) return;
-  modal.classList.toggle('visible', !!isVisible);
-  document.body.classList.toggle('notes-open', !!isVisible);
-  if (!isVisible) {
-    editorModal?.classList.remove('visible');
-    _notesCloseMenus();
-    _notesSetDropActive(false);
-    _notesDragDepth = 0;
-  }
-  if (isVisible) _notesSyncLayout();
-}
-
-function _notesResetState() {
-  if (_notesSaveTimer) clearTimeout(_notesSaveTimer);
-  _notesSaveTimer = null;
-  _notesAttachmentsCache = [];
-  _notesState.notes = [];
-  _notesState.activeNoteId = null;
-  _notesState.view = 'list';
-  _notesState.search = '';
-  _notesState.filter = 'all';
-  _notesState.saving = false;
-  _notesState.dirty = false;
-  _notesState.currentNote = null;
-  _notesState.creating = false;
-  _notesState.previewMode = false;
-  _notesState.error = '';
-  _notesCloseMenus();
-  _notesSetDropActive(false);
-  _notesDragDepth = 0;
-  _notesSyncLayout();
-}
-
-async function _notesStartListener() {
-  if (_notesUnsubscribe) {
-    _notesUnsubscribe();
-    _notesUnsubscribe = null;
-  }
-  if (_notesPollTimer) {
-    clearTimeout(_notesPollTimer);
-    _notesPollTimer = null;
-  }
-  if (!currentPlantId || !currentUser?.uid) {
-    _notesRenderList();
-    _notesRenderEditor(null);
-    return;
-  }
-  if (shouldUseSqlStagingReads(currentPlantId)) {
-    const token = ++_notesLoadToken;
-    let active = true;
-    _notesUnsubscribe = () => {
-      active = false;
-      if (_notesPollTimer) {
-        clearTimeout(_notesPollTimer);
-        _notesPollTimer = null;
-      }
-      _notesUnsubscribe = null;
-    };
-    const poll = async () => {
-      if (!active || token !== _notesLoadToken || !currentPlantId) return;
-      try {
-        const payload = await requireSqlRead(
-          `notes ${currentPlantId}`,
-          () => dataApi.listNotes(currentPlantId, { includeArchived: true }),
-          `Notes are missing in D1 for plant ${currentPlantId}.`
-        );
-        _notesState.error = '';
-        _notesState.notes = (payload.notes || []).map(note => _notesNormalizeDoc(note)).sort(_notesCompare);
-        _notesRenderList();
-        _notesSyncFilterButtons();
-        if (_notesState.activeNoteId) {
-          const activeNote = _notesState.notes.find(note => note.id === _notesState.activeNoteId) || null;
-          if (activeNote && !_notesState.dirty) {
-            _notesRenderEditor(activeNote);
-          } else if (!activeNote) {
-            _notesState.activeNoteId = null;
-            _notesRenderEditor(null);
-          }
-        }
-        _notesEnsureActiveSelection();
-      } catch (err) {
-        console.warn('notes SQL poll error', err);
-        _notesState.error = String(err?.message || '');
-        _notesRenderList();
-        _notesSetStatus('Could not load notes', err?.message || '');
-      }
-      if (active) _notesPollTimer = setTimeout(poll, 5000);
-    };
-    await poll();
-    return;
-  }
-  const token = ++_notesLoadToken;
-  const q = query(notesCol());
-  _notesUnsubscribe = onSnapshot(q, snap => {
-    if (token !== _notesLoadToken) return;
-    _notesState.error = '';
-    _notesState.notes = snap.docs.map(d => _notesNormalizeDoc({ id: d.id, ...d.data() }));
-    _notesState.notes.sort(_notesCompare);
-    _notesRenderList();
-    _notesSyncFilterButtons();
-    if (_notesState.activeNoteId) {
-      const active = _notesState.notes.find(note => note.id === _notesState.activeNoteId) || null;
-      if (active && !_notesState.dirty) {
-        _notesRenderEditor(active);
-      } else if (!active) {
-        _notesState.activeNoteId = null;
-        _notesRenderEditor(null);
-      }
-    }
-    _notesEnsureActiveSelection();
-  }, err => {
-    console.warn('notes listener error', err);
-    _notesState.error = String(err?.message || '');
-    _notesRenderList();
-    _notesSetStatus('Could not load notes', err?.message || '');
-  });
-}
-
-window.closeNotesModal = async (options = {}) => {
-  if (_notesUnsubscribe) {
-    _notesUnsubscribe();
-    _notesUnsubscribe = null;
-  }
-  if (options.preserveState) {
-    if (_notesState.currentNote?.id && _notesState.dirty) {
-      await _notesSaveActiveNote({ immediate: true });
-    }
-    _notesSetVisible(false);
-    return;
-  }
-  _notesResetState();
-  _notesSetVisible(false);
-};
-
-window.openNotesModal = async function(context = {}, options = {}) {
-  if (!currentPlantId) return;
-  _bindToolModalShellNavigation();
-  const preserveState = !!options.preserveState;
-  closeUserMenus();
-  closeSortDropdown();
-  window.closeExportDropdown?.();
-  window.closeMessagingModal?.();
-  window.closePressWikiModal?.();
-  if (_notesUnsubscribe) {
-    _notesUnsubscribe();
-    _notesUnsubscribe = null;
-  }
-  if (!preserveState) {
-    const pressId = String(context.pressId || '').trim();
-    const issueId = String(context.issueId || '').trim();
-    const issue = issueId ? issues.find(i => i.id === issueId) : null;
-    const machineCode = String(context.machineCode || issue?.machine || '').trim();
-    const linkedPressId = pressId || (issue?.pressId ? String(issue.pressId).trim() : '') || (machineCode ? toPressId(machineCode) : '');
-    const label = String(context.label || '').trim() || (issueId
-      ? `Issue · ${machineCode || issueId}`
-      : (linkedPressId ? `Press · ${machineCode || linkedPressId}` : 'Plant-wide'));
-    _notesContext = { pressId: linkedPressId, issueId, machineCode, label };
-    _notesState.filter = context.filter || (linkedPressId || issueId ? 'linked' : 'all');
-    _notesState.search = '';
-    _notesState.activeNoteId = null;
-    _notesState.view = 'list';
-    _notesState.currentNote = null;
-    _notesState.error = '';
-    _notesState.previewMode = false;
-    _notesAttachmentsCache = [];
-  }
-  _notesCloseMenus();
-  _notesSetDropActive(false);
-  _notesDragDepth = 0;
-  _notesSetVisible(true);
-  completeDemoGuideStep('tools');
-  _notesSyncLayout();
-  if (!preserveState) {
-    _notesSetStatus('Loading notes…', _notesContextTitle(_notesContext));
-    const contextEl = document.getElementById('notes-modal-context');
-    if (contextEl) contextEl.textContent = _notesContextTitle(_notesContext);
-    const subtitleEl = document.getElementById('notes-modal-subtitle');
-    if (subtitleEl) subtitleEl.textContent = _notesContext.pressId || _notesContext.issueId
-      ? 'Linked notes stay separate from the wiki, but open straight from the floor.'
-      : 'Quick capture, mobile first, Apple Notes inspired.';
-  }
-  _notesSyncFilterButtons();
-  await _notesStartListener();
-  _notesRenderList();
-  if (_notesState.currentNote?.id) {
-    _notesRenderEditor(_notesState.currentNote);
-  } else {
-    _notesRenderEditor(null);
-  }
-  if (!_notesState.notes.length) {
-    _notesSetStatus('No notes yet', 'Tap New Note to create one.');
-  }
-};
-
-window.openNotesModalFromPress = function(pressOrMachineCode) {
-  const machineCode = typeof pressOrMachineCode === 'string'
-    ? pressOrMachineCode
-    : String(pressOrMachineCode?.machine || pressOrMachineCode?.machineCode || pressOrMachineCode?.pressId || '').trim();
-  const pressId = toPressId(machineCode || '');
-  return window.openNotesModal?.({
-    pressId,
-    machineCode,
-    label: machineCode ? `Press · ${machineCode}` : 'Press notes'
-  });
-};
-
-window.openNotesModalFromIssue = function(issueOrId) {
-  const issueId = typeof issueOrId === 'string' ? issueOrId : String(issueOrId?.id || '').trim();
-  const issue = issues.find(i => i.id === issueId) || (typeof issueOrId === 'object' ? issueOrId : null);
-  const pressId = issue?.pressId || toPressId(issue?.machine || '');
-  return window.openNotesModal?.({
-    issueId,
-    pressId,
-    machineCode: String(issue?.machine || '').trim(),
-    label: issue ? `Issue · ${issue.machine || issue.id}` : 'Issue notes'
-  });
-};
-
-document.getElementById('notes-modal')?.addEventListener('click', e => {
-  if (e.target === document.getElementById('notes-modal')) closeNotesModal();
-});
-document.getElementById('notes-search')?.addEventListener('input', e => {
-  _notesState.search = String(e.target.value || '');
-  _notesRenderList();
-});
-document.getElementById('notes-title')?.addEventListener('input', () => {
-  if (_notesState.currentNote) {
-    const title = document.getElementById('notes-title')?.value || '';
-    _notesState.currentNote.title = title;
-    _notesSyncEditorHeaderTitle(title);
-    _notesQueueAutosave();
-    _notesRenderList();
-  }
-});
-document.getElementById('notes-title')?.addEventListener('keydown', e => {
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    _notesFocusBody();
-  }
-});
-document.getElementById('notes-tags')?.addEventListener('input', () => {
-  if (_notesState.currentNote) {
-    _notesState.currentNote.tags = _notesSplitTags(document.getElementById('notes-tags')?.value || '');
-    _notesRenderTagChips(_notesState.currentNote);
-    _notesRenderTagSuggestions(_notesState.currentNote);
-    _notesQueueAutosave();
-    _notesRenderList();
-  }
-});
-document.getElementById('notes-body')?.addEventListener('input', () => {
-  if (_notesState.currentNote) {
-    _notesState.currentNote.bodyHtml = sanitizeNoteHtml(document.getElementById('notes-body')?.innerHTML || '');
-    _notesState.currentNote.bodyText = _noteTextFromHtml(_notesState.currentNote.bodyHtml);
-    const tagMatches = Array.from(new Set(
-      (String(_notesState.currentNote.bodyText || '').match(/#[a-z0-9][a-z0-9_-]*/gi) || [])
-        .map(tag => tag.slice(1))
-    ));
-    if (tagMatches.length) {
-      const tagsEl = document.getElementById('notes-tags');
-      const merged = Array.from(new Set([...( _notesState.currentNote.tags || [] ), ...tagMatches]));
-      _notesState.currentNote.tags = merged;
-      if (tagsEl) tagsEl.value = merged.map(tag => `#${tag}`).join(', ');
-      _notesRenderTagChips(_notesState.currentNote);
-      _notesRenderTagSuggestions(_notesState.currentNote);
-    }
-    _notesSyncFormatButtons();
-    _notesRenderBodyPreview(_notesState.currentNote);
-    _notesQueueAutosave();
-    _notesRenderList();
-  }
-});
-document.getElementById('notes-body')?.addEventListener('blur', () => {
-  if (_notesState.currentNote) {
-    _notesState.currentNote.bodyHtml = sanitizeNoteHtml(document.getElementById('notes-body')?.innerHTML || '');
-    _notesState.currentNote.bodyText = _noteTextFromHtml(_notesState.currentNote.bodyHtml);
-    _notesQueueAutosave();
-  }
-});
-document.getElementById('notes-body')?.addEventListener('keydown', e => {
-  const cmd = e.metaKey || e.ctrlKey;
-  if (!cmd) return;
-  const key = String(e.key || '').toLowerCase();
-  if (key === 'b') {
-    e.preventDefault();
-    _notesToolbarCommand('bold');
-  } else if (key === 'i') {
-    e.preventDefault();
-    _notesToolbarCommand('italic');
-  } else if (key === 'u') {
-    e.preventDefault();
-    _notesToolbarCommand('underline');
-  } else if (e.key === 'Tab' && !e.shiftKey) {
-    e.preventDefault();
-    document.getElementById('notes-checklist-input')?.focus();
-  }
-});
-document.getElementById('notes-create-btn')?.addEventListener('click', () => {
-  void _notesCreateNewNote();
-});
-document.getElementById('notes-new-btn')?.addEventListener('click', e => {
-  e.preventDefault();
-  void _notesCreateNewNote();
-});
-document.getElementById('notes-actions-menu-btn')?.addEventListener('click', e => {
-  e.stopPropagation();
-  const menu = document.getElementById('notes-actions-menu');
-  const isOpen = menu?.classList.contains('visible');
-  _notesCloseMenus(isOpen ? null : 'notes-actions-menu');
-  _notesSetMenuOpen('notes-actions-menu', !isOpen);
-});
-document.getElementById('notes-actions-menu')?.querySelectorAll('[data-note-template]')?.forEach(btn => {
-  btn.addEventListener('click', e => {
-    e.stopPropagation();
-    _notesCloseMenus();
-    const templateKey = btn.getAttribute('data-note-template') || 'blank';
-    if (templateKey === 'blank' && _notesState.currentNote?.id) return;
-    if (_notesState.currentNote?.id) {
-      _notesApplyTemplate(templateKey);
-    } else {
-      void _notesCreateNewNote(templateKey);
-    }
-  });
-});
-document.getElementById('notes-actions-menu')?.querySelectorAll('button[role="menuitem"]')?.forEach(btn => {
-  btn.addEventListener('click', e => {
-    e.stopPropagation();
-    _notesCloseMenus();
-    if (btn.id === 'notes-actions-pin-btn') void _notesTogglePin();
-    if (btn.id === 'notes-actions-archive-btn') void _notesToggleArchive();
-    if (btn.id === 'notes-actions-delete-btn') void _notesDeleteActiveNote();
-  });
-});
-document.getElementById('notes-back-btn')?.addEventListener('click', () => {
-  _notesSetView('list');
-  _notesRenderEditor(null);
-  _notesRenderList();
-});
-document.getElementById('notes-pin-btn')?.addEventListener('click', () => {
-  void _notesTogglePin();
-});
-document.getElementById('notes-archive-btn')?.addEventListener('click', () => {
-  void _notesToggleArchive();
-});
-document.getElementById('notes-delete-btn')?.addEventListener('click', () => {
-  void _notesDeleteActiveNote();
-});
-document.getElementById('notes-photo-btn')?.addEventListener('click', () => {
-  document.getElementById('notes-photo-input')?.click();
-});
-document.getElementById('notes-photo-input')?.addEventListener('change', async e => {
-  await _notesUploadAttachments(e.target.files);
-  e.target.value = '';
-});
-document.getElementById('notes-bold-btn')?.addEventListener('click', () => _notesToolbarCommand('bold'));
-document.getElementById('notes-italic-btn')?.addEventListener('click', () => _notesToolbarCommand('italic'));
-document.getElementById('notes-underline-btn')?.addEventListener('click', () => _notesToolbarCommand('underline'));
-document.getElementById('notes-bullet-btn')?.addEventListener('click', () => _notesToolbarCommand('insertUnorderedList'));
-document.getElementById('notes-checklist-btn')?.addEventListener('click', () => {
-  if (!_notesState.currentNote) return;
-  const note = _notesState.currentNote;
-  note.checklistItems = normalizeChecklistItems(note.checklistItems);
-  note.checklistItems.push({ id: `chk_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, text: '', done: false });
-  _notesRenderChecklist(note);
-  _notesQueueAutosave();
-});
-document.getElementById('notes-add-checklist-btn')?.addEventListener('click', () => {
-  document.getElementById('notes-checklist-input')?.focus();
-});
-document.getElementById('notes-add-checklist-inline-btn')?.addEventListener('click', () => {
-  const inp = document.getElementById('notes-checklist-input');
-  const text = String(inp?.value || '').trim();
-  if (!_notesState.currentNote || !text) return;
-  const note = _notesState.currentNote;
-  note.checklistItems = normalizeChecklistItems(note.checklistItems);
-  note.checklistItems.push({ id: `chk_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, text, done: false });
-  if (inp) inp.value = '';
-  _notesRenderChecklist(note);
-  _notesQueueAutosave();
-});
-document.getElementById('notes-checklist-input')?.addEventListener('keydown', e => {
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    document.getElementById('notes-add-checklist-inline-btn')?.click();
-  }
-});
-document.getElementById('notes-link-press-btn')?.addEventListener('click', () => {
-  void _notesSetContextLink('press');
-});
-document.getElementById('notes-link-issue-btn')?.addEventListener('click', () => {
-  void _notesSetContextLink('issue');
-});
-document.getElementById('notes-preview-btn')?.addEventListener('click', () => {
-  if (!_notesState.currentNote?.id) return;
-  _notesSetPreviewMode(!_notesState.previewMode);
-  _notesRenderBodyPreview(_notesState.currentNote);
-});
-document.getElementById('notes-filter-all')?.addEventListener('click', () => {
-  _notesState.filter = 'all';
-  _notesSyncFilterButtons();
-  _notesRenderList();
-});
-document.getElementById('notes-filter-pinned')?.addEventListener('click', () => {
-  _notesState.filter = 'pinned';
-  _notesSyncFilterButtons();
-  _notesRenderList();
-});
-document.getElementById('notes-filter-linked')?.addEventListener('click', () => {
-  _notesState.filter = 'linked';
-  _notesSyncFilterButtons();
-  _notesRenderList();
-});
-document.getElementById('notes-filter-archived')?.addEventListener('click', () => {
-  _notesState.filter = 'archived';
-  _notesSyncFilterButtons();
-  _notesRenderList();
-});
-document.querySelectorAll('.notes-toolbar-btn').forEach(btn => {
-  btn.addEventListener('mousedown', e => {
-    e.preventDefault();
-  });
-});
-document.addEventListener('click', e => {
-  if (!document.getElementById('notes-modal')?.classList.contains('visible')) return;
-  const actionsWrap = document.getElementById('notes-actions-menu-btn')?.parentElement;
-  if (actionsWrap && !actionsWrap.contains(e.target)) _notesSetMenuOpen('notes-actions-menu', false);
-});
-document.addEventListener('keydown', e => {
-  if (!document.getElementById('notes-modal')?.classList.contains('visible')) return;
-  const cmd = e.metaKey || e.ctrlKey;
-  const key = String(e.key || '').toLowerCase();
-  if (e.key === 'Escape') {
-    if (document.getElementById('notes-actions-menu')?.classList.contains('visible')) {
-      _notesCloseMenus();
-      return;
-    }
-    closeNotesModal();
-    return;
-  }
-  if (cmd && key === 's') {
-    e.preventDefault();
-    void _notesSaveActiveNote({ immediate: true });
-    return;
-  }
-  if (cmd && key === 'enter') {
-    e.preventDefault();
-    void _notesSaveActiveNote({ immediate: true });
-  }
-});
-document.getElementById('notes-body')?.addEventListener('mouseup', _notesSyncFormatButtons);
-document.getElementById('notes-body')?.addEventListener('keyup', _notesSyncFormatButtons);
-let _notesSelChangeRaf = null;
-document.addEventListener('selectionchange', () => {
-  if (!document.getElementById('notes-editor-modal')?.classList.contains('visible')) return;
-  if (_notesSelChangeRaf) cancelAnimationFrame(_notesSelChangeRaf);
-  _notesSelChangeRaf = requestAnimationFrame(_notesSyncFormatButtons);
-});
-let _notesBodyObserver = null;
-function _notesInitBodyObserver() {
-  const bodyEl = document.getElementById('notes-body');
-  if (!bodyEl || _notesBodyObserver) return;
-  _notesBodyObserver = new MutationObserver(() => {
-    if (!document.getElementById('notes-editor-modal')?.classList.contains('visible')) return;
-    _notesSyncFormatButtons();
-  });
-  _notesBodyObserver.observe(bodyEl, { childList: true, subtree: true, characterData: true });
-}
-_notesInitBodyObserver();
-let _notesDragDepth = 0;
-function _notesSetDropActive(active) {
-  const shell = document.querySelector('#notes-editor-frame');
-  const hint = document.getElementById('notes-drop-hint');
-  shell?.classList.toggle('drop-active', !!active);
-  if (hint) hint.textContent = active ? 'Drop images to attach them here.' : 'Drag images here, or paste screenshots directly into the note.';
-}
-document.addEventListener('dragenter', e => {
-  if (!document.getElementById('notes-modal')?.classList.contains('visible')) return;
-  const hasFiles = Array.from(e.dataTransfer?.items || []).some(item => item.kind === 'file' && item.type.startsWith('image/'));
-  if (!hasFiles) return;
-  e.preventDefault();
-  _notesDragDepth += 1;
-  _notesSetDropActive(true);
-});
-document.addEventListener('dragover', e => {
-  if (!document.getElementById('notes-modal')?.classList.contains('visible')) return;
-  const hasFiles = Array.from(e.dataTransfer?.items || []).some(item => item.kind === 'file');
-  if (!hasFiles) return;
-  e.preventDefault();
-  _notesSetDropActive(true);
-});
-document.addEventListener('dragleave', e => {
-  if (!document.getElementById('notes-modal')?.classList.contains('visible')) return;
-  const hasFiles = Array.from(e.dataTransfer?.items || []).some(item => item.kind === 'file');
-  if (!hasFiles) return;
-  _notesDragDepth = Math.max(0, _notesDragDepth - 1);
-  if (_notesDragDepth === 0) _notesSetDropActive(false);
-});
-document.addEventListener('drop', async e => {
-  if (!document.getElementById('notes-modal')?.classList.contains('visible')) return;
-  const files = Array.from(e.dataTransfer?.files || []).filter(file => file.type.startsWith('image/'));
-  if (!files.length) return;
-  e.preventDefault();
-  _notesDragDepth = 0;
-  _notesSetDropActive(false);
-  await _notesUploadAttachments(files);
-});
-document.addEventListener('paste', e => {
-  if (!document.getElementById('notes-modal')?.classList.contains('visible')) return;
-  const files = Array.from(e.clipboardData?.items || [])
-    .filter(item => item.kind === 'file' && item.type.startsWith('image/'))
-    .map(item => item.getAsFile())
-    .filter(Boolean);
-  if (!files.length) return;
-  e.preventDefault();
-  void _notesUploadAttachments(files);
-});
-window.addEventListener('resize', () => {
-  if (document.getElementById('notes-modal')?.classList.contains('visible')) {
-    _notesSyncLayout();
-    _notesEnsureActiveSelection();
-  }
-});
+window.openNotesModal = notesTool.open;
+window.closeNotesModal = notesTool.close;
+window.openNotesModalFromPress = notesTool.openFromPress;
+window.openNotesModalFromIssue = notesTool.openFromIssue;
+window.closeNotesEditorModal = notesTool.closeEditor;
 
 // ── EXPORT TOOL ──
 const exportTool = initExportTool({
@@ -18952,16 +15101,15 @@ window.closeExportModal = closeExportModal;
 window.downloadPDF = downloadPDF;
 window.downloadExcel = downloadExcel;
 
-// ── ADMIN PANEL ──
-const ADMIN_ICONS = ['🔧','🔩','⚙️','🎛️','🚀','🔍','⚠️','🛠️','🔬','📋','🏭','💡','🔄','📦','🧪','🔑','⛽','🖨️','🤖','🧲','🔒','🔓','📡','🧯','🔌','💧','🌡️','🔋','🪛','🪚','📏','🧰','🔦','🚨','🛞','⚡','🧹','🪝','🗜️','📐'];
+const ADMIN_ICONS = ['🔧', '🔩', '⚙️', '🎛️', '🚀', '🔍', '⚠️', '🛠️', '🔬', '📋', '🏭', '💡', '🔄', '📦', '🧪', '🔑', '⛽', '🖨️', '🤖', '🧲', '🔒', '🔓', '📡', '🧯', '🔌', '💧', '🌡️', '🔋', '🪛', '🪚', '📏', '🧰', '🔦', '🚨', '🛞', '⚡', '🧹', '🪝', '🗜️', '📐'];
 const ADMIN_COLORS = [
-  {name:'Red',hex:'#ef4444'},{name:'Rose',hex:'#fb7185'},{name:'Orange',hex:'#f97316'},
-  {name:'Amber',hex:'#f59e0b'},{name:'Yellow',hex:'#eab308'},{name:'Lime',hex:'#84cc16'},
-  {name:'Green',hex:'#22c55e'},{name:'Emerald',hex:'#10b981'},{name:'Teal',hex:'#14b8a6'},
-  {name:'Cyan',hex:'#06b6d4'},{name:'Sky',hex:'#38bdf8'},{name:'Blue',hex:'#3b82f6'},
-  {name:'Indigo',hex:'#6366f1'},{name:'Violet',hex:'#8b5cf6'},{name:'Purple',hex:'#a855f7'},
-  {name:'Fuchsia',hex:'#d946ef'},{name:'Pink',hex:'#ec4899'},{name:'Slate',hex:'#64748b'},
-  {name:'Zinc',hex:'#71717a'},{name:'Stone',hex:'#78716c'},
+  { name: 'Red', hex: '#ef4444' }, { name: 'Rose', hex: '#fb7185' }, { name: 'Orange', hex: '#f97316' },
+  { name: 'Amber', hex: '#f59e0b' }, { name: 'Yellow', hex: '#eab308' }, { name: 'Lime', hex: '#84cc16' },
+  { name: 'Green', hex: '#22c55e' }, { name: 'Emerald', hex: '#10b981' }, { name: 'Teal', hex: '#14b8a6' },
+  { name: 'Cyan', hex: '#06b6d4' }, { name: 'Sky', hex: '#38bdf8' }, { name: 'Blue', hex: '#3b82f6' },
+  { name: 'Indigo', hex: '#6366f1' }, { name: 'Violet', hex: '#8b5cf6' }, { name: 'Purple', hex: '#a855f7' },
+  { name: 'Fuchsia', hex: '#d946ef' }, { name: 'Pink', hex: '#ec4899' }, { name: 'Slate', hex: '#64748b' },
+  { name: 'Zinc', hex: '#71717a' }, { name: 'Stone', hex: '#78716c' },
 ];
 let adminDraft = {};
 let newCatIcon = ADMIN_ICONS[0];
@@ -19028,8 +15176,8 @@ function renderAdminList() {
       const editPreviewPill = document.createElement('span'); editPreviewPill.className = 'admin-edit-preview-pill';
       const updateEditPreview = () => {
         const col = st.color || st.swipeColor || st.cssColor;
-        editPreviewPill.textContent = (adminDraft[key].icon||st.icon)+' '+(adminDraft[key].label||st.label);
-        editPreviewPill.style.color=col; editPreviewPill.style.borderColor=alphaColor(col,0.53); editPreviewPill.style.background=alphaColor(col,0.09);
+        editPreviewPill.textContent = (adminDraft[key].icon || st.icon) + ' ' + (adminDraft[key].label || st.label);
+        editPreviewPill.style.color = col; editPreviewPill.style.borderColor = alphaColor(col, 0.53); editPreviewPill.style.background = alphaColor(col, 0.09);
         iconEl.textContent = adminDraft[key].icon || st.icon;
       };
 
@@ -19054,7 +15202,7 @@ function renderAdminList() {
           const chip = document.createElement('div'); chip.className = 'admin-sub-chip';
           const span = document.createElement('span'); span.textContent = sub;
           const rm = document.createElement('button'); rm.className = 'admin-sub-remove'; rm.textContent = '✕';
-          addTapListener(rm, () => { adminDraft[key].subs.splice(idx,1); renderSubs(); });
+          addTapListener(rm, () => { adminDraft[key].subs.splice(idx, 1); renderSubs(); });
           chip.appendChild(span); chip.appendChild(rm); subsList.appendChild(chip);
         });
       };
@@ -19072,7 +15220,7 @@ function renderAdminList() {
         renderSubs();
       };
       addTapListener(addBtn, doAdd);
-      addInput.addEventListener('keydown', e => { if(e.key==='Enter') doAdd(); });
+      addInput.addEventListener('keydown', e => { if (e.key === 'Enter') doAdd(); });
       addRowEl.appendChild(addInput); addRowEl.appendChild(addBtn); row.appendChild(addRowEl);
 
       const bulkBtn = document.createElement('button');
@@ -19141,18 +15289,18 @@ function renderAdminList() {
       editPanel.appendChild(iconSecLabel);
       const editIconPicker = document.createElement('div'); editIconPicker.className = 'icon-picker';
       editPanel.appendChild(editIconPicker);
-      const colorSecLabel = document.createElement('div'); colorSecLabel.className = 'admin-edit-section-label'; colorSecLabel.style.marginTop='10px'; colorSecLabel.textContent = 'Color';
+      const colorSecLabel = document.createElement('div'); colorSecLabel.className = 'admin-edit-section-label'; colorSecLabel.style.marginTop = '10px'; colorSecLabel.textContent = 'Color';
       editPanel.appendChild(colorSecLabel);
       const editColorPicker = document.createElement('div'); editColorPicker.className = 'color-picker';
       editPanel.appendChild(editColorPicker);
-      const editPreviewLabel = document.createElement('div'); editPreviewLabel.className = 'admin-edit-section-label'; editPreviewLabel.style.marginTop='10px'; editPreviewLabel.textContent = 'Preview';
+      const editPreviewLabel = document.createElement('div'); editPreviewLabel.className = 'admin-edit-section-label'; editPreviewLabel.style.marginTop = '10px'; editPreviewLabel.textContent = 'Preview';
       editPanel.appendChild(editPreviewLabel);
       editPanel.appendChild(editPreviewPill);
-      buildAdminIconPicker(editIconPicker, ()=>adminDraft[key].icon||st.icon, ic => { adminDraft[key].icon=ic; updateEditPreview(); });
-      buildAdminColorPicker(editColorPicker, ()=>adminDraft[key].color||st.swipeColor||st.cssColor, c => { adminDraft[key].color=c.hex; adminDraft[key].swipeColor=c.hex; adminDraft[key].cssColor=c.hex; updateEditPreview(); });
+      buildAdminIconPicker(editIconPicker, () => adminDraft[key].icon || st.icon, ic => { adminDraft[key].icon = ic; updateEditPreview(); });
+      buildAdminColorPicker(editColorPicker, () => adminDraft[key].color || st.swipeColor || st.cssColor, c => { adminDraft[key].color = c.hex; adminDraft[key].swipeColor = c.hex; adminDraft[key].cssColor = c.hex; updateEditPreview(); });
       updateEditPreview();
       const doneBtn = document.createElement('button'); doneBtn.className = 'admin-edit-done'; doneBtn.textContent = '✓ Done';
-      addTapListener(doneBtn, () => { editPanel.classList.remove('visible'); editBtnEl.textContent='✏️ Edit Icon & Color'; });
+      addTapListener(doneBtn, () => { editPanel.classList.remove('visible'); editBtnEl.textContent = '✏️ Edit Icon & Color'; });
       editPanel.appendChild(doneBtn);
       row.appendChild(editPanel);
 
@@ -19173,9 +15321,9 @@ function renderAdminList() {
       const actionsRow = document.createElement('div'); actionsRow.className = 'admin-row-actions';
 
       const editBtnEl = document.createElement('button'); editBtnEl.className = 'admin-edit-btn'; editBtnEl.textContent = '✏️ Edit Icon & Color';
-      addTapListener(editBtnEl, () => { const open=editPanel.classList.toggle('visible'); editBtnEl.textContent=open?'▲ Close':'✏️ Edit Icon & Color'; if(open)confirmDel.classList.remove('visible'); });
+      addTapListener(editBtnEl, () => { const open = editPanel.classList.toggle('visible'); editBtnEl.textContent = open ? '▲ Close' : '✏️ Edit Icon & Color'; if (open) confirmDel.classList.remove('visible'); });
       const deleteBtnEl = document.createElement('button'); deleteBtnEl.className = 'admin-delete-btn'; deleteBtnEl.textContent = '🗑 Delete';
-      addTapListener(deleteBtnEl, () => { confirmDel.classList.toggle('visible'); if(confirmDel.classList.contains('visible'))editPanel.classList.remove('visible'); });
+      addTapListener(deleteBtnEl, () => { confirmDel.classList.toggle('visible'); if (confirmDel.classList.contains('visible')) editPanel.classList.remove('visible'); });
       actionsRow.appendChild(editBtnEl); actionsRow.appendChild(deleteBtnEl);
       row.appendChild(actionsRow);
       list.appendChild(row);
@@ -19223,11 +15371,11 @@ function renderAdminList() {
   const updateNewPreview = () => {
     const name = nameInput2.value.trim() || 'New Category';
     previewPill.textContent = newCatIcon + ' ' + name;
-    previewPill.style.color = newCatColor.hex; previewPill.style.borderColor = alphaColor(newCatColor.hex,0.53); previewPill.style.background = alphaColor(newCatColor.hex,0.09);
+    previewPill.style.color = newCatColor.hex; previewPill.style.borderColor = alphaColor(newCatColor.hex, 0.53); previewPill.style.background = alphaColor(newCatColor.hex, 0.09);
   };
 
   nameInput2.addEventListener('input', updateNewPreview);
-  addTapListener(trigger, () => { setAddError(''); form.classList.add('visible'); trigger.style.display='none'; updateNewPreview(); });
+  addTapListener(trigger, () => { setAddError(''); form.classList.add('visible'); trigger.style.display = 'none'; updateNewPreview(); });
 
   buildAdminIconPicker(newIconPicker, () => newCatIcon, ic => { newCatIcon = ic; updateNewPreview(); });
   buildAdminColorPicker(newColorPicker, () => newCatColor.hex, c => { newCatColor = c; updateNewPreview(); });
@@ -19237,7 +15385,7 @@ function renderAdminList() {
   const formActions = document.createElement('div'); formActions.className = 'add-cat-actions';
   const cancelBtn2 = document.createElement('button'); cancelBtn2.className = 'add-cat-cancel'; cancelBtn2.textContent = 'Cancel';
   const confirmBtn = document.createElement('button'); confirmBtn.className = 'add-cat-confirm'; confirmBtn.textContent = 'Add Category';
-  const hideForm = () => { setAddError(''); form.classList.remove('visible'); trigger.style.display=''; nameInput2.value=''; newCatIcon=ADMIN_ICONS[0]; newCatColor=ADMIN_COLORS[0]; buildAdminIconPicker(newIconPicker,()=>newCatIcon,ic=>{newCatIcon=ic;updateNewPreview();}); buildAdminColorPicker(newColorPicker,()=>newCatColor.hex,c=>{newCatColor=c;updateNewPreview();}); updateNewPreview(); };
+  const hideForm = () => { setAddError(''); form.classList.remove('visible'); trigger.style.display = ''; nameInput2.value = ''; newCatIcon = ADMIN_ICONS[0]; newCatColor = ADMIN_COLORS[0]; buildAdminIconPicker(newIconPicker, () => newCatIcon, ic => { newCatIcon = ic; updateNewPreview(); }); buildAdminColorPicker(newColorPicker, () => newCatColor.hex, c => { newCatColor = c; updateNewPreview(); }); updateNewPreview(); };
   const doAdd2 = () => {
     const name = normalizeLabel(nameInput2.value); if (!name) { nameInput2.focus(); return; }
     const duplicateLabel = Object.values(adminDraft).some(v => normalizeForCompare(v.label) === normalizeForCompare(name));
@@ -19248,8 +15396,8 @@ function renderAdminList() {
     let key = makeStatusKey();
     while (adminDraft[key]) key = makeStatusKey();
     const slug = slugifyStatusLabel(name);
-    const maxOrder = Math.max(...Object.values(adminDraft).map(v=>v.order||0));
-    adminDraft[key] = { label:name, shortLabel:name, icon:newCatIcon, color:newCatColor.hex, swipeColor:newCatColor.hex, cssColor:newCatColor.hex, floorCls:'has-'+slug, cls:'status-'+slug, subs:[], order:maxOrder+1 };
+    const maxOrder = Math.max(...Object.values(adminDraft).map(v => v.order || 0));
+    adminDraft[key] = { label: name, shortLabel: name, icon: newCatIcon, color: newCatColor.hex, swipeColor: newCatColor.hex, cssColor: newCatColor.hex, floorCls: 'has-' + slug, cls: 'status-' + slug, subs: [], order: maxOrder + 1 };
     hideForm(); renderAdminList();
   };
   addTapListener(cancelBtn2, hideForm);
@@ -19266,35 +15414,35 @@ function closeAdminPanel() {
 
 window.resetToDefaults = async () => {
   if (!confirm('Reset to comprehensive manufacturing categories? This will replace your current configuration.')) return;
-  
+
   // Reset STATUSES to the comprehensive defaults from the code
   STATUSES = {
-    open:            { label:'Open',             shortLabel:'Open',         icon:'●',  cssColor:'var(--color-danger, var(--red))',      swipeColor:'#ef4444', floorCls:'has-open',            cls:'status-open',            subs:['New Fault / Issue','Pending Triage','Scheduled Mold Change','Re-opened'],                                               statLabel:'Open',          order:0 },
-    alert:           { label:'Alert',            shortLabel:'Alert',        icon:'🚨', cssColor:'#dc2626',         swipeColor:'#dc2626', floorCls:'has-alert',           cls:'status-alert',           subs:['Mold Protection Fault','E-Stop / Safety Hazard','Press Down - Critical','Major Oil / Fluid Leak'],                   statLabel:'Alert',         order:1 },
-    attention:       { label:'Attention',        shortLabel:'Attention',    icon:'◇',  cssColor:'#0ea5e9',         swipeColor:'#0ea5e9', floorCls:'has-attention',       cls:'status-attention',       subs:['Watch Item','Needs Follow-up','Housekeeping','PM Opportunity','Operator Note','Check Next Run'],                  statLabel:'Attention',     order:1.5 },
-    controlman:      { label:'Controlman',       shortLabel:'Controlman',   icon:'🎛️', cssColor:'var(--color-babyblue, var(--babyblue))', swipeColor:'#38bdf8', floorCls:'has-controlman',      cls:'status-controlman',      subs:['Color Change','Mold Change','Robot / EOAT (End of Arm Tooling) Fault','Vision System / Camera Error','Conveyor / Auxiliary Comm Loss','PLC / HMI Error'], statLabel:'Controlman',    order:2 },
-    maintenance:     { label:'Maintenance',      shortLabel:'Maintenance',  icon:'🔧', cssColor:'var(--color-warning, var(--yellow))',   swipeColor:'#eab308', floorCls:'has-maintenance',     cls:'status-maintenance',     subs:['Hydraulic Leak / Pressure Drop','Heater Band / Thermocouple Failure','Barrel / Screw / Check Ring Issue','Chiller / Thermolator Failure'], statLabel:'Maintenance',   order:3 },
-    materials:       { label:'Materials',        shortLabel:'Materials',    icon:'📦', cssColor:'#8b5cf6',         swipeColor:'#8b5cf6', floorCls:'has-materials',       cls:'status-materials',       subs:['Resin Moisture / Drying Issue','Colorant / Masterbatch Ratio Error','Vacuum / Material Loader Blockage','Wrong Resin / Regrind Issue'], statLabel:'Materials',     order:4 },
-    processengineer: { label:'Process Engineer', shortLabel:'Process Eng.', icon:'⚙️', cssColor:'var(--color-purple, var(--purple))',   swipeColor:'#a855f7', floorCls:'has-processengineer', cls:'status-processengineer', subs:['Fill / Pack Pressure Adjustment','Temperature Profile Tuning','Cycle Time Optimization','Process Drift / Instability'], statLabel:'Process Eng.',  order:5 },
-    quality:         { label:'Quality',          shortLabel:'Quality',      icon:'✨', cssColor:'#06b6d4',         swipeColor:'#06b6d4', floorCls:'has-quality',         cls:'status-quality',         subs:['Short Shot / Non-fill','Flash / Burrs','Sink Marks / Voids','Splay / Silver Streaks','Burn Marks / Degradation','Warp / Dimensional Out-of-Spec'], statLabel:'Quality',       order:6 },
-    startup:         { label:'Startup',          shortLabel:'Startup',      icon:'🚀', cssColor:'var(--color-teal, var(--teal))',     swipeColor:'#14b8a6', floorCls:'has-startup',         cls:'status-startup',         subs:['Purging / Color Change','Mold Heat-Up / Stabilization','First Article Inspection (FAI)','Robot Homing / Path Setup'], statLabel:'Startup',       order:7 },
-    tooldie:         { label:'Tool & Die',       shortLabel:'Tool & Die',   icon:'🔩', cssColor:'var(--color-orange, var(--orange))',   swipeColor:'#f97316', floorCls:'has-tooldie',         cls:'status-tooldie',         subs:['Broken / Bent Ejector Pin','Hot Runner / Gate Issue','Water Leak in Mold','Stuck Part / Sprue','Mold Greasing / PM'], statLabel:'Tool & Die',    order:8 },
-    resolved:        { label:'Resolved',         shortLabel:'Resolved',     icon:'✓',  cssColor:'var(--color-success, var(--green))',    swipeColor:'#22c55e', floorCls:'all-resolved',        cls:'status-resolved',        subs:['Process Parameter Adjusted','Mold Cleaned / Repaired','Hardware Replaced','Temporary Workaround'],                      statLabel:'Resolved',      order:9 },
+    open: { label: 'Open', shortLabel: 'Open', icon: '●', cssColor: 'var(--color-danger, var(--red))', swipeColor: '#ef4444', floorCls: 'has-open', cls: 'status-open', subs: ['New Fault / Issue', 'Pending Triage', 'Scheduled Mold Change', 'Re-opened'], statLabel: 'Open', order: 0 },
+    alert: { label: 'Alert', shortLabel: 'Alert', icon: '🚨', cssColor: '#dc2626', swipeColor: '#dc2626', floorCls: 'has-alert', cls: 'status-alert', subs: ['Mold Protection Fault', 'E-Stop / Safety Hazard', 'Press Down - Critical', 'Major Oil / Fluid Leak'], statLabel: 'Alert', order: 1 },
+    attention: { label: 'Attention', shortLabel: 'Attention', icon: '◇', cssColor: '#0ea5e9', swipeColor: '#0ea5e9', floorCls: 'has-attention', cls: 'status-attention', subs: ['Watch Item', 'Needs Follow-up', 'Housekeeping', 'PM Opportunity', 'Operator Note', 'Check Next Run'], statLabel: 'Attention', order: 1.5 },
+    controlman: { label: 'Controlman', shortLabel: 'Controlman', icon: '🎛️', cssColor: 'var(--color-babyblue, var(--babyblue))', swipeColor: '#38bdf8', floorCls: 'has-controlman', cls: 'status-controlman', subs: ['Color Change', 'Mold Change', 'Robot / EOAT (End of Arm Tooling) Fault', 'Vision System / Camera Error', 'Conveyor / Auxiliary Comm Loss', 'PLC / HMI Error'], statLabel: 'Controlman', order: 2 },
+    maintenance: { label: 'Maintenance', shortLabel: 'Maintenance', icon: '🔧', cssColor: 'var(--color-warning, var(--yellow))', swipeColor: '#eab308', floorCls: 'has-maintenance', cls: 'status-maintenance', subs: ['Hydraulic Leak / Pressure Drop', 'Heater Band / Thermocouple Failure', 'Barrel / Screw / Check Ring Issue', 'Chiller / Thermolator Failure'], statLabel: 'Maintenance', order: 3 },
+    materials: { label: 'Materials', shortLabel: 'Materials', icon: '📦', cssColor: '#8b5cf6', swipeColor: '#8b5cf6', floorCls: 'has-materials', cls: 'status-materials', subs: ['Resin Moisture / Drying Issue', 'Colorant / Masterbatch Ratio Error', 'Vacuum / Material Loader Blockage', 'Wrong Resin / Regrind Issue'], statLabel: 'Materials', order: 4 },
+    processengineer: { label: 'Process Engineer', shortLabel: 'Process Eng.', icon: '⚙️', cssColor: 'var(--color-purple, var(--purple))', swipeColor: '#a855f7', floorCls: 'has-processengineer', cls: 'status-processengineer', subs: ['Fill / Pack Pressure Adjustment', 'Temperature Profile Tuning', 'Cycle Time Optimization', 'Process Drift / Instability'], statLabel: 'Process Eng.', order: 5 },
+    quality: { label: 'Quality', shortLabel: 'Quality', icon: '✨', cssColor: '#06b6d4', swipeColor: '#06b6d4', floorCls: 'has-quality', cls: 'status-quality', subs: ['Short Shot / Non-fill', 'Flash / Burrs', 'Sink Marks / Voids', 'Splay / Silver Streaks', 'Burn Marks / Degradation', 'Warp / Dimensional Out-of-Spec'], statLabel: 'Quality', order: 6 },
+    startup: { label: 'Startup', shortLabel: 'Startup', icon: '🚀', cssColor: 'var(--color-teal, var(--teal))', swipeColor: '#14b8a6', floorCls: 'has-startup', cls: 'status-startup', subs: ['Purging / Color Change', 'Mold Heat-Up / Stabilization', 'First Article Inspection (FAI)', 'Robot Homing / Path Setup'], statLabel: 'Startup', order: 7 },
+    tooldie: { label: 'Tool & Die', shortLabel: 'Tool & Die', icon: '🔩', cssColor: 'var(--color-orange, var(--orange))', swipeColor: '#f97316', floorCls: 'has-tooldie', cls: 'status-tooldie', subs: ['Broken / Bent Ejector Pin', 'Hot Runner / Gate Issue', 'Water Leak in Mold', 'Stuck Part / Sprue', 'Mold Greasing / PM'], statLabel: 'Tool & Die', order: 8 },
+    resolved: { label: 'Resolved', shortLabel: 'Resolved', icon: '✓', cssColor: 'var(--color-success, var(--green))', swipeColor: '#22c55e', floorCls: 'all-resolved', cls: 'status-resolved', subs: ['Process Parameter Adjusted', 'Mold Cleaned / Repaired', 'Hardware Replaced', 'Temporary Workaround'], statLabel: 'Resolved', order: 9 },
   };
   SUBCATEGORY_ROUTES = {};
-  
+
   // Save to Firestore
   await saveConfig();
-  
+
   // Rebuild UI
   rebuildDerivedStatus();
   refreshStatusDependentUI();
-  
+
   // Refresh admin panel if open
   if (document.getElementById('admin-overlay').classList.contains('visible')) {
     renderAdminPanel();
   }
-  
+
   alert('✅ Reset complete! Comprehensive manufacturing categories have been restored.');
 };
 
@@ -19335,13 +15483,13 @@ async function saveAdminConfig() {
     STATUSES = { ...preserved };
     Object.entries(adminDraft)
       .filter(([k]) => k !== 'open' && k !== 'resolved')
-      .forEach(([k,v]) => { STATUSES[k] = v; });
+      .forEach(([k, v]) => { STATUSES[k] = v; });
     await saveConfig();
     rebuildDerivedStatus();
     closeAdminPanel();
     refreshStatusDependentUI();
     btn.textContent = '✓ Saved!';
-  } catch(e) {
+  } catch (e) {
     btn.textContent = '✕ Error — try again'; console.error(e);
   } finally {
     btn.classList.remove('admin-saving');
