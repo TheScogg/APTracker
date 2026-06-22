@@ -216,11 +216,11 @@ function getDocAiText(doc) {
 function shouldBypassStaticCache(pathname) {
   return pathname === '/'
     || pathname === '/index.html'
-    || pathname === '/app.js'
-    || pathname === '/build-info.js'
-    || pathname === '/fcm-config.js'
+    || pathname === '/js/app.js'
+    || pathname === '/js/build-info.js'
+    || pathname === '/js/fcm-config.js'
     || pathname === '/firebase-messaging-sw.js'
-    || pathname === '/styles.css';
+    || pathname === '/css/styles.css';
 }
 
 function withStaticCacheHeaders(response, pathname) {
@@ -1674,30 +1674,38 @@ async function listPendingIssueTimersD1(env, limit = 100) {
       LIMIT ?
     `).bind(limit).all();
     const rows = Array.isArray(result?.results) ? result.results : [];
-    return rows.map(row => ({
-      source: 'd1',
-      plantId: row.plant_id,
-      issueId: row.issue_id,
-      issue: {
-        machineCode: row.machine_code,
-        machine: row.machine_code,
-        note: row.note,
-        createdByUid: row.created_by_uid,
-        ownerUid: row.assigned_user_uid,
-        assignedToUid: row.assigned_user_uid,
-        timer: {
-          enabled: Boolean(row.timer_enabled),
-          startedAt: row.timer_started_at || null,
-          dueAt: row.timer_due_at || null,
-          dueAtMs: row.timer_due_at_ms == null ? null : Number(row.timer_due_at_ms),
-          durationMinutes: row.timer_duration_minutes == null ? null : Number(row.timer_duration_minutes),
-          notificationStatus: row.timer_notification_status,
-          notificationOwnerUid: row.timer_notification_owner_uid,
-          notificationRequestedBy: parseJsonObject(row.timer_notification_requested_by_json),
-          notificationDelivery: parseJsonObject(row.timer_notification_delivery_json)
+    return rows.map(row => {
+      const delivery = parseJsonObject(row.timer_notification_delivery_json);
+      const pauseMeta = delivery?.__pauseMeta || null;
+      return {
+        source: 'd1',
+        plantId: row.plant_id,
+        issueId: row.issue_id,
+        issue: {
+          machineCode: row.machine_code,
+          machine: row.machine_code,
+          note: row.note,
+          createdByUid: row.created_by_uid,
+          ownerUid: row.assigned_user_uid,
+          assignedToUid: row.assigned_user_uid,
+          timer: {
+            enabled: Boolean(row.timer_enabled),
+            startedAt: row.timer_started_at || null,
+            dueAt: row.timer_due_at || null,
+            dueAtMs: row.timer_due_at_ms == null ? null : Number(row.timer_due_at_ms),
+            durationMinutes: row.timer_duration_minutes == null ? null : Number(row.timer_duration_minutes),
+            minutes: row.timer_duration_minutes == null ? null : Number(row.timer_duration_minutes),
+            notificationStatus: row.timer_notification_status,
+            notificationOwnerUid: row.timer_notification_owner_uid,
+            notificationRequestedBy: parseJsonObject(row.timer_notification_requested_by_json),
+            notificationDelivery: delivery,
+            paused: Boolean(pauseMeta?.paused),
+            pausedAtMs: pauseMeta?.pausedAtMs == null ? null : Number(pauseMeta.pausedAtMs),
+            pausedRemainingMs: pauseMeta?.pausedRemainingMs == null ? null : Number(pauseMeta.pausedRemainingMs)
+          }
         }
-      }
-    }));
+      };
+    });
   } catch (error) {
     if (String(error?.message || '').includes('no such column')) {
       return [];

@@ -25,7 +25,7 @@ import {
   serializeWikiAttachment,
   serializeWikiPage,
   serializeWikiRevision
-} from './api/src/serializers.js';
+} from '../api/src/serializers.js';
 
 function jsonResponse(body, init = {}) {
   return new Response(JSON.stringify(body), {
@@ -168,7 +168,7 @@ function classifyScheduleChange(row) {
   if (/\b(colou?r|purge|colorant|masterbatch)\b/.test(text)) {
     return { statusKey: 'startup', subStatus: 'Purging / Color Change' };
   }
-  return { statusKey: 'open', subStatus: 'Scheduled Mold Change' };
+  return { statusKey: 'controlman', subStatus: 'Mold Change' };
 }
 
 function buildScheduleImportIssue(plantId, scheduleDate, shift, row) {
@@ -363,6 +363,16 @@ function buildIssueRowFromClient(plantId, issueId, issue = {}) {
   const currentStatus = buildCurrentStatusFromIssue(issue);
   const lifecycle = issue.lifecycle || {};
   const timer = issue.timer && typeof issue.timer === 'object' ? issue.timer : null;
+  const timerNotificationDelivery = timer?.notificationDelivery && typeof timer.notificationDelivery === 'object'
+    ? { ...timer.notificationDelivery }
+    : {};
+  if (timer) {
+    timerNotificationDelivery.__pauseMeta = {
+      paused: Boolean(timer.paused),
+      pausedAtMs: timer.pausedAtMs == null ? null : Number(timer.pausedAtMs),
+      pausedRemainingMs: timer.pausedRemainingMs == null ? null : Number(timer.pausedRemainingMs)
+    };
+  }
   const createdAt = asIso(issue.createdAt || issue.openedAt || currentStatus.enteredAt || issue.dateTime, nowIso());
   const updatedAt = asIso(issue.updatedAt || issue.editedAt || issue.reopenDateTime || issue.resolveDateTime || currentStatus.enteredAt, createdAt);
 
@@ -415,14 +425,14 @@ function buildIssueRowFromClient(plantId, issueId, issue = {}) {
     updated_by_uid: stringOrNull(issue.updatedBy?.uid),
     updated_by_name: stringOrNull(issue.updatedBy?.name || issue.editedBy),
     timer_enabled: asBoolInt(timer?.enabled),
-    timer_started_at: asIso(timer?.startedAt),
-    timer_due_at: asIso(timer?.dueAt),
+    timer_started_at: asIso(timer?.startedAt || timer?.startedAtMs),
+    timer_due_at: asIso(timer?.dueAt || timer?.dueAtMs),
     timer_due_at_ms: numberOrNull(timer?.dueAtMs),
-    timer_duration_minutes: numberOrNull(timer?.durationMinutes),
+    timer_duration_minutes: numberOrNull(timer?.durationMinutes ?? timer?.minutes),
     timer_notification_status: stringOrNull(timer?.notificationStatus),
     timer_notification_owner_uid: stringOrNull(timer?.notificationOwnerUid),
     timer_notification_requested_by_json: jsonString(timer?.notificationRequestedBy || null),
-    timer_notification_delivery_json: jsonString(timer?.notificationDelivery || null),
+    timer_notification_delivery_json: jsonString(timer ? timerNotificationDelivery : null),
     created_at: createdAt,
     updated_at: updatedAt,
     schema_version: numberOrZero(issue.schemaVersion || 2)

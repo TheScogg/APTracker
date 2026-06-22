@@ -22,19 +22,32 @@ import {
   BUILT_IN_THEME_DEFS,
   THEME_EDITOR_CORE_VARS,
   applyThemeVars as applyThemeVarsFromEngine,
+  applyResolvedTheme,
   clearThemeVars as clearThemeVarsFromEngine,
+  getCustomThemeKey,
   getThemePreviewColors,
   inferThemeModeFromVars,
-  normalizeThemeColors,
+  loadCustomThemes,
+  normalizeThemeSelectionKey,
   normalizeThemeVars,
   readSavedTheme,
   removeThemeClasses,
+  resolveThemeSelection,
+  saveCustomThemes,
   saveThemeSelection,
   themeLabelSansIcon,
   getContrastRatio,
   THEME_TOKEN_MAP,
   THEME_SOFT_TOKEN_MAP
 } from "./theme-engine.js";
+import {
+  buildThemeCatalog,
+  createBuiltInThemeStoreItems,
+  getStoreItemForTheme as getStoreItemForThemeFromCatalog,
+  getThemeCatalogEntry as getThemeCatalogEntryFromCatalog,
+  isThemeLocked as isThemeLockedFromCatalog,
+  normalizeStoreItems as normalizeStoreItemsFromCatalog
+} from "./theme-catalog.js";
 import {
   normalizeSubcategoryRoutes as normalizeSharedSubcategoryRoutes,
   syncStatusesFromSubcategoryRoutes as syncSharedStatusesFromSubcategoryRoutes
@@ -1055,6 +1068,7 @@ async function sendConversationPush(conversationId, messageId) {
 }
 
 const WORKFLOW_STATES = ['called', 'accepted', 'in-progress', 'finished'];
+const workflowHistoryOpenKeys = new Set();
 
 function createWorkflowId(statusKey = 'status') {
   const cleanStatus = String(statusKey || 'status').toLowerCase().replace(/[^a-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '') || 'status';
@@ -1101,7 +1115,35 @@ function getWorkflowStateTimestamp(issue, entry, state, isCurrent = false) {
   if (entryTs) return entryTs;
   if (isCurrent && issue?.workflowStateHistory?.[state]?.at) return issue.workflowStateHistory[state].at;
   const statusKey = String(entry?.status || '').trim().toLowerCase();
-  return statusKey ? issue?.workflowStateByStatusHistory?.[statusKey]?.[state]?.at || null : null;
+  const statusTs = statusKey ? issue?.workflowStateByStatusHistory?.[statusKey]?.[state]?.at : null;
+  if (statusTs) return statusTs;
+  return issue?.workflowStateHistory?.[state]?.at || null;
+}
+
+function getWorkflowHistoryForEntry(issue, entry, isCurrent = false, allowStatusFallback = false) {
+  const workflowId = getEntryWorkflowId(entry);
+  if (workflowId && issue?.workflowStateByEntryHistory?.[workflowId]) {
+    return issue.workflowStateByEntryHistory[workflowId] || {};
+  }
+  if (isCurrent && issue?.workflowStateHistory) {
+    return issue.workflowStateHistory || {};
+  }
+  const statusKey = String(entry?.status || '').trim().toLowerCase();
+  if (allowStatusFallback && statusKey && issue?.workflowStateByStatusHistory?.[statusKey]) {
+    return issue.workflowStateByStatusHistory[statusKey] || {};
+  }
+  return {};
+}
+
+function workflowHistoryTimestampLabel(ts) {
+  const ms = compatTimestampMillis(ts);
+  if (!Number.isFinite(ms) || ms <= 0) return String(ts || '').trim();
+  return new Date(ms).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit'
+  });
 }
 
 function isCurrentWorkflowEntry(entryIndex, historyLength, entry, issue) {
@@ -4332,55 +4374,7 @@ function restoreSavedThemeSelection() {
 }
 
 function normalizeStoreItems(rawItems) {
-  const incoming = Array.isArray(rawItems) ? rawItems : [];
-  const byId = new Map();
-  const normalizeThemeItem = (item = {}, idx = 0) => {
-    const themeKey = item.themeKey ? String(item.themeKey).trim() : null;
-    const id = themeKey ? `theme_${themeKey}` : (String(item.id || '').trim() || `storeitem_${idx}`);
-    return {
-      ...item,
-      id,
-      type: 'theme',
-      themeKey,
-      name: String(item.name || 'Theme').trim() || 'Theme',
-      price: Math.max(0, Number(item.price || 0)),
-      isActive: item.isActive !== false,
-      customVars: normalizeThemeVars(item.customVars || {}),
-      order: Number.isFinite(Number(item.order)) ? Number(item.order) : idx
-    };
-  };
-  // Seed with defaults so new code-defined items always appear even when
-  // Firestore has an older snapshot that predates them.
-  DEFAULT_STORE_ITEMS.forEach((item, idx) => {
-    const id = String(item.id || '').trim();
-    if (!id) return;
-    byId.set(id, normalizeThemeItem(item, idx));
-  });
-  incoming.forEach((item, idx) => {
-    if (!item || typeof item !== 'object') return;
-    const type = String(item.type || 'theme');
-    if (type !== 'theme') {
-      const id = String(item.id || '').trim() || `storeitem_${idx}`;
-      byId.set(id, {
-        ...(byId.get(id) || {}),
-        ...item,
-        id,
-        type,
-        name: String(item.name || 'Store Item'),
-        price: Math.max(0, Number(item.price || 0)),
-        isActive: item.isActive !== false,
-        order: Number.isFinite(Number(item.order)) ? Number(item.order) : idx
-      });
-      return;
-    }
-    const normalized = normalizeThemeItem(item, idx);
-    byId.set(normalized.id, {
-      ...(byId.get(normalized.id) || {}),
-      ...normalized
-    });
-  });
-
-  return [...byId.values()].sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
+  return normalizeStoreItemsFromCatalog(rawItems, { defaults: DEFAULT_STORE_ITEMS });
 }
 
 function isItemUnlocked(itemId) {
@@ -4388,13 +4382,11 @@ function isItemUnlocked(itemId) {
 }
 
 function getStoreItemForTheme(themeKey) {
-  return storeItems.find(item => item.type === 'theme' && item.themeKey === themeKey && item.isActive !== false) || null;
+  return getStoreItemForThemeFromCatalog(storeItems, themeKey);
 }
 
 function isThemeLocked(themeKey) {
-  const theme = getThemeCatalogEntry(themeKey);
-  if (!theme) return false;
-  return !theme.isOwned;
+  return isThemeLockedFromCatalog(getThemeCatalog(), themeKey, { storeItems });
 }
 
 function ensureCurrentThemeAccess() {
@@ -4516,7 +4508,6 @@ function renderStoreCard() {
 
 // ── STORE MODAL ──
 
-const STORE_THEME_ITEM_PREFIX = 'storeitem:';
 let _pendingPurchaseItemId = null;
 
 function updateStoreXpDisplay() {
@@ -4537,6 +4528,7 @@ window.openStoreModal = openStoreModal;
 function closeStoreModal() {
   document.getElementById('store-modal')?.classList.remove('visible');
   document.body.style.overflow = '';
+  applyTheme(readSavedTheme('midnight'));
 }
 window.closeStoreModal = closeStoreModal;
 
@@ -4696,31 +4688,7 @@ function _buildStoreThemeCard(theme, activeKey, spendable) {
 
 function previewStoreTheme(themeKey) {
   if (!themeKey) return;
-  if (themeKey.startsWith('storetheme_')) {
-    const itemId = themeKey.replace('storetheme_', '');
-    const item = storeItems.find(i => i.id === itemId && i.type === 'theme' && i.isActive !== false);
-    if (!item?.customVars) return;
-    clearCustomThemeVars();
-    removeThemeClasses(THEME_KEYS);
-    applyCustomThemeVars(item.customVars);
-    document.body.dataset.themeMode = inferThemeModeFromVars(item.customVars);
-    updateThemeModeUI();
-    return;
-  }
-  if (themeKey.startsWith('custom_')) {
-    applyTheme(themeKey);
-    return;
-  }
-  const builtIn = THEME_OPTIONS.find(t => t.key === themeKey);
-  if (!builtIn) return;
-  applyThemeVarsFromEngine(THEME_VARS_MAP[themeKey] || {}, {
-    themeKeys: THEME_KEYS,
-    classThemeKey: themeKey,
-    mode: builtIn.mode || 'dark',
-    clearExtraKeys: [..._appliedCustomVarKeys]
-  });
-  _appliedCustomVarKeys = new Set();
-  updateThemeModeUI();
+  _applyThemeSelection(themeKey, { preview: true, enforceOwnership: false });
 }
 window.previewStoreTheme = previewStoreTheme;
 
@@ -4736,12 +4704,7 @@ function applyStoreThemeItem(itemId) {
     renderStoreModal();
     return;
   }
-  clearCustomThemeVars();
-  applyCustomThemeVars(item.customVars || {});
-  document.body.dataset.themeMode = inferThemeModeFromVars(item.customVars || {});
-  saveThemeSelection(`${STORE_THEME_ITEM_PREFIX}${item.id}`);
-  _syncThemePrefsToFirestore();
-  updateThemeModeUI();
+  applyTheme(`storetheme_${item.id}`);
   renderStoreModal();
 }
 window.applyStoreThemeItem = applyStoreThemeItem;
@@ -4855,16 +4818,7 @@ let userLifetimeXp = 0;
 let userXpSpent = 0;
 function userSpendableXp() { return Math.max(0, userLifetimeXp - userXpSpent); }
 
-const BUILT_IN_THEME_STORE_ITEMS = BUILT_IN_THEME_DEFS.map(theme => ({
-  id: `theme_${theme.key}`,
-  type: 'theme',
-  themeKey: theme.key,
-  customVars: null,
-  name: theme.name,
-  price: Number(theme.price || 0),
-  isActive: true,
-  order: Number(theme.order || 0)
-}));
+const BUILT_IN_THEME_STORE_ITEMS = createBuiltInThemeStoreItems(BUILT_IN_THEME_DEFS);
 
 const DEFAULT_STORE_ITEMS = [
   // Canonical store catalog lives here. normalizeStoreItems() seeds these defaults
@@ -6691,63 +6645,45 @@ window.setMapMode = mode => {
 // ── PRESS MINI-CARD STATE ──
 let activeMiniCard = null; // { machine, rowName }
 
-// ── FLOATING PRESS ACTION HUB STATE & FUNCTIONS ──
-let activePressHubMachine = null;
+// ── FLOATING ACTIVE ISSUES HUB ──
+function updateActiveIssuesPill() {
+  const hubEl = document.getElementById('active-issues-hub');
+  const countEl = document.getElementById('active-issues-count');
+  if (!hubEl || !countEl || !currentUser) return;
 
-function showPressActionHub(p) {
-  activePressHubMachine = p;
-
-  // Highlight the pressed button on map
-  const btnEl = document.getElementById('press-' + p.replace(/[\s.]/g, '_'));
-  if (btnEl) btnEl.classList.add('selected');
-
-  // Update badge label
-  const nameEl = document.getElementById('press-hub-name');
-  if (nameEl) nameEl.textContent = p;
-
-  // Make the pill visible
-  const hubEl = document.getElementById('press-action-hub');
-  if (hubEl) hubEl.classList.remove('hidden');
-
-  // Sync select dropdown value
-  const hubSelect = document.getElementById('press-hub-select');
-  if (hubSelect) {
-    hubSelect.value = p;
+  // Only show on mobile viewports
+  if (window.innerWidth >= 900) {
+    hubEl.classList.add('hidden');
+    return;
   }
 
-  // Define global action triggers scoped to this press
-  window.triggerLogIssue = () => {
-    deselectPressHub();
-    window.openAddModal?.(p);
-  };
+  // Count open issues assigned to current user
+  const myOpenIssues = issues.filter(i => 
+    i.userId === currentUser.uid && currentStatusKey(i) !== 'resolved'
+  );
 
-  window.triggerQuickNotes = () => {
-    deselectPressHub();
-    window.openNotesModalFromPress?.(p);
-  };
-
-  window.triggerWiki = () => {
-    deselectPressHub();
-    openPressWikiModal(toPressId(p), p);
-  };
-
-  window.triggerHistory = () => {
-    deselectPressHub();
-    showMachineHistory(p);
-  };
+  if (myOpenIssues.length > 0) {
+    countEl.textContent = myOpenIssues.length;
+    hubEl.classList.remove('hidden');
+  } else {
+    hubEl.classList.add('hidden');
+  }
 }
 
-window.deselectPressHub = function () {
-  if (!activePressHubMachine) return;
-
-  const hubEl = document.getElementById('press-action-hub');
-  if (hubEl) hubEl.classList.add('hidden');
-
-  const btnEl = document.getElementById('press-' + activePressHubMachine.replace(/[\s.]/g, '_'));
-  if (btnEl) btnEl.classList.remove('selected');
-
-  activePressHubMachine = null;
+window.triggerActiveIssuesHub = function() {
+  const hubEl = document.getElementById('active-issues-hub');
+  if (hubEl) hubEl.classList.add('hidden'); // hide immediately to prevent spamming
+  
+  if (issueScope !== 'mine') {
+    window.setIssueScope?.('mine');
+  }
+  
+  // Scroll to the issues log smoothly
+  document.querySelector('.issues-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 };
+
+// Listen to resize to update visibility
+window.addEventListener('resize', updateActiveIssuesPill);
 
 window.handlePressClick = p => {
   completeDemoGuideStep('floor');
@@ -6766,15 +6702,13 @@ window.handlePressClick = p => {
   if (!pressRow) { openAddModal(p); return; }
 
   // Toggle off if same press tapped again
-  if ((activeMiniCard && activeMiniCard.machine === p) || (activePressHubMachine === p)) {
+  if (activeMiniCard && activeMiniCard.machine === p) {
     closeMiniCard();
-    deselectPressHub();
     return;
   }
 
-  // Close any existing mini-card and press hub
+  // Close any existing mini-card
   closeMiniCard();
-  deselectPressHub();
 
   // Automatically activate/expand the row if it's not active
   if (!activeRows.has(pressRow)) {
@@ -6952,16 +6886,11 @@ window.handlePressClick = p => {
   area.appendChild(card);
   area.classList.add('visible');
 
-  // If mobile view, also show the floating action pill
-  const isMobile = window.innerWidth < 900;
-  if (isMobile) {
-    showPressActionHub(p);
-  }
+  // (Removed floating press action hub since mc-toolbar is now visible on mobile)
 };
 
 let _mcCloseTimer = null;
 function closeMiniCard() {
-  deselectPressHub();
   if (_mcCloseTimer) { clearTimeout(_mcCloseTimer); _mcCloseTimer = null; }
   if (!activeMiniCard) return;
   const areaId = 'mc-area-' + activeMiniCard.rowName.replace(/\s/g, '_');
@@ -8306,6 +8235,9 @@ window.openIssueReminderModal = issueReminders.openModal;
 window.closeIssueReminderModal = closeIssueReminderModal;
 window.setIssueReminderFromModal = issueReminders.setFromModal;
 window.setIssueReminderFromModalCustom = issueReminders.setFromModalCustom;
+window.addIssueReminderTimeFromModal = issueReminders.addTimeFromModal;
+window.pauseIssueReminderFromModal = issueReminders.pauseFromModal;
+window.resumeIssueReminderFromModal = issueReminders.resumeFromModal;
 window.clearIssueReminderFromModal = issueReminders.clearFromModal;
 window.setIssueReminderFromCard = issueReminders.setFromCard;
 window.setIssueReminderQuick = issueReminders.setQuick;
@@ -9741,7 +9673,9 @@ window.setWorkflowStateForStatus = async (issueId, statusKey, state) => {
 };
 
 function formatWorkflowActor(actor) {
-  const full = String(actor?.name || '').trim();
+  const full = typeof actor === 'string'
+    ? actor.trim()
+    : String(actor?.name || actor?.displayName || actor?.email || '').trim();
   if (!full) return '';
   const parts = full.split(/\s+/).filter(Boolean);
   if (parts.length <= 1) return `by ${full}`;
@@ -10576,6 +10510,34 @@ function renderIssues() {
       const entryMaterialBadge = String(entry.status || '').toLowerCase() === 'materials' && entrySerialNumber
         ? ` <span class="issue-serial-tag" title="Serial Number: ${esc(entrySerialNumber)}">🏷️ ${esc(entrySerialNumber)}</span>`
         : '';
+      const entryWorkflowId = getEntryWorkflowId(entry);
+      const allowStatusHistoryFallback = !entryWorkflowId && workflowStatusCounts[String(entry?.status || '')] <= 1;
+      const entryWorkflowHistory = getWorkflowHistoryForEntry(issue, entry, isCurrent, allowStatusHistoryFallback);
+      const completedWorkflowStates = wfOrder.filter(state => entryWorkflowHistory?.[state]?.at || entryWorkflowHistory?.[state]?.by);
+      const historyKey = `${issue.id}:${entryWorkflowId || trueIdx}`;
+      const isHistoryOpen = workflowHistoryOpenKeys.has(historyKey);
+      const workflowHistoryRows = wfOrder.map(state => {
+        const cfg = workflowConfig[state];
+        const item = entryWorkflowHistory?.[state] || null;
+        const hasEvent = !!(item?.at || item?.by);
+        const actorLabel = item?.by ? formatWorkflowActor(item.by) : '';
+        const timeLabel = item?.at ? workflowHistoryTimestampLabel(item.at) : '';
+        const meta = hasEvent
+          ? [timeLabel, actorLabel].filter(Boolean).join(' · ')
+          : (entryWorkflowState === state ? 'Current state' : 'Not reached');
+        return `<div class="tl-workflow-history-row ${hasEvent ? 'recorded' : 'missing'} ${entryWorkflowState === state ? 'current' : ''}">
+          <span class="tl-workflow-history-dot ${cfg.cssState}">${hasEvent ? '✓' : '○'}</span>
+          <span class="tl-workflow-history-label">${cfg.icon} ${cfg.label}</span>
+          <span class="tl-workflow-history-meta">${esc(meta || 'Not reached')}</span>
+        </div>`;
+      }).join('');
+      const workflowHistoryPanel = isHistoryOpen
+        ? `<div class="tl-workflow-history-panel">
+            <div class="tl-workflow-history-title">Workflow History</div>
+            ${completedWorkflowStates.length ? workflowHistoryRows : `<div class="tl-workflow-history-empty">No workflow events recorded yet.</div>${workflowHistoryRows}`}
+          </div>`
+        : '';
+      const workflowHistoryButton = `<button class="tl-history-btn" type="button" data-workflow-history-key="${esc(historyKey)}" aria-expanded="${isHistoryOpen ? 'true' : 'false'}">History ${completedWorkflowStates.length}/4</button>`;
 
       return `<div class="tl-entry${entryWorkflowState === 'finished' ? ' finished-checkered' : ''}" style="border-left-color:${barColor};${entryBg}">
         ${wfBadge}
@@ -10586,12 +10548,16 @@ function renderIssues() {
           <div class="tl-time">${entry.dateTime || ''}${entry.by ? ' — ' + esc(entry.by) : ''}</div>
           ${entry.note ? `<div class="tl-note-text">"${esc(entry.note)}"</div>` : ''}
           ${Array.isArray(entry.photos) && entry.photos.length ? `<div class="issue-photos" style="margin-top:6px;">${entry.photos.map((p, i) => `<img class="issue-photo-thumb" src="${esc(p.downloadURL || p.dataUrl || '')}" loading="lazy" alt="${esc(p.name || `Status photo ${i + 1}`)}" onclick="openLightbox(${i}, [${entry.photos.map(sp => `{url:'${esc(sp.downloadURL || sp.dataUrl || '')}',takenAt:'${esc(sp.takenAt || sp.timestamp || '')}',uploadedAt:'${esc(sp.uploadedAt || sp.createdAt || '')}'}`).join(',')}])">`).join('')}</div>` : ''}
-          ${currentUserPermissions.canEditIssue ? `<div style="display:flex;gap:5px;margin-top:6px;">
+          <div class="tl-actions">
+            ${workflowHistoryButton}
+            ${currentUserPermissions.canEditIssue ? `
             ${!isResolvedEntry && !isCurrent ? `<button class="tl-edit-btn" onclick="setStatusCurrentFromHistory('${issue.id}',${trueIdx})">Set current</button>` : ''}
             ${!isResolvedEntry && entryWorkflowState === 'finished' ? `<button class="tl-edit-btn" onclick="setWorkflowStateForEntry('${issue.id}',${trueIdx},'called')">Un-finish</button>` : ''}
             <button class="tl-edit-btn" onclick="startEditEntry('${issue.id}',${trueIdx})">✏ Edit</button>
             <button class="tl-remove-btn" onclick="removeStatusEntry('${issue.id}',${trueIdx})" ${isSynthetic || history.length <= 1 ? 'disabled' : ''}>🗑 Delete</button>
-          </div>` : ''}
+            ` : ''}
+          </div>
+          ${workflowHistoryPanel}
         </div>
       </div>`;
     }).join('');
@@ -10631,10 +10597,10 @@ function renderIssues() {
     </div>
     <div class="action-row issue-footer-actions" style="margin-top:10px;">
       <div class="issue-footer-actions-left">
-        <button class="issue-reminder-btn${!hasTimer ? ' inactive' : isTimerOverdue ? ' overdue' : ''}" onclick="event.stopPropagation(); openIssueReminderModal('${issue.id}')" title="${hasTimer ? 'Modify check-back timer' : 'Set check-back timer'}">
+        <button class="issue-reminder-btn${!hasTimer ? ' inactive' : reminderState?.isPaused ? ' paused' : isTimerOverdue ? ' overdue' : ''}" onclick="event.stopPropagation(); openIssueReminderModal('${issue.id}')" title="${hasTimer ? 'Modify check-back timer' : 'Set check-back timer'}">
           <span class="issue-reminder-icon">⏱</span>
           <span class="issue-reminder-copy">
-            <span class="issue-reminder-label">${!hasTimer ? 'Timer' : isTimerOverdue ? 'Check now' : 'Check back'}</span>
+            <span class="issue-reminder-label">${!hasTimer ? 'Timer' : reminderState?.isPaused ? 'Paused' : isTimerOverdue ? 'Check now' : 'Check back'}</span>
             <span class="issue-reminder-time" data-reminder-id="${issue.id}">${hasTimer ? formatReminderClock(reminderState) : 'Off'}</span>
           </span>
         </button>
@@ -10646,9 +10612,6 @@ function renderIssues() {
       </div>` : ''}
     </div>`;
 
-    const datePart = issue.dateTime ? issue.dateTime.replace(/,\s*\d{4}/, '') : '';
-    const issueAgeTimestamp = issue.createdAt || issue.openedAt || issue.updatedAt || issue.dateTime || '';
-    const relativeAge = _relativeTimeCompact(issueAgeTimestamp);
     const submitterHtml = issue.userName ? `<span class="issue-submitter">${esc(issue.userName.split(' ')[0])}${isMyIssue ? ' (you)' : ''}</span>` : '';
     const alertFocusHtml = isAlertFocus ? `<span class="issue-alert-focus-badge">Outside current time frame</span>` : '';
 
@@ -10656,7 +10619,7 @@ function renderIssues() {
     const secKeys = getSecondaryStatuses(issue).filter(k => k !== 'resolved');
 
     // Build compact 4-step header buttons with state label below
-    const wfAge = workflowState && workflowState !== 'finished'
+    const wfAge = workflowState
       ? _relativeTimeCompact(getWorkflowStateTimestamp(issue, currentEntry, workflowState, true))
       : '';
     const wfHeaderHtml = `<div class="wf-steps-wrap" onclick="event.stopPropagation()">
@@ -10689,7 +10652,7 @@ function renderIssues() {
       const sState = workflowDisplayState(entry, false);
       const sCurrentIdx = sState ? wfOrder.indexOf(sState) : -1;
       const sSubLabel = entry.subStatus || '';
-      const sAge = sState && sState !== 'finished'
+      const sAge = sState
         ? _relativeTimeCompact(getWorkflowStateTimestamp(issue, entry, sState, false))
         : '';
       const btnHtml = wfOrder.map(st => {
@@ -10699,7 +10662,7 @@ function renderIssues() {
       }).join('');
       const sStateLabel = sState ? workflowConfig[sState].label : 'Not Started';
       const sStateClass = sState ? workflowConfig[sState].cssState : '';
-      return `<div class="wf-status-row${sState === 'finished' ? ' finished-checkered' : ''}">
+      return `<div class="wf-status-row is-secondary${sState === 'finished' ? ' finished-checkered' : ''}">
             <div class="wf-status-row-info">
               <div class="issue-status" style="color:${sColor};border-color:${sColor};background:${alphaColor(sColor, 0.12)}">
                 <span class="issue-status-main">${sCfg.icon} ${esc(sCfg.label)}</span>
@@ -10754,10 +10717,9 @@ function renderIssues() {
         </div>
         ${subLabel ? `<div class="issue-route-subcategory">${esc(subLabel)}</div>` : ''}
       </div>
-      ${relativeAge ? `<span class="issue-age" title="${esc(datePart || relativeAge)}">${esc(relativeAge)}</span>` : ''}
     </div>`;
 
-    const currentWfRowHtml = `<div class="wf-status-row${workflowState === 'finished' ? ' finished-checkered' : ''}">
+    const currentWfRowHtml = `<div class="wf-status-row is-current${workflowState === 'finished' ? ' finished-checkered' : ''}">
       <div class="wf-status-row-info">
         <div class="issue-status" style="color:${sc.color};border-color:${sc.color};background:${alphaColor(sc.color, 0.12)}">
           <span class="issue-status-main">${sc.icon} ${baseLabel}</span>
@@ -10810,6 +10772,16 @@ function renderIssues() {
     // Safety cleanup: remove any legacy "Workflow: ..." pill buttons from status history rows.
     card.querySelectorAll('.status-timeline button').forEach(btn => {
       if (/^workflow\s*:/i.test((btn.textContent || '').trim())) btn.remove();
+    });
+    card.querySelectorAll('.tl-history-btn').forEach(btn => {
+      btn.addEventListener('click', evt => {
+        evt.stopPropagation();
+        const key = btn.dataset.workflowHistoryKey || '';
+        if (!key) return;
+        if (workflowHistoryOpenKeys.has(key)) workflowHistoryOpenKeys.delete(key);
+        else workflowHistoryOpenKeys.add(key);
+        renderIssues();
+      });
     });
     row.appendChild(card);
 
@@ -12272,14 +12244,21 @@ function resolveMachineCode(m) {
 
 async function _openToolModalByKey(key) {
   const preserveState = _toolModalHasState(key);
+  const wikiState = wikiTool?.state || {};
+  const notesContext = notesTool?.context || {};
+  const activeMachine = resolveMachineCode(
+    currentMachine ||
+    wikiState.modalPressId ||
+    notesContext.machineCode ||
+    notesContext.pressId ||
+    ''
+  );
   switch (key) {
     case 'log': {
-      const activeMachine = resolveMachineCode(currentMachine || wikiTool.state.modalPressId || notesTool.context.machineCode || notesTool.context.pressId || activePressHubMachine || '');
       window.openAddModal?.(activeMachine);
       break;
     }
     case 'wiki': {
-      const activeMachine = resolveMachineCode(currentMachine || wikiTool.state.modalPressId || notesTool.context.machineCode || notesTool.context.pressId || activePressHubMachine || '');
       if (activeMachine) {
         await window.openPressWikiModal?.(toPressId(activeMachine), activeMachine, { preserveState });
       } else {
@@ -12290,7 +12269,6 @@ async function _openToolModalByKey(key) {
       break;
     }
     case 'notes': {
-      const activeMachine = resolveMachineCode(currentMachine || wikiTool.state.modalPressId || notesTool.context.machineCode || notesTool.context.pressId || activePressHubMachine || '');
       const context = activeMachine ? { pressId: toPressId(activeMachine), machineCode: activeMachine } : {};
       await (preserveState
         ? window.openNotesModal?.(context, { preserveState: true })
@@ -12412,7 +12390,7 @@ function handleShellAction(action, value, trigger, event) {
     case 'open-notes-modal':
       closeHeaderQuickMenu();
       closeUserMenus();
-      window.openNotesModal?.();
+      void _openToolModalByKey('notes');
       break;
     case 'open-todos-modal':
       closeHeaderQuickMenu();
@@ -12589,94 +12567,17 @@ const THEME_VARS_MAP = BUILT_IN_THEME_DEFS.reduce((acc, theme) => {
   return acc;
 }, {});
 
-function getPublishedBuiltInThemeKeys() {
-  const publishedKeys = new Set(
-    (Array.isArray(storeItems) ? storeItems : [])
-      .filter(item => item?.type === 'theme' && item?.isActive !== false && item?.themeKey)
-      .map(item => item.themeKey)
-  );
-  if (!publishedKeys.size) {
-    THEME_OPTIONS.forEach(theme => publishedKeys.add(theme.key));
-  }
-  return publishedKeys;
-}
-
 function getThemeCatalog() {
-  const publishedBuiltInThemeKeys = getPublishedBuiltInThemeKeys();
-  const builtIns = THEME_OPTIONS
-    .filter(theme => publishedBuiltInThemeKeys.has(theme.key))
-    .map((theme, idx) => {
-      const storeItem = getStoreItemForTheme(theme.key);
-      const isFree = !storeItem || Number(storeItem?.price || 0) <= 0;
-      const vars = { ...(THEME_VARS_MAP[theme.key] || {}) };
-      return {
-        key: theme.key,
-        source: 'builtin',
-        label: theme.label,
-        shortLabel: themeLabelSansIcon(theme.label),
-        colors: normalizeThemeColors(theme.colors, vars),
-        vars,
-        mode: theme.mode,
-        storeItemId: storeItem?.id || null,
-        sortOrder: Number(storeItem?.order ?? 9999),
-        price: Math.max(0, Number(storeItem?.price || 0)),
-        isFree,
-        isOwned: isFree || !storeItem || isItemUnlocked(storeItem.id),
-      };
-    });
-
-  const storeCustomThemes = storeItems
-    .filter(item => item.type === 'theme' && item.isActive !== false && !item.themeKey && item.customVars)
-    .map(item => {
-      const vars = normalizeThemeVars(item.customVars);
-      return {
-        key: `storetheme_${item.id}`,
-        source: 'store-custom',
-        label: `🎨 ${item.name || 'Custom Theme'}`,
-        shortLabel: item.name || 'Custom Theme',
-        colors: normalizeThemeColors(null, vars),
-        vars,
-        mode: inferThemeModeFromVars(vars),
-        storeItemId: item.id,
-        sortOrder: Number(item.order ?? 9999),
-        price: Math.max(0, Number(item.price || 0)),
-        isFree: Number(item.price || 0) <= 0,
-        isOwned: Number(item.price || 0) <= 0 || isItemUnlocked(item.id),
-      };
-    });
-
-  const savedCustomThemesRaw = _loadCustomThemes().customThemes;
-  const savedCustomThemes = (Array.isArray(savedCustomThemesRaw) ? savedCustomThemesRaw : [])
-    .slice()
-    .reverse()
-    .filter(theme => theme && typeof theme === 'object')
-    .map((theme, idx) => {
-      const vars = normalizeThemeVars(theme.vars || {});
-      return {
-        key: `custom_${theme.id}`,
-        source: 'saved-custom',
-        label: `🎨 ${theme.name || 'Custom Theme'}`,
-        shortLabel: theme.name || 'Custom',
-        colors: normalizeThemeColors(null, vars),
-        vars,
-        mode: inferThemeModeFromVars(vars),
-        storeItemId: null,
-        sortOrder: 50000 + idx,
-        price: 0,
-        isFree: true,
-        isOwned: true,
-      };
-    })
-    .filter(theme => !!theme.key && !!theme.vars);
-
-  return [...builtIns, ...savedCustomThemes, ...storeCustomThemes]
-    .filter(theme => theme && typeof theme === 'object' && !!theme.key)
-    .sort((a, b) => Number(a.sortOrder || 0) - Number(b.sortOrder || 0))
-    .map(theme => ({ ...theme, colors: normalizeThemeColors(theme.colors, theme.vars) }));
+  return buildThemeCatalog({
+    builtInThemeDefs: BUILT_IN_THEME_DEFS,
+    storeItems,
+    customThemes: _loadCustomThemes().customThemes,
+    unlockedItems: userInventory.unlockedItems
+  });
 }
 
 function getThemeCatalogEntry(key) {
-  return getThemeCatalog().find(theme => theme.key === key) || null;
+  return getThemeCatalogEntryFromCatalog(getThemeCatalog(), key, { storeItems });
 }
 
 function renderThemeSwatches(theme) {
@@ -12686,8 +12587,6 @@ function renderThemeSwatches(theme) {
 }
 
 // ── THEME EDITOR ──
-const CUSTOM_THEMES_KEY = 'apTracker_customThemes';
-
 let _appliedCustomVarKeys = new Set();
 
 
@@ -12763,7 +12662,8 @@ function _teSetVarAndSync(cssVar, val) {
   }
 }
 
-function _teGetAllVariables() {
+function _teGetAllVariables(options = {}) {
+  const { includeRuntimeCss = false } = options;
   const vars = new Set(THEME_EDITOR_CORE_VARS);
 
   Object.values(THEME_VARS_MAP).forEach(themeVars => {
@@ -12774,22 +12674,24 @@ function _teGetAllVariables() {
     Object.keys(theme?.vars || {}).forEach(k => { if (k.startsWith('--')) vars.add(k); });
   });
 
-  Array.from(document.styleSheets || []).forEach(sheet => {
-    try {
-      Array.from(sheet.cssRules || []).forEach(rule => {
-        const style = rule.style;
-        if (!style) return;
-        Array.from(style).forEach(prop => {
-          if (String(prop).startsWith('--')) vars.add(prop);
+  if (includeRuntimeCss) {
+    Array.from(document.styleSheets || []).forEach(sheet => {
+      try {
+        Array.from(sheet.cssRules || []).forEach(rule => {
+          const style = rule.style;
+          if (!style) return;
+          Array.from(style).forEach(prop => {
+            if (String(prop).startsWith('--')) vars.add(prop);
+          });
         });
-      });
-    } catch (e) { /* ignore inaccessible stylesheet */ }
-  });
+      } catch (e) { /* ignore inaccessible stylesheet */ }
+    });
 
-  const rootStyle = getComputedStyle(document.documentElement);
-  for (let i = 0; i < rootStyle.length; i++) {
-    const prop = rootStyle[i];
-    if (String(prop).startsWith('--')) vars.add(prop);
+    const rootStyle = getComputedStyle(document.documentElement);
+    for (let i = 0; i < rootStyle.length; i++) {
+      const prop = rootStyle[i];
+      if (String(prop).startsWith('--')) vars.add(prop);
+    }
   }
 
   const core = THEME_EDITOR_CORE_VARS.filter(v => vars.has(v));
@@ -12815,35 +12717,16 @@ function _teToHexIfColor(value) {
   return `#${toHex(m[1])}${toHex(m[2])}${toHex(m[3])}`;
 }
 
-function normalizeCustomThemeStorage(data = {}) {
-  const customThemes = (Array.isArray(data.customThemes) ? data.customThemes : [])
-    .filter(theme => theme && typeof theme === 'object')
-    .map(theme => ({
-      ...theme,
-      id: String(theme.id || `custom_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`),
-      name: String(theme.name || 'Custom Theme'),
-      vars: normalizeThemeVars(theme.vars || {}),
-      createdAt: Number(theme.createdAt || Date.now())
-    }));
-  const activeCustomId = data.activeCustomId && customThemes.some(theme => theme.id === data.activeCustomId)
-    ? data.activeCustomId
-    : null;
-  return { customThemes, activeCustomId };
-}
-
 function _getCustomThemeKey(id) {
-  if (!id) return '';
-  return id.startsWith('custom_') ? id : 'custom_' + id;
+  return getCustomThemeKey(id);
 }
 
 function _loadCustomThemes() {
-  try { return normalizeCustomThemeStorage(JSON.parse(localStorage.getItem(CUSTOM_THEMES_KEY) || '{"customThemes":[],"activeCustomId":null}')); }
-  catch (e) { return normalizeCustomThemeStorage(); }
+  return loadCustomThemes();
 }
 
 function _saveCustomThemesStorage(data) {
-  const normalized = normalizeCustomThemeStorage(data);
-  try { localStorage.setItem(CUSTOM_THEMES_KEY, JSON.stringify(normalized)); } catch (e) { }
+  const normalized = saveCustomThemes(data);
   _syncThemePrefsToFirestore();
   return normalized;
 }
@@ -12883,8 +12766,7 @@ function _applyFirestoreThemePrefs(prefs) {
   try {
     if (Array.isArray(prefs.customThemes)) {
       const local = _loadCustomThemes();
-      const normalized = normalizeCustomThemeStorage({ ...local, customThemes: prefs.customThemes });
-      try { localStorage.setItem(CUSTOM_THEMES_KEY, JSON.stringify(normalized)); } catch (e) { }
+      saveCustomThemes({ ...local, customThemes: prefs.customThemes });
       renderAppearanceCustomThemes();
     }
     if (prefs.activeTheme) applyTheme(prefs.activeTheme);
@@ -12982,90 +12864,41 @@ function updateThemeModeUI() {
   if (sunIcon) sunIcon.style.display = isDark ? 'none' : '';
 }
 
-function applyTheme(theme) {
-  const legacyThemeMap = { dark: 'midnight', light: 'arctic' };
-  const resolvedTheme = legacyThemeMap[theme] || theme;
-  if (resolvedTheme && resolvedTheme.startsWith(STORE_THEME_ITEM_PREFIX)) {
-    const itemId = resolvedTheme.slice(STORE_THEME_ITEM_PREFIX.length);
-    const item = storeItems.find(i => i.id === itemId && i.type === 'theme' && i.isActive !== false);
-    if (item?.customVars) {
-      clearCustomThemeVars();
-      removeThemeClasses(THEME_KEYS);
-      applyCustomThemeVars(item.customVars);
-      document.body.dataset.themeMode = inferThemeModeFromVars(item.customVars);
-      saveThemeSelection(resolvedTheme);
-      updateActiveThemeChoice(null);
-      _syncThemePrefsToFirestore();
-      updateThemeModeUI();
-      return;
-    }
+function _applyThemeSelection(selection, options = {}) {
+  const { preview = false, enforceOwnership = true, fallback = 'midnight' } = options;
+  const catalog = getThemeCatalog();
+  const normalizedSelection = normalizeThemeSelectionKey(selection, { storeItems, fallback });
+  let { key, entry } = resolveThemeSelection(normalizedSelection, catalog, { storeItems, fallback });
+  if (!entry && normalizedSelection !== fallback) {
+    ({ key, entry } = resolveThemeSelection(fallback, catalog, { storeItems, fallback }));
   }
-  // Handle custom theme keys (stored as "custom_<id>")
-  if (resolvedTheme && resolvedTheme.startsWith('custom_')) {
-    const data = _loadCustomThemes();
-    const found = data.customThemes.find(t => _getCustomThemeKey(t.id) === resolvedTheme);
-    if (found) {
-      removeThemeClasses(THEME_KEYS);
-      applyCustomThemeVars(found.vars);
-      document.body.dataset.themeMode = 'dark';
-      saveThemeSelection(resolvedTheme);
-      updateActiveThemeChoice(null);
-      _syncThemePrefsToFirestore();
-      updateThemeModeUI();
-      return;
-    }
+  if (!entry) return null;
+  if (enforceOwnership && !entry.isOwned) {
+    if (!preview) openStoreModal();
+    return null;
   }
-  if (resolvedTheme && resolvedTheme.startsWith('storetheme_')) {
-    const storeTheme = getThemeCatalogEntry(resolvedTheme);
-    if (storeTheme) {
-      if (!storeTheme.isOwned) {
-        openStoreModal();
-        return;
-      }
-      removeThemeClasses(THEME_KEYS);
-      applyCustomThemeVars(storeTheme.vars || {});
-      document.body.dataset.themeMode = storeTheme.mode || 'dark';
-      saveThemeSelection(resolvedTheme);
-      updateActiveThemeChoice(resolvedTheme);
-      _syncThemePrefsToFirestore();
-      updateThemeModeUI();
-      return;
-    }
-  }
-  clearCustomThemeVars(); // strip any inline custom vars before applying a CSS class theme
-  const normalizedTheme = THEME_KEYS.includes(resolvedTheme) ? resolvedTheme : 'midnight';
-  if (isThemeLocked(normalizedTheme)) {
-    openStoreModal();
-    return;
-  }
-  const selectedTheme = THEME_OPTIONS.find(opt => opt.key === normalizedTheme) || THEME_OPTIONS[0];
-  applyThemeVarsFromEngine(THEME_VARS_MAP[normalizedTheme] || THEME_VARS_MAP.midnight || {}, {
+  const normalized = applyResolvedTheme(entry, {
     themeKeys: THEME_KEYS,
-    classThemeKey: normalizedTheme,
-    mode: selectedTheme.mode,
     clearExtraKeys: [..._appliedCustomVarKeys]
   });
-  _appliedCustomVarKeys = new Set();
-  updateActiveThemeChoice(normalizedTheme);
-  saveThemeSelection(normalizedTheme);
-  _syncThemePrefsToFirestore();
+  _appliedCustomVarKeys = entry.source === 'builtin' ? new Set() : new Set(Object.keys(normalized || {}));
+  if (!preview) {
+    saveThemeSelection(key);
+    _syncThemePrefsToFirestore();
+  }
+  updateActiveThemeChoice(preview ? readSavedTheme('midnight') : key);
   updateThemeModeUI();
+  return entry;
+}
+
+function applyTheme(theme) {
+  return _applyThemeSelection(theme, { preview: false, enforceOwnership: true });
 }
 window.applyTheme = applyTheme;
 
 // Load saved theme (handles both built-in keys and custom_<id>)
 try {
-  const saved = readSavedTheme('');
-  if (saved && saved.startsWith('custom_')) {
-    const data = _loadCustomThemes();
-    const found = data.customThemes.find(t => _getCustomThemeKey(t.id) === saved);
-    if (found) { removeThemeClasses(THEME_KEYS); applyCustomThemeVars(found.vars); document.body.dataset.themeMode = 'dark'; updateActiveThemeChoice(null); }
-    else applyTheme('midnight');
-  } else if (saved && saved.startsWith('storetheme_')) {
-    applyTheme(saved);
-  } else {
-    applyTheme(saved || 'midnight');
-  }
+  applyTheme(readSavedTheme('') || 'midnight');
 } catch (e) { applyTheme('midnight'); }
 updateThemeModeUI();
 renderThemeChoices();
@@ -13821,8 +13654,9 @@ function _renderTEVarsList() {
   const baseKey = document.getElementById('te-base-select')?.value || 'midnight';
   const baseVars = THEME_VARS_MAP[baseKey] || THEME_VARS_MAP.midnight || {};
   const search = String(document.getElementById('te-theme-search')?.value || '').trim().toLowerCase();
+  const includeRuntimeCss = document.getElementById('te-panel-advanced')?.classList.contains('active') || !!search;
 
-  const allVars = _teGetAllVariables().filter(cssVar => !search || cssVar.toLowerCase().includes(search));
+  const allVars = _teGetAllVariables({ includeRuntimeCss }).filter(cssVar => !search || cssVar.toLowerCase().includes(search));
   const countEl = document.getElementById('te-var-count');
   if (countEl) countEl.textContent = `${allVars.length} var${allVars.length === 1 ? '' : 's'}`;
 

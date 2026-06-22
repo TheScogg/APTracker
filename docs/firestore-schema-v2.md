@@ -66,6 +66,10 @@ Keep this document lightweight and user-centric.
     "completedAt": "serverTimestamp",
     "version": 1
   },
+  "themePrefs": {
+    "activeTheme": "midnight",
+    "customThemes": []
+  },
   "defaultPlantId": "plant_jef",
   "recentPlantIds": ["plant_jef", "plant_lou"],
   "createdAt": "serverTimestamp",
@@ -77,6 +81,7 @@ Keep this document lightweight and user-centric.
 ### Notes
 
 - Store identity and preferences here.
+- `themePrefs` mirrors the active theme and user-owned local custom themes; see `docs/theme-system.md`.
 - Do not use this document as the source of truth for plant authorization.
 - Plant access should be derived from `plants/{plantId}/members/{userId}`.
 

@@ -2416,7 +2416,7 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import { getAuth, setPersistence, browserLocalPersistence, GoogleAuthProvider, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut as fbSignOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
     import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-    import { createApiSessionClient } from "./auth-session-client.js";
+    import { createApiSessionClient } from "./js/auth-session-client.js";
     import {
       assignableStatusKeys,
       deepCopy,
@@ -2427,10 +2427,21 @@
       routeKeyFromLabel,
       statusKeyFromLabel,
       syncStatusesFromSubcategoryRoutes as syncSharedStatusesFromSubcategoryRoutes
-    } from "./shared-config.js";
+    } from "./js/shared-config.js";
     import {
-      BUILT_IN_THEME_DEFS
-    } from "./theme-engine.js";
+      BUILT_IN_THEME_DEFS,
+      FALLBACK_THEME_KEY,
+      THEME_DEFAULT_VARS,
+      THEME_STORAGE_KEY,
+      applyThemeVars,
+      loadCustomThemes,
+      normalizeThemeSelectionKey,
+      normalizeThemeVars
+    } from "./js/theme-engine.js";
+    import {
+      createBuiltInThemeStoreItems,
+      normalizeThemeStoreItem
+    } from "./js/theme-catalog.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyABjasNBbJnsqq4M_UxKruKrN6-O2FXCwc",
@@ -2527,29 +2538,14 @@
       return acc;
     }, {});
 
-    const DEFAULT_STORE_ITEMS = BUILT_IN_THEME_DEFS.map(theme => ({
-      id: `theme_${theme.key}`,
-      type: 'theme',
-      themeKey: theme.key,
-      customVars: null,
-      name: theme.name,
-      price: theme.price ?? 0,
-      isActive: true,
-      order: theme.order ?? 0
-    }));
+    const DEFAULT_STORE_ITEMS = createBuiltInThemeStoreItems(BUILT_IN_THEME_DEFS);
 
     const ADMIN_THEME_OPTIONS = BUILT_IN_THEME_DEFS.map(theme => ({
       key: theme.key,
       label: theme.label
     }));
 
-    const THEME_VARS_TEMPLATE = {
-      '--bg': '#0d1117', '--bg2': '#161b22', '--bg3': '#1c2333', '--border': '#30363d',
-      '--text': '#e6edf3', '--text2': '#8b949e', '--text3': '#484f58',
-      '--accent': '#f97316', '--accent2': '#fb923c',
-      '--green': '#22c55e', '--red': '#ef4444', '--blue': '#3b82f6', '--yellow': '#eab308', '--orange': '#f97316',
-      '--bg-svg': '',
-    };
+    const THEME_VARS_TEMPLATE = THEME_DEFAULT_VARS;
 
     const THEME_EDITOR_FIELDS = [
       ['--bg', 'Background'], ['--bg2', 'Surface'], ['--bg3', 'Inset'], ['--border', 'Border'],
@@ -2558,9 +2554,6 @@
       ['--green', 'Success'], ['--red', 'Danger'], ['--blue', 'Info'], ['--yellow', 'Warning'], ['--orange', 'Orange']
     ];
 
-    const THEME_STORAGE_KEY = 'pressTrackerTheme';
-    const CUSTOM_THEMES_STORAGE_KEY = 'apTracker_customThemes';
-    const FALLBACK_THEME_KEY = 'midnight';
     let currentThemeSelection = FALLBACK_THEME_KEY;
 
     const THEME_ITEM_JSON_SCHEMA = {
@@ -2576,10 +2569,9 @@
         order: { type: 'number' },
         customVars: {
           type: 'object',
-          required: THEME_EDITOR_FIELDS.map(([key]) => key),
-          additionalProperties: false,
+          additionalProperties: true,
           patternProperties: {
-            '^--[a-z0-9-]+$': { type: 'string', pattern: '^#[0-9a-fA-F]{6}$' }
+            '^--[a-z0-9-]+$': { type: 'string' }
           }
         }
       }
@@ -2588,27 +2580,15 @@
     const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 
     function sanitizeThemeVars(rawVars) {
-      const merged = { ...THEME_VARS_TEMPLATE };
-      if (!rawVars || typeof rawVars !== 'object') return merged;
-      THEME_EDITOR_FIELDS.forEach(([key]) => {
-        const value = String(rawVars[key] || '').trim();
-        if (HEX_COLOR_RE.test(value)) merged[key] = value;
-      });
-      merged['--bg-svg'] = String(rawVars['--bg-svg'] || '');
-      return merged;
+      return normalizeThemeVars(rawVars || {});
     }
 
     function readCustomThemeStorage() {
-      try {
-        const raw = JSON.parse(localStorage.getItem(CUSTOM_THEMES_STORAGE_KEY) || '{"customThemes":[]}');
-        return Array.isArray(raw?.customThemes) ? raw.customThemes : [];
-      } catch {
-        return [];
-      }
+      return loadCustomThemes().customThemes;
     }
 
     function resolveThemeVars(themeSelection, storeItems = []) {
-      const selected = String(themeSelection || FALLBACK_THEME_KEY).trim() || FALLBACK_THEME_KEY;
+      const selected = normalizeThemeSelectionKey(themeSelection || FALLBACK_THEME_KEY, { storeItems, fallback: FALLBACK_THEME_KEY });
       if (selected.startsWith('custom_')) {
         const customId = selected.slice('custom_'.length);
         const custom = readCustomThemeStorage().find(item => String(item?.id || '') === customId);
@@ -2623,14 +2603,11 @@
     }
 
     function applyThemeVarsToAdmin(vars) {
-      const root = document.documentElement;
-      THEME_EDITOR_FIELDS.forEach(([key]) => {
-        root.style.setProperty(key, vars[key] || THEME_VARS_TEMPLATE[key]);
-      });
+      applyThemeVars(vars, { themeKeys: ADMIN_THEME_OPTIONS.map(theme => theme.key) });
     }
 
     function syncAdminTheme(themeSelection, storeItems = []) {
-      currentThemeSelection = String(themeSelection || FALLBACK_THEME_KEY).trim() || FALLBACK_THEME_KEY;
+      currentThemeSelection = normalizeThemeSelectionKey(themeSelection || FALLBACK_THEME_KEY, { storeItems, fallback: FALLBACK_THEME_KEY });
       const vars = resolveThemeVars(currentThemeSelection, storeItems);
       applyThemeVarsToAdmin(vars);
     }
@@ -2639,19 +2616,9 @@
 
     function validateThemeItemCandidate(candidate, fallbackOrder = 0) {
       if (!candidate || typeof candidate !== 'object') return { ok: false, error: 'Theme payload is not an object.' };
-      const normalized = {
-        ...candidate,
-        id: String(candidate.id || '').trim(),
-        type: 'theme',
-        themeKey: candidate.themeKey ? String(candidate.themeKey).trim() : null,
-        name: String(candidate.name || '').trim(),
-        price: Math.max(0, Number(candidate.price || 0)),
-        isActive: candidate.isActive !== false,
-        order: Number.isFinite(Number(candidate.order)) ? Number(candidate.order) : fallbackOrder,
-        customVars: sanitizeThemeVars(candidate.customVars || {})
-      };
+      const normalized = normalizeThemeStoreItem(candidate, fallbackOrder);
+      if (!normalized) return { ok: false, error: 'Theme payload is not an object.' };
       if (!normalized.name) return { ok: false, error: 'Theme name is required.' };
-      if (normalized.themeKey) normalized.id = `theme_${normalized.themeKey}`;
       if (!normalized.id) normalized.id = `storeitem_${Date.now()}`;
       return { ok: true, item: normalized };
     }

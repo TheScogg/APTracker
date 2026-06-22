@@ -11,6 +11,7 @@ export function initMessagingTool(deps) {
 
   let _messagingInboxUnsubscribe = null;
   let _messagingInboxPollTimer = null;
+  let _msgSearchTimer = null;
 
   const _messagingState = {
     conversations: [],
@@ -701,7 +702,6 @@ export function initMessagingTool(deps) {
       _renderMessagingConversations();
     });
 
-    let _msgSearchTimer = null;
     document.getElementById('messaging-search')?.addEventListener('input', e => {
       _messagingState.search = e.target.value || '';
       if (_msgSearchTimer) clearTimeout(_msgSearchTimer);

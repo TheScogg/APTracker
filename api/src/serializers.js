@@ -15,6 +15,23 @@ function toIso(value) {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
+function toMs(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.getTime();
+}
+
+function timerPauseMeta(row) {
+  const delivery = parseJson(row.timer_notification_delivery_json, null);
+  const meta = delivery && typeof delivery === 'object' ? delivery.__pauseMeta : null;
+  return {
+    delivery,
+    paused: Boolean(meta?.paused),
+    pausedAtMs: meta?.pausedAtMs == null ? null : Number(meta.pausedAtMs),
+    pausedRemainingMs: meta?.pausedRemainingMs == null ? null : Number(meta.pausedRemainingMs)
+  };
+}
+
 export function serializeUserContextRows(rows = []) {
   if (!rows.length) {
     return {
@@ -276,6 +293,7 @@ export function serializeRoleFeedAlert(row) {
 
 export function serializeIssue(row) {
   if (!row) return null;
+  const timerMeta = timerPauseMeta(row);
   return {
     issueId: row.issue_id,
     plantId: row.plant_id,
@@ -328,13 +346,18 @@ export function serializeIssue(row) {
       ? {
           enabled: Boolean(row.timer_enabled),
           startedAt: toIso(row.timer_started_at),
+          startedAtMs: toMs(row.timer_started_at),
           dueAt: toIso(row.timer_due_at),
           dueAtMs: row.timer_due_at_ms == null ? null : Number(row.timer_due_at_ms),
+          minutes: row.timer_duration_minutes == null ? null : Number(row.timer_duration_minutes),
           durationMinutes: row.timer_duration_minutes == null ? null : Number(row.timer_duration_minutes),
           notificationStatus: row.timer_notification_status,
           notificationOwnerUid: row.timer_notification_owner_uid,
           notificationRequestedBy: parseJson(row.timer_notification_requested_by_json, null),
-          notificationDelivery: parseJson(row.timer_notification_delivery_json, null)
+          notificationDelivery: timerMeta.delivery,
+          paused: timerMeta.paused,
+          pausedAtMs: timerMeta.pausedAtMs,
+          pausedRemainingMs: timerMeta.pausedRemainingMs
         }
       : null,
     createdAt: toIso(row.created_at),

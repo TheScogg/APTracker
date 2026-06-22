@@ -23,6 +23,7 @@ export function initTodosTool({
 }) {
   let todoUnsubPersonal = null;
   let todoUnsubShared = null;
+  let _todoSearchTimer = null;
   const state = {
     personal: [],
     shared: [],
@@ -414,7 +415,6 @@ export function initTodosTool({
         void createFromQuick();
       }
     });
-    let _todoSearchTimer = null;
     document.getElementById('todo-search')?.addEventListener('input', e => {
       state.search = String(e.target.value || '');
       if (_todoSearchTimer) clearTimeout(_todoSearchTimer);

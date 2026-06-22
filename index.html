@@ -25,9 +25,9 @@
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&family=Nunito:wght@300;400;600;700&family=Space+Grotesk:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,400..700;1,400..700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="./build-info.js?v=74046e8-dirty"></script>
-<script src="./fcm-config.js?v=ae083d6"></script>
-<link rel="stylesheet" href="./styles.css?v=74046e8-dirty">
+<script src="./js/build-info.js?v=c7078bc-dc873325"></script>
+<script src="./js/fcm-config.js?v=ae083d6"></script>
+<link rel="stylesheet" href="./css/styles.css?v=c7078bc-dc873325">
 </head>
 <body>
 
@@ -82,7 +82,7 @@
   <div id="sync-banner" class="visible">
     <div class="sync-dot" id="sync-dot"></div>
     <span id="sync-text" aria-live="polite">Connecting…</span>
-    <span id="app-version-indicator" class="app-version-indicator" title="Current commit version">rev: 74046e8</span>
+    <span id="app-version-indicator" class="app-version-indicator" title="Current commit version">rev: c7078bc</span>
     <span id="firestore-io-indicator" class="firestore-io-indicator" title="Estimated Firestore operations for this session">R:0 W:0</span>
   </div>
 
@@ -110,7 +110,7 @@
         </button>
 
         <button class="sort-dropdown-btn" id="messages-btn-header" data-messages-trigger="true" data-shell-action="open-messages" style="gap:4px;" aria-label="Messages" title="Messages">
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;opacity:0.7;"><path d="M3 2h10a1 1 0 011 1v8a1 1 0 01-1 1H5l-3 2V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
+          <svg class="messages-btn-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 2h10a1 1 0 011 1v8a1 1 0 01-1 1H5l-3 2V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
           <span class="msg-btn-badge" data-messages-badge style="display:none;">0</span>
         </button>
 
@@ -642,10 +642,34 @@
   <div class="modal timer-scrubber-modal" style="max-width:420px;">
     <div class="modal-title timer-modal-title"><span class="timer-modal-icon">⏱</span> Check-back Timer</div>
     <div class="modal-subtitle" id="issue-reminder-modal-subtitle">Set a reminder</div>
+    <div class="timer-running-panel" id="issue-reminder-running-panel" hidden>
+      <div class="timer-running-topline">
+        <span class="timer-running-pill" id="issue-reminder-running-state">Running</span>
+        <span class="timer-running-due" id="issue-reminder-running-due">Live countdown</span>
+      </div>
+      <div class="timer-running-clock" id="issue-reminder-running-clock">00:00</div>
+      <div class="timer-running-actions">
+        <button class="timer-action-chip timer-action-pause" id="issue-reminder-pause-btn" onclick="pauseIssueReminderFromModal()">Pause</button>
+        <button class="timer-action-chip timer-action-resume" id="issue-reminder-resume-btn" onclick="resumeIssueReminderFromModal()">Resume</button>
+      </div>
+      <div class="timer-add-label">Add time</div>
+      <div class="timer-add-grid">
+        <button class="timer-chip timer-chip-fast" onclick="addIssueReminderTimeFromModal(0.25)">+15s</button>
+        <button class="timer-chip timer-chip-fast" onclick="addIssueReminderTimeFromModal(0.5)">+30s</button>
+        <button class="timer-chip" onclick="addIssueReminderTimeFromModal(1)">+1m</button>
+        <button class="timer-chip" onclick="addIssueReminderTimeFromModal(5)">+5m</button>
+        <button class="timer-chip" onclick="addIssueReminderTimeFromModal(15)">+15m</button>
+        <button class="timer-chip" onclick="addIssueReminderTimeFromModal(30)">+30m</button>
+      </div>
+    </div>
     <div class="timer-scrubber-shell">
       <div class="timer-preview">
         <div class="timer-preview-kicker">Check back in</div>
-        <div class="timer-preview-time" id="issue-reminder-preview">00:00</div>
+        <div class="timer-preview-time" id="issue-reminder-preview">
+          <input id="issue-reminder-preview-mins" class="timer-preview-input timer-preview-input-mins" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="3" value="00" aria-label="Timer minutes">
+          <span class="timer-preview-sep" aria-hidden="true">:</span>
+          <input id="issue-reminder-preview-secs" class="timer-preview-input" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" value="00" aria-label="Timer seconds">
+        </div>
       </div>
       <div class="timer-scrubber-wrap">
         <div class="timer-scrubber-scale" id="issue-reminder-scale-labels"></div>
@@ -959,14 +983,14 @@
 
           <div class="notes-modal-header-copy note-card notes-editor-header-card">
             <div class="notes-modal-header-top">
-              <div class="notes-modal-kicker">Quick capture</div>
+              <div class="notes-modal-kicker">Shift log</div>
               <div id="notes-editor-save-state" class="notes-editor-save-state"></div>
             </div>
             <div class="notes-modal-title-row">
               <div class="notes-modal-title" id="notes-editor-title">New Note</div>
               <div class="notes-modal-context" id="notes-modal-context">Plant-wide</div>
             </div>
-            <div class="notes-modal-subtitle" id="notes-modal-subtitle">Quick capture, mobile first, and saved as you type.</div>
+            <div class="notes-modal-subtitle" id="notes-modal-subtitle">Press notes, handoffs, and issue follow-ups.</div>
             <div class="notes-modal-meta-row">
               <div id="notes-editor-updated" class="notes-editor-updated"></div>
               <div class="notes-modal-sync-note">Cmd+S saves, Esc closes</div>
@@ -975,8 +999,8 @@
           <div class="notes-editor-head">
             <button class="btn btn-ghost notes-back-btn" id="notes-back-btn" type="button">← Notes</button>
             <div class="notes-editor-actions">
-              <button class="btn btn-ghost" id="notes-pin-btn" type="button">📌 Pin</button>
-              <button class="btn btn-ghost" id="notes-archive-btn" type="button">📦 Archive</button>
+              <button class="btn btn-ghost" id="notes-pin-btn" type="button">Pin</button>
+              <button class="btn btn-ghost" id="notes-archive-btn" type="button">Archive</button>
               <button class="btn btn-danger" id="notes-delete-btn" type="button">Delete</button>
             </div>
           </div>
@@ -989,17 +1013,17 @@
             <div id="notes-tag-chips" class="notes-tag-chips"></div>
             <div id="notes-tag-suggestions" class="notes-tag-suggestions" aria-label="Tag suggestions"></div>
             <label for="notes-body">Content</label>
-            <div id="notes-body" class="notes-body" contenteditable="true" data-placeholder="Write something useful... Use #hashtags for tags"></div>
+            <div id="notes-body" class="notes-body" contenteditable="true" data-placeholder="Add the finding, action taken, next step, or handoff note..."></div>
             <div id="notes-body-preview" class="notes-body-preview" aria-hidden="true"></div>
-            <div class="tag-hint">💡 Type # anywhere to add a tag</div>
+            <div class="tag-hint">Type # anywhere to add a tag.</div>
             <div class="notes-toolbar">
-              <button class="notes-toolbar-btn" id="notes-bold-btn" type="button">Bold</button>
-              <button class="notes-toolbar-btn" id="notes-italic-btn" type="button">Italic</button>
-              <button class="notes-toolbar-btn" id="notes-underline-btn" type="button">Underline</button>
+              <button class="notes-toolbar-btn" id="notes-bold-btn" type="button" title="Bold">B</button>
+              <button class="notes-toolbar-btn" id="notes-italic-btn" type="button" title="Italic">I</button>
+              <button class="notes-toolbar-btn" id="notes-underline-btn" type="button" title="Underline">U</button>
               <button class="notes-toolbar-btn" id="notes-bullet-btn" type="button">Bullets</button>
-              <button class="notes-toolbar-btn" id="notes-checklist-btn" type="button">☑ Checklist</button>
+              <button class="notes-toolbar-btn" id="notes-checklist-btn" type="button">Checklist</button>
               <button class="notes-toolbar-btn" id="notes-preview-btn" type="button" aria-pressed="false">Preview</button>
-              <button class="notes-toolbar-btn" id="notes-photo-btn" type="button">📷 Attach</button>
+              <button class="notes-toolbar-btn" id="notes-photo-btn" type="button">Attach</button>
             </div>
           </div>
 
@@ -1018,9 +1042,9 @@
           <div class="notes-editor-card note-card notes-editor-card-attachments">
             <div class="notes-section-head">
               <div class="notes-section-title">Attachments</div>
-              <div class="notes-editor-updated">Drop photos here or tap Attach</div>
+              <div class="notes-editor-updated">Photos and screenshots</div>
             </div>
-            <div id="notes-drop-hint" class="notes-drop-hint">Drag images here, or paste screenshots directly into the note.</div>
+            <div id="notes-drop-hint" class="notes-drop-hint">Drag images here or paste screenshots directly into the note.</div>
             <div id="notes-attachments" class="notes-attachments"></div>
           </div>
 
@@ -1752,7 +1776,7 @@
   </div>
 </div>
 
-<script type="module" src="./app.js?v=74046e8-dirty"></script>
+<script type="module" src="./js/app.js?v=c7078bc-dc873325"></script>
 
 <!-- MASCOT CHARACTER CARD POPOVER -->
 <div class="mascot-popover-backdrop" id="mascot-popover-backdrop" onclick="if(event.target===this)closeMascotPopover()">
@@ -1781,33 +1805,18 @@
   <div class="spt-caret spt-caret-down" id="spt-caret-down" style="display:none"></div>
 </div>
 
-<!-- FLOATING PRESS ACTION HUB FOR MOBILE -->
-<div id="press-action-hub" class="press-hub-pill hidden">
-  <div class="press-hub-badge press-hub-select-wrapper" title="Change Press">
-    <span id="press-hub-name">--</span>
-    <span class="press-hub-arrow" style="margin-left: 4px; font-size: 8px; opacity: 0.8;">▼</span>
-    <select id="press-hub-select" class="press-hub-select-overlay" aria-label="Change Selected Press"></select>
+<!-- FLOATING ACTIVE ISSUES HUB FOR MOBILE -->
+<button id="active-issues-hub" class="press-hub-pill hidden" onclick="window.triggerActiveIssuesHub()" style="cursor: pointer; display: flex; align-items: center; justify-content: center; border: none;">
+  <div class="press-hub-badge" style="background: var(--color-danger, var(--red)); margin-right: 6px; pointer-events: none;">
+    <span id="active-issues-count">0</span>
   </div>
-  <div class="press-hub-divider"></div>
-  <div class="press-hub-actions">
-    <button class="press-hub-btn btn-log" onclick="triggerLogIssue()" title="Log Issue">
-      <svg viewBox="0 0 16 16" fill="none" class="hub-btn-svg"><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>
-      <span class="btn-text">Log</span>
-    </button>
-    <button class="press-hub-btn btn-notes" onclick="triggerQuickNotes()" title="View Notes">
-      <svg viewBox="0 0 16 16" fill="none" class="hub-btn-svg"><path d="M3 2h10v10l-2 2H3V2z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5 5h6M5 8h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
-      <span class="btn-text">Notes</span>
-    </button>
-    <button class="press-hub-btn btn-wiki" onclick="triggerWiki()" title="View Wiki">
-      <svg viewBox="0 0 16 16" fill="none" class="hub-btn-svg"><path d="M3 2h10a1 1 0 011 1v8a1 1 0 01-1 1H5l-3 2V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
-      <span class="btn-text">Wiki</span>
-    </button>
-    <button class="press-hub-btn btn-hist" onclick="triggerHistory()" title="View Timeline">
-      <svg viewBox="0 0 16 16" fill="none" class="hub-btn-svg"><path d="M8 2v6l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/></svg>
-      <span class="btn-text">History</span>
-    </button>
+  <div style="font-weight: 700; font-family: 'Nunito', sans-serif; font-size: 13px; color: var(--color-text, var(--text)); pointer-events: none;">
+    Active Issues
   </div>
-</div>
+  <div style="margin-left: 6px; color: var(--color-text-subtle, var(--text3)); pointer-events: none;">
+    <svg viewBox="0 0 16 16" fill="none" width="12" height="12"><path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </div>
+</button>
 
 <!-- KEYBOARD SHORTCUTS OVERLAY -->
 <div class="modal-overlay" id="shortcuts-overlay" onclick="if(event.target===this)closeShortcutsOverlay()">

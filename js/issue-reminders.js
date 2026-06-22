@@ -28,6 +28,7 @@ export function initIssueReminders(deps) {
   let modalIssueId = null;
   let selectedSeconds = 0;
   let scrubberPointerBound = false;
+  let modalClockTimer = null;
 
   function load() {
     try {
@@ -69,6 +70,24 @@ export function initIssueReminders(deps) {
     return true;
   }
 
+  function setReminderState(issueId, reminder) {
+    if (!issueId || !reminder?.dueAt) return false;
+    reminderMap[issueId] = {
+      minutes: parseTimerMinutes(reminder.minutes),
+      setAt: Number(reminder.setAt || 0) || Date.now(),
+      dueAt: Number(reminder.dueAt || 0),
+      paused: Boolean(reminder.paused),
+      pausedAtMs: Number(reminder.pausedAtMs || 0) || null,
+      pausedRemainingMs: Math.max(0, Number(reminder.pausedRemainingMs || 0)) || null
+    };
+    const payload = timerPayload(reminderMap[issueId]);
+    const previousTimer = applyLocalTimer(issueId, payload);
+    save();
+    persistTimerSet(issueId, payload, previousTimer);
+    if (!payload.paused) requestPushRegistration();
+    return true;
+  }
+
   function applyLocalTimer(issueId, timer) {
     const issue = getIssues().find(item => item?.id === issueId);
     if (!issue) return null;
@@ -84,15 +103,21 @@ export function initIssueReminders(deps) {
     if (!timer?.enabled || !timer?.dueAtMs) return null;
     const dueAt = Number(timer.dueAtMs || 0);
     if (!Number.isFinite(dueAt) || dueAt <= 0) return null;
+    const pauseMeta = timer.notificationDelivery?.__pauseMeta || null;
     return {
-      minutes: parseTimerMinutes(timer.minutes),
+      minutes: parseTimerMinutes(timer.minutes ?? timer.durationMinutes),
       setAt: Number(timer.startedAtMs || 0),
-      dueAt
+      dueAt,
+      paused: Boolean(timer.paused ?? pauseMeta?.paused),
+      pausedAtMs: Number(timer.pausedAtMs ?? pauseMeta?.pausedAtMs ?? 0),
+      pausedRemainingMs: Number(timer.pausedRemainingMs ?? pauseMeta?.pausedRemainingMs ?? 0)
     };
   }
 
   function reminderForIssue(issueId) {
-    return issueTimerReminder(issueId) || reminderMap?.[issueId] || null;
+    const localReminder = reminderMap?.[issueId] || null;
+    if (localReminder?.paused) return localReminder;
+    return issueTimerReminder(issueId) || localReminder;
   }
 
   function state(issueId, nowMs = Date.now()) {
@@ -100,14 +125,17 @@ export function initIssueReminders(deps) {
     if (!reminder?.dueAt) return null;
     const dueAt = Number(reminder.dueAt || 0);
     if (!Number.isFinite(dueAt) || dueAt <= 0) return null;
-    const remainingMs = dueAt - nowMs;
+    const isPaused = Boolean(reminder.paused);
+    const pausedRemainingMs = Number(reminder.pausedRemainingMs || 0);
+    const remainingMs = isPaused ? pausedRemainingMs : dueAt - nowMs;
     return {
       dueAt,
       minutes: Number(reminder.minutes || 0),
-      isOverdue: remainingMs <= 0,
+      isPaused,
+      isOverdue: !isPaused && remainingMs <= 0,
       remainingMs,
       label: remainingMs > 0
-        ? `Remind in ${formatDurationCompact(remainingMs)}`
+        ? `${isPaused ? 'Paused at' : 'Remind in'} ${formatDurationCompact(remainingMs)}`
         : `Due ${formatDurationCompact(Math.abs(remainingMs))}`
     };
   }
@@ -126,11 +154,14 @@ export function initIssueReminders(deps) {
       minutes,
       startedAtMs,
       dueAtMs: dueAt,
-      notificationStatus: 'pending',
+      notificationStatus: reminder?.paused ? 'paused' : 'pending',
       notificationRequestedAtMs: Date.now(),
       notificationRequestedBy: actor,
       notificationOwnerUid: actor?.uid || '',
-      notificationDelivery: null
+      notificationDelivery: null,
+      paused: Boolean(reminder?.paused),
+      pausedAtMs: Number(reminder?.pausedAtMs || 0) || null,
+      pausedRemainingMs: Math.max(0, Number(reminder?.pausedRemainingMs || 0)) || null
     };
   }
 
@@ -214,11 +245,102 @@ export function initIssueReminders(deps) {
     return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   }
 
+  function _timerPreviewInputs() {
+    return {
+      mins: document.getElementById('issue-reminder-preview-mins'),
+      secs: document.getElementById('issue-reminder-preview-secs')
+    };
+  }
+
+  function _timerPreviewInputValue(input) {
+    const maxDigits = input?.id === 'issue-reminder-preview-mins' ? 3 : 2;
+    return String(input?.value || '').replace(/\D+/g, '').slice(0, maxDigits);
+  }
+
+  function syncTimerPreviewInputs(force = false) {
+    const { mins, secs } = _timerPreviewInputs();
+    const totalSeconds = Math.max(0, Math.round(Number(selectedSeconds || 0)));
+    const displayMinutes = Math.floor(totalSeconds / 60);
+    const displaySeconds = totalSeconds % 60;
+    if (mins && (force || document.activeElement !== mins)) mins.value = String(displayMinutes).padStart(2, '0');
+    if (secs && (force || document.activeElement !== secs)) secs.value = String(displaySeconds).padStart(2, '0');
+  }
+
   function updateTimerPreview() {
     const preview = document.getElementById('issue-reminder-preview');
     if (!preview) return;
-    preview.textContent = formatSelectedClock(selectedSeconds);
     preview.classList.toggle('empty', selectedSeconds <= 0);
+    syncTimerPreviewInputs();
+  }
+
+  function liveSyncTimerPreviewInputs() {
+    const { mins, secs } = _timerPreviewInputs();
+    if (!mins || !secs) return;
+    const parsedMinutes = Math.max(0, Math.min(120, Number(_timerPreviewInputValue(mins) || 0)));
+    const parsedSeconds = Math.max(0, Math.min(59, Number(_timerPreviewInputValue(secs) || 0)));
+    setSelectedSeconds((parsedMinutes * 60) + parsedSeconds);
+  }
+
+  function commitTimerPreviewInputs({ keepFocus = false } = {}) {
+    const { mins, secs } = _timerPreviewInputs();
+    if (!mins || !secs) return;
+    const parsedMinutes = Math.max(0, Math.min(120, Number(_timerPreviewInputValue(mins) || 0)));
+    const parsedSeconds = Math.max(0, Math.min(59, Number(_timerPreviewInputValue(secs) || 0)));
+    mins.value = String(parsedMinutes).padStart(2, '0');
+    secs.value = String(parsedSeconds).padStart(2, '0');
+    setSelectedSeconds((parsedMinutes * 60) + parsedSeconds);
+    if (!keepFocus) {
+      mins.classList.remove('is-editing');
+      secs.classList.remove('is-editing');
+    }
+  }
+
+  function bindTimerPreviewInputs() {
+    const { mins, secs } = _timerPreviewInputs();
+    if (!mins || mins.dataset.bound === 'true' || !secs) return;
+    mins.dataset.bound = 'true';
+    secs.dataset.bound = 'true';
+    const inputs = [mins, secs];
+    inputs.forEach(input => {
+      input.addEventListener('focus', () => {
+        input.classList.add('is-editing');
+        input.select();
+      });
+      input.addEventListener('blur', () => {
+        commitTimerPreviewInputs();
+      });
+      input.addEventListener('input', () => {
+        input.value = _timerPreviewInputValue(input);
+        liveSyncTimerPreviewInputs();
+      });
+      input.addEventListener('keydown', event => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          input.blur();
+          return;
+        }
+        if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+          event.preventDefault();
+          const isSeconds = input === secs;
+          const raw = Number(_timerPreviewInputValue(input) || 0);
+          const next = event.key === 'ArrowUp' ? raw + 1 : raw - 1;
+          const max = isSeconds ? 59 : 120;
+          input.value = String(Math.max(0, Math.min(max, next))).padStart(2, '0');
+          commitTimerPreviewInputs({ keepFocus: true });
+          return;
+        }
+        if (event.key === 'ArrowRight' && input === mins && input.selectionStart === input.value.length) {
+          event.preventDefault();
+          secs.focus();
+          return;
+        }
+        if (event.key === 'ArrowLeft' && input === secs && input.selectionStart === 0) {
+          event.preventDefault();
+          mins.focus();
+        }
+      });
+    });
+    syncTimerPreviewInputs(true);
   }
 
   function updateScrubberLabels() {
@@ -280,6 +402,46 @@ export function initIssueReminders(deps) {
     renderScrubberBars();
   }
 
+  function stopModalClock() {
+    if (modalClockTimer) {
+      clearInterval(modalClockTimer);
+      modalClockTimer = null;
+    }
+  }
+
+  function currentModalState() {
+    return modalIssueId ? state(modalIssueId) : null;
+  }
+
+  function updateRunningModal() {
+    const panel = document.getElementById('issue-reminder-running-panel');
+    if (!panel || !modalIssueId) return;
+    const timerState = currentModalState();
+    const hasTimer = !!timerState;
+    panel.hidden = !hasTimer;
+    const clock = document.getElementById('issue-reminder-running-clock');
+    const statePill = document.getElementById('issue-reminder-running-state');
+    const dueEl = document.getElementById('issue-reminder-running-due');
+    const pauseBtn = document.getElementById('issue-reminder-pause-btn');
+    const resumeBtn = document.getElementById('issue-reminder-resume-btn');
+    if (!hasTimer) return;
+    if (clock) clock.textContent = formatClock(timerState);
+    if (statePill) {
+      statePill.textContent = timerState.isPaused ? 'Paused' : (timerState.isOverdue ? 'Overdue' : 'Running');
+      statePill.classList.toggle('paused', !!timerState.isPaused);
+      statePill.classList.toggle('overdue', !!timerState.isOverdue);
+    }
+    if (dueEl) dueEl.textContent = timerState.label || 'Live countdown';
+    if (pauseBtn) pauseBtn.style.display = timerState.isPaused ? 'none' : '';
+    if (resumeBtn) resumeBtn.style.display = timerState.isPaused ? '' : 'none';
+  }
+
+  function startModalClock() {
+    stopModalClock();
+    updateRunningModal();
+    modalClockTimer = setInterval(updateRunningModal, 1000);
+  }
+
   function scrubberSecondsFromClientX(clientX) {
     const barsWrap = document.getElementById('issue-reminder-bars');
     if (!barsWrap) return 0;
@@ -296,6 +458,7 @@ export function initIssueReminders(deps) {
     const lane = document.getElementById('issue-reminder-scrubber');
     if (!lane) return;
     scrubberPointerBound = true;
+    bindTimerPreviewInputs();
     updateScrubberLabels();
     renderScrubberBars();
 
@@ -344,20 +507,28 @@ export function initIssueReminders(deps) {
     if (!issue) return;
     modalIssueId = issueId;
     const current = state(issueId);
+    const runningSeconds = current ? Math.max(0, Math.ceil(Math.abs(Number(current.remainingMs || 0)) / 1000)) : 0;
     const minutes = Math.max(0, Number(current?.minutes || 0));
-    const totalSeconds = Math.round(minutes * 60);
+    const totalSeconds = runningSeconds || Math.round(minutes * 60);
     bindScrubber();
     setSelectedSeconds(totalSeconds);
+    syncTimerPreviewInputs(true);
     const sub = document.getElementById('issue-reminder-modal-subtitle');
-    if (sub) sub.textContent = `Press ${issue.machine || 'Unknown'} • pick a timer`;
+    if (sub) sub.textContent = current
+      ? `Press ${issue.machine || 'Unknown'} • live timer controls`
+      : `Press ${issue.machine || 'Unknown'} • pick a timer`;
     const clearBtn = document.getElementById('issue-reminder-clear-btn');
     if (clearBtn) clearBtn.style.display = current ? '' : 'none';
     document.getElementById('issue-reminder-modal')?.classList.add('visible');
+    startModalClock();
     requestAnimationFrame(() => document.getElementById('issue-reminder-scrubber')?.focus());
   }
 
   function closeModal() {
+    stopModalClock();
     document.getElementById('issue-reminder-modal')?.classList.remove('visible');
+    const panel = document.getElementById('issue-reminder-running-panel');
+    if (panel) panel.hidden = true;
     modalIssueId = null;
   }
 
@@ -368,6 +539,71 @@ export function initIssueReminders(deps) {
     if (!set(modalIssueId, parsedMinutes)) return;
     showGameToast(`⏱ Reminder set for ${formatTimerMinutes(parsedMinutes)}.`);
     closeModal();
+    renderIssues();
+  }
+
+  function addTimeFromModal(minutes) {
+    if (!modalIssueId) return;
+    const addMinutes = parseTimerMinutes(minutes);
+    if (!addMinutes) return;
+    const current = reminderForIssue(modalIssueId);
+    const currentState = state(modalIssueId);
+    const now = Date.now();
+    const remainingMs = Math.max(0, Number(currentState?.remainingMs || 0));
+    const nextRemainingMs = remainingMs + (addMinutes * 60 * 1000);
+    const nextReminder = {
+      minutes: parseTimerMinutes(nextRemainingMs / 60000),
+      setAt: Number(current?.setAt || 0) || now,
+      dueAt: now + nextRemainingMs,
+      paused: Boolean(currentState?.isPaused),
+      pausedAtMs: currentState?.isPaused ? (Number(current?.pausedAtMs || 0) || now) : null,
+      pausedRemainingMs: currentState?.isPaused ? nextRemainingMs : null
+    };
+    if (!setReminderState(modalIssueId, nextReminder)) return;
+    setSelectedSeconds(Math.round(nextRemainingMs / 1000));
+    updateRunningModal();
+    showGameToast(`⏱ Added ${formatTimerMinutes(addMinutes)}.`);
+    renderIssues();
+  }
+
+  function pauseFromModal() {
+    if (!modalIssueId) return;
+    const current = reminderForIssue(modalIssueId);
+    const currentState = state(modalIssueId);
+    if (!current || currentState?.isPaused) return;
+    const remainingMs = Math.max(0, Number(currentState?.remainingMs || 0));
+    const now = Date.now();
+    const nextReminder = {
+      ...current,
+      minutes: parseTimerMinutes(Math.max(remainingMs, 1000) / 60000),
+      paused: true,
+      pausedAtMs: now,
+      pausedRemainingMs: remainingMs
+    };
+    if (!setReminderState(modalIssueId, nextReminder)) return;
+    updateRunningModal();
+    showGameToast('⏸ Timer paused.');
+    renderIssues();
+  }
+
+  function resumeFromModal() {
+    if (!modalIssueId) return;
+    const current = reminderForIssue(modalIssueId);
+    const currentState = state(modalIssueId);
+    if (!current || !currentState?.isPaused) return;
+    const now = Date.now();
+    const remainingMs = Math.max(1000, Number(currentState.remainingMs || current.pausedRemainingMs || 0));
+    const nextReminder = {
+      minutes: parseTimerMinutes(remainingMs / 60000),
+      setAt: now,
+      dueAt: now + remainingMs,
+      paused: false,
+      pausedAtMs: null,
+      pausedRemainingMs: null
+    };
+    if (!setReminderState(modalIssueId, nextReminder)) return;
+    updateRunningModal();
+    showGameToast('▶ Timer resumed.');
     renderIssues();
   }
 
@@ -514,6 +750,7 @@ export function initIssueReminders(deps) {
         const badge = el.closest('.timer-mini-badge');
         if (badge) {
           badge.style.display = 'none';
+          badge.classList.remove('paused');
         }
         
         // Update button style/label if it is in the footer
@@ -521,6 +758,7 @@ export function initIssueReminders(deps) {
         if (btn) {
           btn.classList.add('inactive');
           btn.classList.remove('overdue');
+          btn.classList.remove('paused');
           const label = btn.querySelector('.issue-reminder-label');
           if (label) label.textContent = 'Timer';
         }
@@ -534,6 +772,7 @@ export function initIssueReminders(deps) {
       if (badge) {
         badge.style.display = '';
         badge.classList.toggle('overdue', !!reminderState.isOverdue);
+        badge.classList.toggle('paused', !!reminderState.isPaused);
       }
       
       // Ensure button has correct active classes/labels if in footer
@@ -541,9 +780,10 @@ export function initIssueReminders(deps) {
       if (btn) {
         btn.classList.remove('inactive');
         btn.classList.toggle('overdue', !!reminderState.isOverdue);
+        btn.classList.toggle('paused', !!reminderState.isPaused);
         const label = btn.querySelector('.issue-reminder-label');
         if (label) {
-          label.textContent = reminderState.isOverdue ? 'Check now' : 'Check back';
+          label.textContent = reminderState.isPaused ? 'Paused' : (reminderState.isOverdue ? 'Check now' : 'Check back');
         }
       }
     });
@@ -561,6 +801,9 @@ export function initIssueReminders(deps) {
     closeModal,
     setFromModal,
     setFromModalCustom,
+    addTimeFromModal,
+    pauseFromModal,
+    resumeFromModal,
     clearFromModal,
     setFromCard,
     setQuick,
