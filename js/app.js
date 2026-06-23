@@ -2364,10 +2364,9 @@ async function loadDailyScheduleIndex(date) {
     return dailyScheduleIndexState;
   }
   const sqlPayload = shouldUseSqlStagingReads(currentPlantId)
-    ? await requireSqlRead(
+    ? await safeSqlRead(
       `daily schedule ${currentPlantId}:${date}`,
-      () => dataApi.getDailySchedule(currentPlantId, date),
-      `Daily schedule lookup failed in D1 for plant ${currentPlantId} on ${date}.`
+      () => dataApi.getDailySchedule(currentPlantId, date)
     )
     : null;
   if (sqlPayload?.schedule) {
@@ -2375,9 +2374,8 @@ async function loadDailyScheduleIndex(date) {
     dailyScheduleIndexState = { plantId: currentPlantId, date, scheduled, lookupByPress };
     return dailyScheduleIndexState;
   }
-  if (shouldUseSqlStagingReads(currentPlantId)) {
-    dailyScheduleIndexState = { plantId: currentPlantId, date, scheduled: null, lookupByPress: new Map() };
-    return dailyScheduleIndexState;
+  if (shouldUseSqlStagingReads(currentPlantId) && sqlPayload && sqlPayload.schedule === null) {
+    console.info(`No D1 daily schedule found for ${currentPlantId} on ${date}; checking Firestore fallback.`);
   }
   const dailyRef = doc(db, 'plants', currentPlantId, 'dailySchedules', date);
   const dailySnap = await getDoc(dailyRef);
