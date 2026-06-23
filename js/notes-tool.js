@@ -44,24 +44,29 @@ function _notesIsMobileLayout() {
 function _notesSyncLayout() {
   const modal = document.getElementById('notes-modal');
   if (!modal) return;
-  const isEditor = _notesState.view === 'editor' && !!_notesState.currentNote?.id;
+  const isDetail = (_notesState.view === 'viewer' || _notesState.view === 'editor') && !!_notesState.currentNote?.id;
   const isNarrow = window.innerWidth <= 860;
+  modal.classList.toggle('notes-viewer-mode', _notesState.view === 'viewer' && !!_notesState.currentNote?.id);
+  modal.classList.toggle('notes-editor-mode', _notesState.view === 'editor' && !!_notesState.currentNote?.id);
   if (isNarrow) {
-    modal.classList.toggle('notes-mobile-list', !isEditor);
-    modal.classList.toggle('notes-mobile-editor', isEditor);
+    modal.classList.toggle('notes-mobile-list', !isDetail);
+    modal.classList.toggle('notes-mobile-editor', isDetail);
   } else {
     modal.classList.remove('notes-mobile-list', 'notes-mobile-editor');
   }
 }
 
-window.closeNotesEditorModal = function () {
+window.closeNotesEditorModal = async function () {
+  if (_notesState.currentNote?.id && _notesState.dirty) {
+    await _notesSaveActiveNote({ immediate: true });
+  }
   _notesSetView('list');
   _notesRenderEditor(null);
   _notesRenderList();
 };
 
 function _notesSetView(view) {
-  _notesState.view = view === 'editor' ? 'editor' : 'list';
+  _notesState.view = view === 'editor' || view === 'viewer' ? view : 'list';
   _notesSyncLayout();
 }
 
@@ -657,6 +662,85 @@ function _notesRenderContextChips(note = _notesState.currentNote) {
   });
 }
 
+function _notesRenderViewerTags(note = _notesState.currentNote) {
+  const wrap = document.getElementById('notes-viewer-tags');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  const tags = [];
+  if (note?.isPinned) tags.push({ label: 'Pinned', cls: 'pinned' });
+  if (note?.isArchived) tags.push({ label: 'Archived', cls: 'archived' });
+  if (note?.issueId) tags.push({ label: 'Issue', cls: 'linked' });
+  else if (note?.pressId) tags.push({ label: 'Press', cls: 'linked' });
+  (note?.tags || []).forEach(tag => tags.push({ label: `#${tag}`, cls: '' }));
+  if (!tags.length) {
+    const empty = document.createElement('span');
+    empty.className = 'notes-tag-empty';
+    empty.textContent = 'No tags';
+    wrap.appendChild(empty);
+    return;
+  }
+  tags.forEach(item => {
+    const chip = document.createElement('span');
+    chip.className = `notes-list-badge ${item.cls || ''}`.trim();
+    chip.textContent = item.label;
+    wrap.appendChild(chip);
+  });
+}
+
+function _notesContextSummaryText(note = _notesState.currentNote) {
+  if (note?.issueId) {
+    const issue = getIssues().find(i => i.id === note.issueId);
+    return `Linked to issue ${issue?.machine || note.issueId}`;
+  }
+  if (note?.pressId) return `Linked to press ${note.machineCode || note.pressId}`;
+  if (_notesContext.pressId || _notesContext.issueId) return `${_notesContextTitle(_notesContext)} note`;
+  return 'Plant-wide note';
+}
+
+function _notesRenderViewerContext(note = _notesState.currentNote) {
+  const summary = document.getElementById('notes-viewer-context-summary');
+  const chipsWrap = document.getElementById('notes-viewer-context-chips');
+  if (summary) summary.textContent = note?.id ? _notesContextSummaryText(note) : 'No note selected';
+  if (!chipsWrap) return;
+  chipsWrap.innerHTML = '';
+  const chips = [];
+  if (note?.pressId) chips.push(`Press · ${note.machineCode || note.pressId}`);
+  if (note?.issueId) {
+    const issue = getIssues().find(i => i.id === note.issueId);
+    chips.push(`Issue · ${issue?.machine || note.issueId}`);
+  }
+  if (!chips.length) chips.push('No linked context');
+  chips.forEach(labelText => {
+    const chip = document.createElement('span');
+    chip.className = 'notes-context-chip';
+    chip.textContent = labelText;
+    chipsWrap.appendChild(chip);
+  });
+}
+
+function _notesRenderViewerChecklist(note = _notesState.currentNote) {
+  const wrap = document.getElementById('notes-viewer-checklist');
+  const card = document.getElementById('notes-viewer-checklist-card');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  const items = normalizeChecklistItems(note?.checklistItems || []);
+  if (card) card.hidden = !items.length;
+  if (!items.length) return;
+  items.forEach(item => {
+    const row = document.createElement('div');
+    row.className = `notes-viewer-check-item ${item.done ? 'done' : ''}`;
+    const mark = document.createElement('span');
+    mark.className = 'notes-viewer-check-mark';
+    mark.textContent = item.done ? '✓' : '';
+    const text = document.createElement('span');
+    text.className = 'notes-viewer-check-text';
+    text.textContent = item.text || 'Untitled item';
+    row.appendChild(mark);
+    row.appendChild(text);
+    wrap.appendChild(row);
+  });
+}
+
 function _notesRenderChecklist(note = _notesState.currentNote) {
   const wrap = document.getElementById('notes-checklist');
   if (!wrap) return;
@@ -714,42 +798,82 @@ function _notesRenderChecklist(note = _notesState.currentNote) {
 
 function _notesRenderAttachments() {
   const wrap = document.getElementById('notes-attachments');
-  if (!wrap) return;
-  wrap.innerHTML = '';
+  const viewerWrap = document.getElementById('notes-viewer-attachments');
+  const viewerCard = document.getElementById('notes-viewer-attachments-card');
+  if (wrap) wrap.innerHTML = '';
+  if (viewerWrap) viewerWrap.innerHTML = '';
+  if (viewerCard) viewerCard.hidden = !_notesAttachmentsCache.length;
+  if (!wrap && !viewerWrap) return;
   if (!_notesAttachmentsCache.length) {
     const empty = document.createElement('div');
     empty.className = 'notes-checklist-empty';
     empty.textContent = 'Attachments will appear here after upload.';
-    wrap.appendChild(empty);
+    wrap?.appendChild(empty);
     return;
   }
   _notesAttachmentsCache.forEach((att, idx) => {
-    const tile = document.createElement('div');
-    tile.className = 'notes-attachment';
-    const img = document.createElement('img');
-    img.className = 'notes-attachment-thumb';
-    img.src = att.url || att.downloadURL || '';
-    img.alt = att.fileName || `Attachment ${idx + 1}`;
-    img.addEventListener('click', () => {
-      const photos = _notesAttachmentsCache.map(a => ({
-        url: a.url || a.downloadURL || '',
-        uploadedAt: a.uploadedAt || a.createdAt || ''
-      })).filter(a => a.url);
-      openLightbox(idx, photos);
-    });
-    const label = document.createElement('div');
-    label.className = 'notes-attachment-label';
-    label.textContent = att.fileName || att.caption || `Attachment ${idx + 1}`;
-    const remove = document.createElement('button');
-    remove.type = 'button';
-    remove.className = 'notes-attachment-remove';
-    remove.textContent = 'Remove';
-    remove.addEventListener('click', () => void _notesDeleteAttachment(att.id));
-    tile.appendChild(img);
-    tile.appendChild(label);
-    tile.appendChild(remove);
-    wrap.appendChild(tile);
+    const makeTile = ({ removable = true } = {}) => {
+      const tile = document.createElement('div');
+      tile.className = 'notes-attachment';
+      const img = document.createElement('img');
+      img.className = 'notes-attachment-thumb';
+      img.src = att.url || att.downloadURL || '';
+      img.alt = att.fileName || `Attachment ${idx + 1}`;
+      img.addEventListener('click', () => {
+        const photos = _notesAttachmentsCache.map(a => ({
+          url: a.url || a.downloadURL || '',
+          uploadedAt: a.uploadedAt || a.createdAt || ''
+        })).filter(a => a.url);
+        openLightbox(idx, photos);
+      });
+      const label = document.createElement('div');
+      label.className = 'notes-attachment-label';
+      label.textContent = att.fileName || att.caption || `Attachment ${idx + 1}`;
+      tile.appendChild(img);
+      tile.appendChild(label);
+      if (removable) {
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'notes-attachment-remove';
+        remove.textContent = 'Remove';
+        remove.addEventListener('click', () => void _notesDeleteAttachment(att.id));
+        tile.appendChild(remove);
+      }
+      return tile;
+    };
+    wrap?.appendChild(makeTile({ removable: true }));
+    viewerWrap?.appendChild(makeTile({ removable: false }));
   });
+}
+
+function _notesRenderViewer(note = _notesState.currentNote) {
+  const titleEl = document.getElementById('notes-viewer-title');
+  const metaEl = document.getElementById('notes-viewer-meta');
+  const bodyEl = document.getElementById('notes-viewer-body');
+  if (!titleEl || !metaEl || !bodyEl) return;
+  if (!note?.id) {
+    titleEl.textContent = 'Select a note';
+    metaEl.textContent = 'Choose a note from the list to read it.';
+    bodyEl.innerHTML = '<div class="notes-body-preview-empty">No note selected.</div>';
+    _notesRenderViewerTags(null);
+    _notesRenderViewerChecklist(null);
+    _notesRenderViewerContext(null);
+    _notesRenderAttachments();
+    return;
+  }
+  titleEl.textContent = note.title || 'Untitled Note';
+  metaEl.textContent = [
+    `Updated ${_notesDisplayTime(note.updatedAt)}`,
+    note.updatedBy?.displayName || note.updatedBy?.email || ''
+  ].filter(Boolean).join(' · ');
+  const html = sanitizeNoteHtml(note.bodyHtml || '');
+  const text = _noteTextFromHtml(html);
+  bodyEl.innerHTML = html || '<div class="notes-body-preview-empty">No content yet. Tap Edit below to add details.</div>';
+  bodyEl.classList.toggle('empty', !text);
+  _notesRenderViewerTags(note);
+  _notesRenderViewerChecklist(note);
+  _notesRenderViewerContext(note);
+  _notesRenderAttachments();
 }
 
 function _notesRenderEditor(note = null) {
@@ -757,6 +881,8 @@ function _notesRenderEditor(note = null) {
   const tagsEl = document.getElementById('notes-tags');
   const bodyEl = document.getElementById('notes-body');
   const previewEl = document.getElementById('notes-body-preview');
+  const editBtn = document.getElementById('notes-edit-btn');
+  const doneBtn = document.getElementById('notes-done-btn');
   const pinBtn = document.getElementById('notes-pin-btn');
   const archiveBtn = document.getElementById('notes-archive-btn');
   const deleteBtn = document.getElementById('notes-delete-btn');
@@ -809,6 +935,19 @@ function _notesRenderEditor(note = null) {
   _notesRenderChecklist(note);
   _notesRenderAttachments();
   _notesRenderBodyPreview(note);
+  _notesRenderViewer(note);
+  if (editBtn) editBtn.disabled = !note?.id;
+  if (doneBtn) doneBtn.disabled = !note?.id;
+  if (editBtn) editBtn.hidden = _notesState.view === 'editor';
+  if (doneBtn) doneBtn.hidden = _notesState.view !== 'editor';
+  const viewerEl = document.getElementById('notes-viewer');
+  const editorCards = document.querySelectorAll(
+    '.notes-editor-card-main, .notes-editor-card-checklist, .notes-editor-card-attachments, .notes-editor-card.notes-context-card'
+  );
+  if (viewerEl) viewerEl.hidden = _notesState.view !== 'viewer' || !note?.id;
+  editorCards.forEach(el => {
+    el.hidden = _notesState.view !== 'editor' || !note?.id;
+  });
   _notesSetPreviewMode(_notesState.previewMode && !!note?.id);
   _notesSyncLayout();
 }
@@ -1124,6 +1263,7 @@ async function _notesSaveActiveNote({ immediate = false } = {}) {
     _notesState.lastSavedAt = new Date();
     _notesSetStatus('Saved', `Updated ${_notesDisplayTime(_notesState.lastSavedAt)}`);
     _notesRenderList();
+    _notesRenderViewer(_notesState.currentNote);
   } catch (e) {
     _notesState.saving = false;
     _notesSetStatus('Could not save note', e?.message || '');
@@ -1253,6 +1393,7 @@ async function _notesDeleteActiveNote() {
       await deleteDoc(noteDoc(note.id));
     }
     _notesState.activeNoteId = null;
+    _notesSetView('list');
     _notesRenderEditor(null);
     _notesRenderList();
   } catch (e) {
@@ -1326,6 +1467,7 @@ function _notesSyncFilterButtons() {
 async function _notesSelectNote(noteId) {
   if (!noteId) {
     _notesState.activeNoteId = null;
+    _notesSetView('list');
     _notesRenderEditor(null);
     _notesRenderList();
     return;
@@ -1336,7 +1478,7 @@ async function _notesSelectNote(noteId) {
   const note = _notesState.notes.find(n => n.id === noteId) || null;
   if (!note) return;
   _notesState.activeNoteId = noteId;
-  _notesSetView('editor');
+  _notesSetView('viewer');
   _notesState.currentNote = { ...note, checklistItems: normalizeChecklistItems(note.checklistItems) };
   _notesAttachmentsCache = [];
   _notesRenderEditor(_notesState.currentNote);
@@ -1353,6 +1495,7 @@ function _notesEnsureActiveSelection() {
   if (_notesState.activeNoteId && visible.some(note => note.id === _notesState.activeNoteId)) return;
   if (_notesIsMobileLayout()) {
     _notesState.activeNoteId = null;
+    _notesSetView('list');
     _notesRenderEditor(null);
     _notesSyncLayout();
     return;
@@ -1363,6 +1506,7 @@ function _notesEnsureActiveSelection() {
     return;
   }
   _notesState.activeNoteId = null;
+  _notesSetView('list');
   _notesRenderEditor(null);
 }
 
@@ -1386,7 +1530,7 @@ function _notesResetState() {
   _notesAttachmentsCache = [];
   _notesState.notes = [];
   _notesState.activeNoteId = null;
-  _notesState.view = 'list';
+  _notesSetView('list');
   _notesState.search = '';
   _notesState.filter = 'all';
   _notesState.saving = false;
@@ -1444,6 +1588,7 @@ async function _notesStartListener() {
             _notesRenderEditor(activeNote);
           } else if (!activeNote) {
             _notesState.activeNoteId = null;
+            _notesSetView('list');
             _notesRenderEditor(null);
           }
         }
@@ -1474,6 +1619,7 @@ async function _notesStartListener() {
         _notesRenderEditor(active);
       } else if (!active) {
         _notesState.activeNoteId = null;
+        _notesSetView('list');
         _notesRenderEditor(null);
       }
     }
@@ -1528,7 +1674,7 @@ window.openNotesModal = async function (context = {}, options = {}) {
     _notesState.filter = context.filter || (linkedPressId || issueId ? 'linked' : 'all');
     _notesState.search = '';
     _notesState.activeNoteId = null;
-    _notesState.view = 'list';
+    _notesSetView('list');
     _notesState.currentNote = null;
     _notesState.error = '';
     _notesState.previewMode = false;
@@ -1706,9 +1852,24 @@ document.getElementById('notes-actions-menu')?.querySelectorAll('button[role="me
   });
 });
 document.getElementById('notes-back-btn')?.addEventListener('click', () => {
+  if (_notesState.currentNote?.id && _notesState.dirty) {
+    void _notesSaveActiveNote({ immediate: true });
+  }
   _notesSetView('list');
   _notesRenderEditor(null);
   _notesRenderList();
+});
+document.getElementById('notes-edit-btn')?.addEventListener('click', () => {
+  if (!_notesState.currentNote?.id) return;
+  _notesSetView('editor');
+  _notesRenderEditor(_notesState.currentNote);
+  queueMicrotask(_notesFocusBody);
+});
+document.getElementById('notes-done-btn')?.addEventListener('click', async () => {
+  if (!_notesState.currentNote?.id) return;
+  if (_notesState.dirty) await _notesSaveActiveNote({ immediate: true });
+  _notesSetView('viewer');
+  _notesRenderEditor(_notesState.currentNote);
 });
 document.getElementById('notes-pin-btn')?.addEventListener('click', () => {
   void _notesTogglePin();
@@ -1806,6 +1967,14 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     if (document.getElementById('notes-actions-menu')?.classList.contains('visible')) {
       _notesCloseMenus();
+      return;
+    }
+    if (_notesIsMobileLayout() && (_notesState.view === 'viewer' || _notesState.view === 'editor')) {
+      e.preventDefault();
+      if (_notesState.currentNote?.id && _notesState.dirty) void _notesSaveActiveNote({ immediate: true });
+      _notesSetView('list');
+      _notesRenderEditor(null);
+      _notesRenderList();
       return;
     }
     closeNotesModal();

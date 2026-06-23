@@ -25,9 +25,12 @@
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&family=Nunito:wght@300;400;600;700&family=Space+Grotesk:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,400..700;1,400..700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="./js/build-info.js?v=c7078bc-dc873325"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css" />
+<script src="./js/build-info.js?v=9413548-f9ae44cf"></script>
 <script src="./js/fcm-config.js?v=ae083d6"></script>
-<link rel="stylesheet" href="./css/styles.css?v=c7078bc-dc873325">
+<link rel="stylesheet" href="./css/styles.css?v=9413548-f9ae44cf">
 </head>
 <body>
 
@@ -82,7 +85,7 @@
   <div id="sync-banner" class="visible">
     <div class="sync-dot" id="sync-dot"></div>
     <span id="sync-text" aria-live="polite">Connecting…</span>
-    <span id="app-version-indicator" class="app-version-indicator" title="Current commit version">rev: c7078bc</span>
+    <span id="app-version-indicator" class="app-version-indicator" title="Current commit version">rev: 9413548</span>
     <span id="firestore-io-indicator" class="firestore-io-indicator" title="Estimated Firestore operations for this session">R:0 W:0</span>
   </div>
 
@@ -213,6 +216,10 @@
             <span class="ud-item-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 2h10a1 1 0 011 1v8a1 1 0 01-1 1H5l-3 2V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg></span>
             Messages
             <span class="msg-btn-badge" data-messages-badge style="display:none;">0</span>
+          </button>
+          <button class="user-dropdown-item" id="analytics-btn-menu" type="button" data-shell-action="open-analytics">
+            <span class="ud-item-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 14h12M4 11V5M8 11V3M12 11V7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            Analytics
           </button>
           <!-- Dark/Light toggle -->
           <div class="ud-toggle-row">
@@ -999,10 +1006,42 @@
           <div class="notes-editor-head">
             <button class="btn btn-ghost notes-back-btn" id="notes-back-btn" type="button">← Notes</button>
             <div class="notes-editor-actions">
+              <button class="btn btn-primary" id="notes-edit-btn" type="button">Edit</button>
+              <button class="btn btn-primary" id="notes-done-btn" type="button">Done</button>
               <button class="btn btn-ghost" id="notes-pin-btn" type="button">Pin</button>
               <button class="btn btn-ghost" id="notes-archive-btn" type="button">Archive</button>
               <button class="btn btn-danger" id="notes-delete-btn" type="button">Delete</button>
             </div>
+          </div>
+
+          <div class="notes-viewer" id="notes-viewer" aria-live="polite">
+            <article class="notes-viewer-card note-card">
+              <div class="notes-viewer-title" id="notes-viewer-title">Select a note</div>
+              <div class="notes-viewer-meta" id="notes-viewer-meta">Choose a note from the list to read it.</div>
+              <div class="notes-viewer-tags" id="notes-viewer-tags"></div>
+              <div class="notes-viewer-body" id="notes-viewer-body"></div>
+            </article>
+
+            <section class="notes-viewer-card note-card" id="notes-viewer-checklist-card">
+              <div class="notes-section-head">
+                <div class="notes-section-title">Checklist</div>
+              </div>
+              <div id="notes-viewer-checklist" class="notes-checklist notes-viewer-checklist"></div>
+            </section>
+
+            <section class="notes-viewer-card note-card" id="notes-viewer-attachments-card">
+              <div class="notes-section-head">
+                <div class="notes-section-title">Attachments</div>
+                <div class="notes-editor-updated">Photos and screenshots</div>
+              </div>
+              <div id="notes-viewer-attachments" class="notes-attachments"></div>
+            </section>
+
+            <section class="notes-viewer-card note-card notes-context-card" id="notes-viewer-context-card">
+              <div class="notes-context-label">Linked Context</div>
+              <div class="notes-context-summary" id="notes-viewer-context-summary">Plant-wide note</div>
+              <div id="notes-viewer-context-chips" class="notes-context-chips"></div>
+            </section>
           </div>
 
           <div class="notes-editor-card note-card notes-editor-card-main">
@@ -1776,7 +1815,7 @@
   </div>
 </div>
 
-<script type="module" src="./js/app.js?v=c7078bc-dc873325"></script>
+<script type="module" src="./js/app.js?v=9413548-f9ae44cf"></script>
 
 <!-- MASCOT CHARACTER CARD POPOVER -->
 <div class="mascot-popover-backdrop" id="mascot-popover-backdrop" onclick="if(event.target===this)closeMascotPopover()">
@@ -1804,19 +1843,6 @@
   </div>
   <div class="spt-caret spt-caret-down" id="spt-caret-down" style="display:none"></div>
 </div>
-
-<!-- FLOATING ACTIVE ISSUES HUB FOR MOBILE -->
-<button id="active-issues-hub" class="press-hub-pill hidden" onclick="window.triggerActiveIssuesHub()" style="cursor: pointer; display: flex; align-items: center; justify-content: center; border: none;">
-  <div class="press-hub-badge" style="background: var(--color-danger, var(--red)); margin-right: 6px; pointer-events: none;">
-    <span id="active-issues-count">0</span>
-  </div>
-  <div style="font-weight: 700; font-family: 'Nunito', sans-serif; font-size: 13px; color: var(--color-text, var(--text)); pointer-events: none;">
-    Active Issues
-  </div>
-  <div style="margin-left: 6px; color: var(--color-text-subtle, var(--text3)); pointer-events: none;">
-    <svg viewBox="0 0 16 16" fill="none" width="12" height="12"><path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  </div>
-</button>
 
 <!-- KEYBOARD SHORTCUTS OVERLAY -->
 <div class="modal-overlay" id="shortcuts-overlay" onclick="if(event.target===this)closeShortcutsOverlay()">
@@ -1848,6 +1874,39 @@
         <div class="shortcuts-row"><span class="shortcuts-key">⏎</span><span class="shortcuts-label">Title: focus body</span></div>
         <div class="shortcuts-row"><span class="shortcuts-key">Esc</span><span class="shortcuts-label">Close notes / return to list</span></div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- ANALYTICS MODAL -->
+<div class="modal-overlay" id="analytics-modal" onclick="if(event.target===this)closeAnalyticsModal()">
+  <div class="modal" style="max-width:800px; width:95%; height:85vh; display:flex; flex-direction:column;">
+    <div class="modal-title">📊 Analytics — Days on Hand</div>
+    <div class="modal-subtitle">Compare inventory trends over time.</div>
+    <div class="time-filters" id="doh-time-filters" style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
+      <button class="btn btn-ghost" data-days="7">7D</button>
+      <button class="btn btn-ghost" data-days="30">30D</button>
+      <button class="btn btn-ghost" data-days="90">90D</button>
+      <button class="btn btn-primary" data-days="all">All Time</button>
+    </div>
+    <div class="analytics-part-picker" style="margin-bottom:12px; position:relative; z-index:10;">
+      <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:4px;">
+        <label style="font-size:12px; font-weight:600; color:var(--color-text-subtle, var(--text3));">Selected Parts</label>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <span style="font-size:11px; color:var(--color-text-subtle, var(--text3));">Sort by:</span>
+          <select id="doh-sort-select" style="font-size:11px; padding:2px 4px; border-radius:4px; background:var(--color-surface, var(--bg2)); color:var(--color-text, var(--text)); border:1px solid var(--color-border, var(--border)); outline:none;">
+            <option value="part">Part #</option>
+            <option value="name">Part Name</option>
+          </select>
+        </div>
+      </div>
+      <select id="doh-part-select" multiple></select>
+    </div>
+    <div style="flex:1; position:relative; min-height:0; width:100%; border-radius:12px; background:var(--color-surface, var(--bg2)); padding:12px; border:1px solid var(--color-border, var(--border));">
+      <canvas id="dohChart"></canvas>
+    </div>
+    <div class="modal-actions" style="margin-top:16px;">
+      <button class="btn btn-ghost" onclick="closeAnalyticsModal()">Close</button>
     </div>
   </div>
 </div>

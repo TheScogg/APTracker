@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>DOH Trends Prototype</title>
+  
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  
+  <!-- Choices.js for premium multi-select -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
+
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --accent: #f97316;
+    }
+    * { box-sizing: border-box; }
+    body { 
+      background: var(--bg); color: var(--text); 
+      font-family: 'Inter', 'Nunito', sans-serif; 
+      padding: 12px; margin: 0;
+      -webkit-font-smoothing: antialiased;
+    }
+    .container { max-width: 1000px; margin: 0 auto; width: 100%; }
+    .card { 
+      background: var(--surface); border: 1px solid var(--border); 
+      border-radius: 16px; padding: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.4); 
+    }
+    .header { margin-bottom: 16px; display: flex; flex-direction: column; gap: 12px; }
+    .header-top { display: flex; flex-direction: column; gap: 12px; }
+    h2 { margin: 0 0 4px 0; font-size: 20px; font-weight: 700; letter-spacing: -0.5px; }
+    p { color: var(--text-muted); margin: 0; font-size: 13px; }
+    
+    .controls-row { display: flex; flex-direction: column; gap: 12px; width: 100%; }
+    .control-group { display: flex; flex-direction: column; gap: 6px; width: 100%; }
+    label { font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+    
+    /* Choices.js better dark theme overrides */
+    .choices { margin-bottom: 0; }
+    .choices__inner, .choices[data-type*="select-multiple"] .choices__inner { 
+      background-color: #0d1117 !important; border: 1px solid var(--border) !important; border-radius: 8px !important; min-height: 44px; padding: 4px 8px;
+    }
+    .choices.is-focused .choices__inner { border-color: var(--accent) !important; }
+    .choices__input { background-color: transparent !important; color: var(--text) !important; font-size: 14px; }
+    .choices__list--dropdown, .choices__list[aria-expanded] { background-color: #161b22 !important; border: 1px solid var(--border) !important; color: var(--text) !important; border-radius: 8px !important; box-shadow: 0 8px 24px rgba(0,0,0,0.5) !important; z-index: 10; margin-top: 4px; word-break: break-word; }
+    .choices__list--dropdown .choices__item { color: var(--text) !important; padding: 10px 14px; font-size: 14px; border-bottom: 1px solid #21262d; }
+    .choices__list--dropdown .choices__item--selectable.is-highlighted { background-color: #30363d !important; color: #fff !important; }
+    .choices__list--multiple .choices__item, .choices[data-type*="select-multiple"] .choices__list--multiple .choices__item {
+      background-color: #30363d !important; border: 1px solid #484f58 !important; color: #e6edf3 !important; border-radius: 6px !important; padding: 4px 8px; font-size: 13px; word-break: break-all;
+    }
+    .choices__button, .choices[data-type*="select-multiple"] .choices__button { filter: invert(1) !important; border-left: 1px solid rgba(255,255,255,0.2) !important; margin-left: 6px; }
+    
+    .time-filters { display: flex; gap: 4px; background: #0d1117; padding: 4px; border-radius: 8px; border: 1px solid var(--border); width: 100%; }
+    .time-filters button {
+      background: transparent; border: none; color: var(--text-muted); padding: 8px 0; flex: 1;
+      border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 700; font-family: inherit; transition: 0.2s;
+    }
+    .time-filters button:hover { color: var(--text); background: rgba(255,255,255,0.05); }
+    .time-filters button.active { background: #30363d; color: var(--text); }
+
+    .chart-container { position: relative; height: 350px; width: 100%; margin-top: 8px; }
+
+    /* Desktop overrides */
+    @media (min-width: 768px) {
+      body { padding: 40px 20px; }
+      .card { padding: 24px; }
+      .header-top { flex-direction: row; justify-content: space-between; align-items: flex-start; }
+      h2 { font-size: 24px; }
+      .time-filters { width: fit-content; }
+      .time-filters button { padding: 6px 16px; }
+      .chart-container { height: 500px; }
+      .choices__list--dropdown .choices__item { font-size: 15px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="header">
+        <div class="header-top">
+          <div>
+            <h2>Days on Hand (DOH) Trend</h2>
+            <p>Compare inventory trends over time.</p>
+          </div>
+          <div class="time-filters" id="timeFilters">
+            <button data-days="7">7D</button>
+            <button data-days="30">30D</button>
+            <button data-days="90">90D</button>
+            <button data-days="all" class="active">All Time</button>
+          </div>
+        </div>
+        
+        <div class="controls-row">
+          <div class="control-group">
+            <label for="partSelect">Selected Parts</label>
+            <select id="partSelect" multiple>
+              <option value="265D3484G003">265D3484G003 - 2 Shot Sump - Group 3</option>
+            <option value="290D2710G002">290D2710G002 - 27&quot; Hybrid Basket Bottom</option>
+            <option value="290D1347G003">290D1347G003 - Tall Basket Bottom</option>
+            <option value="265D3220P005">265D3220P005 - Carrier Roller (DDG)</option>
+            <option value="265D3238G001">265D3238G001 - Single Pc Basket (3234) - p1/p2/p3</option>
+            <option value="290D5035G001">290D5035G001 - Agitator Base Hybrid (5035) ASM</option>
+            <option value="290D5040P001">290D5040P001 - Belt Protector</option>
+            <option value="265D3920P001">265D3920P001 - SF SW BASKET</option>
+            <option value="290D5004G001">290D5004G001 - Balance Ring (5005/6)</option>
+            <option value="265D4086G001">265D4086G001 - SF STUD ROLLER ASM UPPER</option>
+            <option value="265D4301P004">265D4301P004 - Console Bracket- New</option>
+            <option value="290D5007G003">290D5007G003 - TL 28' Basket Bottom</option>
+            <option value="265D3975P003">265D3975P003 - SF Mid SA Top & Bottom</option>
+            <option value="265D3974G003">265D3974G003 - SF MID SPRAY ARM- SSG</option>
+            <option value="265D3970G003">265D3970G003 - SF LOWER SPRAY ARM SSG</option>
+            <option value="265D1385P002">265D1385P002 - Conduit Mid Static Single - p1/p2</option>
+            <option value="265D1482P003">265D1482P003 - SF Rack Roller</option>
+            <option value="265D3936P003">265D3936P003 - SF GEControl Panel Dorian Gray</option>
+            <option value="265D1479G006">265D1479G006 - Plastic Bracket (1481- 3 Stud)</option>
+            <option value="290D1335P001">290D1335P001 - Ball Joint</option>
+            <option value="265D3971P003">265D3971P003 - SF Lower SA Top & Bottom - SSG</option>
+            <option value="265D4226P001">265D4226P001 - SF Clip Bridge Upper</option>
+            <option value="239D2360G002">239D2360G002 - Ice Crusher ASM</option>
+            <option value="265D3972P003">265D3972P003 - SF Lower SA Top & Bottom - SSG</option>
+            <option value="265D1378P002">265D1378P002 - Bearing S/A Single - SSG</option>
+            <option value="265D3353P003">265D3353P003 - Sump Latch</option>
+            <option value="265D1377P003">265D1377P003 - Spray Arm Hub- DDG</option>
+            <option value="265D3238G003">265D3238G003 - Single Pc Basket (3234) - MicroBan Blue</option>
+            <option value="290D5061G001">290D5061G001 - Hybrid Impeller (5061)</option>
+            <option value="290D5258P001">290D5258P001 - 28&quot; Console</option>
+            <option value="265D3976P003">265D3976P003 - SF Mid SA Top & Bottom</option>
+            <option value="265D1481P004">265D1481P004 - Plastic Bracket (1481 - stud). p1/p2. RAW</option>
+            <option value="239D2251P002">239D2251P002 - Ice Crusher Bucket</option>
+            <option value="265D3951P002">265D3951P002 - SF Fill Funnel</option>
+            <option value="265D1512P006">265D1512P006 - Roller Lower Rack- p1/p2/p3 - New</option>
+            <option value="239D4586P002">239D4586P002 - Cover Valve and Tank</option>
+            <option value="293D1409G004">293D1409G004 - Room Front- w/ Label- New</option>
+            <option value="239D5772G005">239D5772G005 - DRAWER LOWER ASM FD (5837) White</option>
+            <option value="265D4761P001">265D4761P001 - Attachment Strip Right- New</option>
+            <option value="265D3936P001">265D3936P001 - SF GE Control Panel Black</option>
+            <option value="265D3936P002">265D3936P002 - SF GEControl Panel White</option>
+            <option value="265D2025P002">265D2025P002 - Middle Lid - SSG</option>
+            <option value="265D1512P002">265D1512P002 - Roller Lower Rack p1/p2/p3</option>
+            <option value="265D3933P002">265D3933P002 - SF Hotpoint Control Panel White</option>
+            <option value="239D4533P004">239D4533P004 - LH Inner Door- New</option>
+            <option value="290D2077P002">290D2077P002 - Hinge Bushing Lid RH</option>
+            <option value="265D4791P001">265D4791P001 - White Heater Nut- New</option>
+            <option value="290D2077P001">290D2077P001 - Hinge Bushing Lid LH</option>
+            <option value="265D1967P002">265D1967P002 - Conduit Mid Adj Single p1/p2</option>
+            <option value="265D4761P002">265D4761P002 - Attachment Strip Left- New</option>
+            <option value="265D1386P001">265D1386P001 - Plate Lead Mid Conduit Static Single p1/p2</option>
+            <option value="265D4799P001">265D4799P001 - Plate Lead Adjust- Artemis</option>
+            <option value="265D1483P001">265D1483P001 - Clip Bracket p1/p2</option>
+            <option value="265D4765P001">265D4765P001 - Tub Mount</option>
+            <option value="265D2735P001">265D2735P001 - Hub. p1/p2/p3</option>
+            <option value="265D2026P002">265D2026P002 - End Lid - Shark Skin Gray</option>
+            <option value="265D2314P007">265D2314P007 - Short Cup Shelf DDG New</option>
+            <option value="26503484G003">26503484G003 - 2 Shot Sump Group 3</option>
+            <option value="265D3971P005">265D3971P005 - SF Lower SA Top & Bottom - SSG</option>
+            <option value="265D2736P001">265D2736P001 - Impeller - p1/p2/p3</option>
+            <option value="290D2710G001">290D2710G001 - 27&quot; Hybrid Basket Bottom</option>
+            <option value="239D5772G007">239D5772G007 - DRAWER LOWER ASM CD (0060248048A) White</option>
+            <option value="239D4132P001">239D4132P001 - FZ Slide Holder LH/RH</option>
+            <option value="265034846003">265034846003 - 2 Shot SumpGroup -3</option>
+            <option value="239D4132P002">239D4132P002 - FZ Slide Holder LH/RH</option>
+            <option value="26503220P005">26503220P005 - Integrated Carrier (DDG)</option>
+            <option value="239D1137P003">239D1137P003 - Enclosure MBD Asm</option>
+            <option value="239D2457P001">239D2457P001 - Bin Door FZ</option>
+            <option value="26503920P001">26503920P001 - SF SW BASKET</option>
+            <option value="265D3933P001">265D3933P001 - SF Hotpoint Control Panel Black</option>
+            <option value="265D4701P001">265D4701P001 - Lid Manager</option>
+            <option value="239D4628G001">239D4628G001 - Support Side RH/LH 29 (2501/05)</option>
+            <option value="239D1618P005">239D1618P005 - Slider RH/LH</option>
+            <option value="290D5049P001">290D5049P001 - TL28 Ball Joint</option>
+            <option value="239D4628G003">239D4628G003 - MP Slide Support 23 (2670/71)</option>
+            <option value="265D2001P001">265D2001P001 - Plate Lead Mid Conduit Adj- DDG p1/p2,p3</option>
+            <option value="239D4628G004">239D4628G004 - Support Side RH/LH 23 (2682/83)</option>
+            <option value="29002710G002">29002710G002 - 27&quot; Hybrid Basket Bottom</option>
+            <option value="29005035G001">29005035G001 - Agitator Base Hybrid (5035) ASM</option>
+            <option value="26504301P004">26504301P004 - Console Bracket-New</option>
+            <option value="265D3970G007">265D3970G007 - SF LOWER SPRAY ARM- SSG</option>
+            <option value="290D5007G002">290D5007G002 - TL 28 Basket Bottom</option>
+            <option value="239D1618P006">239D1618P006 - Slider RH/LH</option>
+            <option value="265D1510P001">265D1510P001 - Carrier Roller RT Prod Svc</option>
+            <option value="293D1707P002">293D1707P002 - Shroud OD Fan New</option>
+            <option value="290013470003">290013470003 - Tall Basket Bottom</option>
+            <option value="239D2255P001">239D2255P001 - Crusher Housing (Jones)</option>
+            <option value="239D4437P001">239D4437P001 - Divider Basket Upper</option>
+            <option value="265D1510P002">265D1510P002 - Carrier Roller LT Prod Svc</option>
+            <option value="26501385P002">26501385P002 - Conduit Mid Static Single-p1/p2</option>
+            <option value="26501482P003">26501482P003 - SF Rack Roller</option>
+            <option value="26501377P003">26501377P003 - Spray Arm Hub-DDG</option>
+            <option value="290050046001">290050046001 - Balance Ring (5005/6)</option>
+            <option value="239D2668P001">239D2668P001 - 23&quot; Freezer Tower Meat Pan</option>
+            <option value="26501378P002">26501378P002 - Bearing S/A Single-SSG</option>
+            <option value="239D2287P001">239D2287P001 - Spacer Crusher</option>
+            <option value="26503972P003">26503972P003 - SF Lower SA Top & Bottom - SSG</option>
+            <option value="239D5772G006">239D5772G006 - DRAWER LOWER ASM FD (5837) Gray</option>
+            <option value="290013476003">290013476003 - Tall Basket Bottom</option>
+            <option value="26503353P003">26503353P003 - Sump Latch</option>
+            <option value="26503936P003">26503936P003 - SF GEControl Panel Dorian Gray</option>
+            <option value="29005258P001">29005258P001 - 28&quot; Console</option>
+            <option value="265032386001">265032386001 - Single Pc Basket (3234)-p1/p2/p3</option>
+            <option value="26503238G001">26503238G001 - Single Pc Basket (3234)-p1/p2/p3</option>
+            <option value="265D1511P002">265D1511P002 - Cover Roller LT (Dish Dark Gray) Prod Svc</option>
+            <option value="197D8124P001">197D8124P001 - Ice Bucket</option>
+            <option value="265D4301P003">265D4301P003 - Console Bracket - New</option>
+            <option value="239D1772P003">239D1772P003 - Hinge mullion center</option>
+            <option value="239D2470P001">239D2470P001 - Divider Bottom Basket</option>
+            <option value="290D5040G001">290D5040G001 - Balance Ring (5005/6)</option>
+            <option value="265D3970G004">265D3970G004 - SF LOWER SPRAY ARM- DDG</option>
+            <option value="265D4068G001">265D4068G001 - SF STUD ROLLER ASM UPPER</option>
+            <option value="290050076003">290050076003 - TL 28' Basket Bottom</option>
+            <option value="29002077P002">29002077P002 - Hinge Bushing Lid RH</option>
+            <option value="26501481P004">26501481P004 - Plastic Bracket (1481-3 stud)-p1/p2-RAW</option>
+            <option value="26503975P003">26503975P003 - SF Mid SA Top & Bottom-SSG</option>
+            <option value="26503951P002">26503951P002 - SF Fill Funnel</option>
+            <option value="265039746003">265039746003 - SF MID SPRAY ARM-SSG</option>
+            <option value="290D1287P003">290D1287P003 - Impeller Cap</option>
+            <option value="265D3972G003">265D3972G003 - SF Lower SA Top & Bottom - SSG</option>
+            <option value="265D2954P001">265D2954P001 - Attachment Strip - p1/p2/p3</option>
+            <option value="265D4087G001">265D4087G001 - SF LOWER ROLLER CLIP ASM</option>
+            <option value="29001347G003">29001347G003 - Tall Basket Bottom</option>
+            <option value="265D2025P004">265D2025P004 - Middle Lid - Microban Blue</option>
+            <option value="239D2253P002">239D2253P002 - Cover Crusher</option>
+            <option value="265D3977P003">265D3977P003 - SF Lower SA Top & Bottom - SSG</option>
+            <option value="290027100002">290027100002 - 27 Hybrid Basket Bottom</option>
+            <option value="29001335P001">29001335P001 - Ball Joint</option>
+            <option value="26501483P001">26501483P001 - Clip Bracket-p1/p2</option>
+            <option value="26504226P001">26504226P001 - SF Clip Bridge Upper</option>
+            <option value="26503933P001">26503933P001 - SF Hotpoint Control Panel Black</option>
+            <option value="290050616001">290050616001 - Hybrid Impeller (5061)</option>
+            <option value="26503936P001">26503936P001 - SF GE Control Panel Black</option>
+            <option value="29005004G001">29005004G001 - Balance Ring (5005/6)</option>
+            <option value="26503933P002">26503933P002 - SF Hotpoint Control Panel White</option>
+            <option value="29005040P001">29005040P001 - Belt Protector</option>
+            <option value="265014796006">265014796006 - Plastic Bracket (1481-3 Stud)</option>
+            <option value="265040866001">265040866001 - SF STUD ROLLER ASM UPPER</option>
+            <option value="26503970G003">26503970G003 - SF LOWER SPRAY ARM-SSG</option>
+            <option value="26503936P002">26503936P002 - SF GEControl Panel White</option>
+            <option value="26504086G001">26504086G001 - SF STUD ROLLER ASM UPPER</option>
+            <option value="265039706003">265039706003 - SF LOWER SPRAY ARM-SSG</option>
+            <option value="265D2026P004">265D2026P004 - End Lid - Blue Microban</option>
+            <option value="265D3974G004">265D3974G004 - SF MID SPRAY ARM DDG</option>
+            <option value="265D3975P003 265D3976P003">265D3975P003 265D3976P003 - SF Mid SA Top & Bottom SSG</option>
+            <option value="26503976P003">26503976P003 - SF Mid SA Top & Bottom - SSG</option>
+            <option value="265D3294P001">265D3294P001 - Spray Arm Hub - DDG</option>
+            <option value="265D3976G003">265D3976G003 - SF Mid SA Top & Bottom - SSG</option>
+            <option value="265D3975P003 / 265D3976P003">265D3975P003 / 265D3976P003 - SF Mid SA Top & Bottom - SSG</option>
+            <option value="265D3971P003 / 265D3972P003">265D3971P003 / 265D3972P003 - SF Lower SA Top & Bottom - SSG</option>
+            <option value="265D3179P003">265D3179P003 - SF Lower SA Top & Bottom - SSG</option>
+            <option value="265D3974P003">265D3974P003 - SF Mid SA Top & Bottom-SSG</option>
+            <option value="265D3979G003">265D3979G003 - SF LOWER SPRAY ARM - SSG</option>
+            <option value="265D1511P001">265D1511P001 - Cover Roller RT (Dish Dark Gray) Prod Svc</option>
+            <option value="293014090004">293014090004 - Room Front w/ Label-New</option>
+            <option value="26502025P002">26502025P002 - Middle Lid-SSG</option>
+            <option value="26501386P001">26501386P001 - Plate Lead Mid Conduit Static Single-p1/p2</option>
+            <option value="26504799P001">26504799P001 - Plate Lead Adjust-Artemis</option>
+            <option value="23904586P002">23904586P002 - Cover Valve and Tank</option>
+            <option value="290013359001">290013359001 - Ball Joint</option>
+            <option value="29005061G001">29005061G001 - Hybrid Impeller (5061)</option>
+            <option value="239057726007">239057726007 - DRAWER LOWER ASM CD (0060248048A) White</option>
+            <option value="265034840003">265034840003 - 2 Shot SumpGroup -3</option>
+            <option value="23902360G002">23902360G002 - Ice Crusher ASM</option>
+            <option value="26503974G003">26503974G003 - SF MID SPRAY ARM-SSG</option>
+            <option value="29301707P002">29301707P002 - Shroud OD Fan-New</option>
+            <option value="26504761P001">26504761P001 - Attachment Strip Right-New</option>
+            <option value="26503238G003">26503238G003 - Single Pc Basket (3234) - MicroBan Blue</option>
+            <option value="239057726005">239057726005 - DRAWER LOWER ASM FD (5837) White</option>
+            <option value="29002077P001">29002077P001 - Hinge Bushing Lid LH</option>
+            <option value="23901137P003">23901137P003 - Enclosure MBD Asm</option>
+            <option value="290050356001">290050356001 - Agitator Base Hybrid (5035) ASM</option>
+            <option value="26501512P002">26501512P002 - Roller Lower Rack-p1/p2/p3</option>
+            <option value="239D5772G008">239D5772G008 - DRAWER LOWER ASM CD (0060248048A) Gray</option>
+            <option value="265D4791G001">265D4791G001 - White Heater Nut-New</option>
+            <option value="265D3975G003">265D3975G003 - SF Mid SA Top & Bottom-SSG</option>
+            <option value="206C1833P001">206C1833P001 - Trim Panel Handle</option>
+            <option value="265D3971P003 265D3972P003">265D3971P003 265D3972P003 - SF Lower SA Top & Bottom - SSG</option>
+            <option value="239D1372P003">239D1372P003 - Cover Fan FZ</option>
+            <option value="265D3971P004">265D3971P004 - SF Lower SA Top & Bottom DDG</option>
+            <option value="265D3972P004">265D3972P004 - SF Lower SA Top & Bottom DDG</option>
+            <option value="239D4132P001 23904132P002">239D4132P001 23904132P002 - FZ Slide Holder LH/RH</option>
+            <option value="26503975P003 26503976P003">26503975P003 26503976P003 - SF Mid SA Top & Bottom</option>
+            <option value="26503971P003">26503971P003 - SF Lower SA Top & Bottom - SSG</option>
+            <option value="38383873883 26503972P003">38383873883 26503972P003 - SF Lower SA Top & Bottom - SSG</option>
+            <option value="Sump Cart 265D3484G003">Sump Cart 265D3484G003 - 2 Shot Sump - Group 3</option>
+            <option value="265D4196P001">265D4196P001 - SF ROLLER</option>
+            <option value="265D2723G004">265D2723G004 - Conduit Mid Adj Single - p1/p2</option>
+            <option value="26503976P003 265D3971P00 283838776883">26503976P003 265D3971P00 283838776883 - SF Lower SA Top & Bottom - SSG</option>
+            <option value="265D2178G012">265D2178G012 - 7 Piece Basket Assembly - DDG//ICA Repack</option>
+            <option value="265D1481P005">265D1481P005 - Plastic Bracket (1481 2 stud)- p1/p2 RAW</option>
+            <option value="265D7491P001">265D7491P001 - White Heater Nut - New</option>
+            <option value="290D4187P003">290D4187P003 - Impeller Cap</option>
+            <option value="239D4182P003">239D4182P003 - Slide RH/LH</option>
+            <option value="290D2777P002">290D2777P002 - Hinge Bushing Lid RH</option>
+            <option value="265D3533P003">265D3533P003 - Sump Latch</option>
+            <option value="265D3177P003">265D3177P003 - SF Lower SA Top & Bottom - DDG</option>
+            <option value="230D4268G001">230D4268G001 - Support Side Rail LH 29 (2501/05)</option>
+            <option value="230D2368G002">230D2368G002 - Ice Crusher ASM</option>
+            <option value="265D2032P004">265D2032P004 - Middle Lid - Microban Blue</option>
+            <option value="265D2007P001">265D2007P001 - Plate Lead Mid Convtd Adj - DDG - p1/p2/p3</option>
+            <option value="238D1137P003">238D1137P003 - Enclosure MBD Arm</option>
+            <option value="235D5772G005">235D5772G005 - DRAWER LOWER ASM F/O 8377 White</option>
+            <option value="265D0138P002">265D0138P002 - Conduit Mid Stric Single - p1/p2</option>
+            <option value="265D3178P002">265D3178P002 - Bearing SA Single - SSG</option>
+            <option value="290D3135P001">290D3135P001 - Ball Joint</option>
+            <option value="290D0777P001">290D0777P001 - Hinge Bushing Lid LH</option>
+            <option value="265D2426P001">265D2426P001 - SF Clip Bridge Upper</option>
+            <option value="265D4790P001">265D4790P001 - Plate Lead Adjust - Artmis</option>
+            <option value="265D3195P002">265D3195P002 - SF Fill Funnel</option>
+            <option value="265D3286G003">265D3286G003 - Single Px Basket p3234 - MicroBan Blue</option>
+            <option value="265D3401P004">265D3401P004 - Console Bracket - New</option>
+            <option value="265D3916P003">265D3916P003 - SF GE Control Panel Derian Gray</option>
+            <option value="265D1528P001">265D1528P001 - 2f CPC Basket</option>
+            <option value="233D4628G003">233D4628G003 - MP Slide Support (23/670/7)</option>
+            <option value="23905772G008">23905772G008 - DRAWER LOWER ASM CD (0060248048A) Gray</option>
+            <option value="26504761P002">26504761P002 - Attachment Strip Left-New</option>
+            <option value="265015129002">265015129002 - Roller Lower Rack-p1/p2/p3</option>
+            <option value="26501511P002">26501511P002 - Cover Roller LT (Dish Dark Gray) Prod Svc</option>
+            <option value="26501510P001">26501510P001 - Carrier Roller RT-Prod Svc</option>
+            <option value="265032386003">265032386003 - Single Pc Basket (3234)-MicroBan Blue</option>
+            <option value="2650-39748003">2650-39748003 - SF Mid SA Top & Bottom-SSG</option>
+            <option value="265039778003">265039778003 - SF Lower SA Top & Bottom-SSG</option>
+            <option value="265039222003">265039222003 - SF Lower SA Top & Bottom-SSG</option>
+            <option value="290020779002">290020779002 - Hinge Bushing Lid RH</option>
+            <option value="26501312P002">26501312P002 - Roller Lower Rack-p1/p2/p3</option>
+            <option value="26501967P002">26501967P002 - Conduit Mid Adj Single-p1/p2</option>
+            <option value="265039/5P003">265039/5P003 - SF Mid SA Top & Bottom</option>
+            <option value="265038799003-">265038799003- - SF Mid SA Top & Bottom  SSG</option>
+            <option value="26503977P003-">26503977P003- - SF Lower SA Top & Bottom-SSG</option>
+            <option value="23904628G004">23904628G004 - Support Side RHLH /23 (2682/83)</option>
+            <option value="23904533P004">23904533P004 - LH Inner Door-New.</option>
+            <option value="26501512P006">26501512P006 - Roller Lower Rack-p1/p2/p3-New</option>
+            <option value="29005049P001">29005049P001 - TL.28 Ball Joint</option>
+            <option value="26501511P001">26501511P001 - Cover Roller RT (Dish Dark Gray) Prod Svc</option>
+            <option value="26501510P002">26501510P002 - Carrier Roller LT-Prod Svc</option>
+            <option value="23902251P002">23902251P002 - Ice Crusher Bucket</option>
+            <option value="26503975PUUS">26503975PUUS - SF Mid SA Top & Bottom</option>
+            <option value="265039749003">265039749003 - Unknown Part</option>
+            <option value="28503977P003">28503977P003 - SF Lower SA Top & Bottom-SSG</option>
+            <option value="26501479G006">26501479G006 - Plastic Bracket (1481-3 Stud)</option>
+            <option value="26504701P001">26504701P001 - Lid Manager</option>
+            <option value="239D1177P003">239D1177P003 - Hinge Mullion center</option>
+            <option value="290D2078P001">290D2078P001 - Hinge Bushing Lid LH</option>
+            <option value="265D3929P001">265D3929P001 - SF SW BASKET</option>
+            <option value="265D3973P003">265D3973P003 - SF Mid SA Top & Bottom - SSG</option>
+            <option value="2900134700031">2900134700031 - Tall Basket Bottom</option>
+            <option value="290030076003">290030076003 - TL 28 Basket Bottom</option>
+            <option value="2650348406003">2650348406003 - 2 Shot Sump Group 3</option>
+            <option value="26502026P004">26502026P004 - End Lid-Blue Microban</option>
+            <option value="26504765P001">26504765P001 - Tub Mount</option>
+            <option value="265039339001">265039339001 - SF Hotpoint Control Panel Black</option>
+            <option value="2651039/5P00S">2651039/5P00S - SF Mid SA Top & Bottom</option>
+            <option value="20303973003-">20303973003- - SF Lower SA Top & Bottom-SSG</option>
+            <option value="26501972800">26501972800 - SF Lower SA Top & Bottom-SSG</option>
+            <option value="23904628G003">23904628G003 - MP Slide Support 23 (2670/71)</option>
+            <option value="290027106002">290027106002 - 27&quot; Hybrid Basket Bottom</option>
+            <option value="29301409G004">29301409G004 - Room Front w/ Label-New</option>
+            <option value="239057720006">239057720006 - DRAWER LOWER ASM FD (5837) Gray</option>
+            <option value="265015122006">265015122006 - Roller Lower Rack-p1/p2/p3-New</option>
+            <option value="265014829003">265014829003 - SF Rack Roller</option>
+            <option value="23902253P002">23902253P002 - Cover Crusher</option>
+            <option value="26503879P003">26503879P003 - SF Lower SA Top & Bottom-SSG</option>
+            <option value="265039719003">265039719003 - SF Lower SA Top & Bottom-SSG</option>
+            <option value="23904437P001">23904437P001 - Divider Basket Upper</option>
+            <option value="290050040001">290050040001 - Balance Ring (5005/6)</option>
+            <option value="265D1512G002">265D1512G002 - Roller Lower Rack-p1/p2/p3</option>
+            <option value="265D3977G003">265D3977G003 - SF Lower SA Top & Bottom-SSG</option>
+            <option value="265D3922G003">265D3922G003 - SF Lower SA Top & Bottom-SSG</option>
+            <option value="263D1385P002">263D1385P002 - Condult Mid Static Single-p1 p2</option>
+            <option value="265D1376P002">265D1376P002 - Bearing S/A Single-SSG</option>
+            <option value="265D1512G006">265D1512G006 - Roller Lower Rack-p1/p7/p3-New</option>
+            <option value="265D1391G003">265D1391G003 - SF Lower SA Top & Bottom-SSG</option>
+            <option value="290D1335G001">290D1335G001 - Ball Joint</option>
+            <option value="265D1972G003">265D1972G003 - SF Lower SA Top & Bottom-SSG</option>
+            <option value="265D1397G003">265D1397G003 - SF Lower SA Top & Bottom-SSG</option>
+            <option value="265D3971G003">265D3971G003 - SF Lower SA Top & Bottom - SSG</option>
+            <option value="265D3975P004">265D3975P004 - SF Mid SA Top & Bottom - DDG</option>
+            <option value="265D3976P004">265D3976P004 - SF Mid SA Top & Bottom - SSG</option>
+            <option value="265D39Z6P003">265D39Z6P003 - SF Mid SA Top & Bottom</option>
+            <option value="239D4628G002">239D4628G002 - Support Side RH/LH 29 (2645/46)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      
+      <div class="chart-container">
+        <canvas id="dohChart"></canvas>
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    const series = {"265D1385P002":{"2025-06-02":2.3,"2025-06-03":2.3,"2026-01-05":14,"2026-02-23":1.7,"2026-04-02":7.1,"2026-04-15":1.7,"2026-04-16":1.4,"2026-04-17":1.8,"2026-04-20":1.5,"2026-04-21":1.2,"2026-04-27":1.9,"2026-05-06":1.7,"2026-05-07":1.5,"2026-05-08":1.7,"2026-05-13":1.5,"2026-05-14":1.6,"2026-05-15":1.6,"2026-05-18":1.2,"2026-05-19":1.6,"2026-05-20":1.9,"2026-05-21":2.2,"2026-05-22":1.7,"2026-05-26":1.4,"2026-05-27":1.4,"2026-05-28":1.3,"2026-05-29":1,"2026-06-01":0.8,"2026-06-02":1.9,"2026-06-03":2.1,"2026-06-04":1.7,"2026-06-05":1.4,"2026-06-09":2.4,"2026-06-11":1.8,"2026-06-12":0.8,"2026-06-15":1.3,"2026-06-16":2,"2026-06-17":2.8,"2026-06-18":2.7,"2026-06-22":2.1},"265D1378P002":{"2025-06-02":2.8,"2026-02-23":1.9,"2026-04-02":7.5,"2026-04-08":4.3,"2026-04-15":4.4,"2026-04-16":4.7,"2026-04-17":1.9,"2026-04-20":3.3,"2026-04-27":3,"2026-05-06":34,"2026-05-08":5.1,"2026-05-11":3.6,"2026-05-12":3.6,"2026-05-13":3.4,"2026-05-14":3.8,"2026-05-15":4.1,"2026-05-18":3.2,"2026-05-19":4.4,"2026-05-20":4.6,"2026-05-21":4.8,"2026-05-26":4.7,"2026-05-27":4.3,"2026-05-28":3.5,"2026-05-29":1.7,"2026-06-01":1.1,"2026-06-02":1.9,"2026-06-03":2,"2026-06-04":2.2,"2026-06-05":2.6,"2026-06-09":2.8,"2026-06-10":2.8,"2026-06-11":2.9,"2026-06-12":2.9,"2026-06-15":3.7,"2026-06-16":4.9,"2026-06-17":5.1,"2026-06-18":5.4,"2026-06-22":6.4},"265D1512P006":{"2025-06-02":2.9,"2026-02-23":2.4,"2026-04-02":4.2,"2026-04-08":2.2,"2026-04-15":1.8,"2026-04-16":24,"2026-04-20":3.6,"2026-04-21":3.7,"2026-04-27":2,"2026-05-11":2.2,"2026-05-12":2.2,"2026-05-13":2.1,"2026-05-15":3.2,"2026-05-18":2.4,"2026-05-21":2.2,"2026-05-22":1.7,"2026-05-27":2.1,"2026-05-28":1.9,"2026-05-29":2.1,"2026-06-01":3,"2026-06-02":4.5,"2026-06-03":3.5,"2026-06-04":5.5,"2026-06-16":1.5,"2026-06-17":1.3,"2026-06-18":1.9,"2026-06-22":1.8},"265D3220P005":{"2025-06-02":1,"2025-06-03":0.7,"2026-01-05":1.6,"2026-02-23":2.1,"2026-04-02":5,"2026-04-08":3,"2026-04-10":3.3,"2026-04-15":2.7,"2026-04-16":2.5,"2026-04-17":2.5,"2026-04-20":2.9,"2026-04-21":3.5,"2026-04-27":1.4,"2026-04-29":1.1,"2026-05-06":2.8,"2026-05-07":2.2,"2026-05-08":3.7,"2026-05-11":3.9,"2026-05-12":3.9,"2026-05-13":4.4,"2026-05-14":2.7,"2026-05-15":3.2,"2026-05-18":5.2,"2026-05-19":4.9,"2026-05-20":5.1,"2026-05-21":4.7,"2026-05-22":4.1,"2026-05-26":3.8,"2026-05-27":4.3,"2026-05-28":3.7,"2026-05-29":3.9,"2026-06-01":4.2,"2026-06-02":5,"2026-06-03":3.9,"2026-06-04":4.1,"2026-06-05":4.1,"2026-06-09":5,"2026-06-10":4.8,"2026-06-11":5.5,"2026-06-12":6.2,"2026-06-15":5,"2026-06-16":7.8,"2026-06-17":7.8,"2026-06-18":7.6,"2026-06-22":7.9},"265D2954P001":{"2025-06-02":3.6,"2026-01-05":1.8,"2026-02-23":1.2},"265D1482P003":{"2025-06-02":1.8,"2025-06-03":1,"2026-01-05":1.5,"2026-02-23":2.2,"2026-04-02":3.8,"2026-04-08":4.8,"2026-04-10":2.2,"2026-04-15":2.5,"2026-04-16":2.6,"2026-04-20":2.2,"2026-04-21":2,"2026-04-27":1.7,"2026-05-06":19,"2026-05-07":1,"2026-05-08":1.6,"2026-05-11":0.9,"2026-05-12":0.9,"2026-05-13":0.7,"2026-05-14":1.7,"2026-05-18":1.2,"2026-05-19":2.1,"2026-05-20":2.1,"2026-05-21":1.5,"2026-05-22":1.1,"2026-05-26":1.5,"2026-05-27":2,"2026-05-28":2.5,"2026-05-29":2.4,"2026-06-01":2.3,"2026-06-02":2.3,"2026-06-03":2.4,"2026-06-05":1.9,"2026-06-09":1.3,"2026-06-10":1.1,"2026-06-11":0.8,"2026-06-12":0.9,"2026-06-15":1.7,"2026-06-16":1.2,"2026-06-17":1.5,"2026-06-18":1,"2026-06-22":0.9},"265D1479G006":{"2025-06-02":1.1,"2025-06-03":1.7,"2026-01-05":0.7,"2026-02-23":3.3,"2026-03-09":2.2,"2026-04-02":3.2,"2026-04-08":5.7,"2026-04-10":3.5,"2026-04-15":2.7,"2026-04-16":2.5,"2026-04-20":2.2,"2026-04-21":1.2,"2026-04-27":1.8,"2026-05-06":1.6,"2026-05-07":1.9,"2026-05-08":1.9,"2026-05-11":2,"2026-05-12":2,"2026-05-13":1.9,"2026-05-14":1.5,"2026-05-15":1.1,"2026-05-18":1.3,"2026-05-19":2,"2026-05-20":1.5,"2026-05-21":1.5,"2026-05-22":2.4,"2026-05-26":2.4,"2026-05-27":2.7,"2026-05-28":2.2,"2026-05-29":2,"2026-06-01":1.9,"2026-06-02":1.8,"2026-06-03":1.1,"2026-06-04":1.6,"2026-06-05":1.3,"2026-06-09":1.9,"2026-06-10":2.1,"2026-06-11":1.7,"2026-06-12":1.2,"2026-06-15":1.1,"2026-06-16":1.3,"2026-06-17":1.4,"2026-06-18":1.9,"2026-06-22":1.5},"265D1512P002":{"2025-06-02":1.8,"2025-06-03":0.3,"2026-01-05":2.9,"2026-02-23":1.6,"2026-04-15":0.5,"2026-04-16":1.9,"2026-04-21":3.1,"2026-05-13":2.1,"2026-05-18":4.2,"2026-05-19":2,"2026-05-27":4,"2026-05-28":5,"2026-06-03":2,"2026-06-04":2.2,"2026-06-09":3.6,"2026-06-10":2.1,"2026-06-12":4,"2026-06-15":3.1,"2026-06-16":5.3,"2026-06-17":6.6},"290D1335P001":{"2025-06-02":1.6,"2025-06-03":0.6,"2026-01-05":2,"2026-02-23":3.4,"2026-04-02":0.9,"2026-04-08":1.4,"2026-04-10":1.1,"2026-04-15":1.9,"2026-04-16":1.2,"2026-04-17":1.9,"2026-04-20":0.9,"2026-04-27":3.2,"2026-05-06":1.3,"2026-05-07":1.3,"2026-05-11":2.1,"2026-05-12":2.1,"2026-05-13":1.4,"2026-05-14":2.4,"2026-05-15":1.5,"2026-05-18":1.1,"2026-05-19":1.9,"2026-05-20":1.7,"2026-05-21":1.3,"2026-05-22":0.5,"2026-05-26":2,"2026-05-27":2.8,"2026-05-28":2.5,"2026-05-29":3.6,"2026-06-01":2.6,"2026-06-02":3.9,"2026-06-03":3.2,"2026-06-04":1.3,"2026-06-05":2.4,"2026-06-09":1.5,"2026-06-10":2.8,"2026-06-11":2,"2026-06-12":3,"2026-06-15":2.7,"2026-06-16":2.5,"2026-06-17":1.6,"2026-06-18":2.5,"2026-06-22":1.4},"265D2736P001":{"2025-06-02":3.4,"2025-06-03":4.3,"2026-04-08":3,"2026-04-10":6.2,"2026-05-08":2.4,"2026-05-11":3.5,"2026-05-12":3.5,"2026-05-13":7.3,"2026-05-14":9.1,"2026-06-16":0,"2026-06-17":0.4,"2026-06-18":2.3},"265D4226P001":{"2025-06-02":1.3,"2025-06-03":1.6,"2026-01-05":1.4,"2026-02-23":0,"2026-04-02":6.2,"2026-04-08":2.8,"2026-04-15":1.8,"2026-04-16":22,"2026-04-17":2.1,"2026-04-20":1.4,"2026-04-27":0.6,"2026-05-06":1.6,"2026-05-07":1.2,"2026-05-11":0.1,"2026-05-12":0.1,"2026-05-13":0.6,"2026-05-14":1.1,"2026-05-15":1.6,"2026-05-18":1.6,"2026-05-19":1.3,"2026-05-20":1.5,"2026-05-21":1.3,"2026-05-22":1.7,"2026-05-26":2.5,"2026-05-28":2.7,"2026-05-29":2.1,"2026-06-01":1.5,"2026-06-02":1.8,"2026-06-03":2,"2026-06-04":2.4,"2026-06-05":1.7,"2026-06-09":0.6,"2026-06-10":0.3,"2026-06-11":0.5,"2026-06-12":0.4,"2026-06-15":0,"2026-06-16":1.1,"2026-06-17":1.2,"2026-06-18":1.4,"2026-06-22":1.6},"265D3353P003":{"2025-06-02":2.9,"2026-02-23":2.6,"2026-04-02":7.1,"2026-04-10":2.9,"2026-04-16":22,"2026-04-17":2.4,"2026-04-21":2.3,"2026-04-27":2.1,"2026-05-06":21,"2026-05-07":2,"2026-05-08":2.2,"2026-05-11":2.2,"2026-05-12":2.2,"2026-05-13":2.3,"2026-05-15":2.1,"2026-05-18":1.8,"2026-05-19":1.9,"2026-05-20":2.1,"2026-05-22":2.6,"2026-05-26":2.2,"2026-05-27":2.4,"2026-05-28":2.6,"2026-05-29":2,"2026-06-01":1.3,"2026-06-02":1.5,"2026-06-03":1.7,"2026-06-04":1.8,"2026-06-05":1.7,"2026-06-09":1.8,"2026-06-10":1.8,"2026-06-11":2.2,"2026-06-12":2.3,"2026-06-15":2.3,"2026-06-16":2.4,"2026-06-17":2.8,"2026-06-18":2.7},"265D2735P001":{"2025-06-02":10.1,"2026-04-08":2.3,"2026-04-10":5.6,"2026-04-15":1.8,"2026-04-16":8.8,"2026-04-17":9.8,"2026-05-13":6,"2026-05-18":8.8,"2026-05-19":8.4,"2026-05-20":9.3,"2026-06-15":11.5,"2026-06-16":3,"2026-06-17":4.9,"2026-06-18":6.8,"2026-06-22":8.7},"265D2026P002":{"2025-06-02":2.7,"2026-04-21":2.5,"2026-04-27":3.4,"2026-05-08":2.9,"2026-05-14":2.1,"2026-05-15":1.9,"2026-05-21":2.6,"2026-05-26":4,"2026-05-28":2.8,"2026-06-04":2.8,"2026-06-05":1.9,"2026-06-11":2.1,"2026-06-12":2.3,"2026-06-17":4.4,"2026-06-18":3.5},"265D2001P001":{"2025-06-02":4.3,"2026-01-05":1.1,"2026-04-21":3.5,"2026-05-07":6,"2026-05-14":2.6,"2026-06-01":2.3,"2026-06-10":1,"2026-06-11":0.2},"265D3294P001":{"2025-06-02":1.8,"2025-06-03":1.8},"265D3933P002":{"2025-06-02":1.2,"2026-04-02":12.1,"2026-04-15":1.5,"2026-04-17":0.9,"2026-04-20":0.5,"2026-04-21":0.4,"2026-05-14":1.1,"2026-05-15":1,"2026-05-18":4,"2026-05-19":4.2,"2026-05-20":3.9,"2026-05-22":6.7,"2026-05-26":4.8,"2026-06-03":0.2,"2026-06-04":1,"2026-06-09":1.2,"2026-06-10":2.6,"2026-06-11":2.8,"2026-06-17":3.7},"265D3920P001":{"2025-06-02":1.7,"2025-06-03":1.5,"2026-01-05":1.2,"2026-02-23":1.1,"2026-04-02":5.3,"2026-04-15":1.1,"2026-04-16":1.5,"2026-04-17":1.4,"2026-04-20":1.3,"2026-04-21":1.1,"2026-05-06":1,"2026-05-07":1.8,"2026-05-08":1.7,"2026-05-11":1.5,"2026-05-12":1.5,"2026-05-13":1.7,"2026-05-14":1.5,"2026-05-15":1.8,"2026-05-18":1.5,"2026-05-19":1.9,"2026-05-20":1.8,"2026-05-21":1.9,"2026-05-22":1.4,"2026-05-26":1.3,"2026-05-27":1.4,"2026-05-28":1.1,"2026-05-29":1.6,"2026-06-01":1.2,"2026-06-02":1.5,"2026-06-03":1.2,"2026-06-04":1.3,"2026-06-05":1,"2026-06-09":1,"2026-06-10":1.5,"2026-06-11":0.8,"2026-06-15":1.8,"2026-06-17":1.3,"2026-06-18":1.3,"2026-06-22":1.2},"290D5040P001":{"2025-06-02":0.1,"2025-06-03":1.4,"2026-01-05":0.9,"2026-02-23":0.6,"2026-04-02":1.2,"2026-04-08":0.5,"2026-04-10":1.1,"2026-04-15":1.4,"2026-04-16":1.2,"2026-04-17":0.3,"2026-04-20":0.1,"2026-04-21":1.5,"2026-04-27":0.2,"2026-04-29":0.4,"2026-05-07":0.2,"2026-05-11":1.6,"2026-05-12":1.6,"2026-05-13":0.4,"2026-05-14":0.4,"2026-05-15":0.8,"2026-05-18":1.1,"2026-05-19":1,"2026-05-20":1,"2026-05-21":0.2,"2026-05-22":1.7,"2026-05-26":0.4,"2026-05-29":0.9,"2026-06-01":1,"2026-06-02":1.1,"2026-06-03":0.9,"2026-06-04":1.7,"2026-06-05":1.2,"2026-06-09":0.5,"2026-06-10":1.6,"2026-06-11":1.8,"2026-06-12":0.3,"2026-06-15":1.4,"2026-06-16":1.3,"2026-06-17":2.3,"2026-06-18":0.8,"2026-06-22":0.8},"239D4132P001 23904132P002":{"2025-06-02":2.1},"239D2668P001":{"2025-06-02":3.1,"2025-06-03":9.2,"2026-01-05":0.2,"2026-04-17":3,"2026-06-18":3.6},"197D8124P001":{"2025-06-02":8.4,"2025-06-03":9.7,"2026-04-02":5.3,"2026-06-18":8.6},"265D3951P002":{"2025-06-02":2.1,"2026-04-02":3.8,"2026-04-15":1.2,"2026-04-16":1.7,"2026-04-17":1.3,"2026-05-07":1.1,"2026-05-08":1.1,"2026-05-14":1.5,"2026-05-15":1,"2026-05-18":1.1,"2026-05-19":1.5,"2026-05-20":2,"2026-05-22":1.9,"2026-05-26":1.3,"2026-05-27":1.6,"2026-05-28":1.3,"2026-05-29":1.9,"2026-06-01":0.8,"2026-06-02":1.3,"2026-06-03":1.9,"2026-06-05":2.1,"2026-06-10":2.5,"2026-06-11":1.3,"2026-06-16":1.6,"2026-06-17":1.2,"2026-06-18":1.7,"2026-06-22":1.3},"239D2251P002":{"2025-06-02":2.8,"2025-06-03":1.7,"2026-02-23":3.8,"2026-04-02":7.1,"2026-04-10":3.9,"2026-04-15":1.9,"2026-04-16":3.3,"2026-05-11":2.6,"2026-05-12":2.6,"2026-05-13":4.6,"2026-05-14":4.7,"2026-05-18":2.1,"2026-05-19":4.5,"2026-05-20":4.5,"2026-05-21":5.1,"2026-05-22":5.4,"2026-06-01":2.5,"2026-06-02":2.3,"2026-06-03":2.2,"2026-06-04":2.2,"2026-06-05":5.3,"2026-06-09":3.4,"2026-06-10":4.1,"2026-06-11":5.8,"2026-06-15":2.3,"2026-06-16":4.4,"2026-06-17":3.2,"2026-06-18":3.6,"2026-06-22":3.9},"290D5035G001":{"2025-06-02":0.5,"2025-06-03":0.2,"2026-01-05":0.3,"2026-02-23":0.6,"2026-04-02":0.7,"2026-04-08":0.3,"2026-04-10":0.5,"2026-04-15":1.2,"2026-04-16":0.5,"2026-04-17":1.4,"2026-04-20":2.5,"2026-04-21":2.8,"2026-04-27":3.2,"2026-05-06":4,"2026-05-07":1.3,"2026-05-08":2,"2026-05-11":1.2,"2026-05-12":1.2,"2026-05-13":1.2,"2026-05-14":1.9,"2026-05-15":2.8,"2026-05-18":1,"2026-05-19":2.8,"2026-05-20":2,"2026-05-21":2,"2026-05-22":2.4,"2026-05-26":1.4,"2026-05-27":0.3,"2026-05-28":1.2,"2026-05-29":2.1,"2026-06-01":1.8,"2026-06-02":1,"2026-06-03":0.5,"2026-06-04":0.3,"2026-06-05":0.1,"2026-06-09":0.5,"2026-06-10":0.3,"2026-06-11":0.2,"2026-06-12":0.4,"2026-06-15":0.2,"2026-06-16":0.6,"2026-06-17":0.7,"2026-06-18":1.3,"2026-06-22":0.5},"290D5061G001":{"2025-06-02":1.3,"2026-01-05":0.9,"2026-04-02":1.1,"2026-04-08":1.1,"2026-04-10":0.6,"2026-04-15":0.4,"2026-04-16":1.5,"2026-04-17":6.4,"2026-04-20":0.6,"2026-04-27":0.6,"2026-05-06":1.7,"2026-05-07":1.5,"2026-05-08":1.7,"2026-05-11":1.7,"2026-05-12":1.7,"2026-05-13":0.5,"2026-05-14":0.8,"2026-05-15":1.1,"2026-05-18":0.9,"2026-05-19":1.9,"2026-05-20":2.2,"2026-05-22":0.5,"2026-05-26":0.4,"2026-05-28":0.6,"2026-05-29":2,"2026-06-01":1.7,"2026-06-02":0.6,"2026-06-03":0.6,"2026-06-04":0.4,"2026-06-05":0.4,"2026-06-09":0,"2026-06-12":0.3,"2026-06-15":0.3,"2026-06-16":0,"2026-06-17":0.1,"2026-06-18":0.3,"2026-06-22":0.8},"265D3238G003":{"2025-06-02":2.1,"2026-01-05":2.5,"2026-04-02":2.7,"2026-04-08":1.7,"2026-04-15":2.5,"2026-04-17":3.4,"2026-04-20":2.3,"2026-04-23":25,"2026-04-27":4,"2026-05-06":2,"2026-05-07":2.9,"2026-05-11":2,"2026-05-12":2,"2026-05-13":2.1,"2026-05-14":1.6,"2026-05-15":1.2,"2026-05-18":2.2,"2026-05-19":1.5,"2026-05-20":1.5,"2026-05-21":1.5,"2026-05-22":1.1,"2026-05-26":1.6,"2026-05-27":2.4,"2026-05-28":2.8,"2026-05-29":2.3,"2026-06-01":1.8,"2026-06-02":1.4,"2026-06-03":1.3,"2026-06-04":1.3,"2026-06-05":1.4,"2026-06-09":1.8,"2026-06-10":2.1,"2026-06-11":1.5,"2026-06-12":1.1,"2026-06-15":1.9,"2026-06-16":2.1,"2026-06-17":3,"2026-06-18":1.5},"265D4301P003":{"2025-06-02":2.6,"2025-06-03":3.1},"265D3936P003":{"2025-06-02":2,"2025-06-03":3.1,"2026-01-05":1.7,"2026-02-23":2.3,"2026-04-02":4.6,"2026-04-16":1.9,"2026-04-17":1.9,"2026-04-20":1.5,"2026-04-27":1.6,"2026-05-06":1.4,"2026-05-07":1.9,"2026-05-08":1.8,"2026-05-11":2,"2026-05-12":2,"2026-05-13":2,"2026-05-14":2,"2026-05-15":1.5,"2026-05-18":0.7,"2026-05-19":1,"2026-05-20":1.5,"2026-05-21":2.1,"2026-05-22":1.7,"2026-05-26":1.8,"2026-05-27":1.1,"2026-05-28":1.5,"2026-05-29":1.6,"2026-06-01":2.4,"2026-06-02":1.9,"2026-06-03":1.3,"2026-06-04":1.4,"2026-06-05":1.2,"2026-06-09":2,"2026-06-10":1.8,"2026-06-11":1.4,"2026-06-15":1,"2026-06-16":0.9,"2026-06-17":1.7,"2026-06-18":2,"2026-06-22":1.6},"265D3936P001":{"2025-06-02":2,"2026-01-05":2.1,"2026-02-23":3,"2026-04-02":5.5,"2026-04-15":2.1,"2026-04-17":1.7,"2026-04-20":1.3,"2026-05-06":2.4,"2026-05-07":2.2,"2026-05-13":2.5,"2026-05-14":2.2,"2026-05-19":2.3,"2026-05-21":1.7,"2026-05-26":1.6,"2026-05-27":1.6,"2026-05-28":2.6,"2026-06-01":2.7,"2026-06-03":2.6,"2026-06-05":1.7,"2026-06-09":2.4,"2026-06-10":1.4},"290D5258P001":{"2025-06-02":3.3,"2025-06-03":2.9,"2026-01-05":1.7,"2026-04-02":1.8,"2026-04-08":0.4,"2026-04-10":0.5,"2026-04-15":0.1,"2026-04-16":1.5,"2026-04-17":1.3,"2026-04-20":2.2,"2026-05-06":1.3,"2026-05-08":2.9,"2026-05-13":2.3,"2026-05-14":2,"2026-05-15":0.4,"2026-05-18":0.1,"2026-05-19":0.1,"2026-05-20":0.9,"2026-05-21":1.4,"2026-05-22":1.7,"2026-05-26":0.5,"2026-05-27":1,"2026-05-28":2.5,"2026-05-29":1.6,"2026-06-01":1.5,"2026-06-02":2,"2026-06-03":1.4,"2026-06-04":1.7,"2026-06-05":2,"2026-06-09":2.7,"2026-06-10":2.4,"2026-06-11":1.6,"2026-06-15":3,"2026-06-16":1.3,"2026-06-17":2.3,"2026-06-18":2,"2026-06-22":1.8},"265D3238G001":{"2025-06-02":1.5,"2025-06-03":1.3,"2026-01-05":0.9,"2026-02-23":1,"2026-03-09":13,"2026-04-02":2.5,"2026-04-08":1.7,"2026-04-15":1.2,"2026-04-16":0.8,"2026-04-17":1,"2026-04-20":1.2,"2026-04-21":1.1,"2026-04-27":1,"2026-05-06":1,"2026-05-07":1.3,"2026-05-08":1.3,"2026-05-11":1.3,"2026-05-12":1.3,"2026-05-13":1.2,"2026-05-14":1.3,"2026-05-15":1.3,"2026-05-18":1.3,"2026-05-19":1.2,"2026-05-20":1.3,"2026-05-21":1.2,"2026-05-22":1.4,"2026-05-26":1.5,"2026-05-27":1.4,"2026-05-28":1.5,"2026-05-29":1.2,"2026-06-01":1.2,"2026-06-02":1.1,"2026-06-03":0.8,"2026-06-04":1.1,"2026-06-05":0.9,"2026-06-09":1.1,"2026-06-10":0.7,"2026-06-11":1.1,"2026-06-12":1.2,"2026-06-15":1.1,"2026-06-16":1.2,"2026-06-17":1.1,"2026-06-18":1.3,"2026-06-22":1.1},"26503975P003 26503976P003":{"2025-06-02":1.8},"26503971P003":{"2025-06-02":1.3},"38383873883 26503972P003":{"2025-06-02":1.3},"239D4628G004":{"2025-06-02":4.6,"2026-02-23":2.4,"2026-04-08":1.7,"2026-04-20":0.8,"2026-05-20":2.9,"2026-06-03":3.4,"2026-06-15":3.4,"2026-06-22":3},"239D4586P002":{"2025-06-02":4.9,"2025-06-03":4.5,"2026-01-05":5.1,"2026-04-10":8.8,"2026-04-16":3.8,"2026-04-20":4.2,"2026-05-06":3,"2026-05-07":7.3,"2026-05-11":8.5,"2026-05-12":8.5,"2026-05-13":7.6,"2026-05-14":1.3,"2026-05-15":2,"2026-05-19":8.7,"2026-05-21":8.2,"2026-05-26":9.4,"2026-05-27":10,"2026-05-28":10.3,"2026-06-01":10.6,"2026-06-05":8.6,"2026-06-09":8.4,"2026-06-10":7.8,"2026-06-11":7.7,"2026-06-12":7.1,"2026-06-15":7.2,"2026-06-17":7.5,"2026-06-22":6.9},"290D5004G001":{"2025-06-02":0.7,"2025-06-03":1,"2026-01-05":1.8,"2026-02-23":0,"2026-04-02":2.9,"2026-04-08":1,"2026-04-10":0.8,"2026-04-16":2.3,"2026-04-17":2.2,"2026-04-20":1.7,"2026-04-27":0.4,"2026-05-06":2.2,"2026-05-07":0.8,"2026-05-08":1.5,"2026-05-11":4.2,"2026-05-12":4.2,"2026-05-13":1.4,"2026-05-14":0.4,"2026-05-15":1.8,"2026-05-18":1.4,"2026-05-19":0.4,"2026-05-20":0.8,"2026-05-21":0.4,"2026-05-22":1.4,"2026-05-26":0.8,"2026-05-27":0.7,"2026-05-28":0.4,"2026-05-29":0.5,"2026-06-01":1.3,"2026-06-02":0.8,"2026-06-03":2.6,"2026-06-04":2,"2026-06-05":3.9,"2026-06-09":1.9,"2026-06-10":1.8,"2026-06-11":1.5,"2026-06-12":1.2,"2026-06-15":1.2,"2026-06-16":0,"2026-06-17":1.4,"2026-06-18":1.6,"2026-06-22":1.1},"290D1347G003":{"2025-06-02":1.4,"2025-06-03":0.9,"2026-01-05":0.5,"2026-02-23":0.7,"2026-03-09":2,"2026-04-02":0.5,"2026-04-08":0.6,"2026-04-10":0,"2026-04-15":0.9,"2026-04-16":1.2,"2026-04-17":0.6,"2026-04-20":0.6,"2026-04-21":0.7,"2026-04-27":1.3,"2026-05-06":12,"2026-05-07":0.7,"2026-05-08":0.6,"2026-05-11":0.3,"2026-05-12":0.3,"2026-05-13":0.6,"2026-05-14":0.8,"2026-05-15":0.6,"2026-05-18":0.9,"2026-05-19":1.1,"2026-05-20":1,"2026-05-21":0.5,"2026-05-22":0.8,"2026-05-26":0.8,"2026-05-27":0.9,"2026-05-28":0.4,"2026-05-29":1,"2026-06-01":0.6,"2026-06-02":1.2,"2026-06-03":1.3,"2026-06-04":1.3,"2026-06-05":1.5,"2026-06-09":1.1,"2026-06-10":1.6,"2026-06-11":2.3,"2026-06-12":1.9,"2026-06-15":1.1,"2026-06-16":1,"2026-06-17":1.2,"2026-06-18":1.2,"2026-06-22":1},"290D2710G001":{"2025-06-02":0.7,"2025-06-03":0.9,"2026-01-05":0},"290D5007G002":{"2025-06-02":1.9,"2025-06-03":0.9,"2026-01-05":0},"293D1409G004":{"2025-06-02":2.2,"2025-06-03":2.9,"2026-04-08":2.1,"2026-04-10":1.8,"2026-04-17":1.2,"2026-04-20":0,"2026-04-21":0.4,"2026-04-27":1.9,"2026-05-06":1.8,"2026-05-08":1.2,"2026-05-11":1.5,"2026-05-12":1.5,"2026-05-19":2.6,"2026-05-21":2.8,"2026-05-22":2.4,"2026-05-27":4.5,"2026-06-01":3.1,"2026-06-02":4.2,"2026-06-04":3.4,"2026-06-10":2.8,"2026-06-12":3.5,"2026-06-15":2.6,"2026-06-17":1.4,"2026-06-18":0.4,"2026-06-22":0.9},"239D4533P004":{"2025-06-02":5.6,"2025-06-03":6,"2026-01-05":2.4,"2026-02-23":3.4,"2026-04-02":4.2,"2026-04-10":24,"2026-04-15":2.4,"2026-04-21":0.9,"2026-05-11":1.8,"2026-05-12":1.8,"2026-05-13":2.6,"2026-05-20":2.2,"2026-05-26":2,"2026-05-29":1.9,"2026-06-03":2,"2026-06-09":1,"2026-06-11":2.7,"2026-06-17":1.5,"2026-06-22":2.8},"239D5772G007":{"2025-06-02":4.9,"2026-01-05":0.7,"2026-03-09":1.9,"2026-04-08":2.8,"2026-04-16":5.6,"2026-04-17":5.9,"2026-05-18":2.7,"2026-05-27":2.1,"2026-05-29":3.2,"2026-06-01":2.4,"2026-06-09":0.7,"2026-06-16":0.8},"265D3484G003":{"2025-06-02":0.7,"2025-06-03":0.7,"2026-01-05":0.8,"2026-02-23":0.6,"2026-03-09":0.8,"2026-04-02":2.1,"2026-04-08":1.7,"2026-04-10":1,"2026-04-15":0.7,"2026-04-16":0.7,"2026-04-17":0.7,"2026-04-20":0.7,"2026-04-21":0.6,"2026-04-27":0.7,"2026-05-06":0.7,"2026-05-07":0,"2026-05-08":0,"2026-05-11":0.3,"2026-05-12":0.8,"2026-05-13":0.7,"2026-05-14":0.8,"2026-05-15":0.7,"2026-05-18":0.7,"2026-05-19":0.7,"2026-05-20":0.7,"2026-05-21":0.7,"2026-05-22":0.7,"2026-05-26":0.8,"2026-05-27":0.8,"2026-05-28":0.8,"2026-05-29":0.7,"2026-06-01":0.7,"2026-06-02":0.7,"2026-06-03":0.7,"2026-06-04":0.8,"2026-06-05":0.8,"2026-06-09":0.6,"2026-06-10":0.7,"2026-06-11":0.7,"2026-06-12":0.7,"2026-06-15":0.6,"2026-06-16":0.7,"2026-06-17":0.7,"2026-06-18":0.8,"2026-06-22":0.8},"Sump Cart 265D3484G003":{"2025-06-02":0.7},"265D4087G001":{"2025-06-02":2.1,"2025-06-03":2.2},"265D4086G001":{"2025-06-02":2.1,"2025-06-03":1.7,"2026-01-05":0.9,"2026-02-23":2.8,"2026-03-09":20,"2026-04-02":6,"2026-04-15":1.4,"2026-04-16":0.9,"2026-04-17":0.9,"2026-04-21":1.2,"2026-05-06":14,"2026-05-07":1.7,"2026-05-08":1.2,"2026-05-11":2.3,"2026-05-12":2.3,"2026-05-13":1.9,"2026-05-14":1.5,"2026-05-15":0.9,"2026-05-18":1.7,"2026-05-19":2,"2026-05-20":1.6,"2026-05-21":2,"2026-05-22":2.2,"2026-05-26":1.9,"2026-05-27":1.9,"2026-05-28":2.2,"2026-05-29":2.1,"2026-06-01":1.3,"2026-06-03":1.5,"2026-06-04":1.8,"2026-06-05":1.4,"2026-06-09":1,"2026-06-10":1.8,"2026-06-11":1.7,"2026-06-12":1.4,"2026-06-15":1.6,"2026-06-16":1.7,"2026-06-17":1.8,"2026-06-18":1.8,"2026-06-22":1.7},"265D3970G003":{"2025-06-02":5.6,"2025-06-03":6.2,"2026-01-05":2.7,"2026-02-23":2.6,"2026-03-09":3.1,"2026-04-02":11.6,"2026-04-08":9.1,"2026-04-10":5.1,"2026-04-15":4.2,"2026-04-16":4,"2026-04-17":4.4,"2026-04-20":3.8,"2026-04-27":3.3,"2026-05-06":5.5,"2026-05-08":4.5,"2026-05-11":4.1,"2026-05-12":4.1,"2026-05-13":4.3,"2026-05-14":4.7,"2026-05-15":4.3,"2026-05-18":5.3,"2026-05-19":3.9,"2026-05-20":4.5,"2026-05-21":4.8,"2026-05-22":4.7,"2026-05-26":4.3,"2026-05-27":4.4,"2026-05-28":5,"2026-05-29":5.4,"2026-06-01":6.3,"2026-06-02":5.8,"2026-06-03":5.6,"2026-06-04":5.3,"2026-06-05":4.5,"2026-06-09":4,"2026-06-10":3.7,"2026-06-11":4,"2026-06-12":4.5},"265D3974G003":{"2025-06-02":6.9,"2025-06-03":6.5,"2026-01-05":4.5,"2026-02-23":4,"2026-03-09":3.7,"2026-04-02":8.9,"2026-04-08":5.6,"2026-04-10":5,"2026-04-15":4.9,"2026-04-16":4.7,"2026-04-17":4.6,"2026-04-20":4,"2026-04-21":4,"2026-04-27":3.9,"2026-05-06":3.7,"2026-05-07":1.2,"2026-05-08":4.3,"2026-05-11":3.9,"2026-05-12":3.9,"2026-05-13":3.9,"2026-05-14":3.9,"2026-05-15":4.3,"2026-05-18":5.8,"2026-05-19":4.8,"2026-05-20":4.4,"2026-05-21":4.1,"2026-05-22":4.4,"2026-05-26":5.1,"2026-05-27":4.8,"2026-05-28":4.6,"2026-05-29":4.3,"2026-06-01":5.2,"2026-06-02":5.5,"2026-06-03":5.8,"2026-06-04":6.2,"2026-06-05":6,"2026-06-09":5.3,"2026-06-10":5.2,"2026-06-11":4.8,"2026-06-12":4.6,"2026-06-15":5.3,"2026-06-16":5.1,"2026-06-17":5.3,"2026-06-18":5.6,"2026-06-22":5.1},"265D1386P001":{"2025-06-02":2.8,"2025-06-03":2.1,"2026-01-05":2.6,"2026-04-15":1.4,"2026-05-06":24,"2026-05-07":2.3,"2026-05-08":1.3,"2026-05-15":2.5,"2026-05-18":1.6,"2026-05-21":2.2,"2026-05-28":2.2,"2026-06-02":3.1,"2026-06-03":2.1,"2026-06-05":2.3,"2026-06-11":2.7,"2026-06-12":1.6,"2026-06-17":2.8},"265D3933P001":{"2025-06-02":1.5,"2026-05-06":1.1,"2026-05-13":0.7,"2026-05-14":2.7,"2026-05-21":4.8,"2026-05-22":2.9,"2026-06-04":5.6,"2026-06-12":6.4,"2026-06-16":2.6},"239D1618P006":{"2025-06-02":2.2,"2025-06-03":1.3,"2026-04-17":2.6,"2026-05-18":2.3,"2026-06-04":3.8,"2026-06-12":2.7,"2026-06-18":3.7},"26501378P002":{"2025-06-03":1.9,"2026-04-22":34,"2026-04-23":18,"2026-04-24":43,"2026-04-29":5.3},"239D1772P003":{"2025-06-03":2.1,"2026-05-11":0,"2026-05-12":0,"2026-05-27":5.3},"265D4196P001":{"2025-06-03":0.9},"265D1483P001":{"2025-06-03":2.3,"2026-02-23":2.3,"2026-04-15":2.2,"2026-05-06":28,"2026-05-07":1.7,"2026-05-13":2.2,"2026-05-15":3,"2026-05-20":2.8,"2026-05-28":3,"2026-05-29":1.9,"2026-06-01":3.3,"2026-06-05":3.8,"2026-06-11":3.2,"2026-06-18":2.8},"290D2077P001":{"2025-06-03":2.3,"2026-01-05":3.8,"2026-04-02":3.8,"2026-04-08":4.1,"2026-04-10":6.5,"2026-04-16":19,"2026-04-17":3.9,"2026-05-07":3.9,"2026-05-13":6.1,"2026-05-19":7.9,"2026-05-20":4.6,"2026-05-21":2.3,"2026-05-22":3.9,"2026-06-05":3.2,"2026-06-11":4.2,"2026-06-15":2,"2026-06-18":7.3,"2026-06-22":3.6},"239D2287P001":{"2025-06-03":5.9,"2026-02-23":1.1,"2026-06-01":2.8,"2026-06-02":6.1,"2026-06-12":8.2},"239D2255P001":{"2025-06-03":2.5,"2026-04-29":2.7,"2026-05-18":3.9,"2026-05-27":2.9,"2026-06-17":1.9},"265D1377P003":{"2025-06-03":2.3,"2026-02-23":3.3,"2026-04-02":3.5,"2026-04-08":7.6,"2026-04-10":4,"2026-04-15":2.8,"2026-04-16":3,"2026-04-17":1.1,"2026-04-20":3.3,"2026-04-21":3,"2026-04-27":3.2,"2026-05-06":3,"2026-05-07":3.6,"2026-05-08":3.9,"2026-05-11":4.1,"2026-05-12":4.1,"2026-05-13":4.1,"2026-05-15":4.1,"2026-05-18":2.9,"2026-05-19":2.1,"2026-05-20":2.3,"2026-05-21":2.6,"2026-05-22":2.8,"2026-05-26":3.1,"2026-05-27":3.6,"2026-05-28":3.9,"2026-05-29":4.2,"2026-06-01":3.9,"2026-06-02":3.7,"2026-06-03":3.9,"2026-06-04":3.5,"2026-06-05":4.2,"2026-06-09":4.6,"2026-06-12":3.1,"2026-06-15":5,"2026-06-17":2.4,"2026-06-18":2,"2026-06-22":3},"265D4701P001":{"2025-06-03":3.3,"2026-04-10":5.5,"2026-04-27":0,"2026-05-14":3.7,"2026-05-18":4,"2026-05-28":3.7,"2026-06-04":2.8,"2026-06-05":2.1,"2026-06-11":7.5},"239D1137P003":{"2025-06-03":2.7,"2026-04-16":0.5,"2026-04-21":2.2,"2026-05-18":3.4,"2026-05-19":2.7,"2026-05-27":3.5,"2026-06-03":1.8,"2026-06-09":2.4,"2026-06-15":2.4,"2026-06-18":3.2},"239D4628G001":{"2025-06-03":1.9,"2026-04-24":3.5,"2026-05-11":2.3,"2026-05-12":2.3,"2026-05-13":2.7,"2026-05-15":6.1,"2026-05-22":2.6,"2026-06-04":3.2,"2026-06-18":1.6},"239D2470P001":{"2025-06-03":1.6,"2026-01-05":3.4,"2026-05-28":10.5,"2026-06-04":0.9},"239D1618P005":{"2025-06-03":0.8,"2026-05-08":3.8,"2026-05-18":2.3,"2026-05-26":4,"2026-06-01":3.9,"2026-06-04":3.8,"2026-06-12":2.7,"2026-06-16":2.8,"2026-06-18":3.7},"239D2457P001":{"2025-06-03":3,"2026-06-03":4,"2026-06-04":3.8,"2026-06-10":3.8,"2026-06-12":3.4,"2026-06-15":2.1,"2026-06-16":1.4,"2026-06-18":3.1},"265D2723G004":{"2025-06-03":2.5},"265D1967P002":{"2025-06-03":1.1,"2026-04-16":2,"2026-04-17":1,"2026-04-20":1.8,"2026-04-27":3.3,"2026-05-08":1.6,"2026-05-14":0.9,"2026-05-15":1.7,"2026-05-20":2.7,"2026-05-21":1.7,"2026-05-27":2.3,"2026-05-28":2.1,"2026-06-02":2.7,"2026-06-03":2.1,"2026-06-10":1.2,"2026-06-11":0.8,"2026-06-16":2.3,"2026-06-17":1.9},"265D3936P002":{"2025-06-03":2.2,"2026-02-23":0.2,"2026-04-15":2,"2026-04-20":3,"2026-05-07":1.8,"2026-05-08":1.5,"2026-05-11":1.5,"2026-05-12":1.5,"2026-05-13":2.1,"2026-05-14":1.2,"2026-05-21":2.9,"2026-05-26":2.1,"2026-05-27":1.3,"2026-05-28":1.4,"2026-05-29":0.5,"2026-06-01":2.8,"2026-06-11":2.9,"2026-06-12":1.9,"2026-06-17":2.2,"2026-06-22":3.1},"265D3975P003":{"2025-06-03":1.7,"2026-01-05":1.7,"2026-02-23":2,"2026-04-08":5.5,"2026-04-17":2.3,"2026-04-20":2.2,"2026-04-21":2.5,"2026-04-27":2.2,"2026-05-06":2.6,"2026-05-07":2.2,"2026-05-08":2,"2026-05-11":1.8,"2026-05-12":1.8,"2026-05-13":1.9,"2026-05-14":1.8,"2026-05-15":1.5,"2026-05-18":1.1,"2026-05-19":1.7,"2026-05-20":2.5,"2026-05-21":2.9,"2026-05-22":2.5,"2026-05-26":2.1,"2026-05-27":2,"2026-05-29":3.5,"2026-06-01":2.9,"2026-06-02":2.4,"2026-06-03":1.9,"2026-06-04":1.7,"2026-06-05":2.2,"2026-06-09":3.8,"2026-06-10":3.4,"2026-06-11":3.2,"2026-06-12":3.9,"2026-06-15":3.7,"2026-06-16":3.6,"2026-06-17":3.9,"2026-06-18":3.5,"2026-06-22":2.5},"26503976P003 265D3971P00 283838776883":{"2025-06-03":0.7},"26503972P003":{"2025-06-03":0.7,"2026-06-02":0.7,"2026-06-17":1,"2026-06-18":0},"29001347G003":{"2025-06-03":0.9,"2026-04-22":12,"2026-04-24":14},"239D5772G005":{"2025-06-03":2.4,"2026-04-02":0.4,"2026-04-10":1.3,"2026-04-17":2.5,"2026-04-20":1.1,"2026-04-27":0.9,"2026-05-07":2.6,"2026-05-08":2,"2026-05-13":1.9,"2026-05-14":1.3,"2026-05-19":2.4,"2026-05-20":0.9,"2026-05-21":2,"2026-05-22":1.6,"2026-05-26":1.5,"2026-06-01":1.8,"2026-06-02":0.9,"2026-06-04":2.3,"2026-06-10":2.1,"2026-06-11":2.4,"2026-06-12":1,"2026-06-15":2.9,"2026-06-17":2.3,"2026-06-18":1.5,"2026-06-22":2},"239D2360G002":{"2025-06-03":3.8,"2026-02-23":12.5,"2026-03-09":7.7,"2026-04-02":12,"2026-04-08":10.3,"2026-04-10":6.3,"2026-04-16":1.3,"2026-04-17":1.7,"2026-04-20":1.5,"2026-04-21":1.6,"2026-04-27":2.3,"2026-05-06":3.1,"2026-05-07":4.1,"2026-05-08":4.6,"2026-05-11":3.6,"2026-05-12":3.6,"2026-05-13":1.3,"2026-05-14":1.7,"2026-05-15":1.8,"2026-05-18":2.5,"2026-05-19":2.5,"2026-05-20":3.3,"2026-05-21":3.8,"2026-05-22":3.3,"2026-05-26":4.4,"2026-05-27":5.3,"2026-05-28":4.1,"2026-05-29":6.6,"2026-06-01":6.6,"2026-06-02":6.7,"2026-06-03":5.7,"2026-06-04":6.3,"2026-06-05":6.2,"2026-06-09":5.9,"2026-06-10":5.3,"2026-06-11":4.7,"2026-06-12":4.4,"2026-06-15":4.8,"2026-06-16":4.5,"2026-06-17":4.4,"2026-06-18":4.2,"2026-06-22":3.4},"265D4761P001":{"2025-06-03":4.1,"2026-02-23":1.5,"2026-04-02":6.4,"2026-04-10":4.1,"2026-04-16":44,"2026-04-21":1.4,"2026-04-22":14,"2026-04-27":1.8,"2026-05-06":14,"2026-05-07":6.2,"2026-05-08":4.6,"2026-05-11":4.6,"2026-05-12":4.6,"2026-05-13":4.3,"2026-05-18":4.2,"2026-05-21":3.2,"2026-05-26":3.8,"2026-05-28":3.5,"2026-05-29":4,"2026-06-01":5.7,"2026-06-05":0.9,"2026-06-10":2.3,"2026-06-12":4.1},"265D2178G012":{"2026-01-05":5.5},"265D1481P004":{"2026-01-05":1.2,"2026-02-23":1.9,"2026-04-02":7.2,"2026-04-10":2.5,"2026-04-17":2.1,"2026-04-20":1.1,"2026-04-27":1.4,"2026-05-06":13,"2026-05-07":1.7,"2026-05-08":1.4,"2026-05-13":2.3,"2026-05-15":1.5,"2026-05-18":0.4,"2026-05-19":0.3,"2026-05-20":0.7,"2026-05-21":0.7,"2026-05-22":0.5,"2026-05-28":1.5,"2026-06-01":1.4,"2026-06-02":0.6,"2026-06-03":1.8,"2026-06-04":1.6,"2026-06-05":1.6,"2026-06-09":1.9,"2026-06-11":2.3,"2026-06-12":1.9,"2026-06-15":1.6,"2026-06-16":1.8,"2026-06-17":1.4,"2026-06-18":1.7,"2026-06-22":1.3},"265D4761P002":{"2026-01-05":0.2,"2026-02-23":0.9,"2026-04-10":4.8,"2026-04-16":44,"2026-05-06":14,"2026-05-07":4,"2026-05-19":3.6,"2026-05-21":3.2,"2026-05-22":1.1,"2026-05-27":1.7,"2026-05-29":4.5,"2026-06-02":3.6,"2026-06-04":4,"2026-06-10":2.4,"2026-06-12":3.9,"2026-06-16":2.1,"2026-06-18":3.3},"265D4301P004":{"2026-01-05":2.5,"2026-02-23":0.7,"2026-04-02":4.4,"2026-04-08":3.7,"2026-04-10":2.8,"2026-04-15":1.3,"2026-04-16":30,"2026-04-17":2.9,"2026-04-20":1.9,"2026-04-27":1.7,"2026-05-06":2.3,"2026-05-07":1.6,"2026-05-08":1.9,"2026-05-11":1.4,"2026-05-12":1.4,"2026-05-13":1.7,"2026-05-14":1.3,"2026-05-15":1.4,"2026-05-18":1.5,"2026-05-19":1.8,"2026-05-20":1.8,"2026-05-21":2,"2026-05-22":1.8,"2026-05-26":2.3,"2026-05-27":1.9,"2026-05-28":1.9,"2026-05-29":1.8,"2026-06-01":1.9,"2026-06-02":1.5,"2026-06-03":1.5,"2026-06-04":1.3,"2026-06-05":1.8,"2026-06-09":1.4,"2026-06-10":2,"2026-06-11":1.7,"2026-06-12":1.3,"2026-06-15":1.8,"2026-06-16":2.1,"2026-06-17":2.2,"2026-06-18":1.9,"2026-06-22":1.5},"265D2314P007":{"2026-01-05":2.4,"2026-02-23":1.7,"2026-04-27":3.1,"2026-05-11":6.3,"2026-05-12":6.3,"2026-05-13":2.1,"2026-05-21":0,"2026-05-22":0,"2026-06-03":0.9,"2026-06-04":1,"2026-06-09":0,"2026-06-10":0.4,"2026-06-15":2.8,"2026-06-16":2.1},"265D3976G003":{"2026-01-05":1.7,"2026-05-14":1.8},"265D3972P003":{"2026-01-05":4.3,"2026-02-23":3,"2026-04-02":3.8,"2026-04-16":2.1,"2026-04-17":1.6,"2026-04-27":2.3,"2026-05-18":2.5,"2026-05-19":2.4,"2026-05-20":1.6,"2026-05-21":1.4,"2026-05-27":1.9,"2026-05-29":1.5,"2026-06-02":0.7,"2026-06-03":0.6,"2026-06-04":1.1,"2026-06-05":1.7,"2026-06-09":2.1,"2026-06-10":2.6,"2026-06-11":2.2,"2026-06-12":1.7,"2026-06-15":1.1,"2026-06-18":1.6,"2026-06-22":2},"265D3971P003":{"2026-01-05":4.3,"2026-02-23":3,"2026-04-08":4.5,"2026-04-20":1.3,"2026-04-27":2.3,"2026-05-08":1.6,"2026-05-11":2.2,"2026-05-12":2.2,"2026-05-15":2.2,"2026-05-18":2.5,"2026-05-19":2.4,"2026-05-20":1.6,"2026-05-21":1.4,"2026-05-22":1.7,"2026-05-26":2.2,"2026-05-27":1.9,"2026-05-29":1.5,"2026-06-01":1.3,"2026-06-03":0.6,"2026-06-04":1.1,"2026-06-05":1.7,"2026-06-09":2.1,"2026-06-10":2.6,"2026-06-12":1.7},"239D4437P001":{"2026-01-05":3.4,"2026-04-17":3,"2026-05-15":3.7,"2026-05-26":4.6,"2026-05-29":12.7,"2026-06-16":1.6},"290D2077P002":{"2026-01-05":4.6,"2026-04-16":61,"2026-04-17":6.1,"2026-04-21":0.6,"2026-04-27":3.4,"2026-05-06":32,"2026-05-13":6.8,"2026-05-14":3.9,"2026-05-15":3.9,"2026-05-19":7.9,"2026-05-20":3.9,"2026-05-21":3.9,"2026-05-22":3.9,"2026-05-27":8,"2026-05-28":4,"2026-06-09":4.3,"2026-06-12":7,"2026-06-17":3.9,"2026-06-18":0},"290D2710G002":{"2026-02-23":0.8,"2026-03-09":0.3,"2026-04-02":0.4,"2026-04-08":0.4,"2026-04-10":0.5,"2026-04-15":0,"2026-04-16":0.3,"2026-04-17":0.8,"2026-04-20":1.2,"2026-04-21":0.7,"2026-04-27":0.3,"2026-05-06":1.3,"2026-05-07":0.1,"2026-05-08":0.4,"2026-05-11":1.3,"2026-05-12":1.3,"2026-05-13":1,"2026-05-14":0.8,"2026-05-15":0.7,"2026-05-18":0.9,"2026-05-19":0.9,"2026-05-20":0.6,"2026-05-21":0.7,"2026-05-22":0.7,"2026-05-26":0.8,"2026-05-27":1.7,"2026-05-28":0.7,"2026-05-29":0.9,"2026-06-01":0.5,"2026-06-02":0.7,"2026-06-03":0.4,"2026-06-04":0.6,"2026-06-05":0.6,"2026-06-09":0.6,"2026-06-10":0.7,"2026-06-11":0.6,"2026-06-12":0.5,"2026-06-15":0.9,"2026-06-16":0.8,"2026-06-17":1.3,"2026-06-18":1.3,"2026-06-22":1.4},"290D5007G003":{"2026-02-23":0,"2026-03-09":10,"2026-04-02":1.6,"2026-04-08":0,"2026-04-10":0.7,"2026-04-15":0.8,"2026-04-16":0,"2026-04-17":0.1,"2026-04-20":0.6,"2026-04-21":1,"2026-04-27":1.9,"2026-05-06":1.7,"2026-05-07":6.2,"2026-05-08":0.1,"2026-05-11":1.9,"2026-05-12":1.9,"2026-05-13":2.2,"2026-05-14":1.1,"2026-05-15":1.8,"2026-05-18":0.6,"2026-05-19":0.6,"2026-05-20":1.2,"2026-05-21":2.1,"2026-05-22":2.3,"2026-05-26":2,"2026-05-27":1.4,"2026-05-28":1,"2026-05-29":3.6,"2026-06-01":1.7,"2026-06-02":2,"2026-06-03":2.8,"2026-06-04":1.4,"2026-06-05":0.4,"2026-06-10":0.7,"2026-06-11":1.1,"2026-06-12":0.4,"2026-06-15":0.6,"2026-06-16":1.5,"2026-06-17":0.8,"2026-06-18":1.1,"2026-06-22":1.1},"239D5772G006":{"2026-02-23":1.6,"2026-04-15":0,"2026-04-16":2.2,"2026-06-03":7.2,"2026-06-12":14},"265D1510P001":{"2026-02-23":12,"2026-04-20":30,"2026-04-21":26.3,"2026-05-06":32.9,"2026-06-11":7.7,"2026-06-16":22.7},"265D4799P001":{"2026-02-23":1.3,"2026-04-08":2.3,"2026-04-15":2.2,"2026-04-16":1.7,"2026-05-06":1.3,"2026-05-07":2.1,"2026-05-13":2.5,"2026-05-15":2.8,"2026-05-20":2.2,"2026-05-27":3.1,"2026-05-28":2.2,"2026-06-05":2.2,"2026-06-09":2.9,"2026-06-10":2.3,"2026-06-12":2.4,"2026-06-16":2.7,"2026-06-22":2.5},"239D4132P001":{"2026-02-23":3.5,"2026-04-16":1.9,"2026-04-20":0.5,"2026-05-13":1.2,"2026-05-19":1.9,"2026-05-20":2,"2026-05-22":2.6,"2026-05-27":3.8,"2026-05-29":3.2,"2026-06-10":2.9,"2026-06-16":2.2,"2026-06-17":0.9},"239D4132P002":{"2026-02-23":3.5,"2026-04-02":3.8,"2026-04-10":2.7,"2026-04-27":0,"2026-05-15":3.6,"2026-05-19":1.9,"2026-05-20":2,"2026-05-27":3.8,"2026-05-29":3.2,"2026-06-10":2.9,"2026-06-17":0.9},"265D3976P003":{"2026-02-23":2,"2026-04-02":8.9,"2026-05-18":1.1,"2026-05-19":1.7,"2026-05-20":2.5,"2026-05-21":2.9,"2026-05-27":2,"2026-05-29":3.5,"2026-06-03":1.9,"2026-06-04":1.7,"2026-06-05":2.2,"2026-06-09":3.8,"2026-06-10":3.4,"2026-06-11":3.2,"2026-06-12":3.9,"2026-06-15":3.7,"2026-06-17":3.9,"2026-06-22":2.5},"265D1510P002":{"2026-02-23":7.2,"2026-04-20":20.9,"2026-06-01":0,"2026-06-12":11.9,"2026-06-15":8.8,"2026-06-16":20.2},"293D1707P002":{"2026-03-09":2.5,"2026-04-16":6.3,"2026-05-07":1.5,"2026-05-28":2,"2026-05-29":1,"2026-06-05":4.2,"2026-06-16":2.5},"29002710G002":{"2026-03-09":0.3,"2026-04-22":1.3,"2026-04-23":15,"2026-04-24":6.6,"2026-04-29":0.8},"26503484G003":{"2026-03-09":0.3,"2026-04-22":0.7,"2026-04-23":71.7,"2026-04-24":0.7,"2026-04-29":0.7},"265D4791P001":{"2026-04-02":6.2,"2026-04-15":2.5,"2026-04-16":3.3,"2026-04-17":2.5,"2026-05-18":2.8,"2026-05-19":2.2,"2026-05-20":1.8,"2026-05-21":1.9,"2026-05-27":3.2,"2026-05-28":2,"2026-06-01":2.9,"2026-06-03":1.1,"2026-06-05":2.9,"2026-06-09":1.6,"2026-06-15":2.8,"2026-06-17":2.8,"2026-06-18":1.4,"2026-06-22":2.1},"265D2025P002":{"2026-04-02":4.9,"2026-04-10":3,"2026-04-15":2.2,"2026-04-17":2.8,"2026-04-27":2.4,"2026-05-06":15,"2026-05-11":1.7,"2026-05-12":1.7,"2026-05-13":1.3,"2026-05-14":1.8,"2026-05-19":2.3,"2026-05-20":2,"2026-05-26":2.2,"2026-05-28":1.7,"2026-06-01":2.1,"2026-06-04":2.3,"2026-06-09":2.3,"2026-06-10":1.4,"2026-06-12":1.8,"2026-06-16":2.2,"2026-06-22":2.5},"265D1481P005":{"2026-04-02":32.7},"290D5049P001":{"2026-04-02":2.9,"2026-04-20":0.6,"2026-04-21":1.9,"2026-05-07":4.5,"2026-05-20":0.4,"2026-06-02":1.7,"2026-06-03":1.9,"2026-06-04":0,"2026-06-05":0.9},"265D4765P001":{"2026-04-02":3.2,"2026-04-10":2.6,"2026-04-16":2.2,"2026-04-17":1.4,"2026-04-20":1.8,"2026-04-27":0.9,"2026-05-11":1.9,"2026-05-12":1.9,"2026-05-14":2.6,"2026-05-19":2.8,"2026-05-20":1.9,"2026-05-28":1.9,"2026-06-02":3.3,"2026-06-03":2.3,"2026-06-09":2.8,"2026-06-18":2.9},"265D7491P001":{"2026-04-08":4.2},"290D4187P003":{"2026-04-08":4.6},"239D4182P003":{"2026-04-08":7.3},"265D3975P003 / 265D3976P003":{"2026-04-10":3.4},"265D3971P003 / 265D3972P003":{"2026-04-10":2.3},"239D4628G003":{"2026-04-10":3.6,"2026-04-16":3.1,"2026-05-08":1.9,"2026-05-21":2.6,"2026-05-29":3.6,"2026-06-05":2.3,"2026-06-11":3.1,"2026-06-17":1.4,"2026-06-22":1.7},"290D2777P002":{"2026-04-15":6.1},"265D3533P003":{"2026-04-15":2},"265D3179P003":{"2026-04-15":2.7},"265D3177P003":{"2026-04-15":42.5},"230D4268G001":{"2026-04-15":3.7},"290D5040G001":{"2026-04-15":1.6,"2026-04-21":2.9},"230D2368G002":{"2026-04-15":27},"265D3970G004":{"2026-04-15":23.3,"2026-05-20":6.5,"2026-06-05":2.6,"2026-06-11":5.7},"265D2032P004":{"2026-04-15":3.7},"265D2025P004":{"2026-04-16":27,"2026-05-08":2.6,"2026-06-09":2.7},"265D3974P003":{"2026-04-16":2.5,"2026-05-06":2.6},"265D2007P001":{"2026-04-17":9.1},"238D1137P003":{"2026-04-17":0.9},"265D4068G001":{"2026-04-20":0.9,"2026-04-27":1.8},"235D5772G005":{"2026-04-21":2.2},"265D3979G003":{"2026-04-21":5.1},"265D0138P002":{"2026-04-21":1.2},"265D3178P002":{"2026-04-21":3.6},"290D3135P001":{"2026-04-21":1.8},"290D0777P001":{"2026-04-21":0.7},"265D2426P001":{"2026-04-21":1.7},"239D2253P002":{"2026-04-21":3,"2026-05-18":2.7,"2026-05-27":3.2},"265D1511P001":{"2026-04-21":26.3,"2026-06-16":22},"265D4790P001":{"2026-04-21":2.3},"265D3195P002":{"2026-04-21":1.4},"265D3286G003":{"2026-04-21":5.8},"265D3401P004":{"2026-04-21":2.8},"265D3916P003":{"2026-04-21":1.3},"265D1528P001":{"2026-04-21":1},"265D3977P003":{"2026-04-21":1.5},"233D4628G003":{"2026-04-21":2.8},"23905772G008":{"2026-04-22":11},"290013470003":{"2026-04-22":12,"2026-04-23":6.7,"2026-04-24":14,"2026-04-28":14},"290013476003":{"2026-04-22":12,"2026-04-23":6.7,"2026-04-24":14,"2026-04-29":0.6},"290027100002":{"2026-04-22":1.3,"2026-04-24":0.6,"2026-04-28":54},"290050076003":{"2026-04-22":1.7,"2026-04-23":15,"2026-04-24":24,"2026-04-29":1.5},"293014090004":{"2026-04-22":1.8,"2026-04-28":1.5},"265034846003":{"2026-04-22":0.7,"2026-04-23":3.3,"2026-04-24":4.7,"2026-04-28":2.7,"2026-04-29":0.7},"26501385P002":{"2026-04-22":1.7,"2026-04-24":24,"2026-04-28":1.6,"2026-04-29":1.4},"26503220P005":{"2026-04-22":2.8,"2026-04-23":1.9,"2026-04-24":1.3,"2026-04-28":1.4,"2026-04-29":1.1},"26504761P002":{"2026-04-22":14},"26502025P002":{"2026-04-22":15,"2026-04-28":1.9},"29002077P002":{"2026-04-22":32,"2026-04-24":29,"2026-04-28":3,"2026-04-29":1.9},"26501386P001":{"2026-04-22":24,"2026-04-29":2.4},"26501482P003":{"2026-04-22":19,"2026-04-23":12,"2026-04-24":1.2,"2026-04-28":1.5},"26501481P004":{"2026-04-22":13,"2026-04-24":14,"2026-04-28":1.1,"2026-04-29":1.2},"265015129002":{"2026-04-22":24},"29001335P001":{"2026-04-22":1.3,"2026-04-28":1.8,"2026-04-29":2.8},"26501483P001":{"2026-04-22":28,"2026-04-23":1.6,"2026-04-28":3.8},"26504226P001":{"2026-04-22":1.6,"2026-04-24":0.4,"2026-04-29":1},"26503353P003":{"2026-04-22":21,"2026-04-23":23,"2026-04-24":25,"2026-04-28":2.4,"2026-04-29":2.6},"26501377P003":{"2026-04-22":3,"2026-04-23":23,"2026-04-24":23,"2026-04-28":1.5,"2026-04-29":3.5},"26501511P002":{"2026-04-22":26.6},"26501510P001":{"2026-04-22":32.9},"26504799P001":{"2026-04-22":1.3,"2026-04-28":1.8},"26503933P001":{"2026-04-22":1.1,"2026-04-24":2.4,"2026-04-29":0.6},"26503920P001":{"2026-04-22":1,"2026-04-23":1.2,"2026-04-24":1.6,"2026-04-28":1.4,"2026-04-29":1.1},"29005035G001":{"2026-04-22":4,"2026-04-23":2.6,"2026-04-24":29,"2026-04-29":3.1},"290050616001":{"2026-04-22":1.7,"2026-04-28":0.5,"2026-04-29":0.3},"265032386003":{"2026-04-22":2},"26504301P004":{"2026-04-22":2.3,"2026-04-23":1.8,"2026-04-24":21,"2026-04-28":1.4,"2026-04-29":1.5},"26503936P003":{"2026-04-22":1.4,"2026-04-23":23,"2026-04-24":2.1,"2026-04-28":1.7},"26503936P001":{"2026-04-22":2.4,"2026-04-23":9.7,"2026-04-28":1.5},"29005258P001":{"2026-04-22":1.3,"2026-04-23":2.5,"2026-04-24":2.2,"2026-04-28":1.5,"2026-04-29":3},"265032386001":{"2026-04-22":1,"2026-04-24":1.2,"2026-04-28":1,"2026-04-29":1.2},"26503238G001":{"2026-04-22":1,"2026-04-23":12,"2026-04-24":1.2,"2026-04-29":1.2},"26503975P003":{"2026-04-22":2.6,"2026-04-28":1.8,"2026-04-29":2.4},"2650-39748003":{"2026-04-22":2.6},"265039778003":{"2026-04-22":1.2},"265039222003":{"2026-04-22":0.7},"23904586P002":{"2026-04-22":3,"2026-04-24":7},"290050046001":{"2026-04-22":2.2,"2026-04-23":0.7,"2026-04-24":0.1,"2026-04-28":1.1,"2026-04-29":0.2},"29005004G001":{"2026-04-22":2.2,"2026-04-24":0.1,"2026-04-28":1.1},"290020779002":{"2026-04-23":60},"26501312P002":{"2026-04-23":19},"290013359001":{"2026-04-23":1.7,"2026-04-24":2},"26503933P002":{"2026-04-23":21,"2026-04-24":32,"2026-04-29":2.9},"29005040P001":{"2026-04-23":0.7,"2026-04-28":0.4},"26503951P002":{"2026-04-23":1.5,"2026-04-24":22,"2026-04-28":1.8,"2026-04-29":1.2},"26501967P002":{"2026-04-23":22},"29005061G001":{"2026-04-23":1.1,"2026-04-24":0.7},"265039/5P003":{"2026-04-23":25},"265038799003-":{"2026-04-23":2.5},"26503977P003-":{"2026-04-23":14},"23904628G004":{"2026-04-23":31},"23904533P004":{"2026-04-23":22},"239057726007":{"2026-04-23":5.2,"2026-04-24":5.2},"265034840003":{"2026-04-23":3.3,"2026-04-28":0.7},"265014796006":{"2026-04-23":1.9,"2026-04-28":2.1,"2026-04-29":1.9},"265040866001":{"2026-04-23":1.6,"2026-04-24":2},"23902360G002":{"2026-04-23":3.2,"2026-04-24":2.9},"26503974G003":{"2026-04-23":40,"2026-04-28":4.4},"265039746003":{"2026-04-23":40,"2026-04-24":4.2,"2026-04-29":4.2},"26503970G003":{"2026-04-23":5.6,"2026-04-24":5.3,"2026-04-29":3.6},"26503936P002":{"2026-04-23":20,"2026-04-24":1.2,"2026-04-29":0.9},"29301707P002":{"2026-04-23":3.8,"2026-04-24":28},"26501512P006":{"2026-04-24":34},"26504761P001":{"2026-04-24":25,"2026-04-28":2.3},"29005049P001":{"2026-04-24":13.2},"26501511P001":{"2026-04-24":28.2},"26501510P002":{"2026-04-24":18.5},"23902251P002":{"2026-04-24":44},"26503238G003":{"2026-04-24":22,"2026-04-28":2.9},"26503975PUUS":{"2026-04-24":2.6},"265039749003":{"2026-04-24":1.9},"28503977P003":{"2026-04-24":14},"26501479G006":{"2026-04-24":2},"26504086G001":{"2026-04-24":2,"2026-04-28":1.7},"26504701P001":{"2026-04-24":1.8},"239057726005":{"2026-04-24":1.4,"2026-04-28":6.3},"239D1177P003":{"2026-04-27":0.6},"290D2078P001":{"2026-04-27":4.3},"265D3929P001":{"2026-04-27":1.5},"265D3973P003":{"2026-04-27":2.2},"2900134700031":{"2026-04-28":1.4},"290030076003":{"2026-04-28":1.9},"2650348406003":{"2026-04-28":0.7},"265039706003":{"2026-04-28":3.7,"2026-04-29":3.6},"29002077P001":{"2026-04-28":4.7,"2026-04-29":1.4},"26502026P004":{"2026-04-28":3.1},"26504765P001":{"2026-04-28":1},"23901137P003":{"2026-04-28":3.6},"265039339001":{"2026-04-28":1.7},"290050356001":{"2026-04-28":2.3},"2651039/5P00S":{"2026-04-28":1.8},"20303973003-":{"2026-04-28":2.8},"26501972800":{"2026-04-28":2.8},"23904628G003":{"2026-04-28":1.5},"26501512P002":{"2026-04-28":1.3,"2026-04-29":1.3},"290027106002":{"2026-04-29":2},"29301409G004":{"2026-04-29":2.7},"239057720006":{"2026-04-29":2.9},"265015122006":{"2026-04-29":2.4},"265014829003":{"2026-04-29":1.6},"23902253P002":{"2026-04-29":3.6},"26503879P003":{"2026-04-29":3.1},"265039719003":{"2026-04-29":3.9},"23904437P001":{"2026-04-29":1.8},"290050040001":{"2026-04-29":0.2},"265D2026P004":{"2026-04-29":7.6,"2026-05-13":2.8,"2026-05-26":3.8},"239D5772G008":{"2026-05-06":11,"2026-05-28":7},"265D1512G002":{"2026-05-06":24},"265D1511P002":{"2026-05-06":26.6,"2026-06-01":11.7,"2026-06-15":18,"2026-06-16":24.4},"265D3977G003":{"2026-05-06":1.2},"265D3922G003":{"2026-05-06":0.7},"263D1385P002":{"2026-05-07":1.5},"265D1376P002":{"2026-05-07":4.5},"265D1512G006":{"2026-05-07":3.3},"265D4791G001":{"2026-05-07":2.5,"2026-05-13":2.2},"265D3975G003":{"2026-05-07":2.2,"2026-05-13":1.9},"265D1391G003":{"2026-05-07":1.2},"290D1335G001":{"2026-05-08":2.4},"265D1972G003":{"2026-05-08":1.6},"265D3974G004":{"2026-05-11":2.5,"2026-05-12":2.5,"2026-06-09":4.6},"290D1287P003":{"2026-05-11":0,"2026-05-12":0,"2026-05-18":5.5,"2026-06-15":0.5},"265D3972G003":{"2026-05-11":2.2,"2026-05-12":2.2,"2026-05-13":2,"2026-05-14":1.7},"265D1397G003":{"2026-05-13":2},"265D3971G003":{"2026-05-14":1.7},"265D3975P004":{"2026-05-15":4.4},"265D3976P004":{"2026-05-15":1.5},"206C1833P001":{"2026-05-22":14.9,"2026-06-05":54.9},"265D3975P003 265D3976P003":{"2026-05-28":3.1},"265D3971P003 265D3972P003":{"2026-05-28":1.6},"239D1372P003":{"2026-06-01":2.1,"2026-06-12":0},"265D39Z6P003":{"2026-06-02":1.4},"26503976P003":{"2026-06-02":2.4,"2026-06-18":3.5},"265D3971P005":{"2026-06-02":0.7,"2026-06-11":2.2,"2026-06-12":1.7,"2026-06-15":1.1,"2026-06-16":0.7,"2026-06-17":1,"2026-06-18":1.6,"2026-06-22":2},"265D3971P004":{"2026-06-05":10,"2026-06-11":5.8},"265D3972P004":{"2026-06-05":10,"2026-06-11":5.8},"239D4628G002":{"2026-06-09":5},"265D3970G007":{"2026-06-15":4.4,"2026-06-16":3.8,"2026-06-17":5.5,"2026-06-18":4.5,"2026-06-22":4.1}};
+    const allSortedDates = ["2025-06-02","2025-06-03","2026-01-05","2026-02-23","2026-03-09","2026-04-02","2026-04-08","2026-04-10","2026-04-15","2026-04-16","2026-04-17","2026-04-20","2026-04-21","2026-04-22","2026-04-23","2026-04-24","2026-04-27","2026-04-28","2026-04-29","2026-05-06","2026-05-07","2026-05-08","2026-05-11","2026-05-12","2026-05-13","2026-05-14","2026-05-15","2026-05-18","2026-05-19","2026-05-20","2026-05-21","2026-05-22","2026-05-26","2026-05-27","2026-05-28","2026-05-29","2026-06-01","2026-06-02","2026-06-03","2026-06-04","2026-06-05","2026-06-09","2026-06-10","2026-06-11","2026-06-12","2026-06-15","2026-06-16","2026-06-17","2026-06-18","2026-06-22"];
+    const sortedParts = ["265D3484G003","290D2710G002","290D1347G003","265D3220P005","265D3238G001","290D5035G001","290D5040P001","265D3920P001","290D5004G001","265D4086G001","265D4301P004","290D5007G003","265D3975P003","265D3974G003","265D3970G003","265D1385P002","265D1482P003","265D3936P003","265D1479G006","290D1335P001","265D3971P003","265D4226P001","239D2360G002","265D3972P003","265D1378P002","265D3353P003","265D1377P003","265D3238G003","290D5061G001","290D5258P001","265D3976P003","265D1481P004","239D2251P002","265D3951P002","265D1512P006","239D4586P002","293D1409G004","239D5772G005","265D4761P001","265D3936P001","265D3936P002","265D2025P002","265D1512P002","265D3933P002","239D4533P004","290D2077P002","265D4791P001","290D2077P001","265D1967P002","265D4761P002","265D1386P001","265D4799P001","265D1483P001","265D4765P001","265D2735P001","265D2026P002","265D2314P007","26503484G003","265D3971P005","265D2736P001","290D2710G001","239D5772G007","239D4132P001","265034846003","239D4132P002","26503220P005","239D1137P003","239D2457P001","26503920P001","265D3933P001","265D4701P001","239D4628G001","239D1618P005","290D5049P001","239D4628G003","265D2001P001","239D4628G004","29002710G002","29005035G001","26504301P004","265D3970G007","290D5007G002","239D1618P006","265D1510P001","293D1707P002","290013470003","239D2255P001","239D4437P001","265D1510P002","26501385P002","26501482P003","26501377P003","290050046001","239D2668P001","26501378P002","239D2287P001","26503972P003","239D5772G006","290013476003","26503353P003","26503936P003","29005258P001","265032386001","26503238G001","265D1511P002","197D8124P001","265D4301P003","239D1772P003","239D2470P001","290D5040G001","265D3970G004","265D4068G001","290050076003","29002077P002","26501481P004","26503975P003","26503951P002","265039746003","290D1287P003","265D3972G003","265D2954P001","265D4087G001","29001347G003","265D2025P004","239D2253P002","265D3977P003","290027100002","29001335P001","26501483P001","26504226P001","26503933P001","290050616001","26503936P001","29005004G001","26503933P002","29005040P001","265014796006","265040866001","26503970G003","26503936P002","26504086G001","265039706003","265D2026P004","265D3974G004","265D3975P003 265D3976P003","26503976P003","265D3294P001","265D3976G003","265D3975P003 / 265D3976P003","265D3971P003 / 265D3972P003","265D3179P003","265D3974P003","265D3979G003","265D1511P001","293014090004","26502025P002","26501386P001","26504799P001","23904586P002","290013359001","29005061G001","239057726007","265034840003","23902360G002","26503974G003","29301707P002","26504761P001","26503238G003","239057726005","29002077P001","23901137P003","290050356001","26501512P002","239D5772G008","265D4791G001","265D3975G003","206C1833P001","265D3971P003 265D3972P003","239D1372P003","265D3971P004","265D3972P004","239D4132P001 23904132P002","26503975P003 26503976P003","26503971P003","38383873883 26503972P003","Sump Cart 265D3484G003","265D4196P001","265D2723G004","26503976P003 265D3971P00 283838776883","265D2178G012","265D1481P005","265D7491P001","290D4187P003","239D4182P003","290D2777P002","265D3533P003","265D3177P003","230D4268G001","230D2368G002","265D2032P004","265D2007P001","238D1137P003","235D5772G005","265D0138P002","265D3178P002","290D3135P001","290D0777P001","265D2426P001","265D4790P001","265D3195P002","265D3286G003","265D3401P004","265D3916P003","265D1528P001","233D4628G003","23905772G008","26504761P002","265015129002","26501511P002","26501510P001","265032386003","2650-39748003","265039778003","265039222003","290020779002","26501312P002","26501967P002","265039/5P003","265038799003-","26503977P003-","23904628G004","23904533P004","26501512P006","29005049P001","26501511P001","26501510P002","23902251P002","26503975PUUS","265039749003","28503977P003","26501479G006","26504701P001","239D1177P003","290D2078P001","265D3929P001","265D3973P003","2900134700031","290030076003","2650348406003","26502026P004","26504765P001","265039339001","2651039/5P00S","20303973003-","26501972800","23904628G003","290027106002","29301409G004","239057720006","265015122006","265014829003","23902253P002","26503879P003","265039719003","23904437P001","290050040001","265D1512G002","265D3977G003","265D3922G003","263D1385P002","265D1376P002","265D1512G006","265D1391G003","290D1335G001","265D1972G003","265D1397G003","265D3971G003","265D3975P004","265D3976P004","265D39Z6P003","239D4628G002"];
+    const partDescriptions = {"265D1385P002":"Conduit Mid Static Single - p1/p2","265D1378P002":"Bearing S/A Single - SSG","265D1512P006":"Roller Lower Rack- p1/p2/p3 - New","265D3220P005":"Carrier Roller (DDG)","265D2954P001":"Attachment Strip - p1/p2/p3","265D1482P003":"SF Rack Roller","265D1479G006":"Plastic Bracket (1481- 3 Stud)","265D1512P002":"Roller Lower Rack p1/p2/p3","290D1335P001":"Ball Joint","265D2736P001":"Impeller - p1/p2/p3","265D4226P001":"SF Clip Bridge Upper","265D3353P003":"Sump Latch","265D2735P001":"Hub. p1/p2/p3","265D2026P002":"End Lid - Shark Skin Gray","265D2001P001":"Plate Lead Mid Conduit Adj- DDG p1/p2,p3","265D3294P001":"Spray Arm Hub - DDG","265D3933P002":"SF Hotpoint Control Panel White","265D3920P001":"SF SW BASKET","290D5040P001":"Belt Protector","239D4132P001 23904132P002":"FZ Slide Holder LH/RH","239D2668P001":"23\" Freezer Tower Meat Pan","197D8124P001":"Ice Bucket","265D3951P002":"SF Fill Funnel","239D2251P002":"Ice Crusher Bucket","290D5035G001":"Agitator Base Hybrid (5035) ASM","290D5061G001":"Hybrid Impeller (5061)","265D3238G003":"Single Pc Basket (3234) - MicroBan Blue","265D4301P003":"Console Bracket - New","265D3936P003":"SF GEControl Panel Dorian Gray","265D3936P001":"SF GE Control Panel Black","290D5258P001":"28\" Console","265D3238G001":"Single Pc Basket (3234) - p1/p2/p3","26503975P003 26503976P003":"SF Mid SA Top & Bottom","26503971P003":"SF Lower SA Top & Bottom - SSG","38383873883 26503972P003":"SF Lower SA Top & Bottom - SSG","239D4628G004":"Support Side RH/LH 23 (2682/83)","239D4586P002":"Cover Valve and Tank","290D5004G001":"Balance Ring (5005/6)","290D1347G003":"Tall Basket Bottom","290D2710G001":"27\" Hybrid Basket Bottom","290D5007G002":"TL 28 Basket Bottom","293D1409G004":"Room Front- w/ Label- New","239D4533P004":"LH Inner Door- New","239D5772G007":"DRAWER LOWER ASM CD (0060248048A) White","265D3484G003":"2 Shot Sump - Group 3","Sump Cart 265D3484G003":"2 Shot Sump - Group 3","265D4087G001":"SF LOWER ROLLER CLIP ASM","265D4086G001":"SF STUD ROLLER ASM UPPER","265D3970G003":"SF LOWER SPRAY ARM SSG","265D3974G003":"SF MID SPRAY ARM- SSG","265D1386P001":"Plate Lead Mid Conduit Static Single p1/p2","265D3933P001":"SF Hotpoint Control Panel Black","239D1618P006":"Slider RH/LH","26501378P002":"Bearing S/A Single-SSG","239D1772P003":"Hinge mullion center","265D4196P001":"SF ROLLER","265D1483P001":"Clip Bracket p1/p2","290D2077P001":"Hinge Bushing Lid LH","239D2287P001":"Spacer Crusher","239D2255P001":"Crusher Housing (Jones)","265D1377P003":"Spray Arm Hub- DDG","265D4701P001":"Lid Manager","239D1137P003":"Enclosure MBD Asm","239D4628G001":"Support Side RH/LH 29 (2501/05)","239D2470P001":"Divider Bottom Basket","239D1618P005":"Slider RH/LH","239D2457P001":"Bin Door FZ","265D2723G004":"Conduit Mid Adj Single - p1/p2","265D1967P002":"Conduit Mid Adj Single p1/p2","265D3936P002":"SF GEControl Panel White","265D3975P003":"SF Mid SA Top & Bottom","26503976P003 265D3971P00 283838776883":"SF Lower SA Top & Bottom - SSG","26503972P003":"SF Lower SA Top & Bottom - SSG","29001347G003":"Tall Basket Bottom","239D5772G005":"DRAWER LOWER ASM FD (5837) White","239D2360G002":"Ice Crusher ASM","265D4761P001":"Attachment Strip Right- New","265D2178G012":"7 Piece Basket Assembly - DDG//ICA Repack","265D1481P004":"Plastic Bracket (1481 - stud). p1/p2. RAW","265D4761P002":"Attachment Strip Left- New","265D4301P004":"Console Bracket- New","265D2314P007":"Short Cup Shelf DDG New","265D3976G003":"SF Mid SA Top & Bottom - SSG","265D3972P003":"SF Lower SA Top & Bottom - SSG","265D3971P003":"SF Lower SA Top & Bottom - SSG","239D4437P001":"Divider Basket Upper","290D2077P002":"Hinge Bushing Lid RH","290D2710G002":"27\" Hybrid Basket Bottom","290D5007G003":"TL 28' Basket Bottom","239D5772G006":"DRAWER LOWER ASM FD (5837) Gray","265D1510P001":"Carrier Roller RT Prod Svc","265D4799P001":"Plate Lead Adjust- Artemis","239D4132P001":"FZ Slide Holder LH/RH","239D4132P002":"FZ Slide Holder LH/RH","265D3976P003":"SF Mid SA Top & Bottom","265D1510P002":"Carrier Roller LT Prod Svc","293D1707P002":"Shroud OD Fan New","29002710G002":"27\" Hybrid Basket Bottom","26503484G003":"2 Shot Sump Group 3","265D4791P001":"White Heater Nut- New","265D2025P002":"Middle Lid - SSG","265D1481P005":"Plastic Bracket (1481 2 stud)- p1/p2 RAW","290D5049P001":"TL28 Ball Joint","265D4765P001":"Tub Mount","265D7491P001":"White Heater Nut - New","290D4187P003":"Impeller Cap","239D4182P003":"Slide RH/LH","265D3975P003 / 265D3976P003":"SF Mid SA Top & Bottom - SSG","265D3971P003 / 265D3972P003":"SF Lower SA Top & Bottom - SSG","239D4628G003":"MP Slide Support 23 (2670/71)","290D2777P002":"Hinge Bushing Lid RH","265D3533P003":"Sump Latch","265D3179P003":"SF Lower SA Top & Bottom - SSG","265D3177P003":"SF Lower SA Top & Bottom - DDG","230D4268G001":"Support Side Rail LH 29 (2501/05)","290D5040G001":"Balance Ring (5005/6)","230D2368G002":"Ice Crusher ASM","265D3970G004":"SF LOWER SPRAY ARM- DDG","265D2032P004":"Middle Lid - Microban Blue","265D2025P004":"Middle Lid - Microban Blue","265D3974P003":"SF Mid SA Top & Bottom-SSG","265D2007P001":"Plate Lead Mid Convtd Adj - DDG - p1/p2/p3","238D1137P003":"Enclosure MBD Arm","265D4068G001":"SF STUD ROLLER ASM UPPER","235D5772G005":"DRAWER LOWER ASM F/O 8377 White","265D3979G003":"SF LOWER SPRAY ARM - SSG","265D0138P002":"Conduit Mid Stric Single - p1/p2","265D3178P002":"Bearing SA Single - SSG","290D3135P001":"Ball Joint","290D0777P001":"Hinge Bushing Lid LH","265D2426P001":"SF Clip Bridge Upper","239D2253P002":"Cover Crusher","265D1511P001":"Cover Roller RT (Dish Dark Gray) Prod Svc","265D4790P001":"Plate Lead Adjust - Artmis","265D3195P002":"SF Fill Funnel","265D3286G003":"Single Px Basket p3234 - MicroBan Blue","265D3401P004":"Console Bracket - New","265D3916P003":"SF GE Control Panel Derian Gray","265D1528P001":"2f CPC Basket","265D3977P003":"SF Lower SA Top & Bottom - SSG","233D4628G003":"MP Slide Support (23/670/7)","23905772G008":"DRAWER LOWER ASM CD (0060248048A) Gray","290013470003":"Tall Basket Bottom","290013476003":"Tall Basket Bottom","290027100002":"27 Hybrid Basket Bottom","290050076003":"TL 28' Basket Bottom","293014090004":"Room Front w/ Label-New","265034846003":"2 Shot SumpGroup -3","26501385P002":"Conduit Mid Static Single-p1/p2","26503220P005":"Integrated Carrier (DDG)","26504761P002":"Attachment Strip Left-New","26502025P002":"Middle Lid-SSG","29002077P002":"Hinge Bushing Lid RH","26501386P001":"Plate Lead Mid Conduit Static Single-p1/p2","26501482P003":"SF Rack Roller","26501481P004":"Plastic Bracket (1481-3 stud)-p1/p2-RAW","265015129002":"Roller Lower Rack-p1/p2/p3","29001335P001":"Ball Joint","26501483P001":"Clip Bracket-p1/p2","26504226P001":"SF Clip Bridge Upper","26503353P003":"Sump Latch","26501377P003":"Spray Arm Hub-DDG","26501511P002":"Cover Roller LT (Dish Dark Gray) Prod Svc","26501510P001":"Carrier Roller RT-Prod Svc","26504799P001":"Plate Lead Adjust-Artemis","26503933P001":"SF Hotpoint Control Panel Black","26503920P001":"SF SW BASKET","29005035G001":"Agitator Base Hybrid (5035) ASM","290050616001":"Hybrid Impeller (5061)","265032386003":"Single Pc Basket (3234)-MicroBan Blue","26504301P004":"Console Bracket-New","26503936P003":"SF GEControl Panel Dorian Gray","26503936P001":"SF GE Control Panel Black","29005258P001":"28\" Console","265032386001":"Single Pc Basket (3234)-p1/p2/p3","26503238G001":"Single Pc Basket (3234)-p1/p2/p3","26503975P003":"SF Mid SA Top & Bottom-SSG","2650-39748003":"SF Mid SA Top & Bottom-SSG","265039778003":"SF Lower SA Top & Bottom-SSG","265039222003":"SF Lower SA Top & Bottom-SSG","23904586P002":"Cover Valve and Tank","290050046001":"Balance Ring (5005/6)","29005004G001":"Balance Ring (5005/6)","290020779002":"Hinge Bushing Lid RH","26501312P002":"Roller Lower Rack-p1/p2/p3","290013359001":"Ball Joint","26503933P002":"SF Hotpoint Control Panel White","29005040P001":"Belt Protector","26503951P002":"SF Fill Funnel","26501967P002":"Conduit Mid Adj Single-p1/p2","29005061G001":"Hybrid Impeller (5061)","265039/5P003":"SF Mid SA Top & Bottom","265038799003-":"SF Mid SA Top & Bottom  SSG","26503977P003-":"SF Lower SA Top & Bottom-SSG","23904628G004":"Support Side RHLH /23 (2682/83)","23904533P004":"LH Inner Door-New.","239057726007":"DRAWER LOWER ASM CD (0060248048A) White","265034840003":"2 Shot SumpGroup -3","265014796006":"Plastic Bracket (1481-3 Stud)","265040866001":"SF STUD ROLLER ASM UPPER","23902360G002":"Ice Crusher ASM","26503974G003":"SF MID SPRAY ARM-SSG","265039746003":"SF MID SPRAY ARM-SSG","26503970G003":"SF LOWER SPRAY ARM-SSG","26503936P002":"SF GEControl Panel White","29301707P002":"Shroud OD Fan-New","26501512P006":"Roller Lower Rack-p1/p2/p3-New","26504761P001":"Attachment Strip Right-New","29005049P001":"TL.28 Ball Joint","26501511P001":"Cover Roller RT (Dish Dark Gray) Prod Svc","26501510P002":"Carrier Roller LT-Prod Svc","23902251P002":"Ice Crusher Bucket","26503238G003":"Single Pc Basket (3234) - MicroBan Blue","26503975PUUS":"SF Mid SA Top & Bottom","28503977P003":"SF Lower SA Top & Bottom-SSG","26501479G006":"Plastic Bracket (1481-3 Stud)","26504086G001":"SF STUD ROLLER ASM UPPER","26504701P001":"Lid Manager","239057726005":"DRAWER LOWER ASM FD (5837) White","239D1177P003":"Hinge Mullion center","290D2078P001":"Hinge Bushing Lid LH","265D3929P001":"SF SW BASKET","265D3973P003":"SF Mid SA Top & Bottom - SSG","2900134700031":"Tall Basket Bottom","290030076003":"TL 28 Basket Bottom","2650348406003":"2 Shot Sump Group 3","265039706003":"SF LOWER SPRAY ARM-SSG","29002077P001":"Hinge Bushing Lid LH","26502026P004":"End Lid-Blue Microban","26504765P001":"Tub Mount","23901137P003":"Enclosure MBD Asm","265039339001":"SF Hotpoint Control Panel Black","290050356001":"Agitator Base Hybrid (5035) ASM","2651039/5P00S":"SF Mid SA Top & Bottom","20303973003-":"SF Lower SA Top & Bottom-SSG","26501972800":"SF Lower SA Top & Bottom-SSG","23904628G003":"MP Slide Support 23 (2670/71)","26501512P002":"Roller Lower Rack-p1/p2/p3","290027106002":"27\" Hybrid Basket Bottom","29301409G004":"Room Front w/ Label-New","239057720006":"DRAWER LOWER ASM FD (5837) Gray","265015122006":"Roller Lower Rack-p1/p2/p3-New","265014829003":"SF Rack Roller","23902253P002":"Cover Crusher","26503879P003":"SF Lower SA Top & Bottom-SSG","265039719003":"SF Lower SA Top & Bottom-SSG","23904437P001":"Divider Basket Upper","290050040001":"Balance Ring (5005/6)","265D2026P004":"End Lid - Blue Microban","239D5772G008":"DRAWER LOWER ASM CD (0060248048A) Gray","265D1512G002":"Roller Lower Rack-p1/p2/p3","265D1511P002":"Cover Roller LT (Dish Dark Gray) Prod Svc","265D3977G003":"SF Lower SA Top & Bottom-SSG","265D3922G003":"SF Lower SA Top & Bottom-SSG","263D1385P002":"Condult Mid Static Single-p1 p2","265D1376P002":"Bearing S/A Single-SSG","265D1512G006":"Roller Lower Rack-p1/p7/p3-New","265D4791G001":"White Heater Nut-New","265D3975G003":"SF Mid SA Top & Bottom-SSG","265D1391G003":"SF Lower SA Top & Bottom-SSG","290D1335G001":"Ball Joint","265D1972G003":"SF Lower SA Top & Bottom-SSG","265D3974G004":"SF MID SPRAY ARM DDG","290D1287P003":"Impeller Cap","265D3972G003":"SF Lower SA Top & Bottom - SSG","265D1397G003":"SF Lower SA Top & Bottom-SSG","265D3971G003":"SF Lower SA Top & Bottom - SSG","265D3975P004":"SF Mid SA Top & Bottom - DDG","265D3976P004":"SF Mid SA Top & Bottom - SSG","206C1833P001":"Trim Panel Handle","265D3975P003 265D3976P003":"SF Mid SA Top & Bottom SSG","265D3971P003 265D3972P003":"SF Lower SA Top & Bottom - SSG","239D1372P003":"Cover Fan FZ","265D39Z6P003":"SF Mid SA Top & Bottom","26503976P003":"SF Mid SA Top & Bottom - SSG","265D3971P005":"SF Lower SA Top & Bottom - SSG","265D3971P004":"SF Lower SA Top & Bottom DDG","265D3972P004":"SF Lower SA Top & Bottom DDG","239D4628G002":"Support Side RH/LH 29 (2645/46)","265D3970G007":"SF LOWER SPRAY ARM- SSG","265039749003":"Unknown Part"};
+    
+    // Stable color palette
+    const colors = [
+      '#f97316', '#3b82f6', '#22c55e', '#a855f7', '#eab308', 
+      '#ef4444', '#14b8a6', '#f43f5e', '#6366f1', '#8b5cf6'
+    ];
+
+    const ctx = document.getElementById('dohChart').getContext('2d');
+    let chartInstance = null;
+    let selectedTimeFrame = 'all';
+
+    // Initialize Choices.js
+    const selectEl = document.getElementById('partSelect');
+    const choices = new Choices(selectEl, {
+      removeItemButton: true,
+      searchPlaceholderValue: 'Search part numbers or names...',
+      shouldSort: false, // keep our custom sorting
+      itemSelectText: '', // Remove the "Press to select" text which clutters mobile
+      position: 'bottom'
+    });
+
+    // Default select top 2
+    if (sortedParts.length > 0) choices.setChoiceByValue(sortedParts[0]);
+    if (sortedParts.length > 1) choices.setChoiceByValue(sortedParts[1]);
+
+    function renderChart() {
+      const selectedParts = Array.from(selectEl.selectedOptions).map(opt => opt.value);
+      
+      // Filter dates based on timeframe
+      let datesToUse = allSortedDates;
+      if (selectedTimeFrame !== 'all') {
+        const days = parseInt(selectedTimeFrame);
+        const cutoffDate = new Date();
+        cutoffDate.setDate(cutoffDate.getDate() - days);
+        datesToUse = allSortedDates.filter(d => new Date(d) >= cutoffDate);
+      }
+
+      const datasets = selectedParts.map(partNumber => {
+        const colorIdx = sortedParts.indexOf(partNumber) % colors.length;
+        const color = colors[colorIdx];
+        
+        const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+        gradient.addColorStop(0, color + '66');
+        gradient.addColorStop(1, color + '00');
+
+        const dataPoints = datesToUse.map(date => {
+          return series[partNumber][date] !== undefined ? series[partNumber][date] : null;
+        });
+        
+        // Label will show part number + name in tooltips
+        const labelText = partNumber + ' - ' + partDescriptions[partNumber];
+
+        return {
+          label: labelText,
+          data: dataPoints,
+          borderColor: color,
+          backgroundColor: selectedParts.length === 1 ? gradient : color + '33',
+          fill: selectedParts.length === 1,
+          tension: 0.3,
+          spanGaps: true,
+          borderWidth: 2,
+          pointRadius: 2,
+          pointHoverRadius: 6
+        };
+      });
+
+      if (chartInstance) {
+        chartInstance.destroy();
+      }
+
+      chartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: datesToUse,
+          datasets: datasets
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { 
+              display: false // Hide default legend to save space on mobile, tooltips are enough
+            },
+            tooltip: { 
+              backgroundColor: 'rgba(22, 27, 34, 0.95)', 
+              titleColor: '#e6edf3', 
+              bodyColor: '#e6edf3', 
+              borderColor: '#30363d', 
+              borderWidth: 1, 
+              padding: 12,
+              titleFont: { size: 13 },
+              bodyFont: { size: 13 },
+              callbacks: {
+                label: function(context) {
+                  return ' ' + context.dataset.label + ': ' + context.parsed.y + ' DOH';
+                }
+              }
+            }
+          },
+          scales: {
+            x: { 
+              ticks: { color: '#8b949e', maxTicksLimit: window.innerWidth < 768 ? 6 : 15, maxRotation: 0, font: {size: 11} }, 
+              grid: { color: '#30363d', drawBorder: false } 
+            },
+            y: { 
+              title: { display: false },
+              ticks: { color: '#8b949e', padding: 8, font: {size: 11} }, 
+              grid: { color: '#30363d', drawBorder: false },
+              min: 0, beginAtZero: true
+            }
+          }
+        }
+      });
+    }
+
+    selectEl.addEventListener('change', () => {
+      renderChart();
+    });
+
+    const filterBtns = document.querySelectorAll('.time-filters button');
+    filterBtns.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        filterBtns.forEach(b => b.classList.remove('active'));
+        e.target.classList.add('active');
+        selectedTimeFrame = e.target.getAttribute('data-days');
+        renderChart();
+      });
+    });
+
+    // Re-render on resize to adjust tick limits
+    window.addEventListener('resize', () => {
+      clearTimeout(window.resizeTimer);
+      window.resizeTimer = setTimeout(renderChart, 150);
+    });
+
+    renderChart();
+  </script>
+</body>
+</html>

@@ -21,6 +21,9 @@
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&family=Nunito:wght@300;400;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css" />
 <link rel="stylesheet" href="./css/styles.css">
 </head>
 <body>
@@ -95,6 +98,10 @@
             <span class="ud-item-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 2h10a1 1 0 011 1v8a1 1 0 01-1 1H5l-3 2V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg></span>
             Messages
             <span class="msg-btn-badge" data-messages-badge style="display:none;">0</span>
+          </button>
+          <button class="user-dropdown-item" id="analytics-btn-menu" type="button" data-shell-action="open-analytics">
+            <span class="ud-item-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 14h12M4 11V5M8 11V3M12 11V7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            Analytics
           </button>
           <!-- Dark/Light toggle -->
           <div class="ud-toggle-row">
@@ -1120,6 +1127,39 @@
     </div>
   </div>
   <div class="spt-caret spt-caret-down" id="spt-caret-down" style="display:none"></div>
+</div>
+
+<!-- ANALYTICS MODAL -->
+<div class="modal-overlay" id="analytics-modal" onclick="if(event.target===this)closeAnalyticsModal()">
+  <div class="modal" style="max-width:800px; width:95%; height:85vh; display:flex; flex-direction:column;">
+    <div class="modal-title">📊 Analytics — Days on Hand</div>
+    <div class="modal-subtitle">Compare inventory trends over time.</div>
+    <div class="time-filters" id="doh-time-filters" style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
+      <button class="btn btn-ghost" data-days="7">7D</button>
+      <button class="btn btn-ghost" data-days="30">30D</button>
+      <button class="btn btn-ghost" data-days="90">90D</button>
+      <button class="btn btn-primary" data-days="all">All Time</button>
+    </div>
+    <div class="analytics-part-picker" style="margin-bottom:12px; position:relative; z-index:10;">
+      <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:4px;">
+        <label style="font-size:12px; font-weight:600; color:var(--color-text-subtle, var(--text3));">Selected Parts</label>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <span style="font-size:11px; color:var(--color-text-subtle, var(--text3));">Sort by:</span>
+          <select id="doh-sort-select" style="font-size:11px; padding:2px 4px; border-radius:4px; background:var(--color-surface, var(--bg2)); color:var(--color-text, var(--text)); border:1px solid var(--color-border, var(--border)); outline:none;">
+            <option value="part">Part #</option>
+            <option value="name">Part Name</option>
+          </select>
+        </div>
+      </div>
+      <select id="doh-part-select" multiple></select>
+    </div>
+    <div style="flex:1; position:relative; min-height:0; width:100%; border-radius:12px; background:var(--color-surface, var(--bg2)); padding:12px; border:1px solid var(--color-border, var(--border));">
+      <canvas id="dohChart"></canvas>
+    </div>
+    <div class="modal-actions" style="margin-top:16px;">
+      <button class="btn btn-ghost" onclick="closeAnalyticsModal()">Close</button>
+    </div>
+  </div>
 </div>
 
 </body>

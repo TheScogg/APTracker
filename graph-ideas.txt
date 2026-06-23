@@ -1,0 +1,32 @@
+AP Tracker - Graphing & Analytics Ideas
+
+Here are some ideas for additional data that could be visualized to improve operational insights on the manufacturing floor:
+
+1. Issue Resolution Times (Mean Time To Resolution - MTTR)
+- Graph the average time it takes to resolve issues per machine, row, or shift.
+- Useful for identifying bottlenecks or maintenance backlogs.
+- Visualization: Bar chart comparing machines, or a line chart showing MTTR trends over the past month.
+
+2. Issue Volume by Category/Status
+- Track the number of issues categorized by their status (e.g., Tool/Die, Maintenance, Quality, Process Engineer).
+- Visualization: Stacked bar chart or pie chart to see which departments are handling the most issues.
+
+3. Machine Downtime vs. Uptime
+- If the system tracks when a machine goes down and comes back up, graph the total downtime hours per week.
+- Visualization: Line chart or area chart tracking downtime hours, overlaying a "target uptime" threshold.
+
+4. Gamification & Leaderboards
+- Track user engagement: Who is logging or resolving the most issues?
+- Visualization: Horizontal bar chart showing the top 5 contributors (XP or issues resolved) for the current week.
+
+5. Repeated Issues (Hotspots)
+- Identify parts or machines that have recurring issues logged against them within a short time frame.
+- Visualization: Heatmap showing Machines vs. Days of the Week to identify specific problem periods.
+
+6. Shift Performance Comparison
+- Compare the number of issues logged or resolved between Day, Night, and Weekend shifts.
+- Visualization: Grouped bar chart comparing the shifts side-by-side over time.
+
+7. Inventory Threshold Alerts (DOH Extensions)
+- Extend the DOH chart to overlay a red horizontal "Critical Threshold" line (e.g., < 3 days).
+- Visualization: The current DOH line chart, but highlighting data points in red when they dip below the safe threshold.

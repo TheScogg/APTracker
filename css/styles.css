@@ -2595,6 +2595,9 @@
   .tl-workflow-history-row + .tl-workflow-history-row { margin-top: 4px; }
   .tl-workflow-history-row.missing { opacity: 0.55; }
   .tl-workflow-history-row.current { color: var(--color-text, var(--text)); }
+  .tl-workflow-history-row.superseded { opacity: 0.68; }
+  .tl-workflow-history-row.superseded .tl-workflow-history-label,
+  .tl-workflow-history-row.superseded .tl-workflow-history-meta { text-decoration: line-through; text-decoration-thickness: 1px; text-decoration-color: color-mix(in srgb, currentColor 42%, transparent); }
   .tl-workflow-history-dot { width: 16px; height: 16px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; border: 1px solid color-mix(in srgb, currentColor 45%, transparent); font-size: 9px; line-height: 1; color: var(--color-text-subtle, var(--text3)); }
   .tl-workflow-history-dot.called { color: #eab308; }
   .tl-workflow-history-dot.accepted { color: #22c55e; }
@@ -4230,6 +4233,9 @@
     align-items: center;
     justify-content: flex-end;
   }
+  #notes-modal .notes-back-btn {
+    display: inline-flex;
+  }
   #notes-modal .notes-editor-actions {
     padding: 4px;
     border-radius: 8px;
@@ -4247,6 +4253,111 @@
     border-radius: 8px;
     background: color-mix(in srgb, var(--color-surface, var(--bg2)) 84%, transparent);
     box-shadow: none;
+  }
+  #notes-modal .notes-viewer {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  #notes-modal .notes-viewer[hidden],
+  #notes-modal .notes-editor-card[hidden],
+  #notes-modal .notes-viewer-card[hidden],
+  #notes-modal #notes-edit-btn[hidden],
+  #notes-modal #notes-done-btn[hidden] {
+    display: none !important;
+  }
+  #notes-modal .notes-viewer-card {
+    margin-bottom: 0;
+    padding: 14px;
+    border-radius: 8px;
+    cursor: default;
+    background: color-mix(in srgb, var(--color-surface, var(--bg2)) 84%, transparent);
+    box-shadow: none;
+  }
+  #notes-modal .notes-viewer-card:hover {
+    transform: none;
+    border-color: var(--color-border, var(--border));
+  }
+  #notes-modal .notes-viewer-card:first-child {
+    border-left: 3px solid var(--notes-rail);
+  }
+  #notes-modal .notes-viewer-title {
+    font-family: 'Nunito', sans-serif;
+    font-size: 28px;
+    font-weight: 850;
+    letter-spacing: 0;
+    line-height: 1.12;
+    color: var(--color-text, var(--text));
+    margin-bottom: 6px;
+  }
+  #notes-modal .notes-viewer-meta {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-text-subtle, var(--text3));
+    margin-bottom: 12px;
+  }
+  #notes-modal .notes-viewer-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 14px;
+  }
+  #notes-modal .notes-viewer-body {
+    min-height: 300px;
+    padding: 4px 2px 8px;
+    color: var(--color-text, var(--text));
+    font-family: 'Nunito', sans-serif;
+    font-size: 15px;
+    line-height: 1.65;
+    overflow-wrap: anywhere;
+  }
+  #notes-modal .notes-viewer-body.empty,
+  #notes-modal .notes-body-preview-empty {
+    color: var(--color-text-subtle, var(--text3));
+  }
+  #notes-modal .notes-viewer-body p { margin: 0 0 11px; }
+  #notes-modal .notes-viewer-body ul,
+  #notes-modal .notes-viewer-body ol { margin: 0 0 12px 20px; padding-left: 20px; }
+  #notes-modal .notes-viewer-body li { margin: 3px 0; }
+  #notes-modal .notes-viewer-body h1,
+  #notes-modal .notes-viewer-body h2,
+  #notes-modal .notes-viewer-body h3 { margin: 14px 0 8px; line-height: 1.18; }
+  #notes-modal .notes-viewer-body a { color: var(--color-info, var(--blue)); }
+  #notes-modal .notes-viewer-check-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 9px 10px;
+    border: 1px solid color-mix(in srgb, var(--color-border, var(--border)) 82%, transparent);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--color-bg, var(--bg)) 24%, transparent);
+  }
+  #notes-modal .notes-viewer-check-item.done {
+    opacity: 0.7;
+  }
+  #notes-modal .notes-viewer-check-item.done .notes-viewer-check-text {
+    text-decoration: line-through;
+  }
+  #notes-modal .notes-viewer-check-mark {
+    width: 18px;
+    height: 18px;
+    border-radius: 6px;
+    border: 1px solid color-mix(in srgb, var(--color-success, var(--green)) 54%, var(--color-border, var(--border)));
+    color: var(--color-success, var(--green));
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 900;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  #notes-modal .notes-viewer-check-text {
+    font-size: 14px;
+    line-height: 1.45;
+    color: var(--color-text, var(--text));
   }
   #notes-modal .notes-editor-card-main {
     padding: 14px;
@@ -6946,6 +7057,106 @@
   transform: scale(0.92);
 }
 
+/* Unified workspace shell for AP Tracker tools */
+#press-wiki-modal,
+#notes-modal,
+#todos-modal,
+#messaging-modal,
+#role-alerts-modal,
+#add-modal {
+  --tool-accent: var(--color-accent, var(--accent));
+  --tool-accent-soft: color-mix(in srgb, var(--tool-accent) 14%, var(--color-surface, var(--bg2)));
+  --tool-panel-bg: color-mix(in srgb, var(--color-bg, var(--bg)) 92%, var(--color-surface, var(--bg2)) 8%);
+  --tool-list-bg: color-mix(in srgb, var(--color-surface-raised, var(--bg3)) 86%, var(--color-bg, var(--bg)) 14%);
+  --tool-control-bg: color-mix(in srgb, var(--color-surface, var(--bg2)) 86%, transparent);
+}
+#press-wiki-modal { --tool-accent: var(--color-teal, var(--teal)); }
+#notes-modal { --tool-accent: var(--color-accent, var(--accent)); }
+#todos-modal { --tool-accent: var(--color-success, var(--green)); }
+#messaging-modal { --tool-accent: var(--color-info, var(--blue)); }
+#role-alerts-modal { --tool-accent: var(--color-danger, var(--red)); }
+#add-modal { --tool-accent: var(--color-accent, var(--accent)); }
+
+@media (min-width: 701px) {
+  #press-wiki-frame.phone,
+  #notes-phone-frame.phone,
+  #todos-frame.phone,
+  #messaging-frame.phone,
+  #add-modal-frame.phone,
+  #role-alerts-frame.phone {
+    width: min(94vw, 1180px);
+    height: min(88vh, 860px);
+    border-radius: 12px;
+    background: var(--tool-panel-bg);
+    border-color: color-mix(in srgb, var(--color-border, var(--border)) 82%, var(--tool-accent) 18%);
+    box-shadow: 0 24px 72px rgba(0,0,0,0.58);
+  }
+}
+
+#press-wiki-app-container,
+#notes-app-container,
+#todos-app-container,
+#messaging-app-container,
+#role-alerts-app-container,
+#add-modal-app-container {
+  background: var(--tool-panel-bg) !important;
+}
+
+#press-wiki-modal .tool-modal-nav-shell,
+#notes-modal .tool-modal-nav-shell,
+#todos-modal .tool-modal-nav-shell,
+#messaging-modal .tool-modal-nav-shell,
+#role-alerts-modal .tool-modal-nav-shell,
+#add-modal .tool-modal-nav-shell {
+  min-height: 44px;
+  margin-bottom: 0;
+  padding: 9px 14px;
+  background: color-mix(in srgb, var(--color-surface, var(--bg2)) 86%, var(--color-bg, var(--bg)) 14%);
+  border-bottom-color: color-mix(in srgb, var(--color-border, var(--border)) 86%, var(--tool-accent) 14%);
+}
+
+#press-wiki-modal .tool-modal-nav-title,
+#notes-modal .tool-modal-nav-title,
+#todos-modal .tool-modal-nav-title,
+#messaging-modal .tool-modal-nav-title,
+#role-alerts-modal .tool-modal-nav-title,
+#add-modal .tool-modal-nav-title {
+  color: var(--color-text, var(--text));
+  letter-spacing: 0.12em;
+}
+
+#press-wiki-modal .tool-modal-nav-btn:hover,
+#notes-modal .tool-modal-nav-btn:hover,
+#todos-modal .tool-modal-nav-btn:hover,
+#messaging-modal .tool-modal-nav-btn:hover,
+#role-alerts-modal .tool-modal-nav-btn:hover,
+#add-modal .tool-modal-nav-btn:hover {
+  border-color: color-mix(in srgb, var(--tool-accent) 52%, var(--color-border, var(--border)));
+}
+
+#todos-modal .note-card,
+#role-alerts-modal .role-alert-card,
+#press-wiki-modal .press-wiki-card {
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--color-surface, var(--bg2)) 84%, transparent);
+  border-color: color-mix(in srgb, var(--color-border, var(--border)) 88%, transparent);
+  box-shadow: none;
+}
+
+#todos-modal .note-card:hover,
+#role-alerts-modal .role-alert-card:hover,
+#press-wiki-modal .press-wiki-card:hover {
+  border-color: color-mix(in srgb, var(--tool-accent) 45%, var(--color-border, var(--border)));
+}
+
+#todos-modal .filter-pill.active,
+#role-alerts-modal .scope-btn.active,
+#messaging-modal .msg-tab.active {
+  border-color: color-mix(in srgb, var(--tool-accent) 58%, var(--color-border, var(--border)));
+  background: color-mix(in srgb, var(--tool-accent) 18%, var(--color-surface, var(--bg2)) 82%);
+  color: var(--color-text, var(--text));
+}
+
 /* TODOS TOOL */
 #todos-modal .app-container {
   padding: 0;
@@ -8366,4 +8577,108 @@ body {
     border-color: color-mix(in srgb, var(--color-border, var(--border)) 82%, var(--color-accent, var(--accent)) 18%);
     box-shadow: 0 24px 72px rgba(0,0,0,0.58);
   }
+}
+
+/* Final tool-shell layer: keep every tool aligned after legacy modal sizing rules. */
+@media (min-width: 701px) {
+  #press-wiki-frame.phone,
+  #todos-frame.phone,
+  #messaging-frame.phone,
+  #add-modal-frame.phone,
+  #role-alerts-frame.phone {
+    width: min(94vw, 1180px);
+    height: min(88vh, 860px);
+    border-radius: 12px;
+    background: var(--tool-panel-bg);
+    border-color: color-mix(in srgb, var(--color-border, var(--border)) 82%, var(--tool-accent) 18%);
+    box-shadow: 0 24px 72px rgba(0,0,0,0.58);
+  }
+}
+
+  @media (max-width: 860px) {
+    #notes-modal .notes-viewer {
+      padding-bottom: 18px;
+    }
+    #notes-modal.notes-mobile-editor .notes-editor-actions {
+      display: flex;
+      position: sticky;
+      bottom: 8px;
+      z-index: 8;
+      width: 100%;
+      border-color: color-mix(in srgb, var(--tool-accent, var(--color-accent, var(--accent))) 34%, var(--color-border, var(--border)));
+      background: color-mix(in srgb, var(--color-surface, var(--bg2)) 88%, var(--tool-accent, var(--color-accent, var(--accent))) 12%);
+    }
+    #notes-modal.notes-viewer-mode #notes-edit-btn {
+      flex: 1 1 100%;
+      min-height: 46px;
+      font-size: 13px;
+    }
+    #notes-modal.notes-viewer-mode #notes-pin-btn,
+    #notes-modal.notes-viewer-mode #notes-archive-btn,
+    #notes-modal.notes-viewer-mode #notes-delete-btn {
+      flex: 1 1 calc(33.333% - 6px);
+    }
+    #notes-modal.notes-editor-mode #notes-done-btn {
+      flex: 1 1 100%;
+      min-height: 46px;
+      font-size: 13px;
+    }
+    #notes-modal .notes-viewer-title {
+      font-size: 24px;
+    }
+  #notes-modal .notes-viewer-body {
+    min-height: 260px;
+    font-size: 15px;
+  }
+}
+
+/* Analytics Modal Choices.js overrides */
+.analytics-part-picker {
+  position: relative;
+  z-index: 40;
+  overflow: visible;
+}
+#analytics-modal .modal {
+  overflow: visible;
+}
+#analytics-modal .choices { margin-bottom: 0; position: relative; z-index: 45; }
+#analytics-modal .choices.is-open { z-index: 2200; }
+.choices__inner, .choices[data-type*="select-multiple"] .choices__inner {
+  background-color: var(--color-surface-raised, var(--bg3)) !important; border: 1px solid var(--color-border, var(--border)) !important; border-radius: 8px !important; min-height: 44px; padding: 4px 8px;
+}
+.choices.is-focused .choices__inner { border-color: var(--color-accent, var(--accent)) !important; }
+.choices__input { background-color: transparent !important; color: var(--color-text, var(--text)) !important; font-size: 14px; }
+#analytics-modal .choices__list--dropdown,
+#analytics-modal .choices__list[aria-expanded] {
+  background-color: var(--color-surface-raised, var(--bg3)) !important;
+  border: 1px solid var(--color-border, var(--border)) !important;
+  color: var(--color-text, var(--text)) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.58) !important;
+  z-index: 2300 !important;
+  margin-top: 4px;
+  word-break: break-word;
+}
+#analytics-modal .choices__list--dropdown.is-active,
+#analytics-modal .choices__list[aria-expanded="true"] {
+  display: block !important;
+  visibility: visible !important;
+}
+.choices__list--dropdown .choices__item { color: var(--color-text, var(--text)) !important; padding: 10px 14px; font-size: 14px; border-bottom: 1px solid var(--color-border, var(--border)); }
+.choices__list--dropdown .choices__item--selectable.is-highlighted { background-color: var(--color-bg, var(--bg)) !important; color: var(--color-text, var(--text)) !important; }
+.choices__list--multiple .choices__item, .choices[data-type*="select-multiple"] .choices__list--multiple .choices__item {
+  background-color: var(--color-bg, var(--bg)) !important; border: 1px solid var(--color-border, var(--border)) !important; color: var(--color-text, var(--text)) !important; border-radius: 6px !important; padding: 4px 8px; font-size: 13px; word-break: break-all;
+}
+.choices__button, .choices[data-type*="select-multiple"] .choices__button { filter: invert(1) !important; border-left: 1px solid rgba(255,255,255,0.2) !important; margin-left: 6px; }
+#doh-part-select.analytics-native-select {
+  width: 100%;
+  min-height: 128px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border, var(--border));
+  background: var(--color-surface-raised, var(--bg3));
+  color: var(--color-text, var(--text));
+  padding: 8px;
+  font-family: 'Nunito', sans-serif;
+  font-size: 13px;
+  outline: none;
 }

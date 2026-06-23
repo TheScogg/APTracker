@@ -13,6 +13,7 @@ import { initTodosTool } from "./todos-tool.js";
 import { initMessagingTool } from "./messaging-tool.js";
 import { initWikiTool } from "./wiki-tool.js";
 import { initNotesTool } from "./notes-tool.js";
+import { initAnalyticsTool } from "./analytics-tool.js";
 import {
   normalizeChecklistItems,
   noteTextFromHtml as _noteTextFromHtml,
@@ -1144,6 +1145,12 @@ function workflowHistoryTimestampLabel(ts) {
     hour: 'numeric',
     minute: '2-digit'
   });
+}
+
+function workflowHistoryMissingLabel(stateIndex, currentIndex) {
+  if (currentIndex < 0) return 'Not reached';
+  if (stateIndex < currentIndex) return 'Not recorded';
+  return 'Not reached';
 }
 
 function isCurrentWorkflowEntry(entryIndex, historyLength, entry, issue) {
@@ -6648,26 +6655,7 @@ let activeMiniCard = null; // { machine, rowName }
 // ── FLOATING ACTIVE ISSUES HUB ──
 function updateActiveIssuesPill() {
   const hubEl = document.getElementById('active-issues-hub');
-  const countEl = document.getElementById('active-issues-count');
-  if (!hubEl || !countEl || !currentUser) return;
-
-  // Only show on mobile viewports
-  if (window.innerWidth >= 900) {
-    hubEl.classList.add('hidden');
-    return;
-  }
-
-  // Count open issues assigned to current user
-  const myOpenIssues = issues.filter(i => 
-    i.userId === currentUser.uid && currentStatusKey(i) !== 'resolved'
-  );
-
-  if (myOpenIssues.length > 0) {
-    countEl.textContent = myOpenIssues.length;
-    hubEl.classList.remove('hidden');
-  } else {
-    hubEl.classList.add('hidden');
-  }
+  if (hubEl) hubEl.classList.add('hidden');
 }
 
 window.triggerActiveIssuesHub = function() {
@@ -10516,16 +10504,20 @@ function renderIssues() {
       const completedWorkflowStates = wfOrder.filter(state => entryWorkflowHistory?.[state]?.at || entryWorkflowHistory?.[state]?.by);
       const historyKey = `${issue.id}:${entryWorkflowId || trueIdx}`;
       const isHistoryOpen = workflowHistoryOpenKeys.has(historyKey);
+      const entryWorkflowIndex = wfOrder.indexOf(entryWorkflowState);
       const workflowHistoryRows = wfOrder.map(state => {
         const cfg = workflowConfig[state];
+        const stateIndex = wfOrder.indexOf(state);
         const item = entryWorkflowHistory?.[state] || null;
         const hasEvent = !!(item?.at || item?.by);
+        const isCurrentWorkflowHistoryRow = entryWorkflowState === state;
+        const isSuperseded = hasEvent && entryWorkflowIndex >= 0 && stateIndex > entryWorkflowIndex;
         const actorLabel = item?.by ? formatWorkflowActor(item.by) : '';
         const timeLabel = item?.at ? workflowHistoryTimestampLabel(item.at) : '';
         const meta = hasEvent
-          ? [timeLabel, actorLabel].filter(Boolean).join(' · ')
-          : (entryWorkflowState === state ? 'Current state' : 'Not reached');
-        return `<div class="tl-workflow-history-row ${hasEvent ? 'recorded' : 'missing'} ${entryWorkflowState === state ? 'current' : ''}">
+          ? `${[timeLabel, actorLabel].filter(Boolean).join(' · ')}${isSuperseded ? ' · superseded' : ''}`
+          : (isCurrentWorkflowHistoryRow ? 'Current state' : workflowHistoryMissingLabel(stateIndex, entryWorkflowIndex));
+        return `<div class="tl-workflow-history-row ${hasEvent ? 'recorded' : 'missing'} ${isCurrentWorkflowHistoryRow ? 'current' : ''} ${isSuperseded ? 'superseded' : ''}">
           <span class="tl-workflow-history-dot ${cfg.cssState}">${hasEvent ? '✓' : '○'}</span>
           <span class="tl-workflow-history-label">${cfg.icon} ${cfg.label}</span>
           <span class="tl-workflow-history-meta">${esc(meta || 'Not reached')}</span>
@@ -12382,6 +12374,11 @@ function handleShellAction(action, value, trigger, event) {
       closeUserMenus();
       window.openMessagingModal?.();
       break;
+    case 'open-analytics':
+      closeHeaderQuickMenu();
+      closeUserMenus();
+      window.openAnalyticsModal?.();
+      break;
     case 'open-shared-library':
       closeHeaderQuickMenu();
       closeUserMenus();
@@ -14174,7 +14171,8 @@ const MOBILE_MODAL_SWIPE_BLOCKERS = [
   '.notes-modal-a-close',
   '.notes-modal-b-close',
   '.role-alerts-close',
-  '.role-alerts-retry-fab'
+  '.role-alerts-retry-fab',
+  '.choices'
 ].join(',');
 
 const _mobileModalSwipeState = {
@@ -14913,6 +14911,14 @@ const exportTool = initExportTool({
   getHtml2Pdf: () => window.html2pdf,
   getXlsx: () => window.XLSX
 });
+
+// ── ANALYTICS TOOL ──
+const analyticsTool = initAnalyticsTool({
+  getCurrentPlantId: () => currentPlantId,
+  apiSessionClient
+});
+window.openAnalyticsModal = analyticsTool.openModal;
+window.closeAnalyticsModal = analyticsTool.closeModal;
 
 function openExportModal() {
   return exportTool.openModal();

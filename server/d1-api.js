@@ -3295,8 +3295,9 @@ export async function handleD1ApiRequest(request, env, { authenticateRequest } =
     const wikiRevisionSaveMatch = request.method === 'POST' && url.pathname.match(/^\/api\/plants\/([^/]+)\/wiki-pages\/([^/]+)\/revisions$/);
     const wikiPageDeleteMatch = request.method === 'DELETE' && url.pathname.match(/^\/api\/plants\/([^/]+)\/wiki-pages\/([^/]+)$/);
     const wikiAttachmentCreateMatch = request.method === 'POST' && url.pathname.match(/^\/api\/plants\/([^/]+)\/wiki-pages\/([^/]+)\/attachments$/);
+    const reportsDohMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/reports\/doh$/);
 
-    if (!meMatch && !meUpdateMatch && !meStorePurchaseMatch && !mePushTokenMatch && !accessRequestCreateSelfMatch && !plantsListMatch && !plantCreateMatch && !bootstrapMatch && !dailyScheduleMatch && !plantMembersMatch && !plantMemberCreateMatch && !plantMemberUpdateMatch && !plantMemberDeleteMatch && !accessRequestsMatch && !accessRequestUpdateMatch && !statusConfigMatch && !statusConfigUpdateMatch && !pressConfigMatch && !pressConfigUpdateMatch && !storeConfigMatch && !storeConfigUpdateMatch && !roleAlertRoutingMatch && !roleAlertRoutingUpdateMatch && !gamificationMatch && !gamificationAwardMatch && !gamificationAdminMatch && !gamificationAdminUpdateMatch && !gamificationLeaderboardResetMatch && !userDirectoryMatch && !roleAlertsMatch && !roleAlertCreateMatch && !roleAlertUpdateMatch && !issuesMatch && !issueCreateMatch && !issueMatch && !issueUpdateMatch && !issueDeleteMatch && !eventsMatch && !attachmentsMatch && !notesMatch && !noteCreateMatch && !noteUpdateMatch && !noteDeleteMatch && !noteAttachmentsMatch && !noteAttachmentCreateMatch && !noteAttachmentDeleteMatch && !conversationsMatch && !conversationCreateMatch && !conversationMessagesMatch && !conversationMessageCreateMatch && !conversationReadMatch && !wikiPagesMatch && !wikiPageMatch && !wikiRevisionSaveMatch && !wikiPageDeleteMatch && !wikiAttachmentCreateMatch) {
+    if (!meMatch && !meUpdateMatch && !meStorePurchaseMatch && !mePushTokenMatch && !accessRequestCreateSelfMatch && !plantsListMatch && !plantCreateMatch && !bootstrapMatch && !dailyScheduleMatch && !plantMembersMatch && !plantMemberCreateMatch && !plantMemberUpdateMatch && !plantMemberDeleteMatch && !accessRequestsMatch && !accessRequestUpdateMatch && !statusConfigMatch && !statusConfigUpdateMatch && !pressConfigMatch && !pressConfigUpdateMatch && !storeConfigMatch && !storeConfigUpdateMatch && !roleAlertRoutingMatch && !roleAlertRoutingUpdateMatch && !gamificationMatch && !gamificationAwardMatch && !gamificationAdminMatch && !gamificationAdminUpdateMatch && !gamificationLeaderboardResetMatch && !userDirectoryMatch && !roleAlertsMatch && !roleAlertCreateMatch && !roleAlertUpdateMatch && !issuesMatch && !issueCreateMatch && !issueMatch && !issueUpdateMatch && !issueDeleteMatch && !eventsMatch && !attachmentsMatch && !notesMatch && !noteCreateMatch && !noteUpdateMatch && !noteDeleteMatch && !noteAttachmentsMatch && !noteAttachmentCreateMatch && !noteAttachmentDeleteMatch && !conversationsMatch && !conversationCreateMatch && !conversationMessagesMatch && !conversationMessageCreateMatch && !conversationReadMatch && !wikiPagesMatch && !wikiPageMatch && !wikiRevisionSaveMatch && !wikiPageDeleteMatch && !wikiAttachmentCreateMatch && !reportsDohMatch) {
       return null;
     }
 
@@ -3495,8 +3496,49 @@ export async function handleD1ApiRequest(request, env, { authenticateRequest } =
     if (wikiAttachmentCreateMatch) {
       return createWikiAttachment(db, request, decodePathSegment(wikiAttachmentCreateMatch[1]), decodePathSegment(wikiAttachmentCreateMatch[2]), await request.json(), user);
     }
+    if (reportsDohMatch) {
+      return getDohReport(db, decodePathSegment(reportsDohMatch[1]), user);
+    }
     return null;
   } catch (error) {
     return errorResponse(error);
   }
+}
+
+async function getDohReport(db, plantId, user) {
+  await requirePlantPermission(db, plantId, user, 'canViewPlant');
+  const query = "SELECT schedule_date, part_number, description, doh FROM daily_schedule_rows WHERE plant_id = ? AND part_number IS NOT NULL AND part_number != '' AND doh IS NOT NULL AND doh != '' ORDER BY schedule_date ASC";
+  const { results } = await db.prepare(query).bind(plantId).all();
+  
+  const series = {};
+  const metadata = {};
+  
+  for (const row of (results || [])) {
+    const part = row.part_number;
+    if (!series[part]) series[part] = {};
+    if (!metadata[part]) {
+      metadata[part] = { description: row.description || '', count: 0 };
+    } else if (row.description && !metadata[part].description) {
+      metadata[part].description = row.description;
+    }
+    
+    let dohValue = parseFloat(row.doh);
+    if (!isNaN(dohValue)) {
+      const dateKey = (row.schedule_date || '').split('T')[0];
+      if (dateKey) {
+        if (series[part][dateKey] === undefined) {
+          metadata[part].count++;
+        }
+        series[part][dateKey] = dohValue;
+      }
+    }
+  }
+
+  return jsonResponse({
+    success: true,
+    data: {
+      series,
+      metadata
+    }
+  });
 }
