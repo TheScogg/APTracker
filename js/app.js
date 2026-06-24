@@ -1104,7 +1104,11 @@ function getWorkflowActorForEntry(issue, entry, state, isCurrent = false) {
   const workflowId = getEntryWorkflowId(entry);
   const entryActor = workflowId && issue?.workflowStateByEntryHistory?.[workflowId]?.[state]?.by;
   if (entryActor) return entryActor;
-  if (isCurrent && issue?.workflowStateHistory?.[state]?.by) return issue.workflowStateHistory[state].by;
+  // Only fall back to the legacy issue-level workflow history for entries that do
+  // not have their own workflow id. New timeline entries are entry-scoped; using
+  // issue-level history for them can make a newly-current status appear to inherit
+  // (or "steal") the prior status workflow trail.
+  if (!workflowId && isCurrent && issue?.workflowStateHistory?.[state]?.by) return issue.workflowStateHistory[state].by;
   const statusKey = String(entry?.status || '').trim().toLowerCase();
   return statusKey ? issue?.workflowStateByStatusHistory?.[statusKey]?.[state]?.by || null : null;
 }
@@ -1114,17 +1118,17 @@ function getWorkflowStateTimestamp(issue, entry, state, isCurrent = false) {
   const workflowId = getEntryWorkflowId(entry);
   const entryTs = workflowId && issue?.workflowStateByEntryHistory?.[workflowId]?.[state]?.at;
   if (entryTs) return entryTs;
-  if (isCurrent && issue?.workflowStateHistory?.[state]?.at) return issue.workflowStateHistory[state].at;
+  if (!workflowId && isCurrent && issue?.workflowStateHistory?.[state]?.at) return issue.workflowStateHistory[state].at;
   const statusKey = String(entry?.status || '').trim().toLowerCase();
   const statusTs = statusKey ? issue?.workflowStateByStatusHistory?.[statusKey]?.[state]?.at : null;
   if (statusTs) return statusTs;
-  return issue?.workflowStateHistory?.[state]?.at || null;
+  return !workflowId ? issue?.workflowStateHistory?.[state]?.at || null : null;
 }
 
 function getWorkflowHistoryForEntry(issue, entry, isCurrent = false, allowStatusFallback = false) {
   const workflowId = getEntryWorkflowId(entry);
-  if (workflowId && issue?.workflowStateByEntryHistory?.[workflowId]) {
-    return issue.workflowStateByEntryHistory[workflowId] || {};
+  if (workflowId) {
+    return issue?.workflowStateByEntryHistory?.[workflowId] || {};
   }
   if (isCurrent && issue?.workflowStateHistory) {
     return issue.workflowStateHistory || {};
