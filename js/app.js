@@ -9566,7 +9566,11 @@ async function setWorkflowStateForEntryLocator(issueId, state, locateEntry) {
         }
         const isCurrentEntry = isCurrentWorkflowEntry(entryIndex, history.length, entry, base);
         const current = getWorkflowStateForEntry(base, entry, isCurrentEntry);
-        if (current === state && !needsWorkflowId) {
+        const hasStateHistory = !!(
+          base?.workflowStateByEntryHistory?.[workflowId]?.[state]?.at ||
+          base?.workflowStateByEntryHistory?.[workflowId]?.[state]?.by
+        );
+        if (current === state && !needsWorkflowId && hasStateHistory) {
           updatedWorkflowId = workflowId;
           return;
         }
@@ -9616,22 +9620,34 @@ window.setWorkflowStateForWorkflowId = async (issueId, workflowId, state) => {
 
 window.setWorkflowStateForStatus = async (issueId, statusKey, state) => {
   if (!WORKFLOW_STATES.includes(state)) return;
+  const normalizedStatusKey = String(statusKey || '').trim().toLowerCase();
+  if (!normalizedStatusKey) return;
+  const findLatestStatusEntry = history => {
+    for (let idx = history.length - 1; idx >= 0; idx -= 1) {
+      if (String(history[idx]?.status || '').trim().toLowerCase() === normalizedStatusKey) return idx;
+    }
+    return -1;
+  };
+  const localIssue = issues.find(i => i.id === issueId);
+  if (findLatestStatusEntry(getMutableStatusHistory(localIssue || {})) >= 0) {
+    return setWorkflowStateForEntryLocator(issueId, state, history => findLatestStatusEntry(history));
+  }
   const actor = currentActor();
-  const issue = issues.find(i => i.id === issueId);
+  const issue = localIssue;
   const primaryKey = issue ? currentStatusKey(issue) : null;
-  const current = (statusKey === primaryKey)
+  const current = (normalizedStatusKey === primaryKey)
     ? (issue?.workflowState || null)
-    : (issue?.workflowStateByStatus?.[statusKey] || null);
+    : (issue?.workflowStateByStatus?.[normalizedStatusKey] || null);
   if (current === state) return;
   try {
     if (shouldUseSqlStagingReads(currentPlantId)) {
       const nextIssue = applyIssuePatchLocally(issue, {
-        workflowStateByStatus: { ...(issue?.workflowStateByStatus || {}), [statusKey]: state },
+        workflowStateByStatus: { ...(issue?.workflowStateByStatus || {}), [normalizedStatusKey]: state },
         workflowStateByStatusHistory: {
           ...(issue?.workflowStateByStatusHistory || {}),
-          [statusKey]: { ...((issue?.workflowStateByStatusHistory || {})[statusKey] || {}), [state]: { by: actor, at: new Date().toISOString() } }
+          [normalizedStatusKey]: { ...((issue?.workflowStateByStatusHistory || {})[normalizedStatusKey] || {}), [state]: { by: actor, at: new Date().toISOString() } }
         },
-        ...(statusKey === primaryKey ? {
+        ...(normalizedStatusKey === primaryKey ? {
           workflowState: state,
           workflowStateHistory: { ...(issue?.workflowStateHistory || {}), [state]: { by: actor, at: new Date().toISOString() } }
         } : {}),
@@ -9640,22 +9656,22 @@ window.setWorkflowStateForStatus = async (issueId, statusKey, state) => {
       });
       nextIssue.id = issueId;
       await commitSqlIssueWrite(issueId, nextIssue);
-      await awardGamification('workflow_step_advance', { issueId, dedupeSuffix: `${statusKey}:${state}`, tags: ['workflow:advance', `workflow:${state}`] });
+      await awardGamification('workflow_step_advance', { issueId, dedupeSuffix: `${normalizedStatusKey}:${state}`, tags: ['workflow:advance', `workflow:${state}`] });
       completeDemoGuideStep('workflow');
       return;
     }
     const patch = {
-      [`workflowStateByStatus.${statusKey}`]: state,
-      [`workflowStateByStatusHistory.${statusKey}.${state}`]: { by: actor, at: serverTimestamp() },
+      [`workflowStateByStatus.${normalizedStatusKey}`]: state,
+      [`workflowStateByStatusHistory.${normalizedStatusKey}.${state}`]: { by: actor, at: serverTimestamp() },
       updatedAt: serverTimestamp(),
       updatedBy: actor
     };
-    if (statusKey === primaryKey) {
+    if (normalizedStatusKey === primaryKey) {
       patch.workflowState = state;
       patch[`workflowStateHistory.${state}`] = { by: actor, at: serverTimestamp() };
     }
     await updateDoc(plantDoc('issues', issueId), patch);
-    await awardGamification('workflow_step_advance', { issueId, dedupeSuffix: `${statusKey}:${state}`, tags: ['workflow:advance', `workflow:${state}`] });
+    await awardGamification('workflow_step_advance', { issueId, dedupeSuffix: `${normalizedStatusKey}:${state}`, tags: ['workflow:advance', `workflow:${state}`] });
     completeDemoGuideStep('workflow');
   } catch (e) {
     setSyncStatus('err', 'Error updating workflow: ' + e.message);
@@ -10545,7 +10561,6 @@ function renderIssues() {
           <div class="tl-actions">
             ${workflowHistoryButton}
             ${currentUserPermissions.canEditIssue ? `
-            ${!isResolvedEntry && !isCurrent ? `<button class="tl-edit-btn" onclick="setStatusCurrentFromHistory('${issue.id}',${trueIdx})">Set current</button>` : ''}
             ${!isResolvedEntry && entryWorkflowState === 'finished' ? `<button class="tl-edit-btn" onclick="setWorkflowStateForEntry('${issue.id}',${trueIdx},'called')">Un-finish</button>` : ''}
             <button class="tl-edit-btn" onclick="startEditEntry('${issue.id}',${trueIdx})">✏ Edit</button>
             <button class="tl-remove-btn" onclick="removeStatusEntry('${issue.id}',${trueIdx})" ${isSynthetic || history.length <= 1 ? 'disabled' : ''}>🗑 Delete</button>
