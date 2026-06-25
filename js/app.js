@@ -1071,6 +1071,29 @@ async function sendConversationPush(conversationId, messageId) {
 const WORKFLOW_STATES = ['called', 'accepted', 'in-progress', 'finished'];
 const workflowHistoryOpenKeys = new Set();
 
+function getWorkflowStatesThrough(state) {
+  const idx = WORKFLOW_STATES.indexOf(state);
+  return idx >= 0 ? WORKFLOW_STATES.slice(0, idx + 1) : [];
+}
+
+function hasWorkflowHistoryEvent(history, state) {
+  return !!(history?.[state]?.at || history?.[state]?.by);
+}
+
+function hasSequentialWorkflowHistory(history, state) {
+  return getWorkflowStatesThrough(state).every(step => hasWorkflowHistoryEvent(history, step));
+}
+
+function mergeSequentialWorkflowHistory(history, state, actor, at) {
+  const next = { ...(history || {}) };
+  getWorkflowStatesThrough(state).forEach(step => {
+    if (step === state || !hasWorkflowHistoryEvent(next, step)) {
+      next[step] = { by: actor, at };
+    }
+  });
+  return next;
+}
+
 function createWorkflowId(statusKey = 'status') {
   const cleanStatus = String(statusKey || 'status').toLowerCase().replace(/[^a-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '') || 'status';
   const rand = Math.random().toString(36).slice(2, 8);
@@ -1104,6 +1127,7 @@ function getWorkflowActorForEntry(issue, entry, state, isCurrent = false) {
   const workflowId = getEntryWorkflowId(entry);
   const entryActor = workflowId && issue?.workflowStateByEntryHistory?.[workflowId]?.[state]?.by;
   if (entryActor) return entryActor;
+  if (workflowId && isCurrent && issue?.workflowStateHistory?.[state]?.by) return issue.workflowStateHistory[state].by;
   // Only fall back to the legacy issue-level workflow history for entries that do
   // not have their own workflow id. New timeline entries are entry-scoped; using
   // issue-level history for them can make a newly-current status appear to inherit
@@ -1118,6 +1142,7 @@ function getWorkflowStateTimestamp(issue, entry, state, isCurrent = false) {
   const workflowId = getEntryWorkflowId(entry);
   const entryTs = workflowId && issue?.workflowStateByEntryHistory?.[workflowId]?.[state]?.at;
   if (entryTs) return entryTs;
+  if (workflowId && isCurrent && issue?.workflowStateHistory?.[state]?.at) return issue.workflowStateHistory[state].at;
   if (!workflowId && isCurrent && issue?.workflowStateHistory?.[state]?.at) return issue.workflowStateHistory[state].at;
   const statusKey = String(entry?.status || '').trim().toLowerCase();
   const statusTs = statusKey ? issue?.workflowStateByStatusHistory?.[statusKey]?.[state]?.at : null;
@@ -1128,7 +1153,16 @@ function getWorkflowStateTimestamp(issue, entry, state, isCurrent = false) {
 function getWorkflowHistoryForEntry(issue, entry, isCurrent = false, allowStatusFallback = false) {
   const workflowId = getEntryWorkflowId(entry);
   if (workflowId) {
-    return issue?.workflowStateByEntryHistory?.[workflowId] || {};
+    const entryHistory = issue?.workflowStateByEntryHistory?.[workflowId];
+    if (entryHistory && Object.keys(entryHistory).length) return entryHistory;
+    const statusKey = String(entry?.status || '').trim().toLowerCase();
+    if (allowStatusFallback && statusKey && issue?.workflowStateByStatusHistory?.[statusKey]) {
+      return issue.workflowStateByStatusHistory[statusKey] || {};
+    }
+    if (isCurrent && issue?.workflowStateHistory) {
+      return issue.workflowStateHistory || {};
+    }
+    return {};
   }
   if (isCurrent && issue?.workflowStateHistory) {
     return issue.workflowStateHistory || {};
@@ -2555,15 +2589,15 @@ function buildCurrentStatus(statusKey, subStatus = '', enteredDateTime = '', not
 }
 
 // ── SECONDARY STATUS HELPERS ──
-// An issue has one primary status (currentStatus) plus an optional array of
-// lightweight secondary department flags (no sub-statuses, stored as string keys).
+// An issue keeps one display-summary status (currentStatus) for compact map,
+// filter, and legacy views. Workflow tracks themselves are concurrent peers.
 
 function getSecondaryStatuses(issue) {
   if (Array.isArray(issue?.secondaryStatuses)) return issue.secondaryStatuses;
   return [];
 }
 
-// Returns all active status keys: primary + secondary (resolved overrides everything)
+// Returns all active status keys: display-summary + secondary (resolved overrides everything)
 function getActiveStatuses(issue) {
   if (issue?.lifecycle?.isResolved || issue?.currentStatus?.statusKey === 'resolved') {
     return [{ statusKey: 'resolved', subStatusKey: '' }];
@@ -2575,12 +2609,12 @@ function getActiveStatuses(issue) {
   return [primary, ...secondary];
 }
 
-// True if the issue has this status as primary OR secondary
+// True if the issue has this status as display-summary OR secondary
 function issueHasActiveStatus(issue, statusKey) {
   return getActiveStatuses(issue).some(s => s.statusKey === statusKey);
 }
 
-// Toggle a secondary status tag on/off (does NOT touch the primary status)
+// Toggle a secondary status tag on/off (does NOT touch the display-summary status)
 window.toggleSecondaryStatus = async (id, statusKey) => {
   if (!currentUserPermissions.canEditIssue) return;
   const issue = issues.find(i => i.id === id);
@@ -7384,7 +7418,7 @@ function renderRowPanels() {
       const anyOpen = mi.filter(i => currentStatusKey(i) !== 'resolved');
       const anyResolved = mi.filter(i => currentStatusKey(i) === 'resolved');
 
-      // Build status color list for bar segments — primary + secondary per issue
+      // Build status color list for bar segments — display-summary + secondary per issue
       const statusColors = [];
       anyOpen.forEach(i => {
         getActiveStatuses(i).forEach(as => {
@@ -9141,7 +9175,7 @@ window.removeStatusEntry = async (id, idx) => {
   } catch (e) { setSyncStatus('err', 'Error: ' + e.message); }
 };
 
-// Promote a historical status entry to be the current status.
+// Promote a historical status entry to be the display-summary status.
 window.setStatusCurrentFromHistory = async (id, idx) => {
   if (!currentUserPermissions.canEditIssue) return;
   const issue = issues.find(i => i.id === id);
@@ -9192,11 +9226,11 @@ window.setStatusCurrentFromHistory = async (id, idx) => {
           fromSubStatusKey: prev?.subStatus || '',
           toStatusKey: nextEntry.status,
           toSubStatusKey: nextEntry.subStatus || '',
-          note: 'Set current from history'
+          note: 'Set display summary from history'
         })]
       });
       issueEventHistoryCache.delete(id);
-      await awardGamification('status_changed_valid', { issueId: id, dedupeSuffix: `set-current-${Date.now()}`, tags: ['status:changed', `status:${nextEntry.status}`] });
+      await awardGamification('status_changed_valid', { issueId: id, dedupeSuffix: `set-display-summary-${Date.now()}`, tags: ['status:changed', `status:${nextEntry.status}`] });
       return;
     }
     const patch = {
@@ -9228,11 +9262,11 @@ window.setStatusCurrentFromHistory = async (id, idx) => {
       fromSubStatusKey: prev?.subStatus || '',
       toStatusKey: nextEntry.status,
       toSubStatusKey: nextEntry.subStatus || '',
-      note: 'Set current from history'
+      note: 'Set display summary from history'
     });
     await batch.commit();
     issueEventHistoryCache.delete(id);
-    await awardGamification('status_changed_valid', { issueId: id, dedupeSuffix: `set-current-${Date.now()}`, tags: ['status:changed', `status:${nextEntry.status}`] });
+    await awardGamification('status_changed_valid', { issueId: id, dedupeSuffix: `set-display-summary-${Date.now()}`, tags: ['status:changed', `status:${nextEntry.status}`] });
   } catch (e) {
     setSyncStatus('err', 'Error: ' + e.message);
   }
@@ -9454,13 +9488,14 @@ window.setWorkflowState = async (id, state) => {
   if (!WORKFLOW_STATES.includes(state)) return;
   const actor = currentActor();
   const issue = issues.find(i => i.id === id);
-  if (issue && (issue.workflowState || 'called') === state) return;
+  if (issue && (issue.workflowState || 'called') === state && hasSequentialWorkflowHistory(issue?.workflowStateHistory, state)) return;
   try {
     if (shouldUseSqlStagingReads(currentPlantId)) {
+      const stateAt = new Date().toISOString();
       const nextIssue = applyIssuePatchLocally(issue, {
         workflowState: state,
-        workflowStateHistory: { ...(issue?.workflowStateHistory || {}), [state]: { by: actor, at: new Date().toISOString() } },
-        updatedAt: new Date().toISOString(),
+        workflowStateHistory: mergeSequentialWorkflowHistory(issue?.workflowStateHistory, state, actor, stateAt),
+        updatedAt: stateAt,
         updatedBy: actor
       });
       nextIssue.id = id;
@@ -9468,9 +9503,16 @@ window.setWorkflowState = async (id, state) => {
       completeDemoGuideStep('workflow');
       return;
     }
+    const stateAt = serverTimestamp();
+    const historyPatch = getWorkflowStatesThrough(state).reduce((memo, step) => {
+      if (step === state || !hasWorkflowHistoryEvent(issue?.workflowStateHistory, step)) {
+        memo[`workflowStateHistory.${step}`] = { by: actor, at: stateAt };
+      }
+      return memo;
+    }, {});
     await updateDoc(plantDoc('issues', id), {
       workflowState: state,
-      [`workflowStateHistory.${state}`]: { by: actor, at: serverTimestamp() },
+      ...historyPatch,
       updatedAt: serverTimestamp(),
       updatedBy: actor
     });
@@ -9511,24 +9553,35 @@ async function setWorkflowStateForEntryLocator(issueId, state, locateEntry) {
         history[entryIndex] = entry;
       }
       const isCurrentEntry = isCurrentWorkflowEntry(entryIndex, history.length, entry, base);
+      const stateAt = new Date().toISOString();
       const patch = {
         statusHistory: history,
         workflowStateByEntry: { ...(base?.workflowStateByEntry || {}), [workflowId]: state },
         workflowStateByEntryHistory: {
           ...(base?.workflowStateByEntryHistory || {}),
-          [workflowId]: { ...((base?.workflowStateByEntryHistory || {})[workflowId] || {}), [state]: { by: actor, at: new Date().toISOString() } }
+          [workflowId]: mergeSequentialWorkflowHistory(
+            (base?.workflowStateByEntryHistory || {})[workflowId],
+            state,
+            actor,
+            stateAt
+          )
         },
-        updatedAt: new Date().toISOString(),
+        updatedAt: stateAt,
         updatedBy: actor
       };
       if (isCurrentEntry) {
         patch.workflowState = state;
-        patch.workflowStateHistory = { ...(base?.workflowStateHistory || {}), [state]: { by: actor, at: new Date().toISOString() } };
+        patch.workflowStateHistory = mergeSequentialWorkflowHistory(base?.workflowStateHistory, state, actor, stateAt);
         if (entry.status) {
           patch.workflowStateByStatus = { ...(base?.workflowStateByStatus || {}), [entry.status]: state };
           patch.workflowStateByStatusHistory = {
             ...(base?.workflowStateByStatusHistory || {}),
-            [entry.status]: { ...((base?.workflowStateByStatusHistory || {})[entry.status] || {}), [state]: { by: actor, at: new Date().toISOString() } }
+            [entry.status]: mergeSequentialWorkflowHistory(
+              (base?.workflowStateByStatusHistory || {})[entry.status],
+              state,
+              actor,
+              stateAt
+            )
           };
         }
       }
@@ -9566,27 +9619,40 @@ async function setWorkflowStateForEntryLocator(issueId, state, locateEntry) {
         }
         const isCurrentEntry = isCurrentWorkflowEntry(entryIndex, history.length, entry, base);
         const current = getWorkflowStateForEntry(base, entry, isCurrentEntry);
-        const hasStateHistory = !!(
-          base?.workflowStateByEntryHistory?.[workflowId]?.[state]?.at ||
-          base?.workflowStateByEntryHistory?.[workflowId]?.[state]?.by
-        );
+        const existingEntryHistory = base?.workflowStateByEntryHistory?.[workflowId] || {};
+        const hasStateHistory = hasSequentialWorkflowHistory(existingEntryHistory, state);
         if (current === state && !needsWorkflowId && hasStateHistory) {
           updatedWorkflowId = workflowId;
           return;
         }
+        const stateAt = serverTimestamp();
+        const statesToRecord = getWorkflowStatesThrough(state)
+          .filter(step => step === state || !hasWorkflowHistoryEvent(existingEntryHistory, step));
         const patch = {
           statusHistory: history,
           [`workflowStateByEntry.${workflowId}`]: state,
-          [`workflowStateByEntryHistory.${workflowId}.${state}`]: { by: actor, at: serverTimestamp() },
+          ...statesToRecord.reduce((memo, step) => {
+            memo[`workflowStateByEntryHistory.${workflowId}.${step}`] = { by: actor, at: stateAt };
+            return memo;
+          }, {}),
           updatedAt: serverTimestamp(),
           updatedBy: actor
         };
         if (isCurrentEntry) {
           patch.workflowState = state;
-          patch[`workflowStateHistory.${state}`] = { by: actor, at: serverTimestamp() };
+          getWorkflowStatesThrough(state).forEach(step => {
+            if (step === state || !hasWorkflowHistoryEvent(base?.workflowStateHistory, step)) {
+              patch[`workflowStateHistory.${step}`] = { by: actor, at: stateAt };
+            }
+          });
           if (entry.status) {
             patch[`workflowStateByStatus.${entry.status}`] = state;
-            patch[`workflowStateByStatusHistory.${entry.status}.${state}`] = { by: actor, at: serverTimestamp() };
+            const statusHistory = base?.workflowStateByStatusHistory?.[entry.status] || {};
+            getWorkflowStatesThrough(state).forEach(step => {
+              if (step === state || !hasWorkflowHistoryEvent(statusHistory, step)) {
+                patch[`workflowStateByStatusHistory.${entry.status}.${step}`] = { by: actor, at: stateAt };
+              }
+            });
           }
         }
         tx.update(ref, patch);
@@ -9638,20 +9704,26 @@ window.setWorkflowStateForStatus = async (issueId, statusKey, state) => {
   const current = (normalizedStatusKey === primaryKey)
     ? (issue?.workflowState || null)
     : (issue?.workflowStateByStatus?.[normalizedStatusKey] || null);
-  if (current === state) return;
+  const statusHistory = issue?.workflowStateByStatusHistory?.[normalizedStatusKey] || {};
+  const issueLevelHistory = issue?.workflowStateHistory || {};
+  const hasRequiredHistory = normalizedStatusKey === primaryKey
+    ? hasSequentialWorkflowHistory(issueLevelHistory, state) && hasSequentialWorkflowHistory(statusHistory, state)
+    : hasSequentialWorkflowHistory(statusHistory, state);
+  if (current === state && hasRequiredHistory) return;
   try {
     if (shouldUseSqlStagingReads(currentPlantId)) {
+      const stateAt = new Date().toISOString();
       const nextIssue = applyIssuePatchLocally(issue, {
         workflowStateByStatus: { ...(issue?.workflowStateByStatus || {}), [normalizedStatusKey]: state },
         workflowStateByStatusHistory: {
           ...(issue?.workflowStateByStatusHistory || {}),
-          [normalizedStatusKey]: { ...((issue?.workflowStateByStatusHistory || {})[normalizedStatusKey] || {}), [state]: { by: actor, at: new Date().toISOString() } }
+          [normalizedStatusKey]: mergeSequentialWorkflowHistory(statusHistory, state, actor, stateAt)
         },
         ...(normalizedStatusKey === primaryKey ? {
           workflowState: state,
-          workflowStateHistory: { ...(issue?.workflowStateHistory || {}), [state]: { by: actor, at: new Date().toISOString() } }
+          workflowStateHistory: mergeSequentialWorkflowHistory(issueLevelHistory, state, actor, stateAt)
         } : {}),
-        updatedAt: new Date().toISOString(),
+        updatedAt: stateAt,
         updatedBy: actor
       });
       nextIssue.id = issueId;
@@ -9660,15 +9732,24 @@ window.setWorkflowStateForStatus = async (issueId, statusKey, state) => {
       completeDemoGuideStep('workflow');
       return;
     }
+    const stateAt = serverTimestamp();
     const patch = {
       [`workflowStateByStatus.${normalizedStatusKey}`]: state,
-      [`workflowStateByStatusHistory.${normalizedStatusKey}.${state}`]: { by: actor, at: serverTimestamp() },
       updatedAt: serverTimestamp(),
       updatedBy: actor
     };
+    getWorkflowStatesThrough(state).forEach(step => {
+      if (step === state || !hasWorkflowHistoryEvent(statusHistory, step)) {
+        patch[`workflowStateByStatusHistory.${normalizedStatusKey}.${step}`] = { by: actor, at: stateAt };
+      }
+    });
     if (normalizedStatusKey === primaryKey) {
       patch.workflowState = state;
-      patch[`workflowStateHistory.${state}`] = { by: actor, at: serverTimestamp() };
+      getWorkflowStatesThrough(state).forEach(step => {
+        if (step === state || !hasWorkflowHistoryEvent(issueLevelHistory, step)) {
+          patch[`workflowStateHistory.${step}`] = { by: actor, at: stateAt };
+        }
+      });
     }
     await updateDoc(plantDoc('issues', issueId), patch);
     await awardGamification('workflow_step_advance', { issueId, dedupeSuffix: `${normalizedStatusKey}:${state}`, tags: ['workflow:advance', `workflow:${state}`] });
@@ -10485,13 +10566,13 @@ function renderIssues() {
     // Build timeline entries HTML — reversed so newest is on top
     const timelineEntries = [...displayHistory].reverse().map((entry, displayIdx) => {
       const trueIdx = displayHistory.length - 1 - displayIdx; // real index in array for Firestore ops
-      const isCurrent = trueIdx === displayHistory.length - 1;
+      const isLatest = trueIdx === displayHistory.length - 1;
       const isSynthetic = !!entry._synthetic; // display-only entry; not stored in statusHistory
       const cfg = STATUS_CONFIG_SAFE[entry.status];
       const isResolvedEntry = entry.status === 'resolved';
       const entryWorkflowState = isResolvedEntry
         ? 'finished'
-        : workflowDisplayState(entry, isCurrent);
+        : workflowDisplayState(entry, isLatest);
       const wfCfg = workflowConfig[entryWorkflowState] || workflowConfig.called;
       const wfColor = !entryWorkflowState ? '#6b7280'
         : entryWorkflowState === 'called' ? '#eab308'
@@ -10506,10 +10587,10 @@ function renderIssues() {
 
       // Workflow badge (clickable for non-resolved entries to cycle state)
       const wfBadgeLabel = entryWorkflowState
-        ? `${wfCfg.icon} ${wfCfg.label.toUpperCase()}${isCurrent ? ' · CURRENT' : ''}`
-        : `— NOT STARTED${isCurrent ? ' · CURRENT' : ''}`;
+        ? `${wfCfg.icon} ${wfCfg.label.toUpperCase()}`
+        : `— NOT STARTED`;
       const wfBadge = isResolvedEntry
-        ? `<div class="tl-wf-badge no-action" style="color:${cfg.color}">${cfg.icon} RESOLVED${isCurrent ? ' · CURRENT' : ''}</div>`
+        ? `<div class="tl-wf-badge no-action" style="color:${cfg.color}">${cfg.icon} RESOLVED</div>`
         : `<button class="tl-wf-badge" style="color:${wfColor}" onclick="event.stopPropagation(); cycleWorkflowStateForEntry('${issue.id}',${trueIdx})" title="Tap to cycle workflow state">${wfBadgeLabel}</button>`;
       const entrySerialMatch = String(entry.note || '').match(/S\/N:\s*([A-Za-z0-9]+)/i);
       const entrySerialNumber = entrySerialMatch ? entrySerialMatch[1].toUpperCase() : '';
@@ -10518,7 +10599,7 @@ function renderIssues() {
         : '';
       const entryWorkflowId = getEntryWorkflowId(entry);
       const allowStatusHistoryFallback = !entryWorkflowId && workflowStatusCounts[String(entry?.status || '')] <= 1;
-      const entryWorkflowHistory = getWorkflowHistoryForEntry(issue, entry, isCurrent, allowStatusHistoryFallback);
+      const entryWorkflowHistory = getWorkflowHistoryForEntry(issue, entry, isLatest, allowStatusHistoryFallback);
       const completedWorkflowStates = wfOrder.filter(state => entryWorkflowHistory?.[state]?.at || entryWorkflowHistory?.[state]?.by);
       const historyKey = `${issue.id}:${entryWorkflowId || trueIdx}`;
       const isHistoryOpen = workflowHistoryOpenKeys.has(historyKey);
@@ -10534,7 +10615,7 @@ function renderIssues() {
         const timeLabel = item?.at ? workflowHistoryTimestampLabel(item.at) : '';
         const meta = hasEvent
           ? `${[timeLabel, actorLabel].filter(Boolean).join(' · ')}${isSuperseded ? ' · superseded' : ''}`
-          : (isCurrentWorkflowHistoryRow ? 'Current state' : workflowHistoryMissingLabel(stateIndex, entryWorkflowIndex));
+          : (isCurrentWorkflowHistoryRow ? 'Active state' : workflowHistoryMissingLabel(stateIndex, entryWorkflowIndex));
         return `<div class="tl-workflow-history-row ${hasEvent ? 'recorded' : 'missing'} ${isCurrentWorkflowHistoryRow ? 'current' : ''} ${isSuperseded ? 'superseded' : ''}">
           <span class="tl-workflow-history-dot ${cfg.cssState}">${hasEvent ? '✓' : '○'}</span>
           <span class="tl-workflow-history-label">${cfg.icon} ${cfg.label}</span>
@@ -10671,7 +10752,7 @@ function renderIssues() {
       }).join('');
       const sStateLabel = sState ? workflowConfig[sState].label : 'Not Started';
       const sStateClass = sState ? workflowConfig[sState].cssState : '';
-      return `<div class="wf-status-row is-secondary${sState === 'finished' ? ' finished-checkered' : ''}">
+      return `<div class="wf-status-row is-peer${sState === 'finished' ? ' finished-checkered' : ''}" style="color:${sColor};">
             <div class="wf-status-row-info">
               <div class="issue-status" style="color:${sColor};border-color:${sColor};background:${alphaColor(sColor, 0.12)}">
                 <span class="issue-status-main">${sCfg.icon} ${esc(sCfg.label)}</span>
@@ -10728,7 +10809,7 @@ function renderIssues() {
       </div>
     </div>`;
 
-    const currentWfRowHtml = `<div class="wf-status-row is-current${workflowState === 'finished' ? ' finished-checkered' : ''}">
+    const currentWfRowHtml = `<div class="wf-status-row is-latest${workflowState === 'finished' ? ' finished-checkered' : ''}" style="color:${sc.color};">
       <div class="wf-status-row-info">
         <div class="issue-status" style="color:${sc.color};border-color:${sc.color};background:${alphaColor(sc.color, 0.12)}">
           <span class="issue-status-main">${sc.icon} ${baseLabel}</span>

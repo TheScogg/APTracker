@@ -4,25 +4,24 @@
  * batch-import-schedules.mjs
  *
  * Batch-import daily schedule PDFs through the Worker into D1.
- * Pipeline per file: PDF → Worker Doc AI OCR → Worker DeepSeek → Validate → Worker D1 import
+ * Pipeline per file: PDF → Worker Textract/Doc AI OCR → Worker DeepSeek → Validate → Worker D1 import
  *
  * Usage:
  *   node scripts/batch-import-schedules.mjs \
  *     --dir ~/ScheduleScans/ \
  *     --plant plant_abc \
  *     --worker-url https://press-tracker.yourdomain.workers.dev \
- *     --docai-project my-project --docai-processor abc-123 \
  *     --dry-run
  *   node scripts/batch-import-schedules.mjs \
  *     --dir ~/ScheduleScans/ \
  *     --plant plant_abc \
  *     --worker-url https://press-tracker.yourdomain.workers.dev \
- *     --docai-project my-project --docai-processor abc-123 \
  *     --commit
  */
 
 import { readFileSync, readdirSync, existsSync, writeFileSync } from 'node:fs';
-import { join, parse, extname, resolve } from 'node:path';
+import { join, parse, extname, resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import process from 'node:process';
 
@@ -59,8 +58,8 @@ function parseArgs() {
   const val = flag => { const i = args.indexOf(flag); return i !== -1 && i + 1 < args.length ? args[i + 1] : null; };
   const has = flag => args.includes(flag);
 
-  const engine = (val('--engine') || val('-e') || 'document-ai').toLowerCase();
-  const validEngines = ['document-ai', 'azure', 'google'];
+  const engine = (val('--engine') || val('-e') || 'textract').toLowerCase();
+  const validEngines = ['textract', 'document-ai', 'azure', 'google'];
   if (!validEngines.includes(engine)) die(`Invalid --engine: ${engine}. Valid: ${validEngines.join(', ')}`);
 
   return {
@@ -104,7 +103,7 @@ DOC AI SETTINGS (for document-ai OCR engine):
   --docai-location <loc>  Processor location (default: us)
 
 OPTIONS:
-  --engine, -e <engine>     OCR engine: document-ai, azure, google (default: document-ai)
+  --engine, -e <engine>     OCR engine: textract, document-ai, azure, google (default: textract)
   --from-date <YYYY-MM-DD>  Earliest date to import (inclusive)
   --to-date <YYYY-MM-DD>    Latest date to import (inclusive)
   --deepseek-instructions   Custom instructions for DeepSeek (e.g. 'Press 7 is down')
@@ -287,8 +286,10 @@ async function callOcr(workerUrl, pdfBytes, opts) {
       return callAzureOcr(base, pdfBytes);
     case 'google':
       return callGoogleOcr(base, pdfBytes);
-    default:
+    case 'document-ai':
       return callDocumentAiOcr(base, pdfBytes, opts);
+    default:
+      return callTextractOcr(base, pdfBytes);
   }
 }
 
@@ -309,29 +310,99 @@ async function callAzureOcr(base, pdfBytes) {
   return (data.text || '').trim();
 }
 
-async function callGoogleOcr(base, pdfBytes) {
+let NodeCanvas;
+async function ensurePdfjs() {
   if (!pdfjsLib) {
     try {
-      pdfjsLib = await import('pdfjs-dist');
-      pdfjsLib.GlobalWorkerOptions.workerSrc = '';
-    } catch {
-      throw new Error('pdfjs-dist not installed. Run: npm install pdfjs-dist');
+      pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
+      const scriptDir = dirname(fileURLToPath(import.meta.url));
+      pdfjsLib.GlobalWorkerOptions.workerSrc = resolve(scriptDir, '..', 'node_modules', 'pdfjs-dist', 'legacy', 'build', 'pdf.worker.mjs');
+      const canvasModule = await import('@napi-rs/canvas');
+      NodeCanvas = canvasModule.default || canvasModule;
+      globalThis.Canvas = NodeCanvas.Canvas || canvasModule.Canvas;
+      globalThis.Image = NodeCanvas.Image || canvasModule.Image;
+      globalThis.HTMLCanvasElement = NodeCanvas.Canvas || canvasModule.Canvas;
+      globalThis.Path2D = NodeCanvas.Path2D || canvasModule.Path2D;
+    } catch (e) {
+      throw new Error('Failed to load pdfjs-dist or canvas: ' + e.message);
     }
   }
+}
+
+class NodeCanvasFactory {
+  create(width, height) {
+    const canvas = NodeCanvas.createCanvas(width, height);
+    const context = canvas.getContext('2d');
+    return { canvas, context };
+  }
+
+  reset(canvasAndContext, width, height) {
+    canvasAndContext.canvas.width = width;
+    canvasAndContext.canvas.height = height;
+  }
+
+  destroy(canvasAndContext) {
+    canvasAndContext.canvas.width = 0;
+    canvasAndContext.canvas.height = 0;
+    canvasAndContext.canvas = null;
+    canvasAndContext.context = null;
+  }
+}
+
+async function callTextractOcr(base, pdfBytes) {
+  await ensurePdfjs();
 
   const doc = await pdfjsLib.getDocument({ data: pdfBytes.buffer ? new Uint8Array(pdfBytes) : pdfBytes }).promise;
   const images = [];
+  const factory = new NodeCanvasFactory();
   for (let i = 1; i <= doc.numPages; i++) {
     const page = await doc.getPage(i);
     const viewport = page.getViewport({ scale: 2 });
-    const canvas = new OffscreenCanvas(viewport.width, viewport.height);
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 0, viewport.width, viewport.height);
-    await page.render({ canvasContext: ctx, viewport }).promise;
-    const blob = await canvas.convertToBlob({ type: 'image/png' });
-    const buffer = Buffer.from(await blob.arrayBuffer());
+    const { canvas, context } = factory.create(viewport.width, viewport.height);
+    context.fillStyle = '#fff';
+    context.fillRect(0, 0, viewport.width, viewport.height);
+    await page.render({
+      canvasContext: context,
+      viewport,
+      canvasFactory: factory
+    }).promise;
+    const buffer = canvas.toBuffer('image/jpeg');
+    const base64 = buffer.toString('base64');
+    console.log(`    → Page ${i} rendered: JPEG binary size = ${(buffer.length / 1024).toFixed(1)} KB`);
+    images.push(base64);
+    factory.destroy({ canvas, context });
+  }
+
+  const res = await fetch(`${base}/api/ocr/textract`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ images }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || `Textract OCR failed (${res.status})`);
+  return (data.text || '').trim();
+}
+
+async function callGoogleOcr(base, pdfBytes) {
+  await ensurePdfjs();
+
+  const doc = await pdfjsLib.getDocument({ data: pdfBytes.buffer ? new Uint8Array(pdfBytes) : pdfBytes }).promise;
+  const images = [];
+  const factory = new NodeCanvasFactory();
+  for (let i = 1; i <= doc.numPages; i++) {
+    const page = await doc.getPage(i);
+    const viewport = page.getViewport({ scale: 2 });
+    const { canvas, context } = factory.create(viewport.width, viewport.height);
+    context.fillStyle = '#fff';
+    context.fillRect(0, 0, viewport.width, viewport.height);
+    await page.render({
+      canvasContext: context,
+      viewport,
+      canvasFactory: factory
+    }).promise;
+    const buffer = canvas.toBuffer('image/png');
     images.push(buffer.toString('base64'));
+    factory.destroy({ canvas, context });
   }
 
   const res = await fetch(`${base}/api/ocr/google`, {
@@ -493,6 +564,7 @@ async function processFile(opts, filePath) {
     if (opts.verbose) console.log(`  ✓ ${date}: ${result.rows} rows; ${result.scheduleIssues} schedule issue(s)`);
   } catch (err) {
     result.error = err.message;
+    console.error('Error details:', err);
   }
 
   return result;

@@ -59,6 +59,9 @@ test('serializeIssue parses flags, dates, and JSON fields', () => {
     serial_captured: 0,
     tags_json: '["alpha","beta"]',
     workflow_state_by_entry_json: '{"entry":"triage"}',
+    workflow_state_by_entry_history_json: '{"entry":{"called":{"at":"2026-06-06T12:00:00.000Z"}}}',
+    workflow_state_by_status_json: '{"maintenance":"accepted"}',
+    workflow_state_by_status_history_json: '{"maintenance":{"accepted":{"at":"2026-06-06T12:01:00.000Z"}}}',
     workflow_state_history_json: '[{"state":"triage"}]',
     legacy_status_history_json: '[{"label":"Open"}]',
     created_at: createdAt,
@@ -70,6 +73,13 @@ test('serializeIssue parses flags, dates, and JSON fields', () => {
   assert.equal(result.highPriority, true);
   assert.deepEqual(result.tags, ['alpha', 'beta']);
   assert.deepEqual(result.workflowStateByEntry, { entry: 'triage' });
+  assert.deepEqual(result.workflowStateByEntryHistory, {
+    entry: { called: { at: '2026-06-06T12:00:00.000Z' } }
+  });
+  assert.deepEqual(result.workflowStateByStatus, { maintenance: 'accepted' });
+  assert.deepEqual(result.workflowStateByStatusHistory, {
+    maintenance: { accepted: { at: '2026-06-06T12:01:00.000Z' } }
+  });
   assert.equal(result.createdAt, '2026-06-06T12:00:00.000Z');
 });
 

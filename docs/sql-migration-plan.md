@@ -98,6 +98,7 @@ Every plant-scoped D1 query must include `plant_id`.
 - Plants by ID.
 - Members by plant and active status.
 - Issues by plant.
+- Issue workflow maps by plant, including `workflow_state_by_entry_json`, `workflow_state_by_entry_history_json`, `workflow_state_by_status_json`, and `workflow_state_by_status_history_json`.
 - Open/resolved issue counts by plant.
 - Current status distribution by plant.
 - Event counts per issue.

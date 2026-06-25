@@ -224,6 +224,9 @@ function buildIssueRow(issueId, plantIdValue, issue = {}, pressesMap = {}) {
     reporting_shift_key: stringOrNull(issue.reportingShiftKey || issue.shift),
     workflow_state: stringOrNull(issue.workflowState),
     workflow_state_by_entry_json: jsonOrNull(issue.workflowStateByEntry),
+    workflow_state_by_entry_history_json: jsonOrNull(issue.workflowStateByEntryHistory),
+    workflow_state_by_status_json: jsonOrNull(issue.workflowStateByStatus),
+    workflow_state_by_status_history_json: jsonOrNull(issue.workflowStateByStatusHistory),
     workflow_state_history_json: jsonOrNull(issue.workflowStateHistory),
     legacy_status_history_json: jsonOrNull(issue.statusHistory),
     latest_note_preview: notePreviewFromIssue(issue, currentStatus),
@@ -438,7 +441,9 @@ const TABLES = {
       ['assigned_team'], ['assigned_user_uid'], ['assigned_user_name'], ['serial_required'],
       ['serial_captured'], ['serial_value'], ['reporting_date_key'], ['reporting_week_key'],
       ['reporting_month_key'], ['reporting_shift_key'], ['workflow_state'],
-      ['workflow_state_by_entry_json'], ['workflow_state_history_json'], ['legacy_status_history_json'],
+      ['workflow_state_by_entry_json'], ['workflow_state_by_entry_history_json'],
+      ['workflow_state_by_status_json'], ['workflow_state_by_status_history_json'],
+      ['workflow_state_history_json'], ['legacy_status_history_json'],
       ['latest_note_preview'], ['tags_json'], ['photo_count'], ['created_by_uid'], ['created_by_name'],
       ['updated_by_uid'], ['updated_by_name'], ['created_at'], ['updated_at'], ['schema_version']
     ]

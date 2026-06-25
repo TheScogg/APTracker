@@ -137,6 +137,21 @@ await ensureColumn(
   'timer_notification_delivery_json',
   'ALTER TABLE issues ADD COLUMN timer_notification_delivery_json TEXT CHECK (timer_notification_delivery_json IS NULL OR json_valid(timer_notification_delivery_json));'
 );
+await ensureColumn(
+  'issues',
+  'workflow_state_by_entry_history_json',
+  'ALTER TABLE issues ADD COLUMN workflow_state_by_entry_history_json TEXT CHECK (workflow_state_by_entry_history_json IS NULL OR json_valid(workflow_state_by_entry_history_json));'
+);
+await ensureColumn(
+  'issues',
+  'workflow_state_by_status_json',
+  'ALTER TABLE issues ADD COLUMN workflow_state_by_status_json TEXT CHECK (workflow_state_by_status_json IS NULL OR json_valid(workflow_state_by_status_json));'
+);
+await ensureColumn(
+  'issues',
+  'workflow_state_by_status_history_json',
+  'ALTER TABLE issues ADD COLUMN workflow_state_by_status_history_json TEXT CHECK (workflow_state_by_status_history_json IS NULL OR json_valid(workflow_state_by_status_history_json));'
+);
 await ensureIndex(
   'ix_issues_timer_pending',
   `CREATE INDEX ix_issues_timer_pending

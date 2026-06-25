@@ -28,9 +28,9 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css" />
-<script src="./js/build-info.js?v=0a8be6b"></script>
+<script src="./js/build-info.js?v=79825f4-aed4ccf6"></script>
 <script src="./js/fcm-config.js?v=ae083d6"></script>
-<link rel="stylesheet" href="./css/styles.css?v=0a8be6b">
+<link rel="stylesheet" href="./css/styles.css?v=79825f4-aed4ccf6">
 </head>
 <body>
 
@@ -85,7 +85,7 @@
   <div id="sync-banner" class="visible">
     <div class="sync-dot" id="sync-dot"></div>
     <span id="sync-text" aria-live="polite">Connecting…</span>
-    <span id="app-version-indicator" class="app-version-indicator" title="Current commit version">rev: 0a8be6b</span>
+    <span id="app-version-indicator" class="app-version-indicator" title="Current commit version">rev: 79825f4</span>
     <span id="firestore-io-indicator" class="firestore-io-indicator" title="Estimated Firestore operations for this session">R:0 W:0</span>
   </div>
 
@@ -1815,7 +1815,7 @@
   </div>
 </div>
 
-<script type="module" src="./js/app.js?v=0a8be6b"></script>
+<script type="module" src="./js/app.js?v=79825f4-aed4ccf6"></script>
 
 <!-- MASCOT CHARACTER CARD POPOVER -->
 <div class="mascot-popover-backdrop" id="mascot-popover-backdrop" onclick="if(event.target===this)closeMascotPopover()">
@@ -1881,30 +1881,75 @@
 <!-- ANALYTICS MODAL -->
 <div class="modal-overlay" id="analytics-modal" onclick="if(event.target===this)closeAnalyticsModal()">
   <div class="modal" style="max-width:800px; width:95%; height:85vh; display:flex; flex-direction:column;">
-    <div class="modal-title">📊 Analytics — Days on Hand</div>
-    <div class="modal-subtitle">Compare inventory trends over time.</div>
-    <div class="time-filters" id="doh-time-filters" style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
-      <button class="btn btn-ghost" data-days="7">7D</button>
-      <button class="btn btn-ghost" data-days="30">30D</button>
-      <button class="btn btn-ghost" data-days="90">90D</button>
-      <button class="btn btn-primary" data-days="all">All Time</button>
+    <div class="modal-title">📊 Analytics</div>
+    <div class="analytics-tabs" id="analytics-tabs" role="tablist" aria-label="Analytics views">
+      <button class="analytics-tab active" id="analytics-tab-doh" type="button" role="tab" aria-selected="true" aria-controls="analytics-panel-doh" data-analytics-tab="doh">DOH</button>
+      <button class="analytics-tab" id="analytics-tab-runs" type="button" role="tab" aria-selected="false" aria-controls="analytics-panel-runs" data-analytics-tab="runs">Runs</button>
     </div>
-    <div class="analytics-part-picker" style="margin-bottom:12px; position:relative; z-index:10;">
-      <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:4px;">
-        <label style="font-size:12px; font-weight:600; color:var(--color-text-subtle, var(--text3));">Selected Parts</label>
-        <div style="display:flex; align-items:center; gap:6px;">
-          <span style="font-size:11px; color:var(--color-text-subtle, var(--text3));">Sort by:</span>
-          <select id="doh-sort-select" style="font-size:11px; padding:2px 4px; border-radius:4px; background:var(--color-surface, var(--bg2)); color:var(--color-text, var(--text)); border:1px solid var(--color-border, var(--border)); outline:none;">
-            <option value="part">Part #</option>
-            <option value="name">Part Name</option>
-          </select>
+    <section class="analytics-panel active" id="analytics-panel-doh" role="tabpanel" aria-labelledby="analytics-tab-doh">
+      <div class="modal-subtitle">Compare inventory trends over time.</div>
+      <div class="time-filters" id="doh-time-filters" style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
+        <button class="btn btn-ghost" data-days="7">7D</button>
+        <button class="btn btn-ghost" data-days="30">30D</button>
+        <button class="btn btn-ghost" data-days="90">90D</button>
+        <button class="btn btn-primary" data-days="all">All Time</button>
+      </div>
+      <div class="analytics-part-picker" style="margin-bottom:12px; position:relative; z-index:10;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:4px;">
+          <label style="font-size:12px; font-weight:600; color:var(--color-text-subtle, var(--text3));">Selected Parts</label>
+          <div style="display:flex; align-items:center; gap:6px;">
+            <span style="font-size:11px; color:var(--color-text-subtle, var(--text3));">Sort by:</span>
+            <select id="doh-sort-select" style="font-size:11px; padding:2px 4px; border-radius:4px; background:var(--color-surface, var(--bg2)); color:var(--color-text, var(--text)); border:1px solid var(--color-border, var(--border)); outline:none;">
+              <option value="part">Part #</option>
+              <option value="name">Part Name</option>
+            </select>
+          </div>
+        </div>
+        <select id="doh-part-select" multiple></select>
+      </div>
+      <div class="analytics-chart-panel">
+        <canvas id="dohChart"></canvas>
+      </div>
+    </section>
+    <section class="analytics-panel" id="analytics-panel-runs" role="tabpanel" aria-labelledby="analytics-tab-runs" hidden>
+      <div class="modal-subtitle">Trace which parts and inferred molds have run through each press.</div>
+      <div class="runs-controls">
+        <input class="input" id="runs-search-input" type="search" placeholder="Search part, name, mold, or press..." autocomplete="off">
+        <div class="time-filters" id="runs-time-filters">
+          <button class="btn btn-ghost" data-days="7">7D</button>
+          <button class="btn btn-primary" data-days="30">30D</button>
+          <button class="btn btn-ghost" data-days="90">90D</button>
+          <button class="btn btn-ghost" data-days="all">All</button>
         </div>
       </div>
-      <select id="doh-part-select" multiple></select>
-    </div>
-    <div style="flex:1; position:relative; min-height:0; width:100%; border-radius:12px; background:var(--color-surface, var(--bg2)); padding:12px; border:1px solid var(--color-border, var(--border));">
-      <canvas id="dohChart"></canvas>
-    </div>
+      <div class="runs-layout">
+        <div class="runs-picker-shell">
+          <div class="runs-section-label">Matches</div>
+          <div class="runs-picker-list" id="runs-picker-list"></div>
+        </div>
+        <div class="runs-detail-shell">
+          <div class="runs-selected-card" id="runs-selected-card"></div>
+          <div class="analytics-chart-panel runs-chart-panel">
+            <canvas id="runsChart"></canvas>
+          </div>
+          <div class="runs-table-grid">
+            <div>
+              <div class="runs-section-label">Press Heatmap</div>
+              <div class="runs-table-wrap">
+                <table class="runs-table" id="runs-press-table"></table>
+              </div>
+            </div>
+            <div>
+              <div class="runs-section-label">Recent Runs</div>
+              <div class="runs-table-wrap">
+                <table class="runs-table" id="runs-recent-table"></table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="runs-empty" id="runs-empty" hidden>No schedule run history found for this plant yet.</div>
+    </section>
     <div class="modal-actions" style="margin-top:16px;">
       <button class="btn btn-ghost" onclick="closeAnalyticsModal()">Close</button>
     </div>

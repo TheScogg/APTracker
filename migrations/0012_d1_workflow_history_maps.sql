@@ -1,0 +1,3 @@
+ALTER TABLE issues ADD COLUMN workflow_state_by_entry_history_json TEXT CHECK (workflow_state_by_entry_history_json IS NULL OR json_valid(workflow_state_by_entry_history_json));
+ALTER TABLE issues ADD COLUMN workflow_state_by_status_json TEXT CHECK (workflow_state_by_status_json IS NULL OR json_valid(workflow_state_by_status_json));
+ALTER TABLE issues ADD COLUMN workflow_state_by_status_history_json TEXT CHECK (workflow_state_by_status_history_json IS NULL OR json_valid(workflow_state_by_status_history_json));

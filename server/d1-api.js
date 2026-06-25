@@ -415,6 +415,9 @@ function buildIssueRowFromClient(plantId, issueId, issue = {}) {
     reporting_shift_key: stringOrNull(issue.reportingShiftKey || issue.shift),
     workflow_state: stringOrNull(issue.workflowState),
     workflow_state_by_entry_json: jsonString(issue.workflowStateByEntry || null),
+    workflow_state_by_entry_history_json: jsonString(issue.workflowStateByEntryHistory || null),
+    workflow_state_by_status_json: jsonString(issue.workflowStateByStatus || null),
+    workflow_state_by_status_history_json: jsonString(issue.workflowStateByStatusHistory || null),
     workflow_state_history_json: jsonString(issue.workflowStateHistory || null),
     legacy_status_history_json: jsonString(Array.isArray(issue.statusHistory) ? issue.statusHistory : []),
     latest_note_preview: stringOrNull(currentStatus.notePreview || issue.note),
@@ -675,8 +678,9 @@ function issueUpsertStatement() {
       current_status_color, current_status_entered_at, current_status_entered_by_uid, current_status_entered_by_name,
       is_open, is_resolved, opened_at, resolved_at, closed_at, reopened_count, assigned_team, assigned_user_uid,
       assigned_user_name, serial_required, serial_captured, serial_value, reporting_date_key, reporting_week_key,
-      reporting_month_key, reporting_shift_key, workflow_state, workflow_state_by_entry_json, workflow_state_history_json,
-      legacy_status_history_json, latest_note_preview, tags_json, photo_count, created_by_uid, created_by_name,
+      reporting_month_key, reporting_shift_key, workflow_state, workflow_state_by_entry_json,
+      workflow_state_by_entry_history_json, workflow_state_by_status_json, workflow_state_by_status_history_json,
+      workflow_state_history_json, legacy_status_history_json, latest_note_preview, tags_json, photo_count, created_by_uid, created_by_name,
       updated_by_uid, updated_by_name, timer_enabled, timer_started_at, timer_due_at, timer_due_at_ms,
       timer_duration_minutes, timer_notification_status, timer_notification_owner_uid, timer_notification_requested_by_json,
       timer_notification_delivery_json, created_at, updated_at, schema_version
@@ -686,7 +690,7 @@ function issueUpsertStatement() {
       ?, ?, ?, ?,
       ?, ?, ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?, ?, ?,
-      ?, ?, ?, ?, ?, ?,
+      ?, ?, ?, ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
     )
@@ -727,6 +731,9 @@ function issueUpsertStatement() {
       reporting_shift_key = excluded.reporting_shift_key,
       workflow_state = excluded.workflow_state,
       workflow_state_by_entry_json = excluded.workflow_state_by_entry_json,
+      workflow_state_by_entry_history_json = excluded.workflow_state_by_entry_history_json,
+      workflow_state_by_status_json = excluded.workflow_state_by_status_json,
+      workflow_state_by_status_history_json = excluded.workflow_state_by_status_history_json,
       workflow_state_history_json = excluded.workflow_state_history_json,
       legacy_status_history_json = excluded.legacy_status_history_json,
       latest_note_preview = excluded.latest_note_preview,
@@ -758,8 +765,9 @@ function issueUpsertParams(row) {
     row.current_status_color, row.current_status_entered_at, row.current_status_entered_by_uid, row.current_status_entered_by_name,
     row.is_open, row.is_resolved, row.opened_at, row.resolved_at, row.closed_at, row.reopened_count, row.assigned_team, row.assigned_user_uid,
     row.assigned_user_name, row.serial_required, row.serial_captured, row.serial_value, row.reporting_date_key, row.reporting_week_key,
-    row.reporting_month_key, row.reporting_shift_key, row.workflow_state, row.workflow_state_by_entry_json, row.workflow_state_history_json,
-    row.legacy_status_history_json, row.latest_note_preview, row.tags_json, row.photo_count, row.created_by_uid, row.created_by_name,
+    row.reporting_month_key, row.reporting_shift_key, row.workflow_state, row.workflow_state_by_entry_json,
+    row.workflow_state_by_entry_history_json, row.workflow_state_by_status_json, row.workflow_state_by_status_history_json,
+    row.workflow_state_history_json, row.legacy_status_history_json, row.latest_note_preview, row.tags_json, row.photo_count, row.created_by_uid, row.created_by_name,
     row.updated_by_uid, row.updated_by_name, row.timer_enabled, row.timer_started_at, row.timer_due_at, row.timer_due_at_ms,
     row.timer_duration_minutes, row.timer_notification_status, row.timer_notification_owner_uid, row.timer_notification_requested_by_json,
     row.timer_notification_delivery_json, row.created_at, row.updated_at, row.schema_version
@@ -3296,8 +3304,9 @@ export async function handleD1ApiRequest(request, env, { authenticateRequest } =
     const wikiPageDeleteMatch = request.method === 'DELETE' && url.pathname.match(/^\/api\/plants\/([^/]+)\/wiki-pages\/([^/]+)$/);
     const wikiAttachmentCreateMatch = request.method === 'POST' && url.pathname.match(/^\/api\/plants\/([^/]+)\/wiki-pages\/([^/]+)\/attachments$/);
     const reportsDohMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/reports\/doh$/);
+    const reportsRunsMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/reports\/runs$/);
 
-    if (!meMatch && !meUpdateMatch && !meStorePurchaseMatch && !mePushTokenMatch && !accessRequestCreateSelfMatch && !plantsListMatch && !plantCreateMatch && !bootstrapMatch && !dailyScheduleMatch && !plantMembersMatch && !plantMemberCreateMatch && !plantMemberUpdateMatch && !plantMemberDeleteMatch && !accessRequestsMatch && !accessRequestUpdateMatch && !statusConfigMatch && !statusConfigUpdateMatch && !pressConfigMatch && !pressConfigUpdateMatch && !storeConfigMatch && !storeConfigUpdateMatch && !roleAlertRoutingMatch && !roleAlertRoutingUpdateMatch && !gamificationMatch && !gamificationAwardMatch && !gamificationAdminMatch && !gamificationAdminUpdateMatch && !gamificationLeaderboardResetMatch && !userDirectoryMatch && !roleAlertsMatch && !roleAlertCreateMatch && !roleAlertUpdateMatch && !issuesMatch && !issueCreateMatch && !issueMatch && !issueUpdateMatch && !issueDeleteMatch && !eventsMatch && !attachmentsMatch && !notesMatch && !noteCreateMatch && !noteUpdateMatch && !noteDeleteMatch && !noteAttachmentsMatch && !noteAttachmentCreateMatch && !noteAttachmentDeleteMatch && !conversationsMatch && !conversationCreateMatch && !conversationMessagesMatch && !conversationMessageCreateMatch && !conversationReadMatch && !wikiPagesMatch && !wikiPageMatch && !wikiRevisionSaveMatch && !wikiPageDeleteMatch && !wikiAttachmentCreateMatch && !reportsDohMatch) {
+    if (!meMatch && !meUpdateMatch && !meStorePurchaseMatch && !mePushTokenMatch && !accessRequestCreateSelfMatch && !plantsListMatch && !plantCreateMatch && !bootstrapMatch && !dailyScheduleMatch && !plantMembersMatch && !plantMemberCreateMatch && !plantMemberUpdateMatch && !plantMemberDeleteMatch && !accessRequestsMatch && !accessRequestUpdateMatch && !statusConfigMatch && !statusConfigUpdateMatch && !pressConfigMatch && !pressConfigUpdateMatch && !storeConfigMatch && !storeConfigUpdateMatch && !roleAlertRoutingMatch && !roleAlertRoutingUpdateMatch && !gamificationMatch && !gamificationAwardMatch && !gamificationAdminMatch && !gamificationAdminUpdateMatch && !gamificationLeaderboardResetMatch && !userDirectoryMatch && !roleAlertsMatch && !roleAlertCreateMatch && !roleAlertUpdateMatch && !issuesMatch && !issueCreateMatch && !issueMatch && !issueUpdateMatch && !issueDeleteMatch && !eventsMatch && !attachmentsMatch && !notesMatch && !noteCreateMatch && !noteUpdateMatch && !noteDeleteMatch && !noteAttachmentsMatch && !noteAttachmentCreateMatch && !noteAttachmentDeleteMatch && !conversationsMatch && !conversationCreateMatch && !conversationMessagesMatch && !conversationMessageCreateMatch && !conversationReadMatch && !wikiPagesMatch && !wikiPageMatch && !wikiRevisionSaveMatch && !wikiPageDeleteMatch && !wikiAttachmentCreateMatch && !reportsDohMatch && !reportsRunsMatch) {
       return null;
     }
 
@@ -3499,10 +3508,133 @@ export async function handleD1ApiRequest(request, env, { authenticateRequest } =
     if (reportsDohMatch) {
       return getDohReport(db, decodePathSegment(reportsDohMatch[1]), user);
     }
+    if (reportsRunsMatch) {
+      return getRunsReport(db, decodePathSegment(reportsRunsMatch[1]), user);
+    }
     return null;
   } catch (error) {
     return errorResponse(error);
   }
+}
+
+function normalizeRunKey(value) {
+  return String(value || '').trim().replace(/\s+/g, ' ');
+}
+
+function inferMoldCandidate(row) {
+  const source = [row.notes, row.mc, row.description].map(v => String(v || '')).join(' ');
+  const explicit = source.match(/\b(?:mold|mould|tool|die|mc)\s*#?\s*[:\-]?\s*([A-Z]?\d[\w.-]{2,})\b/i)
+    || source.match(/\b(M[-\s]?\d[\w.-]{2,})\b/i);
+  if (explicit?.[1]) {
+    return {
+      key: explicit[1].toUpperCase().replace(/\s+/g, ''),
+      source: 'inferred',
+      confidence: 'explicit-token'
+    };
+  }
+
+  const partNumber = normalizeRunKey(row.part_number);
+  const compact = partNumber.replace(/[^A-Za-z0-9]/g, '');
+  if (compact.length >= 4) {
+    return {
+      key: `M-${compact.slice(0, Math.min(6, compact.length)).toUpperCase()}`,
+      source: 'inferred',
+      confidence: 'part-similarity'
+    };
+  }
+
+  return {
+    key: '',
+    source: 'inferred',
+    confidence: 'none'
+  };
+}
+
+async function getRunsReport(db, plantId, user) {
+  await requirePlantPermission(db, plantId, user, 'canViewPlant');
+  const query = `
+    SELECT schedule_date, shift, press, part_number, description, cavity, doh, notes, mc, section_key
+    FROM daily_schedule_rows
+    WHERE plant_id = ?
+      AND press IS NOT NULL
+      AND press != ''
+      AND part_number IS NOT NULL
+      AND part_number != ''
+    ORDER BY schedule_date ASC, press ASC
+  `;
+  const { results } = await db.prepare(query).bind(plantId).all();
+  const rows = [];
+  const entities = {};
+
+  for (const row of (results || [])) {
+    const partNumber = normalizeRunKey(row.part_number);
+    const description = normalizeRunKey(row.description);
+    const press = normalizeRunKey(row.press);
+    const dateKey = String(row.schedule_date || '').split('T')[0];
+    if (!partNumber || !press || !dateKey) continue;
+
+    const mold = inferMoldCandidate(row);
+    const entityKey = partNumber;
+    const record = {
+      id: `${dateKey}:${press}:${partNumber}:${row.section_key || ''}`,
+      scheduleDate: dateKey,
+      shift: row.shift == null ? '' : String(row.shift),
+      press,
+      partNumber,
+      description,
+      moldKey: mold.key,
+      moldSource: mold.source,
+      moldConfidence: mold.confidence,
+      cavity: row.cavity == null ? '' : String(row.cavity),
+      doh: row.doh == null || row.doh === '' ? null : Number(row.doh),
+      notes: normalizeRunKey(row.notes),
+      mc: normalizeRunKey(row.mc),
+      section: row.section_key || ''
+    };
+    rows.push(record);
+
+    if (!entities[entityKey]) {
+      entities[entityKey] = {
+        key: entityKey,
+        partNumber,
+        description,
+        moldKey: mold.key,
+        moldSource: mold.source,
+        moldConfidence: mold.confidence,
+        runs: 0,
+        presses: {},
+        dates: {}
+      };
+    }
+    const entity = entities[entityKey];
+    if (!entity.description && description) entity.description = description;
+    if (!entity.moldKey && mold.key) {
+      entity.moldKey = mold.key;
+      entity.moldSource = mold.source;
+      entity.moldConfidence = mold.confidence;
+    }
+    entity.runs += 1;
+    entity.dates[dateKey] = (entity.dates[dateKey] || 0) + 1;
+    if (!entity.presses[press]) entity.presses[press] = { press, runs: 0, lastRun: dateKey };
+    entity.presses[press].runs += 1;
+    if (dateKey > entity.presses[press].lastRun) entity.presses[press].lastRun = dateKey;
+  }
+
+  const entityList = Object.values(entities)
+    .map(entity => ({
+      ...entity,
+      presses: Object.values(entity.presses).sort((a, b) => b.runs - a.runs || b.lastRun.localeCompare(a.lastRun)),
+      lastRun: Object.keys(entity.dates).sort().pop() || ''
+    }))
+    .sort((a, b) => b.runs - a.runs || a.partNumber.localeCompare(b.partNumber));
+
+  return jsonResponse({
+    success: true,
+    data: {
+      entities: entityList,
+      rows
+    }
+  });
 }
 
 async function getDohReport(db, plantId, user) {
