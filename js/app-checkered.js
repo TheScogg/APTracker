@@ -12019,11 +12019,8 @@ async function savePressWikiRevision() {
   const rawChangeNote = String(document.getElementById('press-wiki-edit-change-note')?.value || '').trim();
   if (!body) return _setPressWikiError('Body is required.');
   const fallbackActorName = String(currentActor()?.name || currentUser?.displayName || currentUser?.email || 'Unknown').trim() || 'Unknown';
-  const now = new Date();
-  const dd = String(now.getDate()).padStart(2, '0');
-  const mm = String(now.getMonth() + 1).padStart(2, '0');
-  const yy = String(now.getFullYear()).slice(-2);
-  const changeNote = rawChangeNote || `${fallbackActorName} : ${dd}/${mm}/${yy}`;
+  const fallbackTime = new Date().toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
+  const changeNote = rawChangeNote || `${fallbackActorName} saved ${fallbackTime}`;
   const pageRef = wikiPageDocForScope(_pressWikiScope, _pressWikiScope === WIKI_SCOPE_PRESS ? activePressId : _pressWikiModalPressId, _pressWikiSelectedPageId);
   const revisionRef = doc(wikiRevisionsColForScope(_pressWikiScope, _pressWikiScope === WIKI_SCOPE_PRESS ? activePressId : _pressWikiModalPressId, _pressWikiSelectedPageId));
   await runTransaction(db, async tx => {

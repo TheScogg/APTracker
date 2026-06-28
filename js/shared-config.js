@@ -54,10 +54,15 @@ export function normalizeStatusRecord(key, item, order) {
   const safeLabel = String(item?.label || key || 'Status').trim() || key;
   const slug = slugifyStatusLabel(safeLabel);
   const color = String(item?.cssColor || item?.swipeColor || '#8b949e');
+  const icon = String(item?.icon || '●');
+  const defaultIconUpgrades = {
+    open: { '●': '📍', '＋': '📍' },
+    attention: { '◇': '⚠️', '👁️': '⚠️' }
+  };
   return {
     label: safeLabel,
     shortLabel: String(item?.shortLabel || safeLabel),
-    icon: String(item?.icon || '●'),
+    icon: defaultIconUpgrades[key]?.[icon] || icon,
     cssColor: color,
     swipeColor: String(item?.swipeColor || color),
     floorCls: String(item?.floorCls || (key === 'resolved' ? 'all-resolved' : `has-${slug}`)),
@@ -66,6 +71,39 @@ export function normalizeStatusRecord(key, item, order) {
     statLabel: String(item?.statLabel || safeLabel),
     order: Number.isFinite(Number(item?.order)) ? Number(item.order) : order
   };
+}
+
+function addUniqueSub(subs, label) {
+  const safeLabel = String(label || '').trim();
+  if (!safeLabel) return;
+  if (!subs.some(sub => sub.toLowerCase() === safeLabel.toLowerCase())) subs.push(safeLabel);
+}
+
+export function migrateRetiredStatusCategories(statuses = {}) {
+  const migrated = deepCopy(statuses || {});
+  if (!migrated.attention) return migrated;
+
+  migrated.attention.subs = Array.isArray(migrated.attention.subs)
+    ? migrated.attention.subs.map(v => String(v || '').trim()).filter(Boolean)
+    : [];
+
+  if (migrated.open) {
+    migrated.open.subs = Array.isArray(migrated.open.subs)
+      ? migrated.open.subs.map(v => String(v || '').trim()).filter(sub => sub.toLowerCase() !== 'do020: trial run')
+      : [];
+  }
+  addUniqueSub(migrated.attention.subs, 'DO020: Trial Run');
+
+  if (migrated.alert) {
+    (Array.isArray(migrated.alert.subs) ? migrated.alert.subs : [])
+      .forEach(sub => addUniqueSub(migrated.attention.subs, sub));
+    delete migrated.alert;
+  }
+
+  migrated.attention.order = Number.isFinite(Number(migrated.attention.order))
+    ? Math.min(Number(migrated.attention.order), 1)
+    : 1;
+  return migrated;
 }
 
 export function normalizeStatusesForSave(rawStatuses = {}, defaultStatuses = {}, canonicalOptionalStatuses = {}) {
@@ -81,7 +119,7 @@ export function normalizeStatusesForSave(rawStatuses = {}, defaultStatuses = {},
   Object.entries(canonicalOptionalStatuses || {}).forEach(([key, value]) => {
     if (!normalized[key]) normalized[key] = normalizeStatusRecord(key, value, Object.keys(normalized).length);
   });
-  return normalized;
+  return migrateRetiredStatusCategories(normalized);
 }
 
 export function normalizeSubcategoryRoutes(rawRoutes, statuses = {}, options = {}) {

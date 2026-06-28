@@ -1109,11 +1109,8 @@ document.getElementById('save-btn').addEventListener('click', async () => {
   const rawChangeNote = elChangeNote.value.trim();
   const parentPageId = normalizeParentPageId(elParentPage?.value);
   const fallbackActorName = String(currentActor()?.name || currentUser?.displayName || currentUser?.email || 'Unknown').trim() || 'Unknown';
-  const now = new Date();
-  const dd = String(now.getDate()).padStart(2, '0');
-  const mm = String(now.getMonth() + 1).padStart(2, '0');
-  const yy = String(now.getFullYear()).slice(-2);
-  const changeNote = rawChangeNote || `${fallbackActorName} : ${dd}/${mm}/${yy}`;
+  const fallbackTime = new Date().toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
+  const changeNote = rawChangeNote || `${fallbackActorName} saved ${fallbackTime}`;
   
   if (!title) return showFeedback("Title is required", true);
   

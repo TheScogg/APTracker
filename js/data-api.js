@@ -194,6 +194,15 @@ export class SqlDataApi {
     return this.request(`/plants/${encodeURIComponent(plantId)}/daily-schedules/${encodeURIComponent(scheduleDate)}`);
   }
 
+  listDailySchedules(plantId, params = {}) {
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') query.set(key, String(value));
+    });
+    const suffix = query.toString() ? `?${query}` : '';
+    return this.request(`/plants/${encodeURIComponent(plantId)}/daily-schedules${suffix}`);
+  }
+
   listIssues(plantId, params = {}) {
     const query = new URLSearchParams();
     Object.entries(params).forEach(([key, value]) => {
@@ -362,7 +371,11 @@ export class SqlDataApi {
   }
 
   saveWikiRevision(plantId, pageId, payload) {
-    return this.request(`/plants/${encodeURIComponent(plantId)}/wiki-pages/${encodeURIComponent(pageId)}/revisions`, {
+    const query = new URLSearchParams();
+    if (payload?.scope) query.set('scope', String(payload.scope));
+    if (payload?.pressId) query.set('pressId', String(payload.pressId));
+    const suffix = query.toString() ? `?${query}` : '';
+    return this.request(`/plants/${encodeURIComponent(plantId)}/wiki-pages/${encodeURIComponent(pageId)}/revisions${suffix}`, {
       method: 'POST',
       body: payload
     });
@@ -380,7 +393,11 @@ export class SqlDataApi {
   }
 
   createWikiAttachment(plantId, pageId, payload) {
-    return this.request(`/plants/${encodeURIComponent(plantId)}/wiki-pages/${encodeURIComponent(pageId)}/attachments`, {
+    const query = new URLSearchParams();
+    if (payload?.scope) query.set('scope', String(payload.scope));
+    if (payload?.pressId) query.set('pressId', String(payload.pressId));
+    const suffix = query.toString() ? `?${query}` : '';
+    return this.request(`/plants/${encodeURIComponent(plantId)}/wiki-pages/${encodeURIComponent(pageId)}/attachments${suffix}`, {
       method: 'POST',
       body: payload
     });
@@ -442,6 +459,7 @@ export class FirebaseDataApi {
   awardGamification() { return this.unavailable('awardGamification'); }
   loadPlantBootstrap() { return this.unavailable('loadPlantBootstrap'); }
   getDailySchedule() { return this.unavailable('getDailySchedule'); }
+  listDailySchedules() { return this.unavailable('listDailySchedules'); }
   listIssues() { return this.unavailable('listIssues'); }
   deleteIssue() { return this.unavailable('deleteIssue'); }
   getIssue() { return this.unavailable('getIssue'); }

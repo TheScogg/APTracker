@@ -2359,20 +2359,55 @@ async function getDailySchedule(db, plantId, scheduleDate, user) {
   });
 }
 
+async function listDailySchedules(db, request, plantId, user) {
+  await requirePlantPermission(db, plantId, user, 'canViewPlant');
+  const url = new URL(request.url);
+  const from = String(url.searchParams.get('from') || '').trim();
+  const to = String(url.searchParams.get('to') || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+    throw Object.assign(new Error('from and to query params must use yyyy-mm-dd format.'), { status: 400 });
+  }
+  const rows = await all(
+    db,
+    `
+      SELECT *
+      FROM daily_schedules
+      WHERE plant_id = ?
+        AND schedule_date >= ?
+        AND schedule_date <= ?
+      ORDER BY schedule_date ASC
+    `,
+    plantId,
+    from,
+    to
+  );
+  return jsonResponse({ schedules: rows.map(serializeDailySchedule) });
+}
+
 async function listIssues(db, request, plantId, user) {
   await requirePlantPermission(db, plantId, user, 'canViewPlant');
   const url = new URL(request.url);
   const limit = Math.max(1, Math.min(500, Number(url.searchParams.get('limit')) || 250));
+  const date = String(url.searchParams.get('date') || '').trim();
+  if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    throw Object.assign(new Error('date query param must use yyyy-mm-dd format.'), { status: 400 });
+  }
+  const where = ['plant_id = ?'];
+  const params = [plantId];
+  if (date) {
+    where.push('reporting_date_key = ?');
+    params.push(date);
+  }
   const issues = await all(
     db,
     `
       SELECT *
       FROM issues
-      WHERE plant_id = ?
+      WHERE ${where.join(' AND ')}
       ORDER BY created_at DESC
       LIMIT ?
     `,
-    plantId,
+    ...params,
     limit
   );
   return jsonResponse({ issues: issues.map(serializeIssue) });
@@ -3086,7 +3121,8 @@ async function saveWikiRevision(db, request, plantId, pageId, body, user) {
   const revisionRowId = wikiRevisionRowId(scope, pressId, pageId, revisionId);
   const prevRevisionId = existing?.current_revision_id || null;
   const title = stringOrNull(body.title) || existing?.title || pageId;
-  const changeNote = stringOrNull(body.changeNote) || 'Update';
+  const actorName = String(actor?.name || actor?.email || actor?.uid || 'Unknown').trim() || 'Unknown';
+  const changeNote = stringOrNull(body.changeNote) || `${actorName} saved ${now}`;
   await db.batch([
     db.prepare(
       `
@@ -3255,6 +3291,7 @@ export async function handleD1ApiRequest(request, env, { authenticateRequest } =
     const plantsListMatch = request.method === 'GET' && url.pathname === '/api/plants';
     const plantCreateMatch = request.method === 'POST' && url.pathname === '/api/plants';
     const bootstrapMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/bootstrap$/);
+    const dailySchedulesMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/daily-schedules$/);
     const dailyScheduleMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/daily-schedules\/([^/]+)$/);
     const plantMembersMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/members$/);
     const plantMemberCreateMatch = request.method === 'POST' && url.pathname.match(/^\/api\/plants\/([^/]+)\/members$/);
@@ -3306,7 +3343,7 @@ export async function handleD1ApiRequest(request, env, { authenticateRequest } =
     const reportsDohMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/reports\/doh$/);
     const reportsRunsMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/reports\/runs$/);
 
-    if (!meMatch && !meUpdateMatch && !meStorePurchaseMatch && !mePushTokenMatch && !accessRequestCreateSelfMatch && !plantsListMatch && !plantCreateMatch && !bootstrapMatch && !dailyScheduleMatch && !plantMembersMatch && !plantMemberCreateMatch && !plantMemberUpdateMatch && !plantMemberDeleteMatch && !accessRequestsMatch && !accessRequestUpdateMatch && !statusConfigMatch && !statusConfigUpdateMatch && !pressConfigMatch && !pressConfigUpdateMatch && !storeConfigMatch && !storeConfigUpdateMatch && !roleAlertRoutingMatch && !roleAlertRoutingUpdateMatch && !gamificationMatch && !gamificationAwardMatch && !gamificationAdminMatch && !gamificationAdminUpdateMatch && !gamificationLeaderboardResetMatch && !userDirectoryMatch && !roleAlertsMatch && !roleAlertCreateMatch && !roleAlertUpdateMatch && !issuesMatch && !issueCreateMatch && !issueMatch && !issueUpdateMatch && !issueDeleteMatch && !eventsMatch && !attachmentsMatch && !notesMatch && !noteCreateMatch && !noteUpdateMatch && !noteDeleteMatch && !noteAttachmentsMatch && !noteAttachmentCreateMatch && !noteAttachmentDeleteMatch && !conversationsMatch && !conversationCreateMatch && !conversationMessagesMatch && !conversationMessageCreateMatch && !conversationReadMatch && !wikiPagesMatch && !wikiPageMatch && !wikiRevisionSaveMatch && !wikiPageDeleteMatch && !wikiAttachmentCreateMatch && !reportsDohMatch && !reportsRunsMatch) {
+    if (!meMatch && !meUpdateMatch && !meStorePurchaseMatch && !mePushTokenMatch && !accessRequestCreateSelfMatch && !plantsListMatch && !plantCreateMatch && !bootstrapMatch && !dailySchedulesMatch && !dailyScheduleMatch && !plantMembersMatch && !plantMemberCreateMatch && !plantMemberUpdateMatch && !plantMemberDeleteMatch && !accessRequestsMatch && !accessRequestUpdateMatch && !statusConfigMatch && !statusConfigUpdateMatch && !pressConfigMatch && !pressConfigUpdateMatch && !storeConfigMatch && !storeConfigUpdateMatch && !roleAlertRoutingMatch && !roleAlertRoutingUpdateMatch && !gamificationMatch && !gamificationAwardMatch && !gamificationAdminMatch && !gamificationAdminUpdateMatch && !gamificationLeaderboardResetMatch && !userDirectoryMatch && !roleAlertsMatch && !roleAlertCreateMatch && !roleAlertUpdateMatch && !issuesMatch && !issueCreateMatch && !issueMatch && !issueUpdateMatch && !issueDeleteMatch && !eventsMatch && !attachmentsMatch && !notesMatch && !noteCreateMatch && !noteUpdateMatch && !noteDeleteMatch && !noteAttachmentsMatch && !noteAttachmentCreateMatch && !noteAttachmentDeleteMatch && !conversationsMatch && !conversationCreateMatch && !conversationMessagesMatch && !conversationMessageCreateMatch && !conversationReadMatch && !wikiPagesMatch && !wikiPageMatch && !wikiRevisionSaveMatch && !wikiPageDeleteMatch && !wikiAttachmentCreateMatch && !reportsDohMatch && !reportsRunsMatch) {
       return null;
     }
 
@@ -3338,6 +3375,9 @@ export async function handleD1ApiRequest(request, env, { authenticateRequest } =
     }
     if (bootstrapMatch) {
       return getPlantBootstrap(db, decodePathSegment(bootstrapMatch[1]), user);
+    }
+    if (dailySchedulesMatch) {
+      return listDailySchedules(db, request, decodePathSegment(dailySchedulesMatch[1]), user);
     }
     if (dailyScheduleMatch) {
       return getDailySchedule(db, decodePathSegment(dailyScheduleMatch[1]), decodePathSegment(dailyScheduleMatch[2]), user);

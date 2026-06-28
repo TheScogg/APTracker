@@ -1,6 +1,6 @@
 export function initWikiTool(deps) {
   const {
-    getCurrentUser, getCurrentPlantId, getCurrentUserRole, getPresses,
+    getCurrentUser, getCurrentPlantId, getCurrentUserRole, getPresses, currentActor,
     toPressId, esc, alphaColor, localDateStr,
     completeDemoGuideStep, readFileAsDataUrl, uploadAttachmentToPreferredStorage,
     _bindToolModalShellNavigation, shouldUseSqlStagingReads, requireSqlRead, dataApi,
@@ -31,6 +31,51 @@ let _pressWikiKnownTreeNodeIds = new Set();
 let _pressWikiPickerOpen = false;
 let _pressWikiPressPickerOpen = false;
 const PRESS_WIKI_SHARED_INDEX_PAGE_ID = 'shared-library-index';
+
+function _pressWikiStateSnapshot() {
+  return {
+    modalPressId: _pressWikiModalPressId,
+    selectedPressId: _pressWikiSelectedPressId,
+    selectedPageId: _pressWikiSelectedPageId,
+    machineCode: _pressWikiMachineCode,
+    scope: _pressWikiScope
+  };
+}
+
+function _pressWikiHasRestorableState() {
+  return Boolean(
+    _pressWikiSelectedPageId ||
+    _pressWikiModalPressId ||
+    _pressWikiSelectedPressId ||
+    _pressWikiMachineCode ||
+    _pressWikiExpandedPageIds?.size ||
+    _pressWikiKnownTreeNodeIds?.size
+  );
+}
+
+function _pressWikiResolveKnownPressId(...values) {
+  for (const value of values) {
+    const raw = String(value || '').trim();
+    if (!raw) continue;
+    if (_pressWikiIsKnownPressId(raw)) return raw;
+    const normalized = toPressId(raw);
+    if (_pressWikiIsKnownPressId(normalized)) return normalized;
+  }
+  return null;
+}
+
+function _pressWikiClearState() {
+  _pressWikiModalPressId = null;
+  _pressWikiSelectedPressId = null;
+  _pressWikiSelectedPageId = null;
+  _pressWikiMachineCode = null;
+  _pressWikiRenderedBodyRaw = '';
+  _pressWikiAttachmentsCache = [];
+  _pressWikiPageListCache = [];
+  _pressWikiExpandedPageIds = new Set();
+  _pressWikiKnownTreeNodeIds = new Set();
+  _pressWikiScope = WIKI_SCOPE_PRESS;
+}
 
 function _pressWikiScopeLabel(scope = _pressWikiScope) {
   return scope === WIKI_SCOPE_SHARED ? 'Shared Library' : 'This Press';
@@ -125,7 +170,6 @@ async function _pressWikiSelectPress(pressId) {
   _pressWikiSelectedPressId = info.pressId;
   _pressWikiModalPressId = info.pressId;
   _pressWikiMachineCode = info.machineCode;
-  _pressWikiSetPressPickerOpen(false);
   _pressWikiSetScope(WIKI_SCOPE_PRESS, { reload: false });
   await loadPressWikiPageList();
   if (_pressWikiSelectedPageId) {
@@ -743,17 +787,24 @@ function renderPressWikiEmptySelection(message = _pressWikiEmptySelectionMessage
 async function openPressWikiModal(pressId, machineCode, options = {}) {
   if (!getCurrentPlantId()) return;
   _bindToolModalShellNavigation();
-  const preserveState = !!options.preserveState && Boolean(_pressWikiModalPressId || _pressWikiSelectedPageId || _pressWikiScope);
+  const preserveState = !!options.preserveState && _pressWikiHasRestorableState();
   const initialScope = preserveState
     ? _pressWikiScope
     : (options.scope === WIKI_SCOPE_SHARED ? WIKI_SCOPE_SHARED : WIKI_SCOPE_PRESS);
   const initialTitle = String(options.title || '').trim() || _pressWikiBaseTitle(initialScope);
   const knownPressId = preserveState
-    ? (_pressWikiScope === WIKI_SCOPE_PRESS ? (_pressWikiIsKnownPressId(_pressWikiModalPressId) ? String(_pressWikiModalPressId).trim() : null) : null)
-    : (_pressWikiIsKnownPressId(pressId) ? String(pressId).trim() : null);
+    ? (_pressWikiScope === WIKI_SCOPE_PRESS
+      ? _pressWikiResolveKnownPressId(_pressWikiSelectedPressId, _pressWikiModalPressId, pressId, machineCode)
+      : null)
+    : _pressWikiResolveKnownPressId(pressId, machineCode);
   const initialPageId = preserveState
     ? (_pressWikiSelectedPageId || (initialScope === WIKI_SCOPE_SHARED ? PRESS_WIKI_SHARED_INDEX_PAGE_ID : null))
     : (String(options.pageId || '').trim() || (initialScope === WIKI_SCOPE_SHARED ? PRESS_WIKI_SHARED_INDEX_PAGE_ID : null));
+  if (preserveState && initialScope === WIKI_SCOPE_PRESS && knownPressId && !_pressWikiActivePressId()) {
+    _pressWikiModalPressId = knownPressId;
+    _pressWikiSelectedPressId = knownPressId;
+    _pressWikiMachineCode = String(machineCode || _pressWikiPressInfo(knownPressId)?.machineCode || _pressWikiMachineCode || '').trim();
+  }
   if (!preserveState) {
     _pressWikiModalPressId = initialScope === WIKI_SCOPE_SHARED ? 'shared-library' : (knownPressId || null);
     _pressWikiSelectedPressId = initialScope === WIKI_SCOPE_PRESS ? knownPressId : null;
@@ -796,7 +847,7 @@ async function openPressWikiModal(pressId, machineCode, options = {}) {
   _pressWikiSyncScopeBadge();
   _pressWikiSetScope(_pressWikiScope, { reload: false });
   _pressWikiSetPickerOpen(false);
-  _pressWikiSetPressPickerOpen(false);
+  _pressWikiSetPressPickerOpen(_pressWikiScope === WIKI_SCOPE_PRESS);
   bodyEl.textContent = 'Loading wiki...';
   revisionsEl.innerHTML = '';
   attachmentsEl.innerHTML = '';
@@ -1020,8 +1071,7 @@ window.closePressWikiModal = (options = {}) => {
   _pressWikiSetPressPickerOpen(false);
   closePressWikiActionsMenu();
   if (options.preserveState) return;
-  _pressWikiModalPressId = null;
-  _pressWikiSelectedPressId = null;
+  _pressWikiClearState();
 };
 
 async function savePressWikiRevision() {
@@ -1033,11 +1083,8 @@ async function savePressWikiRevision() {
   const rawChangeNote = String(document.getElementById('press-wiki-edit-change-note')?.value || '').trim();
   if (!body) return _setPressWikiError('Body is required.');
   const fallbackActorName = String(currentActor()?.name || getCurrentUser()?.displayName || getCurrentUser()?.email || 'Unknown').trim() || 'Unknown';
-  const now = new Date();
-  const dd = String(now.getDate()).padStart(2, '0');
-  const mm = String(now.getMonth() + 1).padStart(2, '0');
-  const yy = String(now.getFullYear()).slice(-2);
-  const changeNote = rawChangeNote || `${fallbackActorName} : ${dd}/${mm}/${yy}`;
+  const fallbackTime = new Date().toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
+  const changeNote = rawChangeNote || `${fallbackActorName} saved ${fallbackTime}`;
   if (shouldUseSqlStagingReads(getCurrentPlantId())) {
     await dataApi.saveWikiRevision(getCurrentPlantId(), _pressWikiSelectedPageId, {
       scope: _pressWikiScope,
@@ -1259,11 +1306,6 @@ document.getElementById('press-wiki-modal')?.addEventListener('click', e => {
 document.addEventListener('click', e => {
   const pickerWrap = document.querySelector('.press-wiki-picker-wrap');
   if (pickerWrap && !pickerWrap.contains(e.target)) _pressWikiSetPickerOpen(false);
-  const pressPickerWrap = document.querySelector('.press-wiki-press-picker-wrap');
-  const pressPickerBtn = document.getElementById('press-wiki-scope-press');
-  if (pressPickerWrap && !pressPickerWrap.contains(e.target) && !(pressPickerBtn && pressPickerBtn.contains(e.target))) {
-    _pressWikiSetPressPickerOpen(false);
-  }
 });
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') _pressWikiSetPickerOpen(false);
@@ -1413,6 +1455,8 @@ document.getElementById('press-wiki-scope-press')?.addEventListener('click', e =
   e.stopPropagation();
   if (_pressWikiScope !== WIKI_SCOPE_PRESS) {
     _pressWikiSetScope(WIKI_SCOPE_PRESS);
+    _pressWikiSetPressPickerOpen(true);
+    return;
   }
   _pressWikiSetPressPickerOpen(!_pressWikiPressPickerOpen);
 });
@@ -1475,14 +1519,10 @@ document.addEventListener('click', e => {
     open: openPressWikiModal,
     close: closePressWikiModal,
     openSharedLibrary: openSharedLibraryWiki,
-    hasState: () => Boolean(
-      _pressWikiModalPressId || _pressWikiSelectedPageId ||
-      _pressWikiExpandedPageIds?.size || _pressWikiKnownTreeNodeIds?.size
-    ),
+    hasState: _pressWikiHasRestorableState,
     pressInfo: _pressWikiPressInfo,
-    state: {
-      modalPressId: _pressWikiModalPressId,
-      scope: _pressWikiScope
+    get state() {
+      return _pressWikiStateSnapshot();
     },
     renderPageTree: renderPressWikiPageTree,
     handleScopePressPickerClick: _pressWikiSetPressPickerOpen

@@ -94,7 +94,7 @@ const DEMO_PLANT_ID = 'plant_demo';
 const DEMO_PLANT_NAME = 'Demo Plant';
 const DEMO_GUIDE_KEY = 'aptracker_demo_guide_v1';
 const SQL_STAGING_READ_MODE = SELECTED_DATA_BACKEND === DATA_BACKEND_SQL && !NO_AUTH_MODE && !DEMO_MODE;
-const SQL_STAGING_PLANT_IDS = new Set(['ap4_mnc7kecn']);
+const SQL_STAGING_PLANT_IDS = new Set(['ap4_mnc7kecn', 'ap2_mnc7mk1j']);
 
 const firestoreIoStats = { reads: 0, writes: 0 };
 const APP_BUILD_INFO = window.__APP_BUILD_INFO__ || {};
@@ -1127,7 +1127,6 @@ function getWorkflowActorForEntry(issue, entry, state, isCurrent = false) {
   const workflowId = getEntryWorkflowId(entry);
   const entryActor = workflowId && issue?.workflowStateByEntryHistory?.[workflowId]?.[state]?.by;
   if (entryActor) return entryActor;
-  if (workflowId && isCurrent && issue?.workflowStateHistory?.[state]?.by) return issue.workflowStateHistory[state].by;
   // Only fall back to the legacy issue-level workflow history for entries that do
   // not have their own workflow id. New timeline entries are entry-scoped; using
   // issue-level history for them can make a newly-current status appear to inherit
@@ -1142,7 +1141,6 @@ function getWorkflowStateTimestamp(issue, entry, state, isCurrent = false) {
   const workflowId = getEntryWorkflowId(entry);
   const entryTs = workflowId && issue?.workflowStateByEntryHistory?.[workflowId]?.[state]?.at;
   if (entryTs) return entryTs;
-  if (workflowId && isCurrent && issue?.workflowStateHistory?.[state]?.at) return issue.workflowStateHistory[state].at;
   if (!workflowId && isCurrent && issue?.workflowStateHistory?.[state]?.at) return issue.workflowStateHistory[state].at;
   const statusKey = String(entry?.status || '').trim().toLowerCase();
   const statusTs = statusKey ? issue?.workflowStateByStatusHistory?.[statusKey]?.[state]?.at : null;
@@ -1158,9 +1156,6 @@ function getWorkflowHistoryForEntry(issue, entry, isCurrent = false, allowStatus
     const statusKey = String(entry?.status || '').trim().toLowerCase();
     if (allowStatusFallback && statusKey && issue?.workflowStateByStatusHistory?.[statusKey]) {
       return issue.workflowStateByStatusHistory[statusKey] || {};
-    }
-    if (isCurrent && issue?.workflowStateHistory) {
-      return issue.workflowStateHistory || {};
     }
     return {};
   }
@@ -1244,6 +1239,14 @@ let dailyScheduleIndexState = null; // { plantId, date, scheduled: Set<string>|n
 // { plantId: string, date: string, scheduled: Set<string> | null }
 // scheduled === null means no dailySchedules doc exists for that date → don't highlight.
 let scheduledPressesState = null;
+const scheduleCalendarState = {
+  open: false,
+  visibleYear: new Date().getFullYear(),
+  visibleMonth: new Date().getMonth(),
+  loading: false,
+  loadToken: 0,
+  monthCache: new Map()
+};
 
 // ── ROLE / PERMISSIONS ──
 const DEFAULT_PERMISSIONS = {
@@ -2345,6 +2348,205 @@ function scheduleDateForLookup() {
   return localDateStr(new Date());
 }
 
+function scheduleCalendarMonthKey(year, month) {
+  return `${year}-${String(month + 1).padStart(2, '0')}`;
+}
+
+function scheduleCalendarSelectedDate() {
+  return document.getElementById('date-filter')?.value || localDateStr(new Date());
+}
+
+function scheduleCalendarMonthBounds(year, month) {
+  return {
+    from: localDateStr(new Date(year, month, 1)),
+    to: localDateStr(new Date(year, month + 1, 0))
+  };
+}
+
+function scheduleCalendarRowCount(schedule) {
+  return ['page1Count', 'page2Count', 'northBayChangesCount', 'southBayChangesCount']
+    .reduce((sum, key) => sum + (Number(schedule?.[key]) || 0), 0);
+}
+
+function scheduleCalendarLabel(dateKey, options = {}) {
+  const date = new Date(`${dateKey}T00:00:00`);
+  if (isNaN(date.getTime())) return dateKey || 'Date';
+  return date.toLocaleDateString('en-US', options.withYear
+    ? { month: 'short', day: 'numeric', year: 'numeric' }
+    : { month: 'short', day: 'numeric' });
+}
+
+async function loadScheduleCalendarMonth(year = scheduleCalendarState.visibleYear, month = scheduleCalendarState.visibleMonth) {
+  if (!currentPlantId) return new Map();
+  const cacheKey = `${currentPlantId}:${scheduleCalendarMonthKey(year, month)}`;
+  if (scheduleCalendarState.monthCache.has(cacheKey)) return scheduleCalendarState.monthCache.get(cacheKey);
+
+  const token = ++scheduleCalendarState.loadToken;
+  scheduleCalendarState.loading = true;
+  renderScheduleCalendar();
+
+  try {
+    const { from, to } = scheduleCalendarMonthBounds(year, month);
+    const payload = await dataApi.listDailySchedules(currentPlantId, { from, to });
+    if (token !== scheduleCalendarState.loadToken) return new Map();
+    const markerMap = new Map();
+    (payload?.schedules || []).forEach(schedule => {
+      const dateKey = String(schedule?.scheduleDate || '').trim();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return;
+      markerMap.set(dateKey, {
+        schedule,
+        rowCount: scheduleCalendarRowCount(schedule)
+      });
+    });
+    scheduleCalendarState.monthCache.set(cacheKey, markerMap);
+    return markerMap;
+  } catch (error) {
+    console.warn('loadScheduleCalendarMonth failed:', error);
+    const emptyMap = new Map();
+    scheduleCalendarState.monthCache.set(cacheKey, emptyMap);
+    return emptyMap;
+  } finally {
+    if (token === scheduleCalendarState.loadToken) {
+      scheduleCalendarState.loading = false;
+      renderScheduleCalendar();
+    }
+  }
+}
+
+async function loadScheduleCalendarMonthForDate(dateKey) {
+  const date = new Date(`${dateKey || localDateStr(new Date())}T00:00:00`);
+  if (isNaN(date.getTime())) return new Map();
+  scheduleCalendarState.visibleYear = date.getFullYear();
+  scheduleCalendarState.visibleMonth = date.getMonth();
+  const markers = await loadScheduleCalendarMonth(scheduleCalendarState.visibleYear, scheduleCalendarState.visibleMonth);
+  syncScheduleDateButtonIndicator();
+  return markers;
+}
+
+function syncScheduleDateButtonIndicator() {
+  const btn = document.getElementById('period-date');
+  if (!btn) return;
+  const selected = scheduleCalendarSelectedDate();
+  const [year, rawMonth] = selected.split('-').map(Number);
+  const cacheKey = Number.isFinite(year) && Number.isFinite(rawMonth)
+    ? `${currentPlantId}:${scheduleCalendarMonthKey(year, rawMonth - 1)}`
+    : '';
+  const hasSchedule = !!scheduleCalendarState.monthCache.get(cacheKey)?.has(selected);
+  btn.classList.toggle('has-schedule-data', hasSchedule);
+}
+
+function renderScheduleCalendarReadout(markerMap) {
+  const readoutText = document.getElementById('schedule-cal-readout-text');
+  const readoutChip = document.getElementById('schedule-cal-readout-chip');
+  if (!readoutText || !readoutChip) return;
+  const selected = scheduleCalendarSelectedDate();
+  const marker = markerMap?.get(selected);
+  readoutText.innerHTML = marker
+    ? `<strong>${esc(scheduleCalendarLabel(selected))}</strong> has imported schedule data`
+    : `<strong>${esc(scheduleCalendarLabel(selected))}</strong> has no imported schedule yet`;
+  readoutChip.textContent = scheduleCalendarState.loading
+    ? 'Loading'
+    : marker
+      ? `${marker.rowCount || 0} rows`
+      : 'No data';
+  readoutChip.classList.toggle('empty', !marker);
+}
+
+function renderScheduleCalendar() {
+  const grid = document.getElementById('schedule-cal-grid');
+  const title = document.getElementById('schedule-cal-month');
+  if (!grid || !title) return;
+
+  const { visibleYear: year, visibleMonth: month } = scheduleCalendarState;
+  const monthDate = new Date(year, month, 1);
+  title.textContent = monthDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  grid.innerHTML = '';
+
+  ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].forEach(day => {
+    const cell = document.createElement('div');
+    cell.className = 'schedule-cal-dow';
+    cell.textContent = day;
+    grid.appendChild(cell);
+  });
+
+  const monthKey = currentPlantId ? `${currentPlantId}:${scheduleCalendarMonthKey(year, month)}` : '';
+  const markerMap = scheduleCalendarState.monthCache.get(monthKey) || new Map();
+  const todayKey = localDateStr(new Date());
+  const selected = scheduleCalendarSelectedDate();
+  const first = new Date(year, month, 1);
+  const start = new Date(year, month, 1 - first.getDay());
+
+  for (let i = 0; i < 42; i++) {
+    const date = new Date(start);
+    date.setDate(start.getDate() + i);
+    const dateKey = localDateStr(date);
+    const marker = markerMap.get(dateKey);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'schedule-cal-day';
+    btn.textContent = String(date.getDate());
+    if (date.getMonth() !== month) btn.classList.add('other-month');
+    if (dateKey === todayKey) btn.classList.add('today');
+    if (dateKey === selected) btn.classList.add('selected');
+    if (marker) {
+      btn.classList.add('has-schedule');
+      btn.title = `${scheduleCalendarLabel(dateKey, { withYear: true })}: imported schedule (${marker.rowCount || 0} rows)`;
+    }
+    btn.addEventListener('click', () => {
+      if (date.getMonth() !== month) return;
+      window.onCalendarPick(dateKey);
+      closeScheduleCalendar();
+    });
+    grid.appendChild(btn);
+  }
+
+  renderScheduleCalendarReadout(markerMap);
+  syncScheduleDateButtonIndicator();
+}
+
+function openScheduleCalendar() {
+  const popover = document.getElementById('schedule-calendar-popover');
+  const button = document.getElementById('period-date');
+  if (!popover || !button) return;
+  const selected = scheduleCalendarSelectedDate();
+  const selectedDate = new Date(`${selected}T00:00:00`);
+  if (!isNaN(selectedDate.getTime())) {
+    scheduleCalendarState.visibleYear = selectedDate.getFullYear();
+    scheduleCalendarState.visibleMonth = selectedDate.getMonth();
+  }
+  scheduleCalendarState.open = true;
+  popover.hidden = false;
+  button.setAttribute('aria-expanded', 'true');
+  renderScheduleCalendar();
+  void loadScheduleCalendarMonth();
+}
+
+function closeScheduleCalendar() {
+  const popover = document.getElementById('schedule-calendar-popover');
+  const button = document.getElementById('period-date');
+  scheduleCalendarState.open = false;
+  if (popover) popover.hidden = true;
+  if (button) button.setAttribute('aria-expanded', 'false');
+}
+
+window.toggleScheduleCalendar = () => {
+  if (scheduleCalendarState.open) closeScheduleCalendar();
+  else openScheduleCalendar();
+};
+
+function shiftScheduleCalendarMonth(delta) {
+  scheduleCalendarState.visibleMonth += delta;
+  if (scheduleCalendarState.visibleMonth < 0) {
+    scheduleCalendarState.visibleMonth = 11;
+    scheduleCalendarState.visibleYear -= 1;
+  } else if (scheduleCalendarState.visibleMonth > 11) {
+    scheduleCalendarState.visibleMonth = 0;
+    scheduleCalendarState.visibleYear += 1;
+  }
+  renderScheduleCalendar();
+  void loadScheduleCalendarMonth();
+}
+
 // Bulk-loads all scheduled machine codes for a given date from all 4 schedule sections.
 // Result is cached in scheduledPressesState. Calls updatePressStates() when done so
 // press buttons immediately reflect their scheduled/unscheduled state.
@@ -2401,35 +2603,20 @@ async function loadDailyScheduleIndex(date) {
   if (dailyScheduleIndexState && dailyScheduleIndexState.plantId === currentPlantId && dailyScheduleIndexState.date === date) {
     return dailyScheduleIndexState;
   }
-  const sqlPayload = shouldUseSqlStagingReads(currentPlantId)
-    ? await safeSqlRead(
-      `daily schedule ${currentPlantId}:${date}`,
-      () => dataApi.getDailySchedule(currentPlantId, date)
-    )
-    : null;
+  let sqlPayload = null;
+  try {
+    sqlPayload = await dataApi.getDailySchedule(currentPlantId, date);
+  } catch (error) {
+    console.warn(`D1 daily schedule read failed for ${currentPlantId}:${date}.`, error);
+    dailyScheduleIndexState = { plantId: currentPlantId, date, scheduled: null, lookupByPress: new Map() };
+    return dailyScheduleIndexState;
+  }
   if (sqlPayload?.schedule) {
     const { scheduled, lookupByPress } = buildScheduleIndexFromSectionRows(sqlPayload.sections || {});
     dailyScheduleIndexState = { plantId: currentPlantId, date, scheduled, lookupByPress };
     return dailyScheduleIndexState;
   }
-  if (shouldUseSqlStagingReads(currentPlantId) && sqlPayload && sqlPayload.schedule === null) {
-    console.info(`No D1 daily schedule found for ${currentPlantId} on ${date}; checking Firestore fallback.`);
-  }
-  const dailyRef = doc(db, 'plants', currentPlantId, 'dailySchedules', date);
-  const dailySnap = await getDoc(dailyRef);
-  if (!dailySnap.exists()) {
-    dailyScheduleIndexState = { plantId: currentPlantId, date, scheduled: null, lookupByPress: new Map() };
-    return dailyScheduleIndexState;
-  }
-  const sections = ['page1', 'page2', 'northBayChanges', 'southBayChanges'];
-  const sectionSnaps = await Promise.all(
-    sections.map(s => getDocs(collection(db, 'plants', currentPlantId, 'dailySchedules', date, s)))
-  );
-  const rowsBySection = Object.fromEntries(
-    sections.map((section, idx) => [section, sectionSnaps[idx].docs.map(d => ({ id: d.id, ...(d.data() || {}) }))])
-  );
-  const { scheduled, lookupByPress } = buildScheduleIndexFromSectionRows(rowsBySection);
-  dailyScheduleIndexState = { plantId: currentPlantId, date, scheduled, lookupByPress };
+  dailyScheduleIndexState = { plantId: currentPlantId, date, scheduled: null, lookupByPress: new Map() };
   return dailyScheduleIndexState;
 }
 
@@ -2943,6 +3130,7 @@ async function hydrateCurrentPlantView() {
   buildFloorMap();
   await loadConfig();
   loadDailyScheduledPresses(scheduleDateForLookup()); // fire-and-forget; calls updatePressStates when done
+  void loadScheduleCalendarMonthForDate(scheduleDateForLookup());
 }
 
 // Load user's plant list.
@@ -3297,6 +3485,10 @@ async function switchPlant(plantId) {
   attachmentsHydrationToken++;
   eventsHydrationToken++;
   scheduledPressesState = null; // clear so new plant reloads schedule
+  dailyScheduleIndexState = null;
+  scheduleCalendarState.monthCache.clear();
+  scheduleCalendarState.loadToken++;
+  closeScheduleCalendar();
   issueShiftFilter = 'all';
   syncShiftFilterUi();
   setSyncStatus('', 'Switching plant…');
@@ -3355,9 +3547,8 @@ document.addEventListener('click', e => {
 // ── SINGLE SOURCE OF TRUTH FOR STATUSES ──
 // Loaded from Firestore config doc on startup. Edit via the admin panel (user menu → Manage Statuses).
 let STATUSES = {
-  open: { label: 'Open', shortLabel: 'Open', icon: '●', cssColor: 'var(--color-danger, var(--red))', swipeColor: '#ef4444', floorCls: 'has-open', cls: 'status-open', subs: ['New Fault / Issue', 'Pending Triage', 'Scheduled Mold Change', 'Re-opened'], statLabel: 'Open', order: 0 },
-  alert: { label: 'Alert', shortLabel: 'Alert', icon: '🚨', cssColor: '#dc2626', swipeColor: '#dc2626', floorCls: 'has-alert', cls: 'status-alert', subs: ['Mold Protection Fault', 'E-Stop / Safety Hazard', 'Press Down - Critical', 'Major Oil / Fluid Leak'], statLabel: 'Alert', order: 1 },
-  attention: { label: 'Attention', shortLabel: 'Attention', icon: '◇', cssColor: '#0ea5e9', swipeColor: '#0ea5e9', floorCls: 'has-attention', cls: 'status-attention', subs: ['Watch Item', 'Needs Follow-up', 'Housekeeping', 'PM Opportunity', 'Operator Note', 'Check Next Run'], statLabel: 'Attention', order: 1.5 },
+  open: { label: 'Open', shortLabel: 'Open', icon: '📍', cssColor: 'var(--color-danger, var(--red))', swipeColor: '#ef4444', floorCls: 'has-open', cls: 'status-open', subs: ['New Fault / Issue', 'Pending Triage', 'Scheduled Mold Change', 'Re-opened'], statLabel: 'Open', order: 0 },
+  attention: { label: 'Attention', shortLabel: 'Attention', icon: '⚠️', cssColor: '#0ea5e9', swipeColor: '#0ea5e9', floorCls: 'has-attention', cls: 'status-attention', subs: ['DO020: Trial Run', 'Mold Protection Fault', 'E-Stop / Safety Hazard', 'Press Down - Critical', 'Major Oil / Fluid Leak', 'Watch Item', 'Needs Follow-up', 'Housekeeping', 'PM Opportunity', 'Operator Note', 'Check Next Run'], statLabel: 'Attention', order: 1 },
   controlman: { label: 'Controlman', shortLabel: 'Controlman', icon: '🎛️', cssColor: 'var(--color-babyblue, var(--babyblue))', swipeColor: '#38bdf8', floorCls: 'has-controlman', cls: 'status-controlman', subs: ['Color Change', 'Mold Change', 'Robot / EOAT (End of Arm Tooling) Fault', 'Vision System / Camera Error', 'Conveyor / Auxiliary Comm Loss', 'PLC / HMI Error'], statLabel: 'Controlman', order: 2 },
   maintenance: { label: 'Maintenance', shortLabel: 'Maintenance', icon: '🔧', cssColor: 'var(--color-warning, var(--yellow))', swipeColor: '#eab308', floorCls: 'has-maintenance', cls: 'status-maintenance', subs: ['Hydraulic Leak / Pressure Drop', 'Heater Band / Thermocouple Failure', 'Barrel / Screw / Check Ring Issue', 'Chiller / Thermolator Failure'], statLabel: 'Maintenance', order: 3 },
   materials: { label: 'Materials', shortLabel: 'Materials', icon: '📦', cssColor: '#8b5cf6', swipeColor: '#8b5cf6', floorCls: 'has-materials', cls: 'status-materials', subs: ['Resin Moisture / Drying Issue', 'Colorant / Masterbatch Ratio Error', 'Vacuum / Material Loader Blockage', 'Wrong Resin / Regrind Issue'], statLabel: 'Materials', order: 4 },
@@ -3371,6 +3562,47 @@ const DEFAULT_STATUSES = JSON.parse(JSON.stringify(STATUSES));
 const CANONICAL_OPTIONAL_STATUSES = {
   attention: JSON.parse(JSON.stringify(STATUSES.attention))
 };
+const LEGACY_DEFAULT_STATUS_ICONS = {
+  open: { '●': STATUSES.open.icon, '＋': STATUSES.open.icon },
+  attention: { '◇': STATUSES.attention.icon, '👁️': STATUSES.attention.icon }
+};
+
+function normalizeDefaultStatusIcon(key, icon) {
+  const value = String(icon || '●');
+  return LEGACY_DEFAULT_STATUS_ICONS[key]?.[value] || value;
+}
+
+function addUniqueSub(subs, label) {
+  const safeLabel = String(label || '').trim();
+  if (!safeLabel) return;
+  if (!subs.some(sub => sub.toLowerCase() === safeLabel.toLowerCase())) subs.push(safeLabel);
+}
+
+function migrateRetiredStatusCategories(statuses) {
+  if (!statuses?.attention) return statuses;
+
+  statuses.attention.subs = Array.isArray(statuses.attention.subs)
+    ? statuses.attention.subs.map(v => String(v || '').trim()).filter(Boolean)
+    : [];
+
+  if (statuses.open) {
+    statuses.open.subs = Array.isArray(statuses.open.subs)
+      ? statuses.open.subs.map(v => String(v || '').trim()).filter(sub => sub.toLowerCase() !== 'do020: trial run')
+      : [];
+  }
+  addUniqueSub(statuses.attention.subs, 'DO020: Trial Run');
+
+  if (statuses.alert) {
+    (Array.isArray(statuses.alert.subs) ? statuses.alert.subs : [])
+      .forEach(sub => addUniqueSub(statuses.attention.subs, sub));
+    delete statuses.alert;
+  }
+
+  statuses.attention.order = Number.isFinite(Number(statuses.attention.order))
+    ? Math.min(Number(statuses.attention.order), 1)
+    : 1;
+  return statuses;
+}
 
 // ── MASCOT CHARACTERS ──
 // Animated SVG characters, one per job role. Appear in status swipe panels and empty states.
@@ -3535,7 +3767,7 @@ function normalizeLoadedStatuses(rawStatuses) {
     normalized[key] = {
       label: safeLabel,
       shortLabel: String(value.shortLabel || safeLabel),
-      icon: String(value.icon || '●'),
+      icon: normalizeDefaultStatusIcon(key, value.icon),
       cssColor: color,
       swipeColor: String(value.swipeColor || color),
       floorCls: String(value.floorCls || (key === 'resolved' ? 'all-resolved' : `has-${slug}`)),
@@ -3553,7 +3785,7 @@ function normalizeLoadedStatuses(rawStatuses) {
   Object.entries(CANONICAL_OPTIONAL_STATUSES).forEach(([key, value]) => {
     if (!normalized[key]) normalized[key] = deepCopy(value);
   });
-  return normalized;
+  return migrateRetiredStatusCategories(normalized);
 }
 
 function stopStatusConfigListener() {
@@ -5444,7 +5676,7 @@ function seedInMemoryDemoIssues() {
       },
       lifecycle: { isOpen: true, isResolved: false, openedAt: now },
       statusHistory: [
-        { status: 'alert', subStatus: 'Robot / EOAT (End of Arm Tooling) Fault', by: 'Demo Operator', dateTime: now.toLocaleString() },
+        { status: 'attention', subStatus: 'Robot / EOAT (End of Arm Tooling) Fault', by: 'Demo Operator', dateTime: now.toLocaleString() },
         { status: 'controlman', subStatus: 'Robot / EOAT (End of Arm Tooling) Fault', by: 'Demo Lead', dateTime: now.toLocaleString(), note: 'Controlman called and reviewing servo fault.' }
       ],
       photos: [],
@@ -6230,13 +6462,30 @@ async function loadIssueHistoryPage() {
   return issueHistoryFetchInFlight;
 }
 
+function sqlIssueListParams() {
+  const params = { limit: 500 };
+  const dateFilter = document.getElementById('date-filter')?.value || '';
+  if (issuePeriod === 'date' && dateFilter) params.date = dateFilter;
+  if (issuePeriod === 'today') params.date = localDateStr(new Date());
+  return params;
+}
+
+function refreshIssuesFromSqlSoon() {
+  if (!currentPlantId || !shouldUseSqlStagingReads(currentPlantId)) return;
+  void refreshIssuesFromSql().catch(error => {
+    console.warn('SQL issue refresh failed', error);
+    setSyncStatus('err', 'D1 issue refresh failed');
+  });
+}
+
 async function refreshIssuesFromSql() {
+  const issueParams = sqlIssueListParams();
   const payload = await requireSqlRead(
     `issues ${currentPlantId}`,
-    () => dataApi.listIssues(currentPlantId, { limit: 500 }),
+    () => dataApi.listIssues(currentPlantId, issueParams),
     `Issues are missing in D1 for plant ${currentPlantId}.`
   );
-  const nextSignature = JSON.stringify(payload.issues || []);
+  const nextSignature = JSON.stringify({ issueParams, issues: payload.issues || [] });
   const didPlantChange = lastSqlIssuePollPlantId !== currentPlantId;
   const didIssueSetChange = didPlantChange || lastSqlIssuePollSignature !== nextSignature;
   lastSqlIssuePollPlantId = currentPlantId;
@@ -6526,18 +6775,25 @@ window.setPeriod = (s, options = {}) => {
   updateCalLabel(document.getElementById('date-filter').value || localDateStr(new Date()), false);
   renderIssues(); updatePressStates(); updateStats();
   loadDailyScheduledPresses(scheduleDateForLookup());
+  void loadScheduleCalendarMonthForDate(scheduleDateForLookup());
+  refreshIssuesFromSqlSoon();
   if (!options.silentDemoGuide) completeDemoGuideStep('filters');
 };
 
 window.onCalendarPick = val => {
   if (!val) return;
+  const dateFilter = document.getElementById('date-filter');
+  if (dateFilter) dateFilter.value = val;
   ['today', '24h', 'week', 'month', 'all'].forEach(x => document.getElementById('period-' + x).classList.remove('active'));
   document.getElementById('period-date').classList.add('active');
   issuePeriod = 'date';
   updatePeriodTriggerLabel(val);
   updateCalLabel(val, true);
+  renderScheduleCalendar();
   renderIssues(); updatePressStates(); updateStats(); updateFilterBadge();
   loadDailyScheduledPresses(val);
+  void loadScheduleCalendarMonthForDate(val);
+  refreshIssuesFromSqlSoon();
   completeDemoGuideStep('filters');
 };
 
@@ -6556,6 +6812,8 @@ window.clearDate = () => {
   ['today', '24h', 'week', 'month', 'all'].forEach(x => document.getElementById('period-' + x).classList.toggle('active', x === 'all'));
   renderIssues(); updatePressStates(); updateStats();
   loadDailyScheduledPresses(localDateStr(new Date()));
+  void loadScheduleCalendarMonthForDate(localDateStr(new Date()));
+  refreshIssuesFromSqlSoon();
 };
 
 // Compute time window for period filter
@@ -10598,12 +10856,15 @@ function renderIssues() {
         ? ` <span class="issue-serial-tag" title="Serial Number: ${esc(entrySerialNumber)}">🏷️ ${esc(entrySerialNumber)}</span>`
         : '';
       const entryWorkflowId = getEntryWorkflowId(entry);
-      const allowStatusHistoryFallback = !entryWorkflowId && workflowStatusCounts[String(entry?.status || '')] <= 1;
+      const allowStatusHistoryFallback = workflowStatusCounts[String(entry?.status || '')] <= 1;
       const entryWorkflowHistory = getWorkflowHistoryForEntry(issue, entry, isLatest, allowStatusHistoryFallback);
-      const completedWorkflowStates = wfOrder.filter(state => entryWorkflowHistory?.[state]?.at || entryWorkflowHistory?.[state]?.by);
+      const entryWorkflowIndex = wfOrder.indexOf(entryWorkflowState);
+      const recordedWorkflowStates = wfOrder.filter(state => entryWorkflowHistory?.[state]?.at || entryWorkflowHistory?.[state]?.by);
+      const reachedWorkflowStates = wfOrder.filter((state, stateIndex) =>
+        stateIndex <= entryWorkflowIndex || entryWorkflowHistory?.[state]?.at || entryWorkflowHistory?.[state]?.by
+      );
       const historyKey = `${issue.id}:${entryWorkflowId || trueIdx}`;
       const isHistoryOpen = workflowHistoryOpenKeys.has(historyKey);
-      const entryWorkflowIndex = wfOrder.indexOf(entryWorkflowState);
       const workflowHistoryRows = wfOrder.map(state => {
         const cfg = workflowConfig[state];
         const stateIndex = wfOrder.indexOf(state);
@@ -10625,10 +10886,10 @@ function renderIssues() {
       const workflowHistoryPanel = isHistoryOpen
         ? `<div class="tl-workflow-history-panel">
             <div class="tl-workflow-history-title">Workflow History</div>
-            ${completedWorkflowStates.length ? workflowHistoryRows : `<div class="tl-workflow-history-empty">No workflow events recorded yet.</div>${workflowHistoryRows}`}
+            ${recordedWorkflowStates.length ? workflowHistoryRows : `<div class="tl-workflow-history-empty">No workflow event timestamps recorded yet.</div>${workflowHistoryRows}`}
           </div>`
         : '';
-      const workflowHistoryButton = `<button class="tl-history-btn" type="button" data-workflow-history-key="${esc(historyKey)}" aria-expanded="${isHistoryOpen ? 'true' : 'false'}">History ${completedWorkflowStates.length}/4</button>`;
+      const workflowHistoryButton = `<button class="tl-history-btn" type="button" data-workflow-history-key="${esc(historyKey)}" aria-expanded="${isHistoryOpen ? 'true' : 'false'}">History ${reachedWorkflowStates.length}/4</button>`;
 
       return `<div class="tl-entry${entryWorkflowState === 'finished' ? ' finished-checkered' : ''}" style="border-left-color:${barColor};${entryBg}">
         ${wfBadge}
@@ -12336,9 +12597,15 @@ async function _openToolModalByKey(key) {
   const preserveState = _toolModalHasState(key);
   const wikiState = wikiTool?.state || {};
   const notesContext = notesTool?.context || {};
+  const wikiMachine = resolveMachineCode(
+    wikiState.machineCode ||
+    wikiState.selectedPressId ||
+    wikiState.modalPressId ||
+    ''
+  );
   const activeMachine = resolveMachineCode(
     currentMachine ||
-    wikiState.modalPressId ||
+    wikiMachine ||
     notesContext.machineCode ||
     notesContext.pressId ||
     ''
@@ -12349,8 +12616,11 @@ async function _openToolModalByKey(key) {
       break;
     }
     case 'wiki': {
-      if (activeMachine) {
-        await window.openPressWikiModal?.(toPressId(activeMachine), activeMachine, { preserveState });
+      if (preserveState && wikiState.scope === 'shared') {
+        await window.openSharedLibraryWiki?.({ preserveState: true });
+      } else if (wikiMachine || activeMachine) {
+        const machine = wikiMachine || activeMachine;
+        await window.openPressWikiModal?.(toPressId(machine), machine, { preserveState });
       } else {
         await (preserveState
           ? window.openSharedLibraryWiki?.({ preserveState: true })
@@ -12522,6 +12792,10 @@ function handleShellAction(action, value, trigger, event) {
       break;
     case 'set-period':
       window.setPeriod?.(value);
+      closeScheduleCalendar();
+      break;
+    case 'toggle-schedule-calendar':
+      window.toggleScheduleCalendar?.();
       break;
     case 'set-scope':
       window.setScope?.(value);
@@ -12587,6 +12861,30 @@ document.addEventListener('click', e => {
   const trigger = e.target.closest?.('[data-shell-action]');
   if (!trigger) return;
   handleShellAction(trigger.dataset.shellAction, trigger.dataset.shellValue, trigger, e);
+});
+
+document.getElementById('schedule-cal-prev')?.addEventListener('click', event => {
+  event.preventDefault();
+  shiftScheduleCalendarMonth(-1);
+});
+
+document.getElementById('schedule-cal-next')?.addEventListener('click', event => {
+  event.preventDefault();
+  shiftScheduleCalendarMonth(1);
+});
+
+document.getElementById('date-filter')?.addEventListener('change', event => {
+  window.onCalendarPick?.(event.target.value);
+});
+
+document.addEventListener('click', event => {
+  if (!scheduleCalendarState.open) return;
+  if (event.target.closest?.('#schedule-calendar-popover, #period-date')) return;
+  closeScheduleCalendar();
+});
+
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && scheduleCalendarState.open) closeScheduleCalendar();
 });
 document.addEventListener('click', e => {
   const guideReset = e.target.closest?.('[data-demo-guide-reset]');
@@ -14030,6 +14328,8 @@ window.clearAllFilters = (options = {}) => {
   updateStats();
   updateFilterBadge();
   loadDailyScheduledPresses(scheduleDateForLookup());
+  void loadScheduleCalendarMonthForDate(scheduleDateForLookup());
+  refreshIssuesFromSqlSoon();
   if (!options.silentDemoGuide) completeDemoGuideStep('filters');
 };
 
@@ -14943,6 +15243,7 @@ const wikiTool = initWikiTool({
   getCurrentPlantId: () => currentPlantId,
   getCurrentUserRole: () => currentUserRole,
   getPresses: () => PRESSES,
+  currentActor,
   toPressId, esc, alphaColor, localDateStr,
   completeDemoGuideStep, readFileAsDataUrl,
   uploadAttachmentToPreferredStorage,
@@ -15355,9 +15656,8 @@ window.resetToDefaults = async () => {
 
   // Reset STATUSES to the comprehensive defaults from the code
   STATUSES = {
-    open: { label: 'Open', shortLabel: 'Open', icon: '●', cssColor: 'var(--color-danger, var(--red))', swipeColor: '#ef4444', floorCls: 'has-open', cls: 'status-open', subs: ['New Fault / Issue', 'Pending Triage', 'Scheduled Mold Change', 'Re-opened'], statLabel: 'Open', order: 0 },
-    alert: { label: 'Alert', shortLabel: 'Alert', icon: '🚨', cssColor: '#dc2626', swipeColor: '#dc2626', floorCls: 'has-alert', cls: 'status-alert', subs: ['Mold Protection Fault', 'E-Stop / Safety Hazard', 'Press Down - Critical', 'Major Oil / Fluid Leak'], statLabel: 'Alert', order: 1 },
-    attention: { label: 'Attention', shortLabel: 'Attention', icon: '◇', cssColor: '#0ea5e9', swipeColor: '#0ea5e9', floorCls: 'has-attention', cls: 'status-attention', subs: ['Watch Item', 'Needs Follow-up', 'Housekeeping', 'PM Opportunity', 'Operator Note', 'Check Next Run'], statLabel: 'Attention', order: 1.5 },
+    open: { label: 'Open', shortLabel: 'Open', icon: '📍', cssColor: 'var(--color-danger, var(--red))', swipeColor: '#ef4444', floorCls: 'has-open', cls: 'status-open', subs: ['New Fault / Issue', 'Pending Triage', 'Scheduled Mold Change', 'Re-opened'], statLabel: 'Open', order: 0 },
+    attention: { label: 'Attention', shortLabel: 'Attention', icon: '⚠️', cssColor: '#0ea5e9', swipeColor: '#0ea5e9', floorCls: 'has-attention', cls: 'status-attention', subs: ['DO020: Trial Run', 'Mold Protection Fault', 'E-Stop / Safety Hazard', 'Press Down - Critical', 'Major Oil / Fluid Leak', 'Watch Item', 'Needs Follow-up', 'Housekeeping', 'PM Opportunity', 'Operator Note', 'Check Next Run'], statLabel: 'Attention', order: 1 },
     controlman: { label: 'Controlman', shortLabel: 'Controlman', icon: '🎛️', cssColor: 'var(--color-babyblue, var(--babyblue))', swipeColor: '#38bdf8', floorCls: 'has-controlman', cls: 'status-controlman', subs: ['Color Change', 'Mold Change', 'Robot / EOAT (End of Arm Tooling) Fault', 'Vision System / Camera Error', 'Conveyor / Auxiliary Comm Loss', 'PLC / HMI Error'], statLabel: 'Controlman', order: 2 },
     maintenance: { label: 'Maintenance', shortLabel: 'Maintenance', icon: '🔧', cssColor: 'var(--color-warning, var(--yellow))', swipeColor: '#eab308', floorCls: 'has-maintenance', cls: 'status-maintenance', subs: ['Hydraulic Leak / Pressure Drop', 'Heater Band / Thermocouple Failure', 'Barrel / Screw / Check Ring Issue', 'Chiller / Thermolator Failure'], statLabel: 'Maintenance', order: 3 },
     materials: { label: 'Materials', shortLabel: 'Materials', icon: '📦', cssColor: '#8b5cf6', swipeColor: '#8b5cf6', floorCls: 'has-materials', cls: 'status-materials', subs: ['Resin Moisture / Drying Issue', 'Colorant / Masterbatch Ratio Error', 'Vacuum / Material Loader Blockage', 'Wrong Resin / Regrind Issue'], statLabel: 'Materials', order: 4 },

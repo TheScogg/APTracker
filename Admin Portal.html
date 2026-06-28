@@ -969,7 +969,7 @@ const DEFAULT_PRESSES = {
 
 const DEFAULT_STATUSES = {
   open:            { label:'Open',             shortLabel:'Open',         icon:'●',  cssColor:'#ef4444', swipeColor:'#ef4444', floorCls:'has-open',            cls:'status-open',            subs:['New Fault / Issue','Pending Triage','Scheduled Mold Change','Re-opened'], statLabel:'Open', order:0 },
-  alert:           { label:'Alert',            shortLabel:'Alert',        icon:'🚨', cssColor:'#dc2626', swipeColor:'#dc2626', floorCls:'has-alert',           cls:'status-alert',           subs:['Mold Protection Fault','E-Stop / Safety Hazard','Press Down - Critical','Major Oil / Fluid Leak'], statLabel:'Alert', order:1 },
+  attention:       { label:'Attention',        shortLabel:'Attention',    icon:'⚠️', cssColor:'#0ea5e9', swipeColor:'#0ea5e9', floorCls:'has-attention',       cls:'status-attention',       subs:['DO020: Trial Run','Mold Protection Fault','E-Stop / Safety Hazard','Press Down - Critical','Major Oil / Fluid Leak','Watch Item','Needs Follow-up','Housekeeping','PM Opportunity','Operator Note','Check Next Run'], statLabel:'Attention', order:1 },
   controlman:      { label:'Controlman',       shortLabel:'Controlman',   icon:'🎛️', cssColor:'#38bdf8', swipeColor:'#38bdf8', floorCls:'has-controlman',      cls:'status-controlman',      subs:['Color Change','Mold Change','Robot / EOAT (End of Arm Tooling) Fault','Vision System / Camera Error','Conveyor / Auxiliary Comm Loss','PLC / HMI Error'], statLabel:'Controlman', order:2 },
   maintenance:     { label:'Maintenance',      shortLabel:'Maintenance',  icon:'🔧', cssColor:'#eab308', swipeColor:'#eab308', floorCls:'has-maintenance',     cls:'status-maintenance',     subs:['Hydraulic Leak / Pressure Drop','Heater Band / Thermocouple Failure','Barrel / Screw / Check Ring Issue','Chiller / Thermolator Failure'], statLabel:'Maintenance', order:3 },
   materials:       { label:'Materials',        shortLabel:'Materials',    icon:'📦', cssColor:'#8b5cf6', swipeColor:'#8b5cf6', floorCls:'has-materials',       cls:'status-materials',       subs:['Resin Moisture / Drying Issue','Colorant / Masterbatch Ratio Error','Vacuum / Material Loader Blockage','Wrong Resin / Regrind Issue'], statLabel:'Materials', order:4 },
@@ -1378,6 +1378,29 @@ function normalizeStatusesForSave(rawStatuses) {
   });
   if (!normalized.open) normalized.open = normalizeStatusRecord('open', DEFAULT_STATUSES.open, 0);
   if (!normalized.resolved) normalized.resolved = normalizeStatusRecord('resolved', DEFAULT_STATUSES.resolved, Object.keys(normalized).length);
+  if (normalized.attention) {
+    normalized.attention.subs = Array.isArray(normalized.attention.subs)
+      ? normalized.attention.subs.map(v => String(v || '').trim()).filter(Boolean)
+      : [];
+    if (normalized.open) {
+      normalized.open.subs = Array.isArray(normalized.open.subs)
+        ? normalized.open.subs.map(v => String(v || '').trim()).filter(sub => sub.toLowerCase() !== 'do020: trial run')
+        : [];
+    }
+    if (!normalized.attention.subs.some(sub => sub.toLowerCase() === 'do020: trial run')) {
+      normalized.attention.subs.push('DO020: Trial Run');
+    }
+    if (normalized.alert) {
+      (Array.isArray(normalized.alert.subs) ? normalized.alert.subs : []).forEach(sub => {
+        const label = String(sub || '').trim();
+        if (label && !normalized.attention.subs.some(existing => existing.toLowerCase() === label.toLowerCase())) {
+          normalized.attention.subs.push(label);
+        }
+      });
+      delete normalized.alert;
+    }
+    normalized.attention.order = Number.isFinite(Number(normalized.attention.order)) ? Math.min(Number(normalized.attention.order), 1) : 1;
+  }
   return normalized;
 }
 
