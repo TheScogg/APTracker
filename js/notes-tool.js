@@ -718,6 +718,21 @@ function _notesRenderViewerContext(note = _notesState.currentNote) {
   });
 }
 
+function _notesToggleChecklistItemDone(itemId, done) {
+  if (!_notesState.currentNote?.id || !itemId) return;
+  const current = normalizeChecklistItems(_notesState.currentNote.checklistItems || []);
+  const next = current.map(item => item.id === itemId ? { ...item, done: Boolean(done) } : item);
+  _notesState.currentNote.checklistItems = next;
+  _notesState.notes = (_notesState.notes || []).map(note => (
+    note.id === _notesState.currentNote.id ? { ...note, checklistItems: next } : note
+  ));
+  _notesState.dirty = true;
+  _notesRenderViewer(_notesState.currentNote);
+  _notesRenderChecklist(_notesState.currentNote);
+  _notesRenderList();
+  void _notesSaveActiveNote({ immediate: false });
+}
+
 function _notesRenderViewerChecklist(note = _notesState.currentNote) {
   const wrap = document.getElementById('notes-viewer-checklist');
   const card = document.getElementById('notes-viewer-checklist-card');
@@ -727,8 +742,14 @@ function _notesRenderViewerChecklist(note = _notesState.currentNote) {
   if (card) card.hidden = !items.length;
   if (!items.length) return;
   items.forEach(item => {
-    const row = document.createElement('div');
+    const row = document.createElement('button');
+    row.type = 'button';
     row.className = `notes-viewer-check-item ${item.done ? 'done' : ''}`;
+    row.setAttribute('aria-pressed', item.done ? 'true' : 'false');
+    row.setAttribute('aria-label', `${item.done ? 'Mark incomplete' : 'Mark complete'}: ${item.text || 'Untitled item'}`);
+    row.addEventListener('click', () => {
+      _notesToggleChecklistItemDone(item.id, !item.done);
+    });
     const mark = document.createElement('span');
     mark.className = 'notes-viewer-check-mark';
     mark.textContent = item.done ? '✓' : '';
@@ -886,6 +907,9 @@ function _notesRenderEditor(note = null) {
   const pinBtn = document.getElementById('notes-pin-btn');
   const archiveBtn = document.getElementById('notes-archive-btn');
   const deleteBtn = document.getElementById('notes-delete-btn');
+  const menuPinBtn = document.getElementById('notes-actions-pin-btn');
+  const menuArchiveBtn = document.getElementById('notes-actions-archive-btn');
+  const menuDeleteBtn = document.getElementById('notes-actions-delete-btn');
   const backBtn = document.getElementById('notes-back-btn');
   if (!titleEl || !tagsEl || !bodyEl || !pinBtn || !archiveBtn || !deleteBtn) return;
 
@@ -916,6 +940,15 @@ function _notesRenderEditor(note = null) {
   pinBtn.textContent = note?.isPinned ? 'Unpin' : 'Pin';
   archiveBtn.textContent = note?.isArchived ? 'Unarchive' : 'Archive';
   deleteBtn.disabled = !note?.id;
+  if (menuPinBtn) {
+    menuPinBtn.textContent = note?.isPinned ? 'Unpin' : 'Pin';
+    menuPinBtn.disabled = !note?.id;
+  }
+  if (menuArchiveBtn) {
+    menuArchiveBtn.textContent = note?.isArchived ? 'Unarchive' : 'Archive';
+    menuArchiveBtn.disabled = !note?.id;
+  }
+  if (menuDeleteBtn) menuDeleteBtn.disabled = !note?.id;
   titleEl.disabled = !note?.id;
   tagsEl.disabled = !note?.id;
   bodyEl.contentEditable = note?.id ? 'true' : 'false';

@@ -1596,9 +1596,15 @@ function _updateRoleAlertModalToggleUI() {
 
 function _updateRoleAlertModalFooter(activeCount, acceptedCount) {
   const footer = document.getElementById('role-alerts-footer');
-  if (!footer) return;
+  const footerStatus = document.getElementById('role-alerts-footer-status');
+  if (!footer && !footerStatus) return;
   const acceptedLabel = _roleAlertsShowAccepted ? 'shown' : 'hidden';
-  footer.textContent = `${activeCount} active · ${acceptedCount} accepted ${acceptedLabel}`;
+  const statusText = `${activeCount} active · ${acceptedCount} accepted ${acceptedLabel}`;
+  if (footerStatus) {
+    footerStatus.textContent = statusText;
+  } else {
+    footer.textContent = statusText;
+  }
 }
 
 function _setRoleAlertsModalVisible(isVisible) {
@@ -7233,6 +7239,32 @@ function saveActiveRows() {
   try { localStorage.setItem('activeRows', JSON.stringify([...activeRows])); } catch (e) { }
 }
 
+function updateAddModalMachineLabel(machineCode = currentMachine) {
+  const label = document.getElementById('modal-machine-name');
+  if (label) label.textContent = machineCode || 'Select press';
+}
+
+function populateIssueMachineSelect(selectedMachine = currentMachine) {
+  const select = document.getElementById('issue-machine-select');
+  if (!select) return;
+  const previous = String(selectedMachine || select.value || '').trim();
+  select.innerHTML = '<option value="">Select a press</option>';
+  Object.entries(PRESSES || {}).forEach(([rowName, machines]) => {
+    const group = document.createElement('optgroup');
+    group.label = rowName;
+    (machines || []).forEach(machineCode => {
+      const opt = document.createElement('option');
+      opt.value = machineCode;
+      opt.textContent = machineCode;
+      group.appendChild(opt);
+    });
+    if (group.children.length) select.appendChild(group);
+  });
+  select.value = previous && ALL_MACHINES.includes(previous) ? previous : '';
+  currentMachine = select.value || '';
+  updateAddModalMachineLabel(currentMachine);
+}
+
 function buildFloorMap() {
   // Populate machine filter dropdown
   const sel = document.getElementById('machine-filter');
@@ -7267,6 +7299,7 @@ function buildFloorMap() {
     hubSelect.dataset.hasListener = "true";
   }
 
+  populateIssueMachineSelect(currentMachine);
   renderRowTabs();
 }
 
@@ -7884,18 +7917,19 @@ function applyIssueLogDefaults() {
   setIssueAdvancedDetailsExpanded(Boolean(issueLogPrefs.advancedOpen));
 }
 
-window.openAddModal = m => {
+window.openAddModal = (m = '') => {
   if (!currentUser) return;
   if (!currentUserPermissions.canCreateIssue) return;
   if (isSearchMode) { closeSearch(); }
   closeSubcategorySheet();
   subcategorySheetState = { open: false, statusKey: '', selectedSub: '' };
-  currentMachine = m; pendingPhotos = [];
+  currentMachine = ALL_MACHINES.includes(m) ? m : '';
+  pendingPhotos = [];
   logCatKey = issueLogPrefs.lastStatusKey || null;
   logCatSub = issueLogPrefs.lastStatusSub || null;
   document.getElementById('issue-note').value = '';
   document.getElementById('photo-previews').innerHTML = '';
-  document.getElementById('modal-machine-name').textContent = m;
+  populateIssueMachineSelect(currentMachine);
   document.getElementById('log-photo-source-row')?.classList.remove('visible');
   applyIssueLogDefaults();
   renderIssueQuickPhrases();
@@ -7905,7 +7939,7 @@ window.openAddModal = m => {
   updateLogCatPill();
   document.getElementById('log-cat-selected').classList.toggle('visible', Boolean(logCatKey));
   document.getElementById('add-modal').classList.add('visible');
-  requestAnimationFrame(() => document.getElementById('issue-note')?.focus());
+  requestAnimationFrame(() => (currentMachine ? document.getElementById('issue-note') : document.getElementById('issue-machine-select'))?.focus());
 };
 
 // ── LOG ISSUE CATEGORY PICKER ──
@@ -8347,6 +8381,11 @@ document.getElementById('log-cat-selected')?.addEventListener('click', e => {
   // Disabled: Subcategories now render inline below the category picker.
 });
 
+document.getElementById('issue-machine-select')?.addEventListener('change', e => {
+  currentMachine = String(e.target.value || '').trim();
+  updateAddModalMachineLabel(currentMachine);
+});
+
 window.closeModal = () => {
   if (isSearchMode) { closeSearch(); }
   syncIssueLogPrefsFromModal();
@@ -8600,8 +8639,12 @@ function setSubmitting(on) {
 // ── SUBMIT NEW ──
 window.submitIssue = async () => {
   if (!currentUserPermissions.canCreateIssue) return;
+  const selectedMachine = String(document.getElementById('issue-machine-select')?.value || '').trim();
+  if (selectedMachine) currentMachine = selectedMachine;
+  updateAddModalMachineLabel(currentMachine);
   if (!currentMachine) {
     showGameToast('⚠️ No press selected. Please select a press first.');
+    document.getElementById('issue-machine-select')?.focus();
     return;
   }
   setSubmitting(true);
@@ -12701,11 +12744,11 @@ if (document.readyState === 'loading') {
 
 document.addEventListener('keydown', e => {
   if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+  const currentToolKey = _toolModalCurrentKey();
+  if (!currentToolKey) return;
   const target = e.target;
   const typing = !!(target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable));
-  if (typing) return;
-  const anyToolOpen = !!_toolModalCurrentKey();
-  if (!anyToolOpen) return;
+  if (typing && currentToolKey !== 'log') return;
   e.preventDefault();
   void _cycleToolModal(e.key === 'ArrowLeft' ? -1 : 1);
 });
@@ -14572,6 +14615,142 @@ const MOBILE_MODAL_SWIPE_BLOCKERS = [
   '.role-alerts-retry-fab',
   '.choices'
 ].join(',');
+
+const TOOL_MODAL_HORIZONTAL_SWIPE_FRAMES = [
+  'add-modal-frame',
+  'press-wiki-frame',
+  'notes-phone-frame',
+  'todos-frame',
+  'messaging-frame',
+  'role-alerts-frame'
+];
+
+const TOOL_MODAL_HORIZONTAL_SWIPE_BLOCKERS = [
+  'button',
+  'input',
+  'textarea',
+  'select',
+  'option',
+  'label',
+  'a',
+  '[contenteditable="true"]',
+  '[data-no-swipe]',
+  '.choices'
+].join(',');
+
+const _toolModalHorizontalSwipeState = {
+  frame: null,
+  pointerId: null,
+  startX: 0,
+  startY: 0,
+  lastX: 0,
+  lastY: 0,
+  dragging: false
+};
+
+let _toolModalHorizontalSwipeSuppressClickUntil = 0;
+
+function _toolModalHorizontalSwipeReset() {
+  _toolModalHorizontalSwipeState.frame = null;
+  _toolModalHorizontalSwipeState.pointerId = null;
+  _toolModalHorizontalSwipeState.startX = 0;
+  _toolModalHorizontalSwipeState.startY = 0;
+  _toolModalHorizontalSwipeState.lastX = 0;
+  _toolModalHorizontalSwipeState.lastY = 0;
+  _toolModalHorizontalSwipeState.dragging = false;
+  document.body.classList.remove('tool-modal-horizontal-swipe');
+}
+
+function _toolModalHorizontalSwipeFrame(target) {
+  if (!target?.closest) return null;
+  const selector = TOOL_MODAL_HORIZONTAL_SWIPE_FRAMES.map(id => `#${id}`).join(',');
+  const frame = target.closest(selector);
+  if (!frame || frame.getClientRects().length === 0) return null;
+  return _toolModalCurrentKey() ? frame : null;
+}
+
+function _toolModalHorizontalSwipeStart(event) {
+  if (event.button && event.button !== 0) return;
+  if (!_mobileModalSwipeViewportOk()) return;
+  if (event.pointerType && event.pointerType === 'mouse') return;
+  if (_toolModalHorizontalSwipeState.frame) return;
+  if (event.target?.closest?.(TOOL_MODAL_HORIZONTAL_SWIPE_BLOCKERS)) return;
+
+  const frame = _toolModalHorizontalSwipeFrame(event.target);
+  if (!frame) return;
+
+  _toolModalHorizontalSwipeState.frame = frame;
+  _toolModalHorizontalSwipeState.pointerId = event.pointerId;
+  _toolModalHorizontalSwipeState.startX = event.clientX;
+  _toolModalHorizontalSwipeState.startY = event.clientY;
+  _toolModalHorizontalSwipeState.lastX = event.clientX;
+  _toolModalHorizontalSwipeState.lastY = event.clientY;
+  _toolModalHorizontalSwipeState.dragging = false;
+
+  try { frame.setPointerCapture?.(event.pointerId); } catch (_) { }
+}
+
+function _toolModalHorizontalSwipeMove(event) {
+  if (!_toolModalHorizontalSwipeState.frame || event.pointerId !== _toolModalHorizontalSwipeState.pointerId) return;
+
+  const dx = event.clientX - _toolModalHorizontalSwipeState.startX;
+  const dy = event.clientY - _toolModalHorizontalSwipeState.startY;
+  const absX = Math.abs(dx);
+  const absY = Math.abs(dy);
+  _toolModalHorizontalSwipeState.lastX = event.clientX;
+  _toolModalHorizontalSwipeState.lastY = event.clientY;
+
+  if (!_toolModalHorizontalSwipeState.dragging) {
+    if (absX < 18) return;
+    if (absX < absY * 1.35) {
+      if (absY > 42) _toolModalHorizontalSwipeReset();
+      return;
+    }
+    _toolModalHorizontalSwipeState.dragging = true;
+    document.body.classList.add('tool-modal-horizontal-swipe');
+  }
+
+  event.preventDefault();
+}
+
+function _toolModalHorizontalSwipeEnd(event) {
+  if (!_toolModalHorizontalSwipeState.frame || event.pointerId !== _toolModalHorizontalSwipeState.pointerId) return;
+
+  const endX = event.clientX || _toolModalHorizontalSwipeState.lastX;
+  const endY = event.clientY || _toolModalHorizontalSwipeState.lastY;
+  const dx = endX - _toolModalHorizontalSwipeState.startX;
+  const dy = endY - _toolModalHorizontalSwipeState.startY;
+  const absX = Math.abs(dx);
+  const absY = Math.abs(dy);
+  const shouldCycle = _toolModalHorizontalSwipeState.dragging && absX > 72 && absX > absY * 1.2;
+
+  if (shouldCycle) {
+    event.preventDefault();
+    _toolModalHorizontalSwipeSuppressClickUntil = Date.now() + 450;
+    void _cycleToolModal(dx < 0 ? 1 : -1);
+  }
+
+  _toolModalHorizontalSwipeReset();
+}
+
+function _bindToolModalHorizontalSwipe(frame) {
+  if (!frame || frame.dataset.toolHorizontalSwipeBound === '1') return;
+  frame.dataset.toolHorizontalSwipeBound = '1';
+  frame.addEventListener('pointerdown', _toolModalHorizontalSwipeStart, true);
+}
+
+TOOL_MODAL_HORIZONTAL_SWIPE_FRAMES
+  .map(id => document.getElementById(id))
+  .forEach(_bindToolModalHorizontalSwipe);
+
+document.addEventListener('pointermove', _toolModalHorizontalSwipeMove, true);
+document.addEventListener('pointerup', _toolModalHorizontalSwipeEnd, true);
+document.addEventListener('pointercancel', _toolModalHorizontalSwipeReset, true);
+document.addEventListener('click', event => {
+  if (Date.now() > _toolModalHorizontalSwipeSuppressClickUntil) return;
+  event.preventDefault();
+  event.stopPropagation();
+}, true);
 
 const _mobileModalSwipeState = {
   modal: null,

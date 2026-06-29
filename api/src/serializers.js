@@ -180,7 +180,7 @@ export function serializeDailyScheduleRow(row) {
     rowId: row.row_id,
     press: row.press,
     partNumber: row.part_number,
-    description: row.description,
+    description: row.description || raw.description || null,
     cavity: row.cavity,
     doh: row.doh == null ? null : Number(row.doh),
     labelsPerShift: row.labels_per_shift == null ? null : Number(row.labels_per_shift),

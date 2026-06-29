@@ -573,16 +573,32 @@ export async function importDailyScheduleToD1(db, plantId, payload = {}) {
         displayOrder: Number(row.displayOrder || index + 1),
         isChange: Boolean(row.isChange)
       };
+
+      if (normalizedRow.partNumber) {
+        statements.push(
+          db.prepare(`
+            INSERT INTO parts (part_number, description, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(part_number) DO UPDATE SET
+              description = COALESCE(excluded.description, description),
+              updated_at = excluded.updated_at
+          `).bind(
+            normalizedRow.partNumber,
+            stringOrNull(normalizedRow.description),
+            now
+          )
+        );
+      }
+
       statements.push(
         db.prepare(`
           INSERT INTO daily_schedule_rows (
-            daily_schedule_item_row_id, plant_id, schedule_date, section_key, row_id, press, part_number, description,
+            daily_schedule_item_row_id, daily_schedule_row_id, plant_id, schedule_date, section_key, row_id, press, part_number,
             cavity, doh, labels_per_shift, mc, notes, shift, part_storage_location_json, raw_json, created_at, updated_at
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(daily_schedule_item_row_id) DO UPDATE SET
             press = excluded.press,
             part_number = excluded.part_number,
-            description = excluded.description,
             cavity = excluded.cavity,
             doh = excluded.doh,
             labels_per_shift = excluded.labels_per_shift,
@@ -594,13 +610,13 @@ export async function importDailyScheduleToD1(db, plantId, payload = {}) {
             updated_at = excluded.updated_at
         `).bind(
           `${plantId}:${scheduleDate}:${sectionKey}:${rowId}`,
+          `${plantId}:${scheduleDate}`,
           plantId,
           scheduleDate,
           sectionKey,
           rowId,
           stringOrNull(normalizedRow.press),
           stringOrNull(normalizedRow.partNumber),
-          stringOrNull(normalizedRow.description),
           stringOrNull(normalizedRow.cavity),
           normalizedRow.doh == null ? null : String(normalizedRow.doh),
           normalizedRow.labelsPerShift == null ? null : String(normalizedRow.labelsPerShift),
@@ -2334,10 +2350,11 @@ async function getDailySchedule(db, plantId, scheduleDate, user) {
   const rows = await all(
     db,
     `
-      SELECT *
-      FROM daily_schedule_rows
-      WHERE plant_id = ? AND schedule_date = ?
-      ORDER BY section_key ASC, COALESCE(CAST(json_extract(raw_json, '$.displayOrder') AS INTEGER), 999999) ASC, row_id ASC
+      SELECT r.*, p.description
+      FROM daily_schedule_rows r
+      LEFT JOIN parts p ON r.part_number = p.part_number
+      WHERE r.plant_id = ? AND r.schedule_date = ?
+      ORDER BY r.section_key ASC, COALESCE(CAST(json_extract(r.raw_json, '$.displayOrder') AS INTEGER), 999999) ASC, r.row_id ASC
     `,
     plantId,
     scheduleDate
@@ -3593,14 +3610,15 @@ function inferMoldCandidate(row) {
 async function getRunsReport(db, plantId, user) {
   await requirePlantPermission(db, plantId, user, 'canViewPlant');
   const query = `
-    SELECT schedule_date, shift, press, part_number, description, cavity, doh, notes, mc, section_key
-    FROM daily_schedule_rows
-    WHERE plant_id = ?
-      AND press IS NOT NULL
-      AND press != ''
-      AND part_number IS NOT NULL
-      AND part_number != ''
-    ORDER BY schedule_date ASC, press ASC
+    SELECT r.schedule_date, r.shift, r.press, r.part_number, p.description, r.cavity, r.doh, r.notes, r.mc, r.section_key
+    FROM daily_schedule_rows r
+    LEFT JOIN parts p ON r.part_number = p.part_number
+    WHERE r.plant_id = ?
+      AND r.press IS NOT NULL
+      AND r.press != ''
+      AND r.part_number IS NOT NULL
+      AND r.part_number != ''
+    ORDER BY r.schedule_date ASC, r.press ASC
   `;
   const { results } = await db.prepare(query).bind(plantId).all();
   const rows = [];
@@ -3679,7 +3697,7 @@ async function getRunsReport(db, plantId, user) {
 
 async function getDohReport(db, plantId, user) {
   await requirePlantPermission(db, plantId, user, 'canViewPlant');
-  const query = "SELECT schedule_date, part_number, description, doh FROM daily_schedule_rows WHERE plant_id = ? AND part_number IS NOT NULL AND part_number != '' AND doh IS NOT NULL AND doh != '' ORDER BY schedule_date ASC";
+  const query = "SELECT r.schedule_date, r.part_number, p.description, r.doh FROM daily_schedule_rows r LEFT JOIN parts p ON r.part_number = p.part_number WHERE r.plant_id = ? AND r.part_number IS NOT NULL AND r.part_number != '' AND r.doh IS NOT NULL AND r.doh != '' ORDER BY r.schedule_date ASC";
   const { results } = await db.prepare(query).bind(plantId).all();
   
   const series = {};

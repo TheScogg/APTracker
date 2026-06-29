@@ -28,9 +28,9 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css" />
-<script src="./js/build-info.js?v=cc115b6-7fd6eeb5"></script>
+<script src="./js/build-info.js?v=2372248-233d62b8"></script>
 <script src="./js/fcm-config.js?v=ae083d6"></script>
-<link rel="stylesheet" href="./css/styles.css?v=cc115b6-7fd6eeb5">
+<link rel="stylesheet" href="./css/styles.css?v=2372248-233d62b8">
 </head>
 <body>
 
@@ -85,7 +85,7 @@
   <div id="sync-banner" class="visible">
     <div class="sync-dot" id="sync-dot"></div>
     <span id="sync-text" aria-live="polite">Connecting…</span>
-    <span id="app-version-indicator" class="app-version-indicator" title="Current commit version">rev: cc115b6</span>
+    <span id="app-version-indicator" class="app-version-indicator" title="Current commit version">rev: 2372248</span>
     <span id="firestore-io-indicator" class="firestore-io-indicator" title="Estimated Firestore operations for this session">R:0 W:0</span>
   </div>
 
@@ -490,6 +490,13 @@
           <span class="issue-urgent-pill icon-only" style="width:32px; height:32px; font-size:16px; border-radius:8px;">🔥</span>
         </label>
       </div>
+
+      <div class="issue-press-row">
+        <label for="issue-machine-select">Press</label>
+        <select id="issue-machine-select" class="issue-machine-select">
+          <option value="">Select a press</option>
+        </select>
+      </div>
       
       <label id="issue-note-label">What happened?</label>
       <textarea id="issue-note" placeholder="Example: Hydraulic leak at press startup" rows="3"></textarea>
@@ -867,13 +874,13 @@
       <div class="press-wiki-layout">
         <div class="press-wiki-main">
           <div class="press-wiki-header-content">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:8px;">
+            <div class="tool-create-row" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:8px;">
               <div style="display:inline-flex;gap:3px;padding:3px;background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:999px;">
                 <button id="press-wiki-scope-press" class="btn btn-ghost" type="button" aria-haspopup="dialog" aria-expanded="false" style="padding:4px 10px;border-radius:999px;font-size:12px;">This Press</button>
                 <button id="press-wiki-scope-shared" class="btn btn-ghost" type="button" style="padding:4px 10px;border-radius:999px;font-size:12px;">Shared Library</button>
               </div>
               <div id="press-wiki-actions-wrap" class="press-wiki-actions-wrap" style="display:none;margin-left:auto;">
-                <button id="press-wiki-actions-btn" class="btn btn-primary press-wiki-actions-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Wiki actions">
+                <button id="press-wiki-actions-btn" class="btn btn-primary press-wiki-actions-btn tool-create-action" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Wiki actions">
                   +
                 </button>
                 <div id="press-wiki-actions-menu" class="sort-dropdown press-wiki-actions-menu">
@@ -978,6 +985,14 @@
         </button>
       </div>
 
+      <div class="tool-create-row notes-create-row">
+        <div class="tool-create-copy">
+          <div class="tool-create-kicker">Notebook</div>
+          <div class="tool-create-subtitle">Capture handoffs and follow-ups.</div>
+        </div>
+        <button class="btn btn-primary tool-create-action" id="notes-create-btn" type="button" aria-label="Create note" title="Create note">+</button>
+      </div>
+
       <div class="notes-modal-body">
         <div class="notes-list-panel">
           <div class="notes-list-controls">
@@ -996,23 +1011,8 @@
         </div>
 
         <div class="notes-editor-panel" id="notes-phone-editor-panel">
-          <div class="notes-modal-header-actions" id="notes-editor-header-actions">
+          <div class="notes-modal-header-actions tool-create-row" id="notes-editor-header-actions">
             <button class="notes-modal-close" id="notes-editor-close-btn" type="button" onclick="closeNotesEditorModal()" aria-label="Close notes editor">✕</button>
-            <button class="btn btn-primary" id="notes-create-btn" type="button">+ New Note</button>
-            <div class="notes-menu-wrap notes-mobile-actions-wrap">
-              <button class="btn btn-ghost notes-menu-trigger" id="notes-actions-menu-btn" type="button" aria-expanded="false" aria-haspopup="menu">More</button>
-              <div class="notes-menu" id="notes-actions-menu" role="menu" aria-label="Note actions and templates">
-                <button type="button" data-note-template="blank" role="menuitem">Blank Note</button>
-                <button type="button" data-note-template="follow_up" role="menuitem">Follow-up</button>
-                <button type="button" data-note-template="parts_needed" role="menuitem">Parts Needed</button>
-                <button type="button" data-note-template="shift_handoff" role="menuitem">Shift Handoff</button>
-                <button type="button" data-note-template="issue_summary" role="menuitem">Issue Summary</button>
-                <div class="notes-menu-divider" aria-hidden="true"></div>
-                <button type="button" id="notes-actions-pin-btn" role="menuitem">Pin</button>
-                <button type="button" id="notes-actions-archive-btn" role="menuitem">Archive</button>
-                <button type="button" id="notes-actions-delete-btn" role="menuitem" class="danger">Delete</button>
-              </div>
-            </div>
           </div>
 
           <div class="notes-modal-header-copy note-card notes-editor-header-card">
@@ -1038,6 +1038,20 @@
               <button class="btn btn-ghost" id="notes-pin-btn" type="button">Pin</button>
               <button class="btn btn-ghost" id="notes-archive-btn" type="button">Archive</button>
               <button class="btn btn-danger" id="notes-delete-btn" type="button">Delete</button>
+              <div class="notes-menu-wrap notes-mobile-actions-wrap">
+                <button class="btn btn-ghost notes-menu-trigger" id="notes-actions-menu-btn" type="button" aria-expanded="false" aria-haspopup="menu">More</button>
+                <div class="notes-menu" id="notes-actions-menu" role="menu" aria-label="Note actions and templates">
+                  <button type="button" data-note-template="blank" role="menuitem">Blank Note</button>
+                  <button type="button" data-note-template="follow_up" role="menuitem">Follow-up</button>
+                  <button type="button" data-note-template="parts_needed" role="menuitem">Parts Needed</button>
+                  <button type="button" data-note-template="shift_handoff" role="menuitem">Shift Handoff</button>
+                  <button type="button" data-note-template="issue_summary" role="menuitem">Issue Summary</button>
+                  <div class="notes-menu-divider" aria-hidden="true"></div>
+                  <button type="button" id="notes-actions-pin-btn" role="menuitem">Pin</button>
+                  <button type="button" id="notes-actions-archive-btn" role="menuitem">Archive</button>
+                  <button type="button" id="notes-actions-delete-btn" role="menuitem" class="danger">Delete</button>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1151,7 +1165,15 @@
         </button>
       </div>
 
-      <div class="todo-compose">
+      <div class="tool-create-row todo-create-row">
+        <div class="tool-create-copy">
+          <div class="tool-create-kicker">Tasks</div>
+          <div class="tool-create-subtitle">Create and track follow-ups.</div>
+        </div>
+        <button class="btn btn-primary tool-create-action" id="todo-create-btn" type="button" aria-label="Create todo" title="Create todo" aria-expanded="false" aria-controls="todo-compose">+</button>
+      </div>
+
+      <div class="todo-compose tool-create-panel" id="todo-compose">
         <input type="text" id="todo-quick-title" class="input" placeholder="New todo">
         <button class="btn btn-primary" id="todo-quick-add-btn" type="button">Add</button>
       </div>
@@ -1173,6 +1195,27 @@
         <button class="filter-pill active" data-todo-filter="open" type="button">Open</button>
         <button class="filter-pill" data-todo-filter="today" type="button">Today</button>
         <button class="filter-pill" data-todo-filter="done" type="button">Done</button>
+      </div>
+
+      <div class="todo-viewer note-card" id="todo-viewer" style="display:none;">
+        <div class="notes-section-head">
+          <div class="notes-section-title">Task</div>
+          <button class="notes-toolbar-btn" id="todo-viewer-close-btn" type="button">Close</button>
+        </div>
+        <div class="todo-viewer-title-row">
+          <div class="todo-viewer-check" id="todo-viewer-check" aria-hidden="true"></div>
+          <div class="todo-viewer-title" id="todo-viewer-title">Select a todo</div>
+        </div>
+        <div class="todo-viewer-meta" id="todo-viewer-meta"></div>
+        <div class="todo-viewer-notes" id="todo-viewer-notes"></div>
+        <div class="notes-context-box todo-link-box">
+          <div class="notes-context-label">Linked Context</div>
+          <div class="notes-context-summary" id="todo-viewer-context-summary">Standalone todo</div>
+        </div>
+        <div class="todo-viewer-actions">
+          <button class="btn btn-ghost" id="todo-viewer-toggle-complete-btn" type="button">Mark Done</button>
+          <button class="btn btn-primary" id="todo-viewer-edit-btn" type="button">Edit</button>
+        </div>
       </div>
 
       <div class="todo-editor note-card" id="todo-editor" style="display:none;">
@@ -1759,13 +1802,21 @@
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6.5 3.5L11 8l-4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
       </div>
-      <div class="role-alerts-toolbar" style="padding:8px 12px;flex-shrink:0;">
-        <div class="role-alerts-toggle scope-toggle" role="group" aria-label="Accepted alerts visibility">
+      <div class="role-alerts-toolbar tool-modal-control-row" style="padding:8px 12px;flex-shrink:0;">
+        <div class="tool-modal-control-copy">
+          <div class="tool-modal-kicker">Category alerts</div>
+          <div class="tool-modal-subtitle">Workflow calls from your subscribed categories.</div>
+        </div>
+        <div class="role-alerts-toggle scope-toggle tool-modal-segmented" role="group" aria-label="Accepted alerts visibility">
           <button class="scope-btn" id="role-alerts-hide-accepted-btn" type="button" data-role-alert-action="hide-accepted">Hide accepted</button>
           <button class="scope-btn active" id="role-alerts-show-accepted-btn" type="button" data-role-alert-action="show-accepted">Show accepted</button>
         </div>
       </div>
-      <div id="role-alerts-list" class="role-alerts-list" style="flex:1;overflow-y:auto;padding:0 12px 72px;"></div>
+      <div id="role-alerts-list" class="role-alerts-list tool-modal-scroll-body" style="flex:1;overflow-y:auto;padding:0 12px 72px;"></div>
+      <div class="role-alerts-footer tool-modal-footer" id="role-alerts-footer">
+        <span class="tool-modal-footer-status" id="role-alerts-footer-status">0 active · 0 accepted shown</span>
+        <button class="btn btn-ghost role-alerts-close" type="button" data-role-alert-action="close">Close</button>
+      </div>
       <button class="notes-modal-close role-alerts-close role-alerts-close-fab" type="button" data-role-alert-action="close" aria-label="Close alerts">✕</button>
     </div>
   </div>
@@ -1842,7 +1893,7 @@
   </div>
 </div>
 
-<script type="module" src="./js/app.js?v=cc115b6-7fd6eeb5"></script>
+<script type="module" src="./js/app.js?v=2372248-233d62b8"></script>
 
 <!-- MASCOT CHARACTER CARD POPOVER -->
 <div class="mascot-popover-backdrop" id="mascot-popover-backdrop" onclick="if(event.target===this)closeMascotPopover()">
