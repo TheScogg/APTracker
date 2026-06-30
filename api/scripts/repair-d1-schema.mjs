@@ -106,6 +106,10 @@ await ensureIndex(
   'idx_user_push_tokens_provider',
   'CREATE INDEX idx_user_push_tokens_provider ON user_push_tokens(provider);'
 );
+await ensureIndex(
+  'idx_plant_members_uid_active',
+  'CREATE INDEX idx_plant_members_uid_active ON plant_members(uid, is_active);'
+);
 await ensureColumn(
   'role_feed_alerts',
   'notification_delivery_json',

@@ -420,6 +420,7 @@ function buildIssueRowFromClient(plantId, issueId, issue = {}) {
     workflow_state_by_status_history_json: jsonString(issue.workflowStateByStatusHistory || null),
     workflow_state_history_json: jsonString(issue.workflowStateHistory || null),
     legacy_status_history_json: jsonString(Array.isArray(issue.statusHistory) ? issue.statusHistory : []),
+    quality_defect_json: jsonString(issue.qualityDefect || null),
     latest_note_preview: stringOrNull(currentStatus.notePreview || issue.note),
     tags_json: jsonString(Array.isArray(issue.tags) ? issue.tags : []),
     photo_count: numberOrZero(issue.photoCount || issue.photos?.length),
@@ -696,7 +697,7 @@ function issueUpsertStatement() {
       assigned_user_name, serial_required, serial_captured, serial_value, reporting_date_key, reporting_week_key,
       reporting_month_key, reporting_shift_key, workflow_state, workflow_state_by_entry_json,
       workflow_state_by_entry_history_json, workflow_state_by_status_json, workflow_state_by_status_history_json,
-      workflow_state_history_json, legacy_status_history_json, latest_note_preview, tags_json, photo_count, created_by_uid, created_by_name,
+      workflow_state_history_json, legacy_status_history_json, quality_defect_json, latest_note_preview, tags_json, photo_count, created_by_uid, created_by_name,
       updated_by_uid, updated_by_name, timer_enabled, timer_started_at, timer_due_at, timer_due_at_ms,
       timer_duration_minutes, timer_notification_status, timer_notification_owner_uid, timer_notification_requested_by_json,
       timer_notification_delivery_json, created_at, updated_at, schema_version
@@ -706,7 +707,7 @@ function issueUpsertStatement() {
       ?, ?, ?, ?,
       ?, ?, ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?, ?, ?,
-      ?, ?, ?, ?, ?, ?, ?, ?, ?,
+      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
     )
@@ -752,6 +753,7 @@ function issueUpsertStatement() {
       workflow_state_by_status_history_json = excluded.workflow_state_by_status_history_json,
       workflow_state_history_json = excluded.workflow_state_history_json,
       legacy_status_history_json = excluded.legacy_status_history_json,
+      quality_defect_json = excluded.quality_defect_json,
       latest_note_preview = excluded.latest_note_preview,
       tags_json = excluded.tags_json,
       photo_count = excluded.photo_count,
@@ -783,7 +785,7 @@ function issueUpsertParams(row) {
     row.assigned_user_name, row.serial_required, row.serial_captured, row.serial_value, row.reporting_date_key, row.reporting_week_key,
     row.reporting_month_key, row.reporting_shift_key, row.workflow_state, row.workflow_state_by_entry_json,
     row.workflow_state_by_entry_history_json, row.workflow_state_by_status_json, row.workflow_state_by_status_history_json,
-    row.workflow_state_history_json, row.legacy_status_history_json, row.latest_note_preview, row.tags_json, row.photo_count, row.created_by_uid, row.created_by_name,
+    row.workflow_state_history_json, row.legacy_status_history_json, row.quality_defect_json, row.latest_note_preview, row.tags_json, row.photo_count, row.created_by_uid, row.created_by_name,
     row.updated_by_uid, row.updated_by_name, row.timer_enabled, row.timer_started_at, row.timer_due_at, row.timer_due_at_ms,
     row.timer_duration_minutes, row.timer_notification_status, row.timer_notification_owner_uid, row.timer_notification_requested_by_json,
     row.timer_notification_delivery_json, row.created_at, row.updated_at, row.schema_version

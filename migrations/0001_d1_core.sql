@@ -167,6 +167,7 @@ CREATE TABLE issues (
   workflow_state_by_entry_json TEXT CHECK (workflow_state_by_entry_json IS NULL OR json_valid(workflow_state_by_entry_json)),
   workflow_state_history_json TEXT CHECK (workflow_state_history_json IS NULL OR json_valid(workflow_state_history_json)),
   legacy_status_history_json TEXT CHECK (legacy_status_history_json IS NULL OR json_valid(legacy_status_history_json)),
+  quality_defect_json TEXT CHECK (quality_defect_json IS NULL OR json_valid(quality_defect_json)),
   latest_note_preview TEXT,
   tags_json TEXT CHECK (tags_json IS NULL OR json_valid(tags_json)),
   photo_count INTEGER NOT NULL DEFAULT 0,

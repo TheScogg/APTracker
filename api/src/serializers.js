@@ -338,6 +338,7 @@ export function serializeIssue(row) {
     workflowStateByStatusHistory: parseJson(row.workflow_state_by_status_history_json, null),
     workflowStateHistory: parseJson(row.workflow_state_history_json, null),
     legacyStatusHistory: parseJson(row.legacy_status_history_json, null),
+    qualityDefect: parseJson(row.quality_defect_json, null),
     latestNotePreview: row.latest_note_preview,
     tags: parseJson(row.tags_json, []),
     photoCount: row.photo_count,

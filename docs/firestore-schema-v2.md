@@ -378,6 +378,18 @@ This is the main operational document used by the live UI.
     }
   },
 
+  "qualityDefect": {
+    "key": "flash",
+    "label": "Flash / burrs",
+    "description": "Thin excess plastic at parting line, vents, lifters, pins, or shutoffs.",
+    "whoToCall": ["Quality", "Process Engineer", "Tool & Die"],
+    "likelyCauses": ["Clamp force too low"],
+    "quickChecks": ["Identify whether flash is parting line, vent, pin, or shutoff"],
+    "firstActions": ["Contain flashed product by cavity and time range"],
+    "selectedAt": "2026-06-29T12:00:00.000Z",
+    "selectedBy": { "uid": "uid_123", "name": "James Scoggins" }
+  },
+
   "lifecycle": {
     "isOpen": true,
     "isResolved": false,

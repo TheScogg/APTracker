@@ -28,9 +28,9 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css" />
-<script src="./js/build-info.js?v=2372248-233d62b8"></script>
+<script src="./js/build-info.js?v=ab0d82d-c53abef9"></script>
 <script src="./js/fcm-config.js?v=ae083d6"></script>
-<link rel="stylesheet" href="./css/styles.css?v=2372248-233d62b8">
+<link rel="stylesheet" href="./css/styles.css?v=ab0d82d-c53abef9">
 </head>
 <body>
 
@@ -85,7 +85,7 @@
   <div id="sync-banner" class="visible">
     <div class="sync-dot" id="sync-dot"></div>
     <span id="sync-text" aria-live="polite">Connecting…</span>
-    <span id="app-version-indicator" class="app-version-indicator" title="Current commit version">rev: 2372248</span>
+    <span id="app-version-indicator" class="app-version-indicator" title="Current commit version">rev: ab0d82d</span>
     <span id="firestore-io-indicator" class="firestore-io-indicator" title="Estimated Firestore operations for this session">R:0 W:0</span>
   </div>
 
@@ -558,6 +558,17 @@
         <div class="log-cat-all-row" id="log-cat-all-row"></div>
         <div class="search-bar-row" id="search-bar-row"></div>
         <div class="log-sub-row" id="log-sub-row"></div>
+        <div class="quality-defect-summary" id="quality-defect-summary">
+          <div class="quality-defect-summary-icon" aria-hidden="true">QD</div>
+          <div class="quality-defect-summary-copy">
+            <div class="quality-defect-summary-label" id="quality-defect-summary-label">No defect selected</div>
+            <div class="quality-defect-summary-desc" id="quality-defect-summary-desc"></div>
+            <div class="quality-defect-summary-actions">
+              <button class="quality-defect-link" id="quality-defect-change" type="button">Change defect</button>
+              <button class="quality-defect-link" id="quality-defect-clear" type="button">Clear</button>
+            </div>
+          </div>
+        </div>
       </div>
       <input type="file" id="log-camera-input" accept="image/*" capture="environment" style="display:none">
       <input type="file" id="log-library-input" accept="image/*" multiple style="display:none">
@@ -596,6 +607,34 @@
     <div class="subcategory-sheet-footer">
       <button class="btn btn-ghost subcategory-sheet-secondary" id="subcategory-sheet-skip" type="button">Use no subcategory</button>
       <button class="btn btn-primary subcategory-sheet-primary" id="subcategory-sheet-apply" type="button">Use Subcategory</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay quality-defect-modal-overlay" id="quality-defect-modal">
+  <div class="modal quality-defect-modal" role="dialog" aria-modal="true" aria-labelledby="quality-defect-modal-title">
+    <div class="quality-defect-modal-header">
+      <div>
+        <div class="modal-kicker">Injection molding</div>
+        <div class="modal-title" id="quality-defect-modal-title">Choose defect</div>
+        <div class="modal-subtitle">Pick the molding defect. AP Tracker will attach troubleshooting prompts.</div>
+      </div>
+      <button class="quality-defect-modal-close" id="quality-defect-modal-close" type="button" aria-label="Close defect picker">&times;</button>
+    </div>
+    <div class="quality-defect-modal-body">
+      <div class="quality-defect-picker">
+        <input class="quality-defect-search" id="quality-defect-search" type="search" placeholder="Search defects..." autocomplete="off">
+        <div class="quality-defect-list" id="quality-defect-list"></div>
+      </div>
+      <div class="quality-defect-suggestions" id="quality-defect-suggestions"></div>
+    </div>
+    <div class="modal-actions quality-defect-modal-actions">
+      <div class="quality-defect-modal-state" id="quality-defect-modal-state">Select a defect to enable suggestions.</div>
+      <div class="quality-defect-modal-buttons">
+        <button class="btn btn-ghost" id="quality-defect-modal-clear" type="button">Clear</button>
+        <button class="btn btn-ghost" id="quality-defect-modal-cancel" type="button">Cancel</button>
+        <button class="btn btn-primary" id="quality-defect-modal-confirm" type="button">Use Defect</button>
+      </div>
     </div>
   </div>
 </div>
@@ -1893,7 +1932,7 @@
   </div>
 </div>
 
-<script type="module" src="./js/app.js?v=2372248-233d62b8"></script>
+<script type="module" src="./js/app.js?v=ab0d82d-c53abef9"></script>
 
 <!-- MASCOT CHARACTER CARD POPOVER -->
 <div class="mascot-popover-backdrop" id="mascot-popover-backdrop" onclick="if(event.target===this)closeMascotPopover()">

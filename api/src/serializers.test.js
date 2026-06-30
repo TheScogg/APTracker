@@ -64,6 +64,7 @@ test('serializeIssue parses flags, dates, and JSON fields', () => {
     workflow_state_by_status_history_json: '{"maintenance":{"accepted":{"at":"2026-06-06T12:01:00.000Z"}}}',
     workflow_state_history_json: '[{"state":"triage"}]',
     legacy_status_history_json: '[{"label":"Open"}]',
+    quality_defect_json: '{"key":"flash","label":"Flash / burrs"}',
     created_at: createdAt,
     updated_at: createdAt,
     schema_version: 2
@@ -80,6 +81,7 @@ test('serializeIssue parses flags, dates, and JSON fields', () => {
   assert.deepEqual(result.workflowStateByStatusHistory, {
     maintenance: { accepted: { at: '2026-06-06T12:01:00.000Z' } }
   });
+  assert.deepEqual(result.qualityDefect, { key: 'flash', label: 'Flash / burrs' });
   assert.equal(result.createdAt, '2026-06-06T12:00:00.000Z');
 });
 

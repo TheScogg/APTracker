@@ -687,6 +687,7 @@ function buildLocalIssuePayloadFromDraft(issueId, draft, photos = []) {
   const workflowId = draft.initialWorkflowId || createWorkflowId(draft.initialStatus || 'open');
   const statusKey = draft.initialStatus || 'open';
   const subStatus = draft.initialSubStatus || '';
+  const qualityDefect = sanitizeQualityDefectPayload(draft.qualityDefect);
   return {
     machine: draft.machine || '',
     machineCode: draft.machine || '',
@@ -700,6 +701,7 @@ function buildLocalIssuePayloadFromDraft(issueId, draft, photos = []) {
     userName: draft.userName || currentUser?.displayName || currentUser?.email || '',
     photoCount: photos.length,
     photos,
+    ...(qualityDefect ? { qualityDefect } : {}),
     createdAt: draft.createdAtIso || new Date().toISOString(),
     createdBy: actor,
     statusHistory: [{
@@ -745,6 +747,7 @@ function buildServerIssuePayloadFromDraft(issueId, draft, uploadedPhotos = []) {
   const subStatus = draft.initialSubStatus || '';
   const workflowId = draft.initialWorkflowId || createWorkflowId(statusKey);
   const actor = draft.actor || currentActor();
+  const qualityDefect = sanitizeQualityDefectPayload(draft.qualityDefect);
   return {
     machine: draft.machine || '',
     note: draft.note || 'No Description Provided',
@@ -756,6 +759,7 @@ function buildServerIssuePayloadFromDraft(issueId, draft, uploadedPhotos = []) {
     userId: draft.userId || currentUser?.uid || '',
     userName: draft.userName || currentUser?.displayName || currentUser?.email || '',
     photoCount: uploadedPhotos.length,
+    ...(qualityDefect ? { qualityDefect } : {}),
     createdAt: serverTimestamp(),
     createdBy: actor,
     statusHistory: [{
@@ -7808,6 +7812,257 @@ const ISSUE_LOG_PREFS_KEY = 'aptracker_issue_log_prefs_v1';
 const ISSUE_QUICK_PHRASES = ['Leak', 'Down', 'Needs parts', 'Waiting on maintenance', 'Quality check', 'Escalate'];
 let issueAdvancedExpanded = false;
 let subcategorySheetState = { open: false, statusKey: '', selectedSub: '' };
+let selectedQualityDefect = null;
+let qualityDefectModalState = { open: false, selectedKey: '', previousKey: '', filter: '', view: 'list', activeTab: 'actions' };
+
+const QUALITY_DEFECT_TRIGGER_STATUS_KEY = 'quality';
+const QUALITY_DEFECT_TRIGGER_SUBCATEGORY = 'DO008 Quality Problems';
+const QUALITY_DEFECT_COMMON_ORDER = ['flash', 'short_shot', 'splay', 'sink_marks', 'burn_marks', 'warp'];
+const QUALITY_DEFECT_ROW_DESCRIPTIONS = {
+  short_shot: 'Incomplete part / end of fill',
+  flash: 'Thin burr at parting line',
+  sink_marks: 'Depression over ribs or bosses',
+  voids_bubbles: 'Internal bubbles or hollow spots',
+  splay: 'Silver streaks in flow direction',
+  burn_marks: 'Dark marks near trapped air',
+  warp: 'Shape or dimension out of spec',
+  weld_lines: 'Visible flow-front meeting line',
+  flow_lines: 'Wavy directional surface marks',
+  jetting: 'Rope-like mark from gate',
+  black_specks: 'Dark specks or contamination',
+  delamination: 'Surface peeling or flaking',
+  ejector_marks: 'Marks where pins push part',
+  blush_haze: 'Cloudy or milky surface patch'
+};
+const QUALITY_DEFECT_LIBRARY = [
+  {
+    key: 'short_shot',
+    label: 'Short shot / non-fill',
+    description: 'Part is incomplete, usually at the end of flow or thin sections.',
+    whoToCall: ['Quality', 'Process Engineer', 'Materials'],
+    likelyCauses: ['Low shot size or cushion loss', 'Low melt or mold temperature', 'Injection speed or pressure too low', 'Blocked gate, vent, or runner', 'Material feed inconsistency'],
+    quickChecks: ['Confirm defect location is consistent shot to shot', 'Check cushion, transfer position, and actual peak pressure', 'Verify dryer/loaders are feeding consistently', 'Inspect gate/runner for obstruction or freeze-off'],
+    firstActions: ['Hold suspect product and mark cavity/location', 'Compare actual process values to approved setup sheet', 'Increase fill support within approved limits', 'Escalate to tooling if the same gate or cavity repeatedly underfills']
+  },
+  {
+    key: 'flash',
+    label: 'Flash / burrs',
+    description: 'Thin excess plastic at parting line, vents, lifters, pins, or shutoffs.',
+    whoToCall: ['Quality', 'Process Engineer', 'Tool & Die'],
+    likelyCauses: ['Clamp force too low', 'Injection/pack pressure too high', 'Mold parting line damage or contamination', 'Worn shutoffs or vents', 'Material viscosity lower than expected'],
+    quickChecks: ['Identify whether flash is parting line, vent, pin, or shutoff', 'Check clamp tonnage and mold protection alarms', 'Inspect for debris on parting line', 'Compare pack pressure/time to standard'],
+    firstActions: ['Contain flashed product by cavity and time range', 'Clean parting line if safe and approved', 'Reduce pack pressure or speed within process window', 'Call Tool & Die for persistent localized flash']
+  },
+  {
+    key: 'sink_marks',
+    label: 'Sink marks',
+    description: 'Depressions or dull spots over ribs, bosses, or thick wall sections.',
+    whoToCall: ['Quality', 'Process Engineer'],
+    likelyCauses: ['Insufficient pack pressure or pack time', 'Gate freezing before part is packed', 'Mold temperature imbalance', 'Wall section too thick for current process', 'Cooling time too short'],
+    quickChecks: ['Look for sinks above ribs/bosses and thick transitions', 'Review cushion, hold pressure, and hold time', 'Check gate freeze study or known gate-freeze time', 'Confirm cooling water temperature and flow'],
+    firstActions: ['Quarantine suspect parts for Quality review', 'Increase hold support within approved process limits', 'Verify cooling circuit operation', 'Escalate if sinks remain after packing is stable']
+  },
+  {
+    key: 'voids_bubbles',
+    label: 'Voids / bubbles',
+    description: 'Internal air pockets, bubbles, or hollow-looking sections.',
+    whoToCall: ['Quality', 'Process Engineer', 'Materials'],
+    likelyCauses: ['Trapped gas or poor venting', 'Moisture in resin', 'Excessive melt temperature', 'Insufficient pack of thick areas', 'Screw recovery introducing air'],
+    quickChecks: ['Cut or inspect sample if required by Quality', 'Verify dryer dew point, temperature, and residence time', 'Check for splay or moisture signs on surface', 'Review back pressure and screw recovery stability'],
+    firstActions: ['Hold parts until Quality confirms acceptance criteria', 'Verify material drying before process changes', 'Adjust pack/cooling within approved range', 'Call tooling if voids align with trapped air locations']
+  },
+  {
+    key: 'splay',
+    label: 'Splay / silver streaks',
+    description: 'Silver, splash-like streaks following flow direction.',
+    whoToCall: ['Quality', 'Materials', 'Process Engineer'],
+    likelyCauses: ['Wet resin or colorant', 'Material contamination', 'Excessive shear or melt temperature', 'Air entrainment during recovery', 'Cold slug entering the cavity'],
+    quickChecks: ['Check dryer status, dew point, and hopper material', 'Compare streak direction to gate and flow path', 'Inspect purge for moisture bubbles or contamination', 'Review screw speed and back pressure'],
+    firstActions: ['Place suspect product on hold', 'Verify material lot and dryer settings', 'Purge and inspect melt stream if allowed', 'Reduce shear contributors within approved process range']
+  },
+  {
+    key: 'burn_marks',
+    label: 'Burn marks',
+    description: 'Dark or brown marks, often near end-of-fill, vents, or trapped-air areas.',
+    whoToCall: ['Quality', 'Process Engineer', 'Tool & Die'],
+    likelyCauses: ['Trapped air or poor venting', 'Injection speed too high near end of fill', 'Melt temperature too high', 'Material degradation from residence time', 'Contaminated or overheated runner/gate'],
+    quickChecks: ['Map burn location to end-of-fill or vent areas', 'Check barrel temperatures and actual melt condition', 'Review injection speed profile', 'Inspect vents where safe/approved'],
+    firstActions: ['Contain all burned product', 'Reduce aggressive fill conditions within process window', 'Purge degraded material if suspected', 'Call Tool & Die if burn repeats at the same vent/end-of-fill']
+  },
+  {
+    key: 'warp',
+    label: 'Warp / dimensional out-of-spec',
+    description: 'Part does not hold shape, flatness, straightness, or critical dimension.',
+    whoToCall: ['Quality', 'Process Engineer', 'Tool & Die'],
+    likelyCauses: ['Uneven cooling or mold temperature imbalance', 'Pack imbalance', 'Ejection while part is too hot', 'Material shrink variation', 'Tooling/water circuit issue'],
+    quickChecks: ['Confirm measurement method and fixture', 'Check cooling water flow and temperature by circuit', 'Compare cycle/cooling time to standard', 'Look for cavity-specific pattern'],
+    firstActions: ['Hold suspect parts and record cavity/press/time', 'Return cycle and cooling to approved setup', 'Verify mold cooling before further process adjustment', 'Escalate to Tool & Die for cavity-specific distortion']
+  },
+  {
+    key: 'weld_lines',
+    label: 'Weld / knit lines',
+    description: 'Visible line where flow fronts meet; may be cosmetic or structural.',
+    whoToCall: ['Quality', 'Process Engineer', 'Tool & Die'],
+    likelyCauses: ['Low melt or mold temperature', 'Flow hesitation around holes/features', 'Poor venting where fronts meet', 'Injection speed too low', 'Gate or runner imbalance'],
+    quickChecks: ['Confirm location against known knit-line zones', 'Check if line is visual only or failing strength criteria', 'Review fill speed and temperature actuals', 'Inspect vents near meeting flow fronts'],
+    firstActions: ['Ask Quality to define acceptance against sample/standard', 'Tune fill speed/temperature within approved process limits', 'Verify venting if line darkens or traps gas', 'Escalate tooling if line position changed suddenly']
+  },
+  {
+    key: 'flow_lines',
+    label: 'Flow lines',
+    description: 'Wavy, circular, or directional surface marks from changing flow speed/cooling.',
+    whoToCall: ['Quality', 'Process Engineer'],
+    likelyCauses: ['Low mold or melt temperature', 'Injection speed profile not supporting surface finish', 'Gate hesitation', 'Material temperature inconsistency', 'Part geometry causing uneven flow'],
+    quickChecks: ['Compare to visual standard and location history', 'Review actual melt/mold temperature', 'Check speed profile and transfer point', 'Confirm material lot and colorant are correct'],
+    firstActions: ['Contain if cosmetic standard is not met', 'Stabilize temperatures and process actuals', 'Adjust fill speed profile within approved limits', 'Monitor first 10 parts after any adjustment']
+  },
+  {
+    key: 'jetting',
+    label: 'Jetting',
+    description: 'Snake-like or rope-like flow mark from uncontrolled melt stream entering cavity.',
+    whoToCall: ['Quality', 'Process Engineer', 'Tool & Die'],
+    likelyCauses: ['Injection speed too high at gate entry', 'Gate directs melt into open cavity', 'Low mold temperature', 'Poor gate design or obstruction', 'Material viscosity shift'],
+    quickChecks: ['Confirm mark starts from gate area', 'Review first-stage speed near gate entry', 'Check mold temperature against standard', 'Inspect gate condition if safe/approved'],
+    firstActions: ['Hold parts with visible jetting beyond standard', 'Reduce initial injection speed within process limits', 'Stabilize mold temperature', 'Escalate if gate condition appears damaged or changed']
+  },
+  {
+    key: 'black_specks',
+    label: 'Black specks / contamination',
+    description: 'Dark particles, specks, or foreign material embedded in the part.',
+    whoToCall: ['Quality', 'Materials', 'Process Engineer', 'Maintenance'],
+    likelyCauses: ['Degraded material in barrel or hot runner', 'Contaminated resin/regrind/colorant', 'Dirty hopper, loader, or grinder', 'Dead spots in nozzle/manifold', 'Excessive residence time'],
+    quickChecks: ['Check if specks appear after startup, color change, or material change', 'Inspect purge for recurring dark particles', 'Verify material source and regrind stream', 'Check hopper/loader cleanliness'],
+    firstActions: ['Stop and contain affected product by time window', 'Purge until stream is clean if allowed', 'Verify material handling path before restarting', 'Call Maintenance/Tooling if contamination persists after material path is clean']
+  },
+  {
+    key: 'delamination',
+    label: 'Delamination',
+    description: 'Surface layers peel, flake, or separate from the molded part.',
+    whoToCall: ['Quality', 'Materials', 'Process Engineer'],
+    likelyCauses: ['Incompatible resin or contamination', 'Excess moisture', 'Low melt temperature or poor mixing', 'Excess mold release', 'High shear degrading material'],
+    quickChecks: ['Confirm resin, regrind, colorant, and lot against schedule', 'Look for peeling at gate or high-shear regions', 'Verify dryer and material handling', 'Inspect whether mold release was used'],
+    firstActions: ['Hold product for Quality disposition', 'Verify material identity before process changes', 'Purge suspect material path', 'Stabilize melt temperature/mixing within approved setup']
+  },
+  {
+    key: 'ejector_marks',
+    label: 'Ejector marks',
+    description: 'Raised, white, shiny, or indented marks where pins push the part out.',
+    whoToCall: ['Quality', 'Tool & Die', 'Process Engineer'],
+    likelyCauses: ['Part sticking in mold', 'Ejection pressure or speed too high', 'Cooling time too short', 'Dirty/damaged ejector pins', 'Insufficient draft or mold release issue'],
+    quickChecks: ['Match mark locations to ejector pin layout', 'Check if parts are dragging or sticking', 'Review cooling time and mold temperature', 'Inspect pins and parting area if safe/approved'],
+    firstActions: ['Contain parts if marks exceed standard', 'Return cooling/ejection settings to standard', 'Clean/check ejector area through Tool & Die', 'Escalate persistent sticking before damage occurs']
+  },
+  {
+    key: 'blush_haze',
+    label: 'Blush / haze',
+    description: 'Cloudy, milky, or discolored surface patch, often near gate or high-shear zones.',
+    whoToCall: ['Quality', 'Materials', 'Process Engineer'],
+    likelyCauses: ['Moisture or volatile contamination', 'Stress whitening from ejection or handling', 'Excessive shear near gate', 'Cold mold or melt conditions', 'Material/colorant compatibility issue'],
+    quickChecks: ['Compare haze location to gate/ejector/contact areas', 'Verify material dryness and lot', 'Check handling marks versus molded-in haze', 'Review melt/mold temperature and injection speed'],
+    firstActions: ['Hold questionable product for visual standard review', 'Verify material/drying before tuning process', 'Reduce shear or stress contributors within approved limits', 'Monitor samples after material and process stabilization']
+  }
+];
+
+function normalizeQualityDefectText(value) {
+  return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function getQualityDefectByKey(key) {
+  return QUALITY_DEFECT_LIBRARY.find(defect => defect.key === key) || null;
+}
+
+function isQualityDefectRoute(statusKey = logCatKey, subcategory = logCatSub) {
+  return String(statusKey || '') === QUALITY_DEFECT_TRIGGER_STATUS_KEY
+    && normalizeQualityDefectText(subcategory) === normalizeQualityDefectText(QUALITY_DEFECT_TRIGGER_SUBCATEGORY);
+}
+
+function sanitizeQualityDefectPayload(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const key = String(raw.key || '').trim();
+  const def = getQualityDefectByKey(key);
+  if (!def) return null;
+  return {
+    key: def.key,
+    label: def.label,
+    description: def.description,
+    whoToCall: [...def.whoToCall],
+    likelyCauses: [...def.likelyCauses],
+    quickChecks: [...def.quickChecks],
+    firstActions: [...def.firstActions],
+    selectedAt: raw.selectedAt || new Date().toISOString(),
+    selectedBy: raw.selectedBy || currentActor()
+  };
+}
+
+function normalizeIssueQualityDefect(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const def = getQualityDefectByKey(raw.key);
+  if (def) {
+    return {
+      key: def.key,
+      label: raw.label || def.label,
+      description: raw.description || def.description,
+      whoToCall: Array.isArray(raw.whoToCall) && raw.whoToCall.length ? raw.whoToCall : [...def.whoToCall],
+      likelyCauses: Array.isArray(raw.likelyCauses) && raw.likelyCauses.length ? raw.likelyCauses : [...def.likelyCauses],
+      quickChecks: Array.isArray(raw.quickChecks) && raw.quickChecks.length ? raw.quickChecks : [...def.quickChecks],
+      firstActions: Array.isArray(raw.firstActions) && raw.firstActions.length ? raw.firstActions : [...def.firstActions],
+      selectedAt: raw.selectedAt || '',
+      selectedBy: raw.selectedBy || null
+    };
+  }
+  const label = String(raw.label || '').trim();
+  if (!label) return null;
+  return {
+    key: String(raw.key || '').trim(),
+    label,
+    description: String(raw.description || '').trim(),
+    whoToCall: Array.isArray(raw.whoToCall) ? raw.whoToCall : [],
+    likelyCauses: Array.isArray(raw.likelyCauses) ? raw.likelyCauses : [],
+    quickChecks: Array.isArray(raw.quickChecks) ? raw.quickChecks : [],
+    firstActions: Array.isArray(raw.firstActions) ? raw.firstActions : [],
+    selectedAt: raw.selectedAt || '',
+    selectedBy: raw.selectedBy || null
+  };
+}
+
+function buildQualityDefectPayload(defectKey) {
+  const def = getQualityDefectByKey(defectKey);
+  if (!def) return null;
+  return sanitizeQualityDefectPayload({
+    key: def.key,
+    selectedAt: new Date().toISOString(),
+    selectedBy: currentActor()
+  });
+}
+
+function clearSelectedQualityDefect() {
+  selectedQualityDefect = null;
+  qualityDefectModalState.selectedKey = '';
+  renderQualityDefectSummary();
+}
+
+function isQualityDefectMobileLayout() {
+  return Boolean(window.matchMedia?.('(max-width: 700px)').matches);
+}
+
+function qualityDefectRowDescription(defect) {
+  return QUALITY_DEFECT_ROW_DESCRIPTIONS[defect?.key] || defect?.description || '';
+}
+
+function sortedQualityDefects(defects) {
+  const priority = new Map(QUALITY_DEFECT_COMMON_ORDER.map((key, index) => [key, index]));
+  return [...defects].sort((a, b) => {
+    const ap = priority.has(a.key) ? priority.get(a.key) : 999;
+    const bp = priority.has(b.key) ? priority.get(b.key) : 999;
+    return ap - bp || a.label.localeCompare(b.label, undefined, { sensitivity: 'base' });
+  });
+}
+
+function syncQualityDefectModalModeClass() {
+  const modal = document.getElementById('quality-defect-modal');
+  if (!modal) return;
+  modal.classList.toggle('detail-mode', qualityDefectModalState.view === 'detail');
+}
 
 function loadIssueLogPrefs() {
   try {
@@ -7925,6 +8180,8 @@ window.openAddModal = (m = '') => {
   subcategorySheetState = { open: false, statusKey: '', selectedSub: '' };
   currentMachine = ALL_MACHINES.includes(m) ? m : '';
   pendingPhotos = [];
+  selectedQualityDefect = null;
+  closeQualityDefectModal();
   logCatKey = issueLogPrefs.lastStatusKey || null;
   logCatSub = issueLogPrefs.lastStatusSub || null;
   document.getElementById('issue-note').value = '';
@@ -8028,6 +8285,7 @@ function renderLogSubChips() {
       saveIssueLogPrefs();
       renderLogSubChips();
       updateLogCatPill();
+      maybePromptQualityDefect();
       scrollAddModalToBottom();
     });
     row.appendChild(item);
@@ -8164,6 +8422,7 @@ function searchApplyAddModal(key, sub) {
   issueLogPrefs.lastStatusSub = sub;
   saveIssueLogPrefs();
   closeSearch();
+  maybePromptQualityDefect();
 }
 
 function handleSearchSubPick(sub) {
@@ -8288,6 +8547,7 @@ function confirmSubcategorySheet(useNoSub = false) {
   renderLogSubChips();
   updateLogCatPill();
   closeSubcategorySheet();
+  maybePromptQualityDefect();
 }
 
 function updateLogCatPill() {
@@ -8312,6 +8572,7 @@ function updateLogCatPill() {
   pill.textContent = st.icon + ' ' + getStatusLabel(logCatKey, 'short') + (logCatSub ? ' › ' + logCatSub : '');
   pill.style.color = col; pill.style.borderColor = alphaColor(col, 0.53); pill.style.background = alphaColor(col, 0.08);
   updateAddModalIssueLanguage();
+  renderQualityDefectSummary();
 }
 
 function updateAddModalIssueLanguage() {
@@ -8328,6 +8589,169 @@ function updateAddModalIssueLanguage() {
   }
   const submit = document.getElementById('submit-btn');
   if (submit && !submit.disabled) submit.innerHTML = isAttention ? '◇ Log Attention' : '⚠ Log Issue';
+}
+
+function renderQualityDefectSummary() {
+  const summary = document.getElementById('quality-defect-summary');
+  const label = document.getElementById('quality-defect-summary-label');
+  const desc = document.getElementById('quality-defect-summary-desc');
+  if (!summary || !label || !desc) return;
+  const visible = isQualityDefectRoute() && !!selectedQualityDefect;
+  summary.classList.toggle('visible', visible);
+  if (!visible) return;
+  label.textContent = selectedQualityDefect.label;
+  desc.textContent = `${selectedQualityDefect.description} Suggested first call: ${(selectedQualityDefect.whoToCall || []).join(', ')}.`;
+}
+
+function qualityDefectListMatchesFilter(defect, filter) {
+  if (!filter) return true;
+  const haystack = [
+    defect.label,
+    defect.description,
+    ...(defect.whoToCall || []),
+    ...(defect.likelyCauses || []),
+    ...(defect.quickChecks || []),
+    ...(defect.firstActions || [])
+  ].join(' ');
+  return normalizeQualityDefectText(haystack).includes(filter);
+}
+
+function renderQualityDefectList() {
+  const list = document.getElementById('quality-defect-list');
+  if (!list) return;
+  const filter = normalizeQualityDefectText(qualityDefectModalState.filter);
+  const matches = sortedQualityDefects(QUALITY_DEFECT_LIBRARY.filter(defect => qualityDefectListMatchesFilter(defect, filter)));
+  if (!matches.length) {
+    list.innerHTML = '<div class="subcategory-empty">No defects match that search.</div>';
+    return;
+  }
+  list.innerHTML = matches.map(defect => `
+    <button class="quality-defect-item${qualityDefectModalState.selectedKey === defect.key ? ' selected' : ''}" type="button" data-quality-defect-key="${esc(defect.key)}">
+      <span class="quality-defect-item-title">
+        <span>${esc(defect.label)}</span>
+        <span class="quality-defect-item-check">&check;</span>
+      </span>
+      <span class="quality-defect-item-desc">${esc(qualityDefectRowDescription(defect))}</span>
+    </button>
+  `).join('');
+  list.querySelectorAll('[data-quality-defect-key]').forEach(btn => {
+    addTapListener(btn, () => {
+      qualityDefectModalState.selectedKey = btn.dataset.qualityDefectKey || '';
+      qualityDefectModalState.activeTab = 'actions';
+      if (isQualityDefectMobileLayout()) qualityDefectModalState.view = 'detail';
+      renderQualityDefectList();
+      renderQualityDefectSuggestions();
+      syncQualityDefectModalModeClass();
+    });
+  });
+}
+
+function renderQualityDefectSuggestions() {
+  const panel = document.getElementById('quality-defect-suggestions');
+  const state = document.getElementById('quality-defect-modal-state');
+  const confirm = document.getElementById('quality-defect-modal-confirm');
+  if (!panel) return;
+  const defect = getQualityDefectByKey(qualityDefectModalState.selectedKey);
+  if (confirm) confirm.disabled = !defect;
+  if (state) state.textContent = defect ? `Ready to attach: ${defect.label}` : 'Select a defect to enable suggestions.';
+  if (!defect) {
+    panel.innerHTML = '<div class="quality-defect-empty">Choose a molding defect to show likely causes, quick checks, first actions, and who to call.</div>';
+    return;
+  }
+  const activeTab = qualityDefectModalState.activeTab || 'actions';
+  const tabs = [
+    { key: 'actions', label: 'Actions' },
+    { key: 'checks', label: 'Checks' },
+    { key: 'causes', label: 'Causes' },
+    { key: 'call', label: 'Call' }
+  ];
+  const listHtml = values => `<ul class="quality-defect-suggestion-list">${(values || []).map(item => `<li>${esc(item)}</li>`).join('')}</ul>`;
+  const tabBody = (() => {
+    if (activeTab === 'causes') return `<div class="quality-defect-section-title">Likely causes</div>${listHtml(defect.likelyCauses)}`;
+    if (activeTab === 'checks') return `<div class="quality-defect-section-title">Quick checks</div>${listHtml(defect.quickChecks)}`;
+    if (activeTab === 'call') {
+      return `<div class="quality-defect-section-title">Recommended calls</div>
+        <div class="quality-defect-call-strip">Call: ${(defect.whoToCall || []).map(role => `<span>${esc(role)}</span>`).join('<span class="quality-defect-call-sep">&middot;</span>')}</div>`;
+    }
+    return `<div class="quality-defect-section-title">First actions</div>${listHtml(defect.firstActions)}`;
+  })();
+  panel.innerHTML = `
+    <button class="quality-defect-back" type="button" id="quality-defect-back">Back to defects</button>
+    <div class="quality-defect-suggestion-head">
+      <div>
+        <div class="quality-defect-suggestion-title">${esc(defect.label)}</div>
+        <div class="quality-defect-suggestion-desc">${esc(defect.description)}</div>
+      </div>
+    </div>
+    <div class="quality-defect-tabs" role="tablist" aria-label="Troubleshooting suggestions">
+      ${tabs.map(tab => `<button class="quality-defect-tab${activeTab === tab.key ? ' active' : ''}" type="button" data-quality-defect-tab="${tab.key}" role="tab" aria-selected="${activeTab === tab.key ? 'true' : 'false'}">${tab.label}</button>`).join('')}
+    </div>
+    <div class="quality-defect-section">
+      ${tabBody}
+    </div>
+  `;
+  panel.querySelector('#quality-defect-back')?.addEventListener('click', () => {
+    qualityDefectModalState.view = 'list';
+    syncQualityDefectModalModeClass();
+  });
+  panel.querySelectorAll('[data-quality-defect-tab]').forEach(btn => {
+    addTapListener(btn, () => {
+      qualityDefectModalState.activeTab = btn.dataset.qualityDefectTab || 'actions';
+      renderQualityDefectSuggestions();
+    });
+  });
+}
+
+function renderQualityDefectModal() {
+  syncQualityDefectModalModeClass();
+  renderQualityDefectList();
+  renderQualityDefectSuggestions();
+}
+
+function openQualityDefectModal() {
+  if (!isQualityDefectRoute()) return;
+  qualityDefectModalState = {
+    open: true,
+    selectedKey: selectedQualityDefect?.key || '',
+    previousKey: selectedQualityDefect?.key || '',
+    filter: '',
+    view: 'list',
+    activeTab: 'actions'
+  };
+  const search = document.getElementById('quality-defect-search');
+  if (search) search.value = '';
+  renderQualityDefectModal();
+  document.getElementById('quality-defect-modal')?.classList.add('visible');
+  requestAnimationFrame(() => search?.focus());
+}
+
+function closeQualityDefectModal({ restore = false } = {}) {
+  if (restore) qualityDefectModalState.selectedKey = qualityDefectModalState.previousKey || '';
+  qualityDefectModalState.open = false;
+  document.getElementById('quality-defect-modal')?.classList.remove('visible');
+}
+
+function confirmQualityDefectModal() {
+  const payload = buildQualityDefectPayload(qualityDefectModalState.selectedKey);
+  if (!payload) return;
+  selectedQualityDefect = payload;
+  closeQualityDefectModal();
+  renderQualityDefectSummary();
+  scrollAddModalToBottom();
+}
+
+function clearQualityDefectModal() {
+  clearSelectedQualityDefect();
+  renderQualityDefectModal();
+}
+
+function maybePromptQualityDefect() {
+  if (!isQualityDefectRoute()) {
+    clearSelectedQualityDefect();
+    return;
+  }
+  if (!selectedQualityDefect) openQualityDefectModal();
+  else renderQualityDefectSummary();
 }
 
 function scrollAddModalToBottom() {
@@ -8354,6 +8778,7 @@ function logCatSelectStatus(key) {
   renderLogSubChips();
   updateLogCatPill();
   closeSubcategorySheet();
+  maybePromptQualityDefect();
   scrollAddModalToBottom();
 }
 
@@ -8362,6 +8787,7 @@ document.getElementById('log-cat-clear')?.addEventListener('touchend', e => {
   if (isSearchMode) { closeSearch(); return; }
   closeSubcategorySheet();
   logCatKey = null; logCatSub = null;
+  clearSelectedQualityDefect();
   issueLogPrefs.lastStatusKey = '';
   issueLogPrefs.lastStatusSub = '';
   saveIssueLogPrefs();
@@ -8371,6 +8797,7 @@ document.getElementById('log-cat-clear')?.addEventListener('click', () => {
   if (isSearchMode) { closeSearch(); return; }
   closeSubcategorySheet();
   logCatKey = null; logCatSub = null;
+  clearSelectedQualityDefect();
   issueLogPrefs.lastStatusKey = '';
   issueLogPrefs.lastStatusSub = '';
   saveIssueLogPrefs();
@@ -8392,6 +8819,7 @@ window.closeModal = () => {
   document.getElementById('add-modal').classList.remove('visible');
   document.getElementById('log-photo-source-row')?.classList.remove('visible');
   closeSubcategorySheet();
+  closeQualityDefectModal();
   pendingPhotos = [];
   currentMachine = null;
   issueLogPrefs.lastStatusKey = logCatKey || issueLogPrefs.lastStatusKey || '';
@@ -8399,6 +8827,7 @@ window.closeModal = () => {
   saveIssueLogPrefs();
   logCatKey = null;
   logCatSub = null;
+  selectedQualityDefect = null;
 };
 
 window.resetIssueDateTime = function () {
@@ -8568,6 +8997,25 @@ document.getElementById('subcategory-sheet-overlay')?.addEventListener('click', 
   if (e.target === e.currentTarget) closeSubcategorySheet();
 });
 document.getElementById('subcategory-sheet-close')?.addEventListener('click', () => closeSubcategorySheet());
+document.getElementById('quality-defect-modal')?.addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeQualityDefectModal({ restore: true });
+});
+document.getElementById('quality-defect-modal-close')?.addEventListener('click', () => closeQualityDefectModal({ restore: true }));
+document.getElementById('quality-defect-modal-cancel')?.addEventListener('click', () => closeQualityDefectModal({ restore: true }));
+document.getElementById('quality-defect-modal-confirm')?.addEventListener('click', () => confirmQualityDefectModal());
+document.getElementById('quality-defect-modal-clear')?.addEventListener('click', () => clearQualityDefectModal());
+document.getElementById('quality-defect-change')?.addEventListener('click', e => {
+  e.preventDefault();
+  openQualityDefectModal();
+});
+document.getElementById('quality-defect-clear')?.addEventListener('click', e => {
+  e.preventDefault();
+  clearSelectedQualityDefect();
+});
+document.getElementById('quality-defect-search')?.addEventListener('input', e => {
+  qualityDefectModalState.filter = e.target.value || '';
+  renderQualityDefectList();
+});
 
 document.getElementById('issue-urgent')?.addEventListener('change', () => {
   issueLogPrefs.urgent = false;
@@ -8652,6 +9100,15 @@ window.submitIssue = async () => {
     const d = getIssueDateFromInputs('issue-date', 'issue-time-input');
     const initialStatus = logCatKey || 'open';
     const initialSubStatus = logCatSub || '';
+    if (isQualityDefectRoute(initialStatus, initialSubStatus) && !selectedQualityDefect) {
+      setSubmitting(false);
+      showGameToast('Select a quality defect for DO008 Quality Problems.');
+      openQualityDefectModal();
+      return;
+    }
+    const qualityDefect = isQualityDefectRoute(initialStatus, initialSubStatus)
+      ? sanitizeQualityDefectPayload(selectedQualityDefect)
+      : null;
     const note = document.getElementById('issue-note').value.trim() || 'No Description Provided';
     const initialWorkflowId = createWorkflowId(initialStatus);
     const shiftSel = document.getElementById('issue-shift').value;
@@ -8679,6 +9136,7 @@ window.submitIssue = async () => {
       initialSubStatus,
       initialWorkflowId,
       isUrgent,
+      qualityDefect,
       createdAtIso: new Date().toISOString()
     };
     const localPhotos = pendingPhotos.map(p => ({ ...p }));
@@ -8703,7 +9161,7 @@ window.submitIssue = async () => {
         replaceAttachments: true,
         permissionName: 'canCreateIssue',
         events: [
-          sqlEventPayload('issue_created', { machineCode: currentMachine, note, initialStatusKey: initialStatus, initialSubStatusKey: initialSubStatus, urgent: isUrgent }),
+          sqlEventPayload('issue_created', { machineCode: currentMachine, note, initialStatusKey: initialStatus, initialSubStatusKey: initialSubStatus, urgent: isUrgent, qualityDefect }),
           sqlEventPayload('status_changed', { fromStatusKey: null, fromSubStatusKey: null, toStatusKey: initialStatus, toSubStatusKey: initialSubStatus, note: '' })
         ]
       });
@@ -8740,7 +9198,7 @@ window.submitIssue = async () => {
       events: [
         {
           type: 'issue_created',
-          payload: { machineCode: currentMachine, note, initialStatusKey: initialStatus, initialSubStatusKey: initialSubStatus, urgent: isUrgent }
+          payload: { machineCode: currentMachine, note, initialStatusKey: initialStatus, initialSubStatusKey: initialSubStatus, urgent: isUrgent, qualityDefect }
         },
         {
           type: 'status_changed',
@@ -10840,6 +11298,14 @@ function renderIssues() {
     const sc = { ...scfg, label: scfg.label + (currentSubKey ? ' › ' + currentSubKey : '') };
 
     const editedNote = issue.editedAt ? `<div style="font-size:10px;color:var(--color-text-subtle, var(--text3));margin-top:3px;font-family:'Share Tech Mono',monospace">edited ${issue.editedAt}${issue.editedBy ? ' by ' + esc(issue.editedBy) : ''}</div>` : '';
+    const issueQualityDefect = normalizeIssueQualityDefect(issue.qualityDefect);
+    const issueQualityDefectHtml = issueQualityDefect ? `
+      <div class="issue-quality-defect">
+        <div class="issue-quality-defect-title">Quality defect: ${esc(issueQualityDefect.label)}</div>
+        ${issueQualityDefect.description ? `<div class="issue-quality-defect-desc">${esc(issueQualityDefect.description)}</div>` : ''}
+        ${issueQualityDefect.firstActions?.length ? `<ul class="issue-quality-defect-list">${issueQualityDefect.firstActions.slice(0, 3).map(action => `<li>${esc(action)}</li>`).join('')}</ul>` : ''}
+      </div>
+    ` : '';
 
     // Helper to parse a formatted date string back into input values
     function parseDTForInputs(dtStr) {
@@ -11159,6 +11625,7 @@ function renderIssues() {
         <!-- Full width content -->
         <div class="issue-full-note">${esc(issue.note)}</div>
         ${editedNote}
+        ${issueQualityDefectHtml}
         ${photosHtml}
         <div class="divider"></div>
         ${resolveHtml}
