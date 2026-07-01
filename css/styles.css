@@ -2413,6 +2413,9 @@
   /* Compact workflow step buttons (card header) */
   .wf-steps { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
   .wf-step-btn { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; border: 1px solid color-mix(in srgb, var(--color-border, var(--border)) 80%, transparent); background: color-mix(in srgb, var(--color-surface-raised, var(--bg3)) 76%, transparent); color: var(--color-text-muted, var(--text2)); cursor: pointer; transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.15s, opacity 0.15s, box-shadow 0.15s; user-select: none; font-size: 13px; padding: 0; box-shadow: none; }
+  .wf-escalate-btn { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; flex: 0 0 30px; border-radius: 9px; border: 1px solid color-mix(in srgb, var(--escalate-color, var(--color-accent, var(--accent))) 52%, transparent); background: color-mix(in srgb, var(--escalate-color, var(--color-accent, var(--accent))) 13%, transparent); color: var(--escalate-color, var(--color-accent, var(--accent))); cursor: pointer; font-size: 15px; font-weight: 900; line-height: 1; padding: 0; transition: transform 0.15s, background 0.15s, box-shadow 0.15s; }
+  .wf-escalate-btn:hover { transform: translateY(-1px); background: color-mix(in srgb, var(--escalate-color, var(--color-accent, var(--accent))) 20%, transparent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--escalate-color, var(--color-accent, var(--accent))) 12%, transparent); }
+  .wf-escalate-btn:active { transform: translateY(0) scale(0.96); }
   .wf-step-btn:hover { background: color-mix(in srgb, var(--color-surface-raised, var(--bg3)) 88%, #fff 12%); border-color: color-mix(in srgb, var(--color-text-subtle, var(--text3)) 68%, transparent); color: var(--color-text, var(--text)); transform: translateY(-1px); }
   .wf-step-btn.pending { opacity: 0.28; background: transparent; border-color: color-mix(in srgb, var(--color-border, var(--border)) 48%, transparent); }
   .wf-step-btn.completed { opacity: 0.56; background: rgba(34,197,94,0.06); border-color: rgba(34,197,94,0.2); color: rgba(134,239,172,0.7); }
@@ -2482,6 +2485,38 @@
     border-radius: 4px;
     text-transform: none;
     line-height: 1.2;
+  }
+  .issue-response-path-row {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    max-width: 100%;
+    min-width: 0;
+    margin-top: 1px;
+  }
+  .issue-response-path {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 100%;
+    margin-top: 2px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid color-mix(in srgb, var(--path-color, var(--color-accent, var(--accent))) 32%, transparent);
+    background: color-mix(in srgb, var(--path-color, var(--color-accent, var(--accent))) 10%, transparent);
+    color: var(--color-text-muted, var(--text2));
+    font-size: 9.5px;
+    font-weight: 800;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .issue-response-path span {
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .issue-note-preview { display:block; width:100%; font-size: 16.5px; color: var(--color-text, var(--text)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; letter-spacing: 0; margin-top: 8px; line-height: 1.25; }
   .issue-time { font-family: 'Nunito', sans-serif; font-size: 12.5px; font-weight: 500; color: var(--color-text-subtle, var(--text3)); margin-top: 4px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; line-height: 1.4; }
@@ -4838,6 +4873,24 @@
     background: transparent;
     border: 0;
   }
+  .role-alert-response-path {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 7px 9px;
+    border-radius: 8px;
+    border: 1px solid color-mix(in srgb, var(--role-alert-cat-color, var(--color-accent, var(--accent))) 32%, transparent);
+    background: color-mix(in srgb, var(--role-alert-cat-color, var(--color-accent, var(--accent))) 9%, transparent);
+    color: var(--color-text, var(--text));
+    font-size: 12px;
+    font-weight: 800;
+  }
+  .role-alert-response-path small {
+    color: var(--color-text-muted, var(--text2));
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.25;
+  }
   .role-alert-card-meta {
     display:flex;
     align-items:center;
@@ -4944,6 +4997,65 @@
   .log-sub-row { display: none; flex-wrap: wrap; gap: 5px; margin-bottom: 4px; }
   .log-sub-row.visible { display: flex; }
   .log-sub-row.visible.search-mode { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .log-response-preview[hidden] { display: none !important; }
+  .log-response-preview {
+    display: grid;
+    gap: 7px;
+    margin: 8px 0 10px;
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid color-mix(in srgb, var(--preview-color, var(--color-accent, var(--accent))) 32%, transparent);
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--preview-color, var(--color-accent, var(--accent))) 10%, transparent), transparent),
+      var(--color-surface-raised, var(--bg3));
+  }
+  .log-response-preview-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    color: var(--color-text-subtle, var(--text3));
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 9.5px;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .log-response-preview-alert {
+    color: var(--preview-color, var(--color-accent, var(--accent)));
+    letter-spacing: 0;
+    text-transform: none;
+  }
+  .log-response-preview-paths {
+    display: grid;
+    gap: 6px;
+  }
+  .log-response-preview-path {
+    display: grid;
+    gap: 2px;
+    padding: 7px 8px;
+    border-radius: 8px;
+    border: 1px solid color-mix(in srgb, var(--path-color, var(--color-accent, var(--accent))) 28%, transparent);
+    background: color-mix(in srgb, var(--path-color, var(--color-accent, var(--accent))) 8%, transparent);
+  }
+  .log-response-preview-title {
+    color: var(--color-text, var(--text));
+    font-size: 12px;
+    font-weight: 900;
+    line-height: 1.2;
+  }
+  .log-response-preview-trigger {
+    color: var(--color-text-muted, var(--text2));
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.25;
+  }
+  .log-response-preview-foot {
+    color: var(--color-text-muted, var(--text2));
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.25;
+  }
   .search-bar-row { display: none; }
   .search-bar-row.visible { display: block; min-height: 42px; margin-bottom: 6px; }
   .log-sub-chip { font-size: 12px; font-weight: 700; padding: 4px 11px; border-radius: 20px; border: 1px solid; cursor: pointer; font-family: 'Nunito', sans-serif; transition: background 0.12s, transform 0.1s; }
@@ -5235,6 +5347,91 @@
     font-size: 12px;
   }
   .quality-defect-modal-buttons { display: flex; gap: 8px; }
+  .response-escalation-overlay.visible {
+    display: flex;
+  }
+  .response-escalation-modal {
+    width: min(94vw, 460px);
+    max-height: min(82vh, 620px);
+    padding: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .response-escalation-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px 18px 12px;
+    border-bottom: 1px solid var(--color-border, var(--border));
+    background: var(--color-surface, var(--bg2));
+  }
+  .response-escalation-kicker {
+    color: var(--color-text-subtle, var(--text3));
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+  .response-escalation-head h3 {
+    margin: 3px 0 0;
+    color: var(--color-text, var(--text));
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 22px;
+    line-height: 1.1;
+  }
+  .response-escalation-body {
+    display: grid;
+    gap: 10px;
+    padding: 14px;
+    overflow-y: auto;
+  }
+  .response-escalation-choice {
+    display: grid;
+    gap: 8px;
+    border: 1px solid color-mix(in srgb, var(--path-color, var(--color-accent, var(--accent))) 36%, transparent);
+    border-radius: 12px;
+    padding: 11px;
+    background: color-mix(in srgb, var(--path-color, var(--color-accent, var(--accent))) 8%, transparent);
+  }
+  .response-escalation-path {
+    color: var(--color-text, var(--text));
+    font-size: 14px;
+    font-weight: 900;
+    line-height: 1.2;
+  }
+  .response-escalation-trigger,
+  .response-escalation-note {
+    color: var(--color-text-muted, var(--text2));
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.35;
+  }
+  .response-escalation-confirm {
+    justify-self: stretch;
+    min-height: 40px;
+    border: 1px solid color-mix(in srgb, var(--path-color, var(--color-accent, var(--accent))) 58%, transparent);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--path-color, var(--color-accent, var(--accent))) 18%, transparent);
+    color: var(--color-text, var(--text));
+    cursor: pointer;
+    font-family: 'Nunito', sans-serif;
+    font-size: 13px;
+    font-weight: 900;
+  }
+  .response-escalation-confirm:disabled {
+    cursor: wait;
+    opacity: 0.7;
+  }
+  .response-escalation-actions {
+    display: flex;
+    justify-content: flex-end;
+    padding: 12px 14px;
+    border-top: 1px solid var(--color-border, var(--border));
+    background: var(--color-surface, var(--bg2));
+  }
   .issue-quality-defect {
     margin-top: 10px;
     border: 1px solid rgba(6,182,212,0.25);
@@ -5485,6 +5682,33 @@
     display:grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 6px;
+  }
+  .response-path-section[hidden] { display: none !important; }
+  .response-path-list {
+    display: grid;
+    gap: 6px;
+  }
+  .response-path-card {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 3px;
+    min-height: 42px;
+    border: 1px solid color-mix(in srgb, var(--path-color, var(--color-accent, var(--accent))) 34%, transparent);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--path-color, var(--color-accent, var(--accent))) 9%, transparent);
+    padding: 8px 10px;
+  }
+  .response-path-title {
+    color: var(--color-text, var(--text));
+    font-size: 12px;
+    font-weight: 900;
+    line-height: 1.2;
+  }
+  .response-path-trigger {
+    color: var(--color-text-muted, var(--text2));
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.25;
   }
   .subcategory-item {
     min-height: 42px;

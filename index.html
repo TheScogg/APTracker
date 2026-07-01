@@ -28,9 +28,9 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css" />
-<script src="./js/build-info.js?v=ab0d82d-c53abef9"></script>
+<script src="./js/build-info.js?v=bf4e84e-e51e3b93"></script>
 <script src="./js/fcm-config.js?v=ae083d6"></script>
-<link rel="stylesheet" href="./css/styles.css?v=ab0d82d-c53abef9">
+<link rel="stylesheet" href="./css/styles.css?v=bf4e84e-e51e3b93">
 </head>
 <body>
 
@@ -85,7 +85,7 @@
   <div id="sync-banner" class="visible">
     <div class="sync-dot" id="sync-dot"></div>
     <span id="sync-text" aria-live="polite">Connecting…</span>
-    <span id="app-version-indicator" class="app-version-indicator" title="Current commit version">rev: ab0d82d</span>
+    <span id="app-version-indicator" class="app-version-indicator" title="Current commit version">rev: bf4e84e</span>
     <span id="firestore-io-indicator" class="firestore-io-indicator" title="Estimated Firestore operations for this session">R:0 W:0</span>
   </div>
 
@@ -558,6 +558,7 @@
         <div class="log-cat-all-row" id="log-cat-all-row"></div>
         <div class="search-bar-row" id="search-bar-row"></div>
         <div class="log-sub-row" id="log-sub-row"></div>
+        <div class="log-response-preview" id="log-response-preview" hidden></div>
         <div class="quality-defect-summary" id="quality-defect-summary">
           <div class="quality-defect-summary-icon" aria-hidden="true">QD</div>
           <div class="quality-defect-summary-copy">
@@ -603,6 +604,10 @@
         <div class="subcategory-sheet-label">Subcategories</div>
         <div class="subcategory-grid" id="subcategory-grid"></div>
       </div>
+      <div class="subcategory-sheet-section response-path-section" id="subcategory-response-path-section" hidden>
+        <div class="subcategory-sheet-label">Suggested response path</div>
+        <div class="response-path-list" id="subcategory-response-path-list"></div>
+      </div>
     </div>
     <div class="subcategory-sheet-footer">
       <button class="btn btn-ghost subcategory-sheet-secondary" id="subcategory-sheet-skip" type="button">Use no subcategory</button>
@@ -635,6 +640,22 @@
         <button class="btn btn-ghost" id="quality-defect-modal-cancel" type="button">Cancel</button>
         <button class="btn btn-primary" id="quality-defect-modal-confirm" type="button">Use Defect</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay response-escalation-overlay" id="response-escalation-modal">
+  <div class="modal response-escalation-modal" role="dialog" aria-modal="true" aria-labelledby="response-escalation-title">
+    <div class="response-escalation-head">
+      <div>
+        <div class="response-escalation-kicker">Suggested path</div>
+        <h3 id="response-escalation-title">Escalate Response</h3>
+      </div>
+      <button class="quality-defect-modal-close" type="button" onclick="closeResponseEscalationModal()" aria-label="Close escalation options">&times;</button>
+    </div>
+    <div class="response-escalation-body" id="response-escalation-body"></div>
+    <div class="response-escalation-actions">
+      <button class="btn btn-ghost" type="button" onclick="closeResponseEscalationModal()">Cancel</button>
     </div>
   </div>
 </div>
@@ -1932,7 +1953,7 @@
   </div>
 </div>
 
-<script type="module" src="./js/app.js?v=ab0d82d-c53abef9"></script>
+<script type="module" src="./js/app.js?v=bf4e84e-e51e3b93"></script>
 
 <!-- MASCOT CHARACTER CARD POPOVER -->
 <div class="mascot-popover-backdrop" id="mascot-popover-backdrop" onclick="if(event.target===this)closeMascotPopover()">

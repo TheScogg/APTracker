@@ -43,9 +43,23 @@ export function routeKeyFromLabel(label, routes = {}) {
   return key;
 }
 
+export function responseTreeEdgeId(sourceKey, targetKey, existingEdges = []) {
+  const base = `${String(sourceKey || 'source').trim().toLowerCase()}_to_${String(targetKey || 'target').trim().toLowerCase()}`
+    .replace(/[^a-z0-9_]+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'edge';
+  const used = new Set((existingEdges || []).map(edge => String(edge?.id || '').trim()).filter(Boolean));
+  let id = base;
+  let n = 2;
+  while (used.has(id)) {
+    id = `${base}_${n}`;
+    n += 1;
+  }
+  return id;
+}
+
 export function assignableStatusKeys(statuses = {}) {
   return Object.entries(statuses || {})
-    .filter(([key]) => key !== 'open' && key !== 'resolved')
+    .filter(([key]) => key !== 'open' && key !== 'resolved' && !String(key || '').startsWith('__'))
     .sort((a, b) => (a[1]?.order ?? 999) - (b[1]?.order ?? 999))
     .map(([key]) => key);
 }
@@ -110,6 +124,7 @@ export function normalizeStatusesForSave(rawStatuses = {}, defaultStatuses = {},
   const normalized = {};
   const entries = Object.entries(rawStatuses || {}).sort((a, b) => (a[1]?.order ?? 999) - (b[1]?.order ?? 999));
   entries.forEach(([key, item], idx) => {
+    if (String(key || '').startsWith('__')) return;
     normalized[key] = normalizeStatusRecord(key, item, idx);
   });
   if (!normalized.open && defaultStatuses.open) normalized.open = normalizeStatusRecord('open', defaultStatuses.open, 0);
@@ -120,6 +135,75 @@ export function normalizeStatusesForSave(rawStatuses = {}, defaultStatuses = {},
     if (!normalized[key]) normalized[key] = normalizeStatusRecord(key, value, Object.keys(normalized).length);
   });
   return migrateRetiredStatusCategories(normalized);
+}
+
+export function normalizeResponseTree(rawTree = {}, statuses = {}, routes = {}) {
+  const validStatusKeys = new Set(assignableStatusKeys(statuses));
+  const validRouteKeys = new Set(Object.entries(routes || {})
+    .filter(([, route]) => route?.isActive !== false)
+    .map(([key]) => String(key || '').trim())
+    .filter(Boolean));
+  const rawEdges = Array.isArray(rawTree?.edges) ? rawTree.edges : [];
+  const normalizedEdges = [];
+  const seenIds = new Set();
+
+  rawEdges.forEach((edge, idx) => {
+    if (!edge || typeof edge !== 'object' || Array.isArray(edge)) return;
+    const sourceKey = String(edge.sourceKey || edge.from || '').trim().toLowerCase();
+    const targetKey = String(edge.targetKey || edge.to || '').trim().toLowerCase();
+    if (!validStatusKeys.has(sourceKey) || !validStatusKeys.has(targetKey) || sourceKey === targetKey) return;
+    const legacyRouteKeys = Array.isArray(edge.routeKeys)
+      ? Array.from(new Set(edge.routeKeys
+        .map(v => String(v || '').trim())
+        .filter(v => validRouteKeys.has(v))))
+      : [];
+    const sourceRouteKey = String(edge.sourceRouteKey || edge.routeKey || legacyRouteKeys[0] || '').trim();
+    const targetRouteKey = String(edge.targetRouteKey || edge.toRouteKey || legacyRouteKeys[0] || sourceRouteKey || '').trim();
+    const cleanSourceRouteKey = validRouteKeys.has(sourceRouteKey) ? sourceRouteKey : '';
+    const cleanTargetRouteKey = validRouteKeys.has(targetRouteKey) ? targetRouteKey : cleanSourceRouteKey;
+    const mode = cleanSourceRouteKey && cleanTargetRouteKey && cleanSourceRouteKey !== cleanTargetRouteKey ? 'translate' : 'pass-through';
+    const routeKeys = cleanSourceRouteKey ? [cleanSourceRouteKey] : [];
+    const trigger = String(edge.trigger || edge.label || '').trim();
+    const fallbackId = responseTreeEdgeId(sourceKey, targetKey, normalizedEdges);
+    let id = String(edge.id || fallbackId).trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '');
+    if (!id || seenIds.has(id)) id = responseTreeEdgeId(sourceKey, targetKey, normalizedEdges);
+    seenIds.add(id);
+    normalizedEdges.push({
+      id,
+      sourceKey,
+      targetKey,
+      trigger: trigger || 'Suggested response path',
+      sourceRouteKey: cleanSourceRouteKey,
+      targetRouteKey: cleanTargetRouteKey,
+      mode,
+      routeKeys,
+      isActive: edge.isActive !== false,
+      order: Number.isFinite(Number(edge.order)) ? Number(edge.order) : idx
+    });
+  });
+
+  return {
+    version: 1,
+    edges: normalizedEdges.sort((a, b) =>
+      (a.order ?? 999) - (b.order ?? 999)
+      || a.sourceKey.localeCompare(b.sourceKey)
+      || a.targetKey.localeCompare(b.targetKey)
+    )
+  };
+}
+
+export function stripResponseTreeFromStatuses(statuses = {}) {
+  const clean = {};
+  Object.entries(statuses || {}).forEach(([key, value]) => {
+    if (!String(key || '').startsWith('__')) clean[key] = value;
+  });
+  return clean;
+}
+
+export function attachResponseTreeToStatuses(statuses = {}, responseTree = {}) {
+  const clean = stripResponseTreeFromStatuses(statuses);
+  const edges = Array.isArray(responseTree?.edges) ? responseTree.edges : [];
+  return edges.length ? { ...clean, __responseTree: { version: 1, edges } } : clean;
 }
 
 export function normalizeSubcategoryRoutes(rawRoutes, statuses = {}, options = {}) {
@@ -196,7 +280,7 @@ export function normalizeSubcategoryRoutes(rawRoutes, statuses = {}, options = {
 }
 
 export function syncStatusesFromSubcategoryRoutes(statuses, routes) {
-  const synced = deepCopy(statuses || {});
+  const synced = deepCopy(stripResponseTreeFromStatuses(statuses || {}));
   const validStatusKeys = assignableStatusKeys(synced);
   const routeLabels = new Set(Object.values(routes || {})
     .map(route => String(route?.label || '').trim().toLowerCase())

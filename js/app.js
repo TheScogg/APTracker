@@ -50,7 +50,10 @@ import {
   normalizeStoreItems as normalizeStoreItemsFromCatalog
 } from "./theme-catalog.js";
 import {
+  attachResponseTreeToStatuses,
+  normalizeResponseTree,
   normalizeSubcategoryRoutes as normalizeSharedSubcategoryRoutes,
+  stripResponseTreeFromStatuses,
   syncStatusesFromSubcategoryRoutes as syncSharedStatusesFromSubcategoryRoutes
 } from "./shared-config.js";
 
@@ -1286,6 +1289,7 @@ const ROLE_ALERT_ROUTING_RULES_DEFAULT = [
 const _roleAlertRulesCache = { plantId: null, fetchedAt: 0, rules: null };
 const ROLE_ALERT_RULES_CACHE_MS = 60 * 1000;
 let SUBCATEGORY_ROUTES = {};
+let RESPONSE_TREE = { version: 1, edges: [] };
 let _rolePrefsDraft = [];
 let _roleFeedAlertsUnsubscribe = null;
 const _seenRoleFeedAlerts = new Set();
@@ -1358,6 +1362,144 @@ function normalizeSubcategoryRoutes(rawRoutes, statuses = STATUSES) {
 function syncStatusesFromSubcategoryRoutes(statuses, routes) {
   return syncSharedStatusesFromSubcategoryRoutes(statuses, routes);
 }
+
+function getRouteKeyForSubcategory(subStatus) {
+  const sub = String(subStatus || '').trim().toLowerCase();
+  if (!sub) return '';
+  const found = Object.entries(SUBCATEGORY_ROUTES || {}).find(([, route]) =>
+    route?.isActive !== false
+    && String(route.label || '').trim().toLowerCase() === sub
+  );
+  return found ? found[0] : '';
+}
+
+function getResponseTreeEdges(statusKey, subStatus = '') {
+  const sourceKey = String(statusKey || '').trim().toLowerCase();
+  if (!sourceKey) return [];
+  const routeKey = getRouteKeyForSubcategory(subStatus);
+  const route = routeKey ? SUBCATEGORY_ROUTES?.[routeKey] : null;
+  const boundStatusKeys = Array.isArray(route?.boundStatusKeys)
+    ? route.boundStatusKeys.map(key => String(key || '').trim().toLowerCase())
+    : [];
+  return (RESPONSE_TREE?.edges || [])
+    .filter(edge => edge?.isActive !== false)
+    .filter(edge => edge.sourceKey === sourceKey)
+    .filter(edge => {
+      const targetKey = String(edge?.targetKey || '').trim().toLowerCase();
+      const sourceRouteKey = edge.sourceRouteKey || (Array.isArray(edge.routeKeys) ? edge.routeKeys[0] : '');
+      const targetRouteKey = edge.targetRouteKey || sourceRouteKey;
+      const targetRoute = targetRouteKey ? SUBCATEGORY_ROUTES?.[targetRouteKey] : null;
+      const targetBoundKeys = Array.isArray(targetRoute?.boundStatusKeys)
+        ? targetRoute.boundStatusKeys.map(key => String(key || '').trim().toLowerCase())
+        : [];
+      if (!routeKey || !targetKey || sourceRouteKey !== routeKey) return false;
+      if (!boundStatusKeys.includes(sourceKey)) return false;
+      return targetBoundKeys.includes(targetKey);
+    })
+    .sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
+}
+
+function formatResponseTreePath(edge) {
+  if (!edge) return '';
+  const sourceRoute = SUBCATEGORY_ROUTES?.[edge.sourceRouteKey || edge.routeKeys?.[0] || ''];
+  const targetRoute = SUBCATEGORY_ROUTES?.[edge.targetRouteKey || edge.sourceRouteKey || edge.routeKeys?.[0] || ''];
+  const routeLabel = sourceRoute && targetRoute
+    ? sourceRoute.label === targetRoute.label
+      ? ` · ${sourceRoute.label}`
+      : ` · ${sourceRoute.label} → ${targetRoute.label}`
+    : '';
+  return `${getStatusLabel(edge.sourceKey, 'short')} → ${getStatusLabel(edge.targetKey, 'short')}${routeLabel}`;
+}
+
+function buildResponseTreeContext(statusKey, subStatus = '') {
+  const edges = getResponseTreeEdges(statusKey, subStatus);
+  if (!edges.length) return null;
+  return {
+    sourceKey: String(statusKey || '').trim().toLowerCase(),
+    subStatus: String(subStatus || '').trim(),
+    routeKey: getRouteKeyForSubcategory(subStatus),
+    paths: edges.map(edge => ({
+      edgeId: edge.id,
+      sourceKey: edge.sourceKey,
+      targetKey: edge.targetKey,
+      sourceRouteKey: edge.sourceRouteKey || edge.routeKeys?.[0] || '',
+      targetRouteKey: edge.targetRouteKey || edge.sourceRouteKey || edge.routeKeys?.[0] || '',
+      targetSubStatus: SUBCATEGORY_ROUTES?.[edge.targetRouteKey || edge.sourceRouteKey || edge.routeKeys?.[0] || '']?.label || '',
+      mode: edge.mode || ((edge.sourceRouteKey && edge.targetRouteKey && edge.sourceRouteKey !== edge.targetRouteKey) ? 'translate' : 'pass-through'),
+      trigger: edge.trigger || 'Suggested response path',
+      pathLabel: formatResponseTreePath(edge)
+    }))
+  };
+}
+
+let responseEscalationState = { issueId: '', paths: [], sourceKey: '', sourceSubStatus: '' };
+
+function getIssueResponseTreeContext(issue, sourceStatusKey = '', sourceSubStatus = '') {
+  if (!issue) return null;
+  const hasExplicitSource = !!sourceStatusKey;
+  const statusKey = hasExplicitSource ? sourceStatusKey : currentStatusKey(issue);
+  const subStatus = hasExplicitSource ? sourceSubStatus : (issue.currentStatus?.subStatusKey || currentStatus(issue).subStatus || '');
+  return buildResponseTreeContext(statusKey, subStatus);
+}
+
+function closeResponseEscalationModal() {
+  responseEscalationState = { issueId: '', paths: [], sourceKey: '', sourceSubStatus: '' };
+  document.getElementById('response-escalation-modal')?.classList.remove('visible');
+}
+
+window.closeResponseEscalationModal = closeResponseEscalationModal;
+
+window.openResponseEscalationModal = function (issueId, encodedSourceKey = '', encodedSourceSubStatus = '') {
+  if (!currentUserPermissions.canEditIssue) return;
+  const issue = issues.find(item => item.id === issueId);
+  const sourceKey = encodedSourceKey ? decodeURIComponent(encodedSourceKey) : '';
+  const sourceSubStatus = encodedSourceSubStatus ? decodeURIComponent(encodedSourceSubStatus) : '';
+  const context = getIssueResponseTreeContext(issue, sourceKey, sourceSubStatus);
+  const paths = context?.paths || [];
+  if (!issue || !paths.length) return;
+  responseEscalationState = {
+    issueId,
+    paths,
+    sourceKey: context.sourceKey || currentStatusKey(issue),
+    sourceSubStatus: context.subStatus || ''
+  };
+  const body = document.getElementById('response-escalation-body');
+  if (!body) return;
+  body.innerHTML = paths.map(path => {
+    const targetColor = getStatusColor(path.targetKey);
+    const targetLabel = getStatusLabel(path.targetKey, 'short');
+    return `<div class="response-escalation-choice" style="--path-color:${targetColor};">
+      <div class="response-escalation-path">${esc(path.pathLabel)}</div>
+      <div class="response-escalation-trigger">${esc(path.trigger || 'Suggested response path')}</div>
+      <div class="response-escalation-note">Adds ${esc(targetLabel)} as a new active category, starts it at Called, and sends the category alert.</div>
+      <button class="response-escalation-confirm" type="button" onclick="confirmResponseEscalation('${esc(path.edgeId)}')">↗ Call ${esc(targetLabel)}</button>
+    </div>`;
+  }).join('');
+  document.getElementById('response-escalation-modal')?.classList.add('visible');
+};
+
+window.confirmResponseEscalation = async function (edgeId) {
+  const { issueId, paths, sourceKey, sourceSubStatus } = responseEscalationState;
+  const path = paths.find(item => item.edgeId === edgeId) || paths[0];
+  if (!issueId || !path || !currentUserPermissions.canEditIssue) return;
+  const buttons = document.querySelectorAll('#response-escalation-modal .response-escalation-confirm');
+  buttons.forEach(btn => { btn.disabled = true; });
+  const targetLabel = getStatusLabel(path.targetKey, 'short');
+  try {
+    const noteParts = [
+      `Escalated from ${getStatusLabel(sourceKey, 'short')}`,
+      sourceSubStatus ? `(${sourceSubStatus})` : '',
+      path.trigger ? `- ${path.trigger}` : ''
+    ].filter(Boolean);
+    const workflowId = await addStatusEntry(issueId, path.targetKey, path.targetSubStatus || path.trigger || '', noteParts.join(' '));
+    if (workflowId) await setWorkflowStateForWorkflowId(issueId, workflowId, 'called');
+    showGameToast(`↗ Called ${targetLabel}`);
+    closeResponseEscalationModal();
+  } catch (error) {
+    setSyncStatus('err', 'Error escalating: ' + (error?.message || error));
+    buttons.forEach(btn => { btn.disabled = false; });
+  }
+};
 
 function resolveConfiguredSubcategoryRoute(subStatus) {
   const sub = String(subStatus || '').trim().toLowerCase();
@@ -1446,6 +1588,7 @@ async function queueRoleFeedAlert(issue, { statusKey, subStatus, note = '', work
   if (!normalizedStatus || normalizedStatus === 'open' || normalizedStatus === 'resolved') return;
   const route = await resolveRoleAlertRoute(statusKey, subStatus);
   const statusDef = getStatusDef(statusKey);
+  const responseTree = buildResponseTreeContext(statusKey, subStatus);
   const effectiveRoute = route || {
     feedKey: `${String(statusKey || '').trim().toLowerCase()}_alerts`,
     feedLabel: `${String(statusDef?.label || statusKey || 'General').trim()} Alerts`,
@@ -1492,6 +1635,7 @@ async function queueRoleFeedAlert(issue, { statusKey, subStatus, note = '', work
         categoryKeys,
         requiredJobRoleKeys: roleKeys,
         recipientUserIds,
+        responseTree,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         createdBy: currentActor(),
@@ -1508,6 +1652,7 @@ async function queueRoleFeedAlert(issue, { statusKey, subStatus, note = '', work
           categoryKeys,
           requiredJobRoleKeys: roleKeys,
           recipientUserIds,
+          responseTree,
           createdBy: currentActor()
         }
       });
@@ -1526,6 +1671,7 @@ async function queueRoleFeedAlert(issue, { statusKey, subStatus, note = '', work
         categoryKeys,
         requiredJobRoleKeys: roleKeys,
         recipientUserIds,
+        responseTree,
         createdAt: serverTimestamp(),
         createdBy: currentActor()
       });
@@ -1628,6 +1774,8 @@ function _renderRoleAlertCard(alert) {
   const statusLabel = isResolved ? 'Resolved' : getStatusLabel(statusKey, 'short');
   const acceptedByName = (isResolved || isAccepted) ? formatWorkflowActorName(alert.acceptedBy?.name || alert.acceptedBy || '') : '';
   const noteText = alert.note || 'No note';
+  const responsePath = alert.responsePath || '';
+  const responseTrigger = alert.responseTrigger || '';
   return `
     <div class="role-alert-card${(isAccepted || isResolved) ? ' accepted' : ''}" style="--role-alert-cat-color:${statusColor};--role-alert-card-border:${alphaColor(statusColor, 0.35)};">
       <button class="role-alert-card-body" type="button" data-role-alert-action="focus" data-role-alert-issue-id="${esc(alert.issueId)}" aria-label="Open issue ${esc(alert.machine || 'alert')}">
@@ -1652,6 +1800,7 @@ function _renderRoleAlertCard(alert) {
             </div>
           </div>
           <div class="role-alert-card-note">${esc(noteText)}</div>
+          ${responsePath ? `<div class="role-alert-response-path"><span>${esc(responsePath)}</span>${responseTrigger ? `<small>${esc(responseTrigger)}</small>` : ''}</div>` : ''}
         </div>
       </button>
       <div class="role-alert-card-actions">
@@ -1660,6 +1809,23 @@ function _renderRoleAlertCard(alert) {
       </div>
     </div>
   `;
+}
+
+function getAlertResponsePathMeta(alertData, statusKey, subStatus) {
+  const context = alertData?.responseTree || alertData?.raw?.responseTree || null;
+  const firstPath = Array.isArray(context?.paths) ? context.paths[0] : null;
+  if (firstPath?.pathLabel) {
+    return {
+      responsePath: `Called via ${firstPath.pathLabel}`,
+      responseTrigger: firstPath.trigger || ''
+    };
+  }
+  const fallback = buildResponseTreeContext(statusKey, subStatus);
+  const fallbackPath = fallback?.paths?.[0] || null;
+  return fallbackPath ? {
+    responsePath: `Suggested: ${fallbackPath.pathLabel}`,
+    responseTrigger: fallbackPath.trigger || ''
+  } : { responsePath: '', responseTrigger: '' };
 }
 
 function _renderRoleAlertsModal(alerts) {
@@ -1763,6 +1929,7 @@ async function _loadActiveRoleAlertsForCurrentUser() {
       const issueCurrentStatus = issue?.currentStatus || null;
       const issueSubStatus = issueCurrentStatus?.subStatusKey || '';
       const issueNote = issue?.note || '';
+      const pathMeta = getAlertResponsePathMeta(alert, alertStatusKey, alert.raw?.subStatus || issueSubStatus);
       const workflowAcceptedBy = workflowState === 'accepted'
         ? (
           (alertWorkflowId && issue?.workflowStateByEntryHistory?.[alertWorkflowId]?.accepted?.by) ||
@@ -1779,6 +1946,8 @@ async function _loadActiveRoleAlertsForCurrentUser() {
         statusKey: alertStatusKey,
         workflowId: alertWorkflowId,
         subStatus: alert.raw?.subStatus || issueSubStatus,
+        responsePath: pathMeta.responsePath,
+        responseTrigger: pathMeta.responseTrigger,
         categoryKey: alert.categoryKey || alert.statusKey || '',
         note: alert.body || alert.raw?.note || issueNote,
         createdAt,
@@ -1825,6 +1994,7 @@ async function _loadActiveRoleAlertsForCurrentUser() {
     const issueCurrentStatus = issue && issue.currentStatus ? issue.currentStatus : null;
     const issueSubStatus = issueCurrentStatus && issueCurrentStatus.subStatusKey ? issueCurrentStatus.subStatusKey : '';
     const issueNote = issue && issue.note ? issue.note : '';
+    const pathMeta = getAlertResponsePathMeta(data, alertStatusKey, data.subStatus || issueSubStatus);
     const createdAt = data.createdAt || null;
     const createdAtLabel = createdAt && typeof createdAt.toDate === 'function'
       ? createdAt.toDate().toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
@@ -1845,6 +2015,8 @@ async function _loadActiveRoleAlertsForCurrentUser() {
       statusKey: alertStatusKey,
       workflowId: alertWorkflowId,
       subStatus: data.subStatus || issueSubStatus,
+      responsePath: pathMeta.responsePath,
+      responseTrigger: pathMeta.responseTrigger,
       categoryKey: data.categoryKey || data.statusKey || '',
       note: data.note || issueNote,
       createdAt,
@@ -1853,7 +2025,8 @@ async function _loadActiveRoleAlertsForCurrentUser() {
       workflowState,
       isResolved,
       isAccepted: isResolved || workflowState === 'accepted',
-      acceptedBy: workflowAcceptedBy || (isResolved ? (issue && (issue.resolvedBy || issue.reopenedBy || issue.workflowStateHistory?.finished?.by || null)) : null)
+      acceptedBy: workflowAcceptedBy || (isResolved ? (issue && (issue.resolvedBy || issue.reopenedBy || issue.workflowStateHistory?.finished?.by || null)) : null),
+      raw: data
     });
   }
   alerts.sort((a, b) => {
@@ -3769,7 +3942,7 @@ function normalizeLoadedStatuses(rawStatuses) {
   }
 
   const normalized = {};
-  Object.entries(rawStatuses).forEach(([key, value], idx) => {
+  Object.entries(stripResponseTreeFromStatuses(rawStatuses)).forEach(([key, value], idx) => {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return;
     const safeLabel = String(value.label || key || 'Status').trim() || key;
     const slug = slugifyStatusLabel(safeLabel);
@@ -3823,9 +3996,11 @@ async function loadConfig() {
   stopStatusConfigListener();
   const sqlBootstrap = await ensureSqlPlantBootstrap(plantId);
   if (sqlBootstrap?.statusConfig?.statuses) {
-    const loadedStatuses = normalizeLoadedStatuses(sqlBootstrap.statusConfig.statuses);
+    const rawStatuses = sqlBootstrap.statusConfig.statuses;
+    const loadedStatuses = normalizeLoadedStatuses(rawStatuses);
     SUBCATEGORY_ROUTES = normalizeSubcategoryRoutes(sqlBootstrap.statusConfig.subcategoryRoutes, loadedStatuses);
     STATUSES = syncStatusesFromSubcategoryRoutes(loadedStatuses, SUBCATEGORY_ROUTES);
+    RESPONSE_TREE = normalizeResponseTree(sqlBootstrap.statusConfig.responseTree || sqlBootstrap.statusConfig.escalationTree || rawStatuses.__responseTree || {}, STATUSES, SUBCATEGORY_ROUTES);
     rebuildDerivedStatus();
     refreshStatusDependentUI();
     return;
@@ -3843,6 +4018,7 @@ async function loadConfig() {
     const loadedStatuses = normalizeLoadedStatuses(sqlStatuses);
     SUBCATEGORY_ROUTES = normalizeSubcategoryRoutes(payload?.statusConfig?.subcategoryRoutes, loadedStatuses);
     STATUSES = syncStatusesFromSubcategoryRoutes(loadedStatuses, SUBCATEGORY_ROUTES);
+    RESPONSE_TREE = normalizeResponseTree(payload?.statusConfig?.responseTree || payload?.statusConfig?.escalationTree || sqlStatuses.__responseTree || {}, STATUSES, SUBCATEGORY_ROUTES);
     rebuildDerivedStatus();
     refreshStatusDependentUI();
     return;
@@ -3856,7 +4032,7 @@ async function loadConfig() {
       const existingStatuses = data.statuses && typeof data.statuses === 'object' && !Array.isArray(data.statuses)
         ? data.statuses
         : {};
-      const migratedStatuses = { ...existingStatuses };
+      const migratedStatuses = { ...stripResponseTreeFromStatuses(existingStatuses) };
       let addedDefaults = false;
 
       // Preserve plant-specific custom statuses and only backfill missing built-ins.
@@ -3869,6 +4045,7 @@ async function loadConfig() {
 
       SUBCATEGORY_ROUTES = normalizeSubcategoryRoutes(data.subcategoryRoutes, migratedStatuses);
       STATUSES = syncStatusesFromSubcategoryRoutes(migratedStatuses, SUBCATEGORY_ROUTES);
+      RESPONSE_TREE = normalizeResponseTree(data.responseTree || data.escalationTree || existingStatuses.__responseTree || {}, STATUSES, SUBCATEGORY_ROUTES);
 
       // Since we just changed the available statuses,
       // we must rebuild the logic that buttons depend on
@@ -3908,6 +4085,7 @@ async function loadConfig() {
       const loadedStatuses = normalizeLoadedStatuses(data2.statuses);
       SUBCATEGORY_ROUTES = normalizeSubcategoryRoutes(data2.subcategoryRoutes, loadedStatuses);
       STATUSES = syncStatusesFromSubcategoryRoutes(loadedStatuses, SUBCATEGORY_ROUTES);
+      RESPONSE_TREE = normalizeResponseTree(data2.responseTree || data2.escalationTree || data2.statuses.__responseTree || {}, STATUSES, SUBCATEGORY_ROUTES);
       rebuildDerivedStatus();
       refreshStatusDependentUI();
     }, err => {
@@ -3935,15 +4113,18 @@ function buildStatusFilterPills() {
 
 async function saveConfig() {
   STATUSES = syncStatusesFromSubcategoryRoutes(STATUSES, SUBCATEGORY_ROUTES);
+  RESPONSE_TREE = normalizeResponseTree(RESPONSE_TREE, STATUSES, SUBCATEGORY_ROUTES);
+  const persistedStatuses = attachResponseTreeToStatuses(STATUSES, RESPONSE_TREE);
   if (shouldUseSqlStagingReads(currentPlantId)) {
     await dataApi.updateStatusConfig(currentPlantId, {
-      statuses: STATUSES,
-      subcategoryRoutes: SUBCATEGORY_ROUTES
+      statuses: persistedStatuses,
+      subcategoryRoutes: SUBCATEGORY_ROUTES,
+      responseTree: RESPONSE_TREE
     });
     invalidateSqlPlantBootstrap(currentPlantId);
     return;
   }
-  await setDoc(plantDoc('config', 'statuses'), { statuses: STATUSES, subcategoryRoutes: SUBCATEGORY_ROUTES });
+  await setDoc(plantDoc('config', 'statuses'), { statuses: persistedStatuses, subcategoryRoutes: SUBCATEGORY_ROUTES, responseTree: RESPONSE_TREE });
 }
 
 function rebuildDerivedStatus() {
@@ -5647,6 +5828,7 @@ function hydrateOfflineDemoSandbox() {
   ALL_MACHINES = Object.values(PRESSES).flat();
   STATUSES = deepCopy(DEFAULT_STATUSES);
   SUBCATEGORY_ROUTES = {};
+  RESPONSE_TREE = { version: 1, edges: [] };
   rebuildDerivedStatus();
   currentUserRole = 'editor';
   currentUserPermissions = { ...DEMO_PERMISSIONS };
@@ -5864,6 +6046,7 @@ async function bootstrapDemoSession(user) {
     }
     STATUSES = deepCopy(DEFAULT_STATUSES);
     SUBCATEGORY_ROUTES = {};
+    RESPONSE_TREE = { version: 1, edges: [] };
     rebuildDerivedStatus();
     refreshStatusDependentUI();
   }
@@ -8292,6 +8475,74 @@ function renderLogSubChips() {
   });
 }
 
+function getLogResponsePreviewMeta() {
+  if (isSearchMode || !logCatKey) {
+    return { visible: false, paths: [], alertKeys: [], alertLabels: [], previewColor: getStatusColor(logCatKey || 'open') };
+  }
+  const context = buildResponseTreeContext(logCatKey, logCatSub);
+  const paths = context?.paths || [];
+  const routeKey = getRouteKeyForSubcategory(logCatSub);
+  const route = routeKey ? SUBCATEGORY_ROUTES?.[routeKey] : null;
+  const alertKeys = Array.from(new Set([
+    ...(Array.isArray(route?.boundStatusKeys) ? route.boundStatusKeys : []),
+    ...paths.map(path => path.targetKey)
+  ].map(key => String(key || '').trim().toLowerCase()).filter(Boolean)));
+  const displayAlertKeys = paths.length
+    ? Array.from(new Set(paths.map(path => String(path.targetKey || '').trim().toLowerCase()).filter(Boolean)))
+    : alertKeys;
+  const visible = paths.length > 0 || alertKeys.length > 0;
+  return {
+    visible,
+    paths,
+    alertKeys,
+    alertLabels: displayAlertKeys.map(key => getStatusLabel(key, 'short')),
+    previewColor: paths[0]?.targetKey ? getStatusColor(paths[0].targetKey) : getStatusColor(alertKeys[0] || logCatKey)
+  };
+}
+
+function renderLogResponsePreview() {
+  const preview = document.getElementById('log-response-preview');
+  if (!preview) return;
+  const meta = getLogResponsePreviewMeta();
+  preview.hidden = !meta.visible;
+  if (!meta.visible) {
+    preview.innerHTML = '';
+    return;
+  }
+  preview.style.setProperty('--preview-color', meta.previewColor);
+  const alertText = meta.alertLabels.length
+    ? `Alerts: ${meta.alertLabels.join(', ')}`
+    : 'Alerts: current category';
+  const pathHtml = meta.paths.length
+    ? `<div class="log-response-preview-paths">${meta.paths.map(path => {
+      const targetColor = getStatusColor(path.targetKey);
+      return `<div class="log-response-preview-path" style="--path-color:${targetColor};">
+        <div class="log-response-preview-title">${esc(path.pathLabel)}</div>
+        <div class="log-response-preview-trigger">${esc(path.trigger || 'Suggested response path')}</div>
+      </div>`;
+    }).join('')}</div>`
+    : '';
+  const reasonText = logCatSub
+    ? `Because this issue is marked ${getStatusLabel(logCatKey, 'short')} › ${logCatSub}.`
+    : `Because this issue is marked ${getStatusLabel(logCatKey, 'short')}.`;
+  preview.innerHTML = `
+    <div class="log-response-preview-head">
+      <span>Suggested response</span>
+      <span class="log-response-preview-alert">${esc(alertText)}</span>
+    </div>
+    ${pathHtml}
+    <div class="log-response-preview-foot">${esc(reasonText)}</div>
+  `;
+}
+
+function getLogSubmitButtonLabel() {
+  const baseLabel = logCatKey === 'attention' ? '◇ Log Attention' : '⚠ Log Issue';
+  const meta = getLogResponsePreviewMeta();
+  if (!meta.visible || !meta.alertLabels.length) return baseLabel;
+  if (meta.alertLabels.length === 1) return `${baseLabel} + Call ${meta.alertLabels[0]}`;
+  return `${baseLabel} + Call ${meta.alertLabels.length} Roles`;
+}
+
 // ── SEARCH MODE (reverse subcategory lookup) ──
 // Shared by the add-issue modal and the swipe status panel.
 // Each surface passes its own callbacks and container references.
@@ -8445,6 +8696,8 @@ function renderSubcategorySheet(statusKey = subcategorySheetState.statusKey) {
   const subtitle = document.getElementById('subcategory-sheet-subtitle');
   const applyBtn = document.getElementById('subcategory-sheet-apply');
   const skipBtn = document.getElementById('subcategory-sheet-skip');
+  const pathSection = document.getElementById('subcategory-response-path-section');
+  const pathList = document.getElementById('subcategory-response-path-list');
   if (!parentRow || !grid) return;
 
   const alphabetizedKeys = getAlphabetizedStatusKeys();
@@ -8513,6 +8766,18 @@ function renderSubcategorySheet(statusKey = subcategorySheetState.statusKey) {
   }
 
   if (applyBtn) applyBtn.disabled = !subcategorySheetState.selectedSub;
+  if (pathSection && pathList) {
+    const context = buildResponseTreeContext(activeKey, subcategorySheetState.selectedSub);
+    const paths = context?.paths || [];
+    pathSection.hidden = !paths.length;
+    pathList.innerHTML = paths.map(path => {
+      const targetColor = getStatusColor(path.targetKey);
+      return `<div class="response-path-card" style="--path-color:${targetColor};">
+        <div class="response-path-title">${esc(path.pathLabel)}</div>
+        <div class="response-path-trigger">${esc(path.trigger || 'Suggested response path')}</div>
+      </div>`;
+    }).join('');
+  }
   if (skipBtn) {
     skipBtn.textContent = subs.length ? 'Use no subcategory' : 'Continue';
     skipBtn.onclick = () => confirmSubcategorySheet(true);
@@ -8559,11 +8824,13 @@ function updateLogCatPill() {
     pill.textContent = '🔍 Searching…';
     pill.style.color = 'var(--color-text-muted, var(--text2))'; pill.style.borderColor = 'var(--color-border, var(--border))'; pill.style.background = 'transparent';
     updateAddModalIssueLanguage();
+    renderLogResponsePreview();
     return;
   }
   if (!logCatKey) {
     sel.classList.remove('visible');
     updateAddModalIssueLanguage();
+    renderLogResponsePreview();
     return;
   }
   const st = getStatusDef(logCatKey);
@@ -8572,6 +8839,7 @@ function updateLogCatPill() {
   pill.textContent = st.icon + ' ' + getStatusLabel(logCatKey, 'short') + (logCatSub ? ' › ' + logCatSub : '');
   pill.style.color = col; pill.style.borderColor = alphaColor(col, 0.53); pill.style.background = alphaColor(col, 0.08);
   updateAddModalIssueLanguage();
+  renderLogResponsePreview();
   renderQualityDefectSummary();
 }
 
@@ -8588,7 +8856,7 @@ function updateAddModalIssueLanguage() {
       : 'Example: Hydraulic leak at press startup';
   }
   const submit = document.getElementById('submit-btn');
-  if (submit && !submit.disabled) submit.innerHTML = isAttention ? '◇ Log Attention' : '⚠ Log Issue';
+  if (submit && !submit.disabled) submit.innerHTML = getLogSubmitButtonLabel();
 }
 
 function renderQualityDefectSummary() {
@@ -8828,6 +9096,7 @@ window.closeModal = () => {
   logCatKey = null;
   logCatSub = null;
   selectedQualityDefect = null;
+  renderLogResponsePreview();
 };
 
 window.resetIssueDateTime = function () {
@@ -9081,7 +9350,7 @@ function setSubmitting(on) {
   document.getElementById('cancel-btn').disabled = on;
   document.getElementById('submit-btn').innerHTML = on
     ? '<span class="spinner"></span> Saving…'
-    : (logCatKey === 'attention' ? '◇ Log Attention' : '⚠ Log Issue');
+    : getLogSubmitButtonLabel();
 }
 
 // ── SUBMIT NEW ──
@@ -9710,7 +9979,7 @@ window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
       awardGamification('status_changed_valid', { issueId: id, dedupeSuffix: entry.dateTime || String(Date.now()), tags: ['status:changed', `status:${status}`] }).catch(e => console.warn('gamification award failed', e));
       if (status === 'resolved') awardGamification('issue_resolved', { issueId: id, dedupeSuffix: 'status-resolved', tags: ['issue:resolved', 'status:resolved'] }).catch(e => console.warn('gamification resolve award failed', e));
       if (status && status !== 'open') completeDemoGuideStep('route');
-      return;
+      return workflowId;
     }
     const writeStatusChange = (batch, issuePatch) => {
       batch.update(plantDoc('issues', id), issuePatch);
@@ -9778,7 +10047,9 @@ window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
     awardGamification('status_changed_valid', { issueId: id, dedupeSuffix: entry.dateTime || String(Date.now()), tags: ['status:changed', `status:${status}`] }).catch(e => console.warn('gamification award failed', e));
     if (status === 'resolved') awardGamification('issue_resolved', { issueId: id, dedupeSuffix: 'status-resolved', tags: ['issue:resolved', 'status:resolved'] }).catch(e => console.warn('gamification resolve award failed', e));
     if (status && status !== 'open') completeDemoGuideStep('route');
+    return workflowId;
   } catch (e) { setSyncStatus('err', 'Error: ' + e.message); }
+  return '';
 };
 
 // Update an existing history entry
@@ -11478,10 +11749,27 @@ function renderIssues() {
     // Secondary status keys (needed by workflow rows below)
     const secKeys = getSecondaryStatuses(issue).filter(k => k !== 'resolved');
 
+    const getWorkflowResponseUi = (statusKey, subStatus, fallbackColor) => {
+      const context = buildResponseTreeContext(statusKey, subStatus);
+      const responsePath = context?.paths?.[0] || null;
+      const escalationTargetColor = responsePath?.targetKey ? getStatusColor(responsePath.targetKey) : fallbackColor;
+      const escalationButtonHtml = canEdit && context?.paths?.length
+        ? `<button class="wf-escalate-btn" type="button" style="--escalate-color:${escalationTargetColor};" onclick="event.stopPropagation(); openResponseEscalationModal('${issue.id}','${encodeURIComponent(statusKey || '')}','${encodeURIComponent(subStatus || '')}')" title="Escalate to suggested response path">↗</button>`
+        : '';
+      const responsePathHtml = responsePath
+        ? `<div class="issue-response-path-row">
+            <div class="issue-response-path" style="--path-color:${getStatusColor(responsePath.targetKey)}" title="${esc(responsePath.trigger || '')}"><span>${esc(responsePath.pathLabel)}</span></div>
+            ${escalationButtonHtml}
+          </div>`
+        : '';
+      return { responsePathHtml };
+    };
+
     // Build compact 4-step header buttons with state label below
     const wfAge = workflowState
       ? _relativeTimeCompact(getWorkflowStateTimestamp(issue, currentEntry, workflowState, true))
       : '';
+    const currentResponseUi = getWorkflowResponseUi(currentKey, currentSubKey, sc.color);
     const wfHeaderHtml = `<div class="wf-steps-wrap" onclick="event.stopPropagation()">
       <div class="wf-steps-row">
         ${hasNoWorkflowState ? `<div class="wf-prompt-arrow" id="wf-arrow-${issue.id}"></div>` : ''}
@@ -11522,12 +11810,14 @@ function renderIssues() {
       }).join('');
       const sStateLabel = sState ? workflowConfig[sState].label : 'Not Started';
       const sStateClass = sState ? workflowConfig[sState].cssState : '';
+      const sResponseUi = getWorkflowResponseUi(sKey, sSubLabel, sColor);
       return `<div class="wf-status-row is-peer${sState === 'finished' ? ' finished-checkered' : ''}" style="color:${sColor};">
             <div class="wf-status-row-info">
               <div class="issue-status" style="color:${sColor};border-color:${sColor};background:${alphaColor(sColor, 0.12)}">
                 <span class="issue-status-main">${sCfg.icon} ${esc(sCfg.label)}</span>
               </div>
               ${sSubLabel ? `<span class="issue-status-sub" style="color:${sColor};">${esc(sSubLabel)}</span>` : ''}
+              ${sResponseUi.responsePathHtml}
             </div>
             <div class="wf-steps-wrap" onclick="event.stopPropagation()">
               <div class="wf-steps">${btnHtml}</div>
@@ -11585,6 +11875,7 @@ function renderIssues() {
           <span class="issue-status-main">${sc.icon} ${baseLabel}</span>
         </div>
         ${subLabelWithSerial ? `<span class="issue-status-sub" style="color:${sc.color};">${esc(subLabelWithSerial)}</span>` : ''}
+        ${currentResponseUi.responsePathHtml}
         ${serialBadgeHtml}
         ${secDotsHtml}
       </div>
@@ -15382,7 +15673,7 @@ document.addEventListener('pointermove', _mobileModalSwipeMove, true);
 document.addEventListener('pointerup', _mobileModalSwipeEnd, true);
 document.addEventListener('pointercancel', _mobileModalSwipeEnd, true);
 
-document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeModal(); closeEditModal(); closeResolveModal(); closeReopenModal(); closeLightbox(); closeSortDropdown(); closeExportModal(); closeSerialModal(); closeEditStatusModal(); closeNotesModal(); closeSmsComposer(true); window.closeMessagingModal?.(); window.closeConversation?.(); closeAppearanceModal(); closeThemeEditor(); closeRolePreferencesModal(); closeRoleAlertInboxModal(); closeShortcutsOverlay(); } });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeModal(); closeEditModal(); closeResolveModal(); closeReopenModal(); closeLightbox(); closeSortDropdown(); closeExportModal(); closeSerialModal(); closeEditStatusModal(); closeNotesModal(); closeResponseEscalationModal(); closeSmsComposer(true); window.closeMessagingModal?.(); window.closeConversation?.(); closeAppearanceModal(); closeThemeEditor(); closeRolePreferencesModal(); closeRoleAlertInboxModal(); closeShortcutsOverlay(); } });
 
 document.getElementById('theme-editor-modal')?.addEventListener('click', e => {
   const modal = document.getElementById('theme-editor-modal');
@@ -15393,6 +15684,7 @@ document.getElementById('theme-editor-modal')?.addEventListener('click', e => {
 });
 document.getElementById('appearance-modal')?.addEventListener('click', e => { if (e.target === document.getElementById('appearance-modal')) closeAppearanceModal(); });
 document.getElementById('role-prefs-modal')?.addEventListener('click', e => { if (e.target === document.getElementById('role-prefs-modal')) closeRolePreferencesModal(); });
+document.getElementById('response-escalation-modal')?.addEventListener('click', e => { if (e.target === document.getElementById('response-escalation-modal')) closeResponseEscalationModal(); });
 
 // ── SERIAL NUMBER PROMPT ──
 // Define which status+sub combos require a serial number

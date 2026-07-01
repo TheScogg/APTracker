@@ -758,6 +758,358 @@
       margin-left: 4px;
     }
 
+    .response-tree-toolbar {
+      display: grid;
+      grid-template-columns: minmax(120px, .9fr) minmax(135px, 1fr) minmax(135px, 1fr) minmax(180px, 1.2fr) minmax(180px, 1.2fr) minmax(200px, 1.4fr) auto;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .response-tree-toolbar select[multiple] {
+      min-height: 72px;
+    }
+
+    .response-tree-map {
+      display: grid;
+      gap: 10px;
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent),
+        var(--bg3);
+      margin-bottom: 12px;
+      overflow-x: auto;
+    }
+
+    .response-tree-source {
+      display: grid;
+      grid-template-columns: minmax(160px, 220px) minmax(280px, 1fr);
+      gap: 12px;
+      align-items: center;
+      min-width: 620px;
+    }
+
+    .response-tree-node {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-height: 38px;
+      border-radius: 8px;
+      border: 1px solid color-mix(in srgb, var(--node-color, var(--accent)) 42%, transparent);
+      background: color-mix(in srgb, var(--node-color, var(--accent)) 12%, transparent);
+      color: var(--text);
+      padding: 7px 10px;
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .response-tree-node.source {
+      box-shadow: inset 3px 0 0 var(--node-color, var(--accent));
+    }
+
+    .response-tree-branches {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .response-tree-branch {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 34px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid color-mix(in srgb, var(--branch-color, var(--accent)) 34%, transparent);
+      background: rgba(255, 255, 255, 0.025);
+      color: var(--text2);
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .response-tree-branch::before {
+      content: "→";
+      color: var(--branch-color, var(--accent));
+      font-family: 'Share Tech Mono', monospace;
+    }
+
+    .response-tree-edge-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .response-tree-edge {
+      display: grid;
+      grid-template-columns: minmax(190px, 1fr) minmax(220px, 1.4fr) auto;
+      gap: 10px;
+      align-items: center;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--bg2);
+      padding: 10px;
+    }
+
+    .response-tree-edge-path {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .response-tree-arrow {
+      color: var(--accent);
+      font-family: 'Share Tech Mono', monospace;
+    }
+
+    .response-tree-trigger {
+      display: grid;
+      gap: 5px;
+      min-width: 0;
+    }
+
+    .response-tree-trigger input {
+      width: 100%;
+    }
+
+    .response-tree-routes {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+
+    .response-tree-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 6px;
+    }
+
+    .response-tree-graph-shell {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background:
+        radial-gradient(circle at 16px 16px, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent),
+        var(--bg3);
+      background-size: 24px 24px, auto, auto;
+      margin-bottom: 12px;
+      overflow-x: auto;
+      position: relative;
+    }
+
+    .response-tree-graph {
+      position: relative;
+      min-height: 420px;
+      min-width: 860px;
+    }
+
+    .response-tree-graph-svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: auto;
+      z-index: 1;
+    }
+
+    .response-tree-graph-edge {
+      pointer-events: stroke;
+      cursor: pointer;
+      fill: none;
+      stroke: color-mix(in srgb, var(--edge-color, var(--accent)) 70%, transparent);
+      stroke-width: 3;
+      filter: drop-shadow(0 0 5px color-mix(in srgb, var(--edge-color, var(--accent)) 22%, transparent));
+    }
+
+    .response-tree-graph-edge.selected {
+      stroke-width: 4;
+      stroke: var(--edge-color, var(--accent));
+      filter: drop-shadow(0 0 9px color-mix(in srgb, var(--edge-color, var(--accent)) 46%, transparent));
+    }
+
+    .response-tree-graph-edge.is-translate {
+      stroke-dasharray: 10 7;
+    }
+
+    .response-tree-graph-draft-edge {
+      pointer-events: none;
+      fill: none;
+      stroke: color-mix(in srgb, var(--edge-color, var(--accent)) 78%, transparent);
+      stroke-width: 3;
+      stroke-dasharray: 7 6;
+      filter: drop-shadow(0 0 7px color-mix(in srgb, var(--edge-color, var(--accent)) 32%, transparent));
+    }
+
+    .response-tree-graph-label {
+      position: absolute;
+      z-index: 3;
+      max-width: 180px;
+      transform: translate(-50%, -50%);
+      border: 1px solid color-mix(in srgb, var(--edge-color, var(--accent)) 38%, transparent);
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--edge-color, var(--accent)) 12%, var(--bg2));
+      color: var(--text);
+      font-size: 10px;
+      font-weight: 800;
+      padding: 4px 8px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      pointer-events: auto;
+      cursor: pointer;
+    }
+
+    .response-tree-graph-node {
+      position: absolute;
+      z-index: 4;
+      width: 190px;
+      min-height: 66px;
+      display: grid;
+      gap: 4px;
+      align-content: center;
+      border: 1px solid color-mix(in srgb, var(--node-color, var(--accent)) 38%, var(--border));
+      border-radius: 10px;
+      background: color-mix(in srgb, var(--node-color, var(--accent)) 10%, var(--bg2));
+      color: var(--text);
+      cursor: grab;
+      padding: 10px 12px;
+      text-align: left;
+      user-select: none;
+      touch-action: none;
+      box-shadow: inset 4px 0 0 var(--node-color, var(--accent)), 0 8px 18px rgba(0, 0, 0, 0.22);
+    }
+
+    .response-tree-graph-node:hover {
+      border-color: var(--node-color, var(--accent));
+      transform: translateY(-1px);
+    }
+
+    .response-tree-graph-node.is-dragging {
+      cursor: grabbing;
+      opacity: 0.92;
+      transform: scale(1.02);
+      z-index: 6;
+    }
+
+    .response-tree-graph-node.is-source {
+      outline: 2px solid color-mix(in srgb, var(--node-color, var(--accent)) 38%, transparent);
+      outline-offset: 2px;
+    }
+
+    .response-tree-graph-node.is-target {
+      box-shadow: inset 4px 0 0 var(--node-color, var(--accent)), 0 0 0 2px rgba(255,255,255,0.06), 0 8px 18px rgba(0, 0, 0, 0.22);
+    }
+
+    .response-tree-graph-node-title {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 13px;
+      font-weight: 900;
+      line-height: 1.1;
+    }
+
+    .response-tree-graph-node-meta {
+      color: var(--text2);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .response-tree-port {
+      position: absolute;
+      top: 50%;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      border: 2px solid color-mix(in srgb, var(--node-color, var(--accent)) 70%, #fff 30%);
+      background: var(--bg2);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--node-color, var(--accent)) 16%, transparent);
+      transform: translateY(-50%);
+      cursor: crosshair;
+      z-index: 7;
+    }
+
+    .response-tree-port.input {
+      left: -9px;
+    }
+
+    .response-tree-port.output {
+      right: -9px;
+    }
+
+    .response-tree-port:hover,
+    .response-tree-port.is-hot {
+      background: var(--node-color, var(--accent));
+      box-shadow: 0 0 0 5px color-mix(in srgb, var(--node-color, var(--accent)) 24%, transparent);
+    }
+
+    .response-tree-graph-empty {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      color: var(--text2);
+      font-size: 13px;
+      font-weight: 800;
+      z-index: 2;
+      pointer-events: none;
+    }
+
+    .response-tree-selected-panel {
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) minmax(220px, 1.2fr) auto;
+      gap: 8px;
+      align-items: center;
+      border: 1px solid color-mix(in srgb, var(--selected-color, var(--accent)) 38%, var(--border));
+      border-radius: 10px;
+      background: color-mix(in srgb, var(--selected-color, var(--accent)) 8%, var(--bg2));
+      padding: 10px;
+      margin-bottom: 12px;
+    }
+
+    .response-tree-selected-title {
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .response-tree-selected-sub {
+      color: var(--text2);
+      font-size: 11px;
+      font-weight: 700;
+      margin-top: 2px;
+    }
+
+    .response-tree-mode-badge {
+      display: inline-flex;
+      align-items: center;
+      width: fit-content;
+      margin-top: 6px;
+      border-radius: 999px;
+      border: 1px solid color-mix(in srgb, var(--selected-color, var(--accent)) 38%, transparent);
+      color: var(--selected-color, var(--accent));
+      font-size: 10px;
+      font-weight: 900;
+      padding: 2px 7px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .response-tree-graph-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin: 0 0 8px;
+    }
+
     .json-actions {
       display: flex;
       flex-wrap: wrap;
@@ -790,6 +1142,15 @@
       }
 
       .route-toolbar-actions {
+        justify-content: flex-start;
+      }
+
+      .response-tree-toolbar,
+      .response-tree-edge {
+        grid-template-columns: 1fr;
+      }
+
+      .response-tree-actions {
         justify-content: flex-start;
       }
     }
@@ -2422,10 +2783,14 @@
       deepCopy,
       normalizeStatusRecord,
       normalizeStatusesForSave as normalizeSharedStatusesForSave,
+      normalizeResponseTree,
       normalizeSubcategoryRoutes as normalizeSharedSubcategoryRoutes,
       normalizeSubsInput,
+      responseTreeEdgeId,
       routeKeyFromLabel,
       statusKeyFromLabel,
+      attachResponseTreeToStatuses,
+      stripResponseTreeFromStatuses,
       syncStatusesFromSubcategoryRoutes as syncSharedStatusesFromSubcategoryRoutes
     } from "./js/shared-config.js";
     import {
@@ -2655,6 +3020,7 @@
     let userDirectory = [];
     let statusDraftByPlant = new Map();
     let subcategoryRouteDraftByPlant = new Map();
+    let responseTreeDraftByPlant = new Map();
     let gameDraftByPlant = new Map();
     let badgeDraftByPlant = new Map();
     let missionDraftByPlant = new Map();
@@ -2670,6 +3036,10 @@
     const routeFilterByPlant = {};
     const routeViewByPlant = {};
     const routeBulkStatusByPlant = {};
+    const responseTreeSelectionByPlant = {};
+    const responseTreeGraphStateByPlant = {};
+    let responseTreeDragState = null;
+    let responseTreePortDragState = null;
     const gamePanelOpen = {};
     const plantPanelOpen = {};
     const plantTab = {};
@@ -2691,19 +3061,22 @@
       el.textContent = message || '';
     }
 
-    function buildStatusDraftSnapshot(statuses, subcategoryRoutes) {
-      const normalizedStatuses = normalizeStatusesForSave(statuses || {});
+    function buildStatusDraftSnapshot(statuses, subcategoryRoutes, responseTree) {
+      const normalizedStatuses = normalizeStatusesForSave(stripResponseTreeFromStatuses(statuses || {}));
       const normalizedRoutes = normalizeSubcategoryRoutes(subcategoryRoutes || {}, normalizedStatuses);
+      const normalizedTree = normalizeResponseTree(responseTree || {}, normalizedStatuses, normalizedRoutes);
       return JSON.stringify({
         statuses: normalizeStatusesForSave(syncStatusesFromSubcategoryRoutes(normalizedStatuses, normalizedRoutes)),
-        subcategoryRoutes: normalizedRoutes
+        subcategoryRoutes: normalizedRoutes,
+        responseTree: normalizedTree
       });
     }
 
     function isStatusDraftDirty(plantId) {
       const draftSnapshot = buildStatusDraftSnapshot(
         statusDraftByPlant.get(plantId) || {},
-        subcategoryRouteDraftByPlant.get(plantId) || {}
+        subcategoryRouteDraftByPlant.get(plantId) || {},
+        responseTreeDraftByPlant.get(plantId) || {}
       );
       return draftSnapshot !== savedStatusSnapshotByPlant.get(plantId);
     }
@@ -3114,6 +3487,7 @@
       accessRequestsByPlant.clear();
       statusDraftByPlant.clear();
       subcategoryRouteDraftByPlant.clear();
+      responseTreeDraftByPlant.clear();
       gameDraftByPlant.clear();
       missionDraftByPlant.clear();
       pressDraftByPlant.clear();
@@ -3141,12 +3515,18 @@
           const rawStatuses = bootstrapPayload?.statusConfig?.statuses && typeof bootstrapPayload.statusConfig.statuses === 'object'
             ? bootstrapPayload.statusConfig.statuses
             : deepCopy(DEFAULT_STATUSES);
-          const normalizedStatuses = normalizeStatusesForSave(rawStatuses);
+          const normalizedStatuses = normalizeStatusesForSave(stripResponseTreeFromStatuses(rawStatuses));
           const normalizedRoutes = normalizeSubcategoryRoutes(bootstrapPayload?.statusConfig?.subcategoryRoutes || null, normalizedStatuses);
           const syncedStatuses = syncStatusesFromSubcategoryRoutes(normalizedStatuses, normalizedRoutes);
+          const normalizedTree = normalizeResponseTree(
+            bootstrapPayload?.statusConfig?.responseTree || bootstrapPayload?.statusConfig?.escalationTree || rawStatuses.__responseTree || {},
+            syncedStatuses,
+            normalizedRoutes
+          );
           statusDraftByPlant.set(plantId, syncedStatuses);
           subcategoryRouteDraftByPlant.set(plantId, normalizedRoutes);
-          savedStatusSnapshotByPlant.set(plantId, buildStatusDraftSnapshot(syncedStatuses, normalizedRoutes));
+          responseTreeDraftByPlant.set(plantId, normalizedTree);
+          savedStatusSnapshotByPlant.set(plantId, buildStatusDraftSnapshot(syncedStatuses, normalizedRoutes, normalizedTree));
 
           const gameConfig = bootstrapPayload?.gamificationConfig?.config && typeof bootstrapPayload.gamificationConfig.config === 'object'
             ? bootstrapPayload.gamificationConfig.config
@@ -3192,12 +3572,19 @@
         const rawStatuses = statusesSnap.exists() && statusesSnap.data()?.statuses
           ? statusesSnap.data().statuses
           : deepCopy(DEFAULT_STATUSES);
-        const normalizedStatuses = normalizeStatusesForSave(rawStatuses);
+        const statusConfigData = statusesSnap.exists() ? statusesSnap.data() || {} : {};
+        const normalizedStatuses = normalizeStatusesForSave(stripResponseTreeFromStatuses(rawStatuses));
         const normalizedRoutes = normalizeSubcategoryRoutes(statusesSnap.exists() ? statusesSnap.data()?.subcategoryRoutes : null, normalizedStatuses);
         const syncedStatuses = syncStatusesFromSubcategoryRoutes(normalizedStatuses, normalizedRoutes);
+        const normalizedTree = normalizeResponseTree(
+          statusConfigData.responseTree || statusConfigData.escalationTree || rawStatuses.__responseTree || {},
+          syncedStatuses,
+          normalizedRoutes
+        );
         statusDraftByPlant.set(plantId, syncedStatuses);
         subcategoryRouteDraftByPlant.set(plantId, normalizedRoutes);
-        savedStatusSnapshotByPlant.set(plantId, buildStatusDraftSnapshot(syncedStatuses, normalizedRoutes));
+        responseTreeDraftByPlant.set(plantId, normalizedTree);
+        savedStatusSnapshotByPlant.set(plantId, buildStatusDraftSnapshot(syncedStatuses, normalizedRoutes, normalizedTree));
 
         const gameConfig = gameConfigSnap.exists() ? gameConfigSnap.data() : deepCopy(DEFAULT_GAME_CONFIG);
         gameDraftByPlant.set(plantId, {
@@ -3405,9 +3792,275 @@
     <div class="status-mode-tabs">
       <button class="status-mode-btn ${activeMode === 'categories' ? 'active' : ''}" onclick="window.switchStatusEditorTab('${plantId}','categories')">Categories</button>
       <button class="status-mode-btn ${activeMode === 'routing' ? 'active' : ''}" onclick="window.switchStatusEditorTab('${plantId}','routing')">Subcategory Routing</button>
+      <button class="status-mode-btn ${activeMode === 'tree' ? 'active' : ''}" onclick="window.switchStatusEditorTab('${plantId}','tree')">Response Tree</button>
     </div>
-    ${activeMode === 'routing' ? renderSubcategoryRoutingEditor(plantId, statuses) : categoryEditor}
+    ${activeMode === 'routing' ? renderSubcategoryRoutingEditor(plantId, statuses) : activeMode === 'tree' ? renderResponseTreeEditor(plantId, statuses) : categoryEditor}
   `;
+    }
+
+    function renderResponseTreeEditor(plantId, statuses) {
+      const assignableKeys = assignableStatusKeys(statuses);
+      const routes = normalizeSubcategoryRoutes(subcategoryRouteDraftByPlant.get(plantId) || {}, statuses);
+      const tree = normalizeResponseTree(responseTreeDraftByPlant.get(plantId) || {}, statuses, routes);
+      responseTreeDraftByPlant.set(plantId, tree);
+      const draftDirty = isStatusDraftDirty(plantId);
+      const edges = tree.edges.filter(edge => edge.isActive !== false);
+      const activeRouteEntries = Object.entries(routes)
+        .filter(([, route]) => route.isActive !== false)
+        .sort((a, b) => (a[1].order ?? 999) - (b[1].order ?? 999) || a[1].label.localeCompare(b[1].label));
+      const graphState = responseTreeGraphStateByPlant[plantId] || {};
+      const savedSelection = responseTreeSelectionByPlant[plantId] || {};
+      const defaultSource = assignableKeys.includes(savedSelection.sourceKey)
+        ? savedSelection.sourceKey
+        : (assignableKeys.includes('controlman') ? 'controlman' : (assignableKeys[0] || ''));
+      const defaultTarget = assignableKeys.includes(savedSelection.targetKey) && savedSelection.targetKey !== defaultSource
+        ? savedSelection.targetKey
+        : (assignableKeys.find(key => key !== defaultSource) || '');
+      responseTreeSelectionByPlant[plantId] = { sourceKey: defaultSource, targetKey: defaultTarget };
+      const routeIsSharedBy = (route, sourceKey, targetKey) => {
+        const bound = Array.isArray(route?.boundStatusKeys) ? route.boundStatusKeys.map(key => String(key || '').trim().toLowerCase()) : [];
+        return !!sourceKey && !!targetKey && bound.includes(sourceKey) && bound.includes(targetKey);
+      };
+      const routeIsOwnedBy = (route, statusKey) => {
+        const key = String(statusKey || '').trim().toLowerCase();
+        const bound = Array.isArray(route?.boundStatusKeys) ? route.boundStatusKeys.map(item => String(item || '').trim().toLowerCase()) : [];
+        return !!key && bound.includes(key);
+      };
+      const sharedRouteEntries = activeRouteEntries.filter(([, route]) => routeIsSharedBy(route, defaultSource, defaultTarget));
+      const sourceRouteEntries = activeRouteEntries.filter(([, route]) => routeIsOwnedBy(route, defaultSource));
+      const targetRouteEntries = activeRouteEntries.filter(([, route]) => routeIsOwnedBy(route, defaultTarget));
+      const edgeMode = graphState.edgeMode === 'translate' ? 'translate' : 'pass-through';
+
+      const grouped = edges.reduce((acc, edge) => {
+        if (!acc[edge.sourceKey]) acc[edge.sourceKey] = [];
+        acc[edge.sourceKey].push(edge);
+        return acc;
+      }, {});
+      const selectedEdge = edges.find(edge => edge.id === graphState.selectedEdgeId) || null;
+      const graphSafeId = String(plantId || 'plant').replace(/[^a-zA-Z0-9_-]+/g, '_');
+      const outgoingCount = edges.reduce((acc, edge) => {
+        acc[edge.sourceKey] = (acc[edge.sourceKey] || 0) + 1;
+        return acc;
+      }, {});
+      const incomingCount = edges.reduce((acc, edge) => {
+        acc[edge.targetKey] = (acc[edge.targetKey] || 0) + 1;
+        return acc;
+      }, {});
+      const graphColumns = [[], [], []];
+      assignableKeys.forEach(key => {
+        const hasOut = !!outgoingCount[key];
+        const hasIn = !!incomingCount[key];
+        const col = hasOut && !hasIn ? 0 : hasOut && hasIn ? 1 : hasIn ? 2 : 1;
+        graphColumns[col].push(key);
+      });
+      graphColumns.forEach(col => col.sort((a, b) => (statuses[a]?.order ?? 999) - (statuses[b]?.order ?? 999)));
+      const graphNodeWidth = 190;
+      const graphNodeHeight = 66;
+      const graphX = [28, 326, 624];
+      const graphYStart = 34;
+      const graphYGap = 100;
+      const graphPositions = {};
+      graphColumns.forEach((col, colIdx) => {
+        col.forEach((key, rowIdx) => {
+          graphPositions[key] = {
+            x: graphX[colIdx],
+            y: graphYStart + rowIdx * graphYGap
+          };
+        });
+      });
+      Object.entries(graphState.nodePositions || {}).forEach(([key, pos]) => {
+        if (!graphPositions[key]) return;
+        const x = Number(pos?.x);
+        const y = Number(pos?.y);
+        if (Number.isFinite(x) && Number.isFinite(y)) {
+          graphPositions[key] = {
+            x: Math.max(12, x),
+            y: Math.max(12, y)
+          };
+        }
+      });
+      const positionValues = Object.values(graphPositions);
+      const graphHeight = Math.max(420, ...positionValues.map(pos => pos.y + graphNodeHeight + 42));
+      const graphWidth = Math.max(850, ...positionValues.map(pos => pos.x + graphNodeWidth + 42));
+      const getEdgeSourceRouteKey = edge => edge.sourceRouteKey || (Array.isArray(edge.routeKeys) ? edge.routeKeys[0] : '') || '';
+      const getEdgeTargetRouteKey = edge => edge.targetRouteKey || getEdgeSourceRouteKey(edge);
+      const getEdgeMode = edge => getEdgeSourceRouteKey(edge) && getEdgeTargetRouteKey(edge) && getEdgeSourceRouteKey(edge) !== getEdgeTargetRouteKey(edge) ? 'translate' : 'pass-through';
+      const getEdgeRouteLabel = edge => {
+        const sourceRoute = routes[getEdgeSourceRouteKey(edge)];
+        const targetRoute = routes[getEdgeTargetRouteKey(edge)];
+        if (!sourceRoute && !targetRoute) return 'Choose subcategory mapping';
+        if (!targetRoute || sourceRoute?.label === targetRoute?.label) return sourceRoute?.label || targetRoute?.label || 'Pass-through';
+        return `${sourceRoute?.label || getEdgeSourceRouteKey(edge)} → ${targetRoute.label}`;
+      };
+      const pairCounts = {};
+      const connectorItems = edges.map(edge => {
+        const from = graphPositions[edge.sourceKey];
+        const to = graphPositions[edge.targetKey];
+        if (!from || !to) return null;
+        const pairKey = `${edge.sourceKey}->${edge.targetKey}`;
+        const pairIndex = pairCounts[pairKey] || 0;
+        pairCounts[pairKey] = pairIndex + 1;
+        const pairOffset = (pairIndex % 2 === 0 ? 1 : -1) * Math.ceil(pairIndex / 2) * 22;
+        const source = statuses[edge.sourceKey] || {};
+        const target = statuses[edge.targetKey] || {};
+        const edgeColor = target.cssColor || source.cssColor || '#8b949e';
+        const sx = from.x + graphNodeWidth;
+        const sy = from.y + graphNodeHeight / 2;
+        const tx = to.x;
+        const ty = to.y + graphNodeHeight / 2 + pairOffset;
+        const bend = Math.max(86, Math.abs(tx - sx) / 2);
+        const path = `M ${sx} ${sy} C ${sx + bend} ${sy}, ${tx - bend} ${ty}, ${tx} ${ty}`;
+        const routeLabel = getEdgeRouteLabel(edge);
+        const labelX = (sx + tx) / 2;
+        const labelY = (sy + ty) / 2 - 12;
+        return { edge, edgeColor, path, labelX, labelY, routeLabel };
+      }).filter(Boolean);
+      const connectorPathHtml = connectorItems.map(item => `
+          <path class="response-tree-graph-edge ${getEdgeMode(item.edge) === 'translate' ? 'is-translate' : ''} ${selectedEdge?.id === item.edge.id ? 'selected' : ''}" d="${item.path}" marker-end="url(#response-tree-arrow-${graphSafeId})" style="--edge-color:${item.edgeColor};" onclick="window.selectResponseTreeEdge('${plantId}','${esc(item.edge.id)}')"></path>
+      `).join('');
+      const connectorLabelHtml = connectorItems.map(item => `
+          <button class="response-tree-graph-label" type="button" style="left:${item.labelX}px;top:${item.labelY}px;--edge-color:${item.edgeColor};" onclick="window.selectResponseTreeEdge('${plantId}','${esc(item.edge.id)}')" title="${esc(item.edge.trigger)}">${esc(item.routeLabel)}</button>
+      `).join('');
+      const nodeHtml = assignableKeys.map(key => {
+        const status = statuses[key] || {};
+        const color = status.cssColor || '#8b949e';
+        const pos = graphPositions[key] || { x: graphX[1], y: graphYStart };
+        const cls = `${defaultSource === key ? ' is-source' : ''}${defaultTarget === key ? ' is-target' : ''}`;
+        const out = outgoingCount[key] || 0;
+        const inc = incomingCount[key] || 0;
+        return `
+          <div class="response-tree-graph-node${cls}" role="button" tabindex="0" data-plant-id="${esc(plantId)}" data-status-key="${esc(key)}" style="left:${pos.x}px;top:${pos.y}px;--node-color:${color};" onpointerdown="window.startResponseTreeNodeDrag(event,'${plantId}','${esc(key)}')" onclick="window.pickResponseTreeNode('${plantId}','${esc(key)}')">
+            <button class="response-tree-port input" type="button" data-tree-port="input" data-status-key="${esc(key)}" title="Input: draw a response into ${esc(status.shortLabel || status.label || key)}" onclick="event.stopPropagation()"></button>
+            <span class="response-tree-graph-node-title">${esc(status.icon || '●')} ${esc(status.shortLabel || status.label || key)}</span>
+            <span class="response-tree-graph-node-meta">${out} out · ${inc} in</span>
+            <button class="response-tree-port output" type="button" data-tree-port="output" data-status-key="${esc(key)}" title="Output: draw response from ${esc(status.shortLabel || status.label || key)}" onpointerdown="window.startResponseTreePortDrag(event,'${plantId}','${esc(key)}')" onclick="event.stopPropagation()"></button>
+          </div>`;
+      }).join('');
+      const selectedEdgeSharedRouteEntries = selectedEdge
+        ? activeRouteEntries.filter(([, route]) => routeIsSharedBy(route, selectedEdge.sourceKey, selectedEdge.targetKey))
+        : [];
+      const selectedEdgeSourceRouteEntries = selectedEdge
+        ? activeRouteEntries.filter(([, route]) => routeIsOwnedBy(route, selectedEdge.sourceKey))
+        : [];
+      const selectedEdgeTargetRouteEntries = selectedEdge
+        ? activeRouteEntries.filter(([, route]) => routeIsOwnedBy(route, selectedEdge.targetKey))
+        : [];
+      const selectedPanelHtml = selectedEdge ? (() => {
+        const source = statuses[selectedEdge.sourceKey] || {};
+        const target = statuses[selectedEdge.targetKey] || {};
+        const panelColor = target.cssColor || source.cssColor || '#8b949e';
+        const routeLabel = getEdgeRouteLabel(selectedEdge);
+        const selectedMode = getEdgeMode(selectedEdge);
+        return `
+          <div class="response-tree-selected-panel" style="--selected-color:${panelColor};">
+            <div>
+              <div class="response-tree-selected-title">${esc(source.shortLabel || source.label || selectedEdge.sourceKey)} → ${esc(target.shortLabel || target.label || selectedEdge.targetKey)}</div>
+              <div class="response-tree-selected-sub">${esc(routeLabel)}</div>
+              <div class="response-tree-mode-badge">${selectedMode === 'translate' ? 'Translation' : 'Pass-through'}</div>
+            </div>
+            <div class="response-tree-trigger">
+              <input value="${esc(selectedEdge.trigger)}" placeholder="Trigger text" onchange="window.patchResponseTreeEdge('${plantId}','${esc(selectedEdge.id)}','trigger',this.value)">
+              <select onchange="window.setResponseTreeEdgeMapping('${plantId}','${esc(selectedEdge.id)}','sourceRouteKey',this.value)">
+                ${selectedMode === 'translate'
+                  ? selectedEdgeSourceRouteEntries.map(([routeKey, route]) => `<option value="${esc(routeKey)}" ${getEdgeSourceRouteKey(selectedEdge) === routeKey ? 'selected' : ''}>From: ${esc(route.label)}</option>`).join('')
+                  : selectedEdgeSharedRouteEntries.map(([routeKey, route]) => `<option value="${esc(routeKey)}" ${getEdgeSourceRouteKey(selectedEdge) === routeKey ? 'selected' : ''}>${esc(route.label)}</option>`).join('')}
+              </select>
+              <select onchange="window.setResponseTreeEdgeMapping('${plantId}','${esc(selectedEdge.id)}','targetRouteKey',this.value)">
+                ${selectedMode === 'translate'
+                  ? selectedEdgeTargetRouteEntries.map(([routeKey, route]) => `<option value="${esc(routeKey)}" ${getEdgeTargetRouteKey(selectedEdge) === routeKey ? 'selected' : ''}>To: ${esc(route.label)}</option>`).join('')
+                  : selectedEdgeSharedRouteEntries.map(([routeKey, route]) => `<option value="${esc(routeKey)}" ${getEdgeTargetRouteKey(selectedEdge) === routeKey ? 'selected' : ''}>${esc(route.label)}</option>`).join('')}
+              </select>
+            </div>
+            <button class="small-btn danger" onclick="window.deleteResponseTreeEdge('${plantId}','${esc(selectedEdge.id)}')">Retire</button>
+          </div>`;
+      })() : '';
+      const graphHtml = `
+        ${selectedPanelHtml}
+        <div class="response-tree-graph-actions">
+          <button class="small-btn" type="button" onclick="window.resetResponseTreeNodeLayout('${plantId}')">Reset Layout</button>
+        </div>
+        <div class="response-tree-graph-shell">
+          <div class="response-tree-graph" style="width:${graphWidth}px;height:${graphHeight}px;">
+            <svg class="response-tree-graph-svg" viewBox="0 0 ${graphWidth} ${graphHeight}" preserveAspectRatio="none" aria-hidden="true">
+              <defs>
+                <marker id="response-tree-arrow-${graphSafeId}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                  <path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke"></path>
+                </marker>
+              </defs>
+              ${connectorPathHtml}
+            </svg>
+            ${connectorLabelHtml}
+            ${!edges.length ? '<div class="response-tree-graph-empty">Pick shared categories below to add the first response connection.</div>' : ''}
+            ${nodeHtml}
+          </div>
+        </div>`;
+
+      const edgeRows = edges.length ? edges.map(edge => {
+        const source = statuses[edge.sourceKey] || {};
+        const target = statuses[edge.targetKey] || {};
+        const edgeSharedRouteEntries = activeRouteEntries.filter(([, route]) => routeIsSharedBy(route, edge.sourceKey, edge.targetKey));
+        const edgeSourceRouteEntries = activeRouteEntries.filter(([, route]) => routeIsOwnedBy(route, edge.sourceKey));
+        const edgeTargetRouteEntries = activeRouteEntries.filter(([, route]) => routeIsOwnedBy(route, edge.targetKey));
+        const edgeMode = getEdgeMode(edge);
+        const routeChips = `<span class="route-chip ${edgeMode === 'translate' ? 'warn' : ''}">${esc(getEdgeRouteLabel(edge))}</span>`;
+        return `
+          <div class="response-tree-edge">
+            <div>
+              <div class="response-tree-edge-path">
+                <span style="color:${source.cssColor || '#8b949e'}">${esc(source.icon || '●')} ${esc(source.shortLabel || source.label || edge.sourceKey)}</span>
+                <span class="response-tree-arrow">→</span>
+                <span style="color:${target.cssColor || '#8b949e'}">${esc(target.icon || '●')} ${esc(target.shortLabel || target.label || edge.targetKey)}</span>
+              </div>
+              <div class="response-tree-routes">${routeChips}</div>
+            </div>
+            <div class="response-tree-trigger">
+              <input value="${esc(edge.trigger)}" placeholder="Trigger text" onchange="window.patchResponseTreeEdge('${plantId}','${esc(edge.id)}','trigger',this.value)">
+              <select onchange="window.setResponseTreeEdgeMapping('${plantId}','${esc(edge.id)}','sourceRouteKey',this.value)">
+                ${edgeMode === 'translate'
+                  ? edgeSourceRouteEntries.map(([routeKey, route]) => `<option value="${esc(routeKey)}" ${getEdgeSourceRouteKey(edge) === routeKey ? 'selected' : ''}>From: ${esc(route.label)}</option>`).join('')
+                  : edgeSharedRouteEntries.map(([routeKey, route]) => `<option value="${esc(routeKey)}" ${getEdgeSourceRouteKey(edge) === routeKey ? 'selected' : ''}>${esc(route.label)}</option>`).join('')}
+              </select>
+              <select onchange="window.setResponseTreeEdgeMapping('${plantId}','${esc(edge.id)}','targetRouteKey',this.value)">
+                ${edgeMode === 'translate'
+                  ? edgeTargetRouteEntries.map(([routeKey, route]) => `<option value="${esc(routeKey)}" ${getEdgeTargetRouteKey(edge) === routeKey ? 'selected' : ''}>To: ${esc(route.label)}</option>`).join('')
+                  : edgeSharedRouteEntries.map(([routeKey, route]) => `<option value="${esc(routeKey)}" ${getEdgeTargetRouteKey(edge) === routeKey ? 'selected' : ''}>${esc(route.label)}</option>`).join('')}
+              </select>
+            </div>
+            <div class="response-tree-actions">
+              <button class="small-btn danger" onclick="window.deleteResponseTreeEdge('${plantId}','${esc(edge.id)}')">Retire</button>
+            </div>
+          </div>`;
+      }).join('') : '<div class="status-row"><div class="route-summary">No response branches configured.</div></div>';
+
+      return `
+        <div class="route-helper-bar">
+          <div>Map loose escalation paths between category roles. These paths explain and suggest alerts; they do not enforce workflow order. ${draftDirty ? '<span class="route-draft-indicator">Unsaved tree changes</span>' : ''}</div>
+        </div>
+        ${graphHtml}
+        <div class="response-tree-toolbar">
+          <select id="tree-source-${plantId}" onchange="window.setResponseTreeSelection('${plantId}','sourceKey',this.value)">
+            ${assignableKeys.map(key => `<option value="${esc(key)}" ${key === defaultSource ? 'selected' : ''}>${esc(statuses[key]?.label || key)}</option>`).join('')}
+          </select>
+          <select id="tree-target-${plantId}" onchange="window.setResponseTreeSelection('${plantId}','targetKey',this.value)">
+            ${assignableKeys.map(key => `<option value="${esc(key)}" ${key === defaultTarget ? 'selected' : ''}>${esc(statuses[key]?.label || key)}</option>`).join('')}
+          </select>
+          <select id="tree-route-${plantId}">
+            ${sharedRouteEntries.length
+              ? sharedRouteEntries.map(([routeKey, route]) => `<option value="${esc(routeKey)}">${esc(route.label)}</option>`).join('')
+              : '<option value="">No shared subcategories</option>'}
+          </select>
+          <input id="tree-trigger-${plantId}" placeholder="Trigger, e.g. Mechanical fault suspected">
+          <button class="small-btn" onclick="window.addResponseTreeEdge('${plantId}')" ${sharedRouteEntries.length ? '' : 'disabled'}>Add Connection</button>
+        </div>
+        <div class="response-tree-edge-list">${edgeRows}</div>
+        <div class="status-toolbar">
+          <button class="small-btn" onclick="window.exportStatuses('${plantId}')">Export JSON</button>
+          <input type="file" id="import-file-${plantId}" accept="application/json" style="max-width:240px;padding:6px 8px;" />
+          <button class="small-btn" onclick="window.importStatuses('${plantId}')">Import JSON</button>
+          <button class="small-btn" style="border-color:var(--accent);color:var(--accent);" onclick="window.saveStatuses('${plantId}')">${draftDirty ? 'Save Statuses*' : 'Save Statuses'}</button>
+        </div>
+        <div id="status-fb-${plantId}" class="feedback"></div>
+      `;
     }
 
     function renderSubcategoryRoutingEditor(plantId, statuses) {
@@ -5209,6 +5862,10 @@
         plantId,
         normalizeSubcategoryRoutes(subcategoryRouteDraftByPlant.get(plantId) || {}, statuses)
       );
+      responseTreeDraftByPlant.set(
+        plantId,
+        normalizeResponseTree(responseTreeDraftByPlant.get(plantId) || {}, statuses, subcategoryRouteDraftByPlant.get(plantId) || {})
+      );
       renderPlantsUsers();
     };
 
@@ -5269,6 +5926,7 @@
       const defaults = deepCopy(DEFAULT_STATUSES);
       statusDraftByPlant.set(plantId, defaults);
       subcategoryRouteDraftByPlant.set(plantId, normalizeSubcategoryRoutes({}, defaults));
+      responseTreeDraftByPlant.set(plantId, normalizeResponseTree({}, defaults, {}));
       renderPlantsUsers();
       feedback(`status-fb-${plantId}`, 'ok', 'Draft reset to defaults. Click Save Statuses to apply.');
     };
@@ -5277,11 +5935,13 @@
       const statuses = normalizeStatusesForSave(statusDraftByPlant.get(plantId) || {});
       const subcategoryRoutes = normalizeSubcategoryRoutes(subcategoryRouteDraftByPlant.get(plantId) || {}, statuses);
       const syncedStatuses = normalizeStatusesForSave(syncStatusesFromSubcategoryRoutes(statuses, subcategoryRoutes));
+      const responseTree = normalizeResponseTree(responseTreeDraftByPlant.get(plantId) || {}, syncedStatuses, subcategoryRoutes);
       const payload = {
         plantId,
         exportedAt: new Date().toISOString(),
         statuses: syncedStatuses,
-        subcategoryRoutes
+        subcategoryRoutes,
+        responseTree
       };
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
@@ -5309,10 +5969,13 @@
         if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
           throw new Error('Invalid JSON format. Expected { statuses: { ... } } or a statuses object.');
         }
-        const normalized = normalizeStatusesForSave(candidate);
+        const normalized = normalizeStatusesForSave(stripResponseTreeFromStatuses(candidate));
         const normalizedRoutes = normalizeSubcategoryRoutes(parsed?.subcategoryRoutes || parsed?.routes || null, normalized);
-        statusDraftByPlant.set(plantId, syncStatusesFromSubcategoryRoutes(normalized, normalizedRoutes));
+        const syncedStatuses = syncStatusesFromSubcategoryRoutes(normalized, normalizedRoutes);
+        const normalizedTree = normalizeResponseTree(parsed?.responseTree || parsed?.escalationTree || candidate.__responseTree || {}, syncedStatuses, normalizedRoutes);
+        statusDraftByPlant.set(plantId, syncedStatuses);
         subcategoryRouteDraftByPlant.set(plantId, normalizedRoutes);
+        responseTreeDraftByPlant.set(plantId, normalizedTree);
         renderPlantsUsers();
         feedback(`status-fb-${plantId}`, 'ok', 'Imported statuses into draft. Click Save Statuses to apply.');
       } catch (e) {
@@ -5325,18 +5988,21 @@
       const statuses = normalizeStatusesForSave(statusDraftByPlant.get(plantId) || {});
       const subcategoryRoutes = normalizeSubcategoryRoutes(subcategoryRouteDraftByPlant.get(plantId) || {}, statuses);
       const syncedStatuses = normalizeStatusesForSave(syncStatusesFromSubcategoryRoutes(statuses, subcategoryRoutes));
+      const responseTree = normalizeResponseTree(responseTreeDraftByPlant.get(plantId) || {}, syncedStatuses, subcategoryRoutes);
+      const persistedStatuses = attachResponseTreeToStatuses(syncedStatuses, responseTree);
       try {
         if (shouldUseSqlAdmin()) {
           await adminApiRequest(`/api/plants/${encodeURIComponent(plantId)}/status-config`, {
             method: 'PUT',
-            body: { statuses: syncedStatuses, subcategoryRoutes }
+            body: { statuses: persistedStatuses, subcategoryRoutes, responseTree }
           });
         } else {
-          await setDoc(doc(db, 'plants', plantId, 'config', 'statuses'), { statuses: syncedStatuses, subcategoryRoutes });
+          await setDoc(doc(db, 'plants', plantId, 'config', 'statuses'), { statuses: persistedStatuses, subcategoryRoutes, responseTree });
         }
         statusDraftByPlant.set(plantId, syncedStatuses);
         subcategoryRouteDraftByPlant.set(plantId, subcategoryRoutes);
-        savedStatusSnapshotByPlant.set(plantId, buildStatusDraftSnapshot(syncedStatuses, subcategoryRoutes));
+        responseTreeDraftByPlant.set(plantId, responseTree);
+        savedStatusSnapshotByPlant.set(plantId, buildStatusDraftSnapshot(syncedStatuses, subcategoryRoutes, responseTree));
         renderPlantsUsers();
         feedback(`status-fb-${plantId}`, 'ok', shouldUseSqlAdmin() ? 'Saved statuses to D1.' : 'Saved statuses to Firestore.');
       } catch (e) {
@@ -5346,7 +6012,323 @@
     };
 
     window.switchStatusEditorTab = function (plantId, tab) {
-      statusEditorTab[plantId] = tab === 'routing' ? 'routing' : 'categories';
+      statusEditorTab[plantId] = tab === 'routing' || tab === 'tree' ? tab : 'categories';
+      renderPlantsUsers();
+    };
+
+    function responseTreeRouteScopeMatches(edge, routeKeys) {
+      const current = Array.isArray(edge?.routeKeys) ? edge.routeKeys.filter(Boolean).sort() : [];
+      const next = Array.isArray(routeKeys) ? routeKeys.filter(Boolean).sort() : [];
+      return current.length === next.length && current.every((key, idx) => key === next[idx]);
+    }
+
+    function responseTreeRouteIsShared(route, sourceKey, targetKey) {
+      const source = String(sourceKey || '').trim().toLowerCase();
+      const target = String(targetKey || '').trim().toLowerCase();
+      const bound = Array.isArray(route?.boundStatusKeys) ? route.boundStatusKeys.map(key => String(key || '').trim().toLowerCase()) : [];
+      return !!source && !!target && bound.includes(source) && bound.includes(target);
+    }
+
+    function sharedResponseTreeRoutes(routes, sourceKey, targetKey) {
+      return Object.entries(routes || {})
+        .filter(([, route]) => route?.isActive !== false && responseTreeRouteIsShared(route, sourceKey, targetKey))
+        .sort((a, b) => (a[1].order ?? 999) - (b[1].order ?? 999) || String(a[1].label || '').localeCompare(String(b[1].label || '')));
+    }
+
+    function addResponseTreeEdgeDraft(plantId, sourceKey, targetKey, routeKey, trigger = '') {
+      const statuses = normalizeStatusesForSave(statusDraftByPlant.get(plantId) || {});
+      const routes = normalizeSubcategoryRoutes(subcategoryRouteDraftByPlant.get(plantId) || {}, statuses);
+      const cleanSource = String(sourceKey || '').trim().toLowerCase();
+      const cleanTarget = String(targetKey || '').trim().toLowerCase();
+      const cleanRoute = String(routeKey || '').trim();
+      if (!cleanSource || !cleanTarget || !statuses[cleanSource] || !statuses[cleanTarget]) {
+        feedback(`status-fb-${plantId}`, 'error', 'Choose a valid source and target role.');
+        return '';
+      }
+      if (cleanSource === cleanTarget) {
+        feedback(`status-fb-${plantId}`, 'error', 'Source and target roles must be different.');
+        return '';
+      }
+      if (!cleanRoute || !routes[cleanRoute] || !responseTreeRouteIsShared(routes[cleanRoute], cleanSource, cleanTarget)) {
+        feedback(`status-fb-${plantId}`, 'error', 'Choose a subcategory routed to both the source and target roles.');
+        return '';
+      }
+      const routeKeys = [cleanRoute];
+      const tree = normalizeResponseTree(responseTreeDraftByPlant.get(plantId) || {}, statuses, routes);
+      const exists = tree.edges.some(edge =>
+        edge.isActive !== false
+        && edge.sourceKey === cleanSource
+        && edge.targetKey === cleanTarget
+        && responseTreeRouteScopeMatches(edge, routeKeys)
+      );
+      if (exists) {
+        feedback(`status-fb-${plantId}`, 'error', 'That response branch already exists for this subcategory scope.');
+        return '';
+      }
+      const id = responseTreeEdgeId(cleanSource, cleanTarget, tree.edges);
+      const nextEdges = [...tree.edges, {
+        id,
+        sourceKey: cleanSource,
+        targetKey: cleanTarget,
+        trigger: String(trigger || '').trim() || 'Suggested response path',
+        routeKeys,
+        isActive: true,
+        order: tree.edges.length
+      }];
+      responseTreeDraftByPlant.set(plantId, normalizeResponseTree({ edges: nextEdges }, statuses, routes));
+      responseTreeSelectionByPlant[plantId] = { sourceKey: cleanSource, targetKey: cleanTarget };
+      responseTreeGraphStateByPlant[plantId] = {
+        ...(responseTreeGraphStateByPlant[plantId] || {}),
+        selectedEdgeId: id,
+        pendingSourceKey: ''
+      };
+      feedback(`status-fb-${plantId}`, 'ok', 'Added response connection.');
+      return id;
+    }
+
+    window.setResponseTreeSelection = function (plantId, field, value) {
+      const current = responseTreeSelectionByPlant[plantId] || {};
+      responseTreeSelectionByPlant[plantId] = { ...current, [field]: String(value || '').trim().toLowerCase() };
+      renderPlantsUsers();
+    };
+
+    window.startResponseTreeNodeDrag = function (event, plantId, statusKey) {
+      if (!event || event.button !== 0) return;
+      if (event.target?.closest?.('.response-tree-port')) return;
+      const node = event.currentTarget;
+      const graph = node?.closest?.('.response-tree-graph');
+      if (!node || !graph) return;
+      const key = String(statusKey || '').trim().toLowerCase();
+      const graphRect = graph.getBoundingClientRect();
+      const nodeRect = node.getBoundingClientRect();
+      responseTreeDragState = {
+        plantId,
+        statusKey: key,
+        node,
+        graph,
+        startClientX: event.clientX,
+        startClientY: event.clientY,
+        startX: nodeRect.left - graphRect.left,
+        startY: nodeRect.top - graphRect.top,
+        moved: false
+      };
+      node.classList.add('is-dragging');
+      node.setPointerCapture?.(event.pointerId);
+      event.preventDefault();
+    };
+
+    window.startResponseTreePortDrag = function (event, plantId, sourceKey) {
+      if (!event || event.button !== 0) return;
+      const port = event.currentTarget;
+      const graph = port?.closest?.('.response-tree-graph');
+      const svg = graph?.querySelector?.('.response-tree-graph-svg');
+      if (!port || !graph || !svg) return;
+      const graphRect = graph.getBoundingClientRect();
+      const portRect = port.getBoundingClientRect();
+      const startX = portRect.left + portRect.width / 2 - graphRect.left;
+      const startY = portRect.top + portRect.height / 2 - graphRect.top;
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('class', 'response-tree-graph-draft-edge');
+      path.style.setProperty('--edge-color', getComputedStyle(port).getPropertyValue('--node-color') || 'var(--accent)');
+      svg.appendChild(path);
+      responseTreePortDragState = {
+        plantId,
+        sourceKey: String(sourceKey || '').trim().toLowerCase(),
+        graph,
+        graphRect,
+        path,
+        startX,
+        startY
+      };
+      port.setPointerCapture?.(event.pointerId);
+      event.stopPropagation();
+      event.preventDefault();
+    };
+
+    window.resetResponseTreeNodeLayout = function (plantId) {
+      responseTreeGraphStateByPlant[plantId] = {
+        ...(responseTreeGraphStateByPlant[plantId] || {}),
+        nodePositions: {}
+      };
+      renderPlantsUsers();
+    };
+
+    window.pickResponseTreeNode = function (plantId, statusKey) {
+      const key = String(statusKey || '').trim().toLowerCase();
+      if (!key) return;
+      const current = responseTreeSelectionByPlant[plantId] || {};
+      const graphState = responseTreeGraphStateByPlant[plantId] || {};
+      if (graphState.suppressNodeClickKey === key) {
+        responseTreeGraphStateByPlant[plantId] = { ...graphState, suppressNodeClickKey: '' };
+        return;
+      }
+      if (!graphState.pendingSourceKey || graphState.pendingSourceKey === key) {
+        responseTreeSelectionByPlant[plantId] = { ...current, sourceKey: key };
+        responseTreeGraphStateByPlant[plantId] = { ...graphState, pendingSourceKey: key, selectedEdgeId: '' };
+      } else {
+        responseTreeSelectionByPlant[plantId] = { ...current, sourceKey: graphState.pendingSourceKey, targetKey: key };
+        responseTreeGraphStateByPlant[plantId] = { ...graphState, pendingSourceKey: '', selectedEdgeId: '' };
+      }
+      renderPlantsUsers();
+    };
+
+    window.selectResponseTreeEdge = function (plantId, edgeId) {
+      responseTreeGraphStateByPlant[plantId] = {
+        ...(responseTreeGraphStateByPlant[plantId] || {}),
+        selectedEdgeId: String(edgeId || ''),
+        pendingSourceKey: ''
+      };
+      renderPlantsUsers();
+    };
+
+    document.addEventListener('pointermove', event => {
+      if (responseTreePortDragState) {
+        const drag = responseTreePortDragState;
+        const graphRect = drag.graph.getBoundingClientRect();
+        const x = event.clientX - graphRect.left;
+        const y = event.clientY - graphRect.top;
+        const bend = Math.max(80, Math.abs(x - drag.startX) / 2);
+        drag.path.setAttribute('d', `M ${drag.startX} ${drag.startY} C ${drag.startX + bend} ${drag.startY}, ${x - bend} ${y}, ${x} ${y}`);
+        document.querySelectorAll('.response-tree-port.is-hot').forEach(el => el.classList.remove('is-hot'));
+        const targetPort = document.elementFromPoint(event.clientX, event.clientY)?.closest?.('[data-tree-port="input"]');
+        if (targetPort && targetPort.dataset.statusKey !== drag.sourceKey) targetPort.classList.add('is-hot');
+        event.preventDefault();
+        return;
+      }
+      if (!responseTreeDragState) return;
+      const drag = responseTreeDragState;
+      const dx = event.clientX - drag.startClientX;
+      const dy = event.clientY - drag.startClientY;
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) drag.moved = true;
+      const maxX = Math.max(12, drag.graph.offsetWidth - drag.node.offsetWidth - 12);
+      const maxY = Math.max(12, drag.graph.offsetHeight - drag.node.offsetHeight - 12);
+      const nextX = Math.min(maxX, Math.max(12, drag.startX + dx));
+      const nextY = Math.min(maxY, Math.max(12, drag.startY + dy));
+      drag.node.style.left = `${nextX}px`;
+      drag.node.style.top = `${nextY}px`;
+      event.preventDefault();
+    });
+
+    document.addEventListener('pointerup', event => {
+      if (responseTreePortDragState) {
+        const drag = responseTreePortDragState;
+        const targetPort = document.elementFromPoint(event.clientX, event.clientY)?.closest?.('[data-tree-port="input"]');
+        document.querySelectorAll('.response-tree-port.is-hot').forEach(el => el.classList.remove('is-hot'));
+        drag.path.remove();
+        responseTreePortDragState = null;
+        const targetKey = String(targetPort?.dataset?.statusKey || '').trim().toLowerCase();
+        if (targetKey && targetKey !== drag.sourceKey) {
+          const statuses = normalizeStatusesForSave(statusDraftByPlant.get(drag.plantId) || {});
+          const routes = normalizeSubcategoryRoutes(subcategoryRouteDraftByPlant.get(drag.plantId) || {}, statuses);
+          const sharedRoutes = sharedResponseTreeRoutes(routes, drag.sourceKey, targetKey);
+          if (!sharedRoutes.length) {
+            responseTreeSelectionByPlant[drag.plantId] = { sourceKey: drag.sourceKey, targetKey };
+            feedback(`status-fb-${drag.plantId}`, 'error', 'Those categories do not share a routed subcategory.');
+            renderPlantsUsers();
+            return;
+          }
+          const [routeKey, route] = sharedRoutes[0];
+          const edgeId = addResponseTreeEdgeDraft(drag.plantId, drag.sourceKey, targetKey, routeKey, route?.label || '');
+          if (edgeId) renderPlantsUsers();
+        }
+        return;
+      }
+      if (!responseTreeDragState) return;
+      const drag = responseTreeDragState;
+      if (!drag.moved) {
+        drag.node.classList.remove('is-dragging');
+        responseTreeDragState = null;
+        return;
+      }
+      const x = parseFloat(drag.node.style.left) || drag.startX;
+      const y = parseFloat(drag.node.style.top) || drag.startY;
+      const graphState = responseTreeGraphStateByPlant[drag.plantId] || {};
+      responseTreeGraphStateByPlant[drag.plantId] = {
+        ...graphState,
+        nodePositions: {
+          ...(graphState.nodePositions || {}),
+          [drag.statusKey]: { x, y }
+        },
+        suppressNodeClickKey: drag.moved ? drag.statusKey : ''
+      };
+      drag.node.classList.remove('is-dragging');
+      responseTreeDragState = null;
+      renderPlantsUsers();
+    });
+
+    document.addEventListener('pointercancel', () => {
+      if (responseTreePortDragState) {
+        responseTreePortDragState.path?.remove();
+        document.querySelectorAll('.response-tree-port.is-hot').forEach(el => el.classList.remove('is-hot'));
+        responseTreePortDragState = null;
+      }
+      if (!responseTreeDragState) return;
+      responseTreeDragState.node?.classList.remove('is-dragging');
+      responseTreeDragState = null;
+    });
+
+    window.addResponseTreeEdge = function (plantId) {
+      const sourceKey = String(document.getElementById(`tree-source-${plantId}`)?.value || '').trim().toLowerCase();
+      const targetKey = String(document.getElementById(`tree-target-${plantId}`)?.value || '').trim().toLowerCase();
+      const routeKey = String(document.getElementById(`tree-route-${plantId}`)?.value || '').trim();
+      const trigger = String(document.getElementById(`tree-trigger-${plantId}`)?.value || '').trim();
+      const edgeId = addResponseTreeEdgeDraft(plantId, sourceKey, targetKey, routeKey, trigger);
+      if (edgeId) renderPlantsUsers();
+    };
+
+    window.patchResponseTreeEdge = function (plantId, edgeId, field, value) {
+      const statuses = normalizeStatusesForSave(statusDraftByPlant.get(plantId) || {});
+      const routes = normalizeSubcategoryRoutes(subcategoryRouteDraftByPlant.get(plantId) || {}, statuses);
+      const tree = normalizeResponseTree(responseTreeDraftByPlant.get(plantId) || {}, statuses, routes);
+      const edges = tree.edges.map(edge => {
+        if (edge.id !== edgeId) return edge;
+        if (field === 'trigger') return { ...edge, trigger: String(value || '').trim() || 'Suggested response path' };
+        return edge;
+      });
+      responseTreeDraftByPlant.set(plantId, normalizeResponseTree({ edges }, statuses, routes));
+      renderPlantsUsers();
+    };
+
+    window.setResponseTreeEdgeRoute = function (plantId, edgeId, routeKey) {
+      const statuses = normalizeStatusesForSave(statusDraftByPlant.get(plantId) || {});
+      const routes = normalizeSubcategoryRoutes(subcategoryRouteDraftByPlant.get(plantId) || {}, statuses);
+      const cleanRouteKey = String(routeKey || '').trim();
+      const tree = normalizeResponseTree(responseTreeDraftByPlant.get(plantId) || {}, statuses, routes);
+      const selectedEdge = tree.edges.find(edge => edge.id === edgeId);
+      if (!selectedEdge) return;
+      if (!cleanRouteKey || !routes[cleanRouteKey] || !responseTreeRouteIsShared(routes[cleanRouteKey], selectedEdge.sourceKey, selectedEdge.targetKey)) {
+        feedback(`status-fb-${plantId}`, 'error', 'Choose a subcategory routed to both branch roles.');
+        renderPlantsUsers();
+        return;
+      }
+      const nextRouteKeys = [cleanRouteKey];
+      const exists = selectedEdge && tree.edges.some(edge =>
+        edge.id !== edgeId
+        && edge.isActive !== false
+        && edge.sourceKey === selectedEdge.sourceKey
+        && edge.targetKey === selectedEdge.targetKey
+        && responseTreeRouteScopeMatches(edge, nextRouteKeys)
+      );
+      if (exists) {
+        feedback(`status-fb-${plantId}`, 'error', 'That response branch already exists for this subcategory scope.');
+        renderPlantsUsers();
+        return;
+      }
+      const edges = tree.edges.map(edge => {
+        if (edge.id !== edgeId) return edge;
+        return { ...edge, routeKeys: nextRouteKeys };
+      });
+      responseTreeDraftByPlant.set(plantId, normalizeResponseTree({ edges }, statuses, routes));
+      renderPlantsUsers();
+    };
+
+    window.deleteResponseTreeEdge = function (plantId, edgeId) {
+      if (!confirm('Retire this response branch?')) return;
+      const statuses = normalizeStatusesForSave(statusDraftByPlant.get(plantId) || {});
+      const routes = normalizeSubcategoryRoutes(subcategoryRouteDraftByPlant.get(plantId) || {}, statuses);
+      const tree = normalizeResponseTree(responseTreeDraftByPlant.get(plantId) || {}, statuses, routes);
+      const edges = tree.edges.map(edge => edge.id === edgeId ? { ...edge, isActive: false } : edge);
+      responseTreeDraftByPlant.set(plantId, normalizeResponseTree({ edges }, statuses, routes));
       renderPlantsUsers();
     };
 

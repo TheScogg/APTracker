@@ -336,11 +336,27 @@ The current single-document runtime config stores status categories and subcateg
       "isActive": true,
       "order": 10
     }
+  },
+  "responseTree": {
+    "version": 1,
+    "edges": [
+      {
+        "id": "controlman_to_maintenance",
+        "sourceKey": "controlman",
+        "targetKey": "maintenance",
+        "trigger": "Mechanical fault suspected",
+        "routeKeys": ["do011_eoat"],
+        "isActive": true,
+        "order": 0
+      }
+    ]
   }
 }
 ```
 
 `statuses.{statusKey}.subs` remains the compatibility/display list and category picker source. `subcategoryRoutes` is the routing source for assigning a subcategory to one or more category roles; bound routes are synced back into each bound category's `subs` list so the app picker reflects the bindings.
+
+`responseTree` is an optional guidance layer for loose category-role hierarchy. It explains and suggests paths between existing category/status keys, such as `controlman -> maintenance`, without enforcing workflow order. For SQL/D1 compatibility, the same object may also be embedded under `statuses.__responseTree`; runtime status normalization must strip keys beginning with `__` from normal category lists.
 
 ---
 
