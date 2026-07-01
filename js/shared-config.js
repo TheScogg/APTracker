@@ -7,7 +7,19 @@ export function normalizeSubsInput(value) {
   return String(value || '')
     .split(/\n|,/)
     .map(v => v.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    .sort(compareSubcategoryLabels);
+}
+
+const SUBCATEGORY_COLLATOR = new Intl.Collator(undefined, {
+  numeric: true,
+  sensitivity: 'base'
+});
+
+export function compareSubcategoryLabels(a, b) {
+  const left = typeof a === 'string' ? a : String(a?.label || a?.subcategory || a || '');
+  const right = typeof b === 'string' ? b : String(b?.label || b?.subcategory || b || '');
+  return SUBCATEGORY_COLLATOR.compare(left.trim(), right.trim());
 }
 
 export function slugifyStatusLabel(value) {
@@ -81,7 +93,7 @@ export function normalizeStatusRecord(key, item, order) {
     swipeColor: String(item?.swipeColor || color),
     floorCls: String(item?.floorCls || (key === 'resolved' ? 'all-resolved' : `has-${slug}`)),
     cls: String(item?.cls || `status-${slug}`),
-    subs: Array.isArray(item?.subs) ? item.subs.map(v => String(v).trim()).filter(Boolean) : [],
+    subs: Array.isArray(item?.subs) ? item.subs.map(v => String(v).trim()).filter(Boolean).sort(compareSubcategoryLabels) : [],
     statLabel: String(item?.statLabel || safeLabel),
     order: Number.isFinite(Number(item?.order)) ? Number(item.order) : order
   };
@@ -274,8 +286,8 @@ export function normalizeSubcategoryRoutes(rawRoutes, statuses = {}, options = {
 
   if (!sortRoutes) return normalized;
   return Object.fromEntries(Object.entries(normalized).sort((a, b) =>
-    (a[1].order ?? 999) - (b[1].order ?? 999)
-    || a[1].label.localeCompare(b[1].label, undefined, { sensitivity: 'base' })
+    compareSubcategoryLabels(a[1]?.label, b[1]?.label)
+    || (a[1].order ?? 999) - (b[1].order ?? 999)
   ));
 }
 
@@ -309,7 +321,7 @@ export function syncStatusesFromSubcategoryRoutes(statuses, routes) {
   validStatusKeys.forEach(statusKey => {
     synced[statusKey].subs = Array.from(new Map((synced[statusKey].subs || [])
       .map(sub => [sub.toLowerCase(), sub])).values())
-      .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+      .sort(compareSubcategoryLabels);
   });
   return synced;
 }

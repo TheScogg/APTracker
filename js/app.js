@@ -51,6 +51,7 @@ import {
 } from "./theme-catalog.js";
 import {
   attachResponseTreeToStatuses,
+  compareSubcategoryLabels,
   normalizeResponseTree,
   normalizeSubcategoryRoutes as normalizeSharedSubcategoryRoutes,
   stripResponseTreeFromStatuses,
@@ -1396,7 +1397,17 @@ function getResponseTreeEdges(statusKey, subStatus = '') {
       if (!boundStatusKeys.includes(sourceKey)) return false;
       return targetBoundKeys.includes(targetKey);
     })
-    .sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
+    .sort((a, b) => {
+      const aSourceRouteKey = a.sourceRouteKey || (Array.isArray(a.routeKeys) ? a.routeKeys[0] : '');
+      const bSourceRouteKey = b.sourceRouteKey || (Array.isArray(b.routeKeys) ? b.routeKeys[0] : '');
+      const aTargetRouteKey = a.targetRouteKey || aSourceRouteKey;
+      const bTargetRouteKey = b.targetRouteKey || bSourceRouteKey;
+      const routeOrder = compareSubcategoryLabels(
+        SUBCATEGORY_ROUTES?.[aTargetRouteKey]?.label || aTargetRouteKey,
+        SUBCATEGORY_ROUTES?.[bTargetRouteKey]?.label || bTargetRouteKey
+      );
+      return routeOrder || (a.order ?? 999) - (b.order ?? 999);
+    });
 }
 
 function formatResponseTreePath(edge) {
@@ -1409,6 +1420,13 @@ function formatResponseTreePath(edge) {
       : ` · ${sourceRoute.label} → ${targetRoute.label}`
     : '';
   return `${getStatusLabel(edge.sourceKey, 'short')} → ${getStatusLabel(edge.targetKey, 'short')}${routeLabel}`;
+}
+
+function formatCompactResponseTreePath(path) {
+  if (!path) return '';
+  const targetRoute = SUBCATEGORY_ROUTES?.[path.targetRouteKey || path.sourceRouteKey || path.routeKeys?.[0] || ''];
+  const targetSubStatus = path.targetSubStatus || targetRoute?.label || '';
+  return `→ ${getStatusLabel(path.targetKey, 'short')}${targetSubStatus ? ` · ${targetSubStatus}` : ''}`;
 }
 
 function buildResponseTreeContext(statusKey, subStatus = '') {
@@ -3889,7 +3907,7 @@ function getAllSubs() {
   Object.values(STATUSES).forEach(def => {
     (def.subs || []).forEach(sub => { seen[sub] = true; });
   });
-  return Object.keys(seen).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  return Object.keys(seen).sort(compareSubcategoryLabels);
 }
 
 function getStatusLabel(statusKey, mode = 'label') {
@@ -3902,7 +3920,7 @@ function getStatusLabel(statusKey, mode = 'label') {
 function getStatusSubs(statusKey) {
   const st = getStatusDef(statusKey);
   if (!Array.isArray(st.subs)) return [];
-  return [...st.subs].sort((a, b) => String(a).localeCompare(String(b), undefined, { sensitivity: 'base' }));
+  return [...st.subs].sort(compareSubcategoryLabels);
 }
 
 function getAlphabetizedStatusKeys({ includeOpen = true, includeResolved = true } = {}) {
@@ -8237,7 +8255,7 @@ function sortedQualityDefects(defects) {
   return [...defects].sort((a, b) => {
     const ap = priority.has(a.key) ? priority.get(a.key) : 999;
     const bp = priority.has(b.key) ? priority.get(b.key) : 999;
-    return ap - bp || a.label.localeCompare(b.label, undefined, { sensitivity: 'base' });
+    return ap - bp || compareSubcategoryLabels(a.label, b.label);
   });
 }
 
@@ -11758,7 +11776,7 @@ function renderIssues() {
         : '';
       const responsePathHtml = responsePath
         ? `<div class="issue-response-path-row">
-            <div class="issue-response-path" style="--path-color:${getStatusColor(responsePath.targetKey)}" title="${esc(responsePath.trigger || '')}"><span>${esc(responsePath.pathLabel)}</span></div>
+            <div class="issue-response-path" style="--path-color:${getStatusColor(responsePath.targetKey)}" title="${esc(responsePath.trigger || responsePath.pathLabel || '')}"><span>${esc(formatCompactResponseTreePath(responsePath))}</span></div>
             ${escalationButtonHtml}
           </div>`
         : '';
@@ -12171,7 +12189,7 @@ function renderIssues() {
           const activeColor = getStatusColor(statusKey);
 
           // Sub chips (alphabetized for consistent scan order)
-          const sortedSubs = [...getStatusSubs(statusKey)].sort((a, b) => String(a || '').localeCompare(String(b || ''), undefined, { sensitivity: 'base' }));
+          const sortedSubs = [...getStatusSubs(statusKey)].sort(compareSubcategoryLabels);
           sortedSubs.forEach(sub => {
             const item = document.createElement('button');
             item.type = 'button';
@@ -16374,7 +16392,7 @@ function renderAdminList() {
         subsList.innerHTML = '';
         const sortedSubs = (adminDraft[key].subs || [])
           .map((sub, idx) => ({ sub, idx }))
-          .sort((a, b) => a.sub.localeCompare(b.sub, undefined, { sensitivity: 'base' }));
+          .sort((a, b) => compareSubcategoryLabels(a.sub, b.sub));
         sortedSubs.forEach(({ sub, idx }) => {
           const chip = document.createElement('div'); chip.className = 'admin-sub-chip';
           const span = document.createElement('span'); span.textContent = sub;
@@ -16392,7 +16410,7 @@ function renderAdminList() {
         if (!val) return;
         if (!adminDraft[key].subs) adminDraft[key].subs = [];
         adminDraft[key].subs.push(val);
-        adminDraft[key].subs.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+        adminDraft[key].subs.sort(compareSubcategoryLabels);
         addInput.value = '';
         renderSubs();
       };

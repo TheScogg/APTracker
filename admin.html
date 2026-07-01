@@ -770,6 +770,39 @@
       min-height: 72px;
     }
 
+    .response-tree-route-checklist {
+      display: grid;
+      gap: 5px;
+      max-height: 112px;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg2);
+      padding: 7px;
+    }
+
+    .response-tree-route-check {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      color: var(--text2);
+      font-size: 11px;
+      font-weight: 800;
+      line-height: 1.25;
+      cursor: pointer;
+    }
+
+    .response-tree-route-check input {
+      width: 14px;
+      height: 14px;
+      accent-color: var(--accent);
+    }
+
+    .response-tree-route-check.empty {
+      color: var(--text3);
+      cursor: default;
+    }
+
     .response-tree-map {
       display: grid;
       gap: 10px;
@@ -899,14 +932,27 @@
         var(--bg3);
       background-size: 24px 24px, auto, auto;
       margin-bottom: 12px;
-      overflow-x: auto;
+      min-height: 640px;
+      overflow: hidden;
       position: relative;
+      cursor: grab;
+      touch-action: none;
+    }
+
+    .response-tree-graph-shell.is-panning {
+      cursor: grabbing;
     }
 
     .response-tree-graph {
       position: relative;
-      min-height: 420px;
-      min-width: 860px;
+      min-height: 760px;
+      min-width: 1280px;
+      transform-origin: 0 0;
+      will-change: transform;
+    }
+
+    .response-tree-graph * {
+      cursor: auto;
     }
 
     .response-tree-graph-svg {
@@ -949,20 +995,36 @@
     .response-tree-graph-label {
       position: absolute;
       z-index: 3;
-      max-width: 180px;
+      max-width: 240px;
       transform: translate(-50%, -50%);
       border: 1px solid color-mix(in srgb, var(--edge-color, var(--accent)) 38%, transparent);
-      border-radius: 999px;
+      border-radius: 8px;
       background: color-mix(in srgb, var(--edge-color, var(--accent)) 12%, var(--bg2));
       color: var(--text);
       font-size: 10px;
       font-weight: 800;
-      padding: 4px 8px;
-      white-space: nowrap;
+      padding: 6px 8px;
+      white-space: normal;
       overflow: hidden;
-      text-overflow: ellipsis;
+      text-align: left;
+      line-height: 1.25;
       pointer-events: auto;
       cursor: pointer;
+    }
+
+    .response-tree-graph-label-title {
+      display: block;
+      color: var(--edge-color, var(--accent));
+      font-size: 9px;
+      font-weight: 900;
+      letter-spacing: 0.06em;
+      margin-bottom: 3px;
+      text-transform: uppercase;
+    }
+
+    .response-tree-label-sep {
+      color: var(--text3);
+      padding: 0 4px;
     }
 
     .response-tree-graph-node {
@@ -1088,6 +1150,27 @@
       margin-top: 2px;
     }
 
+    .response-tree-selected-routes {
+      display: grid;
+      gap: 4px;
+      margin-top: 4px;
+      line-height: 1.35;
+    }
+
+    .response-tree-selected-route {
+      display: inline-flex;
+      align-items: center;
+      width: fit-content;
+      max-width: 100%;
+      border: 1px solid color-mix(in srgb, var(--selected-color, var(--accent)) 26%, transparent);
+      border-radius: 6px;
+      background: color-mix(in srgb, var(--selected-color, var(--accent)) 9%, transparent);
+      color: var(--text);
+      font-size: 10px;
+      font-weight: 850;
+      padding: 3px 6px;
+    }
+
     .response-tree-mode-badge {
       display: inline-flex;
       align-items: center;
@@ -1105,9 +1188,34 @@
 
     .response-tree-graph-actions {
       display: flex;
+      flex-wrap: wrap;
       justify-content: flex-end;
       gap: 8px;
       margin: 0 0 8px;
+    }
+
+    .response-tree-graph-zoom {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      background: var(--bg2);
+      padding: 3px;
+    }
+
+    .response-tree-graph-zoom .small-btn {
+      min-width: 36px;
+      padding: 5px 8px;
+    }
+
+    .response-tree-zoom-readout {
+      min-width: 48px;
+      color: var(--text2);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 11px;
+      font-weight: 900;
+      text-align: center;
     }
 
     .json-actions {
@@ -2780,6 +2888,7 @@
     import { createApiSessionClient } from "./js/auth-session-client.js";
     import {
       assignableStatusKeys,
+      compareSubcategoryLabels,
       deepCopy,
       normalizeStatusRecord,
       normalizeStatusesForSave as normalizeSharedStatusesForSave,
@@ -3040,6 +3149,7 @@
     const responseTreeGraphStateByPlant = {};
     let responseTreeDragState = null;
     let responseTreePortDragState = null;
+    let responseTreeCanvasDragState = null;
     const gamePanelOpen = {};
     const plantPanelOpen = {};
     const plantTab = {};
@@ -3807,8 +3917,13 @@
       const edges = tree.edges.filter(edge => edge.isActive !== false);
       const activeRouteEntries = Object.entries(routes)
         .filter(([, route]) => route.isActive !== false)
-        .sort((a, b) => (a[1].order ?? 999) - (b[1].order ?? 999) || a[1].label.localeCompare(b[1].label));
+        .sort((a, b) => compareSubcategoryLabels(a[1]?.label, b[1]?.label) || (a[1].order ?? 999) - (b[1].order ?? 999));
       const graphState = responseTreeGraphStateByPlant[plantId] || {};
+      const graphZoom = Number.isFinite(Number(graphState.zoom)) ? Math.min(1.6, Math.max(0.35, Number(graphState.zoom))) : 1;
+      const graphPan = {
+        x: Number.isFinite(Number(graphState.pan?.x)) ? Number(graphState.pan.x) : 0,
+        y: Number.isFinite(Number(graphState.pan?.y)) ? Number(graphState.pan.y) : 0
+      };
       const savedSelection = responseTreeSelectionByPlant[plantId] || {};
       const defaultSource = assignableKeys.includes(savedSelection.sourceKey)
         ? savedSelection.sourceKey
@@ -3880,8 +3995,8 @@
         }
       });
       const positionValues = Object.values(graphPositions);
-      const graphHeight = Math.max(420, ...positionValues.map(pos => pos.y + graphNodeHeight + 42));
-      const graphWidth = Math.max(850, ...positionValues.map(pos => pos.x + graphNodeWidth + 42));
+      const graphHeight = Math.max(760, ...positionValues.map(pos => pos.y + graphNodeHeight + 120));
+      const graphWidth = Math.max(1280, ...positionValues.map(pos => pos.x + graphNodeWidth + 160));
       const getEdgeSourceRouteKey = edge => edge.sourceRouteKey || (Array.isArray(edge.routeKeys) ? edge.routeKeys[0] : '') || '';
       const getEdgeTargetRouteKey = edge => edge.targetRouteKey || getEdgeSourceRouteKey(edge);
       const getEdgeMode = edge => getEdgeSourceRouteKey(edge) && getEdgeTargetRouteKey(edge) && getEdgeSourceRouteKey(edge) !== getEdgeTargetRouteKey(edge) ? 'translate' : 'pass-through';
@@ -3892,17 +4007,38 @@
         if (!targetRoute || sourceRoute?.label === targetRoute?.label) return sourceRoute?.label || targetRoute?.label || 'Pass-through';
         return `${sourceRoute?.label || getEdgeSourceRouteKey(edge)} → ${targetRoute.label}`;
       };
+      const displayEdges = edges.slice().sort((a, b) =>
+        (statuses[a.sourceKey]?.order ?? 999) - (statuses[b.sourceKey]?.order ?? 999)
+        || (statuses[a.targetKey]?.order ?? 999) - (statuses[b.targetKey]?.order ?? 999)
+        || compareSubcategoryLabels(getEdgeRouteLabel(a), getEdgeRouteLabel(b))
+        || (a.order ?? 999) - (b.order ?? 999)
+      );
+      const groupedConnectors = edges.reduce((acc, edge) => {
+        const mode = getEdgeMode(edge);
+        const key = `${edge.sourceKey}->${edge.targetKey}:${mode}`;
+        if (!acc[key]) acc[key] = { sourceKey: edge.sourceKey, targetKey: edge.targetKey, mode, edges: [] };
+        acc[key].edges.push(edge);
+        return acc;
+      }, {});
+      const selectedConnectorGroup = selectedEdge
+        ? groupedConnectors[`${selectedEdge.sourceKey}->${selectedEdge.targetKey}:${getEdgeMode(selectedEdge)}`] || null
+        : null;
+      const selectedGroupKey = graphState.selectedGroupKey && groupedConnectors[graphState.selectedGroupKey]
+        ? graphState.selectedGroupKey
+        : (selectedConnectorGroup ? `${selectedConnectorGroup.sourceKey}->${selectedConnectorGroup.targetKey}:${selectedConnectorGroup.mode}` : '');
+      const selectedGroup = selectedGroupKey ? groupedConnectors[selectedGroupKey] : selectedConnectorGroup;
       const pairCounts = {};
-      const connectorItems = edges.map(edge => {
-        const from = graphPositions[edge.sourceKey];
-        const to = graphPositions[edge.targetKey];
+      const connectorItems = Object.values(groupedConnectors).map(group => {
+        const groupKey = `${group.sourceKey}->${group.targetKey}:${group.mode}`;
+        const from = graphPositions[group.sourceKey];
+        const to = graphPositions[group.targetKey];
         if (!from || !to) return null;
-        const pairKey = `${edge.sourceKey}->${edge.targetKey}`;
+        const pairKey = `${group.sourceKey}->${group.targetKey}`;
         const pairIndex = pairCounts[pairKey] || 0;
         pairCounts[pairKey] = pairIndex + 1;
-        const pairOffset = (pairIndex % 2 === 0 ? 1 : -1) * Math.ceil(pairIndex / 2) * 22;
-        const source = statuses[edge.sourceKey] || {};
-        const target = statuses[edge.targetKey] || {};
+        const pairOffset = group.mode === 'translate' ? 28 : 0;
+        const source = statuses[group.sourceKey] || {};
+        const target = statuses[group.targetKey] || {};
         const edgeColor = target.cssColor || source.cssColor || '#8b949e';
         const sx = from.x + graphNodeWidth;
         const sy = from.y + graphNodeHeight / 2;
@@ -3910,16 +4046,22 @@
         const ty = to.y + graphNodeHeight / 2 + pairOffset;
         const bend = Math.max(86, Math.abs(tx - sx) / 2);
         const path = `M ${sx} ${sy} C ${sx + bend} ${sy}, ${tx - bend} ${ty}, ${tx} ${ty}`;
-        const routeLabel = getEdgeRouteLabel(edge);
+        const routeLabels = group.edges.map(edge => getEdgeRouteLabel(edge)).sort(compareSubcategoryLabels);
         const labelX = (sx + tx) / 2;
-        const labelY = (sy + ty) / 2 - 12;
-        return { edge, edgeColor, path, labelX, labelY, routeLabel };
+        const labelY = (sy + ty) / 2 - (group.mode === 'translate' ? -10 : 18);
+        const selected = selectedGroupKey
+          ? selectedGroupKey === groupKey
+          : selectedEdge && group.edges.some(edge => edge.id === selectedEdge.id);
+        return { ...group, groupKey, edgeColor, path, labelX, labelY, routeLabels, selectedEdgeId: group.edges[0]?.id || '', selected };
       }).filter(Boolean);
       const connectorPathHtml = connectorItems.map(item => `
-          <path class="response-tree-graph-edge ${getEdgeMode(item.edge) === 'translate' ? 'is-translate' : ''} ${selectedEdge?.id === item.edge.id ? 'selected' : ''}" d="${item.path}" marker-end="url(#response-tree-arrow-${graphSafeId})" style="--edge-color:${item.edgeColor};" onclick="window.selectResponseTreeEdge('${plantId}','${esc(item.edge.id)}')"></path>
+          <path class="response-tree-graph-edge ${item.mode === 'translate' ? 'is-translate' : ''} ${item.selected ? 'selected' : ''}" d="${item.path}" marker-end="url(#response-tree-arrow-${graphSafeId})" style="--edge-color:${item.edgeColor};" onclick="window.selectResponseTreeGroup('${plantId}','${esc(item.groupKey)}','${esc(item.selectedEdgeId)}')"></path>
       `).join('');
       const connectorLabelHtml = connectorItems.map(item => `
-          <button class="response-tree-graph-label" type="button" style="left:${item.labelX}px;top:${item.labelY}px;--edge-color:${item.edgeColor};" onclick="window.selectResponseTreeEdge('${plantId}','${esc(item.edge.id)}')" title="${esc(item.edge.trigger)}">${esc(item.routeLabel)}</button>
+          <button class="response-tree-graph-label" type="button" style="left:${item.labelX}px;top:${item.labelY}px;--edge-color:${item.edgeColor};" onclick="window.selectResponseTreeGroup('${plantId}','${esc(item.groupKey)}','${esc(item.selectedEdgeId)}')" title="${esc(item.routeLabels.join(' | '))}">
+            <span class="response-tree-graph-label-title">${item.mode === 'translate' ? `${item.routeLabels.length} translation${item.routeLabels.length === 1 ? '' : 's'}` : `${item.routeLabels.length} pass-through${item.routeLabels.length === 1 ? '' : 's'}`}</span>
+            ${item.routeLabels.map(label => esc(label)).join('<span class="response-tree-label-sep">|</span>')}
+          </button>
       `).join('');
       const nodeHtml = assignableKeys.map(key => {
         const status = statuses[key] || {};
@@ -3949,13 +4091,19 @@
         const source = statuses[selectedEdge.sourceKey] || {};
         const target = statuses[selectedEdge.targetKey] || {};
         const panelColor = target.cssColor || source.cssColor || '#8b949e';
-        const routeLabel = getEdgeRouteLabel(selectedEdge);
         const selectedMode = getEdgeMode(selectedEdge);
+        const selectedRouteLabels = (selectedGroup?.edges?.length ? selectedGroup.edges : [selectedEdge])
+          .map(edge => getEdgeRouteLabel(edge))
+          .sort(compareSubcategoryLabels);
+        const selectedGroupCount = selectedRouteLabels.length;
         return `
           <div class="response-tree-selected-panel" style="--selected-color:${panelColor};">
             <div>
               <div class="response-tree-selected-title">${esc(source.shortLabel || source.label || selectedEdge.sourceKey)} → ${esc(target.shortLabel || target.label || selectedEdge.targetKey)}</div>
-              <div class="response-tree-selected-sub">${esc(routeLabel)}</div>
+              <div class="response-tree-selected-sub">
+                <span class="response-tree-graph-label-title">${selectedMode === 'translate' ? `${selectedGroupCount} translation${selectedGroupCount === 1 ? '' : 's'}` : `${selectedGroupCount} pass-through${selectedGroupCount === 1 ? '' : 's'}`}</span>
+                <span class="response-tree-selected-routes">${selectedRouteLabels.map(label => `<span class="response-tree-selected-route">${esc(label)}</span>`).join('')}</span>
+              </div>
               <div class="response-tree-mode-badge">${selectedMode === 'translate' ? 'Translation' : 'Pass-through'}</div>
             </div>
             <div class="response-tree-trigger">
@@ -3977,10 +4125,17 @@
       const graphHtml = `
         ${selectedPanelHtml}
         <div class="response-tree-graph-actions">
+          <div class="response-tree-graph-zoom" aria-label="Response tree canvas zoom">
+            <button class="small-btn" type="button" onclick="window.zoomResponseTreeGraph('${plantId}',-0.1)" title="Zoom out">−</button>
+            <span class="response-tree-zoom-readout">${Math.round(graphZoom * 100)}%</span>
+            <button class="small-btn" type="button" onclick="window.zoomResponseTreeGraph('${plantId}',0.1)" title="Zoom in">+</button>
+            <button class="small-btn" type="button" onclick="window.resetResponseTreeGraphView('${plantId}')" title="Reset zoom">100%</button>
+            <button class="small-btn" type="button" onclick="window.fitResponseTreeGraph('${plantId}')" title="Fit everything in view">Fit</button>
+          </div>
           <button class="small-btn" type="button" onclick="window.resetResponseTreeNodeLayout('${plantId}')">Reset Layout</button>
         </div>
-        <div class="response-tree-graph-shell">
-          <div class="response-tree-graph" style="width:${graphWidth}px;height:${graphHeight}px;">
+        <div class="response-tree-graph-shell" data-plant-id="${esc(plantId)}" onpointerdown="window.startResponseTreeCanvasPan(event,'${plantId}')">
+          <div class="response-tree-graph" style="width:${graphWidth}px;height:${graphHeight}px;transform:translate(${graphPan.x}px, ${graphPan.y}px) scale(${graphZoom});">
             <svg class="response-tree-graph-svg" viewBox="0 0 ${graphWidth} ${graphHeight}" preserveAspectRatio="none" aria-hidden="true">
               <defs>
                 <marker id="response-tree-arrow-${graphSafeId}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
@@ -3995,7 +4150,7 @@
           </div>
         </div>`;
 
-      const edgeRows = edges.length ? edges.map(edge => {
+      const edgeRows = displayEdges.length ? displayEdges.map(edge => {
         const source = statuses[edge.sourceKey] || {};
         const target = statuses[edge.targetKey] || {};
         const edgeSharedRouteEntries = activeRouteEntries.filter(([, route]) => routeIsSharedBy(route, edge.sourceKey, edge.targetKey));
@@ -4044,13 +4199,30 @@
           <select id="tree-target-${plantId}" onchange="window.setResponseTreeSelection('${plantId}','targetKey',this.value)">
             ${assignableKeys.map(key => `<option value="${esc(key)}" ${key === defaultTarget ? 'selected' : ''}>${esc(statuses[key]?.label || key)}</option>`).join('')}
           </select>
-          <select id="tree-route-${plantId}">
-            ${sharedRouteEntries.length
-              ? sharedRouteEntries.map(([routeKey, route]) => `<option value="${esc(routeKey)}">${esc(route.label)}</option>`).join('')
-              : '<option value="">No shared subcategories</option>'}
+          <select id="tree-mode-${plantId}" onchange="window.setResponseTreeEdgeMode('${plantId}',this.value)">
+            <option value="pass-through" ${edgeMode === 'pass-through' ? 'selected' : ''}>Pass-through</option>
+            <option value="translate" ${edgeMode === 'translate' ? 'selected' : ''}>Translation</option>
+          </select>
+          ${edgeMode === 'pass-through'
+            ? `<div class="response-tree-route-checklist">
+                ${sharedRouteEntries.length
+                  ? sharedRouteEntries.map(([routeKey, route]) => `<label class="response-tree-route-check"><input type="checkbox" class="response-tree-route-check-input" data-plant-id="${esc(plantId)}" value="${esc(routeKey)}"> ${esc(route.label)}</label>`).join('')
+                  : '<div class="response-tree-route-check empty">No shared subcategories</div>'}
+              </div>`
+            : `<select id="tree-source-route-${plantId}">
+                ${sourceRouteEntries.length
+                  ? sourceRouteEntries.map(([routeKey, route]) => `<option value="${esc(routeKey)}">${esc(route.label)}</option>`).join('')
+                  : '<option value="">No source subcategories</option>'}
+              </select>`}
+          <select id="tree-target-route-${plantId}" ${edgeMode === 'pass-through' ? 'disabled' : ''}>
+            ${edgeMode === 'pass-through'
+              ? '<option value="">Same as selected pass-through</option>'
+              : (targetRouteEntries.length
+                ? targetRouteEntries.map(([routeKey, route]) => `<option value="${esc(routeKey)}">${esc(route.label)}</option>`).join('')
+                : '<option value="">No target subcategories</option>')}
           </select>
           <input id="tree-trigger-${plantId}" placeholder="Trigger, e.g. Mechanical fault suspected">
-          <button class="small-btn" onclick="window.addResponseTreeEdge('${plantId}')" ${sharedRouteEntries.length ? '' : 'disabled'}>Add Connection</button>
+          <button class="small-btn" onclick="window.addResponseTreeEdge('${plantId}')" ${(edgeMode === 'pass-through' ? sharedRouteEntries.length : (sourceRouteEntries.length && targetRouteEntries.length)) ? '' : 'disabled'}>${edgeMode === 'pass-through' ? 'Add Selected' : 'Add Translation'}</button>
         </div>
         <div class="response-tree-edge-list">${edgeRows}</div>
         <div class="status-toolbar">
@@ -4091,7 +4263,8 @@
           if (view === 'mapped') return boundStatusKeys.length > 0;
           if (view === 'unmapped') return boundStatusKeys.length === 0;
           return true;
-        });
+        })
+        .sort((a, b) => compareSubcategoryLabels(a[1]?.label, b[1]?.label) || (a[1].order ?? 999) - (b[1].order ?? 999));
 
       const header = `
     <div class="route-row route-head" style="--route-cols:${assignableKeys.length};">
@@ -4138,7 +4311,8 @@
       });
 
       const rows = sortedGroupKeys.map(groupKey => {
-        const groupEntries = groups[groupKey];
+        const groupEntries = groups[groupKey].slice()
+          .sort((a, b) => compareSubcategoryLabels(a[1]?.label, b[1]?.label) || (a[1].order ?? 999) - (b[1].order ?? 999));
         let groupHeader = '';
 
         if (groupKey === 'unassigned') {
@@ -6016,10 +6190,10 @@
       renderPlantsUsers();
     };
 
-    function responseTreeRouteScopeMatches(edge, routeKeys) {
-      const current = Array.isArray(edge?.routeKeys) ? edge.routeKeys.filter(Boolean).sort() : [];
-      const next = Array.isArray(routeKeys) ? routeKeys.filter(Boolean).sort() : [];
-      return current.length === next.length && current.every((key, idx) => key === next[idx]);
+    function responseTreeRouteScopeMatches(edge, sourceRouteKey, targetRouteKey) {
+      const currentSource = edge?.sourceRouteKey || (Array.isArray(edge?.routeKeys) ? edge.routeKeys[0] : '') || '';
+      const currentTarget = edge?.targetRouteKey || currentSource;
+      return currentSource === sourceRouteKey && currentTarget === targetRouteKey;
     }
 
     function responseTreeRouteIsShared(route, sourceKey, targetKey) {
@@ -6032,15 +6206,16 @@
     function sharedResponseTreeRoutes(routes, sourceKey, targetKey) {
       return Object.entries(routes || {})
         .filter(([, route]) => route?.isActive !== false && responseTreeRouteIsShared(route, sourceKey, targetKey))
-        .sort((a, b) => (a[1].order ?? 999) - (b[1].order ?? 999) || String(a[1].label || '').localeCompare(String(b[1].label || '')));
+        .sort((a, b) => compareSubcategoryLabels(a[1]?.label, b[1]?.label) || (a[1].order ?? 999) - (b[1].order ?? 999));
     }
 
-    function addResponseTreeEdgeDraft(plantId, sourceKey, targetKey, routeKey, trigger = '') {
+    function addResponseTreeEdgeDraft(plantId, sourceKey, targetKey, sourceRouteKey, targetRouteKey = sourceRouteKey, trigger = '') {
       const statuses = normalizeStatusesForSave(statusDraftByPlant.get(plantId) || {});
       const routes = normalizeSubcategoryRoutes(subcategoryRouteDraftByPlant.get(plantId) || {}, statuses);
       const cleanSource = String(sourceKey || '').trim().toLowerCase();
       const cleanTarget = String(targetKey || '').trim().toLowerCase();
-      const cleanRoute = String(routeKey || '').trim();
+      const cleanSourceRoute = String(sourceRouteKey || '').trim();
+      const cleanTargetRoute = String(targetRouteKey || cleanSourceRoute).trim();
       if (!cleanSource || !cleanTarget || !statuses[cleanSource] || !statuses[cleanTarget]) {
         feedback(`status-fb-${plantId}`, 'error', 'Choose a valid source and target role.');
         return '';
@@ -6049,29 +6224,36 @@
         feedback(`status-fb-${plantId}`, 'error', 'Source and target roles must be different.');
         return '';
       }
-      if (!cleanRoute || !routes[cleanRoute] || !responseTreeRouteIsShared(routes[cleanRoute], cleanSource, cleanTarget)) {
-        feedback(`status-fb-${plantId}`, 'error', 'Choose a subcategory routed to both the source and target roles.');
+      if (!cleanSourceRoute || !routes[cleanSourceRoute] || !responseTreeRouteIsShared(routes[cleanSourceRoute], cleanSource, cleanSource)) {
+        feedback(`status-fb-${plantId}`, 'error', 'Choose a source subcategory routed to the source role.');
         return '';
       }
-      const routeKeys = [cleanRoute];
+      if (!cleanTargetRoute || !routes[cleanTargetRoute] || !responseTreeRouteIsShared(routes[cleanTargetRoute], cleanTarget, cleanTarget)) {
+        feedback(`status-fb-${plantId}`, 'error', 'Choose a target subcategory routed to the target role.');
+        return '';
+      }
       const tree = normalizeResponseTree(responseTreeDraftByPlant.get(plantId) || {}, statuses, routes);
       const exists = tree.edges.some(edge =>
         edge.isActive !== false
         && edge.sourceKey === cleanSource
         && edge.targetKey === cleanTarget
-        && responseTreeRouteScopeMatches(edge, routeKeys)
+        && responseTreeRouteScopeMatches(edge, cleanSourceRoute, cleanTargetRoute)
       );
       if (exists) {
-        feedback(`status-fb-${plantId}`, 'error', 'That response branch already exists for this subcategory scope.');
+        feedback(`status-fb-${plantId}`, 'error', 'That response mapping already exists.');
         return '';
       }
       const id = responseTreeEdgeId(cleanSource, cleanTarget, tree.edges);
+      const mode = cleanSourceRoute === cleanTargetRoute ? 'pass-through' : 'translate';
       const nextEdges = [...tree.edges, {
         id,
         sourceKey: cleanSource,
         targetKey: cleanTarget,
         trigger: String(trigger || '').trim() || 'Suggested response path',
-        routeKeys,
+        sourceRouteKey: cleanSourceRoute,
+        targetRouteKey: cleanTargetRoute,
+        mode,
+        routeKeys: [cleanSourceRoute],
         isActive: true,
         order: tree.edges.length
       }];
@@ -6080,6 +6262,7 @@
       responseTreeGraphStateByPlant[plantId] = {
         ...(responseTreeGraphStateByPlant[plantId] || {}),
         selectedEdgeId: id,
+        selectedGroupKey: `${cleanSource}->${cleanTarget}:${mode}`,
         pendingSourceKey: ''
       };
       feedback(`status-fb-${plantId}`, 'ok', 'Added response connection.');
@@ -6092,6 +6275,84 @@
       renderPlantsUsers();
     };
 
+    window.setResponseTreeEdgeMode = function (plantId, mode) {
+      responseTreeGraphStateByPlant[plantId] = {
+        ...(responseTreeGraphStateByPlant[plantId] || {}),
+        edgeMode: mode === 'translate' ? 'translate' : 'pass-through'
+      };
+      renderPlantsUsers();
+    };
+
+    function responseTreeGraphZoom(plantId) {
+      const value = Number(responseTreeGraphStateByPlant[plantId]?.zoom);
+      return Number.isFinite(value) ? Math.min(1.6, Math.max(0.35, value)) : 1;
+    }
+
+    function clampResponseTreeZoom(value) {
+      return Math.min(1.6, Math.max(0.35, Number(value) || 1));
+    }
+
+    window.zoomResponseTreeGraph = function (plantId, delta) {
+      const current = responseTreeGraphZoom(plantId);
+      const next = clampResponseTreeZoom(current + Number(delta || 0));
+      responseTreeGraphStateByPlant[plantId] = {
+        ...(responseTreeGraphStateByPlant[plantId] || {}),
+        zoom: next
+      };
+      renderPlantsUsers();
+    };
+
+    window.resetResponseTreeGraphView = function (plantId) {
+      responseTreeGraphStateByPlant[plantId] = {
+        ...(responseTreeGraphStateByPlant[plantId] || {}),
+        zoom: 1,
+        pan: { x: 0, y: 0 }
+      };
+      renderPlantsUsers();
+    };
+
+    window.fitResponseTreeGraph = function (plantId) {
+      const shell = Array.from(document.querySelectorAll('.response-tree-graph-shell'))
+        .find(el => el.dataset.plantId === String(plantId));
+      const graph = shell?.querySelector?.('.response-tree-graph');
+      if (!shell || !graph) return;
+      const shellRect = shell.getBoundingClientRect();
+      const graphWidth = graph.offsetWidth || 1;
+      const graphHeight = graph.offsetHeight || 1;
+      const nextZoom = clampResponseTreeZoom(Math.min((shellRect.width - 48) / graphWidth, (shellRect.height - 48) / graphHeight));
+      const nextPan = {
+        x: Math.max(18, (shellRect.width - graphWidth * nextZoom) / 2),
+        y: Math.max(18, (shellRect.height - graphHeight * nextZoom) / 2)
+      };
+      responseTreeGraphStateByPlant[plantId] = {
+        ...(responseTreeGraphStateByPlant[plantId] || {}),
+        zoom: nextZoom,
+        pan: nextPan
+      };
+      renderPlantsUsers();
+    };
+
+    window.startResponseTreeCanvasPan = function (event, plantId) {
+      if (!event || event.button !== 0) return;
+      if (event.target?.closest?.('.response-tree-graph-node, .response-tree-graph-label, .response-tree-graph-edge, .response-tree-port, button, input, select, textarea')) return;
+      const shell = event.currentTarget;
+      const graphState = responseTreeGraphStateByPlant[plantId] || {};
+      const startPan = {
+        x: Number.isFinite(Number(graphState.pan?.x)) ? Number(graphState.pan.x) : 0,
+        y: Number.isFinite(Number(graphState.pan?.y)) ? Number(graphState.pan.y) : 0
+      };
+      responseTreeCanvasDragState = {
+        plantId,
+        shell,
+        startClientX: event.clientX,
+        startClientY: event.clientY,
+        startPan
+      };
+      shell.classList.add('is-panning');
+      shell.setPointerCapture?.(event.pointerId);
+      event.preventDefault();
+    };
+
     window.startResponseTreeNodeDrag = function (event, plantId, statusKey) {
       if (!event || event.button !== 0) return;
       if (event.target?.closest?.('.response-tree-port')) return;
@@ -6101,15 +6362,17 @@
       const key = String(statusKey || '').trim().toLowerCase();
       const graphRect = graph.getBoundingClientRect();
       const nodeRect = node.getBoundingClientRect();
+      const zoom = responseTreeGraphZoom(plantId);
       responseTreeDragState = {
         plantId,
         statusKey: key,
         node,
         graph,
+        zoom,
         startClientX: event.clientX,
         startClientY: event.clientY,
-        startX: nodeRect.left - graphRect.left,
-        startY: nodeRect.top - graphRect.top,
+        startX: (nodeRect.left - graphRect.left) / zoom,
+        startY: (nodeRect.top - graphRect.top) / zoom,
         moved: false
       };
       node.classList.add('is-dragging');
@@ -6125,8 +6388,9 @@
       if (!port || !graph || !svg) return;
       const graphRect = graph.getBoundingClientRect();
       const portRect = port.getBoundingClientRect();
-      const startX = portRect.left + portRect.width / 2 - graphRect.left;
-      const startY = portRect.top + portRect.height / 2 - graphRect.top;
+      const zoom = responseTreeGraphZoom(plantId);
+      const startX = (portRect.left + portRect.width / 2 - graphRect.left) / zoom;
+      const startY = (portRect.top + portRect.height / 2 - graphRect.top) / zoom;
       const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
       path.setAttribute('class', 'response-tree-graph-draft-edge');
       path.style.setProperty('--edge-color', getComputedStyle(port).getPropertyValue('--node-color') || 'var(--accent)');
@@ -6136,6 +6400,7 @@
         sourceKey: String(sourceKey || '').trim().toLowerCase(),
         graph,
         graphRect,
+        zoom,
         path,
         startX,
         startY
@@ -6164,11 +6429,21 @@
       }
       if (!graphState.pendingSourceKey || graphState.pendingSourceKey === key) {
         responseTreeSelectionByPlant[plantId] = { ...current, sourceKey: key };
-        responseTreeGraphStateByPlant[plantId] = { ...graphState, pendingSourceKey: key, selectedEdgeId: '' };
+        responseTreeGraphStateByPlant[plantId] = { ...graphState, pendingSourceKey: key, selectedEdgeId: '', selectedGroupKey: '' };
       } else {
         responseTreeSelectionByPlant[plantId] = { ...current, sourceKey: graphState.pendingSourceKey, targetKey: key };
-        responseTreeGraphStateByPlant[plantId] = { ...graphState, pendingSourceKey: '', selectedEdgeId: '' };
+        responseTreeGraphStateByPlant[plantId] = { ...graphState, pendingSourceKey: '', selectedEdgeId: '', selectedGroupKey: '' };
       }
+      renderPlantsUsers();
+    };
+
+    window.selectResponseTreeGroup = function (plantId, groupKey, edgeId) {
+      responseTreeGraphStateByPlant[plantId] = {
+        ...(responseTreeGraphStateByPlant[plantId] || {}),
+        selectedEdgeId: String(edgeId || ''),
+        selectedGroupKey: String(groupKey || ''),
+        pendingSourceKey: ''
+      };
       renderPlantsUsers();
     };
 
@@ -6176,17 +6451,31 @@
       responseTreeGraphStateByPlant[plantId] = {
         ...(responseTreeGraphStateByPlant[plantId] || {}),
         selectedEdgeId: String(edgeId || ''),
+        selectedGroupKey: '',
         pendingSourceKey: ''
       };
       renderPlantsUsers();
     };
 
     document.addEventListener('pointermove', event => {
+      if (responseTreeCanvasDragState) {
+        const drag = responseTreeCanvasDragState;
+        const dx = event.clientX - drag.startClientX;
+        const dy = event.clientY - drag.startClientY;
+        const nextPan = {
+          x: drag.startPan.x + dx,
+          y: drag.startPan.y + dy
+        };
+        const graph = drag.shell?.querySelector?.('.response-tree-graph');
+        if (graph) graph.style.transform = `translate(${nextPan.x}px, ${nextPan.y}px) scale(${responseTreeGraphZoom(drag.plantId)})`;
+        event.preventDefault();
+        return;
+      }
       if (responseTreePortDragState) {
         const drag = responseTreePortDragState;
         const graphRect = drag.graph.getBoundingClientRect();
-        const x = event.clientX - graphRect.left;
-        const y = event.clientY - graphRect.top;
+        const x = (event.clientX - graphRect.left) / drag.zoom;
+        const y = (event.clientY - graphRect.top) / drag.zoom;
         const bend = Math.max(80, Math.abs(x - drag.startX) / 2);
         drag.path.setAttribute('d', `M ${drag.startX} ${drag.startY} C ${drag.startX + bend} ${drag.startY}, ${x - bend} ${y}, ${x} ${y}`);
         document.querySelectorAll('.response-tree-port.is-hot').forEach(el => el.classList.remove('is-hot'));
@@ -6197,8 +6486,8 @@
       }
       if (!responseTreeDragState) return;
       const drag = responseTreeDragState;
-      const dx = event.clientX - drag.startClientX;
-      const dy = event.clientY - drag.startClientY;
+      const dx = (event.clientX - drag.startClientX) / drag.zoom;
+      const dy = (event.clientY - drag.startClientY) / drag.zoom;
       if (Math.abs(dx) > 3 || Math.abs(dy) > 3) drag.moved = true;
       const maxX = Math.max(12, drag.graph.offsetWidth - drag.node.offsetWidth - 12);
       const maxY = Math.max(12, drag.graph.offsetHeight - drag.node.offsetHeight - 12);
@@ -6210,6 +6499,22 @@
     });
 
     document.addEventListener('pointerup', event => {
+      if (responseTreeCanvasDragState) {
+        const drag = responseTreeCanvasDragState;
+        const dx = event.clientX - drag.startClientX;
+        const dy = event.clientY - drag.startClientY;
+        responseTreeGraphStateByPlant[drag.plantId] = {
+          ...(responseTreeGraphStateByPlant[drag.plantId] || {}),
+          pan: {
+            x: drag.startPan.x + dx,
+            y: drag.startPan.y + dy
+          }
+        };
+        drag.shell?.classList.remove('is-panning');
+        responseTreeCanvasDragState = null;
+        renderPlantsUsers();
+        return;
+      }
       if (responseTreePortDragState) {
         const drag = responseTreePortDragState;
         const targetPort = document.elementFromPoint(event.clientX, event.clientY)?.closest?.('[data-tree-port="input"]');
@@ -6228,7 +6533,7 @@
             return;
           }
           const [routeKey, route] = sharedRoutes[0];
-          const edgeId = addResponseTreeEdgeDraft(drag.plantId, drag.sourceKey, targetKey, routeKey, route?.label || '');
+          const edgeId = addResponseTreeEdgeDraft(drag.plantId, drag.sourceKey, targetKey, routeKey, routeKey, route?.label || '');
           if (edgeId) renderPlantsUsers();
         }
         return;
@@ -6257,6 +6562,10 @@
     });
 
     document.addEventListener('pointercancel', () => {
+      if (responseTreeCanvasDragState) {
+        responseTreeCanvasDragState.shell?.classList.remove('is-panning');
+        responseTreeCanvasDragState = null;
+      }
       if (responseTreePortDragState) {
         responseTreePortDragState.path?.remove();
         document.querySelectorAll('.response-tree-port.is-hot').forEach(el => el.classList.remove('is-hot'));
@@ -6270,10 +6579,31 @@
     window.addResponseTreeEdge = function (plantId) {
       const sourceKey = String(document.getElementById(`tree-source-${plantId}`)?.value || '').trim().toLowerCase();
       const targetKey = String(document.getElementById(`tree-target-${plantId}`)?.value || '').trim().toLowerCase();
-      const routeKey = String(document.getElementById(`tree-route-${plantId}`)?.value || '').trim();
+      const mode = String(document.getElementById(`tree-mode-${plantId}`)?.value || 'pass-through');
+      const targetRouteKey = String(document.getElementById(`tree-target-route-${plantId}`)?.value || '').trim();
       const trigger = String(document.getElementById(`tree-trigger-${plantId}`)?.value || '').trim();
-      const edgeId = addResponseTreeEdgeDraft(plantId, sourceKey, targetKey, routeKey, trigger);
-      if (edgeId) renderPlantsUsers();
+      if (mode === 'translate') {
+        const sourceRouteEl = document.getElementById(`tree-source-route-${plantId}`);
+        const sourceRouteKey = String(sourceRouteEl?.value || '').trim();
+        const edgeId = addResponseTreeEdgeDraft(plantId, sourceKey, targetKey, sourceRouteKey, targetRouteKey, trigger);
+        if (edgeId) renderPlantsUsers();
+        return;
+      }
+      const selectedRouteKeys = Array.from(document.querySelectorAll('.response-tree-route-check-input:checked'))
+        .filter(input => input.dataset.plantId === plantId)
+        .map(input => String(input.value || '').trim())
+        .filter(Boolean);
+      if (!selectedRouteKeys.length) {
+        feedback(`status-fb-${plantId}`, 'error', 'Select at least one shared subcategory.');
+        return;
+      }
+      const statuses = normalizeStatusesForSave(statusDraftByPlant.get(plantId) || {});
+      const routes = normalizeSubcategoryRoutes(subcategoryRouteDraftByPlant.get(plantId) || {}, statuses);
+      const added = selectedRouteKeys
+        .sort((a, b) => compareSubcategoryLabels(routes[a]?.label || a, routes[b]?.label || b))
+        .map(routeKey => addResponseTreeEdgeDraft(plantId, sourceKey, targetKey, routeKey, routeKey, trigger))
+        .filter(Boolean);
+      if (added.length) renderPlantsUsers();
     };
 
     window.patchResponseTreeEdge = function (plantId, edgeId, field, value) {
@@ -6289,37 +6619,56 @@
       renderPlantsUsers();
     };
 
-    window.setResponseTreeEdgeRoute = function (plantId, edgeId, routeKey) {
+    window.setResponseTreeEdgeMapping = function (plantId, edgeId, field, routeKey) {
       const statuses = normalizeStatusesForSave(statusDraftByPlant.get(plantId) || {});
       const routes = normalizeSubcategoryRoutes(subcategoryRouteDraftByPlant.get(plantId) || {}, statuses);
       const cleanRouteKey = String(routeKey || '').trim();
       const tree = normalizeResponseTree(responseTreeDraftByPlant.get(plantId) || {}, statuses, routes);
       const selectedEdge = tree.edges.find(edge => edge.id === edgeId);
       if (!selectedEdge) return;
-      if (!cleanRouteKey || !routes[cleanRouteKey] || !responseTreeRouteIsShared(routes[cleanRouteKey], selectedEdge.sourceKey, selectedEdge.targetKey)) {
-        feedback(`status-fb-${plantId}`, 'error', 'Choose a subcategory routed to both branch roles.');
+      const currentSourceRoute = selectedEdge.sourceRouteKey || selectedEdge.routeKeys?.[0] || '';
+      const currentTargetRoute = selectedEdge.targetRouteKey || currentSourceRoute;
+      const nextSourceRoute = field === 'sourceRouteKey' ? cleanRouteKey : currentSourceRoute;
+      const nextTargetRoute = field === 'targetRouteKey' ? cleanRouteKey : currentTargetRoute;
+      if (!nextSourceRoute || !routes[nextSourceRoute] || !responseTreeRouteIsShared(routes[nextSourceRoute], selectedEdge.sourceKey, selectedEdge.sourceKey)) {
+        feedback(`status-fb-${plantId}`, 'error', 'Choose a source subcategory routed to the source role.');
         renderPlantsUsers();
         return;
       }
-      const nextRouteKeys = [cleanRouteKey];
-      const exists = selectedEdge && tree.edges.some(edge =>
+      if (!nextTargetRoute || !routes[nextTargetRoute] || !responseTreeRouteIsShared(routes[nextTargetRoute], selectedEdge.targetKey, selectedEdge.targetKey)) {
+        feedback(`status-fb-${plantId}`, 'error', 'Choose a target subcategory routed to the target role.');
+        renderPlantsUsers();
+        return;
+      }
+      const exists = tree.edges.some(edge =>
         edge.id !== edgeId
         && edge.isActive !== false
         && edge.sourceKey === selectedEdge.sourceKey
         && edge.targetKey === selectedEdge.targetKey
-        && responseTreeRouteScopeMatches(edge, nextRouteKeys)
+        && responseTreeRouteScopeMatches(edge, nextSourceRoute, nextTargetRoute)
       );
       if (exists) {
-        feedback(`status-fb-${plantId}`, 'error', 'That response branch already exists for this subcategory scope.');
+        feedback(`status-fb-${plantId}`, 'error', 'That response mapping already exists.');
         renderPlantsUsers();
         return;
       }
       const edges = tree.edges.map(edge => {
         if (edge.id !== edgeId) return edge;
-        return { ...edge, routeKeys: nextRouteKeys };
+        return {
+          ...edge,
+          sourceRouteKey: nextSourceRoute,
+          targetRouteKey: nextTargetRoute,
+          mode: nextSourceRoute === nextTargetRoute ? 'pass-through' : 'translate',
+          routeKeys: [nextSourceRoute]
+        };
       });
       responseTreeDraftByPlant.set(plantId, normalizeResponseTree({ edges }, statuses, routes));
       renderPlantsUsers();
+    };
+
+    window.setResponseTreeEdgeRoute = function (plantId, edgeId, routeKey) {
+      window.setResponseTreeEdgeMapping(plantId, edgeId, 'sourceRouteKey', routeKey);
+      window.setResponseTreeEdgeMapping(plantId, edgeId, 'targetRouteKey', routeKey);
     };
 
     window.deleteResponseTreeEdge = function (plantId, edgeId) {

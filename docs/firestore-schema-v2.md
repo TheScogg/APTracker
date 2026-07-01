@@ -345,9 +345,24 @@ The current single-document runtime config stores status categories and subcateg
         "sourceKey": "controlman",
         "targetKey": "maintenance",
         "trigger": "Mechanical fault suspected",
+        "sourceRouteKey": "do011_eoat",
+        "targetRouteKey": "do011_eoat",
+        "mode": "pass-through",
         "routeKeys": ["do011_eoat"],
         "isActive": true,
         "order": 0
+      },
+      {
+        "id": "controlman_to_startup",
+        "sourceKey": "controlman",
+        "targetKey": "startup",
+        "trigger": "Mold change complete",
+        "sourceRouteKey": "mold_change",
+        "targetRouteKey": "warm_up",
+        "mode": "translate",
+        "routeKeys": ["mold_change"],
+        "isActive": true,
+        "order": 1
       }
     ]
   }
@@ -356,7 +371,7 @@ The current single-document runtime config stores status categories and subcateg
 
 `statuses.{statusKey}.subs` remains the compatibility/display list and category picker source. `subcategoryRoutes` is the routing source for assigning a subcategory to one or more category roles; bound routes are synced back into each bound category's `subs` list so the app picker reflects the bindings.
 
-`responseTree` is an optional guidance layer for loose category-role hierarchy. It explains and suggests paths between existing category/status keys, such as `controlman -> maintenance`, without enforcing workflow order. For SQL/D1 compatibility, the same object may also be embedded under `statuses.__responseTree`; runtime status normalization must strip keys beginning with `__` from normal category lists.
+`responseTree` is an optional guidance layer for loose category-role hierarchy. It explains and suggests paths between existing category/status keys, such as `controlman -> maintenance`, without enforcing workflow order. Edges map a source category/subcategory to a target category/subcategory. Pass-through edges keep the same route key on both sides; translation edges use different `sourceRouteKey` and `targetRouteKey` values, such as `Mold Change -> Warm Up`. `routeKeys` remains as a legacy compatibility field and should contain the source route. For SQL/D1 compatibility, the same object may also be embedded under `statuses.__responseTree`; runtime status normalization must strip keys beginning with `__` from normal category lists.
 
 ---
 
