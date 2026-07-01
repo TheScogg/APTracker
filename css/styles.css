@@ -2413,9 +2413,29 @@
   /* Compact workflow step buttons (card header) */
   .wf-steps { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
   .wf-step-btn { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; border: 1px solid color-mix(in srgb, var(--color-border, var(--border)) 80%, transparent); background: color-mix(in srgb, var(--color-surface-raised, var(--bg3)) 76%, transparent); color: var(--color-text-muted, var(--text2)); cursor: pointer; transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.15s, opacity 0.15s, box-shadow 0.15s; user-select: none; font-size: 13px; padding: 0; box-shadow: none; }
-  .wf-escalate-btn { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; flex: 0 0 30px; border-radius: 9px; border: 1px solid color-mix(in srgb, var(--escalate-color, var(--color-accent, var(--accent))) 52%, transparent); background: color-mix(in srgb, var(--escalate-color, var(--color-accent, var(--accent))) 13%, transparent); color: var(--escalate-color, var(--color-accent, var(--accent))); cursor: pointer; font-size: 15px; font-weight: 900; line-height: 1; padding: 0; transition: transform 0.15s, background 0.15s, box-shadow 0.15s; }
+  .wf-escalate-btn { position: relative; display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; flex: 0 0 30px; border-radius: 9px; border: 1px solid color-mix(in srgb, var(--escalate-color, var(--color-accent, var(--accent))) 52%, transparent); background: color-mix(in srgb, var(--escalate-color, var(--color-accent, var(--accent))) 13%, transparent); color: var(--escalate-color, var(--color-accent, var(--accent))); cursor: pointer; font-size: 15px; font-weight: 900; line-height: 1; padding: 0; transition: transform 0.15s, background 0.15s, box-shadow 0.15s; }
   .wf-escalate-btn:hover { transform: translateY(-1px); background: color-mix(in srgb, var(--escalate-color, var(--color-accent, var(--accent))) 20%, transparent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--escalate-color, var(--color-accent, var(--accent))) 12%, transparent); }
   .wf-escalate-btn:active { transform: translateY(0) scale(0.96); }
+  .wf-escalate-count {
+    position: absolute;
+    top: -7px;
+    right: -7px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 16px;
+    height: 16px;
+    border: 1px solid color-mix(in srgb, var(--escalate-color, var(--color-accent, var(--accent))) 64%, #fff 12%);
+    border-radius: 999px;
+    background: var(--color-surface, var(--bg2));
+    color: var(--escalate-color, var(--color-accent, var(--accent)));
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 9px;
+    font-weight: 900;
+    line-height: 1;
+    padding: 0 4px;
+    box-shadow: 0 0 8px color-mix(in srgb, var(--escalate-color, var(--color-accent, var(--accent))) 24%, transparent);
+  }
   .wf-step-btn:hover { background: color-mix(in srgb, var(--color-surface-raised, var(--bg3)) 88%, #fff 12%); border-color: color-mix(in srgb, var(--color-text-subtle, var(--text3)) 68%, transparent); color: var(--color-text, var(--text)); transform: translateY(-1px); }
   .wf-step-btn.pending { opacity: 0.28; background: transparent; border-color: color-mix(in srgb, var(--color-border, var(--border)) 48%, transparent); }
   .wf-step-btn.completed { opacity: 0.56; background: rgba(34,197,94,0.06); border-color: rgba(34,197,94,0.2); color: rgba(134,239,172,0.7); }
@@ -2489,6 +2509,7 @@
   .issue-response-path-row {
     display: flex;
     align-items: center;
+    justify-content: flex-end;
     gap: 5px;
     max-width: 100%;
     min-width: 0;

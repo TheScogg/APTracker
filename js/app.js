@@ -1489,7 +1489,6 @@ window.openResponseEscalationModal = function (issueId, encodedSourceKey = '', e
     return `<div class="response-escalation-choice" style="--path-color:${targetColor};">
       <div class="response-escalation-path">${esc(path.pathLabel)}</div>
       <div class="response-escalation-trigger">${esc(path.trigger || 'Suggested response path')}</div>
-      <div class="response-escalation-note">Adds ${esc(targetLabel)} as a new active category, starts it at Called, and sends the category alert.</div>
       <button class="response-escalation-confirm" type="button" onclick="confirmResponseEscalation('${esc(path.edgeId)}')">↗ Call ${esc(targetLabel)}</button>
     </div>`;
   }).join('');
@@ -11771,12 +11770,16 @@ function renderIssues() {
       const context = buildResponseTreeContext(statusKey, subStatus);
       const responsePath = context?.paths?.[0] || null;
       const escalationTargetColor = responsePath?.targetKey ? getStatusColor(responsePath.targetKey) : fallbackColor;
+      const escalationTitle = responsePath
+        ? context.paths.length > 1
+          ? `Choose from ${context.paths.length} escalation paths`
+          : `Escalate to ${getStatusLabel(responsePath.targetKey, 'short')}`
+        : 'Escalate to suggested response path';
       const escalationButtonHtml = canEdit && context?.paths?.length
-        ? `<button class="wf-escalate-btn" type="button" style="--escalate-color:${escalationTargetColor};" onclick="event.stopPropagation(); openResponseEscalationModal('${issue.id}','${encodeURIComponent(statusKey || '')}','${encodeURIComponent(subStatus || '')}')" title="Escalate to suggested response path">↗</button>`
+        ? `<button class="wf-escalate-btn" type="button" style="--escalate-color:${escalationTargetColor};" onclick="event.stopPropagation(); openResponseEscalationModal('${issue.id}','${encodeURIComponent(statusKey || '')}','${encodeURIComponent(subStatus || '')}')" title="${esc(escalationTitle)}">↗${context.paths.length > 1 ? `<span class="wf-escalate-count">${context.paths.length}</span>` : ''}</button>`
         : '';
-      const responsePathHtml = responsePath
+      const responsePathHtml = escalationButtonHtml
         ? `<div class="issue-response-path-row">
-            <div class="issue-response-path" style="--path-color:${getStatusColor(responsePath.targetKey)}" title="${esc(responsePath.trigger || responsePath.pathLabel || '')}"><span>${esc(formatCompactResponseTreePath(responsePath))}</span></div>
             ${escalationButtonHtml}
           </div>`
         : '';
