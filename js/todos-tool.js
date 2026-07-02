@@ -19,10 +19,14 @@ export function initTodosTool({
   toPressId,
   getOpenMachine,
   getOpenIssue,
-  completeDemoGuideStep
+  completeDemoGuideStep,
+  shouldUseSqlStagingReads,
+  requireSqlRead,
+  dataApi
 }) {
   let todoUnsubPersonal = null;
   let todoUnsubShared = null;
+  let todoPollTimer = null;
   let _todoSearchTimer = null;
   const state = {
     personal: [],
@@ -280,7 +284,9 @@ export function initTodosTool({
 
   function todoPayload(todo, { creating = false } = {}) {
     const user = getCurrentUser();
+    const useSql = shouldUseSqlStagingReads(getCurrentPlantId());
     const searchText = [todo.title, todo.notes, todo.listName, todo.machineCode, todo.issueId].join(' ').toLowerCase();
+    const timeNow = useSql ? new Date().toISOString() : serverTimestamp();
     return {
       title: todo.title,
       notes: todo.notes || '',
@@ -288,7 +294,7 @@ export function initTodosTool({
       dueDate: todo.dueDate || '',
       priority: todo.priority || 'none',
       isCompleted: Boolean(todo.isCompleted),
-      completedAt: todo.isCompleted ? (todo.completedAt || serverTimestamp()) : null,
+      completedAt: todo.isCompleted ? (todo.completedAt || timeNow) : null,
       plantId: getCurrentPlantId() || '',
       pressId: todo.pressId || '',
       machineCode: todo.machineCode || '',
@@ -296,23 +302,43 @@ export function initTodosTool({
       ownerUid: todo.ownerUid || user?.uid || '',
       ownerName: todo.ownerName || user?.displayName || user?.email || '',
       searchText,
-      updatedAt: serverTimestamp(),
+      updatedAt: timeNow,
       updatedBy: currentActor(),
       schemaVersion: 1,
-      ...(creating ? { createdAt: serverTimestamp(), createdBy: currentActor() } : {})
+      ...(creating ? { createdAt: timeNow, createdBy: currentActor() } : {})
     };
+  }
+
+  function _todosCreateClientId(prefix = 'todo') {
+    return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
   }
 
   async function saveTodo(todo, { creating = false, oldScope = null, activate = true } = {}) {
     if (!getCurrentUser() || !getCurrentPlantId()) return null;
     const scope = todo.scope === 'shared' ? 'shared' : 'personal';
-    const id = todo.id || doc(scope === 'shared' ? plantTodosCol() : userTodosCol()).id;
+    const useSql = shouldUseSqlStagingReads(getCurrentPlantId());
+    const id = todo.id || (useSql 
+      ? _todosCreateClientId('todo') 
+      : doc(scope === 'shared' ? plantTodosCol() : userTodosCol()).id);
     const normalized = normalizeTodo({ ...todo, id }, scope);
     const createsTargetDoc = creating || !todo.id || (oldScope && oldScope !== scope);
-    await setDoc(todoRef(scope, id), todoPayload(normalized, { creating: createsTargetDoc }), { merge: true });
-    if (oldScope && oldScope !== scope && todo.id) await deleteDoc(todoRef(oldScope, todo.id));
-    if (activate) state.activeKey = `${scope}:${id}`;
-    return { ...normalized, id, scope };
+    
+    if (useSql) {
+      const payload = {
+        ...todoPayload(normalized, { creating: createsTargetDoc }),
+        todoId: id,
+        scope
+      };
+      const response = await dataApi.createTodo(getCurrentPlantId(), payload);
+      const savedTodo = normalizeTodo(response.todo, scope);
+      if (activate) state.activeKey = `${scope}:${id}`;
+      return savedTodo;
+    } else {
+      await setDoc(todoRef(scope, id), todoPayload(normalized, { creating: createsTargetDoc }), { merge: true });
+      if (oldScope && oldScope !== scope && todo.id) await deleteDoc(todoRef(oldScope, todo.id));
+      if (activate) state.activeKey = `${scope}:${id}`;
+      return { ...normalized, id, scope };
+    }
   }
 
   async function createFromQuick() {
@@ -350,17 +376,33 @@ export function initTodosTool({
 
   async function toggleTodo(todo) {
     try {
-      await updateDoc(todoRef(todo.scope, todo.id), {
-        isCompleted: !todo.isCompleted,
-        completedAt: !todo.isCompleted ? serverTimestamp() : null,
-        updatedAt: serverTimestamp(),
-        updatedBy: currentActor()
-      });
-      state.error = '';
-      if (state.activeKey === todoKey(todo)) {
-        const updatedTodo = { ...todo, isCompleted: !todo.isCompleted };
-        if (state.view === 'editor') renderEditor(updatedTodo);
-        else renderViewer(updatedTodo);
+      if (shouldUseSqlStagingReads(getCurrentPlantId())) {
+        const timeNow = new Date().toISOString();
+        const response = await dataApi.updateTodo(getCurrentPlantId(), todo.id, {
+          isCompleted: !todo.isCompleted,
+          completedAt: !todo.isCompleted ? timeNow : null,
+          updatedAt: timeNow,
+          updatedBy: currentActor()
+        });
+        const updatedTodo = normalizeTodo(response.todo, todo.scope);
+        state.error = '';
+        if (state.activeKey === todoKey(todo)) {
+          if (state.view === 'editor') renderEditor(updatedTodo);
+          else renderViewer(updatedTodo);
+        }
+      } else {
+        await updateDoc(todoRef(todo.scope, todo.id), {
+          isCompleted: !todo.isCompleted,
+          completedAt: !todo.isCompleted ? serverTimestamp() : null,
+          updatedAt: serverTimestamp(),
+          updatedBy: currentActor()
+        });
+        state.error = '';
+        if (state.activeKey === todoKey(todo)) {
+          const updatedTodo = { ...todo, isCompleted: !todo.isCompleted };
+          if (state.view === 'editor') renderEditor(updatedTodo);
+          else renderViewer(updatedTodo);
+        }
       }
     } catch (err) {
       setError(`Could not update todo: ${err?.message || 'permission denied'}`, err);
@@ -372,7 +414,11 @@ export function initTodosTool({
     if (!todo?.id) return;
     if (!confirm(`Delete "${todo.title || 'Untitled Todo'}"?`)) return;
     try {
-      await deleteDoc(todoRef(todo.scope, todo.id));
+      if (shouldUseSqlStagingReads(getCurrentPlantId())) {
+        await dataApi.deleteTodo(getCurrentPlantId(), todo.id);
+      } else {
+        await deleteDoc(todoRef(todo.scope, todo.id));
+      }
       state.error = '';
       renderViewer(null);
     } catch (err) {
@@ -388,6 +434,40 @@ export function initTodosTool({
     if (!getCurrentUser() || !getCurrentPlantId() || state.listening) return;
     state.listening = true;
     state.error = '';
+
+    if (shouldUseSqlStagingReads(getCurrentPlantId())) {
+      let active = true;
+      todoUnsubPersonal = () => {
+        active = false;
+        if (todoPollTimer) {
+          clearTimeout(todoPollTimer);
+          todoPollTimer = null;
+        }
+      };
+      const poll = async () => {
+        if (!active || !getCurrentPlantId()) return;
+        try {
+          const payload = await requireSqlRead(
+            `todos ${getCurrentPlantId()}`,
+            () => dataApi.listTodos(getCurrentPlantId()),
+            `Todos are missing in D1 for plant ${getCurrentPlantId()}.`
+          );
+          state.error = '';
+          state.personal = (payload.personal || []).map(t => normalizeTodo(t, 'personal'));
+          state.shared = (payload.shared || []).map(t => normalizeTodo(t, 'shared'));
+          renderList();
+          refreshActiveTodo();
+        } catch (err) {
+          console.warn('todos SQL poll error', err);
+          state.error = `Could not load todos: ${err?.message || 'permission denied'}`;
+          renderList();
+        }
+        if (active) todoPollTimer = setTimeout(poll, 5000);
+      };
+      await poll();
+      return;
+    }
+
     todoUnsubPersonal = onSnapshot(query(userTodosCol(), orderBy('updatedAt', 'desc')), snap => {
       const plantId = getCurrentPlantId();
       state.personal = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.plantId === plantId);
@@ -412,6 +492,10 @@ export function initTodosTool({
   function stopListeners() {
     if (todoUnsubPersonal) todoUnsubPersonal();
     if (todoUnsubShared) todoUnsubShared();
+    if (todoPollTimer) {
+      clearTimeout(todoPollTimer);
+      todoPollTimer = null;
+    }
     todoUnsubPersonal = null;
     todoUnsubShared = null;
     state.listening = false;

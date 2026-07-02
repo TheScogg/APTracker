@@ -40,17 +40,16 @@ export function createApiSessionClient({ getFirebaseIdToken, exchangePath = '/ap
     return Number.isFinite(expiresMs) && expiresMs > (Date.now() + 60 * 1000);
   }
 
-  async function exchange(forceRefresh = false) {
-    if (!getFirebaseIdToken) return '';
+  async function exchange(forceRefresh = false, googleIdToken = null) {
     if (!forceRefresh && isFresh(cached)) return cached.token;
     if (inFlight) return inFlight;
     inFlight = (async () => {
-      const firebaseToken = await getFirebaseIdToken();
-      if (!firebaseToken) return '';
+      const tokenToExchange = googleIdToken || (getFirebaseIdToken ? await getFirebaseIdToken() : null);
+      if (!tokenToExchange) return '';
       const res = await fetchImpl(exchangePath, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${firebaseToken}`
+          Authorization: `Bearer ${tokenToExchange}`
         }
       });
       const text = await res.text();
@@ -72,7 +71,7 @@ export function createApiSessionClient({ getFirebaseIdToken, exchangePath = '/ap
 
   return {
     async getAccessToken(options = {}) {
-      const token = await exchange(Boolean(options?.forceRefresh));
+      const token = await exchange(Boolean(options?.forceRefresh), options?.googleIdToken);
       if (token) return token;
       throw new Error('App session is unavailable. Sign in again to continue.');
     },
@@ -81,7 +80,7 @@ export function createApiSessionClient({ getFirebaseIdToken, exchangePath = '/ap
       writeStoredSession(null);
     },
     warm(options = {}) {
-      return exchange(Boolean(options?.forceRefresh)).catch(() => '');
+      return exchange(Boolean(options?.forceRefresh), options?.googleIdToken).catch(() => '');
     }
   };
 }

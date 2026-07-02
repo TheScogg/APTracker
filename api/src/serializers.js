@@ -587,6 +587,31 @@ export function serializeWikiAttachment(row) {
   };
 }
 
+export function serializeTodo(row) {
+  if (!row) return null;
+  return {
+    id: row.todo_id,
+    scope: row.scope,
+    plantId: row.plant_id,
+    ownerUid: row.owner_uid,
+    title: row.title,
+    notes: row.notes || '',
+    listName: row.list_name || 'Inbox',
+    dueDate: row.due_date || '',
+    priority: row.priority || 'none',
+    isCompleted: Boolean(row.is_completed),
+    completedAt: toIso(row.completed_at),
+    pressId: row.press_id || '',
+    machineCode: row.machine_code || '',
+    issueId: row.issue_id || '',
+    searchText: row.search_text || '',
+    createdBy: parseJson(row.created_by_json, null),
+    updatedBy: parseJson(row.updated_by_json, null),
+    createdAt: toIso(row.created_at),
+    updatedAt: toIso(row.updated_at)
+  };
+}
+
 export const __testOnly = {
   parseJson,
   toIso

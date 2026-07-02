@@ -28,9 +28,10 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css" />
-<script src="./js/build-info.js?v=6c458c2-17a87805"></script>
+<script src="./js/build-info.js?v=9eecea3-69ad6c76"></script>
 <script src="./js/fcm-config.js?v=ae083d6"></script>
-<link rel="stylesheet" href="./css/styles.css?v=6c458c2-17a87805">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<link rel="stylesheet" href="./css/styles.css?v=9eecea3-69ad6c76">
 </head>
 <body>
 
@@ -40,7 +41,7 @@
     <div class="login-icon">⚙</div>
     <div class="login-title">AP <span>TRACKER</span></div>
     <div class="login-sub">Sign in to log and track issues</div>
-    <button class="google-btn" id="google-signin-btn"></button>
+    <div id="google-signin-btn" class="google-btn-container" style="display:flex; justify-content:center; width:100%; min-height:44px; margin-top:10px;"></div>
     <button class="demo-login-btn" id="demo-login-btn" type="button">Open Demo Plant</button>
   </div>
 </div>
@@ -85,7 +86,7 @@
   <div id="sync-banner" class="visible">
     <div class="sync-dot" id="sync-dot"></div>
     <span id="sync-text" aria-live="polite">Connecting…</span>
-    <span id="app-version-indicator" class="app-version-indicator" title="Current commit version">rev: 6c458c2</span>
+    <span id="app-version-indicator" class="app-version-indicator" title="Current commit version">rev: 9eecea3</span>
     <span id="firestore-io-indicator" class="firestore-io-indicator" title="Estimated Firestore operations for this session">R:0 W:0</span>
   </div>
 
@@ -1953,7 +1954,7 @@
   </div>
 </div>
 
-<script type="module" src="./js/app.js?v=6c458c2-17a87805"></script>
+<script type="module" src="./js/app.js?v=9eecea3-69ad6c76"></script>
 
 <!-- MASCOT CHARACTER CARD POPOVER -->
 <div class="mascot-popover-backdrop" id="mascot-popover-backdrop" onclick="if(event.target===this)closeMascotPopover()">

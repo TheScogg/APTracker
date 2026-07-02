@@ -2680,6 +2680,7 @@
       vertical-align: middle;
     }
   </style>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 
 <body>
@@ -2688,7 +2689,7 @@
       <div class="login-card">
         <h1>AP <span style="color:var(--accent)">TRACKER</span></h1>
         <p class="muted" style="margin-bottom:14px;">Sign in to access Admin Portal.</p>
-        <button id="google-signin-btn" class="btn btn-primary" style="width:100%;">Sign in with Google</button>
+        <div id="google-signin-btn" style="display:flex; justify-content:center; width:100%; min-height:40px;"></div>
         <div id="login-feedback" class="feedback"></div>
       </div>
     </div>
@@ -3077,9 +3078,6 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import { getAuth, setPersistence, browserLocalPersistence, GoogleAuthProvider, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut as fbSignOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-    import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
     import { createApiSessionClient } from "./js/auth-session-client.js";
     import {
       assignableStatusKeys,
@@ -3292,29 +3290,42 @@
       return { ok: true, item: normalized };
     }
 
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
-    const auth = getAuth(app);
-    setPersistence(auth, browserLocalPersistence).catch(() => { });
-    const provider = new GoogleAuthProvider();
-    const apiSessionClient = createApiSessionClient({
-      async getFirebaseIdToken() {
-        if (!currentUser?.getIdToken) throw new Error('Sign in is required.');
-        return currentUser.getIdToken();
-      }
-    });
-    provider.setCustomParameters({ prompt: 'select_account' });
+    const apiSessionClient = createApiSessionClient();
+
+    // Firebase Auth / Firestore stub placeholders for backward compatibility
+    const db = null;
+    const auth = null;
+    const provider = null;
+    const collection = null;
+    const collectionGroup = null;
+    const updateDoc = null;
+    const deleteDoc = null;
+    const doc = null;
+    const getDoc = null;
+    const getDocs = null;
+    const setDoc = null;
+    const addDoc = null;
+    const onSnapshot = null;
+    const serverTimestamp = null;
+    const query = null;
+    const orderBy = null;
+    const where = null;
+    const writeBatch = null;
+    const arrayUnion = null;
+    const arrayRemove = null;
+    const increment = null;
+    const limit = null;
+    const runTransaction = null;
+    const startAfter = null;
+    const signInWithPopup = null;
+    const signInAnonymously = null;
+    const fbSignOut = null;
     const DATA_BACKEND_SQL = 'sql';
     function selectedDataBackend() {
-      const explicit = String(window.AP_TRACKER_DATA_BACKEND || '').trim().toLowerCase();
-      if (explicit === 'sql' || explicit === 'firebase') return explicit;
-      const params = new URLSearchParams(window.location.search || '');
-      const fromQuery = String(params.get('dataBackend') || '').trim().toLowerCase();
-      if (fromQuery === 'sql' || fromQuery === 'firebase') return fromQuery;
-      return 'sql';
+      return DATA_BACKEND_SQL;
     }
     function shouldUseSqlAdmin() {
-      return selectedDataBackend() === DATA_BACKEND_SQL;
+      return true;
     }
 
     let currentUser = null;
@@ -3700,40 +3711,86 @@
       return syncSharedStatusesFromSubcategoryRoutes(statuses, routes);
     }
 
-    async function finalizeRedirectSignIn() {
-      if (!sessionStorage.getItem('ap:auth:redirectPending')) return;
+    const GOOGLE_CLIENT_ID = window.AP_TRACKER_GOOGLE_CLIENT_ID || '943200266003-ebvu7h5rdu5fducqpclo0g7hj96ggl75.apps.googleusercontent.com';
+
+    function parseJwtPayload(token) {
       try {
-        await getRedirectResult(auth);
+        const base64Url = token.split('.')[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+          return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+        }).join(''));
+        return JSON.parse(jsonPayload);
       } catch (e) {
-        console.error(e);
-        feedback('login-feedback', 'error', e.message || 'Sign-in failed.');
-        const btn = document.getElementById('google-signin-btn');
-        btn.disabled = false;
-        btn.textContent = 'Sign in with Google';
-      } finally {
-        sessionStorage.removeItem('ap:auth:redirectPending');
+        console.error("Failed to parse JWT payload:", e);
+        return {};
       }
     }
 
-    async function signInWithGoogle() {
-      const btn = document.getElementById('google-signin-btn');
-      btn.disabled = true;
-      btn.textContent = 'Signing in…';
-      feedback('login-feedback', '', '');
+    let googleSignInInitialized = false;
+
+    function initGoogleSignIn() {
+      if (typeof google === 'undefined' || !google.accounts || !google.accounts.id) {
+        setTimeout(initGoogleSignIn, 100);
+        return;
+      }
+      if (!googleSignInInitialized) {
+        google.accounts.id.initialize({
+          client_id: GOOGLE_CLIENT_ID,
+          callback: handleGoogleSignInResponse,
+          auto_select: false
+        });
+        googleSignInInitialized = true;
+      }
+      const container = document.getElementById('google-signin-btn');
+      if (container) {
+        google.accounts.id.renderButton(
+          container,
+          { theme: "outline", size: "large", type: "standard", shape: "rectangular", text: "signin_with", logo_alignment: "left" }
+        );
+      }
+    }
+
+    async function handleGoogleSignInResponse(response) {
+      const credential = response.credential;
+      if (!credential) return;
+      
+      const feedbackEl = document.getElementById('login-feedback');
+      if (feedbackEl) feedbackEl.innerHTML = '<div style="color:var(--color-text-muted, var(--text2)); font-size:14px; margin-top:10px;">Signing in...</div>';
+
       try {
-        sessionStorage.setItem('ap:auth:redirectPending', '1');
-        await signInWithRedirect(auth, provider);
+        const token = await apiSessionClient.getAccessToken({ forceRefresh: true, googleIdToken: credential });
+        if (token) {
+          const payload = parseJwtPayload(token);
+          currentUser = {
+            uid: payload.sub,
+            email: payload.email || '',
+            displayName: payload.name || payload.email || payload.sub,
+            photoURL: payload.picture || '',
+            getIdToken: async () => credential
+          };
+          
+          document.getElementById('login-screen').classList.remove('visible');
+          document.getElementById('app-screen').classList.add('visible');
+          document.getElementById('whoami').textContent = `${currentUser.displayName || currentUser.email} (${currentUser.email || currentUser.uid})`;
+          await refreshAdminData();
+        }
       } catch (e) {
-        console.error(e);
-        feedback('login-feedback', 'error', e.message || 'Sign-in failed.');
-        btn.disabled = false;
-        btn.textContent = 'Sign in with Google';
+        console.error('Google Sign-In error:', e);
+        if (feedbackEl) feedbackEl.innerHTML = `<span style="color:red;">Error: ${e.message || e}</span>`;
+        initGoogleSignIn();
       }
     }
 
     async function doSignOut() {
       apiSessionClient.clear();
-      await fbSignOut(auth);
+      currentUser = null;
+      document.getElementById('login-screen').classList.add('visible');
+      document.getElementById('app-screen').classList.remove('visible');
+      if (typeof google !== 'undefined' && google.accounts && google.accounts.id) {
+        google.accounts.id.disableAutoSelect();
+      }
+      initGoogleSignIn();
     }
 
     async function loadUserPlants() {
@@ -8033,36 +8090,27 @@
       await refreshMigrationReadiness();
     }
 
-    onAuthStateChanged(auth, async user => {
-      if (!user) {
-        apiSessionClient.clear();
-        currentUser = null;
-        document.getElementById('login-screen').classList.add('visible');
-        document.getElementById('app-screen').classList.remove('visible');
-        const btn = document.getElementById('google-signin-btn');
-        btn.disabled = false;
-        btn.textContent = 'Sign in with Google';
-        return;
-      }
-
-      currentUser = user;
-      void apiSessionClient.warm();
-
-      if (!shouldUseSqlAdmin() && user.email) {
-        setDoc(doc(db, 'userLookup', user.email.toLowerCase()), {
-          uid: user.uid,
-          displayName: user.displayName || '',
-          email: user.email,
-          lastSeen: serverTimestamp()
-        }, { merge: true }).catch(() => { });
-      }
-
-      document.getElementById('login-screen').classList.remove('visible');
-      document.getElementById('app-screen').classList.add('visible');
-      document.getElementById('whoami').textContent = `${user.displayName || user.email} (${user.email || user.uid})`;
-
+    async function bootstrapAdminSession() {
       try {
-        await refreshAdminData();
+        const token = await apiSessionClient.getAccessToken().catch(() => null);
+        if (token) {
+          const payload = parseJwtPayload(token);
+          currentUser = {
+            uid: payload.sub,
+            email: payload.email || '',
+            displayName: payload.name || payload.email || payload.sub,
+            photoURL: payload.picture || '',
+            getIdToken: async () => ''
+          };
+          
+          document.getElementById('login-screen').classList.remove('visible');
+          document.getElementById('app-screen').classList.add('visible');
+          document.getElementById('whoami').textContent = `${currentUser.displayName || currentUser.email} (${currentUser.email || currentUser.uid})`;
+          
+          await refreshAdminData();
+        } else {
+          doSignOut();
+        }
       } catch (e) {
         console.error('Admin bootstrap failed:', e);
         feedback('login-feedback', 'error', e?.message || 'Could not load admin data.');
@@ -8077,7 +8125,7 @@
         </div>`;
         }
       }
-    });
+    }
 
     // ── Badge & Leaderboard helpers ───────────────────────────────────────────────
 
@@ -8345,8 +8393,8 @@
 
     // ── End Mission Modal ─────────────────────────────────────────────────────────
 
-    document.getElementById('google-signin-btn').addEventListener('click', signInWithGoogle);
-    finalizeRedirectSignIn();
+    initGoogleSignIn();
+    bootstrapAdminSession();
     document.getElementById('signout-btn').addEventListener('click', doSignOut);
     document.getElementById('create-plant-btn').addEventListener('click', createPlant);
     document.getElementById('load-schedule-file-btn').addEventListener('click', loadScheduleJsonFromFile);

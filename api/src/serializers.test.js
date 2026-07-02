@@ -8,7 +8,8 @@ import {
   serializePlant,
   serializePressConfig,
   serializeStatusConfig,
-  serializeUserContextRows
+  serializeUserContextRows,
+  serializeTodo
 } from './serializers.js';
 
 test('serializeUserContextRows groups memberships under one user', () => {
@@ -137,4 +138,35 @@ test('config serializers parse JSON and normalize dates', () => {
 test('test helpers fall back safely on bad JSON and dates', () => {
   assert.equal(__testOnly.toIso('not-a-date'), null);
   assert.deepEqual(__testOnly.parseJson('{bad}', []), []);
+});
+
+test('serializeTodo correctly serializes todo D1 rows', () => {
+  const result = serializeTodo({
+    todo_id: 't1',
+    scope: 'personal',
+    plant_id: 'p1',
+    owner_uid: 'u1',
+    title: 'Buy groceries',
+    notes: 'Milk and bread',
+    list_name: 'Inbox',
+    due_date: '2026-07-02',
+    priority: 'high',
+    is_completed: 1,
+    completed_at: '2026-07-02T12:00:00.000Z',
+    press_id: 'press-1',
+    machine_code: '1.02',
+    issue_id: 'issue-123',
+    search_text: 'buy groceries milk and bread inbox 1.02 issue-123',
+    created_by_json: '{"uid":"u1","name":"Pat"}',
+    updated_by_json: '{"uid":"u1","name":"Pat"}',
+    created_at: '2026-07-02T11:00:00.000Z',
+    updated_at: '2026-07-02T11:30:00.000Z'
+  });
+
+  assert.equal(result.id, 't1');
+  assert.equal(result.scope, 'personal');
+  assert.equal(result.isCompleted, true);
+  assert.deepEqual(result.createdBy, { uid: 'u1', name: 'Pat' });
+  assert.equal(result.completedAt, '2026-07-02T12:00:00.000Z');
+  assert.equal(result.dueDate, '2026-07-02');
 });

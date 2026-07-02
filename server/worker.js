@@ -63,6 +63,91 @@ async function getGoogleOAuthToken(env) {
   return _cachedToken;
 }
 
+let _googleJwksCache = null;
+let _googleJwksExpiresAt = 0;
+
+async function getGoogleJwks() {
+  if (_googleJwksCache && Date.now() < _googleJwksExpiresAt) {
+    return _googleJwksCache;
+  }
+  const res = await fetch('https://www.googleapis.com/oauth2/v3/certs');
+  if (!res.ok) throw new Error('Failed to fetch Google JWKs');
+  const data = await res.json();
+  _googleJwksCache = data.keys || [];
+  _googleJwksExpiresAt = Date.now() + 6 * 60 * 60 * 1000;
+  return _googleJwksCache;
+}
+
+function base64urlToBytes(str) {
+  const normalized = str.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = normalized + '='.repeat((4 - (normalized.length % 4 || 4)) % 4);
+  const binary = atob(padded);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+async function verifyGoogleIdToken(token, env) {
+  if (!token) throw new Error('Token is empty');
+  const parts = token.split('.');
+  if (parts.length !== 3) throw new Error('Invalid token structure');
+  
+  const [headerB64, payloadB64, signatureB64] = parts;
+  const header = JSON.parse(base64urlDecode(headerB64));
+  const payload = JSON.parse(base64urlDecode(payloadB64));
+  
+  const kid = header.kid;
+  if (!kid) throw new Error('Missing kid in token header');
+  
+  const keys = await getGoogleJwks();
+  const jwk = keys.find(k => k.kid === kid);
+  if (!jwk) throw new Error('JWK not found for kid: ' + kid);
+  
+  const publicKey = await crypto.subtle.importKey(
+    'jwk',
+    jwk,
+    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+    false,
+    ['verify']
+  );
+  
+  const enc = new TextEncoder();
+  const signingInput = `${headerB64}.${payloadB64}`;
+  const signatureBytes = base64urlToBytes(signatureB64);
+  const isValid = await crypto.subtle.verify(
+    'RSASSA-PKCS1-v1_5',
+    publicKey,
+    signatureBytes,
+    enc.encode(signingInput)
+  );
+  
+  if (!isValid) throw new Error('Signature verification failed');
+  
+  const now = Math.floor(Date.now() / 1000);
+  if (payload.exp < now) throw new Error('Token expired');
+  
+  const validIssuers = ['accounts.google.com', 'https://accounts.google.com'];
+  if (!validIssuers.includes(payload.iss)) throw new Error('Invalid issuer: ' + payload.iss);
+  
+  const allowedClientId = env.GOOGLE_CLIENT_ID || '';
+  if (allowedClientId && payload.aud !== allowedClientId) {
+    throw new Error('Audience mismatch. Token aud: ' + payload.aud + ', expected: ' + allowedClientId);
+  } else if (!allowedClientId) {
+    if (!payload.aud.startsWith('943200266003-')) {
+      throw new Error('Audience project mismatch. Token aud: ' + payload.aud);
+    }
+  }
+  
+  return {
+    uid: payload.sub,
+    email: payload.email || '',
+    name: payload.name || payload.email || payload.sub,
+    picture: payload.picture || ''
+  };
+}
+
 async function handleOcr(request, env) {
   if (request.method === 'OPTIONS') {
     return new Response(null, {
@@ -1158,7 +1243,7 @@ async function listUserD1FcmTokens(env, uid) {
 async function authenticateExchangeUser(request, env) {
   const authHeader = request.headers.get('Authorization') || '';
   const match = authHeader.match(/^Bearer\s+(.+)$/i);
-  if (!match) throw new Error('Missing Firebase ID token.');
+  if (!match) throw new Error('Missing Google ID token.');
   const bearerToken = match[1];
   const sessionSecret = env.APP_SESSION_SECRET || env.AP_SESSION_SECRET || '';
   const appSessionUser = await verifyAppSessionToken(bearerToken, sessionSecret);
@@ -1170,15 +1255,53 @@ async function authenticateExchangeUser(request, env) {
       photoUrl: appSessionUser.picture || ''
     };
   }
-  const apiKey = env.FIREBASE_WEB_API_KEY || FIREBASE_WEB_API_KEY;
-  const res = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(apiKey)}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ idToken: bearerToken })
-  });
-  const data = await res.json();
-  if (!res.ok || !data.users?.[0]?.localId) throw new Error('Invalid Firebase ID token.');
-  return data.users[0];
+  try {
+    const decoded = await verifyGoogleIdToken(bearerToken, env);
+    let uid = decoded.uid;
+    const db = getD1Db(env);
+    if (db && decoded.email) {
+      const emailLower = decoded.email.toLowerCase();
+      try {
+        const row = await db.prepare(
+          'SELECT uid FROM user_lookup WHERE email_normalized = ? LIMIT 1'
+        ).bind(emailLower).first();
+        if (row?.uid) {
+          uid = row.uid;
+        } else {
+          const userRow = await db.prepare(
+            'SELECT uid FROM users WHERE LOWER(email) = ? ORDER BY LENGTH(uid) DESC, created_at ASC LIMIT 1'
+          ).bind(emailLower).first();
+          if (userRow?.uid) {
+            uid = userRow.uid;
+          }
+        }
+      } catch (dbErr) {
+        console.error('Failed to look up uid in D1:', dbErr);
+      }
+    }
+    return {
+      localId: uid,
+      email: decoded.email,
+      displayName: decoded.name,
+      photoUrl: decoded.picture
+    };
+  } catch (e) {
+    try {
+      const apiKey = env.FIREBASE_WEB_API_KEY || FIREBASE_WEB_API_KEY;
+      if (apiKey) {
+        const res = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(apiKey)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ idToken: bearerToken })
+        });
+        const data = await res.json();
+        if (res.ok && data.users?.[0]?.localId) {
+          return data.users[0];
+        }
+      }
+    } catch (_) {}
+    throw new Error('Google Sign-In verification failed: ' + e.message);
+  }
 }
 
 async function authenticateAppRequest(request, env) {

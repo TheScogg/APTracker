@@ -24,7 +24,8 @@ import {
   serializeUserContextRows,
   serializeWikiAttachment,
   serializeWikiPage,
-  serializeWikiRevision
+  serializeWikiRevision,
+  serializeTodo
 } from '../api/src/serializers.js';
 
 function jsonResponse(body, init = {}) {
@@ -2756,6 +2757,174 @@ async function deleteNoteAttachment(db, plantId, noteId, attachmentId, user) {
   return jsonResponse({ ok: true, attachmentId });
 }
 
+async function getTodoRow(db, plantId, todoId) {
+  return first(
+    db,
+    `
+      SELECT *
+      FROM todos
+      WHERE plant_id = ? AND todo_id = ?
+      LIMIT 1
+    `,
+    plantId,
+    todoId
+  );
+}
+
+async function listTodos(db, request, plantId, user) {
+  await requirePlantPermission(db, plantId, user, null);
+  const rows = await all(
+    db,
+    `
+      SELECT *
+      FROM todos
+      WHERE plant_id = ?
+        AND (scope = 'shared' OR (scope = 'personal' AND owner_uid = ?))
+      ORDER BY updated_at DESC
+    `,
+    plantId,
+    user.uid
+  );
+  const personal = rows.filter(r => r.scope === 'personal').map(serializeTodo);
+  const shared = rows.filter(r => r.scope === 'shared').map(serializeTodo);
+  return jsonResponse({ personal, shared });
+}
+
+async function createTodo(db, plantId, body, user) {
+  await requirePlantPermission(db, plantId, user, null);
+  const todoId = stringOrNull(body.todoId || body.id);
+  if (!todoId) throw Object.assign(new Error('Missing todoId.'), { status: 400 });
+  const scope = stringOrNull(body.scope) || 'personal';
+  const ownerUid = stringOrNull(body.ownerUid) || user.uid;
+  const now = nowIso();
+  const createdAt = asIso(body.createdAt, now);
+  const updatedAt = asIso(body.updatedAt, createdAt);
+  
+  await run(
+    db,
+    `
+      INSERT INTO todos (
+        todo_id, scope, plant_id, owner_uid, title, notes, list_name, due_date, priority,
+        is_completed, completed_at, press_id, machine_code, issue_id, search_text,
+        created_by_json, updated_by_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(todo_id) DO UPDATE SET
+        scope = excluded.scope,
+        plant_id = excluded.plant_id,
+        owner_uid = excluded.owner_uid,
+        title = excluded.title,
+        notes = excluded.notes,
+        list_name = excluded.list_name,
+        due_date = excluded.due_date,
+        priority = excluded.priority,
+        is_completed = excluded.is_completed,
+        completed_at = excluded.completed_at,
+        press_id = excluded.press_id,
+        machine_code = excluded.machine_code,
+        issue_id = excluded.issue_id,
+        search_text = excluded.search_text,
+        updated_by_json = excluded.updated_by_json,
+        updated_at = excluded.updated_at
+    `,
+    todoId,
+    scope,
+    plantId,
+    ownerUid,
+    stringOrNull(body.title) || 'Untitled Todo',
+    stringOrNull(body.notes),
+    stringOrNull(body.listName) || 'Inbox',
+    stringOrNull(body.dueDate),
+    stringOrNull(body.priority) || 'none',
+    asBoolInt(body.isCompleted),
+    asIso(body.completedAt, null),
+    stringOrNull(body.pressId),
+    stringOrNull(body.machineCode),
+    stringOrNull(body.issueId),
+    stringOrNull(body.searchText),
+    jsonString(body.createdBy || { uid: user.uid, name: user.name }),
+    jsonString(body.updatedBy || { uid: user.uid, name: user.name }),
+    createdAt,
+    updatedAt
+  );
+  
+  const saved = await getTodoRow(db, plantId, todoId);
+  return jsonResponse({ todo: serializeTodo(saved) }, { status: 201 });
+}
+
+async function updateTodo(db, plantId, todoId, body, user) {
+  await requirePlantPermission(db, plantId, user, null);
+  const existing = await getTodoRow(db, plantId, todoId);
+  if (!existing) throw Object.assign(new Error('Todo not found.'), { status: 404 });
+  const now = nowIso();
+  
+  const scope = body.scope !== undefined ? stringOrNull(body.scope) : existing.scope;
+  const ownerUid = body.ownerUid !== undefined ? stringOrNull(body.ownerUid) : existing.owner_uid;
+  const title = body.title !== undefined ? stringOrNull(body.title) : existing.title;
+  const notes = body.notes !== undefined ? stringOrNull(body.notes) : existing.notes;
+  const listName = body.listName !== undefined ? stringOrNull(body.listName) : existing.list_name;
+  const dueDate = body.dueDate !== undefined ? stringOrNull(body.dueDate) : existing.due_date;
+  const priority = body.priority !== undefined ? stringOrNull(body.priority) : existing.priority;
+  const isCompleted = body.isCompleted !== undefined ? asBoolInt(body.isCompleted) : existing.is_completed;
+  const completedAt = body.completedAt !== undefined ? asIso(body.completedAt, null) : existing.completed_at;
+  const pressId = body.pressId !== undefined ? stringOrNull(body.pressId) : existing.press_id;
+  const machineCode = body.machineCode !== undefined ? stringOrNull(body.machineCode) : existing.machine_code;
+  const issueId = body.issueId !== undefined ? stringOrNull(body.issueId) : existing.issue_id;
+  const searchText = body.searchText !== undefined ? stringOrNull(body.searchText) : existing.search_text;
+  
+  const updatedByJson = body.updatedBy !== undefined 
+    ? jsonString(body.updatedBy) 
+    : jsonString({ uid: user.uid, name: user.name });
+
+  await run(
+    db,
+    `
+      UPDATE todos
+      SET scope = ?,
+          owner_uid = ?,
+          title = ?,
+          notes = ?,
+          list_name = ?,
+          due_date = ?,
+          priority = ?,
+          is_completed = ?,
+          completed_at = ?,
+          press_id = ?,
+          machine_code = ?,
+          issue_id = ?,
+          search_text = ?,
+          updated_by_json = ?,
+          updated_at = ?
+      WHERE plant_id = ? AND todo_id = ?
+    `,
+    scope,
+    ownerUid,
+    title || 'Untitled Todo',
+    notes,
+    listName || 'Inbox',
+    dueDate,
+    priority || 'none',
+    isCompleted,
+    completedAt,
+    pressId,
+    machineCode,
+    issueId,
+    searchText,
+    updatedByJson,
+    now,
+    plantId,
+    todoId
+  );
+  
+  const saved = await getTodoRow(db, plantId, todoId);
+  return jsonResponse({ todo: serializeTodo(saved) });
+}
+
+async function deleteTodo(db, plantId, todoId, user) {
+  await requirePlantPermission(db, plantId, user, null);
+  await run(db, 'DELETE FROM todos WHERE plant_id = ? AND todo_id = ?', plantId, todoId);
+  return jsonResponse({ ok: true, todoId });
+}
+
 async function requireConversationMember(db, plantId, conversationId, user) {
   await requirePlantPermission(db, plantId, user, null);
   const row = await first(
@@ -3349,6 +3518,10 @@ export async function handleD1ApiRequest(request, env, { authenticateRequest } =
     const noteAttachmentsMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/notes\/([^/]+)\/attachments$/);
     const noteAttachmentCreateMatch = request.method === 'POST' && url.pathname.match(/^\/api\/plants\/([^/]+)\/notes\/([^/]+)\/attachments$/);
     const noteAttachmentDeleteMatch = request.method === 'DELETE' && url.pathname.match(/^\/api\/plants\/([^/]+)\/notes\/([^/]+)\/attachments\/([^/]+)$/);
+    const todosMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/todos$/);
+    const todoCreateMatch = request.method === 'POST' && url.pathname.match(/^\/api\/plants\/([^/]+)\/todos$/);
+    const todoUpdateMatch = request.method === 'PATCH' && url.pathname.match(/^\/api\/plants\/([^/]+)\/todos\/([^/]+)$/);
+    const todoDeleteMatch = request.method === 'DELETE' && url.pathname.match(/^\/api\/plants\/([^/]+)\/todos\/([^/]+)$/);
     const conversationsMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/conversations$/);
     const conversationCreateMatch = request.method === 'POST' && url.pathname.match(/^\/api\/plants\/([^/]+)\/conversations$/);
     const conversationMessagesMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/conversations\/([^/]+)\/messages$/);
@@ -3362,7 +3535,7 @@ export async function handleD1ApiRequest(request, env, { authenticateRequest } =
     const reportsDohMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/reports\/doh$/);
     const reportsRunsMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/reports\/runs$/);
 
-    if (!meMatch && !meUpdateMatch && !meStorePurchaseMatch && !mePushTokenMatch && !accessRequestCreateSelfMatch && !plantsListMatch && !plantCreateMatch && !bootstrapMatch && !dailySchedulesMatch && !dailyScheduleMatch && !plantMembersMatch && !plantMemberCreateMatch && !plantMemberUpdateMatch && !plantMemberDeleteMatch && !accessRequestsMatch && !accessRequestUpdateMatch && !statusConfigMatch && !statusConfigUpdateMatch && !pressConfigMatch && !pressConfigUpdateMatch && !storeConfigMatch && !storeConfigUpdateMatch && !roleAlertRoutingMatch && !roleAlertRoutingUpdateMatch && !gamificationMatch && !gamificationAwardMatch && !gamificationAdminMatch && !gamificationAdminUpdateMatch && !gamificationLeaderboardResetMatch && !userDirectoryMatch && !roleAlertsMatch && !roleAlertCreateMatch && !roleAlertUpdateMatch && !issuesMatch && !issueCreateMatch && !issueMatch && !issueUpdateMatch && !issueDeleteMatch && !eventsMatch && !attachmentsMatch && !notesMatch && !noteCreateMatch && !noteUpdateMatch && !noteDeleteMatch && !noteAttachmentsMatch && !noteAttachmentCreateMatch && !noteAttachmentDeleteMatch && !conversationsMatch && !conversationCreateMatch && !conversationMessagesMatch && !conversationMessageCreateMatch && !conversationReadMatch && !wikiPagesMatch && !wikiPageMatch && !wikiRevisionSaveMatch && !wikiPageDeleteMatch && !wikiAttachmentCreateMatch && !reportsDohMatch && !reportsRunsMatch) {
+    if (!meMatch && !meUpdateMatch && !meStorePurchaseMatch && !mePushTokenMatch && !accessRequestCreateSelfMatch && !plantsListMatch && !plantCreateMatch && !bootstrapMatch && !dailySchedulesMatch && !dailyScheduleMatch && !plantMembersMatch && !plantMemberCreateMatch && !plantMemberUpdateMatch && !plantMemberDeleteMatch && !accessRequestsMatch && !accessRequestUpdateMatch && !statusConfigMatch && !statusConfigUpdateMatch && !pressConfigMatch && !pressConfigUpdateMatch && !storeConfigMatch && !storeConfigUpdateMatch && !roleAlertRoutingMatch && !roleAlertRoutingUpdateMatch && !gamificationMatch && !gamificationAwardMatch && !gamificationAdminMatch && !gamificationAdminUpdateMatch && !gamificationLeaderboardResetMatch && !userDirectoryMatch && !roleAlertsMatch && !roleAlertCreateMatch && !roleAlertUpdateMatch && !issuesMatch && !issueCreateMatch && !issueMatch && !issueUpdateMatch && !issueDeleteMatch && !eventsMatch && !attachmentsMatch && !notesMatch && !noteCreateMatch && !noteUpdateMatch && !noteDeleteMatch && !noteAttachmentsMatch && !noteAttachmentCreateMatch && !noteAttachmentDeleteMatch && !todosMatch && !todoCreateMatch && !todoUpdateMatch && !todoDeleteMatch && !conversationsMatch && !conversationCreateMatch && !conversationMessagesMatch && !conversationMessageCreateMatch && !conversationReadMatch && !wikiPagesMatch && !wikiPageMatch && !wikiRevisionSaveMatch && !wikiPageDeleteMatch && !wikiAttachmentCreateMatch && !reportsDohMatch && !reportsRunsMatch) {
       return null;
     }
 
@@ -3533,6 +3706,18 @@ export async function handleD1ApiRequest(request, env, { authenticateRequest } =
         decodePathSegment(noteAttachmentDeleteMatch[3]),
         user
       );
+    }
+    if (todosMatch) {
+      return listTodos(db, request, decodePathSegment(todosMatch[1]), user);
+    }
+    if (todoCreateMatch) {
+      return createTodo(db, decodePathSegment(todoCreateMatch[1]), await request.json(), user);
+    }
+    if (todoUpdateMatch) {
+      return updateTodo(db, decodePathSegment(todoUpdateMatch[1]), decodePathSegment(todoUpdateMatch[2]), await request.json(), user);
+    }
+    if (todoDeleteMatch) {
+      return deleteTodo(db, decodePathSegment(todoDeleteMatch[1]), decodePathSegment(todoDeleteMatch[2]), user);
     }
     if (conversationsMatch) {
       return listConversations(db, request, decodePathSegment(conversationsMatch[1]), user);

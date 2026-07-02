@@ -2,11 +2,6 @@ export const DATA_BACKEND_FIREBASE = 'firebase';
 export const DATA_BACKEND_SQL = 'sql';
 
 export function selectedDataBackend() {
-  const explicit = String(window.AP_TRACKER_DATA_BACKEND || '').trim().toLowerCase();
-  if (explicit === DATA_BACKEND_SQL || explicit === DATA_BACKEND_FIREBASE) return explicit;
-  const params = new URLSearchParams(window.location.search || '');
-  const fromQuery = String(params.get('dataBackend') || '').trim().toLowerCase();
-  if (fromQuery === DATA_BACKEND_SQL || fromQuery === DATA_BACKEND_FIREBASE) return fromQuery;
   return DATA_BACKEND_SQL;
 }
 
@@ -426,77 +421,35 @@ export class SqlDataApi {
     });
   }
 
+  listTodos(plantId) {
+    return this.request(`/plants/${encodeURIComponent(plantId)}/todos`);
+  }
+
+  createTodo(plantId, payload) {
+    return this.request(`/plants/${encodeURIComponent(plantId)}/todos`, {
+      method: 'POST',
+      body: payload
+    });
+  }
+
+  updateTodo(plantId, todoId, patch) {
+    return this.request(`/plants/${encodeURIComponent(plantId)}/todos/${encodeURIComponent(todoId)}`, {
+      method: 'PATCH',
+      body: patch
+    });
+  }
+
+  deleteTodo(plantId, todoId) {
+    return this.request(`/plants/${encodeURIComponent(plantId)}/todos/${encodeURIComponent(todoId)}`, {
+      method: 'DELETE'
+    });
+  }
+
   subscribeToPlant(_plantId, _handlers = {}) {
     throw new Error('SQL realtime adapter is not implemented yet. Start with polling, then add Durable Objects or WebSockets if needed.');
   }
 }
 
-export class FirebaseDataApi {
-  constructor(firebaseBindings = {}) {
-    this.firebaseBindings = firebaseBindings;
-  }
-
-  unavailable(methodName) {
-    throw new Error(`FirebaseDataApi.${methodName} has not been wired yet. Keep using existing Firebase calls until adapter cutover.`);
-  }
-
-  getCurrentUserContext() { return this.unavailable('getCurrentUserContext'); }
-  updateCurrentUserContext() { return this.unavailable('updateCurrentUserContext'); }
-  createAccessRequests() { return this.unavailable('createAccessRequests'); }
-  purchaseStoreItem() { return this.unavailable('purchaseStoreItem'); }
-  registerPushToken() { return this.unavailable('registerPushToken'); }
-  getMigrationReadiness() { return this.unavailable('getMigrationReadiness'); }
-  listPlants() { return this.unavailable('listPlants'); }
-  listPlantMembers() { return this.unavailable('listPlantMembers'); }
-  updatePlantMember() { return this.unavailable('updatePlantMember'); }
-  getStatusConfig() { return this.unavailable('getStatusConfig'); }
-  updateStatusConfig() { return this.unavailable('updateStatusConfig'); }
-  getStoreConfig() { return this.unavailable('getStoreConfig'); }
-  updateStoreConfig() { return this.unavailable('updateStoreConfig'); }
-  getRoleAlertRouting() { return this.unavailable('getRoleAlertRouting'); }
-  updateRoleAlertRouting() { return this.unavailable('updateRoleAlertRouting'); }
-  getGamificationState() { return this.unavailable('getGamificationState'); }
-  awardGamification() { return this.unavailable('awardGamification'); }
-  loadPlantBootstrap() { return this.unavailable('loadPlantBootstrap'); }
-  getDailySchedule() { return this.unavailable('getDailySchedule'); }
-  listDailySchedules() { return this.unavailable('listDailySchedules'); }
-  listIssues() { return this.unavailable('listIssues'); }
-  deleteIssue() { return this.unavailable('deleteIssue'); }
-  getIssue() { return this.unavailable('getIssue'); }
-  createIssue() { return this.unavailable('createIssue'); }
-  updateIssue() { return this.unavailable('updateIssue'); }
-  listIssueEvents() { return this.unavailable('listIssueEvents'); }
-  appendIssueEvent() { return this.unavailable('appendIssueEvent'); }
-  listIssueAttachments() { return this.unavailable('listIssueAttachments'); }
-  createIssueAttachment() { return this.unavailable('createIssueAttachment'); }
-  uploadPlantAttachment() { return this.unavailable('uploadPlantAttachment'); }
-  deleteStoredAttachmentObject() { return this.unavailable('deleteStoredAttachmentObject'); }
-  listNotes() { return this.unavailable('listNotes'); }
-  createNote() { return this.unavailable('createNote'); }
-  updateNote() { return this.unavailable('updateNote'); }
-  deleteNote() { return this.unavailable('deleteNote'); }
-  listNoteAttachments() { return this.unavailable('listNoteAttachments'); }
-  createNoteAttachment() { return this.unavailable('createNoteAttachment'); }
-  deleteNoteAttachment() { return this.unavailable('deleteNoteAttachment'); }
-  listConversations() { return this.unavailable('listConversations'); }
-  createConversation() { return this.unavailable('createConversation'); }
-  listConversationMessages() { return this.unavailable('listConversationMessages'); }
-  createConversationMessage() { return this.unavailable('createConversationMessage'); }
-  markConversationRead() { return this.unavailable('markConversationRead'); }
-  listWikiPages() { return this.unavailable('listWikiPages'); }
-  getWikiPage() { return this.unavailable('getWikiPage'); }
-  saveWikiRevision() { return this.unavailable('saveWikiRevision'); }
-  deleteWikiPage() { return this.unavailable('deleteWikiPage'); }
-  createWikiAttachment() { return this.unavailable('createWikiAttachment'); }
-  listRoleAlerts() { return this.unavailable('listRoleAlerts'); }
-  createRoleAlert() { return this.unavailable('createRoleAlert'); }
-  updateRoleAlert() { return this.unavailable('updateRoleAlert'); }
-  subscribeToPlant() { return this.unavailable('subscribeToPlant'); }
-}
-
 export function createDataApi(options = {}) {
-  if (selectedDataBackend() === DATA_BACKEND_SQL) {
-    return new SqlDataApi(options.sql || options);
-  }
-  return new FirebaseDataApi(options.firebase || {});
+  return new SqlDataApi(options.sql || options);
 }

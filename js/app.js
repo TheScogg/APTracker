@@ -1,10 +1,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, collectionGroup, updateDoc as rawUpdateDoc, deleteDoc as rawDeleteDoc, doc, getDoc as rawGetDoc, getDocs as rawGetDocs, setDoc as rawSetDoc, addDoc as rawAddDoc, onSnapshot as rawOnSnapshot, serverTimestamp, query, orderBy, where, writeBatch as rawWriteBatch, arrayUnion, arrayRemove, increment, limit, runTransaction as rawRunTransaction, startAfter } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { getAuth, setPersistence, browserLocalPersistence, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut as fbSignOut, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getMessaging, getToken, isSupported as isMessagingSupported, onMessage } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 import { alphaColor, esc, extFromContentType, localDateStr, parseDataUrlMeta } from "./app-utils.js";
 import { createDropdownController } from "./dropdown-ui.js";
-import { createDataApi, DATA_BACKEND_SQL, selectedDataBackend } from "./data-api.js";
+import { createDataApi, DATA_BACKEND_FIREBASE, DATA_BACKEND_SQL, selectedDataBackend } from "./data-api.js";
 import { createApiSessionClient } from "./auth-session-client.js";
 import { createFirebasePathHelpers } from "./firebase-paths.js";
 import { initExportTool } from "./export-tool.js";
@@ -68,13 +66,38 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-const db = initializeFirestore(app, {
-  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
-});
-const auth = getAuth(app);
-void setPersistence(auth, browserLocalPersistence).catch(() => { });
-const provider = new GoogleAuthProvider();
-provider.setCustomParameters({ prompt: "select_account" });
+
+// Firebase Auth / Firestore stub placeholders for backward compatibility
+const db = null;
+const auth = null;
+const provider = null;
+const collection = null;
+const collectionGroup = null;
+const doc = null;
+const serverTimestamp = () => new Date().toISOString();
+const query = null;
+const orderBy = null;
+const where = null;
+const arrayUnion = null;
+const arrayRemove = null;
+const increment = null;
+const limit = null;
+const startAfter = null;
+const signInWithPopup = null;
+const signInAnonymously = null;
+const fbSignOut = null;
+
+// Raw wrapped Firebase function stubs
+const rawGetDoc = null;
+const rawGetDocs = null;
+const rawSetDoc = null;
+const rawAddDoc = null;
+const rawUpdateDoc = null;
+const rawDeleteDoc = null;
+const rawWriteBatch = null;
+const rawRunTransaction = null;
+const rawOnSnapshot = null;
+
 const FCM_VAPID_KEY = String(window.AP_TRACKER_FCM_CONFIG?.vapidKey || '').trim();
 let fcmMessaging = null;
 let fcmRegistration = null;
@@ -180,12 +203,21 @@ const dataApi = createDataApi({
 });
 const sqlPlantBootstrapCache = new Map();
 
+function generateFirebaseLikeId() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let autoId = '';
+  for (let i = 0; i < 20; i++) {
+    autoId += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return autoId;
+}
+
 function shouldUseSqlBootstrap() {
   return SQL_STAGING_READ_MODE;
 }
 
 function shouldUseSqlStagingReads(plantId = currentPlantId) {
-  return SQL_STAGING_READ_MODE && SQL_STAGING_PLANT_IDS.has(String(plantId || ''));
+  return SQL_STAGING_READ_MODE;
 }
 
 async function safeSqlRead(label, loader) {
@@ -860,6 +892,13 @@ function removeSyncedOutboxItemsFromSnapshot(snap) {
 }
 
 async function flushOneIssueOutboxItem(item) {
+  // SQL-mode plants never use the Firestore outbox — items should not be here,
+  // but guard defensively to avoid calling writeBatch(null).
+  if (shouldUseSqlStagingReads(item.plantId)) {
+    await deleteLocalIssueOutboxItem(item.id);
+    return;
+  }
+
   const syncingItem = { ...item, status: 'syncing', error: '', updatedAt: new Date().toISOString() };
   await saveLocalIssueOutboxItem(syncingItem);
   if (currentPlantId === item.plantId) {
@@ -1478,16 +1517,22 @@ function closeResponseEscalationModal() {
 
 window.closeResponseEscalationModal = closeResponseEscalationModal;
 
-window.openResponseEscalationModal = function (issueId, encodedSourceKey = '', encodedSourceSubStatus = '', encodedEdgeId = '') {
+window.openResponseEscalationModal = function (issueId, encodedSourceKey = '', encodedSourceSubStatus = '', encodedEdgeId = '', encodedRouteMode = '') {
   if (!currentUserPermissions.canEditIssue) return;
   const issue = issues.find(item => item.id === issueId);
   const sourceKey = encodedSourceKey ? decodeURIComponent(encodedSourceKey) : '';
   const sourceSubStatus = encodedSourceSubStatus ? decodeURIComponent(encodedSourceSubStatus) : '';
   const requestedEdgeId = encodedEdgeId ? decodeURIComponent(encodedEdgeId) : '';
+  const requestedRouteMode = encodedRouteMode ? decodeURIComponent(encodedRouteMode) : '';
   const context = getIssueResponseTreeContext(issue, sourceKey, sourceSubStatus);
-  const paths = requestedEdgeId
+  let paths = requestedEdgeId
     ? (context?.paths || []).filter(path => path.edgeId === requestedEdgeId)
     : (context?.paths || []);
+  if (requestedRouteMode === 'translate') {
+    paths = paths.filter(path => path.mode === 'translate');
+  } else if (requestedRouteMode === 'pass-through') {
+    paths = paths.filter(path => path.mode !== 'translate');
+  }
   if (!issue || !paths.length) return;
   responseEscalationState = {
     issueId,
@@ -5393,42 +5438,104 @@ const MAX_DIM = 1000;
 const JPEG_QUALITY = 0.70;
 
 // ── AUTH ──
-function resetGoogleSignInButton() {
-  if (NO_AUTH_MODE || DEMO_MODE) return;
-  const btn = document.getElementById('google-signin-btn');
-  if (!btn) return;
-  btn.disabled = false;
-  btn.innerHTML = googleBtnHTML;
+const GOOGLE_CLIENT_ID = window.AP_TRACKER_GOOGLE_CLIENT_ID || '943200266003-ebvu7h5rdu5fducqpclo0g7hj96ggl75.apps.googleusercontent.com';
+
+function parseJwtPayload(token) {
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+      return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+    }).join(''));
+    return JSON.parse(jsonPayload);
+  } catch (e) {
+    console.error("Failed to parse JWT payload:", e);
+    return {};
+  }
 }
 
-async function signInWithGoogle() {
+function resetGoogleSignInButton() {
   if (NO_AUTH_MODE || DEMO_MODE) return;
-  const btn = document.getElementById('google-signin-btn');
-  if (!btn) return;
-  btn.disabled = true; btn.textContent = 'Signing in…';
-  try {
-    await signInWithPopup(auth, provider);
-  }
-  catch (e) {
-    console.error('Sign in error:', e.code, e.message);
-    resetGoogleSignInButton();
+  const container = document.getElementById('google-signin-btn');
+  if (container) {
+    container.innerHTML = '';
+    initGoogleSignIn();
   }
 }
-const googleBtnHTML = `<svg class="google-logo" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg> Sign in with Google`;
-const googleSignInBtn = document.getElementById('google-signin-btn');
-if (googleSignInBtn) {
-  googleSignInBtn.innerHTML = googleBtnHTML;
-  googleSignInBtn.addEventListener('click', signInWithGoogle);
+
+let googleSignInInitialized = false;
+
+function initGoogleSignIn() {
+  if (NO_AUTH_MODE || DEMO_MODE) return;
+  if (typeof google === 'undefined' || !google.accounts || !google.accounts.id) {
+    setTimeout(initGoogleSignIn, 100);
+    return;
+  }
+  
+  if (!googleSignInInitialized) {
+    google.accounts.id.initialize({
+      client_id: GOOGLE_CLIENT_ID,
+      callback: handleGoogleSignInResponse,
+      auto_select: false
+    });
+    googleSignInInitialized = true;
+  }
+  
+  const container = document.getElementById('google-signin-btn');
+  if (container) {
+    google.accounts.id.renderButton(
+      container,
+      { theme: "outline", size: "large", type: "standard", shape: "rectangular", text: "signin_with", logo_alignment: "left" }
+    );
+  }
+}
+
+async function handleGoogleSignInResponse(response) {
+  const credential = response.credential;
+  if (!credential) return;
+
+  const container = document.getElementById('google-signin-btn');
+  if (container) {
+    container.innerHTML = '<div style="color:var(--color-text-muted, var(--text2)); font-size:14px; margin-top:10px;">Signing in...</div>';
+  }
+
+  try {
+    const token = await apiSessionClient.getAccessToken({ forceRefresh: true, googleIdToken: credential });
+    if (token) {
+      const payload = parseJwtPayload(token);
+      currentUser = {
+        uid: payload.sub,
+        email: payload.email || '',
+        displayName: payload.name || payload.email || payload.sub,
+        photoURL: payload.picture || ''
+      };
+      await bootstrapSignedInSession(currentUser);
+    }
+  } catch (e) {
+    console.error('Google Sign-In error:', e);
+    if (container) {
+      container.innerHTML = '';
+      initGoogleSignIn();
+    }
+  }
+}
+
+// Start Google sign-in initialization
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    initGoogleSignIn();
+    bootstrapSessionFromStorage();
+  });
+} else {
+  initGoogleSignIn();
+  bootstrapSessionFromStorage();
 }
 const demoLoginBtn = document.getElementById('demo-login-btn');
 if (demoLoginBtn) {
   demoLoginBtn.addEventListener('click', () => {
     try { sessionStorage.removeItem('demo_signed_out'); } catch (_) { }
     if (DEMO_MODE) {
-      signInAnonymously(auth).catch(e => {
-        console.error('Demo anon sign-in failed:', e);
-        showDemoAuthError(e);
-      });
+      bootstrapSessionFromStorage();
     } else {
       const url = new URL(window.location.href);
       url.searchParams.set('demo', '1');
@@ -5451,7 +5558,27 @@ async function doSignOut() {
     try { sessionStorage.setItem('demo_signed_out', 'true'); } catch (_) { }
   }
   apiSessionClient.clear();
-  await fbSignOut(auth);
+  
+  stopRoleFeedAlertsWatcher();
+  clearRoleAlertBadge();
+  messagingTool.stopInboxWatcher();
+  currentUser = null;
+  document.getElementById('login-screen').classList.add('visible');
+  document.getElementById('app').classList.remove('visible');
+  issues = [];
+  issuesById.clear();
+  _deletedIssueIds.clear();
+  issueHistoryCursor = null;
+  issueHistoryFetchInFlight = null;
+  attachmentPhotoCache.clear();
+  issueEventHistoryCache.clear();
+  attachmentsHydrationToken++;
+  eventsHydrationToken++;
+  
+  if (typeof google !== 'undefined' && google.accounts && google.accounts.id) {
+    google.accounts.id.disableAutoSelect();
+  }
+  resetGoogleSignInButton();
 }
 
 function applyUserIdentityToShell(user) {
@@ -5975,6 +6102,9 @@ function seedInMemoryDemoIssues() {
 }
 
 async function ensureDemoPlantAccess() {
+  if (typeof doc !== 'function' || typeof setDoc !== 'function' || typeof getDoc !== 'function') {
+    return false;
+  }
   try {
     const plantRef = doc(db, 'plants', DEMO_PLANT_ID);
     const memberRef = plantMemberDocRef(DEMO_PLANT_ID, currentUser.uid);
@@ -6524,88 +6654,69 @@ async function handleOnboardingSubmit(btn) {
   }
 }
 
-onAuthStateChanged(auth, async user => {
-  if (!user) apiSessionClient.clear();
-  if (DEMO_MODE) {
-    const explicitlySignedOut = sessionStorage.getItem('demo_signed_out') === 'true';
-    if (!user) {
-      if (explicitlySignedOut) {
-        stopRoleFeedAlertsWatcher();
-        clearRoleAlertBadge();
-        stopStatusConfigListener();
-        messagingTool.stopInboxWatcher();
-        currentUser = null;
-        document.getElementById('login-screen').classList.add('visible');
-        document.getElementById('app').classList.remove('visible');
-        issues = [];
-        issuesById.clear();
-        _deletedIssueIds.clear();
-        issueHistoryCursor = null;
-        issueHistoryFetchInFlight = null;
-        attachmentPhotoCache.clear();
-        issueEventHistoryCache.clear();
-        attachmentsHydrationToken++;
-        eventsHydrationToken++;
-        resetGoogleSignInButton();
-      } else {
-        try { await signInAnonymously(auth); } catch (e) { console.error('Demo anon sign-in failed:', e); showDemoAuthError(e); }
-      }
-      return;
-    }
-    if (!user.isAnonymous) {
-      if (sessionStorage.getItem('demo_onboarding_in_progress') === 'true') {
-        return;
-      }
-      try {
-        await fbSignOut(auth);
-        await signInAnonymously(auth);
-      } catch (e) {
-        console.error('Demo anon sign-in failed:', e);
-        showDemoAuthError(e);
-      }
-      return;
-    }
-    await bootstrapDemoSession(user);
-    return;
-  }
+async function bootstrapSessionFromStorage() {
   if (NO_AUTH_MODE) {
     await bootstrapNoAuthSession();
     return;
   }
-  let resolvedUser = user;
-  if (resolvedUser) {
-    try {
-      await bootstrapSignedInSession(resolvedUser);
-    } catch (e) {
-      console.error('Session bootstrap failed:', e);
-      setSyncStatus('err', 'Could not load your plant data. Check connection and retry.');
-      document.getElementById('issues-list').innerHTML = `
-        <div class="empty-state">
-          <div class="empty-state-icon">⚠️</div>
-          <div class="empty-state-text" style="margin-bottom:12px;">Unable to load your data right now.</div>
-          <button onclick="window.location.reload()" style="font-size:13px;padding:8px 18px;border-radius:8px;border:1px solid var(--color-accent, var(--accent));background:transparent;color:var(--color-accent, var(--accent));cursor:pointer;font-family:'Nunito',sans-serif;">Reload</button>
-        </div>`;
+  if (DEMO_MODE) {
+    const explicitlySignedOut = sessionStorage.getItem('demo_signed_out') === 'true';
+    if (explicitlySignedOut) {
+      stopRoleFeedAlertsWatcher();
+      clearRoleAlertBadge();
+      stopStatusConfigListener();
+      messagingTool.stopInboxWatcher();
+      currentUser = null;
+      document.getElementById('login-screen').classList.add('visible');
+      document.getElementById('app').classList.remove('visible');
+      issues = [];
+      issuesById.clear();
+      _deletedIssueIds.clear();
+      issueHistoryCursor = null;
+      issueHistoryFetchInFlight = null;
+      attachmentPhotoCache.clear();
+      issueEventHistoryCache.clear();
+      attachmentsHydrationToken++;
+      eventsHydrationToken++;
+      resetGoogleSignInButton();
+    } else {
+      const mockAnonUser = {
+        uid: 'demo-anon-user',
+        isAnonymous: true,
+        displayName: 'Demo User',
+        email: '',
+        photoURL: ''
+      };
+      await bootstrapDemoSession(mockAnonUser);
     }
-  } else {
-    stopRoleFeedAlertsWatcher();
-    clearRoleAlertBadge();
-    stopStatusConfigListener();
-    messagingTool.stopInboxWatcher();
-    currentUser = null;
-    document.getElementById('login-screen').classList.add('visible');
-    document.getElementById('app').classList.remove('visible');
-    issues = [];
-    issuesById.clear();
-    _deletedIssueIds.clear();
-    issueHistoryCursor = null;
-    issueHistoryFetchInFlight = null;
-    attachmentPhotoCache.clear();
-    issueEventHistoryCache.clear();
-    attachmentsHydrationToken++;
-    eventsHydrationToken++;
-    resetGoogleSignInButton();
+    return;
   }
-});
+  
+  try {
+    const token = await apiSessionClient.getAccessToken().catch(() => null);
+    if (token) {
+      const payload = parseJwtPayload(token);
+      currentUser = {
+        uid: payload.sub,
+        email: payload.email || '',
+        displayName: payload.name || payload.email || payload.sub,
+        photoURL: payload.picture || ''
+      };
+      await bootstrapSignedInSession(currentUser);
+    } else {
+      doSignOut();
+    }
+  } catch (e) {
+    console.error('Session bootstrap failed:', e);
+    setSyncStatus('err', 'Could not load your plant data. Check connection and retry.');
+    document.getElementById('issues-list').innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon">⚠️</div>
+        <div class="empty-state-text" style="margin-bottom:12px;">Unable to load your data right now.</div>
+        <button onclick="window.location.reload()" style="font-size:13px;padding:8px 18px;border-radius:8px;border:1px solid var(--color-accent, var(--accent));background:transparent;color:var(--color-accent, var(--accent));cursor:pointer;font-family:'Nunito',sans-serif;">Reload</button>
+      </div>`;
+  }
+}
 
 // Pause issues listener when the page is hidden (another tab open) to avoid
 // cross-tab persistence contention causing spurious permission-denied errors.
@@ -9410,12 +9521,15 @@ window.submitIssue = async () => {
       ? sanitizeQualityDefectPayload(selectedQualityDefect)
       : null;
     const note = document.getElementById('issue-note').value.trim() || 'No Description Provided';
+    const loggedMachine = currentMachine;
     const initialWorkflowId = createWorkflowId(initialStatus);
     const shiftSel = document.getElementById('issue-shift').value;
     const shift = shiftSel === 'auto' ? getShiftForTime(d, getShiftSchedule(currentPlantId)) : shiftSel;
     const timerMinutes = parseTimerMinutes(document.getElementById('issue-timer-minutes')?.value);
     const isUrgent = Boolean(document.getElementById('issue-urgent')?.checked);
-    const issueRef = doc(plantCol('issues'));
+    const useDemoLocal = DEMO_MODE;
+    const useSql = shouldUseSqlStagingReads(currentPlantId);
+    const issueRef = (useDemoLocal || useSql) ? { id: generateFirebaseLikeId() } : doc(plantCol('issues'));
     const actor = currentActor();
     const draft = {
       plantId: currentPlantId,
@@ -9440,6 +9554,28 @@ window.submitIssue = async () => {
       createdAtIso: new Date().toISOString()
     };
     const localPhotos = pendingPhotos.map(p => ({ ...p }));
+    if (useDemoLocal) {
+      const createdIssue = buildLocalIssuePayloadFromDraft(issueRef.id, draft, localPhotos);
+      createdIssue.id = issueRef.id;
+      createdIssue.photos = localPhotos;
+      attachmentPhotoCache.set(issueRef.id, localPhotos);
+      issuesById.set(issueRef.id, createdIssue);
+      rebuildIssuesArrayFromMap();
+      refreshVisibleData();
+      issueLogPrefs.lastStatusKey = initialStatus;
+      issueLogPrefs.lastStatusSub = initialSubStatus;
+      issueLogPrefs.timerMinutes = String(document.getElementById('issue-timer-minutes')?.value || '');
+      issueLogPrefs.urgent = false;
+      saveIssueLogPrefs();
+      if (timerMinutes > 0) setIssueReminder(issueRef.id, timerMinutes);
+      completeDemoGuideStep('log');
+      closeModal();
+      showGameToast(`Logged Press ${loggedMachine}`);
+      if (requiresSerialNumber(initialStatus, initialSubStatus)) {
+        setTimeout(() => openSerialModal(issueRef.id, initialStatus, initialSubStatus, fmtDate(d)), 50);
+      }
+      return;
+    }
     if (shouldUseSqlStagingReads(currentPlantId)) {
       if (guardOfflinePhotos(localPhotos, 'Issue photos')) {
         setSubmitting(false);
@@ -9477,8 +9613,8 @@ window.submitIssue = async () => {
       if (timerMinutes > 0) setIssueReminder(issueRef.id, timerMinutes);
       completeDemoGuideStep('log');
       closeModal();
-      showGameToast(`Logged Press ${currentMachine}`);
-      queueRoleFeedAlert({ id: issueRef.id, machine: currentMachine }, { statusKey: initialStatus, subStatus: initialSubStatus, note, workflowId: initialWorkflowId }).catch(e => console.warn('role alert queue failed', e));
+      showGameToast(`Logged Press ${loggedMachine}`);
+      queueRoleFeedAlert({ id: issueRef.id, machine: loggedMachine }, { statusKey: initialStatus, subStatus: initialSubStatus, note, workflowId: initialWorkflowId }).catch(e => console.warn('role alert queue failed', e));
       if (uploadedPhotos.length > 0) awardGamification('photo_attached', { issueId: issueRef.id, dedupeSuffix: 'photo', tags: ['photo:attached'] }).catch(e => console.warn('gamification photo award failed', e));
       awardGamification('issue_created_complete', { issueId: issueRef.id, dedupeSuffix: 'issue-created', tags: ['issue:create', `status:${initialStatus || 'open'}`] }).catch(e => console.warn('gamification issue-created award failed', e));
       if (requiresSerialNumber(initialStatus, initialSubStatus)) {
@@ -9523,7 +9659,7 @@ window.submitIssue = async () => {
     setSyncStatus('syncing', 'Syncing - local issue pending');
     completeDemoGuideStep('log');
     closeModal();
-    showGameToast(syncState.online ? `Logged Press ${currentMachine} - syncing` : `Saved locally for Press ${currentMachine}`);
+    showGameToast(syncState.online ? `Logged Press ${loggedMachine} - syncing` : `Saved locally for Press ${loggedMachine}`);
     scheduleIssueOutboxFlush();
     if (requiresSerialNumber(initialStatus, initialSubStatus)) {
       setTimeout(() => {
@@ -9956,6 +10092,19 @@ window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
   let prev = currentStatus(issue);
   let appliedIssuePatch = null;
   try {
+    if (DEMO_MODE) {
+      const mutation = buildAddStatusEntryMutation(issue, issue, entry, status, subStatus, note);
+      prev = mutation.prev;
+      appliedIssuePatch = mutation.issuePatch;
+      const nextIssue = applyIssuePatchLocally(issue, appliedIssuePatch);
+      nextIssue.id = id;
+      issuesById.set(id, nextIssue);
+      rebuildIssuesArrayFromMap();
+      refreshVisibleData();
+      issueEventHistoryCache.delete(id);
+      if (status && status !== 'open') completeDemoGuideStep('route');
+      return workflowId;
+    }
     if (shouldUseSqlStagingReads(currentPlantId)) {
       const mutation = buildAddStatusEntryMutation(issue, issue, entry, status, subStatus, note);
       prev = mutation.prev;
@@ -10108,6 +10257,27 @@ window.updateStatusEntry = async (id, idx, status, subStatus, note, dateTime, ph
   // Recalculate current status from last entry
   const last = history[history.length - 1];
   try {
+    if (DEMO_MODE) {
+      const issuePatch = {
+        statusHistory: history,
+        ...(Array.isArray(photos) ? { photos: issue.photos || [] } : {}),
+        ...buildIssueV2CompatLocal({
+          machineCode: issue.machine || issue.machineCode || '',
+          statusKey: last.status || 'open',
+          subStatus: last.subStatus || '',
+          statusDateTime: last.dateTime || fmtDate(new Date()),
+          note: last.note || '',
+          baseIssue: latestIssue || issue
+        })
+      };
+      const nextIssue = applyIssuePatchLocally(latestIssue || issue, issuePatch);
+      nextIssue.id = id;
+      issuesById.set(id, nextIssue);
+      rebuildIssuesArrayFromMap();
+      refreshVisibleData();
+      issueEventHistoryCache.delete(id);
+      return;
+    }
     if (shouldUseSqlStagingReads(currentPlantId)) {
       const nextIssue = applyIssuePatchLocally(latestIssue || issue, {
         statusHistory: history,
@@ -10421,6 +10591,15 @@ window.startEditEntry = (id, idx) => {
   document.getElementById('edit-status-modal').classList.add('visible');
 };
 
+window.openStatusEntryTool = (id, idx, action = 'edit') => {
+  window.startEditEntry(id, idx);
+  if (action === 'camera' || action === 'library') {
+    requestAnimationFrame(() => {
+      document.getElementById(action === 'camera' ? 'edit-status-camera-input' : 'edit-status-library-input')?.click();
+    });
+  }
+};
+
 function updateEditStatusSubOptions() {
   const statusSelect = document.getElementById('edit-status-select');
   const selectedStatus = statusSelect.value;
@@ -10551,6 +10730,21 @@ window.setWorkflowState = async (id, state) => {
   const issue = issues.find(i => i.id === id);
   if (issue && (issue.workflowState || 'called') === state && hasSequentialWorkflowHistory(issue?.workflowStateHistory, state)) return;
   try {
+    if (DEMO_MODE) {
+      const stateAt = new Date().toISOString();
+      const nextIssue = applyIssuePatchLocally(issue, {
+        workflowState: state,
+        workflowStateHistory: mergeSequentialWorkflowHistory(issue?.workflowStateHistory, state, actor, stateAt),
+        updatedAt: stateAt,
+        updatedBy: actor
+      });
+      nextIssue.id = id;
+      issuesById.set(id, nextIssue);
+      rebuildIssuesArrayFromMap();
+      refreshVisibleData();
+      completeDemoGuideStep('workflow');
+      return;
+    }
     if (shouldUseSqlStagingReads(currentPlantId)) {
       const stateAt = new Date().toISOString();
       const nextIssue = applyIssuePatchLocally(issue, {
@@ -10590,7 +10784,7 @@ async function setWorkflowStateForEntryLocator(issueId, state, locateEntry) {
   let updatedWorkflowId = '';
   let didWrite = false;
   try {
-    if (shouldUseSqlStagingReads(currentPlantId)) {
+    if (DEMO_MODE || shouldUseSqlStagingReads(currentPlantId)) {
       const base = issue;
       if (!base) return '';
       const history = getMutableStatusHistory(base);
@@ -10648,7 +10842,13 @@ async function setWorkflowStateForEntryLocator(issueId, state, locateEntry) {
       }
       const nextIssue = applyIssuePatchLocally(base, patch);
       nextIssue.id = issueId;
-      await commitSqlIssueWrite(issueId, nextIssue);
+      if (DEMO_MODE) {
+        issuesById.set(issueId, nextIssue);
+        rebuildIssuesArrayFromMap();
+        refreshVisibleData();
+      } else {
+        await commitSqlIssueWrite(issueId, nextIssue);
+      }
       updatedWorkflowId = workflowId;
       didWrite = true;
     } else {
@@ -11780,58 +11980,50 @@ function renderIssues() {
     // Secondary status keys (needed by workflow rows below)
     const secKeys = getSecondaryStatuses(issue).filter(k => k !== 'resolved');
 
-    const getWorkflowResponseUi = (statusKey, subStatus, fallbackColor) => {
+    const getWorkflowResponseUi = (statusKey, subStatus, fallbackColor, entryIndex) => {
       const context = buildResponseTreeContext(statusKey, subStatus);
       const paths = canEdit && context?.paths?.length ? context.paths : [];
-      const summaryHtml = paths.length
-        ? `<span class="wf-route-summary" title="${esc(`${paths.length} suggested response path${paths.length === 1 ? '' : 's'}`)}">${paths.length} path${paths.length === 1 ? '' : 's'}</span>`
-        : '';
-      const escalationActionsHtml = paths.length
-        ? `<div class="wf-dropdown-section">
-            <div class="wf-dropdown-label">Escalate</div>
-            <div class="wf-route-actions">
-              ${paths.map(path => {
-                const isTranslate = path.mode === 'translate';
-                const targetColor = getStatusColor(path.targetKey) || fallbackColor;
-                const targetLabel = getStatusLabel(path.targetKey, 'short');
-                const sourceLabel = path.sourceRouteKey === RESPONSE_TREE_ANY_ROUTE_KEY
-                  ? 'Any'
-                  : (SUBCATEGORY_ROUTES?.[path.sourceRouteKey]?.label || subStatus || '');
-                const targetSubLabel = path.targetSubStatus || SUBCATEGORY_ROUTES?.[path.targetRouteKey]?.label || '';
-                const routeDetail = isTranslate
-                  ? `${sourceLabel || 'Source'} → ${targetSubLabel || 'Target'}`
-                  : (targetSubLabel || sourceLabel || 'Pass through');
-                return `<button class="wf-route-action ${isTranslate ? 'translate' : 'pass-through'}" type="button" style="--route-color:${targetColor};" onclick="event.stopPropagation(); openResponseEscalationModal('${issue.id}','${encodeURIComponent(statusKey || '')}','${encodeURIComponent(subStatus || '')}','${encodeURIComponent(path.edgeId || '')}')" title="${esc(path.trigger || 'Suggested response path')}">
-                  <span class="wf-route-icon">${isTranslate ? '⇢' : '→'}</span>
-                  <span class="wf-route-copy">
-                    <span class="wf-route-target">${esc(targetLabel)}</span>
-                    <span class="wf-route-detail">${esc(routeDetail)}</span>
-                  </span>
-                  <span class="wf-route-kind">${isTranslate ? 'Translate' : 'Pass'}</span>
-                </button>`;
-              }).join('')}
-            </div>
-          </div>`
-        : `<div class="wf-dropdown-section">
-            <div class="wf-dropdown-label">Escalate</div>
-            <div class="wf-dropdown-empty">No suggested response paths for this subcategory.</div>
-          </div>`;
-      return { escalationActionsHtml, summaryHtml };
+      const passThroughPaths = paths.filter(path => path.mode !== 'translate');
+      const translationPaths = paths.filter(path => path.mode === 'translate');
+      const summarizeRouteGroup = (group = []) => {
+        const targetLabels = [...new Set(group.map(path => getStatusLabel(path.targetKey, 'short')).filter(Boolean))];
+        const shownLabels = targetLabels.slice(0, 2).join(', ');
+        const extraCount = Math.max(0, targetLabels.length - 2);
+        const destinationText = shownLabels
+          ? `to ${shownLabels}${extraCount ? ` +${extraCount}` : ''}`
+          : 'suggested path';
+        return `${group.length} option${group.length === 1 ? '' : 's'} ${destinationText}`;
+      };
+      const renderRouteGroupButton = (group, mode) => {
+        if (!group.length) return '';
+        const isTranslate = mode === 'translate';
+        const targetColor = getStatusColor(group[0]?.targetKey) || fallbackColor;
+        const label = isTranslate ? 'Next...' : 'Escalate';
+        const detail = summarizeRouteGroup(group);
+        const title = `${label}: ${detail}`;
+        return `<button class="wf-tool-btn wf-route-action ${isTranslate ? 'translate' : 'pass-through'}" type="button" style="--route-color:${targetColor};" onclick="event.stopPropagation(); openResponseEscalationModal('${issue.id}','${encodeURIComponent(statusKey || '')}','${encodeURIComponent(subStatus || '')}','','${encodeURIComponent(mode)}')" title="${esc(title)}" aria-label="${esc(title)}">
+          <span class="wf-tool-icon">${isTranslate ? '⇢' : '→'}</span>
+          <span class="wf-tool-badge">${group.length}</span>
+        </button>`;
+      };
+      const routeToolsHtml = `${renderRouteGroupButton(passThroughPaths, 'pass-through')}${renderRouteGroupButton(translationPaths, 'translate')}`;
+      const escalationActionsHtml = `<div class="wf-dropdown-section">
+        <div class="wf-tool-row" aria-label="Status and escalation tools">
+          <div class="wf-tool-group status-tools">
+            <button class="wf-tool-btn" type="button" onclick="event.stopPropagation(); openStatusEntryTool('${issue.id}',${entryIndex},'edit')" title="Edit this status" aria-label="Edit this status"><span class="wf-tool-icon">✎</span></button>
+            <button class="wf-tool-btn" type="button" onclick="event.stopPropagation(); openStatusEntryTool('${issue.id}',${entryIndex},'camera')" title="Take photo for this status" aria-label="Take photo for this status"><span class="wf-tool-icon">📷</span></button>
+            <button class="wf-tool-btn" type="button" onclick="event.stopPropagation(); openStatusEntryTool('${issue.id}',${entryIndex},'library')" title="Choose photo for this status" aria-label="Choose photo for this status"><span class="wf-tool-icon">🖼️</span></button>
+          </div>
+          ${routeToolsHtml ? `<div class="wf-tool-group route-tools">${routeToolsHtml}</div>` : ''}
+        </div>
+      </div>`;
+      return { escalationActionsHtml };
     };
 
-    const renderWorkflowRowDropdown = ({ responseUi, workflowButtonsHtml, stateLabel, stateClass, ageLabel, statusLabel, subStatusLabel }) => `
+    const renderWorkflowRowDropdown = ({ responseUi }) => `
       <div class="wf-status-dropdown" onclick="event.stopPropagation()">
         <div class="wf-status-dropdown-panel">
           ${responseUi.escalationActionsHtml}
-          <div class="wf-dropdown-section">
-            <div class="wf-dropdown-label">Workflow</div>
-            <div class="wf-dropdown-steps">${workflowButtonsHtml}</div>
-          </div>
-          <div class="wf-dropdown-context">
-            <span>${esc(statusLabel || 'Status')}</span>
-            ${subStatusLabel ? `<span>${esc(subStatusLabel)}</span>` : ''}
-            <span class="${stateClass ? `wf-context-state ${stateClass}` : 'wf-context-state'}">${esc(stateLabel || 'Not Started')}${ageLabel ? ` · ${esc(ageLabel)}` : ''}</span>
-          </div>
         </div>
       </div>`;
 
@@ -11839,7 +12031,7 @@ function renderIssues() {
     const wfAge = workflowState
       ? _relativeTimeCompact(getWorkflowStateTimestamp(issue, currentEntry, workflowState, true))
       : '';
-    const currentResponseUi = getWorkflowResponseUi(currentKey, currentSubKey, sc.color);
+    const currentResponseUi = getWorkflowResponseUi(currentKey, currentSubKey, sc.color, currentEntryIndex);
     const wfHeaderHtml = `<div class="wf-steps-wrap" onclick="event.stopPropagation()">
       <div class="wf-steps-row">
         ${hasNoWorkflowState ? `<div class="wf-prompt-arrow" id="wf-arrow-${issue.id}"></div>` : ''}
@@ -11880,26 +12072,18 @@ function renderIssues() {
       }).join('');
       const sStateLabel = sState ? workflowConfig[sState].label : 'Not Started';
       const sStateClass = sState ? workflowConfig[sState].cssState : '';
-      const sResponseUi = getWorkflowResponseUi(sKey, sSubLabel, sColor);
+      const sResponseUi = getWorkflowResponseUi(sKey, sSubLabel, sColor, idx);
       const rowDropdownKey = `${issue.id}:${idx}`;
       const rowDropdownOpen = workflowStatusDropdownOpenKeys.has(rowDropdownKey);
       const rowDropdownHtml = renderWorkflowRowDropdown({
-        responseUi: sResponseUi,
-        workflowButtonsHtml: btnHtml,
-        stateLabel: sStateLabel,
-        stateClass: sStateClass,
-        ageLabel: sAge,
-        statusLabel: sCfg.label,
-        subStatusLabel: sSubLabel
+        responseUi: sResponseUi
       });
       return `<div class="wf-status-row is-peer${rowDropdownOpen ? ' open' : ''}${sState === 'finished' ? ' finished-checkered' : ''}" style="color:${sColor};" onclick="toggleWorkflowStatusDropdown(event,'${esc(rowDropdownKey)}')">
             <div class="wf-status-row-info">
               <div class="wf-status-header">
-                <span class="wf-status-caret">›</span>
                 <div class="issue-status" style="color:${sColor};border-color:${sColor};background:${alphaColor(sColor, 0.12)}">
                   <span class="issue-status-main">${sCfg.icon} ${esc(sCfg.label)}</span>
                 </div>
-                ${sResponseUi.summaryHtml}
               </div>
               ${sSubLabel ? `<span class="issue-status-sub" style="color:${sColor};">${esc(sSubLabel)}</span>` : ''}
             </div>
@@ -11957,26 +12141,14 @@ function renderIssues() {
     const currentDropdownKey = `${issue.id}:${currentEntryIndex}`;
     const currentDropdownOpen = workflowStatusDropdownOpenKeys.has(currentDropdownKey);
     const currentDropdownHtml = renderWorkflowRowDropdown({
-      responseUi: currentResponseUi,
-      workflowButtonsHtml: wfOrder.map(state => {
-        const cfg = workflowConfig[state];
-        const cls = state === workflowState ? `active ${cfg.cssState}` : isCompleted(state) ? 'completed' : 'pending';
-        return `<button class="wf-step-btn ${cls}" onclick="handleWfStepClick(event,'${issue.id}',${currentEntryIndex},'${state}')" title="${cfg.label}">${cfg.icon}</button>`;
-      }).join(''),
-      stateLabel: workflowState ? workflowConfig[workflowState].label : 'Not Started',
-      stateClass: workflowState ? workflowConfig[workflowState].cssState : '',
-      ageLabel: wfAge,
-      statusLabel: baseLabel,
-      subStatusLabel: subLabelWithSerial
+      responseUi: currentResponseUi
     });
     const currentWfRowHtml = `<div class="wf-status-row is-latest${currentDropdownOpen ? ' open' : ''}${workflowState === 'finished' ? ' finished-checkered' : ''}" style="color:${sc.color};" onclick="toggleWorkflowStatusDropdown(event,'${esc(currentDropdownKey)}')">
       <div class="wf-status-row-info">
         <div class="wf-status-header">
-          <span class="wf-status-caret">›</span>
           <div class="issue-status" style="color:${sc.color};border-color:${sc.color};background:${alphaColor(sc.color, 0.12)}">
             <span class="issue-status-main">${sc.icon} ${baseLabel}</span>
           </div>
-          ${currentResponseUi.summaryHtml}
         </div>
         ${subLabelWithSerial ? `<span class="issue-status-sub" style="color:${sc.color};">${esc(subLabelWithSerial)}</span>` : ''}
         ${serialBadgeHtml}
@@ -12581,8 +12753,9 @@ window.toggleWorkflowStatusDropdown = (evt, key) => {
   evt?.stopPropagation?.();
   const cleanKey = String(key || '').trim();
   if (!cleanKey) return;
-  if (workflowStatusDropdownOpenKeys.has(cleanKey)) workflowStatusDropdownOpenKeys.delete(cleanKey);
-  else workflowStatusDropdownOpenKeys.add(cleanKey);
+  const wasOpen = workflowStatusDropdownOpenKeys.has(cleanKey);
+  workflowStatusDropdownOpenKeys.clear();
+  if (!wasOpen) workflowStatusDropdownOpenKeys.add(cleanKey);
   renderIssues();
 };
 
@@ -14046,7 +14219,7 @@ function _themePrefsPayloadSignature(uid, payload) {
 }
 
 function _syncThemePrefsToFirestore() {
-  if (!currentUser) return;
+  if (!currentUser || DEMO_MODE || NO_AUTH_MODE) return;
   try {
     const uid = currentUser.uid;
     const activeTheme = readSavedTheme('midnight');
@@ -16283,7 +16456,10 @@ const todosTool = initTodosTool({
   toPressId,
   getOpenMachine: getCurrentOpenMachine,
   getOpenIssue: getCurrentOpenIssue,
-  completeDemoGuideStep
+  completeDemoGuideStep,
+  shouldUseSqlStagingReads,
+  requireSqlRead,
+  dataApi
 });
 window.openTodosModal = todosTool.open;
 window.closeTodosModal = todosTool.close;
