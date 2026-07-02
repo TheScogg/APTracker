@@ -1273,6 +1273,13 @@
         0 0 14px color-mix(in srgb, var(--accent) 46%, transparent);
     }
 
+    .response-tree-subcategory-pill.any {
+      border-style: dashed;
+      border-color: color-mix(in srgb, #f59e0b 62%, transparent);
+      background: color-mix(in srgb, #f59e0b 14%, var(--bg3));
+      color: var(--text);
+    }
+
     .response-tree-subcategory-pill.selected {
       border-color: color-mix(in srgb, var(--accent) 76%, #fff 8%);
       background: color-mix(in srgb, var(--accent) 24%, var(--bg3));
@@ -3081,6 +3088,7 @@
       normalizeStatusRecord,
       normalizeStatusesForSave as normalizeSharedStatusesForSave,
       normalizeResponseTree,
+      RESPONSE_TREE_ANY_ROUTE_KEY,
       normalizeSubcategoryRoutes as normalizeSharedSubcategoryRoutes,
       normalizeSubsInput,
       responseTreeEdgeId,
@@ -4230,12 +4238,20 @@
       const getEdgeSourceRouteKey = edge => edge.sourceRouteKey || (Array.isArray(edge.routeKeys) ? edge.routeKeys[0] : '') || '';
       const getEdgeTargetRouteKey = edge => edge.targetRouteKey || getEdgeSourceRouteKey(edge);
       const getEdgeMode = edge => getEdgeSourceRouteKey(edge) && getEdgeTargetRouteKey(edge) && getEdgeSourceRouteKey(edge) !== getEdgeTargetRouteKey(edge) ? 'translate' : 'pass-through';
+      const anyRouteEntry = [RESPONSE_TREE_ANY_ROUTE_KEY, { label: 'Any' }];
+      const routeSelectOptions = (entries, selectedRouteKey, prefix = '') => entries
+        .map(([routeKey, route]) => `<option value="${esc(routeKey)}" ${selectedRouteKey === routeKey ? 'selected' : ''}>${prefix}${esc(route.label)}</option>`)
+        .join('');
       const getEdgeRouteLabel = edge => {
-        const sourceRoute = routes[getEdgeSourceRouteKey(edge)];
-        const targetRoute = routes[getEdgeTargetRouteKey(edge)];
-        if (!sourceRoute && !targetRoute) return 'Choose subcategory mapping';
-        if (!targetRoute || sourceRoute?.label === targetRoute?.label) return sourceRoute?.label || targetRoute?.label || 'Pass-through';
-        return `${sourceRoute?.label || getEdgeSourceRouteKey(edge)} → ${targetRoute.label}`;
+        const sourceRouteKey = getEdgeSourceRouteKey(edge);
+        const targetRouteKey = getEdgeTargetRouteKey(edge);
+        const sourceRoute = routes[sourceRouteKey];
+        const targetRoute = routes[targetRouteKey];
+        const sourceLabel = sourceRouteKey === RESPONSE_TREE_ANY_ROUTE_KEY ? 'Any' : sourceRoute?.label;
+        const targetLabel = targetRoute?.label;
+        if (!sourceLabel && !targetLabel) return 'Choose subcategory mapping';
+        if (!targetLabel || sourceLabel === targetLabel) return sourceLabel || targetLabel || 'Pass-through';
+        return `${sourceLabel || sourceRouteKey} → ${targetLabel}`;
       };
       const displayEdges = edges.slice().sort((a, b) =>
         (statuses[a.sourceKey]?.order ?? 999) - (statuses[b.sourceKey]?.order ?? 999)
@@ -4347,18 +4363,21 @@
       const inspectorTargetRouteKey = inspectorSelections[inspectorPairTarget] || '';
       const inspectorCanPassThrough = inspectorCanConnect
         && !!inspectorSourceRouteKey
+        && inspectorSourceRouteKey !== RESPONSE_TREE_ANY_ROUTE_KEY
+        && inspectorTargetRouteKey !== RESPONSE_TREE_ANY_ROUTE_KEY
         && inspectorSourceRouteKey === inspectorTargetRouteKey
         && inspectorSharedRouteEntries.some(([routeKey]) => routeKey === inspectorSourceRouteKey);
       const inspectorCanTranslate = inspectorCanConnect
         && !!inspectorSourceRouteKey
         && !!inspectorTargetRouteKey
+        && inspectorTargetRouteKey !== RESPONSE_TREE_ANY_ROUTE_KEY
         && inspectorSourceRouteKey !== inspectorTargetRouteKey;
       const nodeInspectorConnectionHtml = inspectorCanConnect ? `
         <div class="response-tree-inspector-builder">
           <span class="response-tree-inspector-direction">${esc(statuses[inspectorPairSource]?.shortLabel || statuses[inspectorPairSource]?.label || inspectorPairSource)} → ${esc(statuses[inspectorPairTarget]?.shortLabel || statuses[inspectorPairTarget]?.label || inspectorPairTarget)}</span>
           <button class="response-tree-inspector-action" type="button" onclick="window.setResponseTreeInspectorPair('${plantId}','${esc(inspectorPairTarget)}','${esc(inspectorPairSource)}')" title="Reverse direction">↔</button>
           <button class="response-tree-inspector-action" type="button" onclick="window.addResponseTreeInspectorPassThrough('${plantId}')" ${inspectorCanPassThrough ? '' : 'disabled'} title="Select the same shared subcategory in both categories">Pass-through</button>
-          <button class="response-tree-inspector-action translate" type="button" onclick="window.addResponseTreeInspectorTranslation('${plantId}')" ${inspectorCanTranslate ? '' : 'disabled'} title="Select one source subcategory and one different target subcategory">Translate</button>
+          <button class="response-tree-inspector-action translate" type="button" onclick="window.addResponseTreeInspectorTranslation('${plantId}')" ${inspectorCanTranslate ? '' : 'disabled'} title="Select Any or one source subcategory, then a target subcategory">Translate</button>
         </div>
       ` : selectedNodeKeys.length > 2 ? '<div class="response-tree-node-inspector-sub">Select exactly two categories to create a connection here.</div>' : '';
       const nodeInspectorHtml = selectedNodeKeys.length ? `
@@ -4370,12 +4389,15 @@
           <div class="response-tree-inspector-groups">
             ${selectedNodeKeys.map(key => {
               const routeEntries = selectedNodeRouteEntriesByKey[key] || [];
+              const displayRouteEntries = inspectorCanConnect && key === inspectorPairSource
+                ? [anyRouteEntry, ...routeEntries]
+                : routeEntries;
               return `
                 <div class="response-tree-inspector-group">
                   <div class="response-tree-inspector-group-title">${esc(statuses[key]?.shortLabel || statuses[key]?.label || key)}</div>
                   <div class="response-tree-subcategory-cloud">
-                    ${routeEntries.length
-                      ? routeEntries.map(([routeKey, route]) => `<button class="response-tree-subcategory-pill ${selectedNodeKeys.length > 1 && selectedNodeRouteCounts[routeKey]?.count > 1 ? 'shared' : ''} ${inspectorSelections[key] === routeKey ? 'selected' : ''}" type="button" onclick="window.selectResponseTreeInspectorRoute('${plantId}','${esc(key)}','${esc(routeKey)}')" title="Select ${esc(route.label)}">${esc(route.label)}</button>`).join('')
+                    ${displayRouteEntries.length
+                      ? displayRouteEntries.map(([routeKey, route]) => `<button class="response-tree-subcategory-pill ${routeKey === RESPONSE_TREE_ANY_ROUTE_KEY ? 'any' : ''} ${routeKey !== RESPONSE_TREE_ANY_ROUTE_KEY && selectedNodeKeys.length > 1 && selectedNodeRouteCounts[routeKey]?.count > 1 ? 'shared' : ''} ${inspectorSelections[key] === routeKey ? 'selected' : ''}" type="button" onclick="window.selectResponseTreeInspectorRoute('${plantId}','${esc(key)}','${esc(routeKey)}')" title="${routeKey === RESPONSE_TREE_ANY_ROUTE_KEY ? 'Match any source subcategory' : `Select ${esc(route.label)}`}">${esc(route.label)}</button>`).join('')
                       : '<span class="response-tree-node-inspector-sub">No routed subcategories.</span>'}
                   </div>
                 </div>`;
@@ -4425,13 +4447,13 @@
               <input value="${esc(selectedEdge.trigger)}" placeholder="Trigger text" onchange="window.patchResponseTreeEdge('${plantId}','${esc(selectedEdge.id)}','trigger',this.value)">
               <select onchange="window.setResponseTreeEdgeMapping('${plantId}','${esc(selectedEdge.id)}','sourceRouteKey',this.value)">
                 ${selectedMode === 'translate'
-                  ? selectedEdgeSourceRouteEntries.map(([routeKey, route]) => `<option value="${esc(routeKey)}" ${getEdgeSourceRouteKey(selectedEdge) === routeKey ? 'selected' : ''}>From: ${esc(route.label)}</option>`).join('')
-                  : selectedEdgeSharedRouteEntries.map(([routeKey, route]) => `<option value="${esc(routeKey)}" ${getEdgeSourceRouteKey(selectedEdge) === routeKey ? 'selected' : ''}>${esc(route.label)}</option>`).join('')}
+                  ? routeSelectOptions([anyRouteEntry, ...selectedEdgeSourceRouteEntries], getEdgeSourceRouteKey(selectedEdge), 'From: ')
+                  : routeSelectOptions(selectedEdgeSharedRouteEntries, getEdgeSourceRouteKey(selectedEdge))}
               </select>
               <select onchange="window.setResponseTreeEdgeMapping('${plantId}','${esc(selectedEdge.id)}','targetRouteKey',this.value)">
                 ${selectedMode === 'translate'
-                  ? selectedEdgeTargetRouteEntries.map(([routeKey, route]) => `<option value="${esc(routeKey)}" ${getEdgeTargetRouteKey(selectedEdge) === routeKey ? 'selected' : ''}>To: ${esc(route.label)}</option>`).join('')
-                  : selectedEdgeSharedRouteEntries.map(([routeKey, route]) => `<option value="${esc(routeKey)}" ${getEdgeTargetRouteKey(selectedEdge) === routeKey ? 'selected' : ''}>${esc(route.label)}</option>`).join('')}
+                  ? routeSelectOptions(selectedEdgeTargetRouteEntries, getEdgeTargetRouteKey(selectedEdge), 'To: ')
+                  : routeSelectOptions(selectedEdgeSharedRouteEntries, getEdgeTargetRouteKey(selectedEdge))}
               </select>
             </div>
             <button class="small-btn danger" onclick="window.deleteResponseTreeEdge('${plantId}','${esc(selectedEdge.id)}')">Retire</button>
@@ -4488,13 +4510,13 @@
               <input value="${esc(edge.trigger)}" placeholder="Trigger text" onchange="window.patchResponseTreeEdge('${plantId}','${esc(edge.id)}','trigger',this.value)">
               <select onchange="window.setResponseTreeEdgeMapping('${plantId}','${esc(edge.id)}','sourceRouteKey',this.value)">
                 ${edgeMode === 'translate'
-                  ? edgeSourceRouteEntries.map(([routeKey, route]) => `<option value="${esc(routeKey)}" ${getEdgeSourceRouteKey(edge) === routeKey ? 'selected' : ''}>From: ${esc(route.label)}</option>`).join('')
-                  : edgeSharedRouteEntries.map(([routeKey, route]) => `<option value="${esc(routeKey)}" ${getEdgeSourceRouteKey(edge) === routeKey ? 'selected' : ''}>${esc(route.label)}</option>`).join('')}
+                  ? routeSelectOptions([anyRouteEntry, ...edgeSourceRouteEntries], getEdgeSourceRouteKey(edge), 'From: ')
+                  : routeSelectOptions(edgeSharedRouteEntries, getEdgeSourceRouteKey(edge))}
               </select>
               <select onchange="window.setResponseTreeEdgeMapping('${plantId}','${esc(edge.id)}','targetRouteKey',this.value)">
                 ${edgeMode === 'translate'
-                  ? edgeTargetRouteEntries.map(([routeKey, route]) => `<option value="${esc(routeKey)}" ${getEdgeTargetRouteKey(edge) === routeKey ? 'selected' : ''}>To: ${esc(route.label)}</option>`).join('')
-                  : edgeSharedRouteEntries.map(([routeKey, route]) => `<option value="${esc(routeKey)}" ${getEdgeTargetRouteKey(edge) === routeKey ? 'selected' : ''}>${esc(route.label)}</option>`).join('')}
+                  ? routeSelectOptions(edgeTargetRouteEntries, getEdgeTargetRouteKey(edge), 'To: ')
+                  : routeSelectOptions(edgeSharedRouteEntries, getEdgeTargetRouteKey(edge))}
               </select>
             </div>
             <div class="response-tree-actions">
@@ -6532,6 +6554,7 @@
       const cleanTarget = String(targetKey || '').trim().toLowerCase();
       const cleanSourceRoute = String(sourceRouteKey || '').trim();
       const cleanTargetRoute = String(targetRouteKey || cleanSourceRoute).trim();
+      const sourceIsAny = cleanSourceRoute === RESPONSE_TREE_ANY_ROUTE_KEY;
       if (!cleanSource || !cleanTarget || !statuses[cleanSource] || !statuses[cleanTarget]) {
         feedback(`status-fb-${plantId}`, 'error', 'Choose a valid source and target role.');
         return '';
@@ -6540,11 +6563,11 @@
         feedback(`status-fb-${plantId}`, 'error', 'Source and target roles must be different.');
         return '';
       }
-      if (!cleanSourceRoute || !routes[cleanSourceRoute] || !responseTreeRouteIsShared(routes[cleanSourceRoute], cleanSource, cleanSource)) {
+      if (!sourceIsAny && (!cleanSourceRoute || !routes[cleanSourceRoute] || !responseTreeRouteIsShared(routes[cleanSourceRoute], cleanSource, cleanSource))) {
         feedback(`status-fb-${plantId}`, 'error', 'Choose a source subcategory routed to the source role.');
         return '';
       }
-      if (!cleanTargetRoute || !routes[cleanTargetRoute] || !responseTreeRouteIsShared(routes[cleanTargetRoute], cleanTarget, cleanTarget)) {
+      if (!cleanTargetRoute || cleanTargetRoute === RESPONSE_TREE_ANY_ROUTE_KEY || !routes[cleanTargetRoute] || !responseTreeRouteIsShared(routes[cleanTargetRoute], cleanTarget, cleanTarget)) {
         feedback(`status-fb-${plantId}`, 'error', 'Choose a target subcategory routed to the target role.');
         return '';
       }
@@ -6560,7 +6583,7 @@
         return '';
       }
       const id = responseTreeEdgeId(cleanSource, cleanTarget, tree.edges);
-      const mode = cleanSourceRoute === cleanTargetRoute ? 'pass-through' : 'translate';
+      const mode = sourceIsAny || cleanSourceRoute !== cleanTargetRoute ? 'translate' : 'pass-through';
       const nextEdges = [...tree.edges, {
         id,
         sourceKey: cleanSource,
@@ -6602,9 +6625,13 @@
       const nextTargetCandidate = selected.includes(String(targetKey || '').trim().toLowerCase())
         ? String(targetKey || '').trim().toLowerCase()
         : (selected.includes(graphState.inspectorTargetKey) ? graphState.inspectorTargetKey : selected.find(key => key !== nextSource) || '');
+      const nextTarget = nextTargetCandidate === nextSource ? (selected.find(key => key !== nextSource) || '') : nextTargetCandidate;
+      const nextSelections = { ...(graphState.inspectorRouteSelections || {}) };
+      if (nextSelections[nextTarget] === RESPONSE_TREE_ANY_ROUTE_KEY) nextSelections[nextTarget] = '';
       patchResponseTreeGraphState(plantId, {
         inspectorSourceKey: nextSource,
-        inspectorTargetKey: nextTargetCandidate === nextSource ? (selected.find(key => key !== nextSource) || '') : nextTargetCandidate
+        inspectorTargetKey: nextTarget,
+        inspectorRouteSelections: nextSelections
       });
       renderPlantsUsers();
     };
@@ -6613,6 +6640,11 @@
       const key = String(statusKey || '').trim().toLowerCase();
       const route = String(routeKey || '').trim();
       const graphState = responseTreeGraphStateByPlant[plantId] || {};
+      const pair = responseTreeInspectorPair(plantId);
+      if (route === RESPONSE_TREE_ANY_ROUTE_KEY && pair.targetKey === key) {
+        feedback(`status-fb-${plantId}`, 'error', 'Any can only be used on the source side of a translation.');
+        return;
+      }
       const current = graphState.inspectorRouteSelections || {};
       patchResponseTreeGraphState(plantId, {
         inspectorRouteSelections: {
@@ -6678,6 +6710,20 @@
       };
     }
 
+    function clearResponseTreeSelectedCategories(plantId) {
+      const graphState = responseTreeGraphStateByPlant[plantId] || {};
+      if (!Array.isArray(graphState.selectedNodeKeys) || !graphState.selectedNodeKeys.length) return false;
+      patchResponseTreeGraphState(plantId, {
+        selectedNodeKeys: [],
+        inspectorRouteSelections: {},
+        inspectorSourceKey: '',
+        inspectorTargetKey: '',
+        pendingSourceKey: ''
+      });
+      renderPlantsUsers();
+      return true;
+    }
+
     window.startResponseTreeCanvasPan = function (event, plantId) {
       if (!event || event.button !== 0) return;
       if (event.target?.closest?.('.response-tree-node-inspector, .response-tree-graph-node, .response-tree-graph-label, .response-tree-graph-edge, .response-tree-port, button, input, select, textarea')) return;
@@ -6705,6 +6751,20 @@
         return;
       }
       const graphState = responseTreeGraphStateByPlant[plantId] || {};
+      if (Array.isArray(graphState.selectedNodeKeys) && graphState.selectedNodeKeys.length) {
+        responseTreeCanvasDragState = {
+          plantId,
+          shell,
+          startClientX: event.clientX,
+          startClientY: event.clientY,
+          startPan: null,
+          clearOnClick: true,
+          moved: false
+        };
+        shell.setPointerCapture?.(event.pointerId);
+        event.preventDefault();
+        return;
+      }
       const startPan = {
         x: Number.isFinite(Number(graphState.pan?.x)) ? Number(graphState.pan.x) : 0,
         y: Number.isFinite(Number(graphState.pan?.y)) ? Number(graphState.pan.y) : 0
@@ -6867,6 +6927,14 @@
       renderPlantsUsers();
     };
 
+    document.addEventListener('keydown', event => {
+      if (event.key !== 'Escape') return;
+      const plantId = Object.keys(responseTreeGraphStateByPlant)
+        .find(id => Array.isArray(responseTreeGraphStateByPlant[id]?.selectedNodeKeys) && responseTreeGraphStateByPlant[id].selectedNodeKeys.length);
+      if (!plantId) return;
+      if (clearResponseTreeSelectedCategories(plantId)) event.preventDefault();
+    });
+
     document.addEventListener('pointermove', event => {
       if (responseTreeMarqueeState) {
         const drag = responseTreeMarqueeState;
@@ -6888,6 +6956,11 @@
         const drag = responseTreeCanvasDragState;
         const dx = event.clientX - drag.startClientX;
         const dy = event.clientY - drag.startClientY;
+        if (drag.clearOnClick) {
+          if (Math.abs(dx) > 3 || Math.abs(dy) > 3) drag.moved = true;
+          event.preventDefault();
+          return;
+        }
         const nextPan = {
           x: drag.startPan.x + dx,
           y: drag.startPan.y + dy
@@ -6962,6 +7035,15 @@
         const drag = responseTreeCanvasDragState;
         const dx = event.clientX - drag.startClientX;
         const dy = event.clientY - drag.startClientY;
+        if (drag.clearOnClick) {
+          responseTreeCanvasDragState = null;
+          if (!drag.moved && Math.abs(dx) <= 3 && Math.abs(dy) <= 3) {
+            clearResponseTreeSelectedCategories(drag.plantId);
+            return;
+          }
+          renderPlantsUsers();
+          return;
+        }
         patchResponseTreeGraphState(drag.plantId, {
           pan: {
             x: drag.startPan.x + dx,
@@ -7119,6 +7201,10 @@
         feedback(`status-fb-${plantId}`, 'error', 'Select exactly two categories first.');
         return;
       }
+      if (selectedRouteKey === RESPONSE_TREE_ANY_ROUTE_KEY) {
+        feedback(`status-fb-${plantId}`, 'error', 'Any is only available for translation edges.');
+        return;
+      }
       if (!selectedRouteKey || selectedRouteKey !== String(graphState.inspectorRouteSelections?.[targetKey] || '').trim()) {
         feedback(`status-fb-${plantId}`, 'error', 'Select the same shared subcategory in both categories.');
         return;
@@ -7136,11 +7222,14 @@
         feedback(`status-fb-${plantId}`, 'error', 'Select exactly two categories first.');
         return;
       }
-      if (!sourceRouteKey || !targetRouteKey || sourceRouteKey === targetRouteKey) {
-        feedback(`status-fb-${plantId}`, 'error', 'Choose different source and target subcategories for a translation edge.');
+      if (!sourceRouteKey || !targetRouteKey || targetRouteKey === RESPONSE_TREE_ANY_ROUTE_KEY || sourceRouteKey === targetRouteKey) {
+        feedback(`status-fb-${plantId}`, 'error', 'Choose Any or a source subcategory, then a different target subcategory.');
         return;
       }
-      const edgeId = addResponseTreeEdgeDraft(plantId, sourceKey, targetKey, sourceRouteKey, targetRouteKey, 'Suggested translation path');
+      const trigger = sourceRouteKey === RESPONSE_TREE_ANY_ROUTE_KEY
+        ? 'Any source subcategory'
+        : 'Suggested translation path';
+      const edgeId = addResponseTreeEdgeDraft(plantId, sourceKey, targetKey, sourceRouteKey, targetRouteKey, trigger);
       if (edgeId) renderPlantsUsers();
     };
 
@@ -7168,12 +7257,13 @@
       const currentTargetRoute = selectedEdge.targetRouteKey || currentSourceRoute;
       const nextSourceRoute = field === 'sourceRouteKey' ? cleanRouteKey : currentSourceRoute;
       const nextTargetRoute = field === 'targetRouteKey' ? cleanRouteKey : currentTargetRoute;
-      if (!nextSourceRoute || !routes[nextSourceRoute] || !responseTreeRouteIsShared(routes[nextSourceRoute], selectedEdge.sourceKey, selectedEdge.sourceKey)) {
+      const nextSourceIsAny = nextSourceRoute === RESPONSE_TREE_ANY_ROUTE_KEY;
+      if (!nextSourceIsAny && (!nextSourceRoute || !routes[nextSourceRoute] || !responseTreeRouteIsShared(routes[nextSourceRoute], selectedEdge.sourceKey, selectedEdge.sourceKey))) {
         feedback(`status-fb-${plantId}`, 'error', 'Choose a source subcategory routed to the source role.');
         renderPlantsUsers();
         return;
       }
-      if (!nextTargetRoute || !routes[nextTargetRoute] || !responseTreeRouteIsShared(routes[nextTargetRoute], selectedEdge.targetKey, selectedEdge.targetKey)) {
+      if (!nextTargetRoute || nextTargetRoute === RESPONSE_TREE_ANY_ROUTE_KEY || !routes[nextTargetRoute] || !responseTreeRouteIsShared(routes[nextTargetRoute], selectedEdge.targetKey, selectedEdge.targetKey)) {
         feedback(`status-fb-${plantId}`, 'error', 'Choose a target subcategory routed to the target role.');
         renderPlantsUsers();
         return;
@@ -7196,7 +7286,7 @@
           ...edge,
           sourceRouteKey: nextSourceRoute,
           targetRouteKey: nextTargetRoute,
-          mode: nextSourceRoute === nextTargetRoute ? 'pass-through' : 'translate',
+          mode: nextSourceIsAny || nextSourceRoute !== nextTargetRoute ? 'translate' : 'pass-through',
           routeKeys: [nextSourceRoute]
         };
       });
@@ -7204,7 +7294,7 @@
       responseTreeGraphStateByPlant[plantId] = {
         ...(responseTreeGraphStateByPlant[plantId] || {}),
         selectedEdgeId: edgeId,
-        selectedGroupKey: `${selectedEdge.sourceKey}->${selectedEdge.targetKey}:${nextSourceRoute === nextTargetRoute ? 'pass-through' : 'translate'}`
+        selectedGroupKey: `${selectedEdge.sourceKey}->${selectedEdge.targetKey}:${nextSourceIsAny || nextSourceRoute !== nextTargetRoute ? 'translate' : 'pass-through'}`
       };
       renderPlantsUsers();
     };

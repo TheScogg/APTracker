@@ -53,6 +53,7 @@ import {
   attachResponseTreeToStatuses,
   compareSubcategoryLabels,
   normalizeResponseTree,
+  RESPONSE_TREE_ANY_ROUTE_KEY,
   normalizeSubcategoryRoutes as normalizeSharedSubcategoryRoutes,
   stripResponseTreeFromStatuses,
   syncStatusesFromSubcategoryRoutes as syncSharedStatusesFromSubcategoryRoutes
@@ -1078,6 +1079,7 @@ async function sendConversationPush(conversationId, messageId) {
 
 const WORKFLOW_STATES = ['called', 'accepted', 'in-progress', 'finished'];
 const workflowHistoryOpenKeys = new Set();
+const workflowStatusDropdownOpenKeys = new Set();
 
 function getWorkflowStatesThrough(state) {
   const idx = WORKFLOW_STATES.indexOf(state);
@@ -1393,7 +1395,12 @@ function getResponseTreeEdges(statusKey, subStatus = '') {
       const targetBoundKeys = Array.isArray(targetRoute?.boundStatusKeys)
         ? targetRoute.boundStatusKeys.map(key => String(key || '').trim().toLowerCase())
         : [];
-      if (!routeKey || !targetKey || sourceRouteKey !== routeKey) return false;
+      if (!targetKey) return false;
+      if (sourceRouteKey === RESPONSE_TREE_ANY_ROUTE_KEY) {
+        if (!routeKey || !route || !boundStatusKeys.includes(sourceKey)) return false;
+        return targetBoundKeys.includes(targetKey);
+      }
+      if (!routeKey || sourceRouteKey !== routeKey) return false;
       if (!boundStatusKeys.includes(sourceKey)) return false;
       return targetBoundKeys.includes(targetKey);
     })
@@ -1412,12 +1419,16 @@ function getResponseTreeEdges(statusKey, subStatus = '') {
 
 function formatResponseTreePath(edge) {
   if (!edge) return '';
-  const sourceRoute = SUBCATEGORY_ROUTES?.[edge.sourceRouteKey || edge.routeKeys?.[0] || ''];
-  const targetRoute = SUBCATEGORY_ROUTES?.[edge.targetRouteKey || edge.sourceRouteKey || edge.routeKeys?.[0] || ''];
-  const routeLabel = sourceRoute && targetRoute
-    ? sourceRoute.label === targetRoute.label
-      ? ` · ${sourceRoute.label}`
-      : ` · ${sourceRoute.label} → ${targetRoute.label}`
+  const sourceRouteKey = edge.sourceRouteKey || edge.routeKeys?.[0] || '';
+  const targetRouteKey = edge.targetRouteKey || sourceRouteKey;
+  const sourceRoute = SUBCATEGORY_ROUTES?.[sourceRouteKey];
+  const targetRoute = SUBCATEGORY_ROUTES?.[targetRouteKey];
+  const sourceRouteLabel = sourceRouteKey === RESPONSE_TREE_ANY_ROUTE_KEY ? 'Any' : sourceRoute?.label;
+  const targetRouteLabel = targetRoute?.label;
+  const routeLabel = sourceRouteLabel && targetRouteLabel
+    ? sourceRouteLabel === targetRouteLabel
+      ? ` · ${sourceRouteLabel}`
+      : ` · ${sourceRouteLabel} → ${targetRouteLabel}`
     : '';
   return `${getStatusLabel(edge.sourceKey, 'short')} → ${getStatusLabel(edge.targetKey, 'short')}${routeLabel}`;
 }
@@ -1467,13 +1478,16 @@ function closeResponseEscalationModal() {
 
 window.closeResponseEscalationModal = closeResponseEscalationModal;
 
-window.openResponseEscalationModal = function (issueId, encodedSourceKey = '', encodedSourceSubStatus = '') {
+window.openResponseEscalationModal = function (issueId, encodedSourceKey = '', encodedSourceSubStatus = '', encodedEdgeId = '') {
   if (!currentUserPermissions.canEditIssue) return;
   const issue = issues.find(item => item.id === issueId);
   const sourceKey = encodedSourceKey ? decodeURIComponent(encodedSourceKey) : '';
   const sourceSubStatus = encodedSourceSubStatus ? decodeURIComponent(encodedSourceSubStatus) : '';
+  const requestedEdgeId = encodedEdgeId ? decodeURIComponent(encodedEdgeId) : '';
   const context = getIssueResponseTreeContext(issue, sourceKey, sourceSubStatus);
-  const paths = context?.paths || [];
+  const paths = requestedEdgeId
+    ? (context?.paths || []).filter(path => path.edgeId === requestedEdgeId)
+    : (context?.paths || []);
   if (!issue || !paths.length) return;
   responseEscalationState = {
     issueId,
@@ -11768,23 +11782,58 @@ function renderIssues() {
 
     const getWorkflowResponseUi = (statusKey, subStatus, fallbackColor) => {
       const context = buildResponseTreeContext(statusKey, subStatus);
-      const responsePath = context?.paths?.[0] || null;
-      const escalationTargetColor = responsePath?.targetKey ? getStatusColor(responsePath.targetKey) : fallbackColor;
-      const escalationTitle = responsePath
-        ? context.paths.length > 1
-          ? `Choose from ${context.paths.length} escalation paths`
-          : `Escalate to ${getStatusLabel(responsePath.targetKey, 'short')}`
-        : 'Escalate to suggested response path';
-      const escalationButtonHtml = canEdit && context?.paths?.length
-        ? `<button class="wf-escalate-btn" type="button" style="--escalate-color:${escalationTargetColor};" onclick="event.stopPropagation(); openResponseEscalationModal('${issue.id}','${encodeURIComponent(statusKey || '')}','${encodeURIComponent(subStatus || '')}')" title="${esc(escalationTitle)}">↗${context.paths.length > 1 ? `<span class="wf-escalate-count">${context.paths.length}</span>` : ''}</button>`
+      const paths = canEdit && context?.paths?.length ? context.paths : [];
+      const summaryHtml = paths.length
+        ? `<span class="wf-route-summary" title="${esc(`${paths.length} suggested response path${paths.length === 1 ? '' : 's'}`)}">${paths.length} path${paths.length === 1 ? '' : 's'}</span>`
         : '';
-      const responsePathHtml = escalationButtonHtml
-        ? `<div class="issue-response-path-row">
-            ${escalationButtonHtml}
+      const escalationActionsHtml = paths.length
+        ? `<div class="wf-dropdown-section">
+            <div class="wf-dropdown-label">Escalate</div>
+            <div class="wf-route-actions">
+              ${paths.map(path => {
+                const isTranslate = path.mode === 'translate';
+                const targetColor = getStatusColor(path.targetKey) || fallbackColor;
+                const targetLabel = getStatusLabel(path.targetKey, 'short');
+                const sourceLabel = path.sourceRouteKey === RESPONSE_TREE_ANY_ROUTE_KEY
+                  ? 'Any'
+                  : (SUBCATEGORY_ROUTES?.[path.sourceRouteKey]?.label || subStatus || '');
+                const targetSubLabel = path.targetSubStatus || SUBCATEGORY_ROUTES?.[path.targetRouteKey]?.label || '';
+                const routeDetail = isTranslate
+                  ? `${sourceLabel || 'Source'} → ${targetSubLabel || 'Target'}`
+                  : (targetSubLabel || sourceLabel || 'Pass through');
+                return `<button class="wf-route-action ${isTranslate ? 'translate' : 'pass-through'}" type="button" style="--route-color:${targetColor};" onclick="event.stopPropagation(); openResponseEscalationModal('${issue.id}','${encodeURIComponent(statusKey || '')}','${encodeURIComponent(subStatus || '')}','${encodeURIComponent(path.edgeId || '')}')" title="${esc(path.trigger || 'Suggested response path')}">
+                  <span class="wf-route-icon">${isTranslate ? '⇢' : '→'}</span>
+                  <span class="wf-route-copy">
+                    <span class="wf-route-target">${esc(targetLabel)}</span>
+                    <span class="wf-route-detail">${esc(routeDetail)}</span>
+                  </span>
+                  <span class="wf-route-kind">${isTranslate ? 'Translate' : 'Pass'}</span>
+                </button>`;
+              }).join('')}
+            </div>
           </div>`
-        : '';
-      return { responsePathHtml };
+        : `<div class="wf-dropdown-section">
+            <div class="wf-dropdown-label">Escalate</div>
+            <div class="wf-dropdown-empty">No suggested response paths for this subcategory.</div>
+          </div>`;
+      return { escalationActionsHtml, summaryHtml };
     };
+
+    const renderWorkflowRowDropdown = ({ responseUi, workflowButtonsHtml, stateLabel, stateClass, ageLabel, statusLabel, subStatusLabel }) => `
+      <div class="wf-status-dropdown" onclick="event.stopPropagation()">
+        <div class="wf-status-dropdown-panel">
+          ${responseUi.escalationActionsHtml}
+          <div class="wf-dropdown-section">
+            <div class="wf-dropdown-label">Workflow</div>
+            <div class="wf-dropdown-steps">${workflowButtonsHtml}</div>
+          </div>
+          <div class="wf-dropdown-context">
+            <span>${esc(statusLabel || 'Status')}</span>
+            ${subStatusLabel ? `<span>${esc(subStatusLabel)}</span>` : ''}
+            <span class="${stateClass ? `wf-context-state ${stateClass}` : 'wf-context-state'}">${esc(stateLabel || 'Not Started')}${ageLabel ? ` · ${esc(ageLabel)}` : ''}</span>
+          </div>
+        </div>
+      </div>`;
 
     // Build compact 4-step header buttons with state label below
     const wfAge = workflowState
@@ -11832,19 +11881,34 @@ function renderIssues() {
       const sStateLabel = sState ? workflowConfig[sState].label : 'Not Started';
       const sStateClass = sState ? workflowConfig[sState].cssState : '';
       const sResponseUi = getWorkflowResponseUi(sKey, sSubLabel, sColor);
-      return `<div class="wf-status-row is-peer${sState === 'finished' ? ' finished-checkered' : ''}" style="color:${sColor};">
+      const rowDropdownKey = `${issue.id}:${idx}`;
+      const rowDropdownOpen = workflowStatusDropdownOpenKeys.has(rowDropdownKey);
+      const rowDropdownHtml = renderWorkflowRowDropdown({
+        responseUi: sResponseUi,
+        workflowButtonsHtml: btnHtml,
+        stateLabel: sStateLabel,
+        stateClass: sStateClass,
+        ageLabel: sAge,
+        statusLabel: sCfg.label,
+        subStatusLabel: sSubLabel
+      });
+      return `<div class="wf-status-row is-peer${rowDropdownOpen ? ' open' : ''}${sState === 'finished' ? ' finished-checkered' : ''}" style="color:${sColor};" onclick="toggleWorkflowStatusDropdown(event,'${esc(rowDropdownKey)}')">
             <div class="wf-status-row-info">
-              <div class="issue-status" style="color:${sColor};border-color:${sColor};background:${alphaColor(sColor, 0.12)}">
-                <span class="issue-status-main">${sCfg.icon} ${esc(sCfg.label)}</span>
+              <div class="wf-status-header">
+                <span class="wf-status-caret">›</span>
+                <div class="issue-status" style="color:${sColor};border-color:${sColor};background:${alphaColor(sColor, 0.12)}">
+                  <span class="issue-status-main">${sCfg.icon} ${esc(sCfg.label)}</span>
+                </div>
+                ${sResponseUi.summaryHtml}
               </div>
               ${sSubLabel ? `<span class="issue-status-sub" style="color:${sColor};">${esc(sSubLabel)}</span>` : ''}
-              ${sResponseUi.responsePathHtml}
             </div>
             <div class="wf-steps-wrap" onclick="event.stopPropagation()">
               <div class="wf-steps">${btnHtml}</div>
               <div class="wf-state-label ${sStateClass}">${sStateLabel}</div>
               ${sAge ? `<div class="wf-state-age ${sStateClass}">${esc(sAge)}</div>` : ''}
             </div>
+            ${rowDropdownHtml}
           </div>`;
     }).join('');
 
@@ -11890,17 +11954,36 @@ function renderIssues() {
       </div>
     </div>`;
 
-    const currentWfRowHtml = `<div class="wf-status-row is-latest${workflowState === 'finished' ? ' finished-checkered' : ''}" style="color:${sc.color};">
+    const currentDropdownKey = `${issue.id}:${currentEntryIndex}`;
+    const currentDropdownOpen = workflowStatusDropdownOpenKeys.has(currentDropdownKey);
+    const currentDropdownHtml = renderWorkflowRowDropdown({
+      responseUi: currentResponseUi,
+      workflowButtonsHtml: wfOrder.map(state => {
+        const cfg = workflowConfig[state];
+        const cls = state === workflowState ? `active ${cfg.cssState}` : isCompleted(state) ? 'completed' : 'pending';
+        return `<button class="wf-step-btn ${cls}" onclick="handleWfStepClick(event,'${issue.id}',${currentEntryIndex},'${state}')" title="${cfg.label}">${cfg.icon}</button>`;
+      }).join(''),
+      stateLabel: workflowState ? workflowConfig[workflowState].label : 'Not Started',
+      stateClass: workflowState ? workflowConfig[workflowState].cssState : '',
+      ageLabel: wfAge,
+      statusLabel: baseLabel,
+      subStatusLabel: subLabelWithSerial
+    });
+    const currentWfRowHtml = `<div class="wf-status-row is-latest${currentDropdownOpen ? ' open' : ''}${workflowState === 'finished' ? ' finished-checkered' : ''}" style="color:${sc.color};" onclick="toggleWorkflowStatusDropdown(event,'${esc(currentDropdownKey)}')">
       <div class="wf-status-row-info">
-        <div class="issue-status" style="color:${sc.color};border-color:${sc.color};background:${alphaColor(sc.color, 0.12)}">
-          <span class="issue-status-main">${sc.icon} ${baseLabel}</span>
+        <div class="wf-status-header">
+          <span class="wf-status-caret">›</span>
+          <div class="issue-status" style="color:${sc.color};border-color:${sc.color};background:${alphaColor(sc.color, 0.12)}">
+            <span class="issue-status-main">${sc.icon} ${baseLabel}</span>
+          </div>
+          ${currentResponseUi.summaryHtml}
         </div>
         ${subLabelWithSerial ? `<span class="issue-status-sub" style="color:${sc.color};">${esc(subLabelWithSerial)}</span>` : ''}
-        ${currentResponseUi.responsePathHtml}
         ${serialBadgeHtml}
         ${secDotsHtml}
       </div>
       ${wfHeaderHtml}
+      ${currentDropdownHtml}
     </div>`;
 
     const wfStatusRowsInnerHtml = `${currentWfRowHtml}${wfHistoryRowsHtml}`;
@@ -12493,6 +12576,15 @@ document.addEventListener('click', e => {
   const clickedInsideIssueRow = path.some(node => node && node.classList && node.classList.contains('issue-row'));
   if (!clickedInsideIssueRow) closeSwipe();
 });
+
+window.toggleWorkflowStatusDropdown = (evt, key) => {
+  evt?.stopPropagation?.();
+  const cleanKey = String(key || '').trim();
+  if (!cleanKey) return;
+  if (workflowStatusDropdownOpenKeys.has(cleanKey)) workflowStatusDropdownOpenKeys.delete(cleanKey);
+  else workflowStatusDropdownOpenKeys.add(cleanKey);
+  renderIssues();
+};
 
 let _swipeJustHappened = false;
 window.toggleCard = id => {

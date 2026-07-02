@@ -16,6 +16,8 @@ const SUBCATEGORY_COLLATOR = new Intl.Collator(undefined, {
   sensitivity: 'base'
 });
 
+export const RESPONSE_TREE_ANY_ROUTE_KEY = '__any__';
+
 export function compareSubcategoryLabels(a, b) {
   const left = typeof a === 'string' ? a : String(a?.label || a?.subcategory || a || '');
   const right = typeof b === 'string' ? b : String(b?.label || b?.subcategory || b || '');
@@ -167,13 +169,16 @@ export function normalizeResponseTree(rawTree = {}, statuses = {}, routes = {}) 
     const legacyRouteKeys = Array.isArray(edge.routeKeys)
       ? Array.from(new Set(edge.routeKeys
         .map(v => String(v || '').trim())
-        .filter(v => validRouteKeys.has(v))))
+        .filter(v => validRouteKeys.has(v) || v === RESPONSE_TREE_ANY_ROUTE_KEY)))
       : [];
     const sourceRouteKey = String(edge.sourceRouteKey || edge.routeKey || legacyRouteKeys[0] || '').trim();
     const targetRouteKey = String(edge.targetRouteKey || edge.toRouteKey || legacyRouteKeys[0] || sourceRouteKey || '').trim();
-    const cleanSourceRouteKey = validRouteKeys.has(sourceRouteKey) ? sourceRouteKey : '';
-    const cleanTargetRouteKey = validRouteKeys.has(targetRouteKey) ? targetRouteKey : cleanSourceRouteKey;
-    const mode = cleanSourceRouteKey && cleanTargetRouteKey && cleanSourceRouteKey !== cleanTargetRouteKey ? 'translate' : 'pass-through';
+    const sourceIsAny = sourceRouteKey === RESPONSE_TREE_ANY_ROUTE_KEY || sourceRouteKey === '*' || sourceRouteKey.toLowerCase() === 'any';
+    const cleanSourceRouteKey = sourceIsAny ? RESPONSE_TREE_ANY_ROUTE_KEY : (validRouteKeys.has(sourceRouteKey) ? sourceRouteKey : '');
+    const cleanTargetRouteKey = validRouteKeys.has(targetRouteKey)
+      ? targetRouteKey
+      : (cleanSourceRouteKey && cleanSourceRouteKey !== RESPONSE_TREE_ANY_ROUTE_KEY ? cleanSourceRouteKey : '');
+    const mode = cleanSourceRouteKey === RESPONSE_TREE_ANY_ROUTE_KEY || (cleanSourceRouteKey && cleanTargetRouteKey && cleanSourceRouteKey !== cleanTargetRouteKey) ? 'translate' : 'pass-through';
     const routeKeys = cleanSourceRouteKey ? [cleanSourceRouteKey] : [];
     const trigger = String(edge.trigger || edge.label || '').trim();
     const fallbackId = responseTreeEdgeId(sourceKey, targetKey, normalizedEdges);
