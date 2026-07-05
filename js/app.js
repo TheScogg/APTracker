@@ -337,7 +337,7 @@ function normalizeSqlIssueForApp(issue = {}) {
     userName: issue.createdByName || '',
     createdAt: createdAtTs,
     updatedAt: updatedAtTs,
-    dateTime: formatSqlDateTime(issue.currentStatusEnteredAt || issue.openedAt || issue.createdAt, ''),
+    dateTime: formatSqlDateTime(issue.openedAt || issue.createdAt, ''),
     timestamp: createdAtTs?.toMillis ? createdAtTs.toMillis() : Date.now(),
     currentStatus,
     statusHistory: Array.isArray(issue.legacyStatusHistory) ? issue.legacyStatusHistory.map(entry => ({ ...entry })) : [],
@@ -3815,11 +3815,15 @@ let STATUSES = {
   quality: { label: 'Quality', shortLabel: 'Quality', icon: '✨', cssColor: '#06b6d4', swipeColor: '#06b6d4', floorCls: 'has-quality', cls: 'status-quality', subs: ['Short Shot / Non-fill', 'Flash / Burrs', 'Sink Marks / Voids', 'Splay / Silver Streaks', 'Burn Marks / Degradation', 'Warp / Dimensional Out-of-Spec'], statLabel: 'Quality', order: 6 },
   startup: { label: 'Startup', shortLabel: 'Startup', icon: '🚀', cssColor: 'var(--color-teal, var(--teal))', swipeColor: '#14b8a6', floorCls: 'has-startup', cls: 'status-startup', subs: ['Purging / Color Change', 'Mold Heat-Up / Stabilization', 'First Article Inspection (FAI)', 'Robot Homing / Path Setup'], statLabel: 'Startup', order: 7 },
   tooldie: { label: 'Tool & Die', shortLabel: 'Tool & Die', icon: '🔩', cssColor: 'var(--color-orange, var(--orange))', swipeColor: '#f97316', floorCls: 'has-tooldie', cls: 'status-tooldie', subs: ['Broken / Bent Ejector Pin', 'Hot Runner / Gate Issue', 'Water Leak in Mold', 'Stuck Part / Sprue', 'Mold Greasing / PM'], statLabel: 'Tool & Die', order: 8 },
-  resolved: { label: 'Resolved', shortLabel: 'Resolved', icon: '✓', cssColor: 'var(--color-success, var(--green))', swipeColor: '#22c55e', floorCls: 'all-resolved', cls: 'status-resolved', subs: ['Process Parameter Adjusted', 'Mold Cleaned / Repaired', 'Hardware Replaced', 'Temporary Workaround'], statLabel: 'Resolved', order: 9 },
+  production: { label: 'Production', shortLabel: 'Production', icon: '🏭', cssColor: '#2563eb', swipeColor: '#2563eb', floorCls: 'has-production', cls: 'status-production', subs: ['Operator Coverage Gap', 'Schedule / Priority Change', 'Waiting on Supervisor Decision', 'Packaging / Staging Issue', 'Labeling / Paperwork Issue', 'Training / Setup Question'], statLabel: 'Production', order: 9 },
+  safety: { label: 'Safety', shortLabel: 'Safety', icon: '🛡️', cssColor: '#dc2626', swipeColor: '#dc2626', floorCls: 'has-safety', cls: 'status-safety', subs: ['Safety Hazard / Near Miss', 'E-Stop / Safety Stop', 'Guarding / Interlock Concern', 'Slip / Trip / Housekeeping Hazard', 'PPE / Ergonomics Concern', 'Chemical / Spill Concern', 'Lockout / Tagout Concern'], statLabel: 'Safety', order: 10 },
+  resolved: { label: 'Resolved', shortLabel: 'Resolved', icon: '✓', cssColor: 'var(--color-success, var(--green))', swipeColor: '#22c55e', floorCls: 'all-resolved', cls: 'status-resolved', subs: ['Process Parameter Adjusted', 'Mold Cleaned / Repaired', 'Hardware Replaced', 'Temporary Workaround'], statLabel: 'Resolved', order: 11 },
 };
 const DEFAULT_STATUSES = JSON.parse(JSON.stringify(STATUSES));
 const CANONICAL_OPTIONAL_STATUSES = {
-  attention: JSON.parse(JSON.stringify(STATUSES.attention))
+  attention: JSON.parse(JSON.stringify(STATUSES.attention)),
+  production: JSON.parse(JSON.stringify(STATUSES.production)),
+  safety: JSON.parse(JSON.stringify(STATUSES.safety))
 };
 const LEGACY_DEFAULT_STATUS_ICONS = {
   open: { '●': STATUSES.open.icon, '＋': STATUSES.open.icon },
@@ -9718,19 +9722,20 @@ window.saveEdit = async () => {
       btn.disabled = false; btn.innerHTML = '💾 Save Changes';
       return;
     }
-    const d = getIssueDateFromInputs('edit-date', 'edit-time-input');
     const issue = issues.find(i => i.id === editTargetId);
+    const existingIssueDate = issue?.timestamp
+      ? new Date(issue.timestamp)
+      : (issue?.createdAt?.toDate ? issue.createdAt.toDate() : new Date());
     const last = currentStatus(issue || {});
     const shiftSel = document.getElementById('edit-shift').value;
-    const shift = shiftSel === 'auto' ? getShiftForTime(d, getShiftSchedule(currentPlantId)) : shiftSel;
+    const shift = shiftSel === 'auto' ? getShiftForTime(existingIssueDate, getShiftSchedule(currentPlantId)) : shiftSel;
     const timerMinutes = parseTimerMinutes(document.getElementById('edit-timer-minutes')?.value);
     const uploadedPhotos = await uploadIssuePhotosToStorage(editTargetId, editPhotos);
     if (shouldUseSqlStagingReads(currentPlantId)) {
       const issuePatch = {
         note,
-        dateTime: fmtDate(d), dateKey: localDateStr(d), timestamp: d.getTime(),
         shift,
-        timer: buildIssueTimer(timerMinutes, d, issue?.timer || null),
+        timer: buildIssueTimer(timerMinutes, existingIssueDate, issue?.timer || null),
         photoCount: uploadedPhotos.length,
         editedAt: fmtDate(new Date()), editedBy: currentUser.displayName || currentUser.email,
         ...buildIssueV2CompatLocal({
@@ -9748,7 +9753,7 @@ window.saveEdit = async () => {
       await commitSqlIssueWrite(editTargetId, nextIssue, {
         attachments: sqlAttachmentPayloads(uploadedPhotos),
         replaceAttachments: true,
-        events: [sqlEventPayload('issue_edited', { fieldsChanged: ['note', 'photos', 'dateTime', 'dateKey', 'timestamp'] })]
+        events: [sqlEventPayload('issue_edited', { fieldsChanged: ['note', 'photos'] })]
       });
       if (timerMinutes > 0) setIssueReminder(editTargetId, timerMinutes);
       else clearIssueReminder(editTargetId);
@@ -9759,9 +9764,8 @@ window.saveEdit = async () => {
     }
     const issuePatch = {
       note,
-      dateTime: fmtDate(d), dateKey: localDateStr(d), timestamp: d.getTime(),
       shift,
-      timer: buildIssueTimer(timerMinutes, d, issue?.timer || null),
+      timer: buildIssueTimer(timerMinutes, existingIssueDate, issue?.timer || null),
       photoCount: uploadedPhotos.length,
       editedAt: fmtDate(new Date()), editedBy: currentUser.displayName || currentUser.email,
       ...buildIssueV2Compat({
@@ -9777,7 +9781,7 @@ window.saveEdit = async () => {
     batch.update(plantDoc('issues', editTargetId), issuePatch);
     queueAttachmentDocs(batch, editTargetId, uploadedPhotos);
     queueIssueEvent(batch, editTargetId, 'issue_edited', {
-      fieldsChanged: ['note', 'photos', 'dateTime', 'dateKey', 'timestamp']
+      fieldsChanged: ['note', 'photos']
     });
     await batch.commit();
     if (timerMinutes > 0) setIssueReminder(editTargetId, timerMinutes);
@@ -11571,11 +11575,17 @@ function addTapListener(el, fn) {
 // ── SORT ──
 // Applies primary sort order to `arr` in-place. Used by both renderIssues and openExportModal
 // so the PDF export always matches what the user sees on screen.
+function issueCreatedTime(issue) {
+  return compatTimestampMillis(issue?.createdAt)
+    || compatTimestampMillis(issue?.lifecycle?.openedAt)
+    || Number(issue?.timestamp || 0);
+}
+
 function applySortOrder(arr, sort) {
   if (sort === 'newest') {
-    arr.sort((a, b) => b.timestamp - a.timestamp);
+    arr.sort((a, b) => issueCreatedTime(b) - issueCreatedTime(a));
   } else if (sort === 'oldest') {
-    arr.sort((a, b) => a.timestamp - b.timestamp);
+    arr.sort((a, b) => issueCreatedTime(a) - issueCreatedTime(b));
   } else if (sort === 'machine') {
     arr.sort((a, b) => a.machine.localeCompare(b.machine));
   } else if (sort === 'status') {
@@ -16881,19 +16891,7 @@ function closeAdminPanel() {
 window.resetToDefaults = async () => {
   if (!confirm('Reset to comprehensive manufacturing categories? This will replace your current configuration.')) return;
 
-  // Reset STATUSES to the comprehensive defaults from the code
-  STATUSES = {
-    open: { label: 'Open', shortLabel: 'Open', icon: '📍', cssColor: 'var(--color-danger, var(--red))', swipeColor: '#ef4444', floorCls: 'has-open', cls: 'status-open', subs: ['New Fault / Issue', 'Pending Triage', 'Scheduled Mold Change', 'Re-opened'], statLabel: 'Open', order: 0 },
-    attention: { label: 'Attention', shortLabel: 'Attention', icon: '⚠️', cssColor: '#0ea5e9', swipeColor: '#0ea5e9', floorCls: 'has-attention', cls: 'status-attention', subs: ['DO020: Trial Run', 'Mold Protection Fault', 'E-Stop / Safety Hazard', 'Press Down - Critical', 'Major Oil / Fluid Leak', 'Watch Item', 'Needs Follow-up', 'Housekeeping', 'PM Opportunity', 'Operator Note', 'Check Next Run'], statLabel: 'Attention', order: 1 },
-    controlman: { label: 'Controlman', shortLabel: 'Controlman', icon: '🎛️', cssColor: 'var(--color-babyblue, var(--babyblue))', swipeColor: '#38bdf8', floorCls: 'has-controlman', cls: 'status-controlman', subs: ['Color Change', 'Mold Change', 'Robot / EOAT (End of Arm Tooling) Fault', 'Vision System / Camera Error', 'Conveyor / Auxiliary Comm Loss', 'PLC / HMI Error'], statLabel: 'Controlman', order: 2 },
-    maintenance: { label: 'Maintenance', shortLabel: 'Maintenance', icon: '🔧', cssColor: 'var(--color-warning, var(--yellow))', swipeColor: '#eab308', floorCls: 'has-maintenance', cls: 'status-maintenance', subs: ['Hydraulic Leak / Pressure Drop', 'Heater Band / Thermocouple Failure', 'Barrel / Screw / Check Ring Issue', 'Chiller / Thermolator Failure'], statLabel: 'Maintenance', order: 3 },
-    materials: { label: 'Materials', shortLabel: 'Materials', icon: '📦', cssColor: '#8b5cf6', swipeColor: '#8b5cf6', floorCls: 'has-materials', cls: 'status-materials', subs: ['Resin Moisture / Drying Issue', 'Colorant / Masterbatch Ratio Error', 'Vacuum / Material Loader Blockage', 'Wrong Resin / Regrind Issue'], statLabel: 'Materials', order: 4 },
-    processengineer: { label: 'Process Engineer', shortLabel: 'Process Eng.', icon: '⚙️', cssColor: 'var(--color-purple, var(--purple))', swipeColor: '#a855f7', floorCls: 'has-processengineer', cls: 'status-processengineer', subs: ['Fill / Pack Pressure Adjustment', 'Temperature Profile Tuning', 'Cycle Time Optimization', 'Process Drift / Instability'], statLabel: 'Process Eng.', order: 5 },
-    quality: { label: 'Quality', shortLabel: 'Quality', icon: '✨', cssColor: '#06b6d4', swipeColor: '#06b6d4', floorCls: 'has-quality', cls: 'status-quality', subs: ['Short Shot / Non-fill', 'Flash / Burrs', 'Sink Marks / Voids', 'Splay / Silver Streaks', 'Burn Marks / Degradation', 'Warp / Dimensional Out-of-Spec'], statLabel: 'Quality', order: 6 },
-    startup: { label: 'Startup', shortLabel: 'Startup', icon: '🚀', cssColor: 'var(--color-teal, var(--teal))', swipeColor: '#14b8a6', floorCls: 'has-startup', cls: 'status-startup', subs: ['Purging / Color Change', 'Mold Heat-Up / Stabilization', 'First Article Inspection (FAI)', 'Robot Homing / Path Setup'], statLabel: 'Startup', order: 7 },
-    tooldie: { label: 'Tool & Die', shortLabel: 'Tool & Die', icon: '🔩', cssColor: 'var(--color-orange, var(--orange))', swipeColor: '#f97316', floorCls: 'has-tooldie', cls: 'status-tooldie', subs: ['Broken / Bent Ejector Pin', 'Hot Runner / Gate Issue', 'Water Leak in Mold', 'Stuck Part / Sprue', 'Mold Greasing / PM'], statLabel: 'Tool & Die', order: 8 },
-    resolved: { label: 'Resolved', shortLabel: 'Resolved', icon: '✓', cssColor: 'var(--color-success, var(--green))', swipeColor: '#22c55e', floorCls: 'all-resolved', cls: 'status-resolved', subs: ['Process Parameter Adjusted', 'Mold Cleaned / Repaired', 'Hardware Replaced', 'Temporary Workaround'], statLabel: 'Resolved', order: 9 },
-  };
+  STATUSES = deepCopy(DEFAULT_STATUSES);
   SUBCATEGORY_ROUTES = {};
 
   // Save to Firestore

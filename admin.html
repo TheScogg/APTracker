@@ -3145,10 +3145,14 @@
       quality: { label: 'Quality', shortLabel: 'Quality', icon: '✨', cssColor: '#06b6d4', swipeColor: '#06b6d4', floorCls: 'has-quality', cls: 'status-quality', subs: ['Short Shot / Non-fill', 'Flash / Burrs', 'Sink Marks / Voids', 'Splay / Silver Streaks', 'Burn Marks / Degradation', 'Warp / Dimensional Out-of-Spec'], statLabel: 'Quality', order: 6 },
       startup: { label: 'Startup', shortLabel: 'Startup', icon: '🚀', cssColor: '#14b8a6', swipeColor: '#14b8a6', floorCls: 'has-startup', cls: 'status-startup', subs: ['Purging / Color Change', 'Mold Heat-Up / Stabilization', 'First Article Inspection (FAI)', 'Robot Homing / Path Setup'], statLabel: 'Startup', order: 7 },
       tooldie: { label: 'Tool & Die', shortLabel: 'Tool & Die', icon: '🔩', cssColor: '#f97316', swipeColor: '#f97316', floorCls: 'has-tooldie', cls: 'status-tooldie', subs: ['Broken / Bent Ejector Pin', 'Hot Runner / Gate Issue', 'Water Leak in Mold', 'Stuck Part / Sprue', 'Mold Greasing / PM'], statLabel: 'Tool & Die', order: 8 },
-      resolved: { label: 'Resolved', shortLabel: 'Resolved', icon: '✓', cssColor: '#22c55e', swipeColor: '#22c55e', floorCls: 'all-resolved', cls: 'status-resolved', subs: ['Process Parameter Adjusted', 'Mold Cleaned / Repaired', 'Hardware Replaced', 'Temporary Workaround'], statLabel: 'Resolved', order: 9 },
+      production: { label: 'Production', shortLabel: 'Production', icon: '🏭', cssColor: '#2563eb', swipeColor: '#2563eb', floorCls: 'has-production', cls: 'status-production', subs: ['Operator Coverage Gap', 'Schedule / Priority Change', 'Waiting on Supervisor Decision', 'Packaging / Staging Issue', 'Labeling / Paperwork Issue', 'Training / Setup Question'], statLabel: 'Production', order: 9 },
+      safety: { label: 'Safety', shortLabel: 'Safety', icon: '🛡️', cssColor: '#dc2626', swipeColor: '#dc2626', floorCls: 'has-safety', cls: 'status-safety', subs: ['Safety Hazard / Near Miss', 'E-Stop / Safety Stop', 'Guarding / Interlock Concern', 'Slip / Trip / Housekeeping Hazard', 'PPE / Ergonomics Concern', 'Chemical / Spill Concern', 'Lockout / Tagout Concern'], statLabel: 'Safety', order: 10 },
+      resolved: { label: 'Resolved', shortLabel: 'Resolved', icon: '✓', cssColor: '#22c55e', swipeColor: '#22c55e', floorCls: 'all-resolved', cls: 'status-resolved', subs: ['Process Parameter Adjusted', 'Mold Cleaned / Repaired', 'Hardware Replaced', 'Temporary Workaround'], statLabel: 'Resolved', order: 11 },
     };
     const CANONICAL_OPTIONAL_STATUSES = {
-      attention: JSON.parse(JSON.stringify(DEFAULT_STATUSES.attention))
+      attention: JSON.parse(JSON.stringify(DEFAULT_STATUSES.attention)),
+      production: JSON.parse(JSON.stringify(DEFAULT_STATUSES.production)),
+      safety: JSON.parse(JSON.stringify(DEFAULT_STATUSES.safety))
     };
 
     const DEFAULT_GAME_CONFIG = {

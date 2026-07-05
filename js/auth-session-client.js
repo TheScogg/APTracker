@@ -1,8 +1,8 @@
-const SESSION_STORAGE_KEY = 'ap_api_session_v1';
+const LOCAL_STORAGE_KEY = 'ap_api_session_v1';
 
 function readStoredSession() {
   try {
-    const raw = sessionStorage.getItem(SESSION_STORAGE_KEY);
+    const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     return parsed && typeof parsed === 'object' ? parsed : null;
@@ -14,10 +14,10 @@ function readStoredSession() {
 function writeStoredSession(session) {
   try {
     if (!session?.token) {
-      sessionStorage.removeItem(SESSION_STORAGE_KEY);
+      localStorage.removeItem(LOCAL_STORAGE_KEY);
       return;
     }
-    sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(session));
   } catch {}
 }
 
