@@ -1,5 +1,6 @@
 import { handleD1ApiRequest, importDailyScheduleToD1 } from './d1-api.js';
 import { signAppSessionToken, verifyAppSessionToken } from './session-auth.js';
+import { sendPushNotification } from '@mmmike/web-push/send';
 
 const FIREBASE_AUTH_ORIGIN = 'https://press-tracker-9d9c9.firebaseapp.com';
 const FIREBASE_PROJECT_ID = 'press-tracker-9d9c9';
@@ -1220,14 +1221,14 @@ function jsonResponse(data, init = {}) {
   });
 }
 
-async function listUserD1FcmTokens(env, uid) {
+async function listUserD1PushTokens(env, uid, provider = 'fcm') {
   const db = env.APTRACKER_DB || env.DB;
   if (!db || !uid) return [];
   const result = await db.prepare(`
     SELECT token, token_id, provider, platform, notification_permission
     FROM user_push_tokens
-    WHERE uid = ? AND provider = 'fcm'
-  `).bind(uid).all();
+    WHERE uid = ? AND provider = ?
+  `).bind(uid, provider).all();
   const rows = Array.isArray(result?.results) ? result.results : [];
   return rows
     .filter(row => row?.token)
@@ -1238,6 +1239,10 @@ async function listUserD1FcmTokens(env, uid) {
       platform: row.platform,
       notificationPermission: row.notification_permission
     }));
+}
+
+async function listUserD1FcmTokens(env, uid) {
+  return listUserD1PushTokens(env, uid, 'fcm');
 }
 
 async function authenticateExchangeUser(request, env) {
@@ -1555,6 +1560,7 @@ function migrationReadiness(env) {
   const hasSessionSecret = Boolean(env.APP_SESSION_SECRET || env.AP_SESSION_SECRET);
   const hasGoogleServiceAccount = Boolean(env.GOOGLE_SERVICE_ACCOUNT);
   const hasFirebaseWebApiKey = Boolean(env.FIREBASE_WEB_API_KEY || FIREBASE_WEB_API_KEY);
+  const hasWebPush = Boolean(env.WEB_PUSH_VAPID_PUBLIC_KEY && env.WEB_PUSH_VAPID_PRIVATE_KEY);
   return {
     ready: hasD1 && hasSessionSecret,
     bindings: {
@@ -1563,7 +1569,8 @@ function migrationReadiness(env) {
     },
     runtimeDependencies: {
       firebaseAuthSessionExchange: hasFirebaseWebApiKey,
-      fcmPushDelivery: hasGoogleServiceAccount
+      fcmPushDelivery: hasGoogleServiceAccount,
+      webPushDelivery: hasWebPush
     },
     migrationState: {
       sqlApiAuthOnly: true,
@@ -1572,7 +1579,7 @@ function migrationReadiness(env) {
     },
     remainingSteps: [
       'Replace Firebase/Google sign-in if you want to fully leave Firebase Auth.',
-      'Replace FCM push delivery if you want to fully leave Firebase Cloud Messaging.'
+      'Remove FCM fallback after Web Push has enough active subscriptions.'
     ]
   };
 }
@@ -1585,6 +1592,15 @@ async function handleMigrationReadiness(request, env) {
   } catch (error) {
     return jsonResponse({ error: error?.message || 'Unauthorized' }, { status: error?.status || 401 });
   }
+}
+
+async function handleWebPushVapidPublicKey(request, env) {
+  if (request.method !== 'GET') return jsonResponse({ error: 'GET required' }, { status: 405 });
+  const publicKey = String(env.WEB_PUSH_VAPID_PUBLIC_KEY || '').trim();
+  return jsonResponse({
+    configured: Boolean(publicKey),
+    publicKey
+  });
 }
 
 async function sendFcmToTokens(env, tokens, payload) {
@@ -1624,11 +1640,135 @@ async function sendFcmToTokens(env, tokens, payload) {
   };
 }
 
-async function tokensForUsers(env, userIds) {
-  const tokenLists = await Promise.all(Array.from(new Set(userIds || [])).map(async uid => (
-    listUserD1FcmTokens(env, uid).catch(() => [])
-  )));
-  return tokenLists.flat().map(t => t.token).filter(Boolean);
+function getWebPushVapidConfig(env) {
+  const publicKey = String(env.WEB_PUSH_VAPID_PUBLIC_KEY || '').trim();
+  const privateKey = String(env.WEB_PUSH_VAPID_PRIVATE_KEY || '').trim();
+  const subject = String(env.WEB_PUSH_VAPID_SUBJECT || 'mailto:admin@aptracker.local').trim();
+  if (!publicKey || !privateKey) return null;
+  return { publicKey, privateKey, subject };
+}
+
+function payloadToWebPushPayload(payload = {}) {
+  const title = payload.notification?.title || payload.data?.title || 'AP Tracker';
+  const body = payload.notification?.body || payload.data?.body || '';
+  return {
+    title,
+    body,
+    icon: '/icons/icon-192.png',
+    badge: '/icons/icon-192.png',
+    data: {
+      ...(payload.data || {}),
+      url: payload.link || payload.data?.url || '/index.html'
+    }
+  };
+}
+
+function parseWebPushSubscription(token) {
+  if (!token) return null;
+  if (typeof token === 'object') return token;
+  try {
+    const parsed = JSON.parse(String(token));
+    if (parsed?.endpoint && parsed?.keys?.p256dh && parsed?.keys?.auth) return parsed;
+  } catch {}
+  return null;
+}
+
+async function sendWebPushToTokens(env, tokens, payload) {
+  const subscriptions = Array.from(new Map((tokens || [])
+    .map(parseWebPushSubscription)
+    .filter(Boolean)
+    .map(subscription => [subscription.endpoint, subscription])).values());
+  if (!subscriptions.length) return { attempted: 0, sent: 0, failed: 0, errors: [] };
+  const vapid = getWebPushVapidConfig(env);
+  if (!vapid) return { attempted: 0, sent: 0, failed: subscriptions.length, errors: [{ error: 'Web Push VAPID config is not configured.' }] };
+
+  const webPayload = payloadToWebPushPayload(payload);
+  const results = [];
+  for (const subscription of subscriptions) {
+    try {
+      const ok = await sendPushNotification(subscription, webPayload, vapid);
+      results.push({ ok });
+    } catch (error) {
+      results.push({ ok: false, error: error?.message || 'Web Push send failed' });
+    }
+  }
+  return {
+    attempted: subscriptions.length,
+    sent: results.filter(r => r.ok).length,
+    failed: results.filter(r => !r.ok).length,
+    errors: results.filter(r => !r.ok).slice(0, 5).map(r => ({ error: r.error || 'Web Push send failed' }))
+  };
+}
+
+async function pushTokensByUser(env, userIds) {
+  const entries = await Promise.all(Array.from(new Set(userIds || [])).filter(Boolean).map(async uid => {
+    const [webPush, fcm] = await Promise.all([
+      listUserD1PushTokens(env, uid, 'web-push').catch(() => []),
+      listUserD1FcmTokens(env, uid).catch(() => [])
+    ]);
+    return { uid, webPush, fcm };
+  }));
+  return entries;
+}
+
+async function sendPushToUsers(env, userIds, payload) {
+  const tokenRows = await pushTokensByUser(env, userIds);
+  const webPushTokens = [];
+  const fcmTokens = [];
+  for (const entry of tokenRows) {
+    if (entry.webPush.length) {
+      webPushTokens.push(...entry.webPush.map(t => t.token));
+    } else {
+      fcmTokens.push(...entry.fcm.map(t => t.token));
+    }
+  }
+  const [webPush, fcm] = await Promise.all([
+    sendWebPushToTokens(env, webPushTokens, payload),
+    sendFcmToTokens(env, fcmTokens, payload)
+  ]);
+  return {
+    attempted: webPush.attempted + fcm.attempted,
+    sent: webPush.sent + fcm.sent,
+    failed: webPush.failed + fcm.failed,
+    providers: {
+      webPush,
+      fcm
+    },
+    errors: [
+      ...(webPush.errors || []).map(error => ({ provider: 'web-push', ...error })),
+      ...(fcm.errors || []).map(error => ({ provider: 'fcm', ...error }))
+    ].slice(0, 10)
+  };
+}
+
+function getNotificationsQueue(env) {
+  return env.APTRACKER_NOTIFICATIONS_QUEUE || env.NOTIFICATIONS_QUEUE || null;
+}
+
+async function enqueueNotificationJob(env, job) {
+  const queue = getNotificationsQueue(env);
+  if (!queue?.send) return false;
+  await queue.send({
+    version: 1,
+    enqueuedAt: new Date().toISOString(),
+    ...job
+  });
+  return true;
+}
+
+function buildQueuedDelivery(previousDelivery = null, extra = {}) {
+  const previous = previousDelivery && typeof previousDelivery === 'object' ? previousDelivery : {};
+  return {
+    ...previous,
+    ...extra,
+    queuedAt: new Date().toISOString(),
+    deliveryMode: 'queue',
+    queue: 'aptracker-notifications'
+  };
+}
+
+function isDeliverySent(delivery) {
+  return Boolean(delivery?.sentAt);
 }
 
 function getD1Db(env) {
@@ -1784,6 +1924,39 @@ function issueTimerMessage(issue, plantId, issueId) {
   };
 }
 
+function issueTimerEntryFromD1Row(row) {
+  const delivery = parseJsonObject(row.timer_notification_delivery_json);
+  const pauseMeta = delivery?.__pauseMeta || null;
+  return {
+    source: 'd1',
+    plantId: row.plant_id,
+    issueId: row.issue_id,
+    issue: {
+      machineCode: row.machine_code,
+      machine: row.machine_code,
+      note: row.note,
+      createdByUid: row.created_by_uid,
+      ownerUid: row.assigned_user_uid,
+      assignedToUid: row.assigned_user_uid,
+      timer: {
+        enabled: Boolean(row.timer_enabled),
+        startedAt: row.timer_started_at || null,
+        dueAt: row.timer_due_at || null,
+        dueAtMs: row.timer_due_at_ms == null ? null : Number(row.timer_due_at_ms),
+        durationMinutes: row.timer_duration_minutes == null ? null : Number(row.timer_duration_minutes),
+        minutes: row.timer_duration_minutes == null ? null : Number(row.timer_duration_minutes),
+        notificationStatus: row.timer_notification_status,
+        notificationOwnerUid: row.timer_notification_owner_uid,
+        notificationRequestedBy: parseJsonObject(row.timer_notification_requested_by_json),
+        notificationDelivery: delivery,
+        paused: Boolean(pauseMeta?.paused),
+        pausedAtMs: pauseMeta?.pausedAtMs == null ? null : Number(pauseMeta.pausedAtMs),
+        pausedRemainingMs: pauseMeta?.pausedRemainingMs == null ? null : Number(pauseMeta.pausedRemainingMs)
+      }
+    }
+  };
+}
+
 async function listPendingIssueTimersD1(env, limit = 100) {
   const db = getD1Db(env);
   if (!db) return [];
@@ -1797,41 +1970,29 @@ async function listPendingIssueTimersD1(env, limit = 100) {
       LIMIT ?
     `).bind(limit).all();
     const rows = Array.isArray(result?.results) ? result.results : [];
-    return rows.map(row => {
-      const delivery = parseJsonObject(row.timer_notification_delivery_json);
-      const pauseMeta = delivery?.__pauseMeta || null;
-      return {
-        source: 'd1',
-        plantId: row.plant_id,
-        issueId: row.issue_id,
-        issue: {
-          machineCode: row.machine_code,
-          machine: row.machine_code,
-          note: row.note,
-          createdByUid: row.created_by_uid,
-          ownerUid: row.assigned_user_uid,
-          assignedToUid: row.assigned_user_uid,
-          timer: {
-            enabled: Boolean(row.timer_enabled),
-            startedAt: row.timer_started_at || null,
-            dueAt: row.timer_due_at || null,
-            dueAtMs: row.timer_due_at_ms == null ? null : Number(row.timer_due_at_ms),
-            durationMinutes: row.timer_duration_minutes == null ? null : Number(row.timer_duration_minutes),
-            minutes: row.timer_duration_minutes == null ? null : Number(row.timer_duration_minutes),
-            notificationStatus: row.timer_notification_status,
-            notificationOwnerUid: row.timer_notification_owner_uid,
-            notificationRequestedBy: parseJsonObject(row.timer_notification_requested_by_json),
-            notificationDelivery: delivery,
-            paused: Boolean(pauseMeta?.paused),
-            pausedAtMs: pauseMeta?.pausedAtMs == null ? null : Number(pauseMeta.pausedAtMs),
-            pausedRemainingMs: pauseMeta?.pausedRemainingMs == null ? null : Number(pauseMeta.pausedRemainingMs)
-          }
-        }
-      };
-    });
+    return rows.map(issueTimerEntryFromD1Row);
   } catch (error) {
     if (String(error?.message || '').includes('no such column')) {
       return [];
+    }
+    throw error;
+  }
+}
+
+async function getIssueTimerEntryD1(env, plantId, issueId) {
+  const db = getD1Db(env);
+  if (!db || !plantId || !issueId) return null;
+  try {
+    const row = await db.prepare(`
+      SELECT *
+      FROM issues
+      WHERE plant_id = ? AND issue_id = ?
+      LIMIT 1
+    `).bind(plantId, issueId).first();
+    return row ? issueTimerEntryFromD1Row(row) : null;
+  } catch (error) {
+    if (String(error?.message || '').includes('no such column')) {
+      return null;
     }
     throw error;
   }
@@ -1863,10 +2024,60 @@ async function patchD1IssueTimerNotification(env, plantId, issueId, timerPatch) 
   }
 }
 
+async function deliverIssueTimerPush(env, plantId, issueId) {
+  const entry = await getIssueTimerEntryD1(env, plantId, issueId);
+  if (!entry) return { skipped: true, reason: 'issue-not-found' };
+
+  const { issue } = entry;
+  const timer = issue?.timer || {};
+  const deliveryBefore = timer.notificationDelivery || null;
+  if (isDeliverySent(deliveryBefore)) return { skipped: true, reason: 'already-sent' };
+
+  const dueAtMs = Number(timer.dueAtMs || 0);
+  if (!timer.enabled || !Number.isFinite(dueAtMs) || dueAtMs > Date.now()) {
+    return { skipped: true, reason: 'timer-not-due' };
+  }
+
+  const recipients = issueTimerRecipientIds(issue);
+  try {
+    const result = await sendPushToUsers(env, recipients, issueTimerMessage(issue, plantId, issueId));
+    const delivery = {
+      ...(deliveryBefore || {}),
+      sentAt: new Date().toISOString(),
+      recipientUserIds: recipients,
+      attempted: result.attempted,
+      sent: result.sent,
+      failed: result.failed,
+      providers: result.providers || null,
+      errors: result.errors || []
+    };
+    await patchD1IssueTimerNotification(env, plantId, issueId, {
+      notificationStatus: result.sent > 0 ? 'sent' : 'failed',
+      notificationDelivery: delivery
+    });
+    return { ok: true, ...result };
+  } catch (error) {
+    const failedDelivery = {
+      ...(deliveryBefore || {}),
+      sentAt: new Date().toISOString(),
+      recipientUserIds: recipients,
+      attempted: 0,
+      sent: 0,
+      failed: 1,
+      errors: [{ error: error.message }]
+    };
+    await patchD1IssueTimerNotification(env, plantId, issueId, {
+      notificationStatus: 'failed',
+      notificationDelivery: failedDelivery
+    }).catch(() => {});
+    throw error;
+  }
+}
+
 async function processDueIssueTimers(env) {
   const nowMs = Date.now();
   const pending = await listPendingIssueTimersD1(env);
-  const summary = { checked: pending.length, due: 0, attempted: 0, sent: 0, failed: 0, skipped: 0, errors: [] };
+  const summary = { checked: pending.length, due: 0, queued: 0, attempted: 0, sent: 0, failed: 0, skipped: 0, errors: [] };
 
   for (const entry of pending) {
     const { issue } = entry;
@@ -1881,39 +2092,29 @@ async function processDueIssueTimers(env) {
     summary.due += 1;
     const recipients = issueTimerRecipientIds(issue);
     try {
-      const tokens = await tokensForUsers(env, recipients);
-      const result = await sendFcmToTokens(env, tokens, issueTimerMessage(issue, pathParts.plantId, pathParts.issueId));
-      summary.attempted += result.attempted;
-      summary.sent += result.sent;
-      summary.failed += result.failed;
-
-      const delivery = {
-        sentAt: new Date().toISOString(),
-        recipientUserIds: recipients,
-        attempted: result.attempted,
-        sent: result.sent,
-        failed: result.failed,
-        errors: result.errors || []
-      };
-      await patchD1IssueTimerNotification(env, pathParts.plantId, pathParts.issueId, {
-        notificationStatus: result.sent > 0 ? 'sent' : 'failed',
-        notificationDelivery: delivery
+      const queued = await enqueueNotificationJob(env, {
+        type: 'issue-timer',
+        plantId: pathParts.plantId,
+        issueId: pathParts.issueId
       });
+      if (queued) {
+        summary.queued += 1;
+        await patchD1IssueTimerNotification(env, pathParts.plantId, pathParts.issueId, {
+          notificationStatus: 'queued',
+          notificationDelivery: buildQueuedDelivery(timer.notificationDelivery, {
+            recipientUserIds: recipients
+          })
+        });
+        continue;
+      }
+
+      const result = await deliverIssueTimerPush(env, pathParts.plantId, pathParts.issueId);
+      summary.attempted += Number(result.attempted || 0);
+      summary.sent += Number(result.sent || 0);
+      summary.failed += Number(result.failed || 0);
     } catch (error) {
       summary.failed += 1;
       summary.errors.push({ issueId: pathParts.issueId, error: error.message });
-      const failedDelivery = {
-        sentAt: new Date().toISOString(),
-        recipientUserIds: recipients,
-        attempted: 0,
-        sent: 0,
-        failed: 1,
-        errors: [{ error: error.message }]
-      };
-      await patchD1IssueTimerNotification(env, pathParts.plantId, pathParts.issueId, {
-        notificationStatus: 'failed',
-        notificationDelivery: failedDelivery
-      }).catch(() => {});
     }
   }
 
@@ -1931,6 +2132,45 @@ async function handleFcmDueIssueTimers(request, env) {
   }
 }
 
+async function deliverRoleAlertPush(env, plantId, alertId, excludeUid = '') {
+  if (!plantId || !alertId) return { skipped: true, reason: 'missing-identifiers' };
+  const d1Alert = await getD1RoleAlert(env, plantId, alertId);
+  if (!d1Alert) return { skipped: true, reason: 'alert-not-found' };
+  if (isDeliverySent(d1Alert.notificationDelivery)) return { skipped: true, reason: 'already-sent' };
+
+  const recipients = (Array.isArray(d1Alert.recipientUserIds)
+    ? d1Alert.recipientUserIds
+    : [])
+    .filter(uid => uid && uid !== excludeUid);
+  const title = d1Alert.row.feed_label || d1Alert.row.title || d1Alert.raw?.feedLabel || 'AP Tracker Alert';
+  const body = d1Alert.row.body || d1Alert.raw?.note || d1Alert.raw?.body || 'New alert';
+  const result = await sendPushToUsers(env, recipients, {
+    notification: { title, body },
+    data: {
+      type: 'role-alert',
+      plantId,
+      alertId,
+      issueId: d1Alert.row.issue_id || d1Alert.raw?.issueId || '',
+      title,
+      body,
+      url: '/index.html'
+    },
+    link: '/index.html'
+  });
+  const delivery = {
+    ...(d1Alert.notificationDelivery || {}),
+    sentAt: new Date().toISOString(),
+    recipientUserIds: recipients,
+    attempted: result.attempted,
+    sent: result.sent,
+    failed: result.failed,
+    providers: result.providers || null,
+    errors: result.errors || []
+  };
+  await patchD1RoleAlertNotificationDelivery(env, plantId, alertId, delivery);
+  return { ok: true, ...result };
+}
+
 async function handleFcmRoleAlert(request, env) {
   if (request.method !== 'POST') return jsonResponse({ error: 'POST required' }, { status: 405 });
   try {
@@ -1940,45 +2180,69 @@ async function handleFcmRoleAlert(request, env) {
 
     const d1Alert = await getD1RoleAlert(env, plantId, alertId);
     if (!d1Alert) return jsonResponse({ error: 'Alert not found.' }, { status: 404 });
-    if (d1Alert.notificationDelivery?.sentAt) return jsonResponse({ skipped: true, reason: 'already-sent' });
+    if (isDeliverySent(d1Alert.notificationDelivery)) return jsonResponse({ skipped: true, reason: 'already-sent' });
 
     const createdByUid = String(d1Alert.createdBy?.uid || d1Alert.raw?.createdBy?.uid || '').trim();
     if (createdByUid !== user.localId) {
       return jsonResponse({ error: 'Only the alert creator can trigger push delivery.' }, { status: 403 });
     }
 
-    const recipients = (Array.isArray(d1Alert.recipientUserIds)
-      ? d1Alert.recipientUserIds
-      : [])
-      .filter(uid => uid && uid !== user.localId);
-    const tokens = await tokensForUsers(env, recipients);
-    const title = d1Alert.row.feed_label || d1Alert.row.title || d1Alert.raw?.feedLabel || 'AP Tracker Alert';
-    const body = d1Alert.row.body || d1Alert.raw?.note || d1Alert.raw?.body || 'New alert';
-    const result = await sendFcmToTokens(env, tokens, {
-      notification: { title, body },
-      data: {
-        type: 'role-alert',
-        plantId,
-        alertId,
-        issueId: d1Alert.row.issue_id || d1Alert.raw?.issueId || '',
-        title,
-        body,
-        url: '/index.html'
-      },
-      link: '/index.html'
+    const queued = await enqueueNotificationJob(env, {
+      type: 'role-alert',
+      plantId,
+      alertId,
+      requestedByUid: user.localId
     });
-    const delivery = {
-      sentAt: new Date().toISOString(),
-      attempted: result.attempted,
-      sent: result.sent,
-      failed: result.failed,
-      errors: result.errors || []
-    };
-    await patchD1RoleAlertNotificationDelivery(env, plantId, alertId, delivery);
+    if (queued) {
+      await patchD1RoleAlertNotificationDelivery(env, plantId, alertId, buildQueuedDelivery(d1Alert.notificationDelivery, {
+        requestedByUid: user.localId
+      }));
+      return jsonResponse({ ok: true, queued: true });
+    }
+
+    const result = await deliverRoleAlertPush(env, plantId, alertId, user.localId);
     return jsonResponse({ ok: true, ...result });
   } catch (e) {
     return jsonResponse({ error: e.message }, { status: 500 });
   }
+}
+
+async function deliverConversationMessagePush(env, plantId, conversationId, messageId) {
+  if (!plantId || !conversationId || !messageId) return { skipped: true, reason: 'missing-identifiers' };
+  const [d1Conversation, d1Message] = await Promise.all([
+    getD1Conversation(env, plantId, conversationId),
+    getD1ConversationMessage(env, plantId, conversationId, messageId)
+  ]);
+  if (!d1Conversation || !d1Message) return { skipped: true, reason: 'conversation-or-message-not-found' };
+  if (isDeliverySent(d1Message.notificationDelivery)) return { skipped: true, reason: 'already-sent' };
+
+  const senderUid = String(d1Message.row.sender_uid || '').trim();
+  const recipients = (Array.isArray(d1Conversation.memberIds)
+    ? d1Conversation.memberIds
+    : [])
+    .filter(uid => uid && uid !== senderUid);
+  const senderName = d1Message.row.sender_name || 'Someone';
+  const title = d1Conversation.row.type === 'dm'
+    ? `Message from ${senderName}`
+    : (d1Conversation.row.title || 'AP Tracker Message');
+  const body = d1Message.row.body || (d1Message.attachments.length ? 'Sent a photo' : 'New message');
+  const result = await sendPushToUsers(env, recipients, {
+    notification: { title, body },
+    data: { type: 'conversation-message', plantId, conversationId, messageId, title, body, url: '/index.html' },
+    link: '/index.html'
+  });
+  const delivery = {
+    ...(d1Message.notificationDelivery || {}),
+    sentAt: new Date().toISOString(),
+    recipientUserIds: recipients,
+    attempted: result.attempted,
+    sent: result.sent,
+    failed: result.failed,
+    providers: result.providers || null,
+    errors: result.errors || []
+  };
+  await patchD1ConversationMessageNotificationDelivery(env, plantId, conversationId, messageId, delivery);
+  return { ok: true, ...result };
 }
 
 async function handleFcmConversationMessage(request, env) {
@@ -1995,40 +2259,61 @@ async function handleFcmConversationMessage(request, env) {
       getD1ConversationMessage(env, plantId, conversationId, messageId)
     ]);
     if (!d1Conversation || !d1Message) return jsonResponse({ error: 'Conversation or message not found.' }, { status: 404 });
-    if (d1Message.notificationDelivery?.sentAt) return jsonResponse({ skipped: true, reason: 'already-sent' });
+    if (isDeliverySent(d1Message.notificationDelivery)) return jsonResponse({ skipped: true, reason: 'already-sent' });
 
     const senderUid = String(d1Message.row.sender_uid || '').trim();
     if (senderUid !== user.localId) {
       return jsonResponse({ error: 'Only the sender can trigger push delivery.' }, { status: 403 });
     }
 
-    const recipients = (Array.isArray(d1Conversation.memberIds)
-      ? d1Conversation.memberIds
-      : [])
-      .filter(uid => uid && uid !== user.localId);
-    const tokens = await tokensForUsers(env, recipients);
-    const senderName = d1Message.row.sender_name || 'Someone';
-    const title = d1Conversation.row.type === 'dm'
-      ? `Message from ${senderName}`
-      : (d1Conversation.row.title || 'AP Tracker Message');
-    const body = d1Message.row.body || (d1Message.attachments.length ? 'Sent a photo' : 'New message');
-    const result = await sendFcmToTokens(env, tokens, {
-      notification: { title, body },
-      data: { type: 'conversation-message', plantId, conversationId, messageId, title, body, url: '/index.html' },
-      link: '/index.html'
+    const queued = await enqueueNotificationJob(env, {
+      type: 'conversation-message',
+      plantId,
+      conversationId,
+      messageId,
+      requestedByUid: user.localId
     });
-    const delivery = {
-      sentAt: new Date().toISOString(),
-      attempted: result.attempted,
-      sent: result.sent,
-      failed: result.failed,
-      errors: result.errors || []
-    };
-    await patchD1ConversationMessageNotificationDelivery(env, plantId, conversationId, messageId, delivery);
+    if (queued) {
+      await patchD1ConversationMessageNotificationDelivery(env, plantId, conversationId, messageId, buildQueuedDelivery(d1Message.notificationDelivery, {
+        requestedByUid: user.localId
+      }));
+      return jsonResponse({ ok: true, queued: true });
+    }
+
+    const result = await deliverConversationMessagePush(env, plantId, conversationId, messageId);
     return jsonResponse({ ok: true, ...result });
   } catch (e) {
     return jsonResponse({ error: e.message }, { status: 500 });
   }
+}
+
+async function processNotificationQueueMessage(env, body = {}) {
+  const type = String(body.type || '').trim();
+  if (type === 'role-alert') {
+    return deliverRoleAlertPush(
+      env,
+      String(body.plantId || ''),
+      String(body.alertId || ''),
+      String(body.requestedByUid || '')
+    );
+  }
+  if (type === 'conversation-message') {
+    return deliverConversationMessagePush(
+      env,
+      String(body.plantId || ''),
+      String(body.conversationId || ''),
+      String(body.messageId || '')
+    );
+  }
+  if (type === 'issue-timer') {
+    return deliverIssueTimerPush(
+      env,
+      String(body.plantId || ''),
+      String(body.issueId || '')
+    );
+  }
+  console.warn('Skipping unknown notification queue job type:', type);
+  return { skipped: true, reason: 'unknown-type' };
 }
 
 export default {
@@ -2058,6 +2343,9 @@ export default {
       }
       if (url.pathname === '/api/migration-readiness') {
         return handleMigrationReadiness(request, env);
+      }
+      if (url.pathname === '/api/push/vapid-public-key') {
+        return handleWebPushVapidPublicKey(request, env);
       }
       const attachmentUploadMatch = request.method === 'POST' && url.pathname.match(/^\/api\/plants\/([^/]+)\/attachments\/upload$/);
       if (attachmentUploadMatch) {
@@ -2127,5 +2415,20 @@ export default {
 
   async scheduled(event, env, ctx) {
     ctx.waitUntil(processDueIssueTimers(env));
+  },
+
+  async queue(batch, env, ctx) {
+    const failures = [];
+    for (const message of batch.messages || []) {
+      try {
+        await processNotificationQueueMessage(env, message.body || {});
+      } catch (error) {
+        console.error('Notification queue message failed:', error);
+        failures.push(error);
+      }
+    }
+    if (failures.length) {
+      throw failures[0];
+    }
   }
 };

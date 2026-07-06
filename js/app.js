@@ -102,6 +102,7 @@ const FCM_VAPID_KEY = String(window.AP_TRACKER_FCM_CONFIG?.vapidKey || '').trim(
 let fcmMessaging = null;
 let fcmRegistration = null;
 let fcmTokenRegistrationPromise = null;
+let webPushVapidPublicKeyPromise = null;
 const NO_AUTH_MODE = location.pathname.endsWith('/noauth.html');
 const SELECTED_DATA_BACKEND = selectedDataBackend();
 const NO_AUTH_USER = {
@@ -571,6 +572,7 @@ function migrationStatusPillTitle() {
   lines.push(`D1 binding: ${bindings.d1 ? 'ready' : 'missing'}`);
   lines.push(`App session secret: ${bindings.appSessionSecret ? 'ready' : 'missing'}`);
   lines.push(`Firebase auth exchange: ${runtimeDependencies.firebaseAuthSessionExchange ? 'still enabled' : 'off'}`);
+  lines.push(`Web Push delivery: ${runtimeDependencies.webPushDelivery ? 'ready' : 'missing'}`);
   lines.push(`FCM push delivery: ${runtimeDependencies.fcmPushDelivery ? 'still enabled' : 'off'}`);
   const remainingSteps = Array.isArray(data.remainingSteps) ? data.remainingSteps.filter(Boolean) : [];
   if (remainingSteps.length) {
@@ -1006,9 +1008,7 @@ async function initFcmMessaging() {
   if (!('serviceWorker' in navigator) || !('Notification' in window)) return null;
   const supported = await isMessagingSupported().catch(() => false);
   if (!supported) return null;
-  if (!fcmRegistration) {
-    fcmRegistration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-  }
+  fcmRegistration = await getPushServiceWorkerRegistration();
   if (!fcmMessaging) {
     fcmMessaging = getMessaging(app);
     onMessage(fcmMessaging, payload => {
@@ -1020,14 +1020,105 @@ async function initFcmMessaging() {
   return fcmMessaging;
 }
 
+async function getPushServiceWorkerRegistration() {
+  if (!('serviceWorker' in navigator)) return null;
+  if (!fcmRegistration) {
+    fcmRegistration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+  }
+  return fcmRegistration;
+}
+
+function base64urlToUint8Array(base64url) {
+  const padded = String(base64url || '') + '='.repeat((4 - (String(base64url || '').length % 4)) % 4);
+  const binary = atob(padded.replace(/-/g, '+').replace(/_/g, '/'));
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+async function getWebPushVapidPublicKey() {
+  if (webPushVapidPublicKeyPromise) return webPushVapidPublicKeyPromise;
+  webPushVapidPublicKeyPromise = fetch('/api/push/vapid-public-key')
+    .then(async res => {
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || `Web Push config request failed (${res.status})`);
+      return data?.configured && data?.publicKey ? String(data.publicKey) : '';
+    })
+    .catch(error => {
+      console.warn('Web Push VAPID public key unavailable', error);
+      return '';
+    });
+  return webPushVapidPublicKeyPromise;
+}
+
 function fcmTokenDocId(token) {
   let hash = 0;
   for (let i = 0; i < token.length; i += 1) hash = ((hash << 5) - hash + token.charCodeAt(i)) | 0;
   return `web_${Math.abs(hash).toString(36)}_${token.slice(-12).replace(/[^A-Za-z0-9_-]/g, '')}`;
 }
 
+function pushTokenDocId(seed, prefix = 'web') {
+  const text = String(seed || '');
+  let hash = 0;
+  for (let i = 0; i < text.length; i += 1) hash = ((hash << 5) - hash + text.charCodeAt(i)) | 0;
+  return `${prefix}_${Math.abs(hash).toString(36)}_${text.slice(-12).replace(/[^A-Za-z0-9_-]/g, '')}`;
+}
+
+async function registerWebPushSubscription({ requestPermission = false } = {}) {
+  if (NO_AUTH_MODE || DEMO_MODE || !currentUser?.uid) return null;
+  if (!('Notification' in window) || !('PushManager' in window)) {
+    if (requestPermission) throw new Error('Web Push is not supported in this browser.');
+    return null;
+  }
+  if (requestPermission && Notification.permission !== 'granted') {
+    const result = await Notification.requestPermission();
+    if (result !== 'granted') throw new Error('Notification permission was not granted.');
+  }
+  if (Notification.permission !== 'granted') return null;
+
+  const publicKey = await getWebPushVapidPublicKey();
+  if (!publicKey) {
+    if (requestPermission) throw new Error('Web Push is not configured.');
+    return null;
+  }
+
+  const registration = await getPushServiceWorkerRegistration();
+  if (!registration?.pushManager) {
+    if (requestPermission) throw new Error('Web Push service worker registration failed.');
+    return null;
+  }
+
+  let subscription = await registration.pushManager.getSubscription();
+  if (!subscription) {
+    subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: base64urlToUint8Array(publicKey)
+    });
+  }
+  const serialized = subscription.toJSON();
+  const token = JSON.stringify(serialized);
+  const tokenId = pushTokenDocId(serialized.endpoint, 'webpush');
+  await dataApi.registerPushToken({
+    token,
+    tokenId,
+    provider: 'web-push',
+    platform: 'web',
+    userAgent: navigator.userAgent || '',
+    notificationPermission: Notification.permission,
+    plantIds: userPlants.map(p => p.id).filter(Boolean),
+    currentPlantId: currentPlantId || null
+  });
+  return serialized;
+}
+
 async function registerFcmToken({ requestPermission = false } = {}) {
   if (NO_AUTH_MODE || DEMO_MODE || !currentUser?.uid) return null;
+  const webPushSubscription = await registerWebPushSubscription({ requestPermission }).catch(error => {
+    if (requestPermission) console.warn('Web Push registration failed; falling back to FCM', error);
+    return null;
+  });
+  if (webPushSubscription) return webPushSubscription;
+
   if (!FCM_VAPID_KEY) {
     if (requestPermission) throw new Error('FCM is not configured. Add your Web Push VAPID key to fcm-config.js.');
     return null;
@@ -1314,6 +1405,20 @@ function normalizeMemberRole(roleValue) {
   const normalized = String(roleValue || '').trim().toLowerCase();
   if (normalized === 'admin' || normalized === 'editor' || normalized === 'viewer') return normalized;
   return '';
+}
+
+function formatMemberRoleLabel(roleValue) {
+  const normalized = normalizeMemberRole(roleValue);
+  if (normalized === 'admin') return 'Admin';
+  if (normalized === 'viewer') return 'Viewer';
+  return 'Member';
+}
+
+function updateUserDropdownContext() {
+  const roleEl = document.getElementById('ud-role-label');
+  const plantEl = document.getElementById('ud-plant-label');
+  if (roleEl) roleEl.textContent = formatMemberRoleLabel(currentUserRole);
+  if (plantEl) plantEl.textContent = currentPlantName || 'No plant';
 }
 
 // ── ROLE-BASED ALERT FEEDS ──
@@ -1850,8 +1955,6 @@ function _renderRoleAlertCard(alert) {
   const statusLabel = isResolved ? 'Resolved' : getStatusLabel(statusKey, 'short');
   const acceptedByName = (isResolved || isAccepted) ? formatWorkflowActorName(alert.acceptedBy?.name || alert.acceptedBy || '') : '';
   const noteText = alert.note || 'No note';
-  const responsePath = alert.responsePath || '';
-  const responseTrigger = alert.responseTrigger || '';
   return `
     <div class="role-alert-card${(isAccepted || isResolved) ? ' accepted' : ''}" style="--role-alert-cat-color:${statusColor};--role-alert-card-border:${alphaColor(statusColor, 0.35)};">
       <button class="role-alert-card-body" type="button" data-role-alert-action="focus" data-role-alert-issue-id="${esc(alert.issueId)}" aria-label="Open issue ${esc(alert.machine || 'alert')}">
@@ -1876,7 +1979,6 @@ function _renderRoleAlertCard(alert) {
             </div>
           </div>
           <div class="role-alert-card-note">${esc(noteText)}</div>
-          ${responsePath ? `<div class="role-alert-response-path"><span>${esc(responsePath)}</span>${responseTrigger ? `<small>${esc(responseTrigger)}</small>` : ''}</div>` : ''}
         </div>
       </button>
       <div class="role-alert-card-actions">
@@ -2322,7 +2424,6 @@ window.acceptRoleAlert = async function (issueId, statusKey, workflowId = '') {
       ? await setWorkflowStateForWorkflowId(issueId, workflowId, 'accepted')
       : '';
     if (!updatedWorkflowId) await setWorkflowStateForStatus(issueId, statusKey, 'accepted');
-    showGameToast('✅ Workflow accepted');
     _roleAlertsShowAccepted = true;
     if (document.getElementById('role-alerts-modal')?.classList.contains('visible')) {
       await _openRoleAlertInboxModalInternal({ resetToggle: false });
@@ -2340,7 +2441,6 @@ window.unacceptRoleAlert = async function (issueId, statusKey, workflowId = '') 
       ? await setWorkflowStateForWorkflowId(issueId, workflowId, 'called')
       : '';
     if (!updatedWorkflowId) await setWorkflowStateForStatus(issueId, statusKey, 'called');
-    showGameToast('↩️ Workflow unaccepted');
     if (document.getElementById('role-alerts-modal')?.classList.contains('visible')) {
       await _openRoleAlertInboxModalInternal({ resetToggle: false });
     }
@@ -3375,8 +3475,8 @@ async function ensureIssueDetailsHydrated(issueId) {
 }
 
 // ── APP LIFECYCLE HELPERS (Phase 1: structure-only refactor) ──
-function refreshVisibleData() {
-  renderIssues();
+function refreshVisibleData(options = {}) {
+  renderIssues(options);
   updatePressStates();
   updateStats();
 }
@@ -3489,6 +3589,7 @@ async function loadUserPlants() {
 
     currentPlantName = (userPlants.find(p => p.id === currentPlantId) || {}).name || currentPlantId;
     document.getElementById('plant-name-display').textContent = currentPlantName;
+    updateUserDropdownContext();
     buildPlantDropdown();
     _syncCurrentUserMembershipProfile(userPlants.map(p => p.id)).catch(e => {
       console.warn('Could not sync membership profile fields', e);
@@ -3499,6 +3600,7 @@ async function loadUserPlants() {
     currentPlantName = '';
     userPlants = [];
     document.getElementById('plant-name-display').textContent = 'Unable to load plants';
+    updateUserDropdownContext();
     throw e;
   }
 }
@@ -3658,6 +3760,7 @@ async function loadCurrentMember(plantId) {
 // Show/hide UI elements based on current user's permissions
 function applyRoleUI() {
   const isAdmin = !DEMO_MODE && currentUserRole === 'admin';
+  updateUserDropdownContext();
 
   const adminPageBtn = document.getElementById('admin-page-btn');
   if (adminPageBtn) adminPageBtn.style.display = isAdmin ? '' : 'none';
@@ -3720,6 +3823,7 @@ async function switchPlant(plantId) {
   currentPlantId = plantId;
   currentPlantName = (userPlants.find(p => p.id === plantId) || {}).name || plantId;
   document.getElementById('plant-name-display').textContent = currentPlantName;
+  updateUserDropdownContext();
   // Save last plant to user doc
   if (shouldUseSqlBootstrap()) {
     try {
@@ -4391,16 +4495,150 @@ window.toggleGameDrawer = (forceOpen) => {
   if (gameDrawerOpen) updateGamePillBadge(false); // clear badge when drawer opens
 };
 
-function showGameToast(message) {
+function showGameToast(message, variant = 'default') {
   const el = document.getElementById('game-toast');
   if (!el) return;
+  const opts = typeof variant === 'object' && variant ? variant : { variant };
+  const semantic = String(opts.variant || opts.type || 'default');
   const isPositive = String(message).startsWith('+');
   const isNegative = String(message).startsWith('-') || String(message).startsWith('−');
-  const icon = isNegative ? '💀' : isPositive ? '⚡' : '🎯';
-  const color = isNegative ? 'var(--color-danger, var(--red))' : 'var(--color-warning, var(--yellow))';
+  const semanticMap = {
+    success: { icon: '✓', color: 'var(--color-success, var(--green))' },
+    status: { icon: '↗', color: 'var(--color-info, var(--blue))' },
+    photo: { icon: '◼', color: 'var(--color-teal, var(--teal))' },
+    resolve: { icon: '✓', color: 'var(--color-success, var(--green))' },
+    workflow: { icon: '●', color: 'var(--color-accent, var(--accent))' },
+    error: { icon: '!', color: 'var(--color-danger, var(--red))' }
+  };
+  const semanticDef = semanticMap[semantic] || null;
+  const icon = opts.icon || semanticDef?.icon || (isNegative ? '💀' : isPositive ? '⚡' : '🎯');
+  const color = opts.color || semanticDef?.color || (isNegative ? 'var(--color-danger, var(--red))' : 'var(--color-warning, var(--yellow))');
   el.innerHTML = `<span style="color:${color};font-size:14px;">${icon}</span><span>${esc(message)}</span>`;
+  el.dataset.variant = semantic;
   el.classList.add('show');
   setTimeout(() => el.classList.remove('show'), 2000);
+}
+
+const ACTION_FEEDBACK_CLASS_BY_TYPE = {
+  status: 'action-confirmed',
+  success: 'action-confirmed',
+  create: 'action-confirmed',
+  resolve: 'resolved-pop',
+  photo: 'evidence-added',
+  workflow: 'action-confirmed'
+};
+
+function actionFeedbackReducedMotion() {
+  return Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
+}
+
+function cssEscapeValue(value) {
+  const raw = String(value || '');
+  if (window.CSS?.escape) return CSS.escape(raw);
+  return raw.replace(/["\\]/g, '\\$&');
+}
+
+function issueCardForFeedback(issueId) {
+  if (!issueId) return null;
+  const row = document.querySelector(`.issue-row[data-id="${cssEscapeValue(issueId)}"]`);
+  return row?.querySelector('.issue-card') || document.getElementById(`body-${issueId}`)?.closest('.issue-card') || null;
+}
+
+function pressButtonForFeedback(machine) {
+  const machineKey = String(machine || '').trim();
+  if (!machineKey) return null;
+  return document.getElementById('press-' + machineKey.replace(/[\s.]/g, '_'));
+}
+
+function pulseClass(el, className, duration = 900) {
+  if (!el || !className) return;
+  el.classList.remove(className);
+  void el.offsetWidth;
+  el.classList.add(className);
+  setTimeout(() => el.classList.remove(className), duration);
+}
+
+function showActionMiniCelebration({ color = 'var(--color-success, var(--green))', label = 'Done' } = {}) {
+  if (actionFeedbackReducedMotion()) return;
+  const el = document.createElement('div');
+  el.className = 'action-mini-celebration';
+  el.style.setProperty('--action-feedback-color', color);
+  el.innerHTML = `<span>✓</span><strong>${esc(label)}</strong>`;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 1100);
+}
+
+function showActionFeedback({
+  type = 'success',
+  issueId = '',
+  machine = '',
+  label = '',
+  detail = '',
+  color = '',
+  celebrate = false,
+  toast = true
+} = {}) {
+  const message = detail || label || 'Updated';
+  const feedbackColor = color || (type === 'resolve' ? 'var(--color-success, var(--green))' : '');
+  if (toast && message) showGameToast(message, { variant: type, color: feedbackColor || undefined });
+
+  const card = issueCardForFeedback(issueId);
+  const cardClass = ACTION_FEEDBACK_CLASS_BY_TYPE[type] || 'action-confirmed';
+  if (card) {
+    if (feedbackColor) card.style.setProperty('--action-feedback-color', feedbackColor);
+    pulseClass(card, cardClass, type === 'resolve' ? 1100 : 900);
+  }
+
+  const pressBtn = pressButtonForFeedback(machine);
+  if (pressBtn) {
+    if (feedbackColor) pressBtn.style.setProperty('--action-feedback-color', feedbackColor);
+    pulseClass(pressBtn, 'action-pulse', 950);
+  }
+
+  if (celebrate) showActionMiniCelebration({ color: feedbackColor, label: label || 'Done' });
+}
+
+function showStatusActionFeedback(issueId, issue, statusKey, subStatus = '') {
+  const st = getStatusDef(statusKey);
+  const statusLabel = getStatusLabel(statusKey, 'short') || st.label || 'Status';
+  const isResolved = statusKey === 'resolved';
+  showActionFeedback({
+    type: isResolved ? 'resolve' : 'status',
+    issueId,
+    machine: issue?.machine || issue?.machineCode || '',
+    label: statusLabel,
+    detail: isResolved ? `Press ${issue?.machine || ''} resolved`.trim() : `Routed to ${statusLabel}`,
+    color: getStatusColor(statusKey),
+    celebrate: isResolved
+  });
+}
+
+function showPhotoActionFeedback(issueId, issue, count = 1) {
+  const photoCount = Number(count || 0);
+  if (photoCount <= 0) return;
+  showActionFeedback({
+    type: 'photo',
+    issueId,
+    machine: issue?.machine || issue?.machineCode || '',
+    label: 'Evidence added',
+    detail: photoCount === 1 ? 'Evidence added' : `${photoCount} photos added`
+  });
+}
+
+function workflowFeedbackLabel(state) {
+  if (state === 'accepted') return 'Accepted by you';
+  if (state === 'in-progress') return 'In progress';
+  if (state === 'finished') return 'Finished';
+  if (state === 'called') return 'Called';
+  return 'Workflow updated';
+}
+
+function markSwipeTileConfirmed(tile) {
+  if (!tile) return;
+  tile.classList.remove('confirmed');
+  void tile.offsetWidth;
+  tile.classList.add('confirmed');
+  setTimeout(() => tile.classList.remove('confirmed'), 700);
 }
 
 function showLevelUpCelebration(level) {
@@ -5793,6 +6031,7 @@ function showProfileOnboardingIfNeeded(profile = {}) {
 
 function renderPendingPlantAccessState() {
   document.getElementById('plant-name-display').textContent = 'Access pending';
+  updateUserDropdownContext();
   const issuesList = document.getElementById('issues-list');
   if (issuesList) {
     issuesList.innerHTML = `
@@ -5909,6 +6148,7 @@ async function bootstrapSignedInSession(user) {
         currentPlantId = deduped[0];
         currentPlantName = userPlants[0]?.name || deduped[0];
         document.getElementById('plant-name-display').textContent = currentPlantName;
+        updateUserDropdownContext();
         buildPlantDropdown();
       } else {
         console.warn('Recovery: no real plants found via old plants field or member docs');
@@ -6161,6 +6401,7 @@ async function bootstrapDemoSession(user) {
   userPlants = [{ id: DEMO_PLANT_ID, name: DEMO_PLANT_NAME, location: 'Demo Location' }];
   buildPlantDropdown();
   document.getElementById('plant-name-display').textContent = currentPlantName;
+  updateUserDropdownContext();
 
   const hasRemoteDemoAccess = await ensureDemoPlantAccess();
 
@@ -6847,7 +7088,7 @@ async function refreshIssuesFromSql() {
     issuesById.set(issue.id, issue);
   });
   rebuildIssuesArrayFromMap();
-  refreshVisibleData();
+  refreshVisibleData({ isBackground: true });
   void _refreshRoleAlertBadgeCount();
   refreshSyncState({
     status: 'live',
@@ -6929,7 +7170,7 @@ function startListener() {
       issuesById.set(change.doc.id, buildIssueFromSnapshot(change.doc));
     });
     rebuildIssuesArrayFromMap();
-    refreshVisibleData();
+    refreshVisibleData({ isBackground: true });
     void _refreshRoleAlertBadgeCount();
     if (!issueHistoryCursor && snap.docs.length) {
       issueHistoryCursor = snap.docs[snap.docs.length - 1];
@@ -6957,7 +7198,7 @@ function startListener() {
     retryCount++;
     const delay = nextIssueListenerRetryDelay(retryCount);
     setSyncStatus('err', `Connection lost. Retrying in ${formatRetryDelay(delay)}…`);
-    refreshVisibleData();
+    refreshVisibleData({ isBackground: true });
     retryTimeout = setTimeout(() => startListener(), delay);
   });
   issueBootstrapTimeout = setTimeout(async () => {
@@ -6968,7 +7209,7 @@ function startListener() {
       issuesById.clear();
       snap.docs.forEach(d => issuesById.set(d.id, buildIssueFromSnapshot(d)));
       rebuildIssuesArrayFromMap();
-      refreshVisibleData();
+      refreshVisibleData({ isBackground: true });
       void _refreshRoleAlertBadgeCount();
       if (snap.docs.length) {
         issueHistoryCursor = snap.docs[snap.docs.length - 1];
@@ -6982,7 +7223,7 @@ function startListener() {
       } else {
         setSyncStatus('err', 'Offline — unable to sync issues');
         rebuildIssuesArrayFromMap();
-        refreshVisibleData();
+        refreshVisibleData({ isBackground: true });
       }
     }
   }, ISSUE_LISTENER_BOOTSTRAP_FALLBACK_MS);
@@ -8646,41 +8887,6 @@ function getLogResponsePreviewMeta() {
   };
 }
 
-function renderLogResponsePreview() {
-  const preview = document.getElementById('log-response-preview');
-  if (!preview) return;
-  const meta = getLogResponsePreviewMeta();
-  preview.hidden = !meta.visible;
-  if (!meta.visible) {
-    preview.innerHTML = '';
-    return;
-  }
-  preview.style.setProperty('--preview-color', meta.previewColor);
-  const alertText = meta.alertLabels.length
-    ? `Alerts: ${meta.alertLabels.join(', ')}`
-    : 'Alerts: current category';
-  const pathHtml = meta.paths.length
-    ? `<div class="log-response-preview-paths">${meta.paths.map(path => {
-      const targetColor = getStatusColor(path.targetKey);
-      return `<div class="log-response-preview-path" style="--path-color:${targetColor};">
-        <div class="log-response-preview-title">${esc(path.pathLabel)}</div>
-        <div class="log-response-preview-trigger">${esc(path.trigger || 'Suggested response path')}</div>
-      </div>`;
-    }).join('')}</div>`
-    : '';
-  const reasonText = logCatSub
-    ? `Because this issue is marked ${getStatusLabel(logCatKey, 'short')} › ${logCatSub}.`
-    : `Because this issue is marked ${getStatusLabel(logCatKey, 'short')}.`;
-  preview.innerHTML = `
-    <div class="log-response-preview-head">
-      <span>Suggested response</span>
-      <span class="log-response-preview-alert">${esc(alertText)}</span>
-    </div>
-    ${pathHtml}
-    <div class="log-response-preview-foot">${esc(reasonText)}</div>
-  `;
-}
-
 function getLogSubmitButtonLabel() {
   const baseLabel = logCatKey === 'attention' ? '◇ Log Attention' : '⚠ Log Issue';
   const meta = getLogResponsePreviewMeta();
@@ -8970,13 +9176,11 @@ function updateLogCatPill() {
     pill.textContent = '🔍 Searching…';
     pill.style.color = 'var(--color-text-muted, var(--text2))'; pill.style.borderColor = 'var(--color-border, var(--border))'; pill.style.background = 'transparent';
     updateAddModalIssueLanguage();
-    renderLogResponsePreview();
     return;
   }
   if (!logCatKey) {
     sel.classList.remove('visible');
     updateAddModalIssueLanguage();
-    renderLogResponsePreview();
     return;
   }
   const st = getStatusDef(logCatKey);
@@ -8985,7 +9189,6 @@ function updateLogCatPill() {
   pill.textContent = st.icon + ' ' + getStatusLabel(logCatKey, 'short') + (logCatSub ? ' › ' + logCatSub : '');
   pill.style.color = col; pill.style.borderColor = alphaColor(col, 0.53); pill.style.background = alphaColor(col, 0.08);
   updateAddModalIssueLanguage();
-  renderLogResponsePreview();
   renderQualityDefectSummary();
 }
 
@@ -9242,7 +9445,6 @@ window.closeModal = () => {
   logCatKey = null;
   logCatSub = null;
   selectedQualityDefect = null;
-  renderLogResponsePreview();
 };
 
 window.resetIssueDateTime = function () {
@@ -9574,7 +9776,14 @@ window.submitIssue = async () => {
       if (timerMinutes > 0) setIssueReminder(issueRef.id, timerMinutes);
       completeDemoGuideStep('log');
       closeModal();
-      showGameToast(`Logged Press ${loggedMachine}`);
+      showActionFeedback({
+        type: 'create',
+        issueId: issueRef.id,
+        machine: loggedMachine,
+        label: 'Issue logged',
+        detail: `Logged Press ${loggedMachine}`
+      });
+      if (localPhotos.length > 0) setTimeout(() => showPhotoActionFeedback(issueRef.id, createdIssue, localPhotos.length), 520);
       if (requiresSerialNumber(initialStatus, initialSubStatus)) {
         setTimeout(() => openSerialModal(issueRef.id, initialStatus, initialSubStatus, fmtDate(d)), 50);
       }
@@ -9617,9 +9826,18 @@ window.submitIssue = async () => {
       if (timerMinutes > 0) setIssueReminder(issueRef.id, timerMinutes);
       completeDemoGuideStep('log');
       closeModal();
-      showGameToast(`Logged Press ${loggedMachine}`);
+      showActionFeedback({
+        type: 'create',
+        issueId: issueRef.id,
+        machine: loggedMachine,
+        label: 'Issue logged',
+        detail: `Logged Press ${loggedMachine}`
+      });
       queueRoleFeedAlert({ id: issueRef.id, machine: loggedMachine }, { statusKey: initialStatus, subStatus: initialSubStatus, note, workflowId: initialWorkflowId }).catch(e => console.warn('role alert queue failed', e));
-      if (uploadedPhotos.length > 0) awardGamification('photo_attached', { issueId: issueRef.id, dedupeSuffix: 'photo', tags: ['photo:attached'] }).catch(e => console.warn('gamification photo award failed', e));
+      if (uploadedPhotos.length > 0) {
+        setTimeout(() => showPhotoActionFeedback(issueRef.id, createdIssue, uploadedPhotos.length), 520);
+        awardGamification('photo_attached', { issueId: issueRef.id, dedupeSuffix: 'photo', tags: ['photo:attached'] }).catch(e => console.warn('gamification photo award failed', e));
+      }
       awardGamification('issue_created_complete', { issueId: issueRef.id, dedupeSuffix: 'issue-created', tags: ['issue:create', `status:${initialStatus || 'open'}`] }).catch(e => console.warn('gamification issue-created award failed', e));
       if (requiresSerialNumber(initialStatus, initialSubStatus)) {
         setTimeout(() => openSerialModal(issueRef.id, initialStatus, initialSubStatus, fmtDate(d)), 50);
@@ -9663,7 +9881,13 @@ window.submitIssue = async () => {
     setSyncStatus('syncing', 'Syncing - local issue pending');
     completeDemoGuideStep('log');
     closeModal();
-    showGameToast(syncState.online ? `Logged Press ${loggedMachine} - syncing` : `Saved locally for Press ${loggedMachine}`);
+    showActionFeedback({
+      type: 'create',
+      issueId: issueRef.id,
+      machine: loggedMachine,
+      label: 'Issue logged',
+      detail: syncState.online ? `Logged Press ${loggedMachine} - syncing` : `Saved locally for Press ${loggedMachine}`
+    });
     scheduleIssueOutboxFlush();
     if (requiresSerialNumber(initialStatus, initialSubStatus)) {
       setTimeout(() => {
@@ -9758,7 +9982,10 @@ window.saveEdit = async () => {
       if (timerMinutes > 0) setIssueReminder(editTargetId, timerMinutes);
       else clearIssueReminder(editTargetId);
       attachmentPhotoCache.set(editTargetId, uploadedPhotos);
-      if (uploadedPhotos.length > 0) awardGamification('photo_attached', { issueId: editTargetId, dedupeSuffix: 'photo', tags: ['photo:attached'] }).catch(e => console.warn('gamification photo award failed', e));
+      if (uploadedPhotos.length > 0) {
+        showPhotoActionFeedback(editTargetId, nextIssue, uploadedPhotos.length);
+        awardGamification('photo_attached', { issueId: editTargetId, dedupeSuffix: 'photo', tags: ['photo:attached'] }).catch(e => console.warn('gamification photo award failed', e));
+      }
       closeEditModal();
       return;
     }
@@ -9787,11 +10014,14 @@ window.saveEdit = async () => {
     if (timerMinutes > 0) setIssueReminder(editTargetId, timerMinutes);
     else clearIssueReminder(editTargetId);
     attachmentPhotoCache.set(editTargetId, uploadedPhotos);
-    if (uploadedPhotos.length > 0) awardGamification('photo_attached', { issueId: editTargetId, dedupeSuffix: 'photo', tags: ['photo:attached'] }).catch(e => console.warn('gamification photo award failed', e));
     const editedIssue = { ...(issue || {}), ...issuePatch, id: editTargetId, photos: uploadedPhotos };
     issuesById.set(editTargetId, editedIssue);
     rebuildIssuesArrayFromMap();
     refreshVisibleData();
+    if (uploadedPhotos.length > 0) {
+      showPhotoActionFeedback(editTargetId, editedIssue, uploadedPhotos.length);
+      awardGamification('photo_attached', { issueId: editTargetId, dedupeSuffix: 'photo', tags: ['photo:attached'] }).catch(e => console.warn('gamification photo award failed', e));
+    }
     if (!syncState.online) setSyncStatus('syncing', 'Syncing - local changes pending');
     closeEditModal();
   } catch (e) {
@@ -9868,6 +10098,15 @@ window.confirmResolve = async () => {
         ]
       });
       awardGamification('issue_resolved', { issueId: resolveTargetId, dedupeSuffix: resolvedAtText, tags: ['issue:resolved', 'status:resolved'] }).catch(e => console.warn('gamification resolve award failed', e));
+      showActionFeedback({
+        type: 'resolve',
+        issueId: resolveTargetId,
+        machine: issue?.machine || issue?.machineCode || '',
+        label: 'Resolved',
+        detail: `Press ${issue?.machine || ''} resolved`.trim(),
+        color: 'var(--color-success, var(--green))',
+        celebrate: true
+      });
       closeResolveModal();
       return;
     }
@@ -9889,6 +10128,15 @@ window.confirmResolve = async () => {
     }
     if (!syncState.online) setSyncStatus('syncing', 'Syncing - local changes pending');
     awardGamification('issue_resolved', { issueId: resolveTargetId, dedupeSuffix: resolvedAtText, tags: ['issue:resolved', 'status:resolved'] }).catch(e => console.warn('gamification resolve award failed', e));
+    showActionFeedback({
+      type: 'resolve',
+      issueId: resolveTargetId,
+      machine: issue?.machine || issue?.machineCode || '',
+      label: 'Resolved',
+      detail: `Press ${issue?.machine || ''} resolved`.trim(),
+      color: 'var(--color-success, var(--green))',
+      celebrate: true
+    });
     closeResolveModal();
   } catch (e) { setSyncStatus('err', 'Error: ' + e.message); btn.disabled = false; btn.innerHTML = 'Mark Resolved'; }
 };
@@ -9958,6 +10206,14 @@ window.confirmReopen = async () => {
         events: [sqlEventPayload('issue_reopened', { reason: note || '' })]
       });
       awardGamification('issue_reopened', { issueId: reopenTargetId, dedupeSuffix: reopenDateTime, tags: ['issue:reopened', `status:${reopenStatusKey}`] }).catch(e => console.warn('gamification reopen award failed', e));
+      showActionFeedback({
+        type: 'status',
+        issueId: reopenTargetId,
+        machine: issue?.machine || issue?.machineCode || '',
+        label: 'Reopened',
+        detail: `Press ${issue?.machine || ''} reopened`.trim(),
+        color: getStatusColor(reopenStatusKey)
+      });
       closeReopenModal();
       return;
     }
@@ -9972,6 +10228,14 @@ window.confirmReopen = async () => {
     }
     if (!syncState.online) setSyncStatus('syncing', 'Syncing - local changes pending');
     awardGamification('issue_reopened', { issueId: reopenTargetId, dedupeSuffix: reopenDateTime, tags: ['issue:reopened', `status:${reopenStatusKey}`] }).catch(e => console.warn('gamification reopen award failed', e));
+    showActionFeedback({
+      type: 'status',
+      issueId: reopenTargetId,
+      machine: issue?.machine || issue?.machineCode || '',
+      label: 'Reopened',
+      detail: `Press ${issue?.machine || ''} reopened`.trim(),
+      color: getStatusColor(reopenStatusKey)
+    });
     closeReopenModal();
   } catch (e) { setSyncStatus('err', 'Error: ' + e.message); btn.disabled = false; btn.innerHTML = 'Re-open Issue'; }
 };
@@ -10106,6 +10370,7 @@ window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
       rebuildIssuesArrayFromMap();
       refreshVisibleData();
       issueEventHistoryCache.delete(id);
+      showStatusActionFeedback(id, nextIssue, status, subStatus);
       if (status && status !== 'open') completeDemoGuideStep('route');
       return workflowId;
     }
@@ -10162,6 +10427,7 @@ window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
       issueEventHistoryCache.delete(id);
       awardGamification('status_changed_valid', { issueId: id, dedupeSuffix: entry.dateTime || String(Date.now()), tags: ['status:changed', `status:${status}`] }).catch(e => console.warn('gamification award failed', e));
       if (status === 'resolved') awardGamification('issue_resolved', { issueId: id, dedupeSuffix: 'status-resolved', tags: ['issue:resolved', 'status:resolved'] }).catch(e => console.warn('gamification resolve award failed', e));
+      showStatusActionFeedback(id, nextIssue, status, subStatus);
       if (status && status !== 'open') completeDemoGuideStep('route');
       return workflowId;
     }
@@ -10230,6 +10496,7 @@ window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
     issueEventHistoryCache.delete(id);
     awardGamification('status_changed_valid', { issueId: id, dedupeSuffix: entry.dateTime || String(Date.now()), tags: ['status:changed', `status:${status}`] }).catch(e => console.warn('gamification award failed', e));
     if (status === 'resolved') awardGamification('issue_resolved', { issueId: id, dedupeSuffix: 'status-resolved', tags: ['issue:resolved', 'status:resolved'] }).catch(e => console.warn('gamification resolve award failed', e));
+    showStatusActionFeedback(id, issuesById.get(id) || issue, status, subStatus);
     if (status && status !== 'open') completeDemoGuideStep('route');
     return workflowId;
   } catch (e) { setSyncStatus('err', 'Error: ' + e.message); }
@@ -10239,7 +10506,7 @@ window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
 // Update an existing history entry
 window.updateStatusEntry = async (id, idx, status, subStatus, note, dateTime, photos = null) => {
   const issue = issues.find(i => i.id === id);
-  if (!issue) return;
+  if (!issue) return false;
   const latestIssue = await getLatestIssueForStatusMutation(id, issue);
   const history = getMutableStatusHistory(latestIssue || issue);
   // idx beyond real history means editing a synthetic current-status entry — materialize it first
@@ -10253,7 +10520,7 @@ window.updateStatusEntry = async (id, idx, status, subStatus, note, dateTime, ph
     });
     idx = history.length - 1;
   }
-  if (!history[idx]) return;
+  if (!history[idx]) return false;
   const prev = currentStatus(latestIssue || issue);
   history[idx] = { ...history[idx], status, subStatus: subStatus || '', note: note || '' };
   if (dateTime) history[idx].dateTime = dateTime;
@@ -10280,7 +10547,7 @@ window.updateStatusEntry = async (id, idx, status, subStatus, note, dateTime, ph
       rebuildIssuesArrayFromMap();
       refreshVisibleData();
       issueEventHistoryCache.delete(id);
-      return;
+      return true;
     }
     if (shouldUseSqlStagingReads(currentPlantId)) {
       const nextIssue = applyIssuePatchLocally(latestIssue || issue, {
@@ -10310,7 +10577,7 @@ window.updateStatusEntry = async (id, idx, status, subStatus, note, dateTime, ph
         await commitSqlIssueWrite(id, nextIssue);
       }
       issueEventHistoryCache.delete(id);
-      return;
+      return true;
     }
     const issuePatch = {
       statusHistory: history,
@@ -10340,7 +10607,9 @@ window.updateStatusEntry = async (id, idx, status, subStatus, note, dateTime, ph
     rebuildIssuesArrayFromMap();
     refreshVisibleData();
     if (!syncState.online) setSyncStatus('syncing', 'Syncing - local changes pending');
+    return true;
   } catch (e) { setSyncStatus('err', 'Error: ' + e.message); }
+  return false;
 };
 
 // Remove a history entry (cannot remove the only entry)
@@ -10659,8 +10928,11 @@ window.saveEditStatusEntry = async () => {
     sizeBytes: Number(p.sizeBytes || p.size || 0),
     storageBucket: p.storageBucket || ''
   }));
-  await updateStatusEntry(issueId, entryIndex, status, subStatus, note, dateTime, mergedStatusPhotos);
+  const didSave = await updateStatusEntry(issueId, entryIndex, status, subStatus, note, dateTime, mergedStatusPhotos);
   closeEditStatusModal();
+  if (didSave && uploadedStatusPhotos.length > 0) {
+    showPhotoActionFeedback(issueId, issues.find(i => i.id === issueId), uploadedStatusPhotos.length);
+  }
 };
 
 window.cancelEditEntry = (id, idx) => { /* no longer needed - using modal */ };
@@ -10746,6 +11018,13 @@ window.setWorkflowState = async (id, state) => {
       issuesById.set(id, nextIssue);
       rebuildIssuesArrayFromMap();
       refreshVisibleData();
+      showActionFeedback({
+        type: 'workflow',
+        issueId: id,
+        machine: issue?.machine || issue?.machineCode || '',
+        label: workflowFeedbackLabel(state),
+        detail: workflowFeedbackLabel(state)
+      });
       completeDemoGuideStep('workflow');
       return;
     }
@@ -10759,6 +11038,13 @@ window.setWorkflowState = async (id, state) => {
       });
       nextIssue.id = id;
       await commitSqlIssueWrite(id, nextIssue);
+      showActionFeedback({
+        type: 'workflow',
+        issueId: id,
+        machine: issue?.machine || issue?.machineCode || '',
+        label: workflowFeedbackLabel(state),
+        detail: workflowFeedbackLabel(state)
+      });
       completeDemoGuideStep('workflow');
       return;
     }
@@ -10774,6 +11060,13 @@ window.setWorkflowState = async (id, state) => {
       ...historyPatch,
       updatedAt: serverTimestamp(),
       updatedBy: actor
+    });
+    showActionFeedback({
+      type: 'workflow',
+      issueId: id,
+      machine: issue?.machine || issue?.machineCode || '',
+      label: workflowFeedbackLabel(state),
+      detail: workflowFeedbackLabel(state)
     });
     completeDemoGuideStep('workflow');
   } catch (e) {
@@ -10927,6 +11220,13 @@ async function setWorkflowStateForEntryLocator(issueId, state, locateEntry) {
     }
     if (didWrite && updatedWorkflowId) {
       await awardGamification('workflow_step_advance', { issueId, dedupeSuffix: `${updatedWorkflowId}:${state}`, tags: ['workflow:advance', `workflow:${state}`] });
+      showActionFeedback({
+        type: 'workflow',
+        issueId,
+        machine: issue?.machine || issue?.machineCode || '',
+        label: workflowFeedbackLabel(state),
+        detail: workflowFeedbackLabel(state)
+      });
       completeDemoGuideStep('workflow');
     }
   } catch (e) {
@@ -10994,6 +11294,13 @@ window.setWorkflowStateForStatus = async (issueId, statusKey, state) => {
       nextIssue.id = issueId;
       await commitSqlIssueWrite(issueId, nextIssue);
       await awardGamification('workflow_step_advance', { issueId, dedupeSuffix: `${normalizedStatusKey}:${state}`, tags: ['workflow:advance', `workflow:${state}`] });
+      showActionFeedback({
+        type: 'workflow',
+        issueId,
+        machine: issue?.machine || issue?.machineCode || '',
+        label: workflowFeedbackLabel(state),
+        detail: workflowFeedbackLabel(state)
+      });
       completeDemoGuideStep('workflow');
       return;
     }
@@ -11018,6 +11325,13 @@ window.setWorkflowStateForStatus = async (issueId, statusKey, state) => {
     }
     await updateDoc(plantDoc('issues', issueId), patch);
     await awardGamification('workflow_step_advance', { issueId, dedupeSuffix: `${normalizedStatusKey}:${state}`, tags: ['workflow:advance', `workflow:${state}`] });
+    showActionFeedback({
+      type: 'workflow',
+      issueId,
+      machine: issue?.machine || issue?.machineCode || '',
+      label: workflowFeedbackLabel(state),
+      detail: workflowFeedbackLabel(state)
+    });
     completeDemoGuideStep('workflow');
   } catch (e) {
     setSyncStatus('err', 'Error updating workflow: ' + e.message);
@@ -11076,6 +11390,13 @@ window.cycleWorkflowState = async (id) => {
   try {
     await updateDoc(plantDoc('issues', id), { workflowState: nextState });
     await awardGamification('workflow_step_advance', { issueId: id, dedupeSuffix: `${currentState}->${nextState}`, tags: ['workflow:advance', `workflow:${nextState}`] });
+    showActionFeedback({
+      type: 'workflow',
+      issueId: id,
+      machine: issue?.machine || issue?.machineCode || '',
+      label: workflowFeedbackLabel(nextState),
+      detail: workflowFeedbackLabel(nextState)
+    });
     completeDemoGuideStep('workflow');
   } catch (e) {
     setSyncStatus('err', 'Error updating workflow: ' + e.message);
@@ -11085,6 +11406,7 @@ window.cycleWorkflowState = async (id) => {
 // Dismiss the prompt arrow then set the workflow state
 window.handleWfStepClick = (evt, issueId, entryIndex, state) => {
   evt.stopPropagation();
+  pulseClass(evt.currentTarget, 'wf-step-confirmed', 700);
   const arrow = document.getElementById(`wf-arrow-${issueId}`);
   if (arrow) {
     arrow.classList.add('wf-arrow-dismissed');
@@ -11533,6 +11855,129 @@ window.deleteIssue = async id => {
   catch (e) { setSyncStatus('err', 'Error deleting: ' + e.message); }
 };
 
+window.handleWfDeleteClick = (event, id, entryIndex, btn) => {
+  event.stopPropagation();
+  if (btn.classList.contains('confirm-delete')) {
+    btn.classList.remove('confirm-delete');
+    btn.innerHTML = '<span class="wf-tool-icon">🗑️</span>';
+    window.deleteWorkflowStatusEntry(id, entryIndex);
+  } else {
+    btn.classList.add('confirm-delete');
+    btn.innerHTML = '<span class="wf-tool-icon">Confirm?</span>';
+    setTimeout(() => {
+      if (btn.classList.contains('confirm-delete')) {
+        btn.classList.remove('confirm-delete');
+        btn.innerHTML = '<span class="wf-tool-icon">🗑️</span>';
+      }
+    }, 3000);
+  }
+};
+
+window.deleteWorkflowStatusEntry = async (issueId, entryIndex) => {
+  const actor = currentActor();
+  const issue = issues.find(i => i.id === issueId);
+  if (!issue) return;
+  if (!currentUserPermissions.canEditIssue) return;
+
+  const history = getMutableStatusHistory(issue);
+  if (entryIndex < 0 || entryIndex > history.length) return;
+
+  let deletedEntry;
+  if (entryIndex < history.length) {
+    deletedEntry = history[entryIndex];
+    history.splice(entryIndex, 1);
+  } else {
+    deletedEntry = { status: currentStatusKey(issue) };
+  }
+  const deletedStatus = deletedEntry.status;
+
+  let secondaryStatuses = Array.isArray(issue.secondaryStatuses)
+    ? issue.secondaryStatuses.filter(k => k !== deletedStatus)
+    : [];
+
+  const patch = {
+    statusHistory: history,
+    secondaryStatuses,
+    updatedAt: new Date().toISOString(),
+    updatedBy: actor
+  };
+
+  const wasLatest = (entryIndex >= history.length);
+  if (wasLatest) {
+    const newLatest = history[history.length - 1];
+    if (newLatest) {
+      patch.currentStatus = {
+        statusKey: newLatest.status || 'open',
+        subStatusKey: newLatest.subStatus || '',
+        notePreview: newLatest.note || '',
+        enteredDateTime: newLatest.dateTime || newLatest.timestamp || '',
+        enteredBy: {
+          name: newLatest.by || '',
+          email: '',
+          uid: ''
+        }
+      };
+      const wfId = getEntryWorkflowId(newLatest);
+      patch.workflowState = wfId ? (issue.workflowStateByEntry?.[wfId] || 'called') : '';
+    } else {
+      patch.currentStatus = {
+        statusKey: 'open',
+        subStatusKey: '',
+        notePreview: '',
+        enteredDateTime: issue.dateTime || '',
+        enteredBy: {
+          name: issue.userName || '',
+          email: '',
+          uid: ''
+        }
+      };
+      patch.workflowState = '';
+    }
+  }
+
+  const wfId = getEntryWorkflowId(deletedEntry);
+  if (wfId) {
+    if (issue.workflowStateByEntry) {
+      const nextWfStateByEntry = { ...issue.workflowStateByEntry };
+      delete nextWfStateByEntry[wfId];
+      patch.workflowStateByEntry = nextWfStateByEntry;
+    }
+  }
+
+  try {
+    if (DEMO_MODE || shouldUseSqlStagingReads(currentPlantId)) {
+      const nextIssue = applyIssuePatchLocally(issue, patch);
+      nextIssue.id = issueId;
+      if (DEMO_MODE) {
+        issuesById.set(issueId, nextIssue);
+        rebuildIssuesArrayFromMap();
+        refreshVisibleData();
+      } else {
+        await commitSqlIssueWrite(issueId, nextIssue);
+      }
+    } else {
+      const updateData = {
+        statusHistory: patch.statusHistory,
+        secondaryStatuses: patch.secondaryStatuses,
+        updatedAt: serverTimestamp(),
+        updatedBy: actor
+      };
+      if (patch.currentStatus) {
+        updateData.currentStatus = patch.currentStatus;
+      }
+      if (patch.workflowState !== undefined) {
+        updateData.workflowState = patch.workflowState;
+      }
+      if (wfId) {
+        updateData[`workflowStateByEntry.${wfId}`] = null;
+      }
+      await updateDoc(plantDoc('issues', issueId), updateData);
+    }
+  } catch (e) {
+    setSyncStatus('err', 'Error deleting status entry: ' + e.message);
+  }
+};
+
 // ── STAT FILTER TOGGLE ──
 window.toggleStatFilter = s => {
   const sf = document.getElementById('status-filter');
@@ -11626,7 +12071,40 @@ function applySortOrder(arr, sort) {
 }
 
 // ── RENDER ──
-function renderIssues() {
+let deferredRedrawTimeout = null;
+
+function isUserInteracting() {
+  const selection = window.getSelection();
+  if (selection && selection.toString().trim() !== '') {
+    return true;
+  }
+  const activeEl = document.activeElement;
+  if (activeEl && document.getElementById('issues-list')?.contains(activeEl)) {
+    const tagName = activeEl.tagName.toLowerCase();
+    if (['input', 'textarea', 'select'].includes(tagName)) {
+      return true;
+    }
+  }
+  if (openSwipeRow !== null) {
+    return true;
+  }
+  return false;
+}
+
+function renderIssues(options = {}) {
+  if (options.isBackground && isUserInteracting()) {
+    if (!deferredRedrawTimeout) {
+      deferredRedrawTimeout = setTimeout(() => {
+        deferredRedrawTimeout = null;
+        renderIssues({ isBackground: true });
+      }, 5000);
+    }
+    return;
+  }
+  if (deferredRedrawTimeout) {
+    clearTimeout(deferredRedrawTimeout);
+    deferredRedrawTimeout = null;
+  }
   const search = document.getElementById('search-input').value.toLowerCase();
   const mf = document.getElementById('machine-filter').value;
   const sf = document.getElementById('status-filter').value;
@@ -12017,14 +12495,18 @@ function renderIssues() {
         </button>`;
       };
       const routeToolsHtml = `${renderRouteGroupButton(passThroughPaths, 'pass-through')}${renderRouteGroupButton(translationPaths, 'translate')}`;
+      const deleteToolHtml = (canEdit && !DEMO_MODE)
+        ? `<div class="wf-tool-group delete-tools"><button class="wf-tool-btn delete-btn" type="button" onclick="handleWfDeleteClick(event, '${issue.id}', ${entryIndex}, this)" title="Remove this category & workflow" aria-label="Remove this category & workflow"><span class="wf-tool-icon">🗑️</span></button></div>`
+        : '';
       const escalationActionsHtml = `<div class="wf-dropdown-section">
-        <div class="wf-tool-row" aria-label="Status and escalation tools">
+        <div class="wf-tool-row" aria-label="Status and escalation tools" onclick="closeWorkflowStatusDropdown(event)">
           <div class="wf-tool-group status-tools">
             <button class="wf-tool-btn" type="button" onclick="event.stopPropagation(); openStatusEntryTool('${issue.id}',${entryIndex},'edit')" title="Edit this status" aria-label="Edit this status"><span class="wf-tool-icon">✎</span></button>
             <button class="wf-tool-btn" type="button" onclick="event.stopPropagation(); openStatusEntryTool('${issue.id}',${entryIndex},'camera')" title="Take photo for this status" aria-label="Take photo for this status"><span class="wf-tool-icon">📷</span></button>
             <button class="wf-tool-btn" type="button" onclick="event.stopPropagation(); openStatusEntryTool('${issue.id}',${entryIndex},'library')" title="Choose photo for this status" aria-label="Choose photo for this status"><span class="wf-tool-icon">🖼️</span></button>
           </div>
           ${routeToolsHtml ? `<div class="wf-tool-group route-tools">${routeToolsHtml}</div>` : ''}
+          ${deleteToolHtml}
         </div>
       </div>`;
       return { escalationActionsHtml };
@@ -12378,9 +12860,13 @@ function renderIssues() {
       isSearchMode = true;
       searchFilterText = '';
       searchApplySelection = (key, sub) => {
-        closeSwipeCard(card);
-        if (sub && requiresSerialNumber(key, sub)) { openSerialModal(issue.id, key, sub); }
-        else { addStatusEntry(issue.id, key, sub, ''); }
+        const selectedTile = catInner.querySelector(`.swipe-status-tile[data-status="${cssEscapeValue(key)}"]`);
+        markSwipeTileConfirmed(selectedTile);
+        setTimeout(() => {
+          closeSwipeCard(card);
+          if (sub && requiresSerialNumber(key, sub)) { openSerialModal(issue.id, key, sub); }
+          else { addStatusEntry(issue.id, key, sub, ''); }
+        }, actionFeedbackReducedMotion() ? 0 : 90);
       };
       searchExitFn = null;
 
@@ -12431,11 +12917,14 @@ function renderIssues() {
         if (isDoubleTap && getStatusSubs(statusKey).length > 0) {
           // Double-click/tap on a category = apply immediately with no sub-status (Skip)
           catInner.querySelectorAll('.swipe-status-tile').forEach(t => t.classList.remove('selected'));
+          markSwipeTileConfirmed(tile);
           catInner.classList.remove('has-selection');
           subPanel.classList.remove('visible');
           catPanel.classList.remove('has-subs');
-          closeSwipeCard(card);
-          addStatusEntry(issue.id, statusKey, '', '');
+          setTimeout(() => {
+            closeSwipeCard(card);
+            addStatusEntry(issue.id, statusKey, '', '');
+          }, actionFeedbackReducedMotion() ? 0 : 90);
           return;
         }
 
@@ -12484,12 +12973,17 @@ function renderIssues() {
           subInner.querySelectorAll('.swipe-sub-action').forEach(chip => {
             const handleSubClick = () => {
               const sub = chip.dataset.sub;
-              closeSwipeCard(card);
-              if (sub && requiresSerialNumber(statusKey, sub)) {
-                openSerialModal(issue.id, statusKey, sub);
-              } else {
-                addStatusEntry(issue.id, statusKey, sub, '');
-              }
+              markSwipeTileConfirmed(tile);
+              chip.classList.add('confirmed');
+              setTimeout(() => chip.classList.remove('confirmed'), 700);
+              setTimeout(() => {
+                closeSwipeCard(card);
+                if (sub && requiresSerialNumber(statusKey, sub)) {
+                  openSerialModal(issue.id, statusKey, sub);
+                } else {
+                  addStatusEntry(issue.id, statusKey, sub, '');
+                }
+              }, actionFeedbackReducedMotion() ? 0 : 90);
             };
 
             addTapListener(chip, handleSubClick);
@@ -12502,8 +12996,11 @@ function renderIssues() {
           setTimeout(() => scrollPanelBottomIntoView(subPanel), 240);
         } else {
           // Apply immediately (no subs)
-          closeSwipeCard(card);
-          addStatusEntry(issue.id, statusKey, '', '');
+          markSwipeTileConfirmed(tile);
+          setTimeout(() => {
+            closeSwipeCard(card);
+            addStatusEntry(issue.id, statusKey, '', '');
+          }, actionFeedbackReducedMotion() ? 0 : 90);
         }
       };
 
@@ -12759,13 +13256,45 @@ document.addEventListener('click', e => {
   if (!clickedInsideIssueRow) closeSwipe();
 });
 
+let workflowOutsideClickPending = false;
+
+document.addEventListener('click', e => {
+  if (!workflowStatusDropdownOpenKeys.size) return;
+  const path = typeof e.composedPath === 'function' ? e.composedPath() : [];
+  const clickedInsideToolRow = path.some(node => node && node.classList && node.classList.contains('wf-tool-row'));
+  if (clickedInsideToolRow) return;
+  workflowOutsideClickPending = true;
+  setTimeout(() => {
+    if (!workflowOutsideClickPending) return;
+    workflowOutsideClickPending = false;
+    if (!workflowStatusDropdownOpenKeys.size) return;
+    workflowStatusDropdownOpenKeys.clear();
+    renderIssues();
+  }, 0);
+}, true);
+
 window.toggleWorkflowStatusDropdown = (evt, key) => {
   evt?.stopPropagation?.();
+  if (workflowOutsideClickPending) {
+    workflowOutsideClickPending = false;
+    if (workflowStatusDropdownOpenKeys.size) {
+      workflowStatusDropdownOpenKeys.clear();
+      renderIssues();
+    }
+    return;
+  }
   const cleanKey = String(key || '').trim();
   if (!cleanKey) return;
   const wasOpen = workflowStatusDropdownOpenKeys.has(cleanKey);
   workflowStatusDropdownOpenKeys.clear();
   if (!wasOpen) workflowStatusDropdownOpenKeys.add(cleanKey);
+  renderIssues();
+};
+
+window.closeWorkflowStatusDropdown = evt => {
+  evt?.stopPropagation?.();
+  if (!workflowStatusDropdownOpenKeys.size) return;
+  workflowStatusDropdownOpenKeys.clear();
   renderIssues();
 };
 
@@ -17024,7 +17553,7 @@ setInterval(() => {
 
 setInterval(() => {
   if (document.hidden) return;
-  if (issues.length > 0) renderIssues();
+  if (issues.length > 0) renderIssues({ isBackground: true });
 }, 60000);
 
 setInterval(() => {
