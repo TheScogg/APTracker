@@ -304,6 +304,13 @@ function formatSqlDateTime(value, fallback = '') {
   }
 }
 
+function formatIssueCreatedAtLabel(issue = {}) {
+  const createdMs = compatTimestampMillis(issue.createdAt || issue.lifecycle?.openedAt || issue.openedAt);
+  if (createdMs) return fmtDate(new Date(createdMs));
+  if (issue.dateTime) return String(issue.dateTime);
+  return '';
+}
+
 function normalizeSqlIssueForApp(issue = {}) {
   const currentStatus = {
     statusKey: issue.currentStatusKey || 'open',
@@ -12469,6 +12476,8 @@ function renderIssues(options = {}) {
     </div>`;
 
     const submitterHtml = issue.userName ? `<span class="issue-submitter">${esc(issue.userName.split(' ')[0])}${isMyIssue ? ' (you)' : ''}</span>` : '';
+    const createdAtLabel = formatIssueCreatedAtLabel(issue);
+    const createdAtHtml = createdAtLabel ? `<span class="issue-created-at" title="Created ${esc(createdAtLabel)}">Created ${esc(createdAtLabel)}</span>` : '';
     const alertFocusHtml = isAlertFocus ? `<span class="issue-alert-focus-badge">Outside current time frame</span>` : '';
 
     // Secondary status keys (needed by workflow rows below)
@@ -12683,7 +12692,7 @@ function renderIssues(options = {}) {
           <div class="issue-expand-icon ${wasOpen ? 'open' : ''}" id="chevron-${issue.id}">▼</div>
         </div>
         <div class="issue-note-preview">${esc(issue.note)}</div>
-        <div class="issue-time">${submitterHtml}${shiftBadgeHtml}${timerBadgeHtml}${localSyncBadgeHtml}${(issue.photos || []).length ? `<span class="photo-count-badge">📷 ${issue.photos.length}</span>` : ''}${issue.editedAt ? '<span style="color:var(--color-text-subtle, var(--text3))">(edited)</span>' : ''}${alertFocusHtml}</div>
+        <div class="issue-time">${submitterHtml}${createdAtHtml}${shiftBadgeHtml}${timerBadgeHtml}${localSyncBadgeHtml}${(issue.photos || []).length ? `<span class="photo-count-badge">📷 ${issue.photos.length}</span>` : ''}${issue.editedAt ? '<span style="color:var(--color-text-subtle, var(--text3))">(edited)</span>' : ''}${alertFocusHtml}</div>
         ${wfStatusRowsHtml}
       </div>
       <div class="issue-body ${wasOpen ? 'visible' : ''}" id="body-${issue.id}">

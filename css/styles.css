@@ -2636,6 +2636,7 @@
     letter-spacing: 0.08em;
   }
   .issue-submitter { color: var(--color-text-muted, var(--text2)); }
+  .issue-created-at { color: var(--color-text-muted, var(--text2)); font-family: 'Share Tech Mono', monospace; }
   .issue-status { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 2px; font-size: 11px; font-weight: 700; padding: 4px 9px; border-radius: 9999px; flex: 0 1 auto; width: fit-content; min-width: 104px; max-width: 100%; overflow: hidden; text-transform: uppercase; letter-spacing: 0.04em; }
   .issue-status-main { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; max-width: 100%; min-width: 0; }
   .issue-status-sub { display: block; max-width: 100%; font-size: 11.5px; font-weight: 600; opacity: 0.9; text-transform: none; letter-spacing: 0.02em; white-space: normal; overflow-wrap: anywhere; word-break: break-word; line-height: 1.35; margin-left: 12px; }
