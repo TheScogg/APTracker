@@ -12021,9 +12021,15 @@ function addTapListener(el, fn) {
 // Applies primary sort order to `arr` in-place. Used by both renderIssues and openExportModal
 // so the PDF export always matches what the user sees on screen.
 function issueCreatedTime(issue) {
+  // "Newest"/"Oldest" must reflect when the issue was created, not when
+  // workflow/category metadata was last touched. Some legacy issues do not have
+  // createdAt, and later v2 compatibility updates can backfill lifecycle.openedAt
+  // with the update time, so prefer the original legacy timestamp/dateTime before
+  // using lifecycle.openedAt as a final compatibility fallback.
   return compatTimestampMillis(issue?.createdAt)
-    || compatTimestampMillis(issue?.lifecycle?.openedAt)
-    || Number(issue?.timestamp || 0);
+    || Number(issue?.timestamp || 0)
+    || (issue?.dateTime ? Date.parse(issue.dateTime) || 0 : 0)
+    || compatTimestampMillis(issue?.lifecycle?.openedAt);
 }
 
 function applySortOrder(arr, sort) {
