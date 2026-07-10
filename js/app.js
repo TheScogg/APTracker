@@ -5828,6 +5828,12 @@ async function doSignOut() {
     google.accounts.id.disableAutoSelect();
   }
   resetGoogleSignInButton();
+
+  if (DEMO_MODE) {
+    // Leave the demo URL entirely after signing out. Using replace prevents the
+    // browser's Back button from immediately reopening the signed-out demo.
+    window.location.replace(new URL('/', window.location.origin).toString());
+  }
 }
 
 function applyUserIdentityToShell(user) {

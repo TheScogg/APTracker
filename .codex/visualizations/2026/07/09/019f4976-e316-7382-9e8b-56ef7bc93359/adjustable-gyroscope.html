@@ -1,0 +1,462 @@
+<div id="gyro-sim-019f4976" class="gyro-sim">
+  <style>
+    #gyro-sim-019f4976 {
+      color: var(--foreground);
+      width: 100%;
+    }
+
+    #gyro-sim-019f4976 .gyro-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+      gap: 1rem;
+      align-items: start;
+    }
+
+    #gyro-sim-019f4976 .gyro-stage {
+      position: relative;
+      min-height: 420px;
+      border-radius: 8px;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 50% 42%, color-mix(in srgb, var(--accent) 24%, transparent), transparent 34%),
+        linear-gradient(180deg, color-mix(in srgb, var(--muted) 34%, transparent), transparent 72%);
+    }
+
+    #gyro-sim-019f4976 canvas {
+      display: block;
+      width: 100%;
+      height: 420px;
+    }
+
+    #gyro-sim-019f4976 .gyro-hud {
+      position: absolute;
+      inset: auto 0 0 0;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0.5rem;
+      padding: 0.75rem;
+      pointer-events: none;
+    }
+
+    #gyro-sim-019f4976 .gyro-chip {
+      background: color-mix(in srgb, var(--card) 82%, transparent);
+      color: var(--card-foreground);
+      border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+      border-radius: 8px;
+      padding: 0.5rem;
+      min-width: 0;
+    }
+
+    #gyro-sim-019f4976 .gyro-chip span {
+      display: block;
+    }
+
+    #gyro-sim-019f4976 .gyro-value {
+      font-weight: 500;
+    }
+
+    #gyro-sim-019f4976 .gyro-controls {
+      display: grid;
+      gap: 0.75rem;
+    }
+
+    #gyro-sim-019f4976 .gyro-control {
+      display: grid;
+      gap: 0.35rem;
+    }
+
+    #gyro-sim-019f4976 .gyro-control-label {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.75rem;
+      align-items: baseline;
+    }
+
+    #gyro-sim-019f4976 .gyro-legend {
+      display: grid;
+      gap: 0.45rem;
+      margin-top: 0.25rem;
+    }
+
+    #gyro-sim-019f4976 .gyro-legend-row {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+    }
+
+    #gyro-sim-019f4976 .gyro-swatch {
+      width: 0.85rem;
+      height: 0.85rem;
+      border-radius: 999px;
+      flex: 0 0 auto;
+      background: var(--viz-series-1);
+    }
+
+    #gyro-sim-019f4976 .gyro-swatch.torque {
+      background: var(--viz-series-2);
+    }
+
+    #gyro-sim-019f4976 .gyro-swatch.path {
+      background: var(--viz-series-3);
+    }
+
+    #gyro-sim-019f4976 .gyro-button-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    @media (max-width: 680px) {
+      #gyro-sim-019f4976 .gyro-layout {
+        grid-template-columns: 1fr;
+      }
+
+      #gyro-sim-019f4976 .gyro-stage {
+        min-height: 360px;
+      }
+
+      #gyro-sim-019f4976 canvas {
+        height: 360px;
+      }
+
+      #gyro-sim-019f4976 .gyro-hud {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+
+  <div class="gyro-layout">
+    <div class="gyro-stage">
+      <canvas id="gyro-canvas-019f4976" role="img" aria-label="Adjustable 3D gyroscope simulation showing spin, torque, angular momentum, and precession"></canvas>
+      <div class="gyro-hud" aria-live="polite">
+        <div class="gyro-chip">
+          <span class="text-small text-muted">Precession</span>
+          <span id="gyro-precession-019f4976" class="gyro-value">0.00 rad/s</span>
+        </div>
+        <div class="gyro-chip">
+          <span class="text-small text-muted">Angular momentum</span>
+          <span id="gyro-momentum-019f4976" class="gyro-value">0.00</span>
+        </div>
+        <div class="gyro-chip">
+          <span class="text-small text-muted">Torque</span>
+          <span id="gyro-torque-019f4976" class="gyro-value">0.00</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="gyro-controls">
+      <div class="viz-controls">
+        <label class="form-label gyro-control">
+          <span class="gyro-control-label">
+            <span>Spin speed</span>
+            <span id="gyro-spin-label-019f4976" class="text-muted">34 rad/s</span>
+          </span>
+          <input id="gyro-spin-019f4976" class="form-range" type="range" min="8" max="70" value="34" step="1">
+        </label>
+
+        <label class="form-label gyro-control">
+          <span class="gyro-control-label">
+            <span>Tilt angle</span>
+            <span id="gyro-tilt-label-019f4976" class="text-muted">34 deg</span>
+          </span>
+          <input id="gyro-tilt-019f4976" class="form-range" type="range" min="8" max="68" value="34" step="1">
+        </label>
+
+        <label class="form-label gyro-control">
+          <span class="gyro-control-label">
+            <span>Gravity torque</span>
+            <span id="gyro-gravity-label-019f4976" class="text-muted">1.0x</span>
+          </span>
+          <input id="gyro-gravity-019f4976" class="form-range" type="range" min="0" max="2.5" value="1" step="0.1">
+        </label>
+
+        <label class="form-label gyro-control">
+          <span class="gyro-control-label">
+            <span>Damping</span>
+            <span id="gyro-damping-label-019f4976" class="text-muted">0.20</span>
+          </span>
+          <input id="gyro-damping-019f4976" class="form-range" type="range" min="0" max="0.8" value="0.2" step="0.05">
+        </label>
+      </div>
+
+      <div class="gyro-button-row">
+        <button id="gyro-pause-019f4976" type="button" class="btn">Pause</button>
+        <button id="gyro-reset-019f4976" type="button" class="btn">Reset view</button>
+      </div>
+
+      <div class="gyro-legend text-small">
+        <div class="gyro-legend-row"><span class="gyro-swatch"></span><span>Momentum arrow: angular momentum along the axle</span></div>
+        <div class="gyro-legend-row"><span class="gyro-swatch torque"></span><span>Torque arrow: gravity changing the direction of spin</span></div>
+        <div class="gyro-legend-row"><span class="gyro-swatch path"></span><span>Path: the axle tip precessing around the support</span></div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import * as THREE from "https://esm.sh/three@0.166.1";
+
+    const root = document.getElementById("gyro-sim-019f4976");
+    const canvas = document.getElementById("gyro-canvas-019f4976");
+    const spinInput = document.getElementById("gyro-spin-019f4976");
+    const tiltInput = document.getElementById("gyro-tilt-019f4976");
+    const gravityInput = document.getElementById("gyro-gravity-019f4976");
+    const dampingInput = document.getElementById("gyro-damping-019f4976");
+    const spinLabel = document.getElementById("gyro-spin-label-019f4976");
+    const tiltLabel = document.getElementById("gyro-tilt-label-019f4976");
+    const gravityLabel = document.getElementById("gyro-gravity-label-019f4976");
+    const dampingLabel = document.getElementById("gyro-damping-label-019f4976");
+    const precessionValue = document.getElementById("gyro-precession-019f4976");
+    const momentumValue = document.getElementById("gyro-momentum-019f4976");
+    const torqueValue = document.getElementById("gyro-torque-019f4976");
+    const pauseButton = document.getElementById("gyro-pause-019f4976");
+    const resetButton = document.getElementById("gyro-reset-019f4976");
+
+    const colorProbe = document.createElement("span");
+    colorProbe.style.position = "absolute";
+    colorProbe.style.visibility = "hidden";
+    root.appendChild(colorProbe);
+    const cssColor = (name) => {
+      colorProbe.style.color = `var(${name})`;
+      const resolved = getComputedStyle(colorProbe).color;
+      return resolved && resolved !== "rgba(0, 0, 0, 0)" ? resolved : getComputedStyle(root).color;
+    };
+    const color = (name) => new THREE.Color(cssColor(name));
+
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(36, 1, 0.1, 100);
+    camera.position.set(5.2, 3.2, 6.4);
+    camera.lookAt(0, 0.7, 0);
+
+    const ambient = new THREE.HemisphereLight(color("--card"), color("--muted"), 2.4);
+    scene.add(ambient);
+    const key = new THREE.DirectionalLight(color("--foreground"), 2.2);
+    key.position.set(4, 7, 5);
+    scene.add(key);
+
+    const neutralMat = new THREE.MeshStandardMaterial({
+      color: color("--muted"),
+      roughness: 0.58,
+      metalness: 0.12
+    });
+    const wheelMat = new THREE.MeshStandardMaterial({
+      color: color("--viz-series-1"),
+      roughness: 0.36,
+      metalness: 0.22
+    });
+    const rimMat = new THREE.MeshStandardMaterial({
+      color: color("--secondary"),
+      roughness: 0.42,
+      metalness: 0.18
+    });
+    const supportMat = new THREE.MeshStandardMaterial({
+      color: color("--border"),
+      roughness: 0.65,
+      metalness: 0.08
+    });
+    const lineMat = new THREE.LineBasicMaterial({ color: color("--border"), transparent: true, opacity: 0.7 });
+    const pathMat = new THREE.LineBasicMaterial({ color: color("--viz-series-3"), linewidth: 2 });
+
+    const floorGrid = new THREE.GridHelper(7, 14, color("--border"), color("--border"));
+    floorGrid.material.transparent = true;
+    floorGrid.material.opacity = 0.28;
+    scene.add(floorGrid);
+
+    const support = new THREE.Group();
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.42, 18), supportMat);
+    post.position.y = 0.71;
+    support.add(post);
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.48, 0.58, 0.08, 40), supportMat);
+    base.position.y = 0.04;
+    support.add(base);
+    const pivot = new THREE.Mesh(new THREE.SphereGeometry(0.13, 28, 16), neutralMat);
+    pivot.position.y = 1.42;
+    support.add(pivot);
+    scene.add(support);
+
+    const gyro = new THREE.Group();
+    gyro.position.set(0, 1.42, 0);
+    scene.add(gyro);
+
+    const axle = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 2.85, 24), neutralMat);
+    axle.rotation.z = Math.PI / 2;
+    axle.position.x = 1.05;
+    gyro.add(axle);
+
+    const wheel = new THREE.Group();
+    wheel.position.x = 1.75;
+    gyro.add(wheel);
+
+    const disk = new THREE.Mesh(new THREE.CylinderGeometry(0.78, 0.78, 0.22, 72), wheelMat);
+    disk.rotation.z = Math.PI / 2;
+    wheel.add(disk);
+
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.78, 0.055, 16, 96), rimMat);
+    rim.rotation.y = Math.PI / 2;
+    wheel.add(rim);
+
+    for (let i = 0; i < 6; i += 1) {
+      const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.035, 1.36, 0.035), rimMat);
+      spoke.rotation.x = (Math.PI / 6) + i * Math.PI / 3;
+      wheel.add(spoke);
+    }
+
+    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.08, 20, 12), neutralMat);
+    tip.position.x = 2.55;
+    gyro.add(tip);
+
+    const makeArrow = (hex, length) => new THREE.ArrowHelper(
+      new THREE.Vector3(1, 0, 0),
+      new THREE.Vector3(0, 0, 0),
+      length,
+      hex.getHex(),
+      0.18,
+      0.08
+    );
+    const momentumArrow = makeArrow(color("--viz-series-1"), 1.25);
+    const torqueArrow = makeArrow(color("--viz-series-2"), 0.95);
+    scene.add(momentumArrow, torqueArrow);
+
+    const pathPoints = Array.from({ length: 160 }, () => new THREE.Vector3());
+    const pathGeometry = new THREE.BufferGeometry().setFromPoints(pathPoints);
+    const pathLine = new THREE.Line(pathGeometry, pathMat);
+    scene.add(pathLine);
+
+    const radiusLineGeometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+    const radiusLine = new THREE.Line(radiusLineGeometry, lineMat);
+    scene.add(radiusLine);
+
+    const state = {
+      phi: 0,
+      spinAngle: 0,
+      paused: false,
+      lastTime: performance.now()
+    };
+
+    const params = () => ({
+      spin: Number(spinInput.value),
+      tilt: THREE.MathUtils.degToRad(Number(tiltInput.value)),
+      gravity: Number(gravityInput.value),
+      damping: Number(dampingInput.value)
+    });
+
+    function updateLabels(values) {
+      spinLabel.textContent = `${values.spin.toFixed(0)} rad/s`;
+      tiltLabel.textContent = `${THREE.MathUtils.radToDeg(values.tilt).toFixed(0)} deg`;
+      gravityLabel.textContent = `${values.gravity.toFixed(1)}x`;
+      dampingLabel.textContent = values.damping.toFixed(2);
+
+      const inertia = 0.42;
+      const arm = 1.75;
+      const torque = values.gravity * arm * Math.sin(values.tilt);
+      const momentum = inertia * values.spin;
+      const precession = values.gravity === 0 ? 0 : (values.gravity * arm) / Math.max(momentum, 0.001);
+
+      precessionValue.textContent = `${precession.toFixed(2)} rad/s`;
+      momentumValue.textContent = momentum.toFixed(1);
+      torqueValue.textContent = torque.toFixed(2);
+      return { torque, momentum, precession };
+    }
+
+    function orientationVector(phi, tilt) {
+      return new THREE.Vector3(
+        Math.sin(tilt) * Math.cos(phi),
+        Math.cos(tilt),
+        Math.sin(tilt) * Math.sin(phi)
+      ).normalize();
+    }
+
+    function setGyroOrientation(axis) {
+      const from = new THREE.Vector3(1, 0, 0);
+      gyro.quaternion.setFromUnitVectors(from, axis);
+    }
+
+    function updatePath(tilt) {
+      const arm = 2.55;
+      for (let i = 0; i < pathPoints.length; i += 1) {
+        const a = (i / (pathPoints.length - 1)) * Math.PI * 2;
+        const axis = orientationVector(a, tilt);
+        pathPoints[i].copy(axis.multiplyScalar(arm).add(new THREE.Vector3(0, 1.42, 0)));
+      }
+      pathGeometry.setFromPoints(pathPoints);
+    }
+
+    function updateScene(dt) {
+      const values = params();
+      const live = updateLabels(values);
+      const dampedSpin = values.spin * Math.max(0.08, 1 - values.damping * 0.55);
+      const omega = live.precession * Math.max(0.05, 1 - values.damping * 0.85);
+
+      if (!state.paused) {
+        state.phi += omega * dt;
+        state.spinAngle += dampedSpin * dt;
+      }
+
+      const axis = orientationVector(state.phi, values.tilt);
+      setGyroOrientation(axis);
+      wheel.rotation.x = state.spinAngle;
+      updatePath(values.tilt);
+
+      const pivotWorld = new THREE.Vector3(0, 1.42, 0);
+      const centerWorld = axis.clone().multiplyScalar(1.75).add(pivotWorld);
+      const tipWorld = axis.clone().multiplyScalar(2.55).add(pivotWorld);
+
+      momentumArrow.position.copy(centerWorld);
+      momentumArrow.setDirection(axis);
+      momentumArrow.setLength(0.75 + Math.min(live.momentum / 24, 1.6), 0.18, 0.08);
+
+      const gravity = new THREE.Vector3(0, -1, 0);
+      const torqueDir = axis.clone().cross(gravity).normalize();
+      if (live.torque < 0.001) {
+        torqueArrow.visible = false;
+      } else {
+        torqueArrow.visible = true;
+        torqueArrow.position.copy(centerWorld);
+        torqueArrow.setDirection(torqueDir);
+        torqueArrow.setLength(0.35 + Math.min(live.torque / 2.2, 1.1), 0.18, 0.08);
+      }
+
+      radiusLine.geometry.setFromPoints([pivotWorld, tipWorld]);
+    }
+
+    function resize() {
+      const box = canvas.getBoundingClientRect();
+      const width = Math.max(1, Math.floor(box.width));
+      const height = Math.max(1, Math.floor(box.height));
+      renderer.setSize(width, height, false);
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+    }
+
+    function animate(now) {
+      const dt = Math.min((now - state.lastTime) / 1000, 0.04);
+      state.lastTime = now;
+      resize();
+      updateScene(dt);
+      renderer.render(scene, camera);
+      requestAnimationFrame(animate);
+    }
+
+    [spinInput, tiltInput, gravityInput, dampingInput].forEach((input) => {
+      input.addEventListener("input", () => updateScene(0));
+    });
+
+    pauseButton.addEventListener("click", () => {
+      state.paused = !state.paused;
+      pauseButton.textContent = state.paused ? "Resume" : "Pause";
+    });
+
+    resetButton.addEventListener("click", () => {
+      state.phi = 0;
+      state.spinAngle = 0;
+      updateScene(0);
+    });
+
+    const ro = new ResizeObserver(resize);
+    ro.observe(canvas);
+    updateScene(0);
+    requestAnimationFrame(animate);
+  </script>
+</div>

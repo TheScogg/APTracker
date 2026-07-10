@@ -144,6 +144,7 @@ async function verifyGoogleIdToken(token, env) {
   return {
     uid: payload.sub,
     email: payload.email || '',
+    emailVerified: payload.email_verified !== false,
     name: payload.name || payload.email || payload.sub,
     picture: payload.picture || ''
   };
@@ -1264,10 +1265,24 @@ async function authenticateExchangeUser(request, env) {
     const decoded = await verifyGoogleIdToken(bearerToken, env);
     let uid = decoded.uid;
     const db = getD1Db(env);
-    if (db && decoded.email) {
+    if (db && decoded.email && decoded.emailVerified !== false) {
       const emailLower = decoded.email.toLowerCase();
       try {
-        const row = await db.prepare(
+        const activeMember = await db.prepare(
+          `
+            SELECT pm.uid
+            FROM plant_members pm
+            LEFT JOIN users u ON u.uid = pm.uid
+            WHERE pm.is_active = 1
+              AND (LOWER(pm.email) = ? OR LOWER(u.email) = ?)
+            ORDER BY
+              CASE WHEN pm.uid = ? THEN 0 ELSE 1 END,
+              CASE WHEN pm.role = 'admin' THEN 0 ELSE 1 END,
+              pm.joined_at ASC
+            LIMIT 1
+          `
+        ).bind(emailLower, emailLower, decoded.uid).first();
+        const row = activeMember || await db.prepare(
           'SELECT uid FROM user_lookup WHERE email_normalized = ? LIMIT 1'
         ).bind(emailLower).first();
         if (row?.uid) {

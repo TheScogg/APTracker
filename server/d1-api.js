@@ -688,7 +688,7 @@ export async function importDailyScheduleToD1(db, plantId, payload = {}) {
   };
 }
 
-function issueUpsertStatement() {
+function issueUpsertStatement({ updateCreatedAt = false } = {}) {
   return `
     INSERT INTO issues (
       issue_id, plant_id, press_id, machine_code, row_id, title, note, description, issue_type, priority, severity,
@@ -771,7 +771,7 @@ function issueUpsertStatement() {
       timer_notification_owner_uid = excluded.timer_notification_owner_uid,
       timer_notification_requested_by_json = excluded.timer_notification_requested_by_json,
       timer_notification_delivery_json = excluded.timer_notification_delivery_json,
-      created_at = excluded.created_at,
+      created_at = ${updateCreatedAt ? 'excluded.created_at' : 'issues.created_at'},
       updated_at = excluded.updated_at,
       schema_version = excluded.schema_version
   `;
@@ -793,7 +793,7 @@ function issueUpsertParams(row) {
   ];
 }
 
-async function upsertIssueWriteBundle(db, plantId, body, user) {
+async function upsertIssueWriteBundle(db, plantId, body, user, { updateCreatedAt = false } = {}) {
   const issueId = stringOrNull(body.issueId) || stringOrNull(body.issue?.issueId) || stringOrNull(body.issue?.id);
   if (!issueId) {
     throw Object.assign(new Error('Missing issueId.'), { status: 400 });
@@ -813,7 +813,11 @@ async function upsertIssueWriteBundle(db, plantId, body, user) {
   await requirePlantPermission(db, plantId, user, body.permissionName || 'canEditIssue');
 
   const statements = [
-    db.prepare(issueUpsertStatement()).bind(...issueUpsertParams(issueRow))
+    // Creation time is immutable during routine issue updates. Workflow/category
+    // changes send a complete issue payload, whose timestamp may have crossed the
+    // client boundary as an unparseable object; allowing the upsert to replace
+    // created_at would then silently reset it to now.
+    db.prepare(issueUpsertStatement({ updateCreatedAt })).bind(...issueUpsertParams(issueRow))
   ];
 
   if (body.replaceAttachments) {
@@ -3655,6 +3659,7 @@ export async function handleD1ApiRequest(request, env, { authenticateRequest } =
     if (issueUpdateMatch) {
       const plantId = decodePathSegment(issueUpdateMatch[1]);
       const issueId = decodePathSegment(issueUpdateMatch[2]);
+      const body = await request.json();
       const existing = await first(
         db,
         'SELECT issue_id FROM issues WHERE plant_id = ? AND issue_id = ? LIMIT 1',
@@ -3667,8 +3672,11 @@ export async function handleD1ApiRequest(request, env, { authenticateRequest } =
       return upsertIssueWriteBundle(
         db,
         plantId,
-        { ...(await request.json()), issueId },
-        user
+        { ...body, issueId },
+        user,
+        // Only a purpose-built creation-time editor may opt into changing this.
+        // Full issue writes such as workflow updates must leave it untouched.
+        { updateCreatedAt: body.updateCreatedAt === true }
       );
     }
     if (issueDeleteMatch) {
