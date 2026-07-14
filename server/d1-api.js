@@ -422,6 +422,7 @@ function buildIssueRowFromClient(plantId, issueId, issue = {}) {
     workflow_state_history_json: jsonString(issue.workflowStateHistory || null),
     legacy_status_history_json: jsonString(Array.isArray(issue.statusHistory) ? issue.statusHistory : []),
     quality_defect_json: jsonString(issue.qualityDefect || null),
+    solution_current_json: jsonString(issue.solution || null),
     latest_note_preview: stringOrNull(currentStatus.notePreview || issue.note),
     tags_json: jsonString(Array.isArray(issue.tags) ? issue.tags : []),
     photo_count: numberOrZero(issue.photoCount || issue.photos?.length),
@@ -453,6 +454,7 @@ function buildAttachmentRowFromClient(plantId, issueId, attachment = {}, index =
     issue_id: issueId,
     plant_id: plantId,
     type: stringOrNull(attachment.type) || 'photo',
+    solution_revision_id: stringOrNull(attachment.solutionRevisionId),
     file_name: stringOrNull(attachment.fileName || attachment.name),
     content_type: stringOrNull(attachment.contentType),
     storage_bucket: stringOrNull(attachment.storageBucket),
@@ -701,7 +703,7 @@ function issueUpsertStatement({ updateCreatedAt = false } = {}) {
       workflow_state_history_json, legacy_status_history_json, quality_defect_json, latest_note_preview, tags_json, photo_count, created_by_uid, created_by_name,
       updated_by_uid, updated_by_name, timer_enabled, timer_started_at, timer_due_at, timer_due_at_ms,
       timer_duration_minutes, timer_notification_status, timer_notification_owner_uid, timer_notification_requested_by_json,
-      timer_notification_delivery_json, created_at, updated_at, schema_version
+      timer_notification_delivery_json, solution_current_json, created_at, updated_at, schema_version
     ) VALUES (
       ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?, ?,
@@ -710,7 +712,7 @@ function issueUpsertStatement({ updateCreatedAt = false } = {}) {
       ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?, ?, ?,
-      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
     )
     ON CONFLICT(issue_id) DO UPDATE SET
       press_id = excluded.press_id,
@@ -771,6 +773,7 @@ function issueUpsertStatement({ updateCreatedAt = false } = {}) {
       timer_notification_owner_uid = excluded.timer_notification_owner_uid,
       timer_notification_requested_by_json = excluded.timer_notification_requested_by_json,
       timer_notification_delivery_json = excluded.timer_notification_delivery_json,
+      solution_current_json = excluded.solution_current_json,
       created_at = ${updateCreatedAt ? 'excluded.created_at' : 'issues.created_at'},
       updated_at = excluded.updated_at,
       schema_version = excluded.schema_version
@@ -789,7 +792,7 @@ function issueUpsertParams(row) {
     row.workflow_state_history_json, row.legacy_status_history_json, row.quality_defect_json, row.latest_note_preview, row.tags_json, row.photo_count, row.created_by_uid, row.created_by_name,
     row.updated_by_uid, row.updated_by_name, row.timer_enabled, row.timer_started_at, row.timer_due_at, row.timer_due_at_ms,
     row.timer_duration_minutes, row.timer_notification_status, row.timer_notification_owner_uid, row.timer_notification_requested_by_json,
-    row.timer_notification_delivery_json, row.created_at, row.updated_at, row.schema_version
+    row.timer_notification_delivery_json, row.solution_current_json, row.created_at, row.updated_at, row.schema_version
   ];
 }
 
@@ -828,11 +831,12 @@ async function upsertIssueWriteBundle(db, plantId, body, user, { updateCreatedAt
     statements.push(
       db.prepare(`
         INSERT INTO issue_attachments (
-          attachment_id, issue_id, plant_id, type, file_name, content_type, storage_bucket, storage_path, thumbnail_path,
+          attachment_id, issue_id, plant_id, type, solution_revision_id, file_name, content_type, storage_bucket, storage_path, thumbnail_path,
           download_url, uploaded_by_uid, uploaded_by_name, uploaded_at, size_bytes, schema_version
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(attachment_id) DO UPDATE SET
           type = excluded.type,
+          solution_revision_id = excluded.solution_revision_id,
           file_name = excluded.file_name,
           content_type = excluded.content_type,
           storage_bucket = excluded.storage_bucket,
@@ -845,7 +849,7 @@ async function upsertIssueWriteBundle(db, plantId, body, user, { updateCreatedAt
           size_bytes = excluded.size_bytes,
           schema_version = excluded.schema_version
       `).bind(
-        row.attachment_id, row.issue_id, row.plant_id, row.type, row.file_name, row.content_type, row.storage_bucket, row.storage_path, row.thumbnail_path,
+        row.attachment_id, row.issue_id, row.plant_id, row.type, row.solution_revision_id, row.file_name, row.content_type, row.storage_bucket, row.storage_path, row.thumbnail_path,
         row.download_url, row.uploaded_by_uid, row.uploaded_by_name, row.uploaded_at, row.size_bytes, row.schema_version
       )
     );
@@ -2413,6 +2417,8 @@ async function listIssues(db, request, plantId, user) {
   const url = new URL(request.url);
   const limit = Math.max(1, Math.min(500, Number(url.searchParams.get('limit')) || 250));
   const date = String(url.searchParams.get('date') || '').trim();
+  const machine = String(url.searchParams.get('machine') || '').trim();
+  const cursor = String(url.searchParams.get('cursor') || '').trim();
   if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     throw Object.assign(new Error('date query param must use yyyy-mm-dd format.'), { status: 400 });
   }
@@ -2422,19 +2428,158 @@ async function listIssues(db, request, plantId, user) {
     where.push('reporting_date_key = ?');
     params.push(date);
   }
+  if (machine) {
+    where.push('machine_code = ?');
+    params.push(machine);
+  }
+  if (cursor) {
+    const separator = cursor.lastIndexOf('|');
+    const cursorCreatedAt = separator > 0 ? cursor.slice(0, separator) : '';
+    const cursorIssueId = separator > 0 ? cursor.slice(separator + 1) : '';
+    if (!cursorCreatedAt || !cursorIssueId || !asIso(cursorCreatedAt)) {
+      throw Object.assign(new Error('Invalid issue cursor.'), { status: 400 });
+    }
+    where.push('(created_at < ? OR (created_at = ? AND issue_id < ?))');
+    params.push(cursorCreatedAt, cursorCreatedAt, cursorIssueId);
+  }
   const issues = await all(
     db,
     `
       SELECT *
       FROM issues
       WHERE ${where.join(' AND ')}
-      ORDER BY created_at DESC
+      ORDER BY created_at DESC, issue_id DESC
       LIMIT ?
     `,
     ...params,
-    limit
+    limit + 1
   );
-  return jsonResponse({ issues: issues.map(serializeIssue) });
+  const hasMore = issues.length > limit;
+  const page = hasMore ? issues.slice(0, limit) : issues;
+  const last = page[page.length - 1];
+  return jsonResponse({
+    issues: page.map(serializeIssue),
+    nextCursor: hasMore && last ? `${last.created_at}|${last.issue_id}` : null,
+    exhausted: !hasMore
+  });
+}
+
+function safeJson(value, fallback = null) {
+  if (!value) return fallback;
+  try { return typeof value === 'string' ? JSON.parse(value) : value; } catch { return fallback; }
+}
+
+function compactText(value, max = 900) {
+  return String(value || '').replace(/\s+/g, ' ').trim().slice(0, max);
+}
+
+async function searchBraveWeb(query, env) {
+  if (!env.BRAVE_SEARCH_API_KEY) return { available: false, results: [] };
+  try {
+    const response = await fetch(`https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5`, {
+      headers: { Accept: 'application/json', 'X-Subscription-Token': env.BRAVE_SEARCH_API_KEY }
+    });
+    if (!response.ok) return { available: false, results: [] };
+    const body = await response.json();
+    return {
+      available: true,
+      results: (body.web?.results || []).slice(0, 5).map(result => ({
+        title: compactText(result.title, 180),
+        url: String(result.url || ''),
+        description: compactText(result.description, 500)
+      })).filter(result => result.url)
+    };
+  } catch {
+    return { available: false, results: [] };
+  }
+}
+
+async function findSimilarFixes(db, plantId, body, user, env) {
+  await requirePlantPermission(db, plantId, user, 'canViewPlant');
+  const description = compactText(body?.description, 1600);
+  const machineCode = compactText(body?.machineCode, 80);
+  if (description.length < 8) {
+    throw Object.assign(new Error('Describe the issue in at least 8 characters before searching for fixes.'), { status: 400 });
+  }
+  if (!env.DEEPSEEK_API_KEY) {
+    throw Object.assign(new Error('DeepSeek is not configured for this deployment.'), { status: 503 });
+  }
+
+  // D1 is the source of truth: only completed issues with a usable resolution are
+  // eligible. Candidate selection deliberately stays inside the requested plant.
+  const candidates = await all(db, `
+    SELECT issue_id, machine_code, note, description, issue_type, priority, resolved_at,
+           solution_current_json, legacy_status_history_json
+    FROM issues
+    WHERE plant_id = ? AND is_resolved = 1
+      AND (solution_current_json IS NOT NULL OR legacy_status_history_json IS NOT NULL)
+    ORDER BY resolved_at DESC, updated_at DESC
+    LIMIT 80
+  `, plantId);
+  const terms = description.toLowerCase().match(/[a-z0-9]{3,}/g) || [];
+  const rankedCandidates = candidates.map(row => {
+    const solution = safeJson(row.solution_current_json, {});
+    const history = safeJson(row.legacy_status_history_json, []);
+    const resolution = compactText(solution?.current?.text || solution?.text || [...history].reverse().find(entry => entry?.status === 'resolved')?.note, 1200);
+    const searchable = `${row.machine_code || ''} ${row.note || ''} ${row.description || ''} ${row.issue_type || ''} ${resolution}`.toLowerCase();
+    const score = terms.reduce((total, term) => total + (searchable.includes(term) ? 1 : 0), 0) + (machineCode && row.machine_code === machineCode ? 2 : 0);
+    return { issueId: row.issue_id, machineCode: row.machine_code || '', issueType: row.issue_type || '', note: compactText(row.note || row.description, 700), resolution, resolvedAt: row.resolved_at || '', score };
+  }).filter(candidate => candidate.resolution).sort((a, b) => b.score - a.score || String(b.resolvedAt).localeCompare(String(a.resolvedAt))).slice(0, 12);
+
+  const web = await searchBraveWeb(`${machineCode ? `${machineCode} ` : ''}${description} manufacturing troubleshooting`, env);
+  const systemPrompt = `You are AP Tracker's evidence-based maintenance research assistant. Compare a new manufacturing-floor issue with internal resolved incidents and external web snippets. Never invent facts or repair steps. Treat external sources as general guidance, not plant-approved procedure. Require lockout/tagout and the plant SOP before machine service. Return ONLY JSON with internalMatches, externalResearch, recommendedNextSteps, and safetyNotes. Every internal match must cite an issueId; every external result must cite its supplied url.`;
+  const prompt = {
+    newIssue: { description, machineCode },
+    internalResolvedIssues: rankedCandidates,
+    externalSearchResults: web.results
+  };
+  const response = await fetch('https://api.deepseek.com/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env.DEEPSEEK_API_KEY}` },
+    body: JSON.stringify({
+      model: env.DEEPSEEK_MODEL || 'deepseek-v4-flash',
+      messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: JSON.stringify(prompt) }],
+      response_format: { type: 'json_object' },
+      temperature: 0.15,
+      max_tokens: 1800
+    })
+  });
+  const deepseekBody = await response.json();
+  if (!response.ok) throw Object.assign(new Error(deepseekBody?.error?.message || `DeepSeek request failed (${response.status}).`), { status: 502 });
+  const content = deepseekBody?.choices?.[0]?.message?.content;
+  const analysis = safeJson(content, null);
+  if (!analysis || typeof analysis !== 'object') throw Object.assign(new Error('DeepSeek returned an invalid research response.'), { status: 502 });
+  // DeepSeek is allowed to summarize evidence, not manufacture references. Keep
+  // only citations that originated from D1 or the search provider response.
+  const internalById = new Map(rankedCandidates.map(candidate => [candidate.issueId, candidate]));
+  const externalByUrl = new Map(web.results.map(result => [result.url, result]));
+  const internalMatches = (Array.isArray(analysis.internalMatches) ? analysis.internalMatches : [])
+    .map(match => {
+      const candidate = internalById.get(String(match?.issueId || ''));
+      return candidate && {
+        issueId: candidate.issueId,
+        whySimilar: compactText(match?.whySimilar, 500),
+        fix: compactText(match?.fix || candidate.resolution, 1200)
+      };
+    }).filter(Boolean).slice(0, 6);
+  const externalResearch = (Array.isArray(analysis.externalResearch) ? analysis.externalResearch : [])
+    .map(result => {
+      const source = externalByUrl.get(String(result?.url || ''));
+      return source && {
+        title: source.title,
+        url: source.url,
+        summary: compactText(result?.summary || source.description, 700),
+        applicability: compactText(result?.applicability, 500)
+      };
+    }).filter(Boolean).slice(0, 5);
+  return jsonResponse({
+    internalMatches,
+    externalResearch,
+    recommendedNextSteps: (Array.isArray(analysis.recommendedNextSteps) ? analysis.recommendedNextSteps : []).map(step => compactText(step, 400)).filter(Boolean).slice(0, 6),
+    safetyNotes: (Array.isArray(analysis.safetyNotes) ? analysis.safetyNotes : []).map(note => compactText(note, 400)).filter(Boolean).slice(0, 4),
+    internalCandidates: rankedCandidates,
+    externalSearchAvailable: web.available
+  });
 }
 
 async function getIssue(db, plantId, issueId, user) {
@@ -3509,6 +3654,7 @@ export async function handleD1ApiRequest(request, env, { authenticateRequest } =
     const roleAlertCreateMatch = request.method === 'POST' && url.pathname.match(/^\/api\/plants\/([^/]+)\/role-alerts$/);
     const roleAlertUpdateMatch = request.method === 'PATCH' && url.pathname.match(/^\/api\/plants\/([^/]+)\/role-alerts\/([^/]+)$/);
     const issuesMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/issues$/);
+    const similarFixesMatch = request.method === 'POST' && url.pathname.match(/^\/api\/plants\/([^/]+)\/similar-fixes$/);
     const issueCreateMatch = request.method === 'POST' && url.pathname.match(/^\/api\/plants\/([^/]+)\/issues$/);
     const issueMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/issues\/([^/]+)$/);
     const issueUpdateMatch = request.method === 'PATCH' && url.pathname.match(/^\/api\/plants\/([^/]+)\/issues\/([^/]+)$/);
@@ -3539,7 +3685,7 @@ export async function handleD1ApiRequest(request, env, { authenticateRequest } =
     const reportsDohMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/reports\/doh$/);
     const reportsRunsMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/reports\/runs$/);
 
-    if (!meMatch && !meUpdateMatch && !meStorePurchaseMatch && !mePushTokenMatch && !accessRequestCreateSelfMatch && !plantsListMatch && !plantCreateMatch && !bootstrapMatch && !dailySchedulesMatch && !dailyScheduleMatch && !plantMembersMatch && !plantMemberCreateMatch && !plantMemberUpdateMatch && !plantMemberDeleteMatch && !accessRequestsMatch && !accessRequestUpdateMatch && !statusConfigMatch && !statusConfigUpdateMatch && !pressConfigMatch && !pressConfigUpdateMatch && !storeConfigMatch && !storeConfigUpdateMatch && !roleAlertRoutingMatch && !roleAlertRoutingUpdateMatch && !gamificationMatch && !gamificationAwardMatch && !gamificationAdminMatch && !gamificationAdminUpdateMatch && !gamificationLeaderboardResetMatch && !userDirectoryMatch && !roleAlertsMatch && !roleAlertCreateMatch && !roleAlertUpdateMatch && !issuesMatch && !issueCreateMatch && !issueMatch && !issueUpdateMatch && !issueDeleteMatch && !eventsMatch && !attachmentsMatch && !notesMatch && !noteCreateMatch && !noteUpdateMatch && !noteDeleteMatch && !noteAttachmentsMatch && !noteAttachmentCreateMatch && !noteAttachmentDeleteMatch && !todosMatch && !todoCreateMatch && !todoUpdateMatch && !todoDeleteMatch && !conversationsMatch && !conversationCreateMatch && !conversationMessagesMatch && !conversationMessageCreateMatch && !conversationReadMatch && !wikiPagesMatch && !wikiPageMatch && !wikiRevisionSaveMatch && !wikiPageDeleteMatch && !wikiAttachmentCreateMatch && !reportsDohMatch && !reportsRunsMatch) {
+    if (!meMatch && !meUpdateMatch && !meStorePurchaseMatch && !mePushTokenMatch && !accessRequestCreateSelfMatch && !plantsListMatch && !plantCreateMatch && !bootstrapMatch && !dailySchedulesMatch && !dailyScheduleMatch && !plantMembersMatch && !plantMemberCreateMatch && !plantMemberUpdateMatch && !plantMemberDeleteMatch && !accessRequestsMatch && !accessRequestUpdateMatch && !statusConfigMatch && !statusConfigUpdateMatch && !pressConfigMatch && !pressConfigUpdateMatch && !storeConfigMatch && !storeConfigUpdateMatch && !roleAlertRoutingMatch && !roleAlertRoutingUpdateMatch && !gamificationMatch && !gamificationAwardMatch && !gamificationAdminMatch && !gamificationAdminUpdateMatch && !gamificationLeaderboardResetMatch && !userDirectoryMatch && !roleAlertsMatch && !roleAlertCreateMatch && !roleAlertUpdateMatch && !issuesMatch && !similarFixesMatch && !issueCreateMatch && !issueMatch && !issueUpdateMatch && !issueDeleteMatch && !eventsMatch && !attachmentsMatch && !notesMatch && !noteCreateMatch && !noteUpdateMatch && !noteDeleteMatch && !noteAttachmentsMatch && !noteAttachmentCreateMatch && !noteAttachmentDeleteMatch && !todosMatch && !todoCreateMatch && !todoUpdateMatch && !todoDeleteMatch && !conversationsMatch && !conversationCreateMatch && !conversationMessagesMatch && !conversationMessageCreateMatch && !conversationReadMatch && !wikiPagesMatch && !wikiPageMatch && !wikiRevisionSaveMatch && !wikiPageDeleteMatch && !wikiAttachmentCreateMatch && !reportsDohMatch && !reportsRunsMatch) {
       return null;
     }
 
@@ -3649,6 +3795,9 @@ export async function handleD1ApiRequest(request, env, { authenticateRequest } =
     }
     if (issuesMatch) {
       return listIssues(db, request, decodePathSegment(issuesMatch[1]), user);
+    }
+    if (similarFixesMatch) {
+      return findSimilarFixes(db, decodePathSegment(similarFixesMatch[1]), await request.json(), user, env);
     }
     if (issueCreateMatch) {
       return upsertIssueWriteBundle(db, decodePathSegment(issueCreateMatch[1]), await request.json(), user);

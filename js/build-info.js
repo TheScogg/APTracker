@@ -1,11 +1,11 @@
 window.__APP_BUILD_INFO__ = {
-  "version": "3c58f38",
-  "assetVersion": "3c58f38-f72c2336",
-  "commit": "3c58f38c1fa1c63b8842383cda533e339852a858",
-  "shortCommit": "3c58f38",
+  "version": "29616dc",
+  "assetVersion": "29616dc-9c1a8973",
+  "commit": "29616dc081c278be4657390c2fd37d5edff04acc",
+  "shortCommit": "29616dc",
   "branch": "codex/workflow-dropdown-response-tree",
-  "commitDate": "2026-07-08T12:06:36-04:00",
-  "builtAt": "2026-07-10T01:11:04.787Z",
+  "commitDate": "2026-07-09T21:11:22-04:00",
+  "builtAt": "2026-07-13T00:56:08.704Z",
   "dirty": true
 };
-window.__APP_VERSION__ = "3c58f38";
+window.__APP_VERSION__ = "29616dc";

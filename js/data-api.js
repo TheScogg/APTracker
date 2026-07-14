@@ -207,6 +207,13 @@ export class SqlDataApi {
     return this.request(`/plants/${encodeURIComponent(plantId)}/issues${suffix}`);
   }
 
+  findSimilarFixes(plantId, payload) {
+    return this.request(`/plants/${encodeURIComponent(plantId)}/similar-fixes`, {
+      method: 'POST',
+      body: payload
+    });
+  }
+
   deleteIssue(plantId, issueId) {
     return this.request(`/plants/${encodeURIComponent(plantId)}/issues/${encodeURIComponent(issueId)}`, {
       method: 'DELETE'

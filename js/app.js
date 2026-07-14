@@ -437,10 +437,11 @@ function buildIssueV2CompatLocal({ machineCode, statusKey, subStatus = '', statu
   };
 }
 
-function sqlAttachmentPayloads(photos = []) {
+function sqlAttachmentPayloads(photos = [], type = 'photo', solutionRevisionId = '') {
   return (photos || []).filter(photo => photo?.storagePath).map((photo, index) => ({
     attachmentId: `photo_${String(index).padStart(3, '0')}_${String(photo.storagePath).split('/').pop().replace(/[^a-zA-Z0-9]+/g, '_')}`,
-    type: 'photo',
+    type,
+    solutionRevisionId,
     fileName: photo.name || '',
     contentType: photo.contentType || 'image/jpeg',
     storagePath: photo.storagePath,
@@ -849,12 +850,13 @@ function queuePlantIssueEvent(batch, plantId, issueId, type, payload = {}) {
   });
 }
 
-function queuePlantAttachmentDocs(batch, plantId, issueId, photos = []) {
+function queuePlantAttachmentDocs(batch, plantId, issueId, photos = [], type = 'photo', solutionRevisionId = '') {
   photos.forEach((p, idx) => {
     if (!p?.storagePath) return;
     const attachmentId = `photo_${String(idx).padStart(3, '0')}_${String(p.storagePath).split('/').pop().replace(/[^a-zA-Z0-9]+/g, '_')}`;
     batch.set(doc(db, 'plants', plantId, 'issues', issueId, 'attachments', attachmentId), {
-      type: 'photo',
+      type,
+      solutionRevisionId,
       name: p.name || attachmentId,
       storagePath: p.storagePath,
       storageBucket: p.storageBucket || '',
@@ -3850,6 +3852,10 @@ async function switchPlant(plantId) {
   _deletedIssueIds.clear();
   issueHistoryCursor = null;
   issueHistoryFetchInFlight = null;
+  issueHistoryExhausted = false;
+  issueHistoryLoadError = '';
+  sqlIssueHistoryCursor = null;
+  sqlIssueHistoryExhausted = false;
   attachmentPhotoCache.clear();
   issueEventHistoryCache.clear();
   attachmentsHydrationToken++;
@@ -5574,8 +5580,16 @@ const issuesById = new Map();
 const _deletedIssueIds = new Set();
 let issueHistoryCursor = null;
 let issueHistoryFetchInFlight = null;
+let issueHistoryLoadError = '';
+let issueHistoryExhausted = false;
+let sqlIssueHistoryCursor = null;
+let sqlIssueHistoryExhausted = false;
 let issueDisplayLimit = 50;
 const PAGE_SIZE = 50;
+let issueLogView = (() => {
+  try { return localStorage.getItem('aptracker.issueLogView') === 'list' ? 'list' : 'cards'; }
+  catch (_) { return 'cards'; }
+})();
 let pendingPhotos = [];   // for add modal
 let logCatKey = null;
 let logCatSub = null;
@@ -5819,6 +5833,10 @@ async function doSignOut() {
   _deletedIssueIds.clear();
   issueHistoryCursor = null;
   issueHistoryFetchInFlight = null;
+  issueHistoryExhausted = false;
+  issueHistoryLoadError = '';
+  sqlIssueHistoryCursor = null;
+  sqlIssueHistoryExhausted = false;
   attachmentPhotoCache.clear();
   issueEventHistoryCache.clear();
   attachmentsHydrationToken++;
@@ -6932,6 +6950,10 @@ async function bootstrapSessionFromStorage() {
       _deletedIssueIds.clear();
       issueHistoryCursor = null;
       issueHistoryFetchInFlight = null;
+      issueHistoryExhausted = false;
+      issueHistoryLoadError = '';
+      sqlIssueHistoryCursor = null;
+      sqlIssueHistoryExhausted = false;
       attachmentPhotoCache.clear();
       issueEventHistoryCache.clear();
       attachmentsHydrationToken++;
@@ -7041,12 +7063,17 @@ async function loadIssueHistoryPage() {
     const snap = await getDocs(q);
     if (snap.empty) {
       issueHistoryCursor = null;
+      issueHistoryExhausted = true;
       return;
     }
     snap.docs.forEach(d => {
       if (!issuesById.has(d.id)) issuesById.set(d.id, buildIssueFromSnapshot(d));
     });
     issueHistoryCursor = snap.docs[snap.docs.length - 1] || null;
+    if (snap.docs.length < HISTORY_ISSUES_PAGE_SIZE) {
+      issueHistoryCursor = null;
+      issueHistoryExhausted = true;
+    }
     rebuildIssuesArrayFromMap();
     refreshVisibleData();
   })().finally(() => {
@@ -7055,8 +7082,73 @@ async function loadIssueHistoryPage() {
   return issueHistoryFetchInFlight;
 }
 
+async function loadOlderIssueRecords() {
+  if (issueHistoryFetchInFlight) return issueHistoryFetchInFlight;
+  issueHistoryLoadError = '';
+  const plantToken = currentPlantId;
+  const machine = String(document.getElementById('machine-filter')?.value || '');
+  if (shouldUseSqlStagingReads(currentPlantId)) {
+    issueHistoryFetchInFlight = (async () => {
+      const payload = await dataApi.listIssues(currentPlantId, {
+        limit: HISTORY_ISSUES_PAGE_SIZE,
+        machine,
+        cursor: sqlIssueHistoryCursor || ''
+      });
+      if (currentPlantId !== plantToken) return;
+      normalizeSqlIssueList(payload.issues || []).forEach(issue => issuesById.set(issue.id, issue));
+      sqlIssueHistoryCursor = payload.nextCursor || null;
+      sqlIssueHistoryExhausted = payload.exhausted === true || !sqlIssueHistoryCursor;
+      rebuildIssuesArrayFromMap();
+      issueDisplayLimit += PAGE_SIZE;
+      refreshVisibleData();
+    })().catch(error => {
+      issueHistoryLoadError = error?.message || 'Unable to load older records.';
+      renderIssues();
+    }).finally(() => { issueHistoryFetchInFlight = null; renderIssues(); });
+    renderIssues();
+    return issueHistoryFetchInFlight;
+  }
+  const beforeCount = machine ? issues.filter(issue => issue.machine === machine).length : issues.length;
+  issueHistoryFetchInFlight = (async () => {
+    // Sparse press histories may require several plant-wide pages before a match.
+    do {
+      const cursor = issueHistoryCursor;
+      if (!cursor) break;
+      const historyQuery = query(plantCol('issues'), orderBy('createdAt', 'desc'), startAfter(cursor), limit(HISTORY_ISSUES_PAGE_SIZE));
+      const snap = await getDocs(historyQuery);
+      if (currentPlantId !== plantToken) return;
+      if (snap.empty) {
+        issueHistoryCursor = null;
+        issueHistoryExhausted = true;
+        break;
+      }
+      snap.docs.forEach(docSnap => {
+        if (!issuesById.has(docSnap.id)) issuesById.set(docSnap.id, buildIssueFromSnapshot(docSnap));
+      });
+      issueHistoryCursor = snap.docs.length < HISTORY_ISSUES_PAGE_SIZE
+        ? null
+        : snap.docs[snap.docs.length - 1];
+      if (snap.docs.length < HISTORY_ISSUES_PAGE_SIZE) issueHistoryExhausted = true;
+      rebuildIssuesArrayFromMap();
+      const afterCount = machine ? issues.filter(issue => issue.machine === machine).length : issues.length;
+      if (afterCount > beforeCount || !issueHistoryCursor) break;
+    } while (issueHistoryCursor);
+    issueDisplayLimit += PAGE_SIZE;
+    refreshVisibleData();
+  })().catch(error => {
+    issueHistoryLoadError = error?.message || 'Unable to load older records.';
+    renderIssues();
+  }).finally(() => { issueHistoryFetchInFlight = null; renderIssues(); });
+  renderIssues();
+  return issueHistoryFetchInFlight;
+}
+
+window.loadOlderIssueRecords = loadOlderIssueRecords;
+
 function sqlIssueListParams() {
   const params = { limit: 500 };
+  const machine = String(document.getElementById('machine-filter')?.value || '').trim();
+  if (machine) params.machine = machine;
   const dateFilter = document.getElementById('date-filter')?.value || '';
   if (issuePeriod === 'date' && dateFilter) params.date = dateFilter;
   if (issuePeriod === 'today') params.date = localDateStr(new Date());
@@ -7096,7 +7188,14 @@ async function refreshIssuesFromSql() {
     return true;
   }
   const normalized = normalizeSqlIssueList(payload.issues || []);
-  issuesById.clear();
+  const preservePaginatedPressHistory = issuePeriod === 'all'
+    && !!issueParams.machine
+    && issuesById.size > normalized.length;
+  if (!preservePaginatedPressHistory) {
+    sqlIssueHistoryCursor = payload.nextCursor || null;
+    sqlIssueHistoryExhausted = payload.exhausted === true || !sqlIssueHistoryCursor;
+    issuesById.clear();
+  }
   normalized.forEach(issue => {
     issuesById.set(issue.id, issue);
   });
@@ -7185,8 +7284,12 @@ function startListener() {
     rebuildIssuesArrayFromMap();
     refreshVisibleData({ isBackground: true });
     void _refreshRoleAlertBadgeCount();
-    if (!issueHistoryCursor && snap.docs.length) {
+    if (!issueHistoryCursor && !issueHistoryExhausted && snap.docs.length) {
       issueHistoryCursor = snap.docs[snap.docs.length - 1];
+      if (snap.docs.length < MAX_LIVE_ISSUES) {
+        issueHistoryCursor = null;
+        issueHistoryExhausted = true;
+      }
     }
     if (snap.metadata?.hasPendingWrites) {
       setSyncStatus('syncing', 'Syncing - local changes pending');
@@ -7226,6 +7329,10 @@ function startListener() {
       void _refreshRoleAlertBadgeCount();
       if (snap.docs.length) {
         issueHistoryCursor = snap.docs[snap.docs.length - 1];
+        if (snap.docs.length < MAX_LIVE_ISSUES) {
+          issueHistoryCursor = null;
+          issueHistoryExhausted = true;
+        }
       }
       setSyncStatus(syncState.online ? 'cached' : 'offline', syncState.online ? 'Cached - showing saved data' : 'Offline - showing cached data');
     } catch (e) {
@@ -7792,6 +7899,7 @@ window.showMachineHistory = machine => {
   // Scroll down to the issue log smoothly
   document.querySelector('.issues-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   renderIssues(); updateFilterBadge();
+  refreshIssuesFromSqlSoon();
 };
 
 window.clearMachineBreadcrumb = () => {
@@ -7800,6 +7908,7 @@ window.clearMachineBreadcrumb = () => {
   const bc = document.getElementById('machine-breadcrumb');
   if (bc) bc.classList.remove('visible');
   renderIssues(); updateFilterBadge();
+  refreshIssuesFromSqlSoon();
 };
 
 window.closeMachineHistory = () => {
@@ -7865,7 +7974,10 @@ function buildFloorMap() {
     hubSelect.innerHTML = '';
   }
 
-  Object.values(PRESSES).flat().forEach(p => {
+  const sortedPresses = Object.values(PRESSES).flat().filter(Boolean).sort((a, b) =>
+    String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' })
+  );
+  sortedPresses.forEach(p => {
     if (sel) {
       const opt = document.createElement('option'); opt.value = p; opt.textContent = p;
       sel.appendChild(opt);
@@ -8336,6 +8448,9 @@ function renderRowPanels() {
         btn.style.color = col;
       } else if (anyResolved.length > 0 && showResolvedRows.has(rowName)) {
         btn.classList.add('all-resolved');
+      } else {
+        // A press with no visible active or resolved issues should not resemble a category state.
+        btn.classList.add('is-idle');
       }
 
       // hist-mode class if needed
@@ -8768,6 +8883,8 @@ window.openAddModal = (m = '') => {
   logCatKey = issueLogPrefs.lastStatusKey || null;
   logCatSub = issueLogPrefs.lastStatusSub || null;
   document.getElementById('issue-note').value = '';
+  const similarFixesResults = document.getElementById('similar-fixes-results');
+  if (similarFixesResults) { similarFixesResults.hidden = true; similarFixesResults.innerHTML = ''; }
   document.getElementById('photo-previews').innerHTML = '';
   populateIssueMachineSelect(currentMachine);
   document.getElementById('log-photo-source-row')?.classList.remove('visible');
@@ -8780,6 +8897,53 @@ window.openAddModal = (m = '') => {
   document.getElementById('log-cat-selected').classList.toggle('visible', Boolean(logCatKey));
   document.getElementById('add-modal').classList.add('visible');
   requestAnimationFrame(() => (currentMachine ? document.getElementById('issue-note') : document.getElementById('issue-machine-select'))?.focus());
+};
+
+function renderSimilarFixesResults(payload) {
+  const target = document.getElementById('similar-fixes-results');
+  if (!target) return;
+  const internal = Array.isArray(payload?.internalMatches) ? payload.internalMatches : [];
+  const external = Array.isArray(payload?.externalResearch) ? payload.externalResearch : [];
+  const steps = Array.isArray(payload?.recommendedNextSteps) ? payload.recommendedNextSteps : [];
+  const safety = Array.isArray(payload?.safetyNotes) ? payload.safetyNotes : [];
+  const internalHtml = internal.length ? internal.map(match => {
+    const issueId = String(match.issueId || '');
+    const fallback = (payload.internalCandidates || []).find(candidate => candidate.issueId === issueId) || {};
+    const fix = match.fix || fallback.resolution || '';
+    return `<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--color-border,var(--border));"><button type="button" class="quality-defect-link" onclick="openSimilarFixIssue('${encodeURIComponent(issueId)}')">Internal issue ${esc(issueId)}</button><div style="font-size:11px;color:var(--color-text-muted,var(--text2));margin-top:3px;">${esc(match.whySimilar || fallback.note || '')}</div><div style="font-size:12px;margin-top:4px;">${esc(fix)}</div></div>`;
+  }).join('') : '<div style="font-size:12px;color:var(--color-text-muted,var(--text2));">No closely matching completed issues were found.</div>';
+  const externalHtml = external.length ? external.map(result => `<div style="margin-top:7px;"><a href="${esc(result.url || '')}" target="_blank" rel="noopener noreferrer" style="font-size:12px;color:var(--color-accent,var(--accent));font-weight:700;">${esc(result.title || result.url || 'External research')}</a><div style="font-size:11px;color:var(--color-text-muted,var(--text2));margin-top:2px;">${esc(result.summary || result.applicability || '')}</div></div>`).join('') : `<div style="font-size:12px;color:var(--color-text-muted,var(--text2));">${payload?.externalSearchAvailable ? 'No external sources were selected.' : 'External search is not configured yet.'}</div>`;
+  target.innerHTML = `<div style="font-size:12px;font-weight:800;color:var(--color-text,var(--text));">Similar fixes</div>${internalHtml}<div style="font-size:12px;font-weight:800;color:var(--color-text,var(--text));margin-top:12px;">External research</div>${externalHtml}${steps.length ? `<div style="font-size:12px;font-weight:800;color:var(--color-text,var(--text));margin-top:12px;">Suggested next steps</div><ul style="margin:5px 0 0;padding-left:18px;font-size:12px;">${steps.map(step => `<li>${esc(step)}</li>`).join('')}</ul>` : ''}${safety.length ? `<div style="font-size:11px;color:var(--color-warning,var(--yellow));margin-top:10px;">${esc(safety.join(' '))}</div>` : ''}`;
+  target.hidden = false;
+}
+
+window.findSimilarFixes = async () => {
+  const description = document.getElementById('issue-note')?.value.trim() || '';
+  const machineCode = document.getElementById('issue-machine-select')?.value || currentMachine || '';
+  if (description.length < 8) { showGameToast('Describe the issue before finding similar fixes.', 'error'); document.getElementById('issue-note')?.focus(); return; }
+  const button = document.getElementById('similar-fixes-btn');
+  if (!button || !currentPlantId) return;
+  button.disabled = true; button.innerHTML = '<span class="spinner"></span> Researching fixes…';
+  try {
+    const payload = await dataApi.findSimilarFixes(currentPlantId, { description, machineCode });
+    renderSimilarFixesResults(payload);
+  } catch (error) {
+    showGameToast(error?.message || 'Could not research similar fixes.', 'error');
+  } finally {
+    button.disabled = false; button.textContent = '✨ Find similar fixes';
+  }
+};
+
+window.openSimilarFixIssue = issueId => {
+  const decodedId = decodeURIComponent(String(issueId || ''));
+  closeModal();
+  requestAnimationFrame(() => {
+    const card = document.getElementById(`body-${decodedId}`)?.closest('.issue-card');
+    if (!card) { showGameToast('That historical issue is not loaded in this view.', 'error'); return; }
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const body = document.getElementById(`body-${decodedId}`);
+    if (body?.classList.contains('collapsed')) toggleCard(decodedId);
+  });
 };
 
 // ── LOG ISSUE CATEGORY PICKER ──
@@ -10054,6 +10218,68 @@ window.openResolveModal = id => {
   document.getElementById('resolve-modal').classList.add('visible');
 };
 window.closeResolveModal = () => { document.getElementById('resolve-modal').classList.remove('visible'); resolveTargetId = null; };
+
+let solutionTargetId = null;
+let solutionPhotos = [];
+window.openSolutionModal = id => {
+  if (!currentUserPermissions.canEditIssue) return;
+  const issue = issues.find(i => i.id === id);
+  if (!issue || currentStatusKey(issue) !== 'resolved') return;
+  solutionTargetId = id;
+  const current = issue.solution?.current || issue.solution || {};
+  solutionPhotos = (current.photos || []).map(photo => ({ ...photo, name: photo.name || photo.fileName || 'solution-photo.jpg', dataUrl: photo.dataUrl || photo.downloadUrl || photo.url || '' }));
+  document.getElementById('solution-machine-label').textContent = `Press ${issue.machine} · shared with this plant`;
+  document.getElementById('solution-text').value = current.text || '';
+  document.getElementById('solution-save-btn').textContent = current.text ? 'Update Solution' : 'Share Solution';
+  renderPreviews(solutionPhotos, 'solution-photo-previews');
+  document.getElementById('solution-modal').classList.add('visible');
+};
+window.closeSolutionModal = () => { document.getElementById('solution-modal').classList.remove('visible'); solutionTargetId = null; solutionPhotos = []; };
+window.openSolutionPhoto = (issueId, index) => {
+  const issue = issues.find(i => i.id === issueId);
+  const photos = issue?.solution?.current?.photos || issue?.solution?.photos || [];
+  if (photos[index]) openLightbox(index, photos);
+};
+window.toggleInlineSolution = issueId => {
+  const block = document.getElementById(`inline-solution-${issueId}`);
+  if (!block) return;
+  block.hidden = !block.hidden;
+};
+window.saveIssueSolution = async () => {
+  const text = document.getElementById('solution-text').value.trim();
+  if (!text) { document.getElementById('solution-text').focus(); return; }
+  if (solutionPhotos.length > 5) { showGameToast('A solution can include up to five photos.'); return; }
+  const issue = issues.find(i => i.id === solutionTargetId);
+  if (!issue) return;
+  const btn = document.getElementById('solution-save-btn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Saving…';
+  try {
+    if (guardOfflinePhotos(solutionPhotos, 'Solution photos')) throw new Error('Solution photos require a connection.');
+    const revisionId = `sol_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const photos = await uploadIssuePhotosToStorage(solutionTargetId, solutionPhotos);
+    const current = { revisionId, text, photos, photoCount: photos.length, sharedAt: new Date().toISOString(), sharedBy: currentActor() };
+    const eventType = (issue.solution?.current || issue.solution)?.text ? 'solution_updated' : 'solution_shared';
+    if (shouldUseSqlStagingReads(currentPlantId)) {
+      const nextIssue = applyIssuePatchLocally(issue, { solution: { current }, updatedAt: new Date().toISOString(), updatedBy: currentActor() });
+      nextIssue.id = solutionTargetId;
+      await commitSqlIssueWrite(solutionTargetId, nextIssue, {
+        permissionName: 'canEditIssue',
+        attachments: sqlAttachmentPayloads(photos, 'solution_photo', revisionId),
+        events: [sqlEventPayload(eventType, { revisionId, text, photoCount: photos.length, photos: photos.map(p => ({ storagePath:p.storagePath, fileName:p.name || p.fileName || '' })) })]
+      });
+    } else {
+      const batch = writeBatch(db);
+      batch.update(plantDoc('issues', solutionTargetId), { solution: { current }, updatedAt: serverTimestamp(), updatedBy: currentActor() });
+      queuePlantAttachmentDocs(batch, currentPlantId, solutionTargetId, photos, 'solution_photo', revisionId);
+      queuePlantIssueEvent(batch, currentPlantId, solutionTargetId, eventType, { revisionId, text, photoCount: photos.length, photos: photos.map(p => ({ storagePath:p.storagePath, fileName:p.name || p.fileName || '' })) });
+      await batch.commit();
+      issuesById.set(solutionTargetId, { ...issue, solution: { current } }); rebuildIssuesArrayFromMap(); refreshVisibleData();
+    }
+    closeSolutionModal();
+  } catch (e) { setSyncStatus('err', 'Solution not saved: ' + e.message); btn.disabled = false; btn.textContent = 'Share Solution'; }
+};
+document.getElementById('solution-photo-input')?.addEventListener('change', e => handleFiles(Array.from(e.target.files || []).slice(0, Math.max(0, 5 - solutionPhotos.length)), solutionPhotos, 'solution-photo-previews'));
+document.getElementById('solution-photo-dropzone')?.addEventListener('click', () => document.getElementById('solution-photo-input')?.click());
 window.confirmResolve = async () => {
   const note = document.getElementById('resolve-note').value.trim();
   const btn = document.getElementById('resolve-confirm-btn');
@@ -12045,6 +12271,51 @@ function issueCreatedTime(issue) {
     || compatTimestampMillis(issue?.lifecycle?.openedAt);
 }
 
+function issueResolvedTime(issue) {
+  return compatTimestampMillis(issue?.lifecycle?.resolvedAt || issue?.lifecycle?.closedAt)
+    || compatTimestampMillis(issue?.resolvedAt)
+    || (issue?.resolveDateTime ? Date.parse(issue.resolveDateTime) || 0 : 0);
+}
+
+function formatLedgerDuration(issue) {
+  const start = issueCreatedTime(issue);
+  if (!start) return 'Time unknown';
+  const resolved = currentStatusKey(issue) === 'resolved';
+  const end = resolved ? issueResolvedTime(issue) : Date.now();
+  if (!end || end < start) return resolved ? 'Resolved' : 'Open';
+  const minutes = Math.max(1, Math.round((end - start) / 60000));
+  if (minutes < 60) return `${resolved ? 'Resolved in' : 'Open'} ${minutes}m`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return `${resolved ? 'Resolved in' : 'Open'} ${hours}h`;
+  const days = Math.round(hours / 24);
+  return `${resolved ? 'Resolved in' : 'Open'} ${days}d`;
+}
+
+function syncIssueViewToggle() {
+  ['cards', 'list'].forEach(view => {
+    const button = document.getElementById(`issue-view-${view}`);
+    const active = issueLogView === view;
+    button?.classList.toggle('active', active);
+    button?.setAttribute('aria-pressed', String(active));
+  });
+}
+
+window.setIssueLogView = view => {
+  issueLogView = view === 'list' ? 'list' : 'cards';
+  try { localStorage.setItem('aptracker.issueLogView', issueLogView); } catch (_) { }
+  syncIssueViewToggle();
+  renderIssues();
+};
+
+window.toggleLedgerIssue = id => {
+  const row = document.querySelector(`.issue-row[data-id="${CSS.escape(String(id))}"]`);
+  const opening = !row?.classList.contains('ledger-expanded');
+  row?.classList.toggle('ledger-expanded', opening);
+  const body = document.getElementById(`body-${id}`);
+  if (body && body.classList.contains('visible') !== opening) window.toggleCard(id);
+  row?.querySelector('.ledger-summary')?.setAttribute('aria-expanded', String(opening));
+};
+
 function applySortOrder(arr, sort) {
   if (sort === 'newest') {
     arr.sort((a, b) => issueCreatedTime(b) - issueCreatedTime(a));
@@ -12129,6 +12400,7 @@ function renderIssues(options = {}) {
   const sf = document.getElementById('status-filter').value;
   const sort = currentSort;
   const openSwipeSnapshot = captureOpenSwipeSnapshot();
+  syncIssueViewToggle();
 
   // Build set of machines in active rows (for Active Rows filter)
   const activeRowMachines = new Set();
@@ -12143,6 +12415,7 @@ function renderIssues(options = {}) {
     if (issueShiftFilter !== 'all' && i.shift !== issueShiftFilter) return false;
     if (!periodFilter(i)) return false;
     if (issueRowScope === 'active' && activeRows.size > 0 && !activeRowMachines.has(i.machine)) return false;
+    if (issueRowScope === 'resolved' && currentStatusKey(i) !== 'resolved') return false;
     if (mf && i.machine !== mf) return false;
     if (sf && !issueHasActiveStatus(i, sf)) return false;
     if (search) {
@@ -12157,12 +12430,12 @@ function renderIssues(options = {}) {
 
   applySortOrder(filtered, sort);
   // Always float resolved issues to the bottom (unless sorting by status)
-  if (sort !== 'status' && sort !== 'longest-open') {
+  if (issueLogView === 'cards' && sort !== 'status' && sort !== 'longest-open') {
     const isResolved = i => currentStatusKey(i) === 'resolved';
     filtered.sort((a, b) => isResolved(a) - isResolved(b));
   }
   // Float high-priority (non-resolved) issues to the very top
-  {
+  if (issueLogView === 'cards') {
     const isResolved = i => currentStatusKey(i) === 'resolved';
     filtered.sort((a, b) => {
       const aR = isResolved(a), bR = isResolved(b);
@@ -12193,6 +12466,7 @@ function renderIssues(options = {}) {
   const visible = filtered.slice(0, issueDisplayLimit);
 
   const list = document.getElementById('issues-list');
+  list.classList.toggle('ledger-view', issueLogView === 'list');
   document.getElementById('issue-count').textContent = issueDisplayLimit < totalFiltered
     ? `${issueDisplayLimit} of ${totalFiltered} issues`
     : `${totalFiltered} issue${totalFiltered !== 1 ? 's' : ''}`;
@@ -12233,14 +12507,35 @@ function renderIssues(options = {}) {
       + '</select>';
   }
 
+  let ledgerMonthKey = '';
   visible.forEach(issue => {
+    if (issueLogView === 'list' && (sort === 'newest' || sort === 'oldest')) {
+      const createdMs = issueCreatedTime(issue);
+      const createdDate = createdMs ? new Date(createdMs) : null;
+      const monthKey = createdDate ? `${createdDate.getFullYear()}-${createdDate.getMonth()}` : 'unknown';
+      if (monthKey !== ledgerMonthKey) {
+        ledgerMonthKey = monthKey;
+        const monthCount = filtered.filter(candidate => {
+          const ms = issueCreatedTime(candidate);
+          if (!createdDate || !ms) return !createdDate && !ms;
+          const date = new Date(ms);
+          return date.getFullYear() === createdDate.getFullYear() && date.getMonth() === createdDate.getMonth();
+        }).length;
+        const heading = document.createElement('div');
+        heading.className = 'ledger-month-heading';
+        heading.innerHTML = `<span>${createdDate ? createdDate.toLocaleDateString([], { month: 'long', year: 'numeric' }) : 'Date unknown'}</span><span>${monthCount} issue${monthCount === 1 ? '' : 's'}</span>`;
+        list.appendChild(heading);
+      }
+    }
     const wasOpen = expanded.has(issue.id);
     const isMyIssue = issue.userId === currentUser?.uid;
     const isAlertFocus = !!issue.__alertFocus;
     const isLocalIssue = !!(issue.__localPending || issue.__localSyncStatus);
     const reminderState = getIssueReminderState(issue.id);
     const isTimerOverdue = !!reminderState?.isOverdue;
-    const row = document.createElement('div'); row.className = 'issue-row'; row.dataset.id = issue.id;
+    const row = document.createElement('div');
+    row.className = `issue-row${issueLogView === 'list' ? ' ledger-row' : ''}${wasOpen ? ' ledger-expanded' : ''}`;
+    row.dataset.id = issue.id;
     if (isAlertFocus) row.classList.add('alert-focus-issue');
     const card = document.createElement('div');
     card.className = 'issue-card' + (issueIsResolvedV2(issue) ? ' resolved' : '') + (issue.highPriority ? ' high-priority' : '') + (isTimerOverdue ? ' timer-overdue' : '') + (isAlertFocus ? ' alert-focus-card' : '') + (isLocalIssue ? ' local-pending' : '') + (issue.__localSyncStatus === 'failed' ? ' sync-failed' : '');
@@ -12339,6 +12634,10 @@ function renderIssues(options = {}) {
     const isCompleted = (state) => workflowState && wfOrder.indexOf(state) < wfCurrentIdx;
     const wfByStatus = issue.workflowStateByStatus || {};
 
+    const canEdit = currentUserPermissions.canEditIssue && !isLocalIssue;
+    const solution = issue.solution?.current || issue.solution || null;
+    const solutionPhotos = Array.isArray(solution?.photos) ? solution.photos : [];
+
     // Build timeline entries HTML — reversed so newest is on top
     const timelineEntries = [...displayHistory].reverse().map((entry, displayIdx) => {
       const trueIdx = displayHistory.length - 1 - displayIdx; // real index in array for Firestore ops
@@ -12365,8 +12664,13 @@ function renderIssues(options = {}) {
       const wfBadgeLabel = entryWorkflowState
         ? `${wfCfg.icon} ${wfCfg.label.toUpperCase()}`
         : `— NOT STARTED`;
+      const resolvedSolutionToggle = isResolvedEntry && solution?.text
+        ? `<button class="tl-solution-icon" type="button" onclick="event.stopPropagation(); toggleInlineSolution('${issue.id}')" title="View shared solution" aria-label="View shared solution">💡</button>`
+        : (isResolvedEntry && canEdit
+          ? `<button class="tl-solution-icon" type="button" onclick="event.stopPropagation(); openSolutionModal('${issue.id}')" title="Add shared solution" aria-label="Add shared solution">＋</button>`
+          : '');
       const wfBadge = isResolvedEntry
-        ? `<div class="tl-wf-badge no-action" style="color:${cfg.color}">${cfg.icon} RESOLVED</div>`
+        ? `<div class="tl-wf-badge no-action" style="color:${cfg.color}">${cfg.icon} RESOLVED ${resolvedSolutionToggle}</div>`
         : `<button class="tl-wf-badge" style="color:${wfColor}" onclick="event.stopPropagation(); cycleWorkflowStateForEntry('${issue.id}',${trueIdx})" title="Tap to cycle workflow state">${wfBadgeLabel}</button>`;
       const entrySerialMatch = String(entry.note || '').match(/S\/N:\s*([A-Za-z0-9]+)/i);
       const entrySerialNumber = entrySerialMatch ? entrySerialMatch[1].toUpperCase() : '';
@@ -12418,6 +12722,11 @@ function renderIssues(options = {}) {
           <div class="tl-time">${entry.dateTime || ''}${entry.by ? ' — ' + esc(entry.by) : ''}</div>
           ${entry.note ? `<div class="tl-note-text">"${esc(entry.note)}"</div>` : ''}
           ${Array.isArray(entry.photos) && entry.photos.length ? `<div class="issue-photos" style="margin-top:6px;">${entry.photos.map((p, i) => `<img class="issue-photo-thumb" src="${esc(p.downloadURL || p.dataUrl || '')}" loading="lazy" alt="${esc(p.name || `Status photo ${i + 1}`)}" onclick="openLightbox(${i}, [${entry.photos.map(sp => `{url:'${esc(sp.downloadURL || sp.dataUrl || '')}',takenAt:'${esc(sp.takenAt || sp.timestamp || '')}',uploadedAt:'${esc(sp.uploadedAt || sp.createdAt || '')}'}`).join(',')}])">`).join('')}</div>` : ''}
+          ${isResolvedEntry && solution?.text ? `<div class="solution-card-block solution-in-resolved" id="inline-solution-${issue.id}" hidden>
+            <div class="solution-card-head">💡 Shared solution <span class="solution-card-meta">${esc(solution.sharedBy?.name || solution.sharedByName || '')}${solution.sharedAt ? ` · ${esc(fmtDate(new Date(solution.sharedAt)))}` : ''}</span></div>
+            <div class="solution-card-text">${esc(solution.text)}</div>
+            ${solutionPhotos.length ? `<div class="solution-photo-strip">${solutionPhotos.map((photo, index) => `<img class="solution-photo-thumb" src="${esc(photo.downloadUrl || photo.dataUrl || photo.url || '')}" alt="Solution photo ${index + 1}" onclick="event.stopPropagation(); openSolutionPhoto('${issue.id}',${index})">`).join('')}</div>` : ''}
+          </div>` : ''}
           <div class="tl-actions">
             ${workflowHistoryButton}
             ${currentUserPermissions.canEditIssue ? `
@@ -12435,7 +12744,6 @@ function renderIssues(options = {}) {
     const pend = pendingEntry[issue.id] || {};
     const pendSubs = STATUS_CONFIG[pend.status]?.subs || [];
     const pendNowDT = toLocalDTInputs(new Date());
-    const canEdit = currentUserPermissions.canEditIssue && !isLocalIssue;
     const addRowHtml = !canEdit ? '' : pend.status !== undefined
       ? `<div class="tl-add-row">
           <select class="tl-mini-select" onchange="setPendingStatus('${issue.id}','status',this.value)">
@@ -12457,6 +12765,9 @@ function renderIssues(options = {}) {
 
     const hasTimer = !!reminderState;
     const priorityButtonHtml = `<button class="priority-btn priority-btn-inline${(issue.highPriority || isTimerOverdue) ? ' active' : ''}" onclick="event.stopPropagation(); ${isLocalIssue ? '' : `togglePriority('${issue.id}')`}" ${isLocalIssue ? 'disabled' : ''} title="${isLocalIssue ? 'Sync before changing priority' : isTimerOverdue ? 'Timer overdue - clear timer to stop pulse' : (issue.highPriority ? 'Remove high priority' : 'Mark as high priority')}">!</button>`;
+    const solutionActionHtml = currentKey === 'resolved' && canEdit && !isLocalIssue
+      ? `<button class="btn btn-success" onclick="event.stopPropagation(); openSolutionModal('${issue.id}')">💡 ${solution?.text ? 'Edit Solution' : 'Solution'}</button>`
+      : '';
     const resolveHtml = `<div class="status-timeline">
       <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--color-text-muted, var(--text2));margin-bottom:8px;">Status History</div>
       <div class="tl-list">
@@ -12466,6 +12777,7 @@ function renderIssues(options = {}) {
     </div>
     <div class="action-row issue-footer-actions" style="margin-top:10px;">
       <div class="issue-footer-actions-left">
+        ${solutionActionHtml}
         <button class="issue-reminder-btn${!hasTimer ? ' inactive' : reminderState?.isPaused ? ' paused' : isTimerOverdue ? ' overdue' : ''}" onclick="event.stopPropagation(); openIssueReminderModal('${issue.id}')" title="${hasTimer ? 'Modify check-back timer' : 'Set check-back timer'}">
           <span class="issue-reminder-icon">⏱</span>
           <span class="issue-reminder-copy">
@@ -12724,6 +13036,37 @@ function renderIssues(options = {}) {
         renderIssues();
       });
     });
+    if (issueLogView === 'list') {
+      const summary = document.createElement('button');
+      summary.type = 'button';
+      summary.className = 'ledger-summary';
+      summary.setAttribute('aria-expanded', String(wasOpen));
+      summary.setAttribute('aria-controls', `body-${issue.id}`);
+      summary.onclick = () => window.toggleLedgerIssue(issue.id);
+      const createdMs = issueCreatedTime(issue);
+      const createdDate = createdMs ? new Date(createdMs) : null;
+      const createdDateLabel = createdDate
+        ? createdDate.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })
+        : 'Date unknown';
+      const createdTimeLabel = createdDate
+        ? createdDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+        : '';
+      const updateCount = issue.eventHistory?.length || issue.statusHistory?.length || 0;
+      const photoCount = issue.photos?.length || 0;
+      const statusLabel = scfg.label || currentKey || 'Unknown';
+      const summaryText = issue.note || issue.description || issue.title || 'No issue description';
+      summary.innerHTML = `
+        <span class="ledger-press">${esc(issue.machine || '—')}</span>
+        <span class="ledger-date"><strong>${esc(createdDateLabel)}</strong><small>${esc(createdTimeLabel)}</small></span>
+        <span class="ledger-route"><span class="ledger-chip" style="color:${sc.color};border-color:${sc.color};background:${alphaColor(sc.color, 0.12)}">${esc(statusLabel)}</span>${currentSubKey ? `<small>${esc(currentSubKey)}</small>` : ''}</span>
+        <span class="ledger-description">${esc(summaryText)}</span>
+        <span class="ledger-state ${currentKey === 'resolved' ? 'resolved' : 'open'}">${esc(currentKey === 'resolved' ? 'Resolved' : statusLabel)}</span>
+        <span class="ledger-duration">${esc(formatLedgerDuration(issue))}</span>
+        <span class="ledger-person">${esc(issue.userName || 'Unknown')}</span>
+        <span class="ledger-counts"><span title="Updates">↻ ${updateCount}</span><span title="Photos">▧ ${photoCount}</span></span>
+        <span class="ledger-chevron" aria-hidden="true">⌄</span>`;
+      row.appendChild(summary);
+    }
     row.appendChild(card);
 
     // Add teaser strip (gradient bar that peeks out during left swipe)
@@ -13228,6 +13571,22 @@ function renderIssues(options = {}) {
     loadMoreRow.className = 'load-more-row';
     loadMoreRow.innerHTML = `<button class="load-more-btn" onclick="loadMoreIssues()">Show ${Math.min(remaining, PAGE_SIZE)} more <span class="load-more-count">${remaining} remaining</span></button>`;
     list.appendChild(loadMoreRow);
+  } else if (issueLogView === 'list' && issuePeriod === 'all') {
+    const hasOlder = shouldUseSqlStagingReads(currentPlantId)
+      ? !sqlIssueHistoryExhausted
+      : !!issueHistoryCursor;
+    const historyRow = document.createElement('div');
+    historyRow.className = 'load-more-row ledger-history-loader';
+    if (issueHistoryFetchInFlight) {
+      historyRow.innerHTML = '<button class="load-more-btn" disabled>Loading older records…</button>';
+    } else if (issueHistoryLoadError) {
+      historyRow.innerHTML = `<button class="load-more-btn" onclick="loadOlderIssueRecords()">Retry loading older records <span class="load-more-count">${esc(issueHistoryLoadError)}</span></button>`;
+    } else if (hasOlder) {
+      historyRow.innerHTML = '<button class="load-more-btn" onclick="loadOlderIssueRecords()">Load older records</button>';
+    } else {
+      historyRow.innerHTML = '<div class="ledger-history-end">End of available history</div>';
+    }
+    list.appendChild(historyRow);
   }
 
   maybeNotifyIssueReminders(filtered);
@@ -13409,7 +13768,7 @@ function applyIssueLogLayout() {
     return;
   }
 
-  if (issueLogLayoutMode !== 'masonic' || window.innerWidth <= 480) {
+  if (issueLogView === 'list' || issueLogLayoutMode !== 'masonic' || window.innerWidth <= 480) {
     list.classList.remove('masonic-enabled');
     if (issueLogResizeObserver) issueLogResizeObserver.disconnect();
     resetIssueLogLayoutStyles(list);
@@ -13450,7 +13809,7 @@ function applyIssueLogLayout() {
 }
 
 function scheduleIssueLogRelayout(delay = 0) {
-  if (issueLogLayoutMode !== 'masonic') return;
+  if (issueLogView === 'list' || issueLogLayoutMode !== 'masonic') return;
 
   if (issueLogDeferredRelayoutTimer) {
     clearTimeout(issueLogDeferredRelayoutTimer);
@@ -13916,6 +14275,8 @@ function _lbShow(idx) {
   const current = _lbPhotos[_lbIndex] || {};
   const src = typeof current === 'string' ? current : (current.url || current.downloadURL || current.dataUrl || '');
   document.getElementById('lightbox-img').src = src;
+  const downloadButton = document.getElementById('lightbox-download');
+  if (downloadButton) downloadButton.disabled = !src;
   const multi = _lbPhotos.length > 1;
   document.getElementById('lightbox-prev').style.display = multi ? '' : 'none';
   document.getElementById('lightbox-next').style.display = multi ? '' : 'none';
@@ -13949,9 +14310,29 @@ window.closeLightbox = () => {
 
 window.lightboxNav = dir => _lbShow(_lbIndex + dir);
 
+window.downloadLightboxPhoto = () => {
+  const current = _lbPhotos[_lbIndex] || {};
+  const src = typeof current === 'string' ? current : (current.url || current.downloadURL || current.dataUrl || '');
+  if (!src) return;
+  const name = typeof current === 'object' && current.name ? current.name : `ap-tracker-photo-${_lbIndex + 1}.jpg`;
+  const url = new URL(src, window.location.href);
+  // R2 object URLs opt into an attachment response while retaining their signed path.
+  if (url.pathname === '/api/storage/object') {
+    url.searchParams.set('download', '1');
+    url.searchParams.set('filename', String(name));
+  }
+  const link = document.createElement('a');
+  link.href = url.toString();
+  link.download = String(name).replace(/[\\/:*?"<>|]+/g, '_');
+  link.rel = 'noopener';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+};
+
 // Close on backdrop click (not on nav buttons or img)
 document.getElementById('lightbox').addEventListener('click', e => {
-  if (!e.target.closest('.lightbox-nav') && !e.target.matches('#lightbox-img') && !e.target.matches('.lightbox-close')) {
+  if (!e.target.closest('.lightbox-nav, .lightbox-download') && !e.target.matches('#lightbox-img') && !e.target.matches('.lightbox-close')) {
     closeLightbox();
   }
 });
@@ -13969,7 +14350,7 @@ document.addEventListener('keydown', e => {
   let lx0 = 0, lTracking = false;
   const lb = document.getElementById('lightbox');
   lb.addEventListener('touchstart', e => {
-    if (e.target.closest('.lightbox-nav, .lightbox-close')) return;
+    if (e.target.closest('.lightbox-nav, .lightbox-close, .lightbox-download')) return;
     lx0 = e.touches[0].clientX; lTracking = true;
   }, { passive: true });
   lb.addEventListener('touchend', e => {
@@ -14466,6 +14847,9 @@ function handleShellAction(action, value, trigger, event) {
       window.setMapMode?.(value);
       completeDemoGuideStep('floor');
       break;
+    case 'set-issue-view':
+      window.setIssueLogView?.(value);
+      break;
     case 'set-issue-row-scope':
       window.setIssueRowScope?.(value);
       break;
@@ -14480,6 +14864,9 @@ function handleShellAction(action, value, trigger, event) {
       break;
     case 'toggle-export-dropdown':
       window.toggleExportDropdown?.();
+      break;
+    case 'toggle-issue-mobile-menu':
+      window.toggleIssueMobileMenu?.();
       break;
     case 'open-export-modal':
       window.closeExportDropdown?.();
@@ -15945,6 +16332,7 @@ window.clearAllFilters = (options = {}) => {
   document.getElementById('period-date')?.classList.remove('active');
   document.getElementById('scope-view-all')?.classList.toggle('active', true);
   document.getElementById('scope-view-active')?.classList.toggle('active', false);
+  document.getElementById('scope-view-resolved')?.classList.toggle('active', false);
 
   const today = localDateStr(new Date());
   const dateFilter = document.getElementById('date-filter');
@@ -16057,6 +16445,7 @@ document.getElementById('machine-filter').addEventListener('change', () => {
     else { bc.classList.remove('visible'); }
   }
   renderIssues(); updateFilterBadge();
+  refreshIssuesFromSqlSoon();
   completeDemoGuideStep('filters');
 });
 document.getElementById('status-filter').addEventListener('change', () => { updateStatPillStyles(); renderIssues(); updateFilterBadge(); completeDemoGuideStep('filters'); });
@@ -16083,6 +16472,28 @@ const exportDropdown = createDropdownController({
   buttonId: 'export-menu-btn',
   wrapId: 'export-dropdown-wrap'
 });
+const issueMobileMenu = createDropdownController({
+  dropdownId: 'issue-mobile-menu',
+  buttonId: 'issue-mobile-menu-btn',
+  wrapId: 'issue-mobile-menu-wrap'
+});
+
+function buildIssueMobileMenu() {
+  const menu = document.getElementById('issue-mobile-menu');
+  if (!menu) return;
+  menu.innerHTML = `
+    <div class="issue-mobile-menu-heading">Export</div>
+    <button class="sort-opt" type="button" data-mobile-export="pdf"><span class="sort-opt-check"></span>PDF</button>
+    <button class="sort-opt" type="button" data-mobile-export="xls"><span class="sort-opt-check"></span>Excel</button>`;
+  menu.querySelector('[data-mobile-export="pdf"]')?.addEventListener('click', () => {
+    issueMobileMenu.close();
+    window.openExportModal?.();
+  });
+  menu.querySelector('[data-mobile-export="xls"]')?.addEventListener('click', () => {
+    issueMobileMenu.close();
+    window.downloadExcel?.();
+  });
+}
 
 function buildSortDropdown() {
   const dd = document.getElementById('sort-dropdown');
@@ -16104,7 +16515,9 @@ function setSort(val) {
   const sel = document.getElementById('sort-select');
   if (sel) sel.value = val;
   closeSortDropdown();
+  issueMobileMenu.close();
   buildSortDropdown();
+  buildIssueMobileMenu();
   renderIssues();
   completeDemoGuideStep('filters');
 }
@@ -16115,6 +16528,10 @@ document.getElementById('sort-select')?.addEventListener('change', function () {
 });
 
 window.toggleSortDropdown = sortDropdown.toggle;
+window.toggleIssueMobileMenu = () => {
+  buildIssueMobileMenu();
+  issueMobileMenu.toggle();
+};
 
 function closeSortDropdown() {
   sortDropdown.close();
@@ -16139,6 +16556,7 @@ window.setIssueRowScope = s => {
   issueRowScope = s;
   document.getElementById('scope-view-all')?.classList.toggle('active', s === 'all');
   document.getElementById('scope-view-active')?.classList.toggle('active', s === 'active');
+  document.getElementById('scope-view-resolved')?.classList.toggle('active', s === 'resolved');
   renderIssues(); updateStats();
 };
 

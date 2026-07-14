@@ -576,6 +576,27 @@ This replaces embedded `statusHistory` with an append-only event log.
 }
 ```
 
+### Shared solution
+
+Resolved issues may carry a current reusable solution summary on the issue document:
+
+```json
+{
+  "solution": {
+    "current": {
+      "revisionId": "sol_abc123",
+      "text": "Replaced the damaged hydraulic hose and verified clamp pressure.",
+      "photoCount": 2,
+      "photos": [{ "storagePath": "plants/{plantId}/issues/{issueId}/photos/example.jpg" }],
+      "sharedAt": "serverTimestamp",
+      "sharedBy": { "uid": "uid_123", "name": "James Scoggins" }
+    }
+  }
+}
+```
+
+Each submission also appends a `solution_shared` or `solution_updated` event. Solution photos use ordinary issue attachment storage with `type: "solution_photo"` and the matching `solutionRevisionId`; photo blobs are never stored in the issue document.
+
 ### Reopened
 
 ```json

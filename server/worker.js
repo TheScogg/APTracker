@@ -1564,6 +1564,10 @@ async function handleAttachmentObject(request, env) {
   const headers = new Headers();
   object.writeHttpMetadata(headers);
   headers.set('etag', object.httpEtag);
+  if (url.searchParams.get('download') === '1') {
+    const filename = normalizeAttachmentFileName(url.searchParams.get('filename') || storagePath.split('/').pop(), 'attachment');
+    headers.set('Content-Disposition', `attachment; filename="${filename}"`);
+  }
   if (!headers.has('Cache-Control')) {
     headers.set('Cache-Control', 'public, max-age=31536000, immutable');
   }

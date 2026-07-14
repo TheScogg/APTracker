@@ -127,7 +127,8 @@ const RAW_BUILT_IN_THEME_DEFS = [
   { key:'starmono',   name:'Star Mono',  label:'📟 Star Mono',  mode:'dark',  colors:['#0e1011','#d6b56d','#f0f2ee'], vars:{ '--bg':'#0e1011','--bg2':'#16191a','--bg3':'#222627','--border':'#3e4547','--text':'#f0f2ee','--text2':'#b9c0bd','--text3':'#7d8783','--accent':'#d6b56d','--accent2':'#f0cf83','--green':'#62b981','--red':'#d97373','--blue':'#8db5c8','--yellow':'#d6b56d','--orange':'#d69a61' }, price:170, order:12 },
   { key:'engel',      name:'Engel',      label:'🟢 Engel',      mode:'dark',  colors:['#0c1209','#78be20','#e8f5d8'], vars:{ '--bg':'#0c1209','--bg2':'#141e0f','--bg3':'#1b2a14','--border':'#2d4820','--text':'#e8f5d8','--text2':'#8ab870','--text3':'#4d6e38','--accent':'#78be20','--accent2':'#96d63a','--green':'#78be20','--red':'#f87171','--blue':'#00a3b5','--yellow':'#ffc72c','--orange':'#fb923c' }, price:0, order:13 },
   { key:'cardinals',  name:'Cardinals',  label:'🔴 Cardinals',  mode:'dark',  colors:['#170607','#b91f36','#f6eeee'], vars:{ '--bg':'#170607','--bg2':'#240d0f','--bg3':'#321418','--border':'#51232a','--text':'#f6eeee','--text2':'#d7b3b8','--text3':'#956a71','--accent':'#b91f36','--accent2':'#e0465b','--green':'#22c55e','--red':'#e0465b','--blue':'#6da5e8','--yellow':'#d9b64c','--orange':'#e67b3e' }, price:25, order:14 },
-  { key:'wildcats',   name:'Wildcats',   label:'🔵 Wildcats',   mode:'dark',  colors:['#061022','#1f5fd0','#eef4ff'], vars:{ '--bg':'#061022','--bg2':'#0b1932','--bg3':'#112447','--border':'#1d3d73','--text':'#eef4ff','--text2':'#a9c1ec','--text3':'#6f8ec7','--accent':'#1f5fd0','--accent2':'#3f7bea','--green':'#22c55e','--red':'#ef6b6b','--blue':'#3f7bea','--yellow':'#e0bc4b','--orange':'#f47c20' }, price:25, order:15 }
+  { key:'wildcats',   name:'Wildcats',   label:'🔵 Wildcats',   mode:'dark',  colors:['#061022','#1f5fd0','#eef4ff'], vars:{ '--bg':'#061022','--bg2':'#0b1932','--bg3':'#112447','--border':'#1d3d73','--text':'#eef4ff','--text2':'#a9c1ec','--text3':'#6f8ec7','--accent':'#1f5fd0','--accent2':'#3f7bea','--green':'#22c55e','--red':'#ef6b6b','--blue':'#3f7bea','--yellow':'#e0bc4b','--orange':'#f47c20' }, price:25, order:15 },
+  { key:'injectvisor', name:'Injectvisor', label:'🖥️ Injectvisor', mode:'dark', colors:['#06152e','#56b9ff','#f4fbff'], vars:{ '--bg':'#06152e','--bg2':'#0d2b57','--bg3':'#123a70','--border':'#75c8ff','--text':'#f4fbff','--text2':'#c5e5ff','--text3':'#8dbce0','--accent':'#56b9ff','--accent2':'#a3efff','--green':'#5be08a','--red':'#ff7198','--blue':'#56b9ff','--yellow':'#ffe26b','--orange':'#ffb15e' }, price:0, order:16 }
 ];
 
 const BUILT_IN_THEME_VAR_OVERRIDES = {
@@ -528,6 +529,40 @@ const BUILT_IN_THEME_VAR_OVERRIDES = {
     '--theme-active-shadow': '0 0 0 1px rgba(38,217,255,0.35), 0 0 18px rgba(38,217,255,0.28)',
     '--theme-pill-border-color': 'rgba(118,236,255,0.24)',
     '--theme-pill-bg': 'linear-gradient(135deg, rgba(13,29,54,0.96), rgba(8,25,42,0.96))'
+  },
+  'injectvisor': {
+    '--bg': '#06152e',
+    '--bg2': '#0d2b57',
+    '--bg3': '#123a70',
+    '--border': '#75c8ff',
+    '--accent': '#56b9ff',
+    '--accent2': '#a3efff',
+    '--accent-glow': 'rgba(86,185,255,0.20)',
+    '--green': '#5be08a',
+    '--green-dim': 'rgba(91,224,138,0.14)',
+    '--red': '#ff7198',
+    '--red-dim': 'rgba(255,113,152,0.14)',
+    '--blue': '#56b9ff',
+    '--blue-dim': 'rgba(86,185,255,0.16)',
+    '--yellow': '#ffe26b',
+    '--yellow-dim': 'rgba(255,226,107,0.14)',
+    '--purple': '#b9a6ff',
+    '--purple-dim': 'rgba(185,166,255,0.14)',
+    '--babyblue': '#a3efff',
+    '--babyblue-dim': 'rgba(163,239,255,0.14)',
+    '--teal': '#72e2d2',
+    '--teal-dim': 'rgba(114,226,210,0.14)',
+    '--orange': '#ffb15e',
+    '--orange-dim': 'rgba(255,177,94,0.14)',
+    '--text': '#f4fbff',
+    '--text2': '#c5e5ff',
+    '--text3': '#8dbce0',
+    '--theme-bg-pattern': 'linear-gradient(rgba(126,232,255,0.055) 1px, transparent 1px), linear-gradient(90deg, rgba(126,232,255,0.055) 1px, transparent 1px)',
+    '--theme-bg-pattern-size': '8px 8px',
+    '--theme-panel-shadow': '0 0 0 1px rgba(117,200,255,0.18), 0 10px 24px rgba(0,0,0,0.32)',
+    '--theme-active-shadow': '0 0 0 1px rgba(163,239,255,0.48), 0 0 14px rgba(86,185,255,0.22)',
+    '--theme-pill-border-color': 'rgba(163,239,255,0.32)',
+    '--theme-pill-bg': 'rgba(13,43,87,0.94)'
   },
   'starforge': {
     '--bg': "#100d0a",

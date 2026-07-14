@@ -28,6 +28,17 @@ AP Tracker’s SQL migration now points at the existing Cloudflare Worker plus C
 4. Worker serves `/api/me`, `/api/plants/:plantId/bootstrap`, and issue read endpoints from D1.
 5. Firebase Storage continues to hold attachment binaries during the first migration stages.
 
+## Similar-fix research configuration
+
+The Worker endpoint `POST /api/plants/:plantId/similar-fixes` searches resolved D1 issues in the authorized plant, then asks DeepSeek to compare those results with optional external research. Configure secrets in the Cloudflare deployment; never expose them in browser code:
+
+```sh
+npx wrangler secret put DEEPSEEK_API_KEY
+npx wrangler secret put BRAVE_SEARCH_API_KEY
+```
+
+`BRAVE_SEARCH_API_KEY` is optional. Without it, the feature still returns D1-backed internal fixes and marks external research unavailable. `DEEPSEEK_MODEL` may be set as a Worker variable to override the default `deepseek-v4-flash`.
+
 ## Recommended next repo steps
 
 1. Bind your Cloudflare D1 database in `wrangler.jsonc`.
