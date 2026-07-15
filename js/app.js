@@ -13001,6 +13001,7 @@ function renderIssues(options = {}) {
       : '';
 
     card.innerHTML = `
+      <div class="issue-card-front">
       <div class="issue-card-header" onclick="toggleCard('${issue.id}')">
         <div class="issue-card-top">
           <div class="issue-machine-tag">${esc(issue.machine)}</div>
@@ -13021,6 +13022,7 @@ function renderIssues(options = {}) {
         ${photosHtml}
         <div class="divider"></div>
         ${resolveHtml}
+      </div>
       </div>`;
     // Safety cleanup: remove any legacy "Workflow: ..." pill buttons from status history rows.
     card.querySelectorAll('.status-timeline button').forEach(btn => {
@@ -13078,10 +13080,10 @@ function renderIssues(options = {}) {
     teaser.style.background = `linear-gradient(to bottom, ${colors})`;
     card.appendChild(teaser);
 
-    // Right-swipe notes teaser (teal bar on left edge)
-    const notesTeaser = document.createElement('div');
-    notesTeaser.className = 'swipe-notes-teaser';
-    card.appendChild(notesTeaser);
+    // Right-swipe quick-action teaser (teal bar on left edge)
+    const quickActionsTeaser = document.createElement('div');
+    quickActionsTeaser.className = 'swipe-notes-teaser';
+    card.appendChild(quickActionsTeaser);
 
     // Category panel (slides out underneath card)
     const catPanel = document.createElement('div');
@@ -13118,6 +13120,66 @@ function renderIssues(options = {}) {
 
     row.appendChild(catPanel);
     row.appendChild(subPanel);
+
+    // Right swipe opens a floor-friendly action tray instead of taking the user
+    // away to the press Wiki. Assignment and watch are deliberately local to
+    // this prototype until their shared Firestore schema is introduced.
+    const quickActionStorageKey = `aptracker.issueQuickActions:${currentPlantId || 'local'}:${issue.id}`;
+    let quickActionState = {};
+    try { quickActionState = JSON.parse(sessionStorage.getItem(quickActionStorageKey) || '{}'); } catch (_) { }
+    const quickPanel = document.createElement('div');
+    quickPanel.className = 'swipe-quick-actions-panel';
+    const renderQuickActions = () => {
+      const assigned = !!quickActionState.assigned;
+      const watching = !!quickActionState.watching;
+      quickPanel.innerHTML = `
+        <div class="swipe-quick-actions-heading">
+          <span>Quick actions</span>
+          <small>Press ${esc(issue.machine)}</small>
+        </div>
+        <div class="swipe-quick-actions-grid">
+          <button type="button" class="swipe-quick-action photo" data-quick-action="photo"><span class="swipe-quick-action-icon">📷</span><span>Add Photo</span><small>Capture evidence</small></button>
+          <button type="button" class="swipe-quick-action note" data-quick-action="note"><span class="swipe-quick-action-icon">📝</span><span>Edit Note</span><small>Quick update</small></button>
+          <button type="button" class="swipe-quick-action assign${assigned ? ' active' : ''}" data-quick-action="assign"><span class="swipe-quick-action-icon">👤</span><span>${assigned ? 'Assigned to You' : 'Assign to Me'}</span><small>${assigned ? 'Tap to unassign' : 'I’m taking this'}</small></button>
+          <button type="button" class="swipe-quick-action timer" data-quick-action="timer"><span class="swipe-quick-action-icon">⏱️</span><span>Timer</span><small>Check back soon</small></button>
+          <button type="button" class="swipe-quick-action watch${watching ? ' active' : ''}" data-quick-action="watch"><span class="swipe-quick-action-icon">⭐</span><span>${watching ? 'Watching' : 'Pin / Watch'}</span><small>${watching ? 'Tap to unwatch' : 'Keep it close'}</small></button>
+          <button type="button" class="swipe-quick-action more" data-quick-action="more"><span class="swipe-quick-action-icon">⋯</span><span>More</span><small>Full issue details</small></button>
+        </div>`;
+      quickPanel.querySelectorAll('[data-quick-action]').forEach(button => {
+        addTapListener(button, () => handleQuickAction(button.dataset.quickAction));
+      });
+    };
+    const saveQuickActionState = () => {
+      try { sessionStorage.setItem(quickActionStorageKey, JSON.stringify(quickActionState)); } catch (_) { }
+    };
+    const handleQuickAction = action => {
+      if (action === 'photo') {
+        closeSwipeCard(card);
+        window.openEditModal(issue.id).then(() => document.getElementById('edit-photo-input')?.click());
+        return;
+      }
+      if (action === 'note') { closeSwipeCard(card); window.openEditModal(issue.id); return; }
+      if (action === 'timer') { closeSwipeCard(card); window.openIssueReminderModal(issue.id); return; }
+      if (action === 'more') {
+        closeSwipeCard(card);
+        setTimeout(() => window.toggleCard(issue.id), 70);
+        return;
+      }
+      if (action === 'assign') quickActionState.assigned = !quickActionState.assigned;
+      if (action === 'watch') quickActionState.watching = !quickActionState.watching;
+      saveQuickActionState();
+      renderQuickActions();
+      showActionFeedback({
+        issueId: issue.id,
+        machine: issue.machine,
+        label: action === 'assign'
+          ? (quickActionState.assigned ? 'Assigned to you' : 'Assignment cleared')
+          : (quickActionState.watching ? 'Watching issue' : 'Stopped watching issue'),
+        color: action === 'assign' ? 'var(--color-blue, var(--blue))' : 'var(--color-warning, var(--yellow))'
+      });
+    };
+    renderQuickActions();
+    card.appendChild(quickPanel);
     list.appendChild(row);
 
     // Helper functions for this card
@@ -13140,7 +13202,7 @@ function renderIssues(options = {}) {
       card.classList.add('swiped');
       catPanel.classList.add('visible');
       if (openSwipeRow && openSwipeRow.card !== card) closeSwipeCard(openSwipeRow.card);
-      openSwipeRow = { card, catPanel, subPanel };
+      openSwipeRow = { card, catPanel, subPanel, quickPanel };
       scheduleIssueLogRelayout();
       scrollPanelBottomIntoView(catPanel);
       setTimeout(() => scrollPanelBottomIntoView(catPanel), 280);
@@ -13148,12 +13210,14 @@ function renderIssues(options = {}) {
 
     const closeSwipeCard = (c) => {
       if (isSearchMode) closeSearch();
-      c.classList.remove('swiped');
+      c.classList.remove('swiped', 'quick-actions-open');
       const r = c.closest('.issue-row');
       const cp = r.querySelector('.swipe-category-panel');
       const sp = r.querySelector('.swipe-sub-panel');
+      const qp = r.querySelector('.swipe-quick-actions-panel');
       cp.classList.remove('visible', 'has-subs', 'search-mode');
       sp.classList.remove('visible');
+      qp?.classList.remove('visible');
       cp.querySelector('.swipe-category-inner')?.classList.remove('has-selection');
       const swipeSearchBar = sp.querySelector('.swipe-search-bar-row');
       if (swipeSearchBar) {
@@ -13170,6 +13234,17 @@ function renderIssues(options = {}) {
       swipeSearchMode = false;
       if (openSwipeRow?.card === c) openSwipeRow = null;
       scheduleIssueLogRelayout();
+    };
+
+    const openQuickActions = () => {
+      if (openSwipeRow && openSwipeRow.card !== card) closeSwipeCard(openSwipeRow.card);
+      card.classList.remove('peeking-right', 'dragging');
+      card.style.transform = '';
+      card.classList.add('quick-actions-open');
+      quickPanel.classList.add('visible');
+      openSwipeRow = { card, catPanel, subPanel, quickPanel };
+      scheduleIssueLogRelayout();
+      scrollPanelBottomIntoView(quickPanel);
     };
 
     // Tile clicks
@@ -13463,10 +13538,10 @@ function renderIssues(options = {}) {
         setTimeout(() => { _swipeJustHappened = false; }, 50);
         openCategoryPanel();
       } else if (!isOpen() && dx > 25) {
-        // Closed: swipe right → open notes modal for this press
+        // Closed: swipe right → open quick-action tray
         _swipeJustHappened = true;
         setTimeout(() => { _swipeJustHappened = false; }, 50);
-        openPressWikiModal(toPressId(issue.machine), issue.machine);
+        openQuickActions();
       } else if (isOpen() && Math.abs(dx) > 25) {
         // Open: swipe either direction to close
         _swipeJustHappened = true;
@@ -13518,7 +13593,7 @@ function renderIssues(options = {}) {
       } else if (!isOpen() && dx > 25) {
         _swipeJustHappened = true;
         setTimeout(() => { _swipeJustHappened = false; }, 50);
-        openPressWikiModal(toPressId(issue.machine), issue.machine);
+        openQuickActions();
       } else if (isOpen() && Math.abs(dx) > 25) {
         _swipeJustHappened = true;
         setTimeout(() => { _swipeJustHappened = false; }, 50);
@@ -13551,7 +13626,7 @@ function renderIssues(options = {}) {
         } else if (!isOpen() && dx < -35) {
           _swipeJustHappened = true;
           setTimeout(() => { _swipeJustHappened = false; }, 50);
-          openPressWikiModal(toPressId(issue.machine), issue.machine);
+          openQuickActions();
         } else if (isOpen() && Math.abs(dx) > 35) {
           _swipeJustHappened = true;
           setTimeout(() => { _swipeJustHappened = false; }, 50);
@@ -13620,10 +13695,11 @@ function captureOpenSwipeSnapshot() {
 
 function closeSwipe() {
   if (!openSwipeRow) return;
-  const { card, catPanel, subPanel } = openSwipeRow;
-  card.classList.remove('swiped');
+  const { card, catPanel, subPanel, quickPanel } = openSwipeRow;
+  card.classList.remove('swiped', 'quick-actions-open');
   catPanel.classList.remove('visible', 'has-subs');
   subPanel.classList.remove('visible');
+  quickPanel?.classList.remove('visible');
   catPanel.querySelectorAll('.swipe-status-tile').forEach(t => t.classList.remove('selected'));
   openSwipeRow = null;
   scheduleIssueLogRelayout();
