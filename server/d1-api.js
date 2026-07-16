@@ -148,14 +148,33 @@ function scheduleShiftStartTime(shift) {
 }
 
 function scheduleIssueDate(scheduleDate, shift) {
-  const parsed = new Date(`${scheduleDate}T${scheduleShiftStartTime(shift)}`);
-  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+  // Schedule rows contain wall-clock shift times. Workers run in UTC, so parsing
+  // a time without an offset made a 5:54 AM first-shift change display as
+  // 1:54 AM in the Kentucky plant UI during daylight saving time.
+  const timeZone = 'America/Kentucky/Louisville';
+  const wallClockMillis = Date.parse(`${scheduleDate}T${scheduleShiftStartTime(shift)}Z`);
+  if (!Number.isFinite(wallClockMillis)) return new Date();
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit',
+    minute: '2-digit', second: '2-digit', hourCycle: 'h23'
+  }).formatToParts(new Date(wallClockMillis));
+  const values = Object.fromEntries(parts
+    .filter(part => part.type !== 'literal')
+    .map(part => [part.type, Number(part.value)]));
+  const renderedMillis = Date.UTC(
+    values.year, values.month - 1, values.day,
+    values.hour, values.minute, values.second
+  );
+  const utcOffsetMillis = renderedMillis - wallClockMillis;
+  return new Date(wallClockMillis - utcOffsetMillis);
 }
 
 function formatScheduleIssueDateTime(scheduleDate, shift) {
   const date = scheduleIssueDate(scheduleDate, shift);
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' ' +
-    date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  const options = { timeZone: 'America/Kentucky/Louisville' };
+  return date.toLocaleDateString('en-US', { ...options, month: 'short', day: 'numeric', year: 'numeric' }) + ' ' +
+    date.toLocaleTimeString('en-US', { ...options, hour: 'numeric', minute: '2-digit', hour12: true });
 }
 
 function classifyScheduleChange(row) {

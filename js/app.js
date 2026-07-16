@@ -466,7 +466,7 @@ function sqlEventPayload(type, payload = {}) {
   };
 }
 
-async function commitSqlIssueWrite(issueId, issue, { attachments = [], replaceAttachments = false, events = [], permissionName } = {}) {
+async function commitSqlIssueWrite(issueId, issue, { attachments = [], replaceAttachments = false, events = [], permissionName, updateCreatedAt = false } = {}) {
   if (_deletedIssueIds.has(issueId)) return null;
   const payload = await dataApi.updateIssue(currentPlantId, issueId, {
     issueId,
@@ -474,7 +474,8 @@ async function commitSqlIssueWrite(issueId, issue, { attachments = [], replaceAt
     attachments,
     replaceAttachments,
     events,
-    permissionName
+    permissionName,
+    updateCreatedAt
   });
   if (payload?.issue) {
     issuesById.set(issueId, normalizeSqlIssueForApp(payload.issue));
@@ -9841,6 +9842,8 @@ document.getElementById('log-library-input').addEventListener('change', function
 
 // photos - edit modal
 document.getElementById('edit-photo-input').addEventListener('change', function () { handleFiles(this.files, editPhotos, 'edit-photo-previews'); });
+document.getElementById('edit-photo-camera-input')?.addEventListener('change', function () { handleFiles(this.files, editPhotos, 'edit-photo-previews'); this.value = ''; });
+document.getElementById('edit-photo-library-input')?.addEventListener('change', function () { handleFiles(this.files, editPhotos, 'edit-photo-previews'); this.value = ''; });
 document.getElementById('edit-status-camera-btn')?.addEventListener('click', () => document.getElementById('edit-status-camera-input')?.click());
 document.getElementById('edit-status-library-btn')?.addEventListener('click', () => document.getElementById('edit-status-library-input')?.click());
 document.getElementById('edit-status-camera-input')?.addEventListener('change', function () { handleFiles(this.files, editStatusPhotos, 'edit-status-photo-previews'); this.value = ''; });
@@ -10105,6 +10108,8 @@ window.openEditModal = async id => {
   } catch (e) { }
   renderPreviews(editPhotos, 'edit-photo-previews');
   document.getElementById('edit-photo-input').value = '';
+  document.getElementById('edit-photo-camera-input').value = '';
+  document.getElementById('edit-photo-library-input').value = '';
   document.getElementById('edit-shift').value = issue.shift || 'auto';
   document.getElementById('edit-timer-minutes').value = String(getIssueReminderMinutes(id) || '');
   const btn = document.getElementById('edit-submit-btn');
@@ -10124,19 +10129,21 @@ window.saveEdit = async () => {
       return;
     }
     const issue = issues.find(i => i.id === editTargetId);
-    const existingIssueDate = issue?.timestamp
-      ? new Date(issue.timestamp)
-      : (issue?.createdAt?.toDate ? issue.createdAt.toDate() : new Date());
+    const editedIssueDate = getIssueDateFromInputs('edit-date', 'edit-time-input');
     const last = currentStatus(issue || {});
     const shiftSel = document.getElementById('edit-shift').value;
-    const shift = shiftSel === 'auto' ? getShiftForTime(existingIssueDate, getShiftSchedule(currentPlantId)) : shiftSel;
+    const shift = shiftSel === 'auto' ? getShiftForTime(editedIssueDate, getShiftSchedule(currentPlantId)) : shiftSel;
     const timerMinutes = parseTimerMinutes(document.getElementById('edit-timer-minutes')?.value);
     const uploadedPhotos = await uploadIssuePhotosToStorage(editTargetId, editPhotos);
     if (shouldUseSqlStagingReads(currentPlantId)) {
       const issuePatch = {
         note,
         shift,
-        timer: buildIssueTimer(timerMinutes, existingIssueDate, issue?.timer || null),
+        dateTime: fmtDate(editedIssueDate),
+        dateKey: localDateStr(editedIssueDate),
+        timestamp: editedIssueDate.getTime(),
+        createdAt: editedIssueDate.toISOString(),
+        timer: buildIssueTimer(timerMinutes, editedIssueDate, issue?.timer || null),
         photoCount: uploadedPhotos.length,
         editedAt: fmtDate(new Date()), editedBy: currentUser.displayName || currentUser.email,
         ...buildIssueV2CompatLocal({
@@ -10146,7 +10153,8 @@ window.saveEdit = async () => {
           statusDateTime: last?.dateTime || issue?.dateTime || fmtDate(new Date()),
           note,
           baseIssue: issue
-        })
+        }),
+        lifecycle: { ...deriveLifecycleLocal(last?.status || currentStatusKey(issue || {}), issue), openedAt: editedIssueDate.toISOString() }
       };
       const nextIssue = applyIssuePatchLocally(issue, issuePatch);
       nextIssue.id = editTargetId;
@@ -10154,7 +10162,8 @@ window.saveEdit = async () => {
       await commitSqlIssueWrite(editTargetId, nextIssue, {
         attachments: sqlAttachmentPayloads(uploadedPhotos),
         replaceAttachments: true,
-        events: [sqlEventPayload('issue_edited', { fieldsChanged: ['note', 'photos'] })]
+        events: [sqlEventPayload('issue_edited', { fieldsChanged: ['note', 'dateTime', 'photos'] })],
+        updateCreatedAt: true
       });
       if (timerMinutes > 0) setIssueReminder(editTargetId, timerMinutes);
       else clearIssueReminder(editTargetId);
@@ -10169,7 +10178,11 @@ window.saveEdit = async () => {
     const issuePatch = {
       note,
       shift,
-      timer: buildIssueTimer(timerMinutes, existingIssueDate, issue?.timer || null),
+      dateTime: fmtDate(editedIssueDate),
+      dateKey: localDateStr(editedIssueDate),
+      timestamp: editedIssueDate.getTime(),
+      createdAt: editedIssueDate.toISOString(),
+      timer: buildIssueTimer(timerMinutes, editedIssueDate, issue?.timer || null),
       photoCount: uploadedPhotos.length,
       editedAt: fmtDate(new Date()), editedBy: currentUser.displayName || currentUser.email,
       ...buildIssueV2Compat({
@@ -10179,13 +10192,14 @@ window.saveEdit = async () => {
         statusDateTime: last?.dateTime || issue?.dateTime || fmtDate(new Date()),
         note,
         baseIssue: issue
-      })
+      }),
+      lifecycle: { ...deriveLifecycle(last?.status || currentStatusKey(issue || {}), issue), openedAt: editedIssueDate.toISOString() }
     };
     const batch = writeBatch(db);
     batch.update(plantDoc('issues', editTargetId), issuePatch);
     queueAttachmentDocs(batch, editTargetId, uploadedPhotos);
     queueIssueEvent(batch, editTargetId, 'issue_edited', {
-      fieldsChanged: ['note', 'photos']
+      fieldsChanged: ['note', 'dateTime', 'photos']
     });
     await batch.commit();
     if (timerMinutes > 0) setIssueReminder(editTargetId, timerMinutes);
@@ -13122,61 +13136,46 @@ function renderIssues(options = {}) {
     row.appendChild(subPanel);
 
     // Right swipe opens a floor-friendly action tray instead of taking the user
-    // away to the press Wiki. Assignment and watch are deliberately local to
-    // this prototype until their shared Firestore schema is introduced.
-    const quickActionStorageKey = `aptracker.issueQuickActions:${currentPlantId || 'local'}:${issue.id}`;
-    let quickActionState = {};
-    try { quickActionState = JSON.parse(sessionStorage.getItem(quickActionStorageKey) || '{}'); } catch (_) { }
+    // away to the press Wiki. The hot action uses the existing issue priority field.
     const quickPanel = document.createElement('div');
     quickPanel.className = 'swipe-quick-actions-panel';
     const renderQuickActions = () => {
-      const assigned = !!quickActionState.assigned;
-      const watching = !!quickActionState.watching;
       quickPanel.innerHTML = `
         <div class="swipe-quick-actions-heading">
-          <span>Quick actions</span>
-          <small>Press ${esc(issue.machine)}</small>
+          <span class="swipe-quick-actions-machine">${esc(issue.machine)}</span>
+          <span class="swipe-quick-actions-status" style="color:${sc.color};border-color:color-mix(in srgb, ${sc.color} 30%, transparent);background:color-mix(in srgb, ${sc.color} 12%, transparent);">${sc.icon} ${esc(baseLabel)}</span>
+          <span class="swipe-quick-actions-title">Quick actions</span>
         </div>
         <div class="swipe-quick-actions-grid">
-          <button type="button" class="swipe-quick-action photo" data-quick-action="photo"><span class="swipe-quick-action-icon">📷</span><span>Add Photo</span><small>Capture evidence</small></button>
+          <button type="button" class="swipe-quick-action photo" data-quick-action="photo-camera"><span class="swipe-quick-action-icon">📷</span><span>Take Photo</span><small>Open camera</small></button>
+          <button type="button" class="swipe-quick-action photo library" data-quick-action="photo-library"><span class="swipe-quick-action-icon">🖼️</span><span>Choose Photo</span><small>Open file picker</small></button>
           <button type="button" class="swipe-quick-action note" data-quick-action="note"><span class="swipe-quick-action-icon">📝</span><span>Edit Note</span><small>Quick update</small></button>
-          <button type="button" class="swipe-quick-action assign${assigned ? ' active' : ''}" data-quick-action="assign"><span class="swipe-quick-action-icon">👤</span><span>${assigned ? 'Assigned to You' : 'Assign to Me'}</span><small>${assigned ? 'Tap to unassign' : 'I’m taking this'}</small></button>
           <button type="button" class="swipe-quick-action timer" data-quick-action="timer"><span class="swipe-quick-action-icon">⏱️</span><span>Timer</span><small>Check back soon</small></button>
-          <button type="button" class="swipe-quick-action watch${watching ? ' active' : ''}" data-quick-action="watch"><span class="swipe-quick-action-icon">⭐</span><span>${watching ? 'Watching' : 'Pin / Watch'}</span><small>${watching ? 'Tap to unwatch' : 'Keep it close'}</small></button>
+          <button type="button" class="swipe-quick-action hot${issue.highPriority ? ' active' : ''}" data-quick-action="hot"><span class="swipe-quick-action-icon">🔥</span><span>High Priority</span><small>${issue.highPriority ? 'Remove hot flag' : 'Mark high priority'}</small></button>
           <button type="button" class="swipe-quick-action more" data-quick-action="more"><span class="swipe-quick-action-icon">⋯</span><span>More</span><small>Full issue details</small></button>
         </div>`;
       quickPanel.querySelectorAll('[data-quick-action]').forEach(button => {
         addTapListener(button, () => handleQuickAction(button.dataset.quickAction));
       });
     };
-    const saveQuickActionState = () => {
-      try { sessionStorage.setItem(quickActionStorageKey, JSON.stringify(quickActionState)); } catch (_) { }
-    };
-    const handleQuickAction = action => {
-      if (action === 'photo') {
+    const handleQuickAction = async action => {
+      if (action === 'photo-camera' || action === 'photo-library') {
         closeSwipeCard(card);
-        window.openEditModal(issue.id).then(() => document.getElementById('edit-photo-input')?.click());
+        window.openEditModal(issue.id).then(() => document.getElementById(action === 'photo-camera' ? 'edit-photo-camera-input' : 'edit-photo-library-input')?.click());
         return;
       }
       if (action === 'note') { closeSwipeCard(card); window.openEditModal(issue.id); return; }
       if (action === 'timer') { closeSwipeCard(card); window.openIssueReminderModal(issue.id); return; }
+      if (action === 'hot') {
+        closeSwipeCard(card);
+        await window.togglePriority(issue.id);
+        return;
+      }
       if (action === 'more') {
         closeSwipeCard(card);
         setTimeout(() => window.toggleCard(issue.id), 70);
         return;
       }
-      if (action === 'assign') quickActionState.assigned = !quickActionState.assigned;
-      if (action === 'watch') quickActionState.watching = !quickActionState.watching;
-      saveQuickActionState();
-      renderQuickActions();
-      showActionFeedback({
-        issueId: issue.id,
-        machine: issue.machine,
-        label: action === 'assign'
-          ? (quickActionState.assigned ? 'Assigned to you' : 'Assignment cleared')
-          : (quickActionState.watching ? 'Watching issue' : 'Stopped watching issue'),
-        color: action === 'assign' ? 'var(--color-blue, var(--blue))' : 'var(--color-warning, var(--yellow))'
-      });
     };
     renderQuickActions();
     card.appendChild(quickPanel);
@@ -13217,7 +13216,8 @@ function renderIssues(options = {}) {
       const qp = r.querySelector('.swipe-quick-actions-panel');
       cp.classList.remove('visible', 'has-subs', 'search-mode');
       sp.classList.remove('visible');
-      qp?.classList.remove('visible');
+      // Keep the reverse face mounted until its matching 280ms flip completes.
+      // transitionend below then removes it without cutting the close animation short.
       cp.querySelector('.swipe-category-inner')?.classList.remove('has-selection');
       const swipeSearchBar = sp.querySelector('.swipe-search-bar-row');
       if (swipeSearchBar) {
@@ -13240,12 +13240,18 @@ function renderIssues(options = {}) {
       if (openSwipeRow && openSwipeRow.card !== card) closeSwipeCard(openSwipeRow.card);
       card.classList.remove('peeking-right', 'dragging');
       card.style.transform = '';
-      card.classList.add('quick-actions-open');
       quickPanel.classList.add('visible');
+      requestAnimationFrame(() => card.classList.add('quick-actions-open'));
       openSwipeRow = { card, catPanel, subPanel, quickPanel };
       scheduleIssueLogRelayout();
       scrollPanelBottomIntoView(quickPanel);
     };
+
+    quickPanel.addEventListener('transitionend', event => {
+      if (event.target === quickPanel && event.propertyName === 'transform' && !card.classList.contains('quick-actions-open')) {
+        quickPanel.classList.remove('visible');
+      }
+    });
 
     // Tile clicks
     let lastTileTap = null; // { key, stamp } — tracks last tap for double-click/double-tap detection
@@ -13699,7 +13705,7 @@ function closeSwipe() {
   card.classList.remove('swiped', 'quick-actions-open');
   catPanel.classList.remove('visible', 'has-subs');
   subPanel.classList.remove('visible');
-  quickPanel?.classList.remove('visible');
+  // Let the quick-action reverse face finish its flip before it is hidden.
   catPanel.querySelectorAll('.swipe-status-tile').forEach(t => t.classList.remove('selected'));
   openSwipeRow = null;
   scheduleIssueLogRelayout();
