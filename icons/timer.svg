@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" aria-labelledby="title desc" role="img">
+  <title id="title">Timer Multicolor</title>
+  <desc id="desc">A sleek multicolor timer icon with a cyan to blue gradient body, glowing aqua center, and a warm yellow crown accent.</desc>
+  <defs>
+    <linearGradient id="timerStroke" x1="4.5" y1="4" x2="19.5" y2="20" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2FE6D5"/>
+      <stop offset="1" stop-color="#5B8CFF"/>
+    </linearGradient>
+    <linearGradient id="handStroke" x1="10.5" y1="8.65" x2="13.3" y2="12.8" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#8AF7EC"/>
+      <stop offset="1" stop-color="#34C8FF"/>
+    </linearGradient>
+    <radialGradient id="dialGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(12 12) rotate(90) scale(8)">
+      <stop offset="0" stop-color="#7CF3FF" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#5B8CFF" stop-opacity="0.03"/>
+    </radialGradient>
+  </defs>
+
+  <circle cx="12" cy="12" r="8.1" fill="url(#dialGlow)" opacity="0.6"/>
+  <path d="M12 3.75v1.75" stroke="#FFD166" stroke-width="1.45" stroke-linecap="round"/>
+  <path d="M16.95 5.8a8.5 8.5 0 1 1-7.6-.95" stroke="url(#timerStroke)" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M12 12V8.65" stroke="url(#handStroke)" stroke-width="1.45" stroke-linecap="round"/>
+  <circle cx="12" cy="12" r=".95" fill="#DDF8FF"/>
+  <path d="M19.2 10.1A7.25 7.25 0 0 1 19.25 12" stroke="url(#handStroke)" stroke-width="1.1" stroke-linecap="round" opacity="0.95"/>
+  <path d="M7.1 5.95 6.2 5.05" stroke="url(#timerStroke)" stroke-width="1.1" stroke-linecap="round"/>
+  <path d="M4.9 12H4.75" stroke="url(#timerStroke)" stroke-width="1.1" stroke-linecap="round"/>
+  <path d="M19.25 12h-.15" stroke="url(#timerStroke)" stroke-width="1.1" stroke-linecap="round"/>
+</svg>

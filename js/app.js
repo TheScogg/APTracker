@@ -8043,6 +8043,13 @@ function renderRowTabs() {
     }
 
     tab.appendChild(document.createTextNode(rowName.replace('Row ', 'R')));
+    if (isActive) {
+      const selectedMark = document.createElement('span');
+      selectedMark.className = 'row-tab-selected-mark';
+      selectedMark.textContent = '✓';
+      selectedMark.setAttribute('aria-hidden', 'true');
+      tab.appendChild(selectedMark);
+    }
     tabsEl.appendChild(tab);
   }
 
@@ -8078,8 +8085,14 @@ function closeRowStatusOverflow() {
   document.getElementById('row-status-overflow-popover')?.remove();
 }
 
+function openRowStatusDetails(rowName, statusKey) {
+  expandedPill = { row: rowName, status: statusKey };
+  closeRowStatusOverflow();
+  renderRowPanels();
+}
+
 function getRowStatusVisibleLimit() {
-  return window.matchMedia?.('(max-width: 560px)')?.matches ? 2 : 3;
+  return 1;
 }
 
 function positionRowStatusOverflowPopover(popover, anchorEl) {
@@ -8113,7 +8126,7 @@ function openRowStatusOverflowPopover(rowName, anchorEl, entries) {
 
   const header = document.createElement('div');
   header.className = 'row-status-overflow-header';
-  header.textContent = `${rowName} categories`;
+  header.textContent = `${rowName} roles`;
   popover.appendChild(header);
 
   entries.forEach(entry => {
@@ -8131,9 +8144,7 @@ function openRowStatusOverflowPopover(rowName, anchorEl, entries) {
 
     btn.onclick = (e) => {
       e.stopPropagation();
-      expandedPill = { row: rowName, status: entry.statusKey };
-      closeRowStatusOverflow();
-      renderRowPanels();
+      openRowStatusDetails(rowName, entry.statusKey);
     };
 
     popover.appendChild(btn);
@@ -8206,7 +8217,7 @@ function renderRowPanels() {
     const numB = parseInt(b.replace(/\D/g, '')) || 999;
     return numA - numB;
   });
-  for (const rowName of sortedPanelRowNames) {
+  for (const [rowIndex, rowName] of sortedPanelRowNames.entries()) {
     if (!activeRows.has(rowName)) continue;
     const presses = PRESSES[rowName];
     // Determine unscheduled presses for the current date (null = no schedule loaded → don't highlight)
@@ -8214,7 +8225,8 @@ function renderRowPanels() {
     const unscheduledSet = (scheduledPressesState && scheduledPressesState.date === _schedDate && scheduledPressesState.scheduled !== null)
       ? scheduledPressesState.scheduled : null;
     const panel = document.createElement('div');
-    panel.className = 'row-panel';
+    const rowTone = (rowIndex % 6) + 1;
+    panel.className = 'row-panel row-tone-' + rowTone + (activeRows.has(rowName) ? ' active-row' : '');
 
     // Header with name + status pills
     const header = document.createElement('div');
@@ -8251,28 +8263,36 @@ function renderRowPanels() {
       })
       .filter(Boolean)
       .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }) || (a.order - b.order));
+    if (!statusEntries.length) {
+      const clearState = document.createElement('span');
+      clearState.className = 'row-clear-state';
+      clearState.textContent = 'All clear';
+      pillsWrap.appendChild(clearState);
+    }
     const visibleEntries = statusEntries.slice(0, visibleLimit);
     const hiddenEntries = statusEntries.slice(visibleLimit);
 
-    visibleEntries.forEach(entry => {
+    statusEntries.forEach((entry, entryIndex) => {
       const sk = entry.statusKey;
       const col = entry.color;
-      const pill = document.createElement('span');
-      pill.className = 'row-spill' + (expandedPill.row === rowName && expandedPill.status === sk ? ' active' : '');
-      pill.style.color = col;
-      pill.style.borderColor = alphaColor(col, 0.5);
-      pill.style.background = alphaColor(col, 0.12);
-      pill.textContent = `${entry.count} ${STATUS_PILL_LABELS[sk]}`;
-      pill.onclick = (e) => {
-        e.stopPropagation();
-        if (expandedPill.row === rowName && expandedPill.status === sk) {
-          expandedPill = { row: null, status: null };
-        } else {
-          expandedPill = { row: rowName, status: sk };
-        }
-        renderRowPanels();
-      };
-      pillsWrap.appendChild(pill);
+      if (entryIndex < visibleLimit) {
+        const pill = document.createElement('span');
+        pill.className = 'row-spill' + (expandedPill.row === rowName && expandedPill.status === sk ? ' active' : '');
+        pill.style.color = col;
+        pill.style.borderColor = alphaColor(col, 0.5);
+        pill.style.background = alphaColor(col, 0.12);
+        pill.textContent = `${entry.count} ${STATUS_PILL_LABELS[sk]}`;
+        pill.onclick = (e) => {
+          e.stopPropagation();
+          if (expandedPill.row === rowName && expandedPill.status === sk) {
+            expandedPill = { row: null, status: null };
+            renderRowPanels();
+          } else {
+            openRowStatusDetails(rowName, sk);
+          }
+        };
+        pillsWrap.appendChild(pill);
+      }
 
       // Build expand area for this status
       const matchingIssues = [];
@@ -8340,10 +8360,11 @@ function renderRowPanels() {
       const moreBtn = document.createElement('button');
       moreBtn.type = 'button';
       moreBtn.className = 'row-spill row-spill-more row-status-overflow-trigger';
-      moreBtn.textContent = `+${hiddenEntries.length} more`;
+      moreBtn.textContent = `+${hiddenEntries.length} role${hiddenEntries.length === 1 ? '' : 's'}`;
+      moreBtn.setAttribute('aria-label', `Show all ${statusEntries.length} active roles for ${rowName}`);
       moreBtn.onclick = (e) => {
         e.stopPropagation();
-        openRowStatusOverflowPopover(rowName, moreBtn, hiddenEntries);
+        openRowStatusOverflowPopover(rowName, moreBtn, statusEntries);
       };
       pillsWrap.appendChild(moreBtn);
     }
@@ -9787,6 +9808,8 @@ window.clearIssueReminderFromModal = issueReminders.clearFromModal;
 window.setIssueReminderFromCard = issueReminders.setFromCard;
 window.setIssueReminderQuick = issueReminders.setQuick;
 window.clearIssueReminderFromCard = issueReminders.clearFromCard;
+window.dismissOverdueIssueReminder = issueReminders.dismissOverdueFromCard;
+window.handleIssueReminderBadge = issueReminders.handleBadgeAction;
 
 document.getElementById('subcategory-sheet-overlay')?.addEventListener('click', e => {
   if (e.target === e.currentTarget) closeSubcategorySheet();
@@ -12112,7 +12135,7 @@ window.handleWfDeleteClick = (event, id, entryIndex, btn) => {
   event.stopPropagation();
   if (btn.classList.contains('confirm-delete')) {
     btn.classList.remove('confirm-delete');
-    btn.innerHTML = '<span class="wf-tool-icon">🗑️</span>';
+    btn.innerHTML = '<span class="wf-tool-icon"><img src="icons/trash-can.svg" alt="" aria-hidden="true"></span>';
     window.deleteWorkflowStatusEntry(id, entryIndex);
   } else {
     btn.classList.add('confirm-delete');
@@ -12120,7 +12143,7 @@ window.handleWfDeleteClick = (event, id, entryIndex, btn) => {
     setTimeout(() => {
       if (btn.classList.contains('confirm-delete')) {
         btn.classList.remove('confirm-delete');
-        btn.innerHTML = '<span class="wf-tool-icon">🗑️</span>';
+        btn.innerHTML = '<span class="wf-tool-icon"><img src="icons/trash-can.svg" alt="" aria-hidden="true"></span>';
       }
     }, 3000);
   }
@@ -12545,14 +12568,19 @@ function renderIssues(options = {}) {
     const isMyIssue = issue.userId === currentUser?.uid;
     const isAlertFocus = !!issue.__alertFocus;
     const isLocalIssue = !!(issue.__localPending || issue.__localSyncStatus);
+    const isResolved = issueIsResolvedV2(issue);
     const reminderState = getIssueReminderState(issue.id);
     const isTimerOverdue = !!reminderState?.isOverdue;
+    const hasTimerProgress = !!reminderState && !reminderState.isPaused && !isTimerOverdue && !isResolved;
+    const hasPausedTimerProgress = !!reminderState?.isPaused && !isResolved;
     const row = document.createElement('div');
     row.className = `issue-row${issueLogView === 'list' ? ' ledger-row' : ''}${wasOpen ? ' ledger-expanded' : ''}`;
     row.dataset.id = issue.id;
     if (isAlertFocus) row.classList.add('alert-focus-issue');
     const card = document.createElement('div');
-    card.className = 'issue-card' + (issueIsResolvedV2(issue) ? ' resolved' : '') + (issue.highPriority ? ' high-priority' : '') + (isTimerOverdue ? ' timer-overdue' : '') + (isAlertFocus ? ' alert-focus-card' : '') + (isLocalIssue ? ' local-pending' : '') + (issue.__localSyncStatus === 'failed' ? ' sync-failed' : '');
+    card.className = 'issue-card' + (isResolved ? ' resolved' : '') + (issue.highPriority ? ' high-priority' : '') + (isTimerOverdue ? ' timer-overdue' : '') + (hasTimerProgress ? ' timer-progress' : '') + (hasPausedTimerProgress ? ' timer-paused-progress' : '') + (isAlertFocus ? ' alert-focus-card' : '') + (isLocalIssue ? ' local-pending' : '') + (issue.__localSyncStatus === 'failed' ? ' sync-failed' : '');
+    if (!isResolved) card.dataset.reminderCardId = issue.id;
+    if (hasTimerProgress || hasPausedTimerProgress) card.style.setProperty('--timer-progress', String(reminderState.elapsedProgress));
 
     const _photoList = (issue.photos || []).map(p => ({
       url: p.dataUrl || p.downloadURL || p.url || '',
@@ -12774,11 +12802,13 @@ function renderIssues(options = {}) {
           <button class="tl-mini-btn tl-cancel-btn" onclick="cancelAddEntry('${issue.id}')">Cancel</button>
         </div>`
       : `<div class="tl-add-row">
-          <button class="tl-mini-btn" style="background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));color:var(--color-text-muted, var(--text2));padding:4px 11px;" onclick="setPendingStatus('${issue.id}','status','')">+ Add status entry</button>
+          <button class="tl-mini-btn tl-add-entry-btn" onclick="setPendingStatus('${issue.id}','status','')">+ Add status entry</button>
         </div>`;
 
     const hasTimer = !!reminderState;
-    const priorityButtonHtml = `<button class="priority-btn priority-btn-inline${(issue.highPriority || isTimerOverdue) ? ' active' : ''}" onclick="event.stopPropagation(); ${isLocalIssue ? '' : `togglePriority('${issue.id}')`}" ${isLocalIssue ? 'disabled' : ''} title="${isLocalIssue ? 'Sync before changing priority' : isTimerOverdue ? 'Timer overdue - clear timer to stop pulse' : (issue.highPriority ? 'Remove high priority' : 'Mark as high priority')}">!</button>`;
+    const priorityButtonHtml = issue.highPriority
+      ? `<button class="priority-btn priority-btn-header active" onclick="event.stopPropagation(); ${isLocalIssue ? '' : `togglePriority('${issue.id}')`}" ${isLocalIssue ? 'disabled' : ''} title="${isLocalIssue ? 'Sync before changing priority' : 'Remove high priority'}">!</button>`
+      : '';
     const solutionActionHtml = currentKey === 'resolved' && canEdit && !isLocalIssue
       ? `<button class="btn btn-success" onclick="event.stopPropagation(); openSolutionModal('${issue.id}')">💡 ${solution?.text ? 'Edit Solution' : 'Solution'}</button>`
       : '';
@@ -12792,14 +12822,13 @@ function renderIssues(options = {}) {
     <div class="action-row issue-footer-actions" style="margin-top:10px;">
       <div class="issue-footer-actions-left">
         ${solutionActionHtml}
-        <button class="issue-reminder-btn${!hasTimer ? ' inactive' : reminderState?.isPaused ? ' paused' : isTimerOverdue ? ' overdue' : ''}" onclick="event.stopPropagation(); openIssueReminderModal('${issue.id}')" title="${hasTimer ? 'Modify check-back timer' : 'Set check-back timer'}">
-          <span class="issue-reminder-icon">⏱</span>
+        <button class="issue-reminder-btn${!hasTimer ? ' inactive' : reminderState?.isPaused ? ' paused' : isTimerOverdue ? ' overdue alarm-dismiss-btn' : ''}" onclick="event.stopPropagation(); ${isTimerOverdue ? `dismissOverdueIssueReminder('${issue.id}')` : `openIssueReminderModal('${issue.id}')`}" title="${isTimerOverdue ? 'Dismiss expired alarm' : hasTimer ? 'Modify check-back timer' : 'Set check-back timer'}">
+          <span class="issue-reminder-icon">${isTimerOverdue ? '✓' : '⏱'}</span>
           <span class="issue-reminder-copy">
-            <span class="issue-reminder-label">${!hasTimer ? 'Timer' : reminderState?.isPaused ? 'Paused' : isTimerOverdue ? 'Check now' : 'Check back'}</span>
-            <span class="issue-reminder-time" data-reminder-id="${issue.id}">${hasTimer ? formatReminderClock(reminderState) : 'Off'}</span>
+            <span class="issue-reminder-label">${!hasTimer ? 'Timer' : reminderState?.isPaused ? 'Paused' : isTimerOverdue ? 'Dismiss alarm' : 'Check back'}</span>
+            <span class="issue-reminder-time" data-reminder-id="${issue.id}">${hasTimer ? (isTimerOverdue ? 'Now' : formatReminderClock(reminderState)) : 'Off'}</span>
           </span>
         </button>
-        ${priorityButtonHtml}
       </div>
       ${canEdit ? `<div class="issue-footer-actions-right">
       <button class="btn btn-edit" onclick="openEditModal('${issue.id}')">✏️ Edit</button>
@@ -12809,7 +12838,7 @@ function renderIssues(options = {}) {
 
     const submitterHtml = issue.userName ? `<span class="issue-submitter">${esc(issue.userName.split(' ')[0])}${isMyIssue ? ' (you)' : ''}</span>` : '';
     const createdAtLabel = formatIssueCreatedAtLabel(issue);
-    const createdAtHtml = createdAtLabel ? `<span class="issue-created-at" title="Created ${esc(createdAtLabel)}">Created ${esc(createdAtLabel)}</span>` : '';
+    const createdAtHtml = createdAtLabel ? `<span class="issue-created-at" title="Created ${esc(createdAtLabel)}">${esc(createdAtLabel)}</span>` : '';
     const alertFocusHtml = isAlertFocus ? `<span class="issue-alert-focus-badge">Outside current time frame</span>` : '';
 
     // Secondary status keys (needed by workflow rows below)
@@ -12843,14 +12872,14 @@ function renderIssues(options = {}) {
       };
       const routeToolsHtml = `${renderRouteGroupButton(passThroughPaths, 'pass-through')}${renderRouteGroupButton(translationPaths, 'translate')}`;
       const deleteToolHtml = (canEdit && !DEMO_MODE)
-        ? `<div class="wf-tool-group delete-tools"><button class="wf-tool-btn delete-btn" type="button" onclick="handleWfDeleteClick(event, '${issue.id}', ${entryIndex}, this)" title="Remove this category & workflow" aria-label="Remove this category & workflow"><span class="wf-tool-icon">🗑️</span></button></div>`
+        ? `<div class="wf-tool-group delete-tools"><button class="wf-tool-btn delete-btn" type="button" onclick="handleWfDeleteClick(event, '${issue.id}', ${entryIndex}, this)" title="Remove this category & workflow" aria-label="Remove this category & workflow"><span class="wf-tool-icon"><img src="icons/trash-can.svg" alt="" aria-hidden="true"></span></button></div>`
         : '';
       const escalationActionsHtml = `<div class="wf-dropdown-section">
         <div class="wf-tool-row" aria-label="Status and escalation tools" onclick="closeWorkflowStatusDropdown(event)">
           <div class="wf-tool-group status-tools">
-            <button class="wf-tool-btn" type="button" onclick="event.stopPropagation(); openStatusEntryTool('${issue.id}',${entryIndex},'edit')" title="Edit this status" aria-label="Edit this status"><span class="wf-tool-icon">✎</span></button>
-            <button class="wf-tool-btn" type="button" onclick="event.stopPropagation(); openStatusEntryTool('${issue.id}',${entryIndex},'camera')" title="Take photo for this status" aria-label="Take photo for this status"><span class="wf-tool-icon">📷</span></button>
-            <button class="wf-tool-btn" type="button" onclick="event.stopPropagation(); openStatusEntryTool('${issue.id}',${entryIndex},'library')" title="Choose photo for this status" aria-label="Choose photo for this status"><span class="wf-tool-icon">🖼️</span></button>
+            <button class="wf-tool-btn" type="button" onclick="event.stopPropagation(); openStatusEntryTool('${issue.id}',${entryIndex},'edit')" title="Edit this status" aria-label="Edit this status"><span class="wf-tool-icon"><img src="icons/edit-note.svg" alt="" aria-hidden="true"></span></button>
+            <button class="wf-tool-btn" type="button" onclick="event.stopPropagation(); openStatusEntryTool('${issue.id}',${entryIndex},'camera')" title="Take photo for this status" aria-label="Take photo for this status"><span class="wf-tool-icon"><img src="icons/take-photo.svg" alt="" aria-hidden="true"></span></button>
+            <button class="wf-tool-btn" type="button" onclick="event.stopPropagation(); openStatusEntryTool('${issue.id}',${entryIndex},'library')" title="Choose photo for this status" aria-label="Choose photo for this status"><span class="wf-tool-icon"><img src="icons/choose-photo.svg" alt="" aria-hidden="true"></span></button>
           </div>
           ${routeToolsHtml ? `<div class="wf-tool-group route-tools">${routeToolsHtml}</div>` : ''}
           ${deleteToolHtml}
@@ -12880,8 +12909,10 @@ function renderIssues(options = {}) {
       return `<button class="wf-step-btn ${cls}" onclick="handleWfStepClick(event,'${issue.id}',${currentEntryIndex},'${state}')" title="${cfg.label}">${cfg.icon}</button>`;
     }).join('')}</div>
       </div>
-      <div class="wf-state-label ${workflowState ? workflowConfig[workflowState].cssState : ''}">${workflowState ? workflowConfig[workflowState].label : ''}</div>
-      ${wfAge ? `<div class="wf-state-age ${workflowState ? workflowConfig[workflowState].cssState : ""}">${esc(wfAge)}</div>` : ''}
+      <div class="wf-state-line">
+        <div class="wf-state-label ${workflowState ? workflowConfig[workflowState].cssState : ''}">${workflowState ? workflowConfig[workflowState].label : ''}</div>
+        ${wfAge ? `<div class="wf-state-age ${workflowState ? workflowConfig[workflowState].cssState : ""}">${esc(wfAge)}</div>` : ''}
+      </div>
     </div>`;
 
     // Per-status workflow rows for the card header. Finished statuses stay in
@@ -12928,8 +12959,10 @@ function renderIssues(options = {}) {
             </div>
             <div class="wf-steps-wrap" onclick="event.stopPropagation()">
               <div class="wf-steps">${btnHtml}</div>
-              <div class="wf-state-label ${sStateClass}">${sStateLabel}</div>
-              ${sAge ? `<div class="wf-state-age ${sStateClass}">${esc(sAge)}</div>` : ''}
+              <div class="wf-state-line">
+                <div class="wf-state-label ${sStateClass}">${sStateLabel}</div>
+                ${sAge ? `<div class="wf-state-age ${sStateClass}">${esc(sAge)}</div>` : ''}
+              </div>
             </div>
             ${rowDropdownHtml}
           </div>`;
@@ -13009,7 +13042,8 @@ function renderIssues(options = {}) {
     const shiftBadgeHtml = _shiftDef
       ? `<span class="shift-badge" style="background:${_shiftDef.color}20;color:${_shiftDef.color};border-color:${_shiftDef.color}50">${_shiftDef.shortLabel}</span>`
       : '';
-    const timerBadgeHtml = reminderState ? `<span class="timer-mini-badge ${reminderState.isOverdue ? 'overdue' : ''}"><span class="timer-mini-dot"></span><span data-reminder-id="${issue.id}">${formatReminderClock(reminderState)}</span></span>` : '';
+    const timerBadgeActionLabel = reminderState?.isOverdue ? 'Dismiss expired alarm' : reminderState?.isPaused ? 'Resume timer' : 'Pause timer';
+    const timerBadgeHtml = reminderState ? `<button type="button" class="timer-mini-badge ${reminderState.isOverdue ? 'overdue' : ''}${reminderState.isPaused ? ' paused' : ''}" data-reminder-badge-id="${issue.id}" onclick="event.stopPropagation(); handleIssueReminderBadge('${issue.id}')" title="${timerBadgeActionLabel}" aria-label="${timerBadgeActionLabel}"><span class="timer-mini-dot"></span><span data-reminder-id="${issue.id}">${formatReminderClock(reminderState)}</span></button>` : '';
     const localSyncBadgeHtml = isLocalIssue
       ? `<span class="local-sync-badge ${issue.__localSyncStatus === 'failed' ? 'failed' : ''}">${issue.__localSyncStatus === 'failed' ? 'Sync failed' : issue.__localSyncStatus === 'syncing' ? 'Uploading' : 'Pending sync'}</span>`
       : '';
@@ -13022,10 +13056,15 @@ function renderIssues(options = {}) {
           <div class="issue-meta">
             ${routeHtml}
           </div>
+          ${priorityButtonHtml}
           <div class="issue-expand-icon ${wasOpen ? 'open' : ''}" id="chevron-${issue.id}">▼</div>
         </div>
         <div class="issue-note-preview">${esc(issue.note)}</div>
-        <div class="issue-time">${submitterHtml}${createdAtHtml}${shiftBadgeHtml}${timerBadgeHtml}${localSyncBadgeHtml}${(issue.photos || []).length ? `<span class="photo-count-badge">📷 ${issue.photos.length}</span>` : ''}${issue.editedAt ? '<span style="color:var(--color-text-subtle, var(--text3))">(edited)</span>' : ''}${alertFocusHtml}</div>
+        <div class="issue-time">
+          ${(submitterHtml || (issue.photos || []).length || issue.editedAt) ? `<div class="issue-time-submitter">${submitterHtml ? `Created by ${submitterHtml}` : ''}${(issue.photos || []).length ? `<span class="photo-count-badge">📷 ${issue.photos.length}</span>` : ''}${issue.editedAt ? '<span style="color:var(--color-text-subtle, var(--text3))">(edited)</span>' : ''}</div>` : ''}
+          <div class="issue-time-created">${createdAtHtml}${shiftBadgeHtml}${timerBadgeHtml}${localSyncBadgeHtml}</div>
+          ${alertFocusHtml}
+        </div>
         ${wfStatusRowsHtml}
       </div>
       <div class="issue-body ${wasOpen ? 'visible' : ''}" id="body-${issue.id}">
@@ -13147,12 +13186,12 @@ function renderIssues(options = {}) {
           <span class="swipe-quick-actions-title">Quick actions</span>
         </div>
         <div class="swipe-quick-actions-grid">
-          <button type="button" class="swipe-quick-action photo" data-quick-action="photo-camera"><span class="swipe-quick-action-icon">📷</span><span>Take Photo</span><small>Open camera</small></button>
-          <button type="button" class="swipe-quick-action photo library" data-quick-action="photo-library"><span class="swipe-quick-action-icon">🖼️</span><span>Choose Photo</span><small>Open file picker</small></button>
-          <button type="button" class="swipe-quick-action note" data-quick-action="note"><span class="swipe-quick-action-icon">📝</span><span>Edit Note</span><small>Quick update</small></button>
-          <button type="button" class="swipe-quick-action timer" data-quick-action="timer"><span class="swipe-quick-action-icon">⏱️</span><span>Timer</span><small>Check back soon</small></button>
-          <button type="button" class="swipe-quick-action hot${issue.highPriority ? ' active' : ''}" data-quick-action="hot"><span class="swipe-quick-action-icon">🔥</span><span>High Priority</span><small>${issue.highPriority ? 'Remove hot flag' : 'Mark high priority'}</small></button>
-          <button type="button" class="swipe-quick-action more" data-quick-action="more"><span class="swipe-quick-action-icon">⋯</span><span>More</span><small>Full issue details</small></button>
+          <button type="button" class="swipe-quick-action photo" data-quick-action="photo-camera"><span class="swipe-quick-action-icon"><img src="icons/take-photo.svg" alt="" aria-hidden="true"></span><span>Take Photo</span><small>Open camera</small></button>
+          <button type="button" class="swipe-quick-action photo library" data-quick-action="photo-library"><span class="swipe-quick-action-icon"><img src="icons/choose-photo.svg" alt="" aria-hidden="true"></span><span>Choose Photo</span><small>Open file picker</small></button>
+          <button type="button" class="swipe-quick-action note" data-quick-action="note"><span class="swipe-quick-action-icon"><img src="icons/edit-note.svg" alt="" aria-hidden="true"></span><span>Edit Note</span><small>Quick update</small></button>
+          <button type="button" class="swipe-quick-action timer${hasTimer && !reminderState?.isPaused && !isTimerOverdue ? ' timer-progress' : ''}${reminderState?.isPaused ? ' paused timer-paused-progress' : ''}${isTimerOverdue ? ' timer-overdue' : ''}" data-quick-action="${isTimerOverdue ? 'dismiss-alarm' : 'timer'}" data-reminder-quick-id="${issue.id}"${hasTimer && !isTimerOverdue ? ` style="--timer-progress:${reminderState.elapsedProgress}"` : ''}><span class="swipe-quick-action-icon"><img src="icons/timer.svg" alt="" aria-hidden="true"></span><span>${isTimerOverdue ? 'Dismiss' : 'Timer'}</span><small>${isTimerOverdue ? 'Dismiss alarm' : 'Check back soon'}</small></button>
+          <button type="button" class="swipe-quick-action hot${issue.highPriority ? ' active' : ''}" data-quick-action="hot"><span class="swipe-quick-action-icon"><img src="icons/high-priority.svg" alt="" aria-hidden="true"></span><span>High Priority</span><small>${issue.highPriority ? 'Remove hot flag' : 'Mark high priority'}</small></button>
+          <button type="button" class="swipe-quick-action more" data-quick-action="more"><span class="swipe-quick-action-icon"><img src="icons/more.svg" alt="" aria-hidden="true"></span><span>More</span><small>Full issue details</small></button>
         </div>`;
       quickPanel.querySelectorAll('[data-quick-action]').forEach(button => {
         addTapListener(button, () => handleQuickAction(button.dataset.quickAction));
@@ -13166,6 +13205,7 @@ function renderIssues(options = {}) {
       }
       if (action === 'note') { closeSwipeCard(card); window.openEditModal(issue.id); return; }
       if (action === 'timer') { closeSwipeCard(card); window.openIssueReminderModal(issue.id); return; }
+      if (action === 'dismiss-alarm') { closeSwipeCard(card); window.dismissOverdueIssueReminder(issue.id); return; }
       if (action === 'hot') {
         closeSwipeCard(card);
         await window.togglePriority(issue.id);

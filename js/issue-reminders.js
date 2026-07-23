@@ -60,7 +60,10 @@ export function initIssueReminders(deps) {
     reminderMap[issueId] = {
       minutes: parsedMinutes,
       setAt: now,
-      dueAt: now + parsedMinutes * 60 * 1000
+      dueAt: now + parsedMinutes * 60 * 1000,
+      visualDurationMs: parsedMinutes * 60 * 1000,
+      visualElapsedMs: 0,
+      visualStartedAtMs: now
     };
     const payload = timerPayload(reminderMap[issueId]);
     const previousTimer = applyLocalTimer(issueId, payload);
@@ -78,7 +81,10 @@ export function initIssueReminders(deps) {
       dueAt: Number(reminder.dueAt || 0),
       paused: Boolean(reminder.paused),
       pausedAtMs: Number(reminder.pausedAtMs || 0) || null,
-      pausedRemainingMs: Math.max(0, Number(reminder.pausedRemainingMs || 0)) || null
+      pausedRemainingMs: Math.max(0, Number(reminder.pausedRemainingMs || 0)) || null,
+      visualDurationMs: Math.max(0, Number(reminder.visualDurationMs || 0)) || null,
+      visualElapsedMs: Math.max(0, Number(reminder.visualElapsedMs || 0)) || 0,
+      visualStartedAtMs: Number(reminder.visualStartedAtMs || 0) || null
     };
     const payload = timerPayload(reminderMap[issueId]);
     const previousTimer = applyLocalTimer(issueId, payload);
@@ -110,13 +116,19 @@ export function initIssueReminders(deps) {
       dueAt,
       paused: Boolean(timer.paused ?? pauseMeta?.paused),
       pausedAtMs: Number(timer.pausedAtMs ?? pauseMeta?.pausedAtMs ?? 0),
-      pausedRemainingMs: Number(timer.pausedRemainingMs ?? pauseMeta?.pausedRemainingMs ?? 0)
+      pausedRemainingMs: Number(timer.pausedRemainingMs ?? pauseMeta?.pausedRemainingMs ?? 0),
+      visualDurationMs: Number(timer.visualDurationMs || 0),
+      visualElapsedMs: Number(timer.visualElapsedMs || 0),
+      visualStartedAtMs: Number(timer.visualStartedAtMs || 0)
     };
   }
 
   function reminderForIssue(issueId) {
     const localReminder = reminderMap?.[issueId] || null;
-    if (localReminder?.paused) return localReminder;
+    // A resume immediately reschedules the server timer. Keep the local visual
+    // baseline authoritative while that write and its snapshot catch up; otherwise
+    // the prior server snapshot can briefly reset the perimeter to zero.
+    if (localReminder?.paused || localReminder?.visualDurationMs) return localReminder;
     return issueTimerReminder(issueId) || localReminder;
   }
 
@@ -128,9 +140,26 @@ export function initIssueReminders(deps) {
     const isPaused = Boolean(reminder.paused);
     const pausedRemainingMs = Number(reminder.pausedRemainingMs || 0);
     const remainingMs = isPaused ? pausedRemainingMs : dueAt - nowMs;
+    const configuredDurationMs = Math.max(0, Number(reminder.minutes || 0) * 60 * 1000);
+    const storedSetAt = Number(reminder.setAt || 0);
+    const startedAt = Number.isFinite(storedSetAt) && storedSetAt > 0
+      ? storedSetAt
+      : dueAt - configuredDurationMs;
+    const fallbackDurationMs = Math.max(0, dueAt - startedAt) || configuredDurationMs;
+    const durationMs = Math.max(0, Number(reminder.visualDurationMs || 0)) || fallbackDurationMs;
+    const visualStartedAtMs = Number(reminder.visualStartedAtMs || 0) || startedAt;
+    const visualElapsedBaseMs = Math.max(0, Number(reminder.visualElapsedMs || 0));
+    const elapsedMs = isPaused
+      ? visualElapsedBaseMs
+      : Math.min(durationMs, visualElapsedBaseMs + Math.max(0, nowMs - visualStartedAtMs));
+    const elapsedProgress = durationMs > 0 ? Math.min(1, Math.max(0, elapsedMs / durationMs)) : 0;
     return {
       dueAt,
       minutes: Number(reminder.minutes || 0),
+      startedAt,
+      durationMs,
+      elapsedMs,
+      elapsedProgress,
       isPaused,
       isOverdue: !isPaused && remainingMs <= 0,
       remainingMs,
@@ -161,7 +190,10 @@ export function initIssueReminders(deps) {
       notificationDelivery: null,
       paused: Boolean(reminder?.paused),
       pausedAtMs: Number(reminder?.pausedAtMs || 0) || null,
-      pausedRemainingMs: Math.max(0, Number(reminder?.pausedRemainingMs || 0)) || null
+      pausedRemainingMs: Math.max(0, Number(reminder?.pausedRemainingMs || 0)) || null,
+      visualDurationMs: Math.max(0, Number(reminder?.visualDurationMs || 0)) || null,
+      visualElapsedMs: Math.max(0, Number(reminder?.visualElapsedMs || 0)) || 0,
+      visualStartedAtMs: Number(reminder?.visualStartedAtMs || 0) || null
     };
   }
 
@@ -557,7 +589,10 @@ export function initIssueReminders(deps) {
       dueAt: now + nextRemainingMs,
       paused: Boolean(currentState?.isPaused),
       pausedAtMs: currentState?.isPaused ? (Number(current?.pausedAtMs || 0) || now) : null,
-      pausedRemainingMs: currentState?.isPaused ? nextRemainingMs : null
+      pausedRemainingMs: currentState?.isPaused ? nextRemainingMs : null,
+      visualDurationMs: Number(currentState?.durationMs || 0) + (addMinutes * 60 * 1000),
+      visualElapsedMs: Number(currentState?.elapsedMs || 0),
+      visualStartedAtMs: now
     };
     if (!setReminderState(modalIssueId, nextReminder)) return;
     setSelectedSeconds(Math.round(nextRemainingMs / 1000));
@@ -566,10 +601,10 @@ export function initIssueReminders(deps) {
     renderIssues();
   }
 
-  function pauseFromModal() {
-    if (!modalIssueId) return;
-    const current = reminderForIssue(modalIssueId);
-    const currentState = state(modalIssueId);
+  function pauseIssueReminder(issueId) {
+    if (!issueId) return false;
+    const current = reminderForIssue(issueId);
+    const currentState = state(issueId);
     if (!current || currentState?.isPaused) return;
     const remainingMs = Math.max(0, Number(currentState?.remainingMs || 0));
     const now = Date.now();
@@ -578,18 +613,26 @@ export function initIssueReminders(deps) {
       minutes: parseTimerMinutes(Math.max(remainingMs, 1000) / 60000),
       paused: true,
       pausedAtMs: now,
-      pausedRemainingMs: remainingMs
+      pausedRemainingMs: remainingMs,
+      visualDurationMs: Number(currentState?.durationMs || 0),
+      visualElapsedMs: Number(currentState?.elapsedMs || 0),
+      visualStartedAtMs: now
     };
-    if (!setReminderState(modalIssueId, nextReminder)) return;
-    updateRunningModal();
+    if (!setReminderState(issueId, nextReminder)) return false;
     showGameToast('⏸ Timer paused.');
     renderIssues();
+    return true;
   }
 
-  function resumeFromModal() {
-    if (!modalIssueId) return;
-    const current = reminderForIssue(modalIssueId);
-    const currentState = state(modalIssueId);
+  function pauseFromModal() {
+    if (!pauseIssueReminder(modalIssueId)) return;
+    updateRunningModal();
+  }
+
+  function resumeIssueReminder(issueId) {
+    if (!issueId) return false;
+    const current = reminderForIssue(issueId);
+    const currentState = state(issueId);
     if (!current || !currentState?.isPaused) return;
     const now = Date.now();
     const remainingMs = Math.max(1000, Number(currentState.remainingMs || current.pausedRemainingMs || 0));
@@ -599,12 +642,20 @@ export function initIssueReminders(deps) {
       dueAt: now + remainingMs,
       paused: false,
       pausedAtMs: null,
-      pausedRemainingMs: null
+      pausedRemainingMs: null,
+      visualDurationMs: Number(currentState?.durationMs || 0),
+      visualElapsedMs: Number(currentState?.elapsedMs || 0),
+      visualStartedAtMs: now
     };
-    if (!setReminderState(modalIssueId, nextReminder)) return;
-    updateRunningModal();
+    if (!setReminderState(issueId, nextReminder)) return false;
     showGameToast('▶ Timer resumed.');
     renderIssues();
+    return true;
+  }
+
+  function resumeFromModal() {
+    if (!resumeIssueReminder(modalIssueId)) return;
+    updateRunningModal();
   }
 
   function setFromModalCustom() {
@@ -649,6 +700,22 @@ export function initIssueReminders(deps) {
     clear(issueId);
     showGameToast('Reminder cleared.');
     renderIssues();
+  }
+
+  function dismissOverdueFromCard(issueId) {
+    const reminderState = state(issueId);
+    if (!reminderState?.isOverdue) return;
+    clear(issueId);
+    showGameToast('✓ Alarm dismissed.', 'success');
+    renderIssues();
+  }
+
+  function handleBadgeAction(issueId) {
+    const reminderState = state(issueId);
+    if (!reminderState) return;
+    if (reminderState.isOverdue) return dismissOverdueFromCard(issueId);
+    if (reminderState.isPaused) return resumeIssueReminder(issueId);
+    return pauseIssueReminder(issueId);
   }
 
   async function autoEscalateToHot(issue, reminderState) {
@@ -737,6 +804,36 @@ export function initIssueReminders(deps) {
   }
 
   function refreshClocksInDom() {
+    document.querySelectorAll('[data-reminder-card-id]').forEach(card => {
+      const issueId = card.getAttribute('data-reminder-card-id');
+      if (!issueId) return;
+      const reminderState = state(issueId);
+      const showProgress = !!reminderState && !reminderState.isPaused && !reminderState.isOverdue;
+      const showPausedProgress = !!reminderState && reminderState.isPaused;
+      card.classList.toggle('timer-progress', showProgress);
+      card.classList.toggle('timer-paused-progress', showPausedProgress);
+      card.classList.toggle('timer-overdue', !!reminderState?.isOverdue);
+      if (showProgress || showPausedProgress) {
+        card.style.setProperty('--timer-progress', String(reminderState.elapsedProgress));
+      } else {
+        card.style.removeProperty('--timer-progress');
+      }
+    });
+
+    document.querySelectorAll('[data-reminder-quick-id]').forEach(button => {
+      const issueId = button.getAttribute('data-reminder-quick-id');
+      if (!issueId) return;
+      const reminderState = state(issueId);
+      const showProgress = !!reminderState && !reminderState.isPaused && !reminderState.isOverdue;
+      const showPausedProgress = !!reminderState && reminderState.isPaused;
+      button.classList.toggle('timer-progress', showProgress);
+      button.classList.toggle('timer-paused-progress', showPausedProgress);
+      button.classList.toggle('timer-overdue', !!reminderState?.isOverdue);
+      button.classList.toggle('paused', !!reminderState?.isPaused);
+      if (showProgress || showPausedProgress) button.style.setProperty('--timer-progress', String(reminderState.elapsedProgress));
+      else button.style.removeProperty('--timer-progress');
+    });
+
     document.querySelectorAll('[data-reminder-id]').forEach(el => {
       const issueId = el.getAttribute('data-reminder-id');
       if (!issueId) return;
@@ -773,6 +870,11 @@ export function initIssueReminders(deps) {
         badge.style.display = '';
         badge.classList.toggle('overdue', !!reminderState.isOverdue);
         badge.classList.toggle('paused', !!reminderState.isPaused);
+        if (badge.matches('button')) {
+          const label = reminderState.isOverdue ? 'Dismiss expired alarm' : reminderState.isPaused ? 'Resume timer' : 'Pause timer';
+          badge.title = label;
+          badge.setAttribute('aria-label', label);
+        }
       }
       
       // Ensure button has correct active classes/labels if in footer
@@ -783,7 +885,7 @@ export function initIssueReminders(deps) {
         btn.classList.toggle('paused', !!reminderState.isPaused);
         const label = btn.querySelector('.issue-reminder-label');
         if (label) {
-          label.textContent = reminderState.isPaused ? 'Paused' : (reminderState.isOverdue ? 'Check now' : 'Check back');
+          label.textContent = reminderState.isPaused ? 'Paused' : (reminderState.isOverdue ? 'Dismiss alarm' : 'Check back');
         }
       }
     });
@@ -804,10 +906,12 @@ export function initIssueReminders(deps) {
     addTimeFromModal,
     pauseFromModal,
     resumeFromModal,
+    handleBadgeAction,
     clearFromModal,
     setFromCard,
     setQuick,
     clearFromCard,
+    dismissOverdueFromCard,
     maybeNotify,
     refreshClocksInDom
   };
