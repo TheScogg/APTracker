@@ -1845,6 +1845,7 @@
 
   /* ISSUES */
   .issues-section { padding: 0 16px 40px; }
+  .app-footer { padding: 0 16px 24px; color: var(--color-text-subtle, var(--text3)); font-size: 11px; text-align: center; letter-spacing: 0.2px; }
   .issues-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; gap: 10px; flex-wrap: wrap; }
   .issues-header-controls { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; }
   .issues-title-wrap { display: flex; align-items: center; gap: 10px; min-width: 0; }
