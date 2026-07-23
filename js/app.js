@@ -9087,11 +9087,7 @@ function getLogResponsePreviewMeta() {
 }
 
 function getLogSubmitButtonLabel() {
-  const baseLabel = logCatKey === 'attention' ? '◇ Log Attention' : '⚠ Log Issue';
-  const meta = getLogResponsePreviewMeta();
-  if (!meta.visible || !meta.alertLabels.length) return baseLabel;
-  if (meta.alertLabels.length === 1) return `${baseLabel} + Call ${meta.alertLabels[0]}`;
-  return `${baseLabel} + Call ${meta.alertLabels.length} Roles`;
+  return logCatKey === 'attention' ? '◇ Log Attention' : '⚠ Log Issue';
 }
 
 // ── SEARCH MODE (reverse subcategory lookup) ──
