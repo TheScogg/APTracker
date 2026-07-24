@@ -28,10 +28,10 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css" />
-<script src="./js/build-info.js?v=b6c3ede-befc0b22"></script>
+<script src="./js/build-info.js?v=e0507c0-512cb9e1"></script>
 <script src="./js/fcm-config.js?v=ae083d6"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<link rel="stylesheet" href="./css/styles.css?v=b6c3ede-befc0b22">
+<link rel="stylesheet" href="./css/styles.css?v=e0507c0-512cb9e1">
 </head>
 <body>
 
@@ -86,7 +86,7 @@
   <div id="sync-banner" class="visible">
     <div class="sync-dot" id="sync-dot"></div>
     <span id="sync-text" aria-live="polite">Connecting…</span>
-    <span id="app-version-indicator" class="app-version-indicator" title="Current commit version">rev: b6c3ede</span>
+    <span id="app-version-indicator" class="app-version-indicator" title="Current commit version">rev: e0507c0</span>
     <span id="firestore-io-indicator" class="firestore-io-indicator" title="Estimated Firestore operations for this session">R:0 W:0</span>
   </div>
 
@@ -404,6 +404,10 @@
         <select id="status-filter">
           <option value="">All Status</option>
         </select>
+        <select id="solution-filter" aria-label="Solution filter">
+          <option value="">All Solutions</option>
+          <option value="shared">Has User Solution</option>
+        </select>
         <select id="sort-select">
           <option value="newest">Newest First</option>
           <option value="oldest">Oldest First</option>
@@ -532,7 +536,7 @@
       <textarea id="issue-note" placeholder="Example: Hydraulic leak at press startup" rows="3"></textarea>
       <div class="issue-quick-phrases" id="issue-quick-phrases"></div>
       <div id="similar-fixes-panel" style="margin:0 0 12px;">
-        <button class="btn btn-ghost" id="similar-fixes-btn" type="button" onclick="findSimilarFixes()" style="width:100%;padding:9px 12px;font-size:12px;">✨ Find similar fixes</button>
+        <button class="btn btn-ghost" id="similar-fixes-btn" type="button" onclick="findSimilarFixes()" style="padding:9px 12px;font-size:12px;">✨ Find fixes!</button>
         <div id="similar-fixes-results" hidden style="margin-top:8px;padding:10px;border:1px solid var(--color-border, var(--border));border-radius:10px;background:var(--color-surface-raised, var(--bg3));font-family:'Nunito',sans-serif;"></div>
       </div>
       <label>Photos <span style="color:var(--color-text-subtle, var(--text3));font-size:9px;letter-spacing:0;text-transform:none;font-family:'Nunito',sans-serif">(optional)</span></label>
@@ -2006,7 +2010,7 @@
   </div>
 </div>
 
-<script type="module" src="./js/app.js?v=b6c3ede-befc0b22"></script>
+<script type="module" src="./js/app.js?v=e0507c0-512cb9e1"></script>
 
 <!-- MASCOT CHARACTER CARD POPOVER -->
 <div class="mascot-popover-backdrop" id="mascot-popover-backdrop" onclick="if(event.target===this)closeMascotPopover()">

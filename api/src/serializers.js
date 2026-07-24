@@ -340,6 +340,7 @@ export function serializeIssue(row) {
     legacyStatusHistory: parseJson(row.legacy_status_history_json, null),
     qualityDefect: parseJson(row.quality_defect_json, null),
     solution: parseJson(row.solution_current_json, null),
+    similarFixes: parseJson(row.similar_fixes_json, null),
     latestNotePreview: row.latest_note_preview,
     tags: parseJson(row.tags_json, []),
     photoCount: row.photo_count,

@@ -2513,10 +2513,65 @@ async function searchBraveWeb(query, env) {
   }
 }
 
+function similarFixesCandidateQuery(plantId, sourceIssueId = '') {
+  const sourceId = compactText(sourceIssueId, 200);
+  return {
+    sql: `
+      SELECT issue_id, machine_code, note, description, issue_type, priority, resolved_at,
+             solution_current_json, legacy_status_history_json
+      FROM issues
+      WHERE plant_id = ? AND is_resolved = 1
+        AND (solution_current_json IS NOT NULL OR legacy_status_history_json IS NOT NULL)
+        ${sourceId ? 'AND issue_id != ?' : ''}
+      ORDER BY resolved_at DESC, updated_at DESC
+      LIMIT 80
+    `,
+    params: sourceId ? [plantId, sourceId] : [plantId]
+  };
+}
+
+const SIMILAR_FIXES_STOP_WORDS = new Set(['about', 'after', 'again', 'also', 'and', 'are', 'been', 'before', 'both', 'but', 'can', 'could', 'did', 'does', 'for', 'from', 'had', 'has', 'have', 'into', 'its', 'not', 'now', 'our', 'out', 'see', 'she', 'that', 'the', 'their', 'then', 'there', 'they', 'this', 'through', 'too', 'was', 'were', 'when', 'with', 'would']);
+
+function similarFixesTerms(value) {
+  return [...new Set((String(value || '').toLowerCase().match(/[a-z0-9]{3,}/g) || [])
+    .filter(term => !SIMILAR_FIXES_STOP_WORDS.has(term)))];
+}
+
+function normalizeSimilarFixesStatusHistory(value) {
+  if (!Array.isArray(value)) return [];
+  return value.slice(-12).map(entry => ({
+    status: compactText(entry?.status || entry?.statusKey, 100),
+    subStatus: compactText(entry?.subStatus || entry?.subStatusKey, 220),
+    note: compactText(entry?.note || entry?.comment || '', 600)
+  })).filter(entry => entry.status || entry.subStatus || entry.note);
+}
+
+function similarFixesStatusHistoryText(history = []) {
+  return history.map(entry => `${entry.status} ${entry.subStatus} ${entry.note}`).join(' ');
+}
+
+function fallbackInternalMatches(candidates = [], machineCode = '') {
+  return candidates
+    .filter(candidate => candidate?.sameMachine || (candidate?.matchedTerms || []).length >= 2)
+    .slice(0, 3)
+    .map(candidate => ({
+      issueId: candidate.issueId,
+      whySimilar: [
+        candidate.sameMachine && machineCode ? `Same press: ${machineCode}.` : '',
+        candidate.matchedTerms?.length ? `Matching terms: ${candidate.matchedTerms.join(', ')}.` : ''
+      ].filter(Boolean).join(' '),
+      fix: candidate.resolution
+    }));
+}
+
+export const __testOnly = { similarFixesCandidateQuery, fallbackInternalMatches, similarFixesTerms, normalizeSimilarFixesStatusHistory };
+
 async function findSimilarFixes(db, plantId, body, user, env) {
   await requirePlantPermission(db, plantId, user, 'canViewPlant');
   const description = compactText(body?.description, 1600);
   const machineCode = compactText(body?.machineCode, 80);
+  const sourceIssueId = compactText(body?.sourceIssueId, 200);
+  const sourceStatusHistory = normalizeSimilarFixesStatusHistory(body?.statusHistory);
   if (description.length < 8) {
     throw Object.assign(new Error('Describe the issue in at least 8 characters before searching for fixes.'), { status: 400 });
   }
@@ -2526,29 +2581,24 @@ async function findSimilarFixes(db, plantId, body, user, env) {
 
   // D1 is the source of truth: only completed issues with a usable resolution are
   // eligible. Candidate selection deliberately stays inside the requested plant.
-  const candidates = await all(db, `
-    SELECT issue_id, machine_code, note, description, issue_type, priority, resolved_at,
-           solution_current_json, legacy_status_history_json
-    FROM issues
-    WHERE plant_id = ? AND is_resolved = 1
-      AND (solution_current_json IS NOT NULL OR legacy_status_history_json IS NOT NULL)
-    ORDER BY resolved_at DESC, updated_at DESC
-    LIMIT 80
-  `, plantId);
-  const terms = description.toLowerCase().match(/[a-z0-9]{3,}/g) || [];
+  const candidateQuery = similarFixesCandidateQuery(plantId, sourceIssueId);
+  const candidates = await all(db, candidateQuery.sql, ...candidateQuery.params);
+  const terms = similarFixesTerms(`${description} ${similarFixesStatusHistoryText(sourceStatusHistory)}`);
   const rankedCandidates = candidates.map(row => {
     const solution = safeJson(row.solution_current_json, {});
-    const history = safeJson(row.legacy_status_history_json, []);
+    const history = normalizeSimilarFixesStatusHistory(safeJson(row.legacy_status_history_json, []));
     const resolution = compactText(solution?.current?.text || solution?.text || [...history].reverse().find(entry => entry?.status === 'resolved')?.note, 1200);
-    const searchable = `${row.machine_code || ''} ${row.note || ''} ${row.description || ''} ${row.issue_type || ''} ${resolution}`.toLowerCase();
-    const score = terms.reduce((total, term) => total + (searchable.includes(term) ? 1 : 0), 0) + (machineCode && row.machine_code === machineCode ? 2 : 0);
-    return { issueId: row.issue_id, machineCode: row.machine_code || '', issueType: row.issue_type || '', note: compactText(row.note || row.description, 700), resolution, resolvedAt: row.resolved_at || '', score };
+    const searchableTerms = new Set(similarFixesTerms(`${row.machine_code || ''} ${row.note || ''} ${row.description || ''} ${row.issue_type || ''} ${resolution} ${similarFixesStatusHistoryText(history)}`));
+    const matchedTerms = terms.filter(term => searchableTerms.has(term));
+    const sameMachine = Boolean(machineCode && row.machine_code === machineCode);
+    const score = matchedTerms.length + (sameMachine ? 2 : 0);
+    return { issueId: row.issue_id, machineCode: row.machine_code || '', issueType: row.issue_type || '', note: compactText(row.note || row.description, 700), statusHistory: history, resolution, resolvedAt: row.resolved_at || '', score, matchedTerms, sameMachine };
   }).filter(candidate => candidate.resolution).sort((a, b) => b.score - a.score || String(b.resolvedAt).localeCompare(String(a.resolvedAt))).slice(0, 12);
 
   const web = await searchBraveWeb(`${machineCode ? `${machineCode} ` : ''}${description} manufacturing troubleshooting`, env);
   const systemPrompt = `You are AP Tracker's evidence-based maintenance research assistant. Compare a new manufacturing-floor issue with internal resolved incidents and external web snippets. Never invent facts or repair steps. Treat external sources as general guidance, not plant-approved procedure. Require lockout/tagout and the plant SOP before machine service. Return ONLY JSON with internalMatches, externalResearch, recommendedNextSteps, and safetyNotes. Every internal match must cite an issueId; every external result must cite its supplied url.`;
   const prompt = {
-    newIssue: { description, machineCode },
+    newIssue: { description, machineCode, statusHistory: sourceStatusHistory },
     internalResolvedIssues: rankedCandidates,
     externalSearchResults: web.results
   };
@@ -2572,7 +2622,7 @@ async function findSimilarFixes(db, plantId, body, user, env) {
   // only citations that originated from D1 or the search provider response.
   const internalById = new Map(rankedCandidates.map(candidate => [candidate.issueId, candidate]));
   const externalByUrl = new Map(web.results.map(result => [result.url, result]));
-  const internalMatches = (Array.isArray(analysis.internalMatches) ? analysis.internalMatches : [])
+  const modelInternalMatches = (Array.isArray(analysis.internalMatches) ? analysis.internalMatches : [])
     .map(match => {
       const candidate = internalById.get(String(match?.issueId || ''));
       return candidate && {
@@ -2581,6 +2631,11 @@ async function findSimilarFixes(db, plantId, body, user, env) {
         fix: compactText(match?.fix || candidate.resolution, 1200)
       };
     }).filter(Boolean).slice(0, 6);
+  // The model may conservatively omit valid citations. When D1 has scored
+  // evidence, return it directly rather than showing an empty internal result.
+  const internalMatches = modelInternalMatches.length
+    ? modelInternalMatches
+    : fallbackInternalMatches(rankedCandidates, machineCode);
   const externalResearch = (Array.isArray(analysis.externalResearch) ? analysis.externalResearch : [])
     .map(result => {
       const source = externalByUrl.get(String(result?.url || ''));
@@ -2599,6 +2654,30 @@ async function findSimilarFixes(db, plantId, body, user, env) {
     internalCandidates: rankedCandidates,
     externalSearchAvailable: web.available
   });
+}
+
+async function saveIssueSimilarFixes(db, plantId, issueId, body, user) {
+  await requirePlantPermission(db, plantId, user, 'canEditIssue');
+  const existing = await first(db, 'SELECT issue_id FROM issues WHERE plant_id = ? AND issue_id = ? LIMIT 1', plantId, issueId);
+  if (!existing) return jsonResponse({ error: 'Issue not found' }, { status: 404 });
+  const payload = body?.payload && typeof body.payload === 'object' ? body.payload : null;
+  if (!payload) throw Object.assign(new Error('A Similar Fixes research payload is required.'), { status: 400 });
+  const saved = {
+    payload: {
+      internalMatches: Array.isArray(payload.internalMatches) ? payload.internalMatches.slice(0, 6) : [],
+      externalResearch: Array.isArray(payload.externalResearch) ? payload.externalResearch.slice(0, 5) : [],
+      recommendedNextSteps: Array.isArray(payload.recommendedNextSteps) ? payload.recommendedNextSteps.slice(0, 6) : [],
+      safetyNotes: Array.isArray(payload.safetyNotes) ? payload.safetyNotes.slice(0, 4) : [],
+      internalCandidates: Array.isArray(payload.internalCandidates) ? payload.internalCandidates.slice(0, 12) : [],
+      externalSearchAvailable: !!payload.externalSearchAvailable
+    },
+    savedAt: nowIso(),
+    savedBy: { uid: user.uid, name: user.name || user.email || user.uid }
+  };
+  await run(db, 'UPDATE issues SET similar_fixes_json = ?, updated_at = ?, updated_by_uid = ?, updated_by_name = ? WHERE plant_id = ? AND issue_id = ?',
+    jsonString(saved), nowIso(), user.uid, user.name || user.email || user.uid, plantId, issueId);
+  const issue = await first(db, 'SELECT * FROM issues WHERE plant_id = ? AND issue_id = ? LIMIT 1', plantId, issueId);
+  return jsonResponse({ issue: serializeIssue(issue) });
 }
 
 async function getIssue(db, plantId, issueId, user) {
@@ -3674,6 +3753,7 @@ export async function handleD1ApiRequest(request, env, { authenticateRequest } =
     const roleAlertUpdateMatch = request.method === 'PATCH' && url.pathname.match(/^\/api\/plants\/([^/]+)\/role-alerts\/([^/]+)$/);
     const issuesMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/issues$/);
     const similarFixesMatch = request.method === 'POST' && url.pathname.match(/^\/api\/plants\/([^/]+)\/similar-fixes$/);
+    const issueSimilarFixesSaveMatch = request.method === 'PUT' && url.pathname.match(/^\/api\/plants\/([^/]+)\/issues\/([^/]+)\/similar-fixes$/);
     const issueCreateMatch = request.method === 'POST' && url.pathname.match(/^\/api\/plants\/([^/]+)\/issues$/);
     const issueMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/issues\/([^/]+)$/);
     const issueUpdateMatch = request.method === 'PATCH' && url.pathname.match(/^\/api\/plants\/([^/]+)\/issues\/([^/]+)$/);
@@ -3817,6 +3897,9 @@ export async function handleD1ApiRequest(request, env, { authenticateRequest } =
     }
     if (similarFixesMatch) {
       return findSimilarFixes(db, decodePathSegment(similarFixesMatch[1]), await request.json(), user, env);
+    }
+    if (issueSimilarFixesSaveMatch) {
+      return saveIssueSimilarFixes(db, decodePathSegment(issueSimilarFixesSaveMatch[1]), decodePathSegment(issueSimilarFixesSaveMatch[2]), await request.json(), user);
     }
     if (issueCreateMatch) {
       return upsertIssueWriteBundle(db, decodePathSegment(issueCreateMatch[1]), await request.json(), user);
