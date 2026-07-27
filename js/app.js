@@ -312,6 +312,10 @@ function formatIssueCreatedAtLabel(issue = {}) {
 }
 
 function normalizeSqlIssueForApp(issue = {}) {
+  let similarFixes = issue.similarFixes ?? issue.similar_fixes_json ?? null;
+  if (typeof similarFixes === 'string') {
+    try { similarFixes = JSON.parse(similarFixes); } catch (_) { similarFixes = null; }
+  }
   const currentStatus = {
     statusKey: issue.currentStatusKey || 'open',
     subStatusKey: issue.currentSubStatusKey || '',
@@ -358,6 +362,7 @@ function normalizeSqlIssueForApp(issue = {}) {
       reopenedCount: Number(issue.reopenedCount || 0)
     },
     resolved: !!issue.isResolved,
+    similarFixes,
     photos: attachmentPhotoCache.get(issue.issueId) || [],
     eventHistory: issueEventHistoryCache.get(issue.issueId) || []
   };
@@ -3838,6 +3843,7 @@ async function switchPlant(plantId) {
   clearStoredIssueSimilarFixes(currentPlantId);
   currentPlantId = plantId;
   issueSimilarFixes.clear();
+  issueSimilarFixesHydrated.clear();
   currentPlantName = (userPlants.find(p => p.id === plantId) || {}).name || plantId;
   document.getElementById('plant-name-display').textContent = currentPlantName;
   updateUserDropdownContext();
@@ -8929,10 +8935,16 @@ window.openAddModal = (m = '') => {
 };
 
 const issueSimilarFixes = new Map();
+const issueSimilarFixesHydrated = new Set();
 const ISSUE_SIMILAR_FIXES_STORAGE_PREFIX = 'apTracker:similar-fixes:';
 
 function issueSimilarFixesStorageKey(plantId, issueId) {
   return `${ISSUE_SIMILAR_FIXES_STORAGE_PREFIX}${String(plantId || '')}:${String(issueId || '')}`;
+}
+
+function similarFixesButtonContent(isLoading = false) {
+  if (isLoading) return '<span class="spinner"></span><span>Researching fixes…</span>';
+  return '<span class="issue-similar-fixes-icon" aria-hidden="true">✨</span><span class="issue-similar-fixes-copy"><strong>Find similar fixes</strong><small>Search past resolutions and research</small></span><span class="issue-similar-fixes-arrow" aria-hidden="true">›</span>';
 }
 
 function storeIssueSimilarFixes(issueId, state) {
@@ -9021,6 +9033,29 @@ function loadSavedIssueSimilarFixes(issue) {
   return saved?.payload ? { queryKey: issueSimilarFixesQueryKey(issue), payload: saved.payload, loading: false, saved: true } : null;
 }
 
+async function hydrateSavedIssueSimilarFixes(issue) {
+  if (!currentPlantId || !issue?.id || issueSimilarFixesHydrated.has(issue.id)) return false;
+  issueSimilarFixesHydrated.add(issue.id);
+  try {
+    const response = await dataApi.getIssueSimilarFixes(currentPlantId, issue.id);
+    const saved = response?.similarFixes;
+    if (!saved?.payload) return false;
+    issueSimilarFixes.set(issue.id, {
+      queryKey: issueSimilarFixesQueryKey(issue),
+      payload: saved.payload,
+      loading: false,
+      saved: true
+    });
+    issuesById.set(issue.id, { ...issue, similarFixes: saved });
+    rebuildIssuesArrayFromMap();
+    refreshVisibleData();
+    return true;
+  } catch (error) {
+    console.warn('Could not load saved Similar Fixes', error);
+    return false;
+  }
+}
+
 function restoreIssueSimilarFixes(issue) {
   let state = issueSimilarFixes.get(issue.id);
   if (!state) {
@@ -9033,13 +9068,32 @@ function restoreIssueSimilarFixes(issue) {
   const button = document.getElementById(`similar-fixes-btn-${issue.id}`);
   if (button) {
     button.disabled = !!state.loading;
-    button.innerHTML = state.loading ? '<span class="spinner"></span> Researching fixes…' : '✨ Find fixes!';
+    button.innerHTML = similarFixesButtonContent(state.loading);
+  }
+  if (!state.payload) {
+    if (target) { target.hidden = true; target.innerHTML = ''; }
+    return;
   }
   if (target) {
     if (state.payload) renderSimilarFixesResults(state.payload, target, { issueId: issue.id, saved: state.saved });
     else { target.hidden = true; target.innerHTML = ''; }
   }
 }
+
+window.viewSavedSimilarFixesForIssue = async encodedIssueId => {
+  const issueId = decodeURIComponent(String(encodedIssueId || ''));
+  const issue = issuesById.get(issueId) || issues.find(candidate => candidate.id === issueId);
+  if (!issue || !currentPlantId) return;
+  const existing = issueSimilarFixes.get(issueId) || loadSavedIssueSimilarFixes(issue);
+  if (existing?.payload && existing.saved) {
+    issueSimilarFixes.set(issueId, existing);
+    restoreIssueSimilarFixes(issue);
+    return;
+  }
+  issueSimilarFixesHydrated.delete(issueId);
+  const restored = await hydrateSavedIssueSimilarFixes(issue);
+  if (!restored) showGameToast('No saved Similar Fixes research is available for this issue yet.', 'error');
+};
 
 window.findSimilarFixesForIssue = async encodedIssueId => {
   const issueId = decodeURIComponent(String(encodedIssueId || ''));
@@ -11201,8 +11255,14 @@ window.openPendingCategoryDrawer = id => {
   pendingEntry[id] = { ...(pendingEntry[id] || {}), categoryPickerOpen: true };
   renderIssues();
 };
-window.choosePendingCategory = (id, status) => {
+window.choosePendingCategory = async (id, status) => {
   const hasSubcategories = getStatusSubs(status).length > 0;
+  if (!hasSubcategories) {
+    delete pendingEntry[id];
+    renderIssues();
+    await addStatusEntry(id, status, '', '');
+    return;
+  }
   pendingEntry[id] = {
     ...(pendingEntry[id] || {}),
     status,
@@ -11212,47 +11272,17 @@ window.choosePendingCategory = (id, status) => {
   };
   renderIssues();
 };
-window.openPendingSubcategoryDrawer = id => {
-  const pending = pendingEntry[id] || {};
-  if (!pending.status || !getStatusSubs(pending.status).length) return;
-  pendingEntry[id] = { ...pending, subcategoryPickerOpen: true };
-  renderIssues();
-};
-window.choosePendingSubcategory = (id, encodedSubStatus = '') => {
+window.choosePendingSubcategory = async (id, encodedSubStatus = '') => {
   const subStatus = decodeURIComponent(String(encodedSubStatus || ''));
-  pendingEntry[id] = { ...(pendingEntry[id] || {}), subStatus, subcategoryPickerOpen: false };
-  renderIssues();
-};
-window.setPendingStatus = (id, key, val) => {
-  if (!pendingEntry[id]) pendingEntry[id] = {};
-  pendingEntry[id][key] = val;
-  // Only re-render when status changes (to update sub-status options) — NOT for note keystrokes
-  if (key === 'status') renderIssues();
-};
-window.commitAddEntry = async (id) => {
-  const p = pendingEntry[id] || {};
-  if (!p.status) return;
-  // Read note, sub, and date/time directly from DOM
-  const noteEl = document.getElementById('pending-note-' + id);
-  const dateEl = document.getElementById('pending-date-' + id);
-  const timeEl = document.getElementById('pending-time-' + id);
-  const note = noteEl ? noteEl.value.trim() : (p.note || '');
-  const sub = p.subStatus || '';
-  let dt = null;
-  if (dateEl?.value) {
-    const tVal = timeEl?.value || '00:00';
-    dt = fmtDate(new Date(dateEl.value + 'T' + tVal + ':00'));
-  }
-  // Check if serial number is required
-  if (requiresSerialNumber(p.status, sub)) {
-    openSerialModal(id, p.status, sub, dt);
-    delete pendingEntry[id];
-    renderIssues();
-    return;
-  }
-  await addStatusEntry(id, p.status, sub, note, dt);
+  const status = pendingEntry[id]?.status;
+  if (!status) return;
   delete pendingEntry[id];
   renderIssues();
+  if (subStatus && requiresSerialNumber(status, subStatus)) {
+    openSerialModal(id, status, subStatus);
+    return;
+  }
+  await addStatusEntry(id, status, subStatus, '');
 };
 window.cancelAddEntry = (id) => { delete pendingEntry[id]; renderIssues(); };
 
@@ -12573,6 +12603,12 @@ function isUserInteracting() {
   if (selection && selection.toString().trim() !== '') {
     return true;
   }
+  // Similar Fixes is a read-heavy panel. Keep it mounted while the user is
+  // reviewing research instead of letting the periodic background redraw
+  // replace the card underneath them.
+  if (document.querySelector('.issue-similar-fixes-results:not([hidden])')) {
+    return true;
+  }
   const activeEl = document.activeElement;
   if (activeEl && document.getElementById('issues-list')?.contains(activeEl)) {
     const tagName = activeEl.tagName.toLowerCase();
@@ -12954,8 +12990,6 @@ function renderIssues(options = {}) {
 
     // Pending new entry for this issue
     const pend = pendingEntry[issue.id] || {};
-    const pendSubs = STATUS_CONFIG[pend.status]?.subs || [];
-    const pendNowDT = toLocalDTInputs(new Date());
     const categoryPickerHtml = `<div class="tl-category-drawer" aria-label="Choose a category">
       <div class="swipe-category-inner">
         ${getAlphabetizedStatusKeys().map(key => {
@@ -12966,7 +13000,6 @@ function renderIssues(options = {}) {
       </div>
       <button type="button" class="tl-mini-btn tl-cancel-btn" onclick="cancelAddEntry('${issue.id}')">Cancel</button>
     </div>`;
-    const selectedCategoryHtml = `<button type="button" class="tl-pending-category-btn" onclick="openPendingCategoryDrawer('${issue.id}')" title="Change category" style="color:${getStatusColor(pend.status)};border-color:${getStatusColor(pend.status)};">${getStatusDef(pend.status).icon} ${esc(getStatusLabel(pend.status, 'short'))}</button>`;
     const subcategoryPickerHtml = (() => {
       const statusColor = getStatusColor(pend.status);
       const subs = toColumnMajorOrder(getStatusSubs(pend.status), 2);
@@ -12977,29 +13010,16 @@ function renderIssues(options = {}) {
             <button type="button" class="subcategory-item swipe-sub-action skip" onclick="choosePendingSubcategory('${issue.id}','')" style="border-color:var(--color-border, var(--border));background:transparent;"><span class="subcategory-item-label" style="color:var(--color-text-subtle, var(--text3));font-style:italic;">Skip ›</span></button>
           </div>
         </div>
-        <button type="button" class="tl-mini-btn tl-cancel-btn" onclick="openPendingCategoryDrawer('${issue.id}')">← Categories</button>
-        <button type="button" class="tl-mini-btn tl-cancel-btn" onclick="cancelAddEntry('${issue.id}')">Cancel</button>
+        <div class="tl-subcategory-actions">
+          <button type="button" class="tl-back-category-btn" onclick="openPendingCategoryDrawer('${issue.id}')" aria-label="Back to categories" title="Back to categories"><span aria-hidden="true">←</span> Back</button>
+          <button type="button" class="tl-mini-btn tl-cancel-btn" onclick="cancelAddEntry('${issue.id}')">Cancel</button>
+        </div>
       </div>`;
     })();
-    const selectedSubcategoryHtml = pendSubs.length
-      ? `<button type="button" class="tl-pending-category-btn tl-pending-subcategory-btn" onclick="openPendingSubcategoryDrawer('${issue.id}')" title="Change subcategory" style="color:${getStatusColor(pend.status)};border-color:${alphaColor(getStatusColor(pend.status), 0.5)};">${esc(pend.subStatus || 'Choose subcategory')}</button>`
-      : '';
     const addRowHtml = !canEdit ? '' : pend.categoryPickerOpen
       ? `<div class="tl-add-row tl-category-picker-row">${categoryPickerHtml}</div>`
       : pend.subcategoryPickerOpen
       ? `<div class="tl-add-row tl-category-picker-row">${subcategoryPickerHtml}</div>`
-      : pend.status !== undefined
-      ? `<div class="tl-add-row">
-          ${selectedCategoryHtml}
-          ${selectedSubcategoryHtml}
-          <input class="tl-mini-input" id="pending-note-${issue.id}" placeholder="Note (optional)…">
-          <div style="display:flex;gap:4px;align-items:center;width:100%;">
-            <input type="date" class="tl-mini-input" id="pending-date-${issue.id}" value="${pendNowDT.dateStr}" style="flex:1;min-width:110px;">
-            <input type="time" class="tl-mini-input" id="pending-time-${issue.id}" value="${pendNowDT.timeStr}" style="width:90px;">
-          </div>
-          <button class="tl-mini-btn tl-save-btn" onclick="commitAddEntry('${issue.id}')">+ Add</button>
-          <button class="tl-mini-btn tl-cancel-btn" onclick="cancelAddEntry('${issue.id}')">Cancel</button>
-        </div>`
       : '';
 
     const hasTimer = !!reminderState;
@@ -13014,10 +13034,13 @@ function renderIssues(options = {}) {
       : '';
     const similarFixesState = issueSimilarFixes.get(issue.id);
     const similarFixesLoading = !!similarFixesState?.loading;
-    const similarFixesHtml = `<div class="issue-similar-fixes" style="margin:10px 0 0;">
-      <button class="btn btn-ghost" id="similar-fixes-btn-${issue.id}" type="button" onclick="event.stopPropagation(); findSimilarFixesForIssue('${encodeURIComponent(issue.id)}')" ${similarFixesLoading ? 'disabled' : ''} style="padding:9px 12px;font-size:12px;">${similarFixesLoading ? '<span class="spinner"></span> Researching fixes…' : '✨ Find fixes!'}</button>
-      <div id="similar-fixes-results-${issue.id}" hidden style="margin-top:8px;padding:10px;border:1px solid var(--color-border, var(--border));border-radius:10px;background:var(--color-surface-raised, var(--bg3));font-family:'Nunito',sans-serif;"></div>
-    </div>`;
+    const similarFixesHtml = `<section class="issue-similar-fixes" aria-label="Similar fixes">
+      <div class="issue-similar-fixes-actions">
+        <button class="issue-similar-fixes-trigger" id="similar-fixes-btn-${issue.id}" type="button" onclick="event.stopPropagation(); findSimilarFixesForIssue('${encodeURIComponent(issue.id)}')" ${similarFixesLoading ? 'disabled' : ''}>${similarFixesButtonContent(similarFixesLoading)}</button>
+        <button class="issue-similar-fixes-saved" type="button" onclick="event.stopPropagation(); viewSavedSimilarFixesForIssue('${encodeURIComponent(issue.id)}')"><span aria-hidden="true">▣</span> View saved research</button>
+      </div>
+      <div class="issue-similar-fixes-results" id="similar-fixes-results-${issue.id}" hidden></div>
+    </section>`;
     const issueActionToolbarHtml = `<div class="issue-card-action-toolbar" aria-label="Issue actions">
       <div class="issue-card-action-start">
         <button class="issue-card-icon-btn timer${!hasTimer ? ' inactive' : reminderState?.isPaused ? ' paused' : isTimerOverdue ? ' overdue alarm-dismiss-btn' : ''}" type="button" onclick="event.stopPropagation(); ${isTimerOverdue ? `dismissOverdueIssueReminder('${issue.id}')` : `openIssueReminderModal('${issue.id}')`}" title="${isTimerOverdue ? 'Dismiss expired alarm' : hasTimer ? 'Modify check-back timer' : 'Set check-back timer'}" aria-label="${isTimerOverdue ? 'Dismiss expired alarm' : hasTimer ? 'Modify check-back timer' : 'Set check-back timer'}">
@@ -13267,21 +13290,21 @@ function renderIssues(options = {}) {
           </div>
           ${priorityButtonHtml}
           ${solutionHeaderButtonHtml}
-          <div class="issue-expand-icon ${wasOpen ? 'open' : ''}" id="chevron-${issue.id}">▼</div>
+          <button type="button" class="issue-expand-icon ${wasOpen ? 'open' : ''}" id="chevron-${issue.id}" onclick="toggleCardFromChevron('${issue.id}', event)" aria-label="${wasOpen ? 'Collapse' : 'Expand'} issue details">▼</button>
         </div>
         <div class="issue-note-preview">${esc(issue.note)}</div>
         <div class="issue-time">
-          ${(submitterHtml || (issue.photos || []).length || issue.editedAt) ? `<div class="issue-time-submitter">${submitterHtml ? `Created by ${submitterHtml}` : ''}${(issue.photos || []).length ? `<span class="photo-count-badge">📷 ${issue.photos.length}</span>` : ''}${issue.editedAt ? '<span style="color:var(--color-text-subtle, var(--text3))">(edited)</span>' : ''}</div>` : ''}
           <div class="issue-time-created">${createdAtHtml}${shiftBadgeHtml}${timerBadgeHtml}${localSyncBadgeHtml}</div>
+          ${(submitterHtml || (issue.photos || []).length || issue.editedAt) ? `<div class="issue-time-submitter">${submitterHtml ? `Created by ${submitterHtml}` : ''}${(issue.photos || []).length ? `<span class="photo-count-badge">📷 ${issue.photos.length}</span>` : ''}${issue.editedAt ? '<span style="color:var(--color-text-subtle, var(--text3))">(edited)</span>' : ''}</div>` : ''}
           ${alertFocusHtml}
         </div>
         ${wfStatusRowsHtml}
       </div>
       <div class="issue-body ${wasOpen ? 'visible' : ''}" id="body-${issue.id}">
         <!-- Full width content -->
+        ${similarFixesHtml}
         <div class="issue-full-note">${esc(issue.note)}</div>
         ${editedNote}
-        ${similarFixesHtml}
         ${issueQualityDefectHtml}
         ${photosHtml}
         <div class="divider"></div>
@@ -14025,6 +14048,13 @@ window.closeWorkflowStatusDropdown = evt => {
 };
 
 let _swipeJustHappened = false;
+window.toggleCardFromChevron = (id, event) => {
+  event?.stopPropagation?.();
+  // The chevron is an explicit expand/collapse control. Close an open swipe
+  // drawer first so its state cannot prevent the card from being toggled.
+  if (openSwipeRow) closeSwipe();
+  window.toggleCard(id);
+};
 window.toggleCard = id => {
   // Don't toggle if a swipe gesture just completed or card is swiped open
   if (_swipeJustHappened) { _swipeJustHappened = false; return; }

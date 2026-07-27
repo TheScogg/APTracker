@@ -2680,6 +2680,18 @@ async function saveIssueSimilarFixes(db, plantId, issueId, body, user) {
   return jsonResponse({ issue: serializeIssue(issue) });
 }
 
+async function getIssueSimilarFixes(db, plantId, issueId, user) {
+  await requirePlantPermission(db, plantId, user, 'canViewPlant');
+  const issue = await first(
+    db,
+    'SELECT similar_fixes_json FROM issues WHERE plant_id = ? AND issue_id = ? LIMIT 1',
+    plantId,
+    issueId
+  );
+  if (!issue) return jsonResponse({ error: 'Issue not found' }, { status: 404 });
+  return jsonResponse({ similarFixes: safeJson(issue.similar_fixes_json, null) });
+}
+
 async function getIssue(db, plantId, issueId, user) {
   await requirePlantPermission(db, plantId, user, 'canViewPlant');
   const issue = await first(
@@ -3754,6 +3766,7 @@ export async function handleD1ApiRequest(request, env, { authenticateRequest } =
     const issuesMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/issues$/);
     const similarFixesMatch = request.method === 'POST' && url.pathname.match(/^\/api\/plants\/([^/]+)\/similar-fixes$/);
     const issueSimilarFixesSaveMatch = request.method === 'PUT' && url.pathname.match(/^\/api\/plants\/([^/]+)\/issues\/([^/]+)\/similar-fixes$/);
+    const issueSimilarFixesGetMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/issues\/([^/]+)\/similar-fixes$/);
     const issueCreateMatch = request.method === 'POST' && url.pathname.match(/^\/api\/plants\/([^/]+)\/issues$/);
     const issueMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/issues\/([^/]+)$/);
     const issueUpdateMatch = request.method === 'PATCH' && url.pathname.match(/^\/api\/plants\/([^/]+)\/issues\/([^/]+)$/);
@@ -3784,7 +3797,7 @@ export async function handleD1ApiRequest(request, env, { authenticateRequest } =
     const reportsDohMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/reports\/doh$/);
     const reportsRunsMatch = request.method === 'GET' && url.pathname.match(/^\/api\/plants\/([^/]+)\/reports\/runs$/);
 
-    if (!meMatch && !meUpdateMatch && !meStorePurchaseMatch && !mePushTokenMatch && !accessRequestCreateSelfMatch && !plantsListMatch && !plantCreateMatch && !bootstrapMatch && !dailySchedulesMatch && !dailyScheduleMatch && !plantMembersMatch && !plantMemberCreateMatch && !plantMemberUpdateMatch && !plantMemberDeleteMatch && !accessRequestsMatch && !accessRequestUpdateMatch && !statusConfigMatch && !statusConfigUpdateMatch && !pressConfigMatch && !pressConfigUpdateMatch && !storeConfigMatch && !storeConfigUpdateMatch && !roleAlertRoutingMatch && !roleAlertRoutingUpdateMatch && !gamificationMatch && !gamificationAwardMatch && !gamificationAdminMatch && !gamificationAdminUpdateMatch && !gamificationLeaderboardResetMatch && !userDirectoryMatch && !roleAlertsMatch && !roleAlertCreateMatch && !roleAlertUpdateMatch && !issuesMatch && !similarFixesMatch && !issueCreateMatch && !issueMatch && !issueUpdateMatch && !issueDeleteMatch && !eventsMatch && !attachmentsMatch && !notesMatch && !noteCreateMatch && !noteUpdateMatch && !noteDeleteMatch && !noteAttachmentsMatch && !noteAttachmentCreateMatch && !noteAttachmentDeleteMatch && !todosMatch && !todoCreateMatch && !todoUpdateMatch && !todoDeleteMatch && !conversationsMatch && !conversationCreateMatch && !conversationMessagesMatch && !conversationMessageCreateMatch && !conversationReadMatch && !wikiPagesMatch && !wikiPageMatch && !wikiRevisionSaveMatch && !wikiPageDeleteMatch && !wikiAttachmentCreateMatch && !reportsDohMatch && !reportsRunsMatch) {
+    if (!meMatch && !meUpdateMatch && !meStorePurchaseMatch && !mePushTokenMatch && !accessRequestCreateSelfMatch && !plantsListMatch && !plantCreateMatch && !bootstrapMatch && !dailySchedulesMatch && !dailyScheduleMatch && !plantMembersMatch && !plantMemberCreateMatch && !plantMemberUpdateMatch && !plantMemberDeleteMatch && !accessRequestsMatch && !accessRequestUpdateMatch && !statusConfigMatch && !statusConfigUpdateMatch && !pressConfigMatch && !pressConfigUpdateMatch && !storeConfigMatch && !storeConfigUpdateMatch && !roleAlertRoutingMatch && !roleAlertRoutingUpdateMatch && !gamificationMatch && !gamificationAwardMatch && !gamificationAdminMatch && !gamificationAdminUpdateMatch && !gamificationLeaderboardResetMatch && !userDirectoryMatch && !roleAlertsMatch && !roleAlertCreateMatch && !roleAlertUpdateMatch && !issuesMatch && !similarFixesMatch && !issueSimilarFixesSaveMatch && !issueSimilarFixesGetMatch && !issueCreateMatch && !issueMatch && !issueUpdateMatch && !issueDeleteMatch && !eventsMatch && !attachmentsMatch && !notesMatch && !noteCreateMatch && !noteUpdateMatch && !noteDeleteMatch && !noteAttachmentsMatch && !noteAttachmentCreateMatch && !noteAttachmentDeleteMatch && !todosMatch && !todoCreateMatch && !todoUpdateMatch && !todoDeleteMatch && !conversationsMatch && !conversationCreateMatch && !conversationMessagesMatch && !conversationMessageCreateMatch && !conversationReadMatch && !wikiPagesMatch && !wikiPageMatch && !wikiRevisionSaveMatch && !wikiPageDeleteMatch && !wikiAttachmentCreateMatch && !reportsDohMatch && !reportsRunsMatch) {
       return null;
     }
 
@@ -3900,6 +3913,9 @@ export async function handleD1ApiRequest(request, env, { authenticateRequest } =
     }
     if (issueSimilarFixesSaveMatch) {
       return saveIssueSimilarFixes(db, decodePathSegment(issueSimilarFixesSaveMatch[1]), decodePathSegment(issueSimilarFixesSaveMatch[2]), await request.json(), user);
+    }
+    if (issueSimilarFixesGetMatch) {
+      return getIssueSimilarFixes(db, decodePathSegment(issueSimilarFixesGetMatch[1]), decodePathSegment(issueSimilarFixesGetMatch[2]), user);
     }
     if (issueCreateMatch) {
       return upsertIssueWriteBundle(db, decodePathSegment(issueCreateMatch[1]), await request.json(), user);
