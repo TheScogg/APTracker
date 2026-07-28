@@ -7975,6 +7975,32 @@ function populateIssueMachineSelect(selectedMachine = currentMachine) {
   updateAddModalMachineLabel(currentMachine);
 }
 
+function populateEditMachineSelect(selectedMachine = '') {
+  const select = document.getElementById('edit-machine-select');
+  if (!select) return;
+  const selected = String(selectedMachine || '').trim();
+  const availableMachines = new Set(ALL_MACHINES || []);
+  select.innerHTML = '';
+  if (selected && !availableMachines.has(selected)) {
+    const option = document.createElement('option');
+    option.value = selected;
+    option.textContent = `${selected} (unlisted)`;
+    select.appendChild(option);
+  }
+  Object.entries(PRESSES || {}).forEach(([rowName, machines]) => {
+    const group = document.createElement('optgroup');
+    group.label = rowName;
+    (machines || []).forEach(machineCode => {
+      const option = document.createElement('option');
+      option.value = machineCode;
+      option.textContent = machineCode;
+      group.appendChild(option);
+    });
+    if (group.children.length) select.appendChild(group);
+  });
+  select.value = selected;
+}
+
 function buildFloorMap() {
   // Populate machine filter dropdown
   const sel = document.getElementById('machine-filter');
@@ -10307,7 +10333,12 @@ window.openEditModal = async id => {
   }
   editTargetId = id;
   editPhotos = (photoList || []).map(p => ({ name: p.name, dataUrl: p.dataUrl, storagePath: p.storagePath || '', storageBucket: p.storageBucket || '', contentType: p.contentType || '', sizeBytes: Number(p.sizeBytes || 0) }));
-  document.getElementById('edit-machine-name').textContent = issue.machine;
+  const issueMachineCode = issue.machine || issue.machineCode || '';
+  document.getElementById('edit-machine-name').textContent = issueMachineCode;
+  populateEditMachineSelect(issueMachineCode);
+  document.getElementById('edit-machine-select').onchange = event => {
+    document.getElementById('edit-machine-name').textContent = event.target.value;
+  };
   document.getElementById('edit-note').value = issue.note || '';
   // Parse existing date back into inputs
   try {
@@ -10331,6 +10362,8 @@ window.closeEditModal = () => { document.getElementById('edit-modal').classList.
 window.saveEdit = async () => {
   const note = document.getElementById('edit-note').value.trim();
   if (!note) { document.getElementById('edit-note').focus(); return; }
+  const machineCode = String(document.getElementById('edit-machine-select')?.value || '').trim();
+  if (!machineCode) { document.getElementById('edit-machine-select')?.focus(); return; }
   const btn = document.getElementById('edit-submit-btn');
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Saving…';
   try {
@@ -10339,6 +10372,8 @@ window.saveEdit = async () => {
       return;
     }
     const issue = issues.find(i => i.id === editTargetId);
+    const previousMachineCode = String(issue?.machine || issue?.machineCode || '').trim();
+    const machineChanged = machineCode !== previousMachineCode;
     const editedIssueDate = getIssueDateFromInputs('edit-date', 'edit-time-input');
     const last = currentStatus(issue || {});
     const shiftSel = document.getElementById('edit-shift').value;
@@ -10347,6 +10382,7 @@ window.saveEdit = async () => {
     const uploadedPhotos = await uploadIssuePhotosToStorage(editTargetId, editPhotos);
     if (shouldUseSqlStagingReads(currentPlantId)) {
       const issuePatch = {
+        machine: machineCode,
         note,
         shift,
         dateTime: fmtDate(editedIssueDate),
@@ -10357,7 +10393,7 @@ window.saveEdit = async () => {
         photoCount: uploadedPhotos.length,
         editedAt: fmtDate(new Date()), editedBy: currentUser.displayName || currentUser.email,
         ...buildIssueV2CompatLocal({
-          machineCode: issue?.machine || currentMachine,
+          machineCode,
           statusKey: last?.status || currentStatusKey(issue || {}),
           subStatus: last?.subStatus || issue?.subStatus || '',
           statusDateTime: last?.dateTime || issue?.dateTime || fmtDate(new Date()),
@@ -10372,7 +10408,7 @@ window.saveEdit = async () => {
       await commitSqlIssueWrite(editTargetId, nextIssue, {
         attachments: sqlAttachmentPayloads(uploadedPhotos),
         replaceAttachments: true,
-        events: [sqlEventPayload('issue_edited', { fieldsChanged: ['note', 'dateTime', 'photos'] })],
+        events: [sqlEventPayload('issue_edited', { fieldsChanged: ['press', 'note', 'dateTime', 'photos'].filter(field => field !== 'press' || machineChanged), previousMachineCode, machineCode })],
         updateCreatedAt: true
       });
       if (timerMinutes > 0) setIssueReminder(editTargetId, timerMinutes);
@@ -10386,6 +10422,7 @@ window.saveEdit = async () => {
       return;
     }
     const issuePatch = {
+      machine: machineCode,
       note,
       shift,
       dateTime: fmtDate(editedIssueDate),
@@ -10396,7 +10433,7 @@ window.saveEdit = async () => {
       photoCount: uploadedPhotos.length,
       editedAt: fmtDate(new Date()), editedBy: currentUser.displayName || currentUser.email,
       ...buildIssueV2Compat({
-        machineCode: issue?.machine || currentMachine,
+        machineCode,
         statusKey: last?.status || currentStatusKey(issue || {}),
         subStatus: last?.subStatus || issue?.subStatus || '',
         statusDateTime: last?.dateTime || issue?.dateTime || fmtDate(new Date()),
@@ -10409,7 +10446,9 @@ window.saveEdit = async () => {
     batch.update(plantDoc('issues', editTargetId), issuePatch);
     queueAttachmentDocs(batch, editTargetId, uploadedPhotos);
     queueIssueEvent(batch, editTargetId, 'issue_edited', {
-      fieldsChanged: ['note', 'dateTime', 'photos']
+      fieldsChanged: ['press', 'note', 'dateTime', 'photos'].filter(field => field !== 'press' || machineChanged),
+      previousMachineCode,
+      machineCode
     });
     await batch.commit();
     if (timerMinutes > 0) setIssueReminder(editTargetId, timerMinutes);
