@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AP-Tracker — Wiki CMS</title>
   <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&family=Share+Tech+Mono&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="css/styles.css">
   <style>
     .shell { max-width: 1400px; margin: 0 auto; padding: 0; display: flex; flex-direction: column; height: 100vh; }
     .topbar { display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; background: var(--bg2); border-bottom: 1px solid var(--border); flex-shrink: 0; }
@@ -258,7 +258,7 @@
             
             <div class="editor-actions">
               <div style="flex:1;">
-                <input type="text" id="edit-change-note" class="editor-input" placeholder="Change Note (Required to save)" style="border-color:var(--accent);">
+                <input type="text" id="edit-change-note" class="editor-input" placeholder="Change note (optional)" style="border-color:var(--accent);">
               </div>
               <button id="delete-page-btn" class="btn btn-danger" type="button">Delete Page</button>
               <button id="cancel-btn" class="btn" type="button">Cancel</button>
@@ -279,6 +279,6 @@
     </div>
   </div>
 
-  <script type="module" src="wiki-cms.js"></script>
+  <script type="module" src="js/wiki-cms.js"></script>
 </body>
 </html>

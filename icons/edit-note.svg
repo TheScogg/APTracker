@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" aria-labelledby="title desc" role="img">
+  <title id="title">Edit Note</title>
+  <desc id="desc">A compact note icon with a cyan-to-blue page, luminous aqua text, and gold-gradient pencil.</desc>
+  <defs>
+    <linearGradient id="noteStroke" x1="5.75" y1="4.75" x2="20.75" y2="19.75" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#35E7D7"/>
+      <stop offset="1" stop-color="#5B8CFF"/>
+    </linearGradient>
+    <linearGradient id="lineStroke" x1="8.5" y1="8.5" x2="15" y2="13" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#C9FFFB"/>
+      <stop offset="1" stop-color="#37CFFF"/>
+    </linearGradient>
+    <linearGradient id="pencilStroke" x1="13.5" y1="18.9" x2="20.9" y2="11.6" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFE59A"/>
+      <stop offset=".48" stop-color="#FFD166"/>
+      <stop offset="1" stop-color="#EAA52E"/>
+    </linearGradient>
+    <radialGradient id="noteFill" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(12.5 12.5) rotate(90) scale(7.5 6.8)">
+      <stop offset="0" stop-color="#66F4F0" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#5082FF" stop-opacity="0.04"/>
+    </radialGradient>
+  </defs>
+
+  <path d="M8 4.75h7.75A2.25 2.25 0 0 1 18 7v3.25" fill="url(#noteFill)" stroke="url(#noteStroke)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M8 19.25A2.25 2.25 0 0 1 5.75 17V7A2.25 2.25 0 0 1 8 4.75" stroke="url(#noteStroke)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M8.5 9.25h6" stroke="url(#lineStroke)" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M8.5 12.25h4.5" stroke="url(#lineStroke)" stroke-width="1.7" stroke-linecap="round" opacity="0.9"/>
+  <path d="m13.8 16.8 4.85-4.85a1.5 1.5 0 0 1 2.12 2.12l-4.85 4.85-2.67.55.55-2.67Z" stroke="url(#pencilStroke)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="19.7" cy="10.92" r="0.55" fill="#FFE59A"/>
+</svg>

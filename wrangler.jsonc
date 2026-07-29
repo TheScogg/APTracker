@@ -1,14 +1,52 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "press-tracker",
-  "main": "./worker.js",
+  "main": "./server/worker.js",
   "compatibility_date": "2025-09-27",
   "observability": {
     "enabled": true
   },
+  "vars": {
+    "WEB_PUSH_VAPID_PUBLIC_KEY": "BB8W3ZRqBQs5sYJO87V7kGzn-kOamh5DhgdwglxfPmJZh-Mlk5-i5TcItpre05lvmjvpCySgjIW_cU3Yrbdzoqg",
+    "WEB_PUSH_VAPID_SUBJECT": "https://press-tracker.pages.dev"
+  },
+  "triggers": {
+    "crons": [
+      "*/1 * * * *"
+    ]
+  },
   "assets": {
     "directory": ".",
     "binding": "ASSETS"
+  },
+  "d1_databases": [
+    {
+      "binding": "APTRACKER_DB",
+      "database_name": "coe_db",
+      "database_id": "8f86cf6d-1bfc-45ba-883e-d249014b79a1"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "APTRACKER_ATTACHMENTS",
+      "bucket_name": "aptracker-attachments"
+    }
+  ],
+  "queues": {
+    "producers": [
+      {
+        "queue": "aptracker-notifications",
+        "binding": "APTRACKER_NOTIFICATIONS_QUEUE"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "aptracker-notifications",
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        "max_retries": 3
+      }
+    ]
   },
   "compatibility_flags": [
     "nodejs_compat"

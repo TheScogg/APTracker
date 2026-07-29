@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" role="img" aria-labelledby="title">
+  <title id="title">Trash can</title>
+  <defs>
+    <linearGradient id="trash-can-gradient" x1="4" y1="4" x2="20" y2="21" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#35F3D5"/>
+      <stop offset=".5" stop-color="#24C9E8"/>
+      <stop offset="1" stop-color="#4D85FF"/>
+    </linearGradient>
+    <linearGradient id="trash-can-accent" x1="11" y1="3" x2="14" y2="6" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF29A"/>
+      <stop offset="1" stop-color="#FFC84D"/>
+    </linearGradient>
+  </defs>
+  <path d="M5.25 7.25h13.5l-.72 11.19a2 2 0 0 1-2 1.87H7.97a2 2 0 0 1-2-1.87L5.25 7.25Z" stroke="url(#trash-can-gradient)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M4 7.25h16" stroke="url(#trash-can-gradient)" stroke-width="1.8" stroke-linecap="round"/>
+  <path d="M9.25 7.25 10.1 4h3.8l.85 3.25" stroke="url(#trash-can-gradient)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M9.5 11.1v5.45M14.5 11.1v5.45" stroke="url(#trash-can-gradient)" stroke-width="1.55" stroke-linecap="round"/>
+  <circle cx="17.65" cy="5.2" r="1.1" fill="url(#trash-can-accent)"/>
+</svg>

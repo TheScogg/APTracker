@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" aria-labelledby="title desc" role="img">
+  <title id="title">High Priority</title>
+  <desc id="desc">A compact high-priority badge with a cyan-to-blue structure, luminous aqua chevron, and gold-gradient signal beams.</desc>
+  <defs>
+    <linearGradient id="badgeStroke" x1="6.2" y1="9.2" x2="17.8" y2="17.35" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#35E7D7"/>
+      <stop offset="1" stop-color="#5C83FF"/>
+    </linearGradient>
+    <linearGradient id="innerStroke" x1="9" y1="14.45" x2="15" y2="16.2" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#C9FFFB"/>
+      <stop offset="1" stop-color="#37CFFF"/>
+    </linearGradient>
+    <linearGradient id="beamStroke" x1="7.25" y1="6.1" x2="16.75" y2="6.9" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFE59A"/>
+      <stop offset=".48" stop-color="#FFD166"/>
+      <stop offset="1" stop-color="#EAA52E"/>
+    </linearGradient>
+    <radialGradient id="badgeFill" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(12 14.2) rotate(90) scale(5.8 6.2)">
+      <stop offset="0" stop-color="#66F4F0" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#5082FF" stop-opacity="0.04"/>
+    </radialGradient>
+  </defs>
+
+  <path d="M12 4.5v2.3" stroke="url(#beamStroke)" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M7.25 6.4v2.15" stroke="url(#beamStroke)" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M16.75 6.4v2.15" stroke="url(#beamStroke)" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M12 9.2 6.2 13v4.35l5.8-3.35 5.8 3.35V13L12 9.2Z" fill="url(#badgeFill)" stroke="url(#badgeStroke)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M9 16.2 12 14.45 15 16.2" stroke="url(#innerStroke)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="12" cy="11.4" r="0.7" fill="#FFE59A"/>
+</svg>

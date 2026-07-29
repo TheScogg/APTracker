@@ -28,6 +28,8 @@ When a status/category is selected on an issue:
 5. Legacy role-based matching is still considered as a fallback.
 6. App writes an append-only alert doc to `plants/{plantId}/roleFeedAlerts`.
 
+If `config/statuses.responseTree` has a matching edge for the selected category/subcategory, the alert stores a small `responseTree` context so the inbox can explain the path, for example `Controlman -> Maintenance`. Response Tree edges may either pass the same subcategory through to another category or translate one subcategory into another downstream subcategory, such as `Mold Change -> Warm Up`. This is guidance only until the user escalates; current workflow state and alert routing are still driven by selected category/subcategory and subscriptions.
+
 Alerts are created both:
 - when logging a new issue with an initial category, and
 - when changing a category later.
@@ -62,6 +64,7 @@ The app now starts a realtime watcher for each signed-in user/plant:
 - `recipientUserIds`
 - `requiredJobRoleKeys` (legacy compatibility)
 - `createdAt`, `createdBy`
+- optional `responseTree.paths[]` with `sourceKey`, `targetKey`, `sourceRouteKey`, `targetRouteKey`, `targetSubStatus`, `mode`, `pathLabel`, and `trigger`
 
 When `workflowId` is present, accepting an alert updates `workflowStateByEntry.{workflowId}` on the linked issue. Older alerts without `workflowId` fall back to status/category workflow handling.
 

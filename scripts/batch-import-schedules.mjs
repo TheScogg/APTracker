@@ -3,31 +3,27 @@
 /**
  * batch-import-schedules.mjs
  *
- * Batch-import daily schedule PDFs from a folder into Firestore.
- * Pipeline per file: PDF → Worker Doc AI OCR → Worker DeepSeek → Validate → Firestore
+ * Batch-import daily schedule PDFs through the Worker into D1.
+ * Pipeline per file: PDF → Worker Textract/Doc AI OCR → Worker DeepSeek → Validate → Worker D1 import
  *
  * Usage:
- *   export GOOGLE_APPLICATION_CREDENTIALS="/path/to/serviceAccountKey.json"
  *   node scripts/batch-import-schedules.mjs \
  *     --dir ~/ScheduleScans/ \
  *     --plant plant_abc \
  *     --worker-url https://press-tracker.yourdomain.workers.dev \
- *     --docai-project my-project --docai-processor abc-123 \
  *     --dry-run
  *   node scripts/batch-import-schedules.mjs \
  *     --dir ~/ScheduleScans/ \
  *     --plant plant_abc \
  *     --worker-url https://press-tracker.yourdomain.workers.dev \
- *     --docai-project my-project --docai-processor abc-123 \
  *     --commit
  */
 
 import { readFileSync, readdirSync, existsSync, writeFileSync } from 'node:fs';
-import { join, parse, extname, resolve } from 'node:path';
+import { join, parse, extname, resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import process from 'node:process';
-import { initializeApp, cert } from 'firebase-admin/app';
-import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 
 let pdfjsLib;
 
@@ -62,8 +58,8 @@ function parseArgs() {
   const val = flag => { const i = args.indexOf(flag); return i !== -1 && i + 1 < args.length ? args[i + 1] : null; };
   const has = flag => args.includes(flag);
 
-  const engine = (val('--engine') || val('-e') || 'document-ai').toLowerCase();
-  const validEngines = ['document-ai', 'azure', 'google'];
+  const engine = (val('--engine') || val('-e') || 'textract').toLowerCase();
+  const validEngines = ['textract', 'document-ai', 'azure', 'google'];
   if (!validEngines.includes(engine)) die(`Invalid --engine: ${engine}. Valid: ${validEngines.join(', ')}`);
 
   return {
@@ -91,14 +87,14 @@ function parseArgs() {
 
 function printHelp() {
   console.log(`
-batch-import-schedules.mjs — Batch import daily schedule PDFs into Firestore
+batch-import-schedules.mjs — Batch import daily schedule PDFs into D1 via the Worker
 
 USAGE:
   node scripts/batch-import-schedules.mjs --dir <path> --plant <id> --worker-url <url> [options]
 
 REQUIRED:
   --dir, -d <path>        Folder of schedule PDFs
-  --plant, -p <id>        Target Firestore plant ID
+  --plant, -p <id>        Target plant ID
   --worker-url, -w <url>  Cloudflare Worker base URL (or WORKER_URL env var)
 
 DOC AI SETTINGS (for document-ai OCR engine):
@@ -106,37 +102,22 @@ DOC AI SETTINGS (for document-ai OCR engine):
   --docai-processor <id>  Document AI processor ID
   --docai-location <loc>  Processor location (default: us)
 
-ENVIRONMENT:
-  GOOGLE_APPLICATION_CREDENTIALS  Path to Firebase service account JSON
-
 OPTIONS:
-  --engine, -e <engine>     OCR engine: document-ai, azure, google (default: document-ai)
+  --engine, -e <engine>     OCR engine: textract, document-ai, azure, google (default: textract)
   --from-date <YYYY-MM-DD>  Earliest date to import (inclusive)
   --to-date <YYYY-MM-DD>    Latest date to import (inclusive)
   --deepseek-instructions   Custom instructions for DeepSeek (e.g. 'Press 7 is down')
   --deepseek-system-prompt  Extra system prompt context appended to base prompt
   --concurrency, -c <n>     Files to process in parallel (default: 1)
   --delay <ms>              Pause before each file (default: 500)
-  --dry-run                 Skip Firestore writes, only test pipeline
-  --resume                  Skip dates already in Firestore (default: on)
+  --dry-run                 Skip Worker import writes, only test pipeline
+  --resume                  Skip dates already in D1 (default: on)
   --overwrite               Re-import even if date exists
   --date-regex <regex>      Custom regex with capture group for date in filename
   --log <file>              Results output file (default: batch-import-results.json)
   --verbose, -v             Detailed per-file progress
   --help, -h                Show this help
 `);
-}
-
-// ─── Firebase ────────────────────────────────────────────────────────────────
-
-function initFirebase() {
-  const keyPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
-  if (!keyPath) die('GOOGLE_APPLICATION_CREDENTIALS env var is required');
-  const resolved = keyPath.startsWith('~') ? join(homedir(), keyPath.slice(1)) : resolve(keyPath);
-  if (!existsSync(resolved)) die(`Service account key not found: ${resolved}`);
-  const sa = JSON.parse(readFileSync(resolved, 'utf8'));
-  initializeApp({ credential: cert(sa) });
-  return getFirestore();
 }
 
 function die(msg) { console.error('FATAL:', msg); process.exit(1); }
@@ -215,121 +196,6 @@ function parseMaybeNumber(v) {
 function slugForId(value, fallback = 'item') {
   return String(value || '').trim().toLowerCase()
     .replace(/\./g, '_').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || fallback;
-}
-
-function toPressId(machineCode) {
-  return 'press_' + slugForId(machineCode, 'unknown');
-}
-
-function toRowIdFromPress(machineCode) {
-  const m = String(machineCode || '').match(/^(\d+)/);
-  if (m) return 'row_' + String(m[1]).padStart(2, '0');
-  return 'row_other';
-}
-
-function scheduleIssueId(scheduleDate, section, rowId) {
-  return `schedule_${slugForId(scheduleDate)}_${slugForId(section)}_${slugForId(rowId)}`;
-}
-
-function scheduleIssueDate(scheduleDate) {
-  const d = new Date(`${scheduleDate}T12:00:00`);
-  return Number.isFinite(d.getTime()) ? d : new Date();
-}
-
-function formatScheduleIssueDateTime(scheduleDate) {
-  const d = scheduleIssueDate(scheduleDate);
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' ' +
-    d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-}
-
-function classifyScheduleChange(row) {
-  const text = [row?.description, row?.notes, row?.partNumber, row?.mc].map(v => String(v || '')).join(' ').toLowerCase();
-  if (/\b(colou?r|purge|colorant|masterbatch)\b/.test(text)) {
-    return { statusKey: 'startup', subStatus: 'Purging / Color Change' };
-  }
-  return { statusKey: 'open', subStatus: 'Scheduled Mold Change' };
-}
-
-function buildScheduleIssuePayload(plantId, scheduleDate, shift, row, actor) {
-  const machineCode = String(row?.press || '').trim();
-  const { statusKey, subStatus } = classifyScheduleChange(row);
-  const dateTime = formatScheduleIssueDateTime(scheduleDate);
-  const createdDate = scheduleIssueDate(scheduleDate);
-  const noteParts = [
-    `${subStatus} from schedule import.`,
-    row?.partNumber ? `Part: ${row.partNumber}` : '',
-    row?.description ? `Description: ${row.description}` : '',
-    row?.cavity ? `Cavity: ${row.cavity}` : '',
-    row?.notes ? `Notes: ${row.notes}` : '',
-    row?.section ? `Section: ${row.section}` : '',
-  ].filter(Boolean);
-  const note = noteParts.join('\n');
-  const workflowId = `wf_schedule_${slugForId(scheduleDate)}_${slugForId(row?.section)}_${slugForId(row?.rowId)}`;
-
-  return {
-    machine: machineCode,
-    note,
-    dateTime,
-    dateKey: scheduleDate,
-    timestamp: createdDate.getTime(),
-    shift: String(shift || row?.shift || 1),
-    timer: null,
-    userId: actor.uid,
-    userName: actor.name,
-    photoCount: 0,
-    statusHistory: [{
-      status: statusKey,
-      subStatus,
-      note: '',
-      dateTime,
-      by: actor.name,
-      workflowId
-    }],
-    workflowStateByEntry: { [workflowId]: null },
-    schemaVersion: 2,
-    plantId,
-    pressId: toPressId(machineCode),
-    machineCode,
-    rowId: toRowIdFromPress(machineCode),
-    currentStatus: {
-      statusKey,
-      subStatusKey: subStatus,
-      label: statusKey === 'startup' ? 'Startup' : 'Open',
-      subLabel: subStatus,
-      color: statusKey === 'startup' ? '#14b8a6' : '#ef4444',
-      enteredAt: FieldValue.serverTimestamp(),
-      enteredDateTime: dateTime,
-      enteredBy: actor,
-      notePreview: note
-    },
-    lifecycle: {
-      isOpen: true,
-      isResolved: false,
-      openedAt: FieldValue.serverTimestamp(),
-      resolvedAt: null,
-      closedAt: null,
-      reopenedCount: 0
-    },
-    scheduleImport: {
-      date: scheduleDate,
-      section: row?.section || '',
-      rowId: row?.rowId || '',
-      partNumber: row?.partNumber || '',
-      description: row?.description || '',
-      notes: row?.notes || '',
-      isChange: true
-    },
-    source: {
-      type: 'schedule_import',
-      scheduleDate,
-      scheduleSection: row?.section || '',
-      scheduleRowId: row?.rowId || ''
-    },
-    createdAt: FieldValue.serverTimestamp(),
-    createdBy: actor,
-    updatedAt: FieldValue.serverTimestamp(),
-    updatedBy: actor
-  };
 }
 
 function normalizeSchemaPayload(raw) {
@@ -420,8 +286,10 @@ async function callOcr(workerUrl, pdfBytes, opts) {
       return callAzureOcr(base, pdfBytes);
     case 'google':
       return callGoogleOcr(base, pdfBytes);
-    default:
+    case 'document-ai':
       return callDocumentAiOcr(base, pdfBytes, opts);
+    default:
+      return callTextractOcr(base, pdfBytes);
   }
 }
 
@@ -442,29 +310,99 @@ async function callAzureOcr(base, pdfBytes) {
   return (data.text || '').trim();
 }
 
-async function callGoogleOcr(base, pdfBytes) {
+let NodeCanvas;
+async function ensurePdfjs() {
   if (!pdfjsLib) {
     try {
-      pdfjsLib = await import('pdfjs-dist');
-      pdfjsLib.GlobalWorkerOptions.workerSrc = '';
-    } catch {
-      throw new Error('pdfjs-dist not installed. Run: npm install pdfjs-dist');
+      pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
+      const scriptDir = dirname(fileURLToPath(import.meta.url));
+      pdfjsLib.GlobalWorkerOptions.workerSrc = resolve(scriptDir, '..', 'node_modules', 'pdfjs-dist', 'legacy', 'build', 'pdf.worker.mjs');
+      const canvasModule = await import('@napi-rs/canvas');
+      NodeCanvas = canvasModule.default || canvasModule;
+      globalThis.Canvas = NodeCanvas.Canvas || canvasModule.Canvas;
+      globalThis.Image = NodeCanvas.Image || canvasModule.Image;
+      globalThis.HTMLCanvasElement = NodeCanvas.Canvas || canvasModule.Canvas;
+      globalThis.Path2D = NodeCanvas.Path2D || canvasModule.Path2D;
+    } catch (e) {
+      throw new Error('Failed to load pdfjs-dist or canvas: ' + e.message);
     }
   }
+}
+
+class NodeCanvasFactory {
+  create(width, height) {
+    const canvas = NodeCanvas.createCanvas(width, height);
+    const context = canvas.getContext('2d');
+    return { canvas, context };
+  }
+
+  reset(canvasAndContext, width, height) {
+    canvasAndContext.canvas.width = width;
+    canvasAndContext.canvas.height = height;
+  }
+
+  destroy(canvasAndContext) {
+    canvasAndContext.canvas.width = 0;
+    canvasAndContext.canvas.height = 0;
+    canvasAndContext.canvas = null;
+    canvasAndContext.context = null;
+  }
+}
+
+async function callTextractOcr(base, pdfBytes) {
+  await ensurePdfjs();
 
   const doc = await pdfjsLib.getDocument({ data: pdfBytes.buffer ? new Uint8Array(pdfBytes) : pdfBytes }).promise;
   const images = [];
+  const factory = new NodeCanvasFactory();
   for (let i = 1; i <= doc.numPages; i++) {
     const page = await doc.getPage(i);
     const viewport = page.getViewport({ scale: 2 });
-    const canvas = new OffscreenCanvas(viewport.width, viewport.height);
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 0, viewport.width, viewport.height);
-    await page.render({ canvasContext: ctx, viewport }).promise;
-    const blob = await canvas.convertToBlob({ type: 'image/png' });
-    const buffer = Buffer.from(await blob.arrayBuffer());
+    const { canvas, context } = factory.create(viewport.width, viewport.height);
+    context.fillStyle = '#fff';
+    context.fillRect(0, 0, viewport.width, viewport.height);
+    await page.render({
+      canvasContext: context,
+      viewport,
+      canvasFactory: factory
+    }).promise;
+    const buffer = canvas.toBuffer('image/jpeg');
+    const base64 = buffer.toString('base64');
+    console.log(`    → Page ${i} rendered: JPEG binary size = ${(buffer.length / 1024).toFixed(1)} KB`);
+    images.push(base64);
+    factory.destroy({ canvas, context });
+  }
+
+  const res = await fetch(`${base}/api/ocr/textract`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ images }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || `Textract OCR failed (${res.status})`);
+  return (data.text || '').trim();
+}
+
+async function callGoogleOcr(base, pdfBytes) {
+  await ensurePdfjs();
+
+  const doc = await pdfjsLib.getDocument({ data: pdfBytes.buffer ? new Uint8Array(pdfBytes) : pdfBytes }).promise;
+  const images = [];
+  const factory = new NodeCanvasFactory();
+  for (let i = 1; i <= doc.numPages; i++) {
+    const page = await doc.getPage(i);
+    const viewport = page.getViewport({ scale: 2 });
+    const { canvas, context } = factory.create(viewport.width, viewport.height);
+    context.fillStyle = '#fff';
+    context.fillRect(0, 0, viewport.width, viewport.height);
+    await page.render({
+      canvasContext: context,
+      viewport,
+      canvasFactory: factory
+    }).promise;
+    const buffer = canvas.toBuffer('image/png');
     images.push(buffer.toString('base64'));
+    factory.destroy({ canvas, context });
   }
 
   const res = await fetch(`${base}/api/ocr/google`, {
@@ -496,108 +434,96 @@ async function callDeepSeek(workerUrl, ocrText, opts) {
   return data;
 }
 
-// ─── Firestore Import ─────────────────────────────────────────────────────
+// ─── Worker D1 import helpers ─────────────────────────────────────────────
 
-async function importToFirestore(db, plantId, norm, dryRun) {
-  const { scheduleDate, shift, lineSpeed, totalPlannedPcs, notes, sections } = norm;
-  const dailyRef = db.doc(`plants/${plantId}/dailySchedules/${scheduleDate}`);
-  const scheduleChangeRows = [...(sections.northBayChanges || []), ...(sections.southBayChanges || [])]
+async function checkScheduleExists(workerUrl, plantId, scheduleDate) {
+  const url = `${workerUrl.replace(/\/+$/, '')}/api/import-schedule?plant=${encodeURIComponent(plantId)}&date=${encodeURIComponent(scheduleDate)}`;
+  const res = await fetch(url);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Schedule existence check failed (${res.status})`);
+  return Boolean(data.exists);
+}
+
+async function importToWorker(workerUrl, plantId, norm, sourceFileName, dryRun) {
+  const scheduleChangeRows = [...(norm.sections.northBayChanges || []), ...(norm.sections.southBayChanges || [])]
     .filter(row => String(row?.press || '').trim());
-
+  const rowCount = Object.values(norm.sections).reduce((sum, rows) => sum + rows.length, 0);
   if (dryRun) {
-    const total = Object.values(sections).reduce((s, r) => s + r.length, 0);
-    return { rowCount: total, issueCount: scheduleChangeRows.length };
+    return { rowCount, issueCount: scheduleChangeRows.length };
   }
 
-  // Delete existing rows
-  for (const cfg of SCHEDULE_SECTIONS) {
-    const snap = await dailyRef.collection(cfg.section).get();
-    if (snap.empty) continue;
-    const batch = db.batch();
-    snap.forEach(d => batch.delete(d.ref));
-    await batch.commit();
-  }
-
-  // Write parent doc
-  const parentData = {
-    scheduleDate, plantId, shift, lineSpeed, totalPlannedPcs,
-    sourceFileName: `batch-import-${scheduleDate}`,
-    sourceFileType: 'application/pdf',
-    status: 'imported', notes,
-    page1Count: sections.page1.length, page2Count: sections.page2.length,
-    northBayChangesCount: sections.northBayChanges.length,
-    southBayChangesCount: sections.southBayChanges.length,
-    updatedAt: FieldValue.serverTimestamp(), createdAt: FieldValue.serverTimestamp(),
+  const res = await fetch(`${workerUrl.replace(/\/+$/, '')}/api/import-schedule?plant=${encodeURIComponent(plantId)}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-source-file-name': sourceFileName,
+      'x-source-file-type': 'application/pdf'
+    },
+    body: JSON.stringify({
+      schedule_info: {
+        date: norm.scheduleDate,
+        shift: norm.shift,
+        line_speed: norm.lineSpeed,
+        total_planned_pcs: norm.totalPlannedPcs,
+        note: norm.notes
+      },
+      page_1: (norm.sections.page1 || []).map(row => ({
+        press: row.press,
+        part_storage_location: row.partStorageLocation,
+        part_number: row.partNumber,
+        description: row.description,
+        cavity: row.cavity,
+        doh: row.doh,
+        labels_per_shift: row.labelsPerShift,
+        mc: row.mc,
+        notes: row.notes
+      })),
+      page_2: (norm.sections.page2 || []).map(row => ({
+        press: row.press,
+        part_storage_location: row.partStorageLocation,
+        part_number: row.partNumber,
+        description: row.description,
+        cavity: row.cavity,
+        doh: row.doh,
+        labels_per_shift: row.labelsPerShift,
+        mc: row.mc,
+        notes: row.notes
+      })),
+      north_bay_changes: (norm.sections.northBayChanges || []).map(row => ({
+        press: row.press,
+        part_storage_location: row.partStorageLocation,
+        part_number: row.partNumber,
+        description: row.description,
+        cavity: row.cavity,
+        doh: row.doh,
+        labels_per_shift: row.labelsPerShift,
+        mc: row.mc,
+        notes: row.notes
+      })),
+      south_bay_changes: (norm.sections.southBayChanges || []).map(row => ({
+        press: row.press,
+        part_storage_location: row.partStorageLocation,
+        part_number: row.partNumber,
+        description: row.description,
+        cavity: row.cavity,
+        doh: row.doh,
+        labels_per_shift: row.labelsPerShift,
+        mc: row.mc,
+        notes: row.notes
+      }))
+    })
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Worker import failed (${res.status})`);
+  return {
+    rowCount: Number(data.totalRows || rowCount),
+    issueCount: Number(data.scheduleIssues || scheduleChangeRows.length)
   };
-
-  const allOps = [];
-  allOps.push({ ref: dailyRef, data: parentData });
-
-  for (const cfg of SCHEDULE_SECTIONS) {
-    for (const row of (sections[cfg.section] || [])) {
-      allOps.push({
-        ref: dailyRef.collection(cfg.section).doc(row.rowId),
-        data: { ...row, scheduleDate, plantId, shift, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() },
-      });
-    }
-  }
-
-  const actor = { uid: 'schedule-import', name: 'Schedule Import' };
-  let scheduleIssueCount = 0;
-  for (const row of scheduleChangeRows) {
-    const issueId = scheduleIssueId(scheduleDate, row.section, row.rowId);
-    const issueRef = db.doc(`plants/${plantId}/issues/${issueId}`);
-    const existing = await issueRef.get();
-    if (existing.exists) continue;
-    const issuePayload = buildScheduleIssuePayload(plantId, scheduleDate, shift, row, actor);
-    allOps.push({ ref: issueRef, data: issuePayload });
-    allOps.push({
-      ref: issueRef.collection('events').doc(),
-      data: {
-        type: 'issue_created',
-        eventAt: FieldValue.serverTimestamp(),
-        actor,
-        payload: {
-          machineCode: issuePayload.machineCode,
-          note: issuePayload.note,
-          initialStatusKey: issuePayload.currentStatus.statusKey,
-          initialSubStatusKey: issuePayload.currentStatus.subStatusKey,
-          source: issuePayload.source
-        },
-        schemaVersion: 2
-      }
-    });
-    allOps.push({
-      ref: issueRef.collection('events').doc(),
-      data: {
-        type: 'status_changed',
-        eventAt: FieldValue.serverTimestamp(),
-        actor,
-        payload: {
-          fromStatusKey: null,
-          fromSubStatusKey: null,
-          toStatusKey: issuePayload.currentStatus.statusKey,
-          toSubStatusKey: issuePayload.currentStatus.subStatusKey,
-          note: ''
-        },
-        schemaVersion: 2
-      }
-    });
-    scheduleIssueCount += 1;
-  }
-
-  for (let i = 0; i < allOps.length; i += 450) {
-    const batch = db.batch();
-    allOps.slice(i, i + 450).forEach(op => batch.set(op.ref, op.data, { merge: true }));
-    await batch.commit();
-  }
-
-  return { rowCount: Object.values(sections).reduce((s, r) => s + r.length, 0), issueCount: scheduleIssueCount };
 }
 
 // ─── Per-File Pipeline ────────────────────────────────────────────────────
 
-async function processFile(db, opts, filePath) {
+async function processFile(opts, filePath) {
   const filename = parse(filePath).base;
   const result = { file: filename, date: null, status: 'failed', error: null, rows: 0, scheduleIssues: 0 };
 
@@ -607,8 +533,8 @@ async function processFile(db, opts, filePath) {
     result.date = date;
 
     if (opts.resume) {
-      const existing = await db.doc(`plants/${opts.plant}/dailySchedules/${date}`).get();
-      if (existing.exists) { result.status = 'skipped'; result.error = 'Already exists in Firestore'; return result; }
+      const exists = await checkScheduleExists(opts.workerUrl, opts.plant, date);
+      if (exists) { result.status = 'skipped'; result.error = 'Already exists in D1'; return result; }
     }
 
     if (opts.verbose) console.log(`  → OCR: ${filename}`);
@@ -630,8 +556,7 @@ async function processFile(db, opts, filePath) {
       for (const row of (norm.sections[cfg.section] || [])) row.scheduleDate = date;
     }
 
-    // Import to Firestore
-    const importResult = await importToFirestore(db, opts.plant, norm, opts.dryRun);
+    const importResult = await importToWorker(opts.workerUrl, opts.plant, norm, filename, opts.dryRun);
     result.rows = importResult.rowCount;
     result.scheduleIssues = importResult.issueCount;
     result.status = opts.dryRun ? 'would_import' : 'imported';
@@ -639,6 +564,7 @@ async function processFile(db, opts, filePath) {
     if (opts.verbose) console.log(`  ✓ ${date}: ${result.rows} rows; ${result.scheduleIssues} schedule issue(s)`);
   } catch (err) {
     result.error = err.message;
+    console.error('Error details:', err);
   }
 
   return result;
@@ -694,8 +620,6 @@ async function main() {
 
   if (!files.length) die(`No PDF files match the date range. Total: ${allFiles.length}, filtered out: ${skippedRange}`);
 
-  const db = initFirebase();
-
   const rangeStr = opts.fromDate || opts.toDate
     ? `  Date range: ${opts.fromDate || '…'} → ${opts.toDate || '…'}`
     : '';
@@ -707,10 +631,10 @@ async function main() {
   console.log(`  OCR engine: ${opts.engine}`);
   if (rangeStr) console.log(rangeStr);
   console.log(`  Files:      ${files.length} PDF(s)${skippedRange ? ` (${skippedRange} outside range)` : ''}`);
-  console.log(`  Mode:       ${opts.dryRun ? 'DRY RUN (no Firestore writes)' : 'LIVE'}`);
+  console.log(`  Mode:       ${opts.dryRun ? 'DRY RUN (no D1 writes)' : 'LIVE'}`);
   console.log(`  Resume:     ${opts.resume ? 'Skip existing' : 'Overwrite'}`);
   console.log(`  Concurrency: ${opts.concurrency}`);
-  if (!opts.dryRun) console.log(`  ⚠  This WILL write to Firestore`);
+  if (!opts.dryRun) console.log(`  ⚠  This WILL write to D1 through the Worker`);
   console.log('');
 
   // Process with concurrency pool
@@ -719,7 +643,7 @@ async function main() {
   const total = files.length;
 
   async function worker(file) {
-    const result = await processFile(db, opts, file);
+    const result = await processFile(opts, file);
     results.push(result);
     const icon = result.status === 'imported' ? '✓' : result.status === 'would_import' ? '~' : result.status === 'skipped' ? '-' : '✗';
     const detail = result.date ? result.date : '??';

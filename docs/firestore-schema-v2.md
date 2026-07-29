@@ -58,6 +58,18 @@ Keep this document lightweight and user-centric.
   "displayName": "James Scoggins",
   "email": "james@example.com",
   "photoURL": "https://...",
+  "fullName": "James Scoggins",
+  "ssoNumber": "123456",
+  "requestedPlantIds": ["plant_jef", "plant_lou"],
+  "profileOnboarding": {
+    "completed": true,
+    "completedAt": "serverTimestamp",
+    "version": 1
+  },
+  "themePrefs": {
+    "activeTheme": "midnight",
+    "customThemes": []
+  },
   "defaultPlantId": "plant_jef",
   "recentPlantIds": ["plant_jef", "plant_lou"],
   "createdAt": "serverTimestamp",
@@ -69,6 +81,7 @@ Keep this document lightweight and user-centric.
 ### Notes
 
 - Store identity and preferences here.
+- `themePrefs` mirrors the active theme and user-owned local custom themes; see `docs/theme-system.md`.
 - Do not use this document as the source of truth for plant authorization.
 - Plant access should be derived from `plants/{plantId}/members/{userId}`.
 
@@ -118,6 +131,8 @@ This becomes the source of truth for authorization and plant-specific roles.
 {
   "userId": "uid_123",
   "displayName": "James Scoggins",
+  "fullName": "James Scoggins",
+  "ssoNumber": "123456",
   "email": "james@example.com",
   "role": "owner",
   "isActive": true,
@@ -132,6 +147,26 @@ This becomes the source of truth for authorization and plant-specific roles.
   },
   "joinedAt": "serverTimestamp",
   "lastSeenAt": "serverTimestamp"
+}
+```
+
+### `plants/{plantId}/accessRequests/{userId}`
+
+Pending requests created during onboarding. These are not authorization; admins approve by creating the member doc and adding the plant to `users/{userId}.plantIds`.
+
+```json
+{
+  "uid": "uid_123",
+  "userId": "uid_123",
+  "displayName": "James Scoggins",
+  "fullName": "James Scoggins",
+  "ssoNumber": "123456",
+  "email": "james@example.com",
+  "photoURL": "https://...",
+  "requestedPlantId": "plant_jef",
+  "requestedAt": "serverTimestamp",
+  "updatedAt": "serverTimestamp",
+  "status": "pending"
 }
 ```
 
@@ -301,11 +336,42 @@ The current single-document runtime config stores status categories and subcateg
       "isActive": true,
       "order": 10
     }
+  },
+  "responseTree": {
+    "version": 1,
+    "edges": [
+      {
+        "id": "controlman_to_maintenance",
+        "sourceKey": "controlman",
+        "targetKey": "maintenance",
+        "trigger": "Mechanical fault suspected",
+        "sourceRouteKey": "do011_eoat",
+        "targetRouteKey": "do011_eoat",
+        "mode": "pass-through",
+        "routeKeys": ["do011_eoat"],
+        "isActive": true,
+        "order": 0
+      },
+      {
+        "id": "controlman_to_startup",
+        "sourceKey": "controlman",
+        "targetKey": "startup",
+        "trigger": "Mold change complete",
+        "sourceRouteKey": "mold_change",
+        "targetRouteKey": "warm_up",
+        "mode": "translate",
+        "routeKeys": ["mold_change"],
+        "isActive": true,
+        "order": 1
+      }
+    ]
   }
 }
 ```
 
 `statuses.{statusKey}.subs` remains the compatibility/display list and category picker source. `subcategoryRoutes` is the routing source for assigning a subcategory to one or more category roles; bound routes are synced back into each bound category's `subs` list so the app picker reflects the bindings.
+
+`responseTree` is an optional guidance layer for loose category-role hierarchy. It explains and suggests paths between existing category/status keys, such as `controlman -> maintenance`, without enforcing workflow order. Edges map a source category/subcategory to a target category/subcategory. Pass-through edges keep the same route key on both sides; translation edges use different `sourceRouteKey` and `targetRouteKey` values, such as `Mold Change -> Warm Up`. Translation edges may also use `sourceRouteKey: "__any__"` to mean any current source subcategory can suggest one concrete target subcategory. `routeKeys` remains as a legacy compatibility field and should contain the source route. For SQL/D1 compatibility, the same object may also be embedded under `statuses.__responseTree`; runtime status normalization must strip keys beginning with `__` from normal category lists.
 
 ---
 
@@ -341,6 +407,18 @@ This is the main operational document used by the live UI.
       "uid": "uid_123",
       "name": "James Scoggins"
     }
+  },
+
+  "qualityDefect": {
+    "key": "flash",
+    "label": "Flash / burrs",
+    "description": "Thin excess plastic at parting line, vents, lifters, pins, or shutoffs.",
+    "whoToCall": ["Quality", "Process Engineer", "Tool & Die"],
+    "likelyCauses": ["Clamp force too low"],
+    "quickChecks": ["Identify whether flash is parting line, vent, pin, or shutoff"],
+    "firstActions": ["Contain flashed product by cavity and time range"],
+    "selectedAt": "2026-06-29T12:00:00.000Z",
+    "selectedBy": { "uid": "uid_123", "name": "James Scoggins" }
   },
 
   "lifecycle": {
@@ -497,6 +575,27 @@ This replaces embedded `statusHistory` with an append-only event log.
   }
 }
 ```
+
+### Shared solution
+
+Resolved issues may carry a current reusable solution summary on the issue document:
+
+```json
+{
+  "solution": {
+    "current": {
+      "revisionId": "sol_abc123",
+      "text": "Replaced the damaged hydraulic hose and verified clamp pressure.",
+      "photoCount": 2,
+      "photos": [{ "storagePath": "plants/{plantId}/issues/{issueId}/photos/example.jpg" }],
+      "sharedAt": "serverTimestamp",
+      "sharedBy": { "uid": "uid_123", "name": "James Scoggins" }
+    }
+  }
+}
+```
+
+Each submission also appends a `solution_shared` or `solution_updated` event. Solution photos use ordinary issue attachment storage with `type: "solution_photo"` and the matching `solutionRevisionId`; photo blobs are never stored in the issue document.
 
 ### Reopened
 

@@ -16,3 +16,4 @@ batchScheduleImporter.rtf
 batch-import-results.json
 schedule-ocr.py
 .venv/
+deepseek-recommendations.txt

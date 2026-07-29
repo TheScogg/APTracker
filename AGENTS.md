@@ -8,7 +8,6 @@ AP Tracker is a manufacturing-floor issue tracker built primarily as a **single-
 - `index.html` — production app shell + runtime logic (~6,580 lines)
 - `admin.html` — plant/member/status administration portal (~1,920 lines)
 - `demo.html` — large interactive demo/prototype variant (~2,148 lines)
-- `migration-plant-structure.html` — one-off migration helper
 - `ap-tracker-job-mascots-v2.html` — mascot/job-role visual utility page
 
 ### Stack

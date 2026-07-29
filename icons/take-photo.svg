@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">Take Photo</title>
+  <desc id="desc">A compact camera with a cyan-to-blue body, luminous aqua lens, and gold-gradient shutter control.</desc>
+  <defs>
+    <linearGradient id="camera-body" x1="3" y1="5" x2="21" y2="20" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#35E7D7"/>
+      <stop offset="1" stop-color="#5C83FF"/>
+    </linearGradient>
+    <linearGradient id="camera-lens" x1="8" y1="9" x2="16" y2="17" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#C9FFFB"/>
+      <stop offset="1" stop-color="#37CFFF"/>
+    </linearGradient>
+    <linearGradient id="camera-gold" x1="16.5" y1="4.5" x2="20.2" y2="7.2" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFE59A"/>
+      <stop offset=".48" stop-color="#FFD166"/>
+      <stop offset="1" stop-color="#EAA52E"/>
+    </linearGradient>
+    <radialGradient id="camera-face" cx="0" cy="0" r="1" gradientTransform="translate(12 13) rotate(90) scale(4.5)">
+      <stop stop-color="#66F4F0" stop-opacity=".24"/>
+      <stop offset="1" stop-color="#5082FF" stop-opacity=".04"/>
+    </radialGradient>
+  </defs>
+
+  <rect x="16.8" y="5.05" width="3.25" height="1.55" rx=".72" fill="url(#camera-gold)"/>
+  <path d="M7.4 6.55 8.95 4.8h6.1l1.55 1.75H19a2.25 2.25 0 0 1 2.25 2.25v8.65A2.25 2.25 0 0 1 19 19.7H5a2.25 2.25 0 0 1-2.25-2.25V8.8A2.25 2.25 0 0 1 5 6.55h2.4Z"
+        stroke="url(#camera-body)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="12" cy="13" r="4" fill="url(#camera-face)" stroke="url(#camera-lens)" stroke-width="1.7"/>
+  <circle cx="12" cy="13" r="1.45" fill="#E5FFFF" stroke="#3CD9F1" stroke-width=".65"/>
+  <path d="M9.55 10.55a3.45 3.45 0 0 1 2.45-1" stroke="#8BF8EF" stroke-width="1.05" stroke-linecap="round" opacity=".95"/>
+  <circle cx="18.15" cy="9.25" r=".7" fill="#C9FFFB" opacity=".9"/>
+</svg>

@@ -2,7 +2,6 @@
 node_modules
 .wrangler
 .venv
-schedule.pdf
-schedule.pdf.txt
-schedule-output.txt
-output.txt
+scratch/
+scripts/
+server/

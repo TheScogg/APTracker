@@ -23,6 +23,25 @@ messaging.onBackgroundMessage(payload => {
   self.registration.showNotification(title, options);
 });
 
+self.addEventListener('push', event => {
+  let payload = {};
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch {
+    payload = { body: event.data ? event.data.text() : '' };
+  }
+  if (payload?.from || payload?.fcmMessageId || payload?.notification) return;
+
+  const title = payload?.title || payload?.data?.title || 'AP Tracker';
+  const options = {
+    body: payload?.body || payload?.data?.body || '',
+    icon: payload?.icon || '/icons/icon-192.png',
+    badge: payload?.badge || '/icons/icon-192.png',
+    data: payload?.data || {}
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
 self.addEventListener('notificationclick', event => {
   event.notification.close();
   const data = event.notification.data || {};

@@ -1,8 +1,9 @@
 import { execSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const outPath = resolve(process.cwd(), 'build-info.js');
+const outPath = resolve(process.cwd(), 'js', 'build-info.js');
 const indexPath = resolve(process.cwd(), 'index.html');
 
 let version = 'dev';
@@ -33,7 +34,16 @@ const dirty = (() => {
     return false;
   }
 })();
-const assetVersion = dirty ? `${version}-dirty` : version;
+function hashFile(path) {
+  try {
+    return createHash('sha256').update(readFileSync(resolve(process.cwd(), path))).digest('hex').slice(0, 8);
+  } catch (_) {
+    return '';
+  }
+}
+
+const assetHash = [hashFile('js/app.js'), hashFile('css/styles.css')].filter(Boolean).join('');
+const assetVersion = dirty && assetHash ? `${version}-${assetHash.slice(0, 8)}` : version;
 
 const buildInfo = {
   version,
@@ -49,9 +59,9 @@ const content = `window.__APP_BUILD_INFO__ = ${JSON.stringify(buildInfo, null, 2
 writeFileSync(outPath, content, 'utf8');
 try {
   const indexHtml = readFileSync(indexPath, 'utf8')
-    .replace(/build-info\.js\?v=[^"']+/g, `build-info.js?v=${assetVersion}`)
-    .replace(/app\.js\?v=[^"']+/g, `app.js?v=${assetVersion}`)
-    .replace(/styles\.css\?v=[^"']+/g, `styles.css?v=${assetVersion}`)
+    .replace(/js\/build-info\.js\?v=[^"']+/g, `js/build-info.js?v=${assetVersion}`)
+    .replace(/js\/app\.js\?v=[^"']+/g, `js/app.js?v=${assetVersion}`)
+    .replace(/css\/styles\.css\?v=[^"']+/g, `css/styles.css?v=${assetVersion}`)
     .replace(/(<span id="app-version-indicator"[^>]*>)([^<]*)(<\/span>)/, `$1rev: ${version}$3`);
   writeFileSync(indexPath, indexHtml, 'utf8');
 } catch (_) {

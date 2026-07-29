@@ -22,12 +22,16 @@
     }
   }
 </script>
-<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&family=Nunito:wght@300;400;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&family=Nunito:wght@300;400;600;700&family=Space+Grotesk:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,400..700;1,400..700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="./build-info.js?v=3bb03c2"></script>
-<script src="./fcm-config.js?v=ae083d6"></script>
-<link rel="stylesheet" href="./styles.css?v=3bb03c2">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css" />
+<script src="./js/build-info.js?v=851d81b-013c4521"></script>
+<script src="./js/fcm-config.js?v=ae083d6"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<link rel="stylesheet" href="./css/styles.css?v=851d81b-013c4521">
 </head>
 <body>
 
@@ -37,8 +41,43 @@
     <div class="login-icon">⚙</div>
     <div class="login-title">AP <span>TRACKER</span></div>
     <div class="login-sub">Sign in to log and track issues</div>
-    <button class="google-btn" id="google-signin-btn"></button>
+    <div id="google-signin-btn" class="google-btn-container" style="display:flex; justify-content:center; width:100%; min-height:44px; margin-top:10px;"></div>
     <button class="demo-login-btn" id="demo-login-btn" type="button">Open Demo Plant</button>
+  </div>
+</div>
+
+<div class="modal-overlay profile-onboarding-overlay" id="profile-onboarding-modal">
+  <div class="modal profile-onboarding-modal" role="dialog" aria-modal="true" aria-labelledby="profile-onboarding-title">
+    <div class="modal-kicker">Profile setup</div>
+    <div class="modal-title" id="profile-onboarding-title">Request plant access</div>
+    <div class="modal-subtitle">Confirm your identity and choose the plants you need. An admin will review and approve access.</div>
+
+    <label class="onboarding-field">
+      <span>Full name</span>
+      <input type="text" id="profile-onboarding-full-name" autocomplete="name" placeholder="First and last name">
+    </label>
+
+    <label class="onboarding-field">
+      <span>SSO number</span>
+      <input type="text" id="profile-onboarding-sso" inputmode="numeric" autocomplete="off" placeholder="Employee SSO">
+    </label>
+
+    <div class="onboarding-field">
+      <span>Plants</span>
+      <div class="onboarding-plant-picker" id="profile-onboarding-plant-picker">
+        <button class="onboarding-plant-toggle" id="profile-onboarding-plant-toggle" type="button" aria-haspopup="listbox" aria-expanded="false">
+          <span id="profile-onboarding-plant-label">Select plants</span>
+          <span aria-hidden="true">▾</span>
+        </button>
+        <div class="onboarding-plant-menu" id="profile-onboarding-plant-menu" role="listbox" aria-multiselectable="true"></div>
+      </div>
+      <div class="onboarding-help">This sends an access request. It does not grant access until an admin approves it.</div>
+    </div>
+
+    <div class="onboarding-error" id="profile-onboarding-error" role="alert"></div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" id="profile-onboarding-submit" type="button">Continue</button>
+    </div>
   </div>
 </div>
 
@@ -46,8 +85,8 @@
 <div id="app">
   <div id="sync-banner" class="visible">
     <div class="sync-dot" id="sync-dot"></div>
-    <span id="sync-text">Connecting…</span>
-    <span id="app-version-indicator" class="app-version-indicator" title="Current commit version">rev: 3bb03c2</span>
+    <span id="sync-text" aria-live="polite">Connecting…</span>
+    <span id="app-version-indicator" class="app-version-indicator" title="Current commit version">rev: 851d81b</span>
     <span id="firestore-io-indicator" class="firestore-io-indicator" title="Estimated Firestore operations for this session">R:0 W:0</span>
   </div>
 
@@ -68,14 +107,14 @@
         <button class="sort-dropdown-btn" id="todos-btn-header" type="button" data-shell-action="open-todos-modal" aria-label="Todos" title="Todos">
           <span class="todo-btn-icon" aria-hidden="true">
             <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
-              <rect x="2.25" y="2.25" width="11.5" height="11.5" rx="2" fill="#fff" stroke="var(--green)" stroke-width="1.5"/>
-              <path d="M4.8 8.1 7 10.4 11.7 5.4" stroke="var(--green)" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round"/>
+              <rect x="2.25" y="2.25" width="11.5" height="11.5" rx="2" fill="#fff" stroke="var(--color-success, var(--green))" stroke-width="1.5"/>
+              <path d="M4.8 8.1 7 10.4 11.7 5.4" stroke="var(--color-success, var(--green))" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </span>
         </button>
 
         <button class="sort-dropdown-btn" id="messages-btn-header" data-messages-trigger="true" data-shell-action="open-messages" style="gap:4px;" aria-label="Messages" title="Messages">
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;opacity:0.7;"><path d="M3 2h10a1 1 0 011 1v8a1 1 0 01-1 1H5l-3 2V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
+          <svg class="messages-btn-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 2h10a1 1 0 011 1v8a1 1 0 01-1 1H5l-3 2V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
           <span class="msg-btn-badge" data-messages-badge style="display:none;">0</span>
         </button>
 
@@ -111,8 +150,8 @@
         <button class="header-quick-item" type="button" data-shell-action="open-todos-modal" role="menuitem">
           <span class="header-quick-item-icon header-quick-item-icon-todos" aria-hidden="true">
             <svg width="22" height="22" viewBox="0 0 16 16" fill="none">
-              <rect x="2.25" y="2.25" width="11.5" height="11.5" rx="2" fill="#fff" stroke="var(--green)" stroke-width="1.5"/>
-              <path d="M4.8 8.1 7 10.4 11.7 5.4" stroke="var(--green)" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round"/>
+              <rect x="2.25" y="2.25" width="11.5" height="11.5" rx="2" fill="#fff" stroke="var(--color-success, var(--green))" stroke-width="1.5"/>
+              <path d="M4.8 8.1 7 10.4 11.7 5.4" stroke="var(--color-success, var(--green))" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </span>
           <span class="header-quick-item-copy">
@@ -121,7 +160,13 @@
           </span>
         </button>
         <button class="header-quick-item" type="button" data-shell-action="open-messages" role="menuitem">
-          <span class="header-quick-item-icon header-quick-item-icon-messages" aria-hidden="true">✉</span>
+          <span class="header-quick-item-icon header-quick-item-icon-messages" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 16 16" fill="none">
+              <path d="M2.5 4.25A1.75 1.75 0 014.25 2.5h7.5a1.75 1.75 0 011.75 1.75v7.5a1.75 1.75 0 01-1.75 1.75h-7.5a1.75 1.75 0 01-1.75-1.75v-7.5z" fill="#fff" opacity="0.96"/>
+              <path d="M3.7 4.95 8 8.45l4.3-3.5" stroke="#be123c" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M3.85 11.15 6.35 8.9M12.15 11.15 9.65 8.9" stroke="#be123c" stroke-width="1.45" stroke-linecap="round"/>
+            </svg>
+          </span>
           <span class="header-quick-item-copy">
             <span class="header-quick-item-title">Messages</span>
             <span class="header-quick-item-sub">Inbox and replies</span>
@@ -131,10 +176,12 @@
         <button class="header-quick-item" type="button" data-shell-action="open-role-alerts" role="menuitem">
           <span class="header-quick-item-icon header-quick-item-icon-alerts" aria-hidden="true">!</span>
           <span class="header-quick-item-copy">
-            <span class="header-quick-item-title">Alerts</span>
+            <span class="header-quick-item-title-row">
+              <span class="header-quick-item-title">Alerts</span>
+              <span class="msg-btn-badge header-quick-item-badge" id="header-quick-alert-badge" data-role-alert-badge style="display:none;">0</span>
+            </span>
             <span class="header-quick-item-sub">Category tasks</span>
           </span>
-          <span class="msg-btn-badge header-quick-item-badge" id="header-quick-alert-badge" data-role-alert-badge style="display:none;">0</span>
         </button>
       </div>
     </div>
@@ -146,26 +193,21 @@
         <span class="user-chevron">▼</span>
       </div>
       <div class="user-dropdown" id="user-dropdown">
-        <!-- Account -->
-        <div class="user-dropdown-section">
-          <div class="user-dropdown-section-label">Account</div>
-          <button class="user-dropdown-item" id="role-prefs-btn" type="button" data-shell-action="open-role-prefs">
-            <span class="ud-item-icon">🧭</span>
-            My Alert Categories
-          </button>
-          <button class="user-dropdown-item" id="admin-page-btn" style="display:none">
-            <span class="ud-item-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 1L10 5H14L11 8L12.5 12L8 9.5L3.5 12L5 8L2 5H6L8 1Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" fill="none"/></svg></span>
-            Admin Panel
-          </button>
-          <button class="user-dropdown-item" id="tutorial-btn" data-shell-action="open-tutorial">
-            <span class="ud-item-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.3"/><path d="M8 7v4M8 5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>
-            Tutorial
-          </button>
+        <div class="ud-profile-card">
+          <div class="user-avatar-fallback ud-avatar" id="ud-avatar">?</div>
+          <div class="ud-profile-copy">
+            <div class="ud-profile-name" id="dropdown-full-name">User</div>
+            <div class="ud-profile-email" id="dropdown-email"></div>
+            <div class="ud-profile-meta">
+              <span id="ud-role-label">Member</span>
+              <span aria-hidden="true">·</span>
+              <span id="ud-plant-label">Plant loading</span>
+            </div>
+          </div>
         </div>
-        <div class="ud-divider"></div>
-        <!-- Workspace -->
-        <div class="user-dropdown-section">
-          <div class="user-dropdown-section-label">Workspace</div>
+
+        <div class="user-dropdown-section ud-plant-section">
+          <div class="user-dropdown-section-label">Current Plant</div>
           <div class="plant-switcher-wrap" id="plant-switcher-wrap">
             <button class="plant-switcher-btn" id="plant-switcher-btn" data-shell-action="toggle-plant-dropdown">
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;opacity:0.7;"><path d="M2 3h12v10H2z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M6 3V1h4v2" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M2 7h12" stroke="currentColor" stroke-width="1.3"/></svg>
@@ -174,12 +216,27 @@
             </button>
             <div class="plant-dropdown" id="plant-dropdown"></div>
           </div>
+        </div>
+
+        <div class="user-dropdown-section">
+          <div class="user-dropdown-section-label">Tools</div>
           <button class="user-dropdown-item" id="messages-btn-menu" data-messages-trigger="true" type="button" data-shell-action="open-messages">
             <span class="ud-item-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 2h10a1 1 0 011 1v8a1 1 0 01-1 1H5l-3 2V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg></span>
             Messages
             <span class="msg-btn-badge" data-messages-badge style="display:none;">0</span>
           </button>
-          <!-- Dark/Light toggle -->
+          <button class="user-dropdown-item" id="analytics-btn-menu" type="button" data-shell-action="open-analytics">
+            <span class="ud-item-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 14h12M4 11V5M8 11V3M12 11V7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            Analytics
+          </button>
+          <button class="user-dropdown-item" id="role-prefs-btn" type="button" data-shell-action="open-role-prefs">
+            <span class="ud-item-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2.2 13 4.5v3.2c0 3-2 5.3-5 6.1-3-.8-5-3.1-5-6.1V4.5l5-2.3Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M6 8.1 7.3 9.4 10.2 6.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            Alert Categories
+          </button>
+        </div>
+
+        <div class="user-dropdown-section ud-appearance-section">
+          <div class="user-dropdown-section-label">Appearance</div>
           <div class="ud-toggle-row">
             <span class="ud-item-icon" id="ud-mode-icon">
               <svg id="ud-moon-icon" width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M12.5 9.5A6 6 0 0 1 5.5 2.5a6 6 0 1 0 7 7Z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -210,14 +267,25 @@
             <div class="theme-select-grid" id="theme-select-grid"></div>
             <div class="theme-select-store">
               <button class="user-dropdown-item" type="button" data-shell-action="open-theme-editor">
-                <span class="ud-item-icon">🎛️</span>
+                <span class="ud-item-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 4h10M3 8h10M3 12h10" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="6" cy="4" r="1.4" fill="currentColor"/><circle cx="10" cy="8" r="1.4" fill="currentColor"/><circle cx="7.5" cy="12" r="1.4" fill="currentColor"/></svg></span>
                 Theme Editor
               </button>
             </div>
           </div>
         </div>
-        <!-- XP badge -->
-        <div class="ud-divider"></div>
+
+        <div class="user-dropdown-section">
+          <div class="user-dropdown-section-label">Admin & Help</div>
+          <button class="user-dropdown-item" id="admin-page-btn" style="display:none">
+            <span class="ud-item-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 1L10 5H14L11 8L12.5 12L8 9.5L3.5 12L5 8L2 5H6L8 1Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" fill="none"/></svg></span>
+            Admin Panel
+          </button>
+          <button class="user-dropdown-item" id="tutorial-btn" data-shell-action="open-tutorial">
+            <span class="ud-item-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.3"/><path d="M8 7v4M8 5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>
+            Tutorial
+          </button>
+        </div>
+
         <div class="ud-xp-section">
           <div class="ud-xp-badge" id="game-pill" data-shell-action="toggle-game-drawer" title="Open Progress">
             <span class="ud-xp-icon"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M4 1h6v5a3 3 0 0 1-6 0V1Z" stroke="currentColor" stroke-width="1.2"/><path d="M4 3H2a1 1 0 0 0-1 1v1a2 2 0 0 0 2 2M10 3h2a1 1 0 0 1 1 1v1a2 2 0 0 1-2 2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><path d="M7 9v3M5 12h4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg></span>
@@ -229,9 +297,8 @@
             <span class="game-pill-badge" style="display:none"></span>
           </div>
         </div>
-        <div class="ud-divider"></div>
-        <!-- Sign out -->
-        <div class="user-dropdown-section" style="padding-bottom:6px">
+
+        <div class="user-dropdown-section ud-session-section">
           <button class="user-dropdown-item danger" id="signout-btn">
             <span class="ud-item-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 2H3a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3M11 11l3-3-3-3M14 8H6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
             Sign Out
@@ -257,15 +324,36 @@
         <button class="scope-btn"        id="period-week"   data-shell-action="set-period" data-shell-value="week">Week</button>
         <button class="scope-btn"        id="period-month"  data-shell-action="set-period" data-shell-value="month">Month</button>
         <button class="scope-btn"        id="period-all"    data-shell-action="set-period" data-shell-value="all">All</button>
-        <label class="scope-btn cal-btn" id="period-date" title="Pick a date" onclick="try { document.getElementById('date-filter').showPicker(); } catch(e) {}">
+        <button class="scope-btn cal-btn" id="period-date" type="button" title="Pick a date" aria-haspopup="dialog" aria-expanded="false" data-shell-action="toggle-schedule-calendar">
           <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="pointer-events:none;flex-shrink:0;opacity:0.7;">
             <rect x="1" y="3" width="14" height="12" rx="2" stroke="currentColor" stroke-width="1.4"/>
             <path d="M1 7h14" stroke="currentColor" stroke-width="1.4"/>
             <path d="M5 1v4M11 1v4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
           </svg>
           <span class="cal-date-lbl" id="cal-date-lbl" style="opacity:0.45;pointer-events:none;">Date</span>
-          <input type="date" id="date-filter" onchange="onCalendarPick(this.value)" tabindex="-1" style="position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; left:0; top:0;">
-        </label>
+        </button>
+        <input type="date" id="date-filter" tabindex="-1" aria-hidden="true" style="position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; left:0; top:0;">
+        <div class="schedule-calendar-popover" id="schedule-calendar-popover" role="dialog" aria-label="Filter by schedule date" hidden>
+          <div class="schedule-cal-head">
+            <button class="schedule-cal-nav" type="button" id="schedule-cal-prev" aria-label="Previous month">‹</button>
+            <div class="schedule-cal-title">
+              <div id="schedule-cal-month">Month</div>
+              <span>Imported daily schedules highlighted</span>
+            </div>
+            <button class="schedule-cal-nav" type="button" id="schedule-cal-next" aria-label="Next month">›</button>
+          </div>
+          <div class="schedule-cal-grid" id="schedule-cal-grid"></div>
+          <div class="schedule-cal-footer">
+            <div class="schedule-cal-readout">
+              <span id="schedule-cal-readout-text">Select a date</span>
+              <span class="schedule-cal-chip" id="schedule-cal-readout-chip">Loading</span>
+            </div>
+            <div class="schedule-cal-legend">
+              <span class="schedule-cal-legend-item"><span class="schedule-cal-dot"></span>Schedule imported</span>
+              <span>Rows shown below</span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
     <div class="scope-toggle">
@@ -289,19 +377,36 @@
   <div class="filter-drawer" id="filter-drawer">
     <div class="filter-inner">
       <div class="shift-filter-row">
-        <button class="shift-filter-pill active" id="shift-pill-all"    data-shell-action="set-shift-filter" data-shell-value="all">All Shifts</button>
-        <button class="shift-filter-pill"        id="shift-pill-first"  data-shell-action="set-shift-filter" data-shell-value="first">1st Shift</button>
-        <button class="shift-filter-pill"        id="shift-pill-second" data-shell-action="set-shift-filter" data-shell-value="second">2nd Shift</button>
-        <button class="shift-filter-pill"        id="shift-pill-third"  data-shell-action="set-shift-filter" data-shell-value="third">3rd Shift</button>
+        <div class="shift-dropdown-wrap" id="shift-dropdown-wrap">
+          <button class="shift-filter-pill shift-dropdown-btn active" id="shift-dropdown-btn" type="button" data-shell-action="toggle-shift-dropdown" aria-haspopup="menu" aria-expanded="false" aria-controls="shift-dropdown">
+            <span id="shift-filter-label">All Shifts</span>
+            <span class="shift-dropdown-arrow" aria-hidden="true">
+              <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
+                <path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+          </button>
+          <div class="sort-dropdown shift-dropdown" id="shift-dropdown" role="menu" aria-label="Shift filter">
+            <button class="sort-opt active" type="button" data-shell-action="set-shift-filter" data-shell-value="all" role="menuitem"><span class="sort-opt-check">✓</span>All Shifts</button>
+            <button class="sort-opt" type="button" data-shell-action="set-shift-filter" data-shell-value="first" role="menuitem"><span class="sort-opt-check"></span>1st Shift</button>
+            <button class="sort-opt" type="button" data-shell-action="set-shift-filter" data-shell-value="second" role="menuitem"><span class="sort-opt-check"></span>2nd Shift</button>
+            <button class="sort-opt" type="button" data-shell-action="set-shift-filter" data-shell-value="third" role="menuitem"><span class="sort-opt-check"></span>3rd Shift</button>
+          </div>
+        </div>
+        <button class="shift-filter-pill filter-clear-pill" type="button" data-shell-action="clear-all-filters">Clear</button>
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:6px;" id="stat-pills-row">
-        <div class="stat-pill" id="pill-open"            data-shell-action="toggle-stat-filter" data-shell-value="open">           <div class="dot" style="background:var(--red)"></div>      <span id="stat-open">0 Open</span></div>
-        <div class="stat-pill" id="pill-resolved"        data-shell-action="toggle-stat-filter" data-shell-value="resolved">       <div class="dot" style="background:var(--green)"></div>    <span id="stat-resolved">0 Resolved</span></div>
+        <div class="stat-pill" id="pill-open"            data-shell-action="toggle-stat-filter" data-shell-value="open">           <div class="dot" style="background:var(--color-danger, var(--red))"></div>      <span id="stat-open">0 Open</span></div>
+        <div class="stat-pill" id="pill-resolved"        data-shell-action="toggle-stat-filter" data-shell-value="resolved">       <div class="dot" style="background:var(--color-success, var(--green))"></div>    <span id="stat-resolved">0 Resolved</span></div>
       </div>
       <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;">
         <select id="machine-filter"><option value="">All Machines</option></select>
         <select id="status-filter">
           <option value="">All Status</option>
+        </select>
+        <select id="solution-filter" aria-label="Solution filter">
+          <option value="">All Solutions</option>
+          <option value="shared">Has User Solution</option>
         </select>
         <select id="sort-select">
           <option value="newest">Newest First</option>
@@ -344,12 +449,17 @@
         <div class="issue-count" id="issue-count">—</div>
       </div>
       <div class="issues-header-controls">
+        <div class="issue-view-toggle" role="group" aria-label="Issue log view">
+          <button class="issue-view-btn active" id="issue-view-cards" type="button" data-shell-action="set-issue-view" data-shell-value="cards" aria-pressed="true">Cards</button>
+          <button class="issue-view-btn" id="issue-view-list" type="button" data-shell-action="set-issue-view" data-shell-value="list" aria-pressed="false">List</button>
+        </div>
         <div class="scope-toggle" id="issue-scope-toggle">
-          <button class="scope-btn active" id="scope-view-all" data-shell-action="set-issue-row-scope" data-shell-value="all">View All</button>
-          <button class="scope-btn" id="scope-view-active" data-shell-action="set-issue-row-scope" data-shell-value="active">Active Rows</button>
+          <button class="scope-btn active" id="scope-view-all" data-shell-action="set-issue-row-scope" data-shell-value="all"><span class="scope-label-wide">View All</span><span class="scope-label-phone">All</span></button>
+          <button class="scope-btn" id="scope-view-active" data-shell-action="set-issue-row-scope" data-shell-value="active"><span class="scope-label-wide">Active Rows</span><span class="scope-label-phone">Active</span></button>
+          <button class="scope-btn" id="scope-view-resolved" data-shell-action="set-issue-row-scope" data-shell-value="resolved">Resolved</button>
         </div>
         <div class="sort-dropdown-wrap" id="sort-dropdown-wrap">
-          <button class="sort-dropdown-btn" id="sort-dropdown-btn" data-shell-action="toggle-sort-dropdown">
+          <button class="sort-dropdown-btn" id="sort-dropdown-btn" data-shell-action="toggle-sort-dropdown" aria-label="Sort issues" aria-expanded="false">
             <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;opacity:0.7;">
               <path d="M2 4h12M4 8h8M6 12h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
             </svg>
@@ -373,6 +483,10 @@
             <button class="sort-opt" id="export-excel-menu-item" data-shell-action="download-excel"><span class="sort-opt-check"></span>XLS</button>
           </div>
         </div>
+        <div class="sort-dropdown-wrap issue-mobile-menu-wrap" id="issue-mobile-menu-wrap">
+          <button class="issue-mobile-menu-btn" id="issue-mobile-menu-btn" type="button" data-shell-action="toggle-issue-mobile-menu" aria-label="Issue log options" aria-expanded="false">•••</button>
+          <div class="sort-dropdown issue-mobile-menu" id="issue-mobile-menu"></div>
+        </div>
       </div>
     </div>
     <div class="machine-breadcrumb" id="machine-breadcrumb">
@@ -384,107 +498,201 @@
       <div class="empty-state"><div class="empty-state-icon">🔄</div><div class="empty-state-text">Connecting…</div></div>
     </div>
   </div>
+
+  <footer class="app-footer">© 2026 AP-Tracker. All rights reserved.</footer>
 </div>
 
 <!-- ADD ISSUE MODAL -->
-<div class="modal-overlay" id="add-modal">
-  <div class="modal add-issue-modal">
-    <div class="modal-title" style="display:flex; justify-content:space-between; align-items:flex-start; padding-right:4px;">
-      <div><span id="add-modal-title-action">Log Issue</span> — <span class="modal-machine" id="modal-machine-name"></span></div>
-      <label class="issue-urgent-toggle" for="issue-urgent" title="Mark as Urgent">
-        <input id="issue-urgent" type="checkbox">
-        <span class="issue-urgent-pill icon-only" title="Urgent">🔥</span>
-      </label>
-    </div>
-    <label id="issue-note-label">What happened?</label>
-    <textarea id="issue-note" placeholder="Example: Hydraulic leak at press startup" rows="3"></textarea>
-    <div class="issue-quick-phrases" id="issue-quick-phrases"></div>
-    <label>Photos <span style="color:var(--text3);font-size:9px;letter-spacing:0;text-transform:none;font-family:'Nunito',sans-serif">(optional)</span></label>
-    <div class="issue-attach-hint">Tap once for camera or library. Photos preview right here.</div>
-    <div class="photo-stack">
-      <div class="photo-btn-row">
-        <button class="photo-pick-btn photo-add-btn" id="log-photo-btn" type="button">➕ Add Photo</button>
+<div class="modal-overlay" id="add-modal" onclick="if(event.target===this)closeModal()">
+  <div class="phone add-issue-modal" id="add-modal-frame" onclick="event.stopPropagation()">
+    <div class="notes-drag-handle"></div>
+    <div class="app-container" id="add-modal-app-container" style="display:flex; flex-direction:column; overflow-y:auto; padding-top:0;">
+      <div class="modal-header-row tool-modal-nav-shell" style="flex-shrink:0; margin-bottom:16px;">
+        <button class="tool-modal-nav-btn tool-modal-nav-prev" type="button" data-shell-action="cycle-tool-modal" data-shell-value="prev" aria-label="Previous tool" title="Previous tool">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M9.5 3.5L5 8l4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="tool-modal-nav-title"><span id="add-modal-title-action">Log Issue</span> — <span class="modal-machine" id="modal-machine-name"></span></div>
+        <button class="tool-modal-nav-btn tool-modal-nav-next" type="button" data-shell-action="cycle-tool-modal" data-shell-value="next" aria-label="Next tool" title="Next tool">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6.5 3.5L11 8l-4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
       </div>
-      <div class="photo-source-row" id="log-photo-source-row">
-        <button class="photo-pick-btn photo-source-btn" id="log-camera-btn" type="button">📷 Camera</button>
-        <button class="photo-pick-btn photo-source-btn" id="log-library-btn" type="button">🖼️ Library</button>
+      
+      <div class="issue-urgent-row" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; background:var(--color-surface-raised, var(--bg3)); border:1px solid var(--color-border, var(--border)); border-radius:10px; padding:8px 12px; flex-shrink:0;">
+        <span style="font-family:'Nunito', sans-serif; font-size:13px; font-weight:700; color:var(--color-text, var(--text));">Mark as Urgent</span>
+        <label class="issue-urgent-toggle" for="issue-urgent" title="Mark as Urgent" style="margin:0; display:flex; align-items:center; justify-content:center;">
+          <input id="issue-urgent" type="checkbox" style="margin:0;">
+          <span class="issue-urgent-pill icon-only" style="width:32px; height:32px; font-size:16px; border-radius:8px;">🔥</span>
+        </label>
       </div>
-    </div>
-    <button class="issue-advanced-toggle" id="issue-advanced-toggle" type="button" onclick="toggleIssueAdvancedDetails()">
-      <span>More details</span>
-      <span class="issue-advanced-toggle-state" id="issue-advanced-toggle-state">Show</span>
-    </button>
-    <div class="issue-advanced-panel" id="issue-advanced-panel">
-      <div style="margin-bottom:14px">
-        <label style="margin-bottom:5px">When did it happen?</label>
-        <div style="display:flex;gap:8px;align-items:center">
-          <input type="date" id="issue-date" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;outline:none;flex:1;">
-          <input type="time" id="issue-time-input" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:120px;">
-          <button onclick="resetIssueDateTime()" style="font-size:11px;color:var(--accent);background:none;border:none;cursor:pointer;font-family:'Nunito',sans-serif;white-space:nowrap;padding:0;" title="Reset to now">↺ Now</button>
+
+      <div class="issue-press-row">
+        <label for="issue-machine-select">Press</label>
+        <select id="issue-machine-select" class="issue-machine-select">
+          <option value="">Select a press</option>
+        </select>
+      </div>
+      
+      <label id="issue-note-label">What happened?</label>
+      <textarea id="issue-note" placeholder="Example: Hydraulic leak at press startup" rows="3"></textarea>
+      <div class="issue-quick-phrases" id="issue-quick-phrases"></div>
+      <div id="similar-fixes-panel" style="margin:0 0 12px;">
+        <button class="btn btn-ghost" id="similar-fixes-btn" type="button" onclick="findSimilarFixes()" style="padding:9px 12px;font-size:12px;">✨ Find fixes!</button>
+        <div id="similar-fixes-results" hidden style="margin-top:8px;padding:10px;border:1px solid var(--color-border, var(--border));border-radius:10px;background:var(--color-surface-raised, var(--bg3));font-family:'Nunito',sans-serif;"></div>
+      </div>
+      <label>Photos <span style="color:var(--color-text-subtle, var(--text3));font-size:9px;letter-spacing:0;text-transform:none;font-family:'Nunito',sans-serif">(optional)</span></label>
+      <div class="issue-attach-hint">Tap once for camera or library. Photos preview right here.</div>
+      <div class="photo-stack">
+        <div class="photo-btn-row">
+          <button class="photo-pick-btn photo-add-btn" id="log-photo-btn" type="button">➕ Add Photo</button>
+        </div>
+        <div class="photo-source-row" id="log-photo-source-row">
+          <button class="photo-pick-btn photo-source-btn" id="log-camera-btn" type="button">📷 Camera</button>
+          <button class="photo-pick-btn photo-source-btn" id="log-library-btn" type="button">🖼️ Library</button>
         </div>
       </div>
-      <div style="margin-bottom:14px">
-        <label style="margin-bottom:5px">Shift</label>
-        <select id="issue-shift" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:100%;">
-          <option value="auto">Auto-detect from time</option>
-          <option value="first">1st Shift (5:54 AM – 1:54 PM)</option>
-          <option value="second">2nd Shift (1:54 PM – 9:54 PM)</option>
-          <option value="third">3rd Shift (9:54 PM – 5:54 AM)</option>
-        </select>
+      <button class="issue-advanced-toggle" id="issue-advanced-toggle" type="button" onclick="toggleIssueAdvancedDetails()">
+        <span>More details</span>
+        <span class="issue-advanced-toggle-state" id="issue-advanced-toggle-state">Show</span>
+      </button>
+      <div class="issue-advanced-panel" id="issue-advanced-panel">
+        <div style="margin-bottom:14px">
+          <label style="margin-bottom:5px">When did it happen?</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="date" id="issue-date" style="background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:7px 10px;color:var(--color-text, var(--text));font-family:'Nunito',sans-serif;font-size:13px;outline:none;flex:1;">
+            <input type="time" id="issue-time-input" style="background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:7px 10px;color:var(--color-text, var(--text));font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:120px;">
+            <button onclick="resetIssueDateTime()" style="font-size:11px;color:var(--color-accent, var(--accent));background:none;border:none;cursor:pointer;font-family:'Nunito',sans-serif;white-space:nowrap;padding:0;" title="Reset to now">↺ Now</button>
+          </div>
+        </div>
+        <div style="margin-bottom:14px">
+          <label style="margin-bottom:5px">Shift</label>
+          <select id="issue-shift" style="background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:7px 10px;color:var(--color-text, var(--text));font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:100%;">
+            <option value="auto">Auto-detect from time</option>
+            <option value="first">1st Shift (5:54 AM – 1:54 PM)</option>
+            <option value="second">2nd Shift (1:54 PM – 9:54 PM)</option>
+            <option value="third">3rd Shift (9:54 PM – 5:54 AM)</option>
+          </select>
+        </div>
+        <div style="margin-bottom:14px">
+          <label style="margin-bottom:5px">Check-back timer</label>
+          <select id="issue-timer-minutes" class="timer-select" style="background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:7px 10px;color:var(--color-text, var(--text));font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:100%;">
+            <option value="">No timer</option>
+            <option value="0.25">15 seconds</option>
+            <option value="0.5">30 seconds</option>
+            <option value="1">1 minute</option>
+            <option value="5">5 minutes</option>
+            <option value="15">15 minutes</option>
+            <option value="30">30 minutes</option>
+            <option value="60">1 hour</option>
+            <option value="120">2 hours</option>
+          </select>
+        </div>
       </div>
-      <div style="margin-bottom:14px">
-        <label style="margin-bottom:5px">Check-back timer</label>
-        <select id="issue-timer-minutes" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:100%;">
-          <option value="">No timer</option>
-          <option value="15">15 minutes</option>
-          <option value="30">30 minutes</option>
-          <option value="60">1 hour</option>
-          <option value="120">2 hours</option>
-        </select>
+      <div style="margin-bottom:4px">
+        <label style="margin-bottom:6px">Status <span style="color:var(--color-text-subtle, var(--text3));font-size:9px;letter-spacing:0;text-transform:none;font-family:'Nunito',sans-serif">(optional — defaults to Open)</span></label>
+        <div class="log-cat-selected" id="log-cat-selected">
+          <span class="log-cat-pill" id="log-cat-pill"></span>
+          <button class="log-cat-clear" id="log-cat-clear">✕ clear</button>
+        </div>
+        <div class="log-cat-all-row" id="log-cat-all-row"></div>
+        <div class="search-bar-row" id="search-bar-row"></div>
+        <div class="log-sub-row" id="log-sub-row"></div>
+        <div class="quality-defect-summary" id="quality-defect-summary">
+          <div class="quality-defect-summary-icon" aria-hidden="true">QD</div>
+          <div class="quality-defect-summary-copy">
+            <div class="quality-defect-summary-label" id="quality-defect-summary-label">No defect selected</div>
+            <div class="quality-defect-summary-desc" id="quality-defect-summary-desc"></div>
+            <div class="quality-defect-summary-actions">
+              <button class="quality-defect-link" id="quality-defect-change" type="button">Change defect</button>
+              <button class="quality-defect-link" id="quality-defect-clear" type="button">Clear</button>
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
-    <div style="margin-bottom:4px">
-      <label style="margin-bottom:6px">Status <span style="color:var(--text3);font-size:9px;letter-spacing:0;text-transform:none;font-family:'Nunito',sans-serif">(optional — defaults to Open)</span></label>
-      <div class="log-cat-selected" id="log-cat-selected">
-        <span class="log-cat-pill" id="log-cat-pill"></span>
-        <button class="log-cat-clear" id="log-cat-clear">✕ clear</button>
+      <input type="file" id="log-camera-input" accept="image/*" capture="environment" style="display:none">
+      <input type="file" id="log-library-input" accept="image/*" multiple style="display:none">
+      <div class="photo-previews" id="photo-previews"></div>
+      <div class="modal-actions" style="margin-top:auto; padding-top:16px;">
+        <button class="btn btn-ghost" id="cancel-btn" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" id="submit-btn" onclick="submitIssue()">⚠ Log Issue</button>
       </div>
-      <div class="log-cat-all-row" id="log-cat-all-row"></div>
-      <div class="search-bar-row" id="search-bar-row"></div>
-      <div class="log-sub-row" id="log-sub-row"></div>
-    </div>
-    <input type="file" id="log-camera-input" accept="image/*" capture="environment" style="display:none">
-    <input type="file" id="log-library-input" accept="image/*" multiple style="display:none">
-    <div class="photo-previews" id="photo-previews"></div>
-    <div class="modal-actions">
-      <button class="btn btn-ghost" id="cancel-btn" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-primary" id="submit-btn" onclick="submitIssue()">⚠ Log Issue</button>
     </div>
   </div>
 </div>
 
 <div class="modal-overlay subcategory-sheet-overlay" id="subcategory-sheet-overlay">
   <div class="subcategory-sheet" id="subcategory-sheet" role="dialog" aria-modal="true" aria-labelledby="subcategory-sheet-title">
-    <div class="subcategory-sheet-handle"></div>
-    <div class="subcategory-sheet-head">
-      <div class="subcategory-sheet-copy">
-        <div class="subcategory-sheet-kicker">Subcategory</div>
-        <div class="subcategory-sheet-title" id="subcategory-sheet-title">Choose a subcategory</div>
-        <div class="subcategory-sheet-subtitle" id="subcategory-sheet-subtitle">Pick the closest match to log faster.</div>
+    <div class="subcategory-sheet-header">
+      <div class="subcategory-sheet-handle"></div>
+      <div class="subcategory-sheet-head">
+        <div class="subcategory-sheet-copy">
+          <div class="subcategory-sheet-kicker">Subcategory</div>
+          <div class="subcategory-sheet-title" id="subcategory-sheet-title">Choose a subcategory</div>
+          <div class="subcategory-sheet-subtitle" id="subcategory-sheet-subtitle">Pick the closest match to log faster.</div>
+        </div>
+        <button class="subcategory-sheet-close" type="button" id="subcategory-sheet-close" aria-label="Close subcategory picker">✕</button>
       </div>
-      <button class="subcategory-sheet-close" type="button" id="subcategory-sheet-close" aria-label="Close subcategory picker">✕</button>
+      <div class="subcategory-sheet-section" style="margin-bottom: 0;">
+        <div class="subcategory-sheet-label">Parent status</div>
+        <div class="subcategory-parent-row" id="subcategory-parent-row"></div>
+      </div>
     </div>
-    <div class="subcategory-sheet-section">
-      <div class="subcategory-sheet-label">Parent status</div>
-      <div class="subcategory-parent-row" id="subcategory-parent-row"></div>
-    </div>
-    <div class="subcategory-sheet-section">
-      <div class="subcategory-sheet-label">Subcategories</div>
-      <div class="subcategory-grid" id="subcategory-grid"></div>
+    <div class="subcategory-sheet-body">
+      <div class="subcategory-sheet-section" style="margin-bottom: 0;">
+        <div class="subcategory-sheet-label">Subcategories</div>
+        <div class="subcategory-grid" id="subcategory-grid"></div>
+      </div>
+      <div class="subcategory-sheet-section response-path-section" id="subcategory-response-path-section" hidden>
+        <div class="subcategory-sheet-label">Suggested response path</div>
+        <div class="response-path-list" id="subcategory-response-path-list"></div>
+      </div>
     </div>
     <div class="subcategory-sheet-footer">
       <button class="btn btn-ghost subcategory-sheet-secondary" id="subcategory-sheet-skip" type="button">Use no subcategory</button>
       <button class="btn btn-primary subcategory-sheet-primary" id="subcategory-sheet-apply" type="button">Use Subcategory</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay quality-defect-modal-overlay" id="quality-defect-modal">
+  <div class="modal quality-defect-modal" role="dialog" aria-modal="true" aria-labelledby="quality-defect-modal-title">
+    <div class="quality-defect-modal-header">
+      <div>
+        <div class="modal-kicker">Injection molding</div>
+        <div class="modal-title" id="quality-defect-modal-title">Choose defect</div>
+        <div class="modal-subtitle">Pick the molding defect. AP Tracker will attach troubleshooting prompts.</div>
+      </div>
+      <button class="quality-defect-modal-close" id="quality-defect-modal-close" type="button" aria-label="Close defect picker">&times;</button>
+    </div>
+    <div class="quality-defect-modal-body">
+      <div class="quality-defect-picker">
+        <input class="quality-defect-search" id="quality-defect-search" type="search" placeholder="Search defects..." autocomplete="off">
+        <div class="quality-defect-list" id="quality-defect-list"></div>
+      </div>
+      <div class="quality-defect-suggestions" id="quality-defect-suggestions"></div>
+    </div>
+    <div class="modal-actions quality-defect-modal-actions">
+      <div class="quality-defect-modal-state" id="quality-defect-modal-state">Select a defect to enable suggestions.</div>
+      <div class="quality-defect-modal-buttons">
+        <button class="btn btn-ghost" id="quality-defect-modal-clear" type="button">Clear</button>
+        <button class="btn btn-ghost" id="quality-defect-modal-cancel" type="button">Cancel</button>
+        <button class="btn btn-primary" id="quality-defect-modal-confirm" type="button">Use Defect</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay response-escalation-overlay" id="response-escalation-modal">
+  <div class="modal response-escalation-modal" role="dialog" aria-modal="true" aria-labelledby="response-escalation-title">
+    <div class="response-escalation-head">
+      <div>
+        <div class="response-escalation-kicker">Suggested path</div>
+        <h3 id="response-escalation-title">Escalate Response</h3>
+      </div>
+      <button class="quality-defect-modal-close" type="button" onclick="closeResponseEscalationModal()" aria-label="Close escalation options">&times;</button>
+    </div>
+    <div class="response-escalation-body" id="response-escalation-body"></div>
+    <div class="response-escalation-actions">
+      <button class="btn btn-ghost" type="button" onclick="closeResponseEscalationModal()">Cancel</button>
     </div>
   </div>
 </div>
@@ -494,15 +702,19 @@
   <div class="modal">
     <div class="modal-title">✏️ Edit Issue — <span class="modal-machine" id="edit-machine-name"></span></div>
     <div style="margin-bottom:14px">
+      <label for="edit-machine-select" style="margin-bottom:5px">Press</label>
+      <select id="edit-machine-select" style="background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:7px 10px;color:var(--color-text, var(--text));font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:100%;"></select>
+    </div>
+    <div style="margin-bottom:14px">
       <label style="margin-bottom:5px">Date &amp; Time</label>
       <div style="display:flex;gap:8px;align-items:center">
-        <input type="date" id="edit-date" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;outline:none;flex:1;">
-        <input type="time" id="edit-time-input" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:120px;">
+        <input type="date" id="edit-date" style="background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:7px 10px;color:var(--color-text, var(--text));font-family:'Nunito',sans-serif;font-size:13px;outline:none;flex:1;">
+        <input type="time" id="edit-time-input" style="background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:7px 10px;color:var(--color-text, var(--text));font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:120px;">
       </div>
     </div>
     <div style="margin-bottom:14px">
       <label style="margin-bottom:5px">Shift</label>
-      <select id="edit-shift" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:100%;">
+      <select id="edit-shift" style="background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:7px 10px;color:var(--color-text, var(--text));font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:100%;">
         <option value="auto">Auto-detect from time</option>
         <option value="first">1st Shift (5:54 AM – 1:54 PM)</option>
         <option value="second">2nd Shift (1:54 PM – 9:54 PM)</option>
@@ -511,8 +723,12 @@
     </div>
     <div style="margin-bottom:14px">
       <label style="margin-bottom:5px">Initial Reminder</label>
-      <select id="edit-timer-minutes" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:100%;">
+      <select id="edit-timer-minutes" class="timer-select" style="background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:7px 10px;color:var(--color-text, var(--text));font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:100%;">
         <option value="">No timer</option>
+        <option value="0.25">15 seconds</option>
+        <option value="0.5">30 seconds</option>
+        <option value="1">1 minute</option>
+        <option value="5">5 minutes</option>
         <option value="15">15 minutes</option>
         <option value="30">30 minutes</option>
         <option value="60">1 hour</option>
@@ -524,6 +740,8 @@
     <label>Photos</label>
     <div class="photo-upload-area" id="edit-drop-zone">
       <input type="file" id="edit-photo-input" accept="image/*" multiple>
+      <input type="file" id="edit-photo-camera-input" accept="image/*" capture="environment" hidden>
+      <input type="file" id="edit-photo-library-input" accept="image/*" multiple hidden>
       <div class="upload-icon">📷</div>
       <div class="upload-text">Add more photos</div>
     </div>
@@ -549,6 +767,23 @@
   </div>
 </div>
 
+<!-- SHARED SOLUTION MODAL -->
+<div class="modal-overlay" id="solution-modal">
+  <div class="modal solution-modal">
+    <div class="modal-title">💡 Share Solution</div>
+    <div class="modal-subtitle" id="solution-machine-label"></div>
+    <label for="solution-text">How was this solved?</label>
+    <textarea id="solution-text" placeholder="Describe the fix so the team can reuse it…"></textarea>
+    <label>Photo evidence <span class="form-optional">optional · up to 5</span></label>
+    <div class="photo-dropzone" id="solution-photo-dropzone">📷 Add photos<input id="solution-photo-input" type="file" accept="image/*" multiple hidden></div>
+    <div class="photo-previews" id="solution-photo-previews"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" type="button" onclick="closeSolutionModal()">Cancel</button>
+      <button class="btn btn-success" id="solution-save-btn" type="button" onclick="saveIssueSolution()">Share Solution</button>
+    </div>
+  </div>
+</div>
+
 <!-- REOPEN MODAL -->
 <div class="modal-overlay" id="reopen-modal">
   <div class="modal">
@@ -565,36 +800,60 @@
 
 <!-- ISSUE REMINDER MODAL -->
 <div class="modal-overlay" id="issue-reminder-modal">
-  <div class="modal" style="max-width:420px;">
-    <div class="modal-title">⏱ Check-back Timer</div>
+  <div class="modal timer-scrubber-modal" style="max-width:420px;">
+    <div class="modal-title timer-modal-title"><span class="timer-modal-icon">⏱</span> Check-back Timer</div>
     <div class="modal-subtitle" id="issue-reminder-modal-subtitle">Set a reminder</div>
-    <div class="timer-wheel-wrap">
-      <div class="timer-wheel-highlight"></div>
-      <div class="timer-wheel-grid">
-        <div class="timer-wheel-col">
-          <div class="timer-wheel-label">hr</div>
-          <div class="timer-wheel" id="issue-reminder-hours-wheel"></div>
+    <div class="timer-running-panel" id="issue-reminder-running-panel" hidden>
+      <div class="timer-running-topline">
+        <span class="timer-running-pill" id="issue-reminder-running-state">Running</span>
+        <span class="timer-running-due" id="issue-reminder-running-due">Live countdown</span>
+      </div>
+      <div class="timer-running-clock" id="issue-reminder-running-clock">00:00</div>
+      <div class="timer-running-actions">
+        <button class="timer-action-chip timer-action-pause" id="issue-reminder-pause-btn" onclick="pauseIssueReminderFromModal()">Pause</button>
+        <button class="timer-action-chip timer-action-resume" id="issue-reminder-resume-btn" onclick="resumeIssueReminderFromModal()">Resume</button>
+      </div>
+      <div class="timer-add-label">Add time</div>
+      <div class="timer-add-grid">
+        <button class="timer-chip timer-chip-fast" onclick="addIssueReminderTimeFromModal(0.25)">+15s</button>
+        <button class="timer-chip timer-chip-fast" onclick="addIssueReminderTimeFromModal(0.5)">+30s</button>
+        <button class="timer-chip" onclick="addIssueReminderTimeFromModal(1)">+1m</button>
+        <button class="timer-chip" onclick="addIssueReminderTimeFromModal(5)">+5m</button>
+        <button class="timer-chip" onclick="addIssueReminderTimeFromModal(15)">+15m</button>
+        <button class="timer-chip" onclick="addIssueReminderTimeFromModal(30)">+30m</button>
+      </div>
+    </div>
+    <div class="timer-scrubber-shell">
+      <div class="timer-preview">
+        <div class="timer-preview-kicker">Check back in</div>
+        <div class="timer-preview-time" id="issue-reminder-preview">
+          <input id="issue-reminder-preview-mins" class="timer-preview-input timer-preview-input-mins" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="3" value="00" aria-label="Timer minutes">
+          <span class="timer-preview-sep" aria-hidden="true">:</span>
+          <input id="issue-reminder-preview-secs" class="timer-preview-input" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" value="00" aria-label="Timer seconds">
         </div>
-        <div class="timer-wheel-col">
-          <div class="timer-wheel-label">min</div>
-          <div class="timer-wheel" id="issue-reminder-mins-wheel"></div>
-        </div>
-        <div class="timer-wheel-col">
-          <div class="timer-wheel-label">sec</div>
-          <div class="timer-wheel" id="issue-reminder-secs-wheel"></div>
+      </div>
+      <div class="timer-scrubber-wrap">
+        <div class="timer-scrubber-scale" id="issue-reminder-scale-labels"></div>
+        <div class="timer-scrubber-lane" id="issue-reminder-scrubber" aria-label="Timer scrubber" role="slider" aria-valuemin="0" aria-valuemax="1800" aria-valuenow="0" aria-valuetext="00:00" tabindex="0">
+          <div class="timer-scrubber-bars" id="issue-reminder-bars"></div>
+          <div class="timer-scrubber-pointer" aria-hidden="true"></div>
         </div>
       </div>
     </div>
     <div class="timer-iphone-stack">
+      <button class="timer-chip timer-chip-fast" onclick="setIssueReminderFromModal(0.25)">15s</button>
+      <button class="timer-chip timer-chip-fast" onclick="setIssueReminderFromModal(0.5)">30s</button>
+      <button class="timer-chip" onclick="setIssueReminderFromModal(1)">1m</button>
+      <button class="timer-chip" onclick="setIssueReminderFromModal(5)">5m</button>
       <button class="timer-chip" onclick="setIssueReminderFromModal(15)">15m</button>
       <button class="timer-chip" onclick="setIssueReminderFromModal(30)">30m</button>
       <button class="timer-chip" onclick="setIssueReminderFromModal(60)">1h</button>
       <button class="timer-chip" onclick="setIssueReminderFromModal(120)">2h</button>
     </div>
-    <div class="modal-actions">
-      <button class="btn btn-primary" onclick="setIssueReminderFromModalCustom()">Start</button>
+    <div class="modal-actions timer-modal-actions">
+      <button class="btn btn-primary timer-start-btn" onclick="setIssueReminderFromModalCustom()">Start Timer</button>
       <button class="btn btn-ghost" onclick="closeIssueReminderModal()">Cancel</button>
-      <button class="btn btn-danger" onclick="clearIssueReminderFromModal()">Clear</button>
+      <button class="btn btn-danger timer-clear-btn" id="issue-reminder-clear-btn" onclick="clearIssueReminderFromModal()">Clear</button>
     </div>
   </div>
 </div>
@@ -629,7 +888,7 @@
   <div class="modal">
     <div class="modal-title">✏️ Edit Status Entry</div>
     <label>Status</label>
-    <select id="edit-status-select" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:9px 11px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;margin-bottom:14px;"></select>
+    <select id="edit-status-select" style="width:100%;background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:9px 11px;color:var(--color-text, var(--text));font-family:'Nunito',sans-serif;font-size:13px;margin-bottom:14px;"></select>
     <div id="edit-status-sub-wrap"></div>
     <label>Note (optional)</label>
     <textarea id="edit-status-note" placeholder="Additional details…" style="min-height:60px;margin-bottom:14px;"></textarea>
@@ -644,8 +903,8 @@
     <div style="margin-bottom:14px;">
       <label>Date & Time</label>
       <div style="display:flex;gap:8px;">
-        <input type="date" id="edit-status-date" style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;">
-        <input type="time" id="edit-status-time" style="width:120px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Nunito',sans-serif;font-size:13px;">
+        <input type="date" id="edit-status-date" style="flex:1;background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:7px 10px;color:var(--color-text, var(--text));font-family:'Nunito',sans-serif;font-size:13px;">
+        <input type="time" id="edit-status-time" style="width:120px;background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:7px 10px;color:var(--color-text, var(--text));font-family:'Nunito',sans-serif;font-size:13px;">
       </div>
     </div>
     <div class="modal-actions">
@@ -658,6 +917,7 @@
 <!-- LIGHTBOX -->
 <div class="lightbox" id="lightbox">
   <span class="lightbox-close" onclick="closeLightbox()">✕</span>
+  <button class="lightbox-download" id="lightbox-download" type="button" onclick="downloadLightboxPhoto()" title="Download photo" aria-label="Download photo">⇩ Download</button>
   <button class="lightbox-nav prev" id="lightbox-prev" onclick="lightboxNav(-1)">&#8249;</button>
   <img id="lightbox-img" src="" alt="">
   <button class="lightbox-nav next" id="lightbox-next" onclick="lightboxNav(1)">&#8250;</button>
@@ -670,10 +930,10 @@
   <div class="modal" style="max-width:620px;">
     <div class="modal-title" style="display:flex;align-items:center;justify-content:space-between;">
       <span style="display:flex;align-items:center;gap:8px;">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 1h6l4 4v9a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1z" stroke="var(--accent)" stroke-width="1.3"/><path d="M10 1v4h4M5 9h6M5 11.5h4" stroke="var(--accent)" stroke-width="1.3" stroke-linecap="round"/></svg>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 1h6l4 4v9a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1z" stroke="var(--color-accent, var(--accent))" stroke-width="1.3"/><path d="M10 1v4h4M5 9h6M5 11.5h4" stroke="var(--color-accent, var(--accent))" stroke-width="1.3" stroke-linecap="round"/></svg>
         Export Issue Log
       </span>
-      <button style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;" onclick="closeExportModal()">&times;</button>
+      <button style="background:none;border:none;color:var(--color-text-subtle, var(--text3));font-size:18px;cursor:pointer;" onclick="closeExportModal()">&times;</button>
     </div>
     <div class="modal-subtitle" id="export-subtitle">—</div>
     <div id="export-preview" style="max-height:50vh;overflow-y:auto;margin-bottom:12px;border-radius:6px;"></div>
@@ -692,22 +952,22 @@
   <div class="modal" style="max-width:380px;">
     <div class="modal-title" style="display:flex;align-items:center;justify-content:space-between;">
       <span style="display:flex;align-items:center;gap:8px;">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="4" width="14" height="8" rx="1" stroke="var(--blue)" stroke-width="1.2"/><path d="M4 6v4M6 6v4M8 6v4M10 6v4M12 6v4" stroke="var(--blue)" stroke-width="0.8"/></svg>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="4" width="14" height="8" rx="1" stroke="var(--color-info, var(--blue))" stroke-width="1.2"/><path d="M4 6v4M6 6v4M8 6v4M10 6v4M12 6v4" stroke="var(--color-info, var(--blue))" stroke-width="0.8"/></svg>
         Serial Number
       </span>
-      <button style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;" onclick="closeSerialModal()">&times;</button>
+      <button style="background:none;border:none;color:var(--color-text-subtle, var(--text3));font-size:18px;cursor:pointer;" onclick="closeSerialModal()">&times;</button>
     </div>
     <div style="padding:0 24px 6px;">
-      <div style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px;margin-bottom:14px;">
-        <span id="serial-modal-machine" style="font-weight:700;color:var(--accent);font-family:'Share Tech Mono',monospace;"></span>
+      <div style="font-size:12px;color:var(--color-text-muted, var(--text2));display:flex;align-items:center;gap:6px;margin-bottom:14px;">
+        <span id="serial-modal-machine" style="font-weight:700;color:var(--color-accent, var(--accent));font-family:'Share Tech Mono',monospace;"></span>
         →
-        <span id="serial-modal-status" style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;border:1px solid rgba(59,130,246,0.4);color:var(--blue);background:rgba(59,130,246,0.1);"></span>
+        <span id="serial-modal-status" style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;border:1px solid rgba(59,130,246,0.4);color:var(--color-info, var(--blue));background:rgba(59,130,246,0.1);"></span>
       </div>
       <label style="margin-bottom:5px;">Material (Select or Enter Custom)</label>
-      <select id="serial-select" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:13px;outline:none;margin-bottom:8px;"></select>
-      <input type="text" id="serial-input" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-family:'Share Tech Mono',monospace;font-size:14px;outline:none;letter-spacing:0.5px;margin-bottom:4px;" placeholder="Or enter custom (e.g. STK12345)">
-      <div style="font-size:10px;color:var(--text3);margin-bottom:4px;">Required for Needs → Material. Pick from list or enter custom.</div>
-      <div id="serial-error" style="font-size:11px;color:var(--red);display:none;">Please select or enter a material code</div>
+      <select id="serial-select" style="width:100%;background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:10px 12px;color:var(--color-text, var(--text));font-size:13px;outline:none;margin-bottom:8px;"></select>
+      <input type="text" id="serial-input" style="width:100%;background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:10px 12px;color:var(--color-text, var(--text));font-family:'Share Tech Mono',monospace;font-size:14px;outline:none;letter-spacing:0.5px;margin-bottom:4px;" placeholder="Or enter custom (e.g. STK12345)">
+      <div style="font-size:10px;color:var(--color-text-subtle, var(--text3));margin-bottom:4px;">Required for Needs → Material. Pick from list or enter custom.</div>
+      <div id="serial-error" style="font-size:11px;color:var(--color-danger, var(--red));display:none;">Please select or enter a material code</div>
     </div>
     <div class="modal-actions" style="padding-top:10px;">
       <button class="btn btn-ghost" onclick="closeSerialModal()">Cancel</button>
@@ -732,93 +992,99 @@
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6.5 3.5L11 8l-4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
       </div>
-      <div class="press-wiki-header-content">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:8px;">
-          <div style="display:inline-flex;gap:3px;padding:3px;background:var(--bg3);border:1px solid var(--line);border-radius:999px;">
-            <button id="press-wiki-scope-press" class="btn btn-ghost" type="button" aria-haspopup="dialog" aria-expanded="false" style="padding:4px 10px;border-radius:999px;font-size:12px;">This Press</button>
-            <button id="press-wiki-scope-shared" class="btn btn-ghost" type="button" style="padding:4px 10px;border-radius:999px;font-size:12px;">Shared Library</button>
-          </div>
-          <div id="press-wiki-actions-wrap" class="press-wiki-actions-wrap" style="display:none;margin-left:auto;">
-            <button id="press-wiki-actions-btn" class="btn btn-primary press-wiki-actions-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Wiki actions">
-              +
-            </button>
-            <div id="press-wiki-actions-menu" class="sort-dropdown press-wiki-actions-menu">
-              <button id="press-wiki-new-page-btn" class="sort-opt press-wiki-action-item" type="button">Create Entry</button>
-              <button id="press-wiki-edit-btn" class="sort-opt press-wiki-action-item" type="button">Quick Edit</button>
-              <button id="press-wiki-cms-btn" class="sort-opt press-wiki-action-item" type="button">Edit in CMS</button>
-            </div>
-          </div>
-        </div>
-        <div class="press-wiki-press-picker-wrap" style="margin-top:8px;display:none;">
-            <div class="press-wiki-press-picker-panel-head">
-              <div>
-                <div class="press-wiki-press-picker-panel-kicker">Press Deck</div>
-                <div id="press-wiki-press-picker-panel-copy" class="press-wiki-press-picker-panel-copy">Pick a press to load its wiki.</div>
+      <div class="press-wiki-layout">
+        <div class="press-wiki-main">
+          <div class="press-wiki-header-content">
+            <div class="tool-create-row" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:8px;">
+              <div style="display:inline-flex;gap:3px;padding:3px;background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:999px;">
+                <button id="press-wiki-scope-press" class="btn btn-ghost" type="button" aria-haspopup="dialog" aria-expanded="false" style="padding:4px 10px;border-radius:999px;font-size:12px;">This Press</button>
+                <button id="press-wiki-scope-shared" class="btn btn-ghost" type="button" style="padding:4px 10px;border-radius:999px;font-size:12px;">Shared Library</button>
               </div>
-              <button id="press-wiki-press-picker-close" class="btn btn-ghost" type="button" style="padding:4px 10px;border-radius:999px;font-size:12px;">Close</button>
+              <div id="press-wiki-actions-wrap" class="press-wiki-actions-wrap" style="display:none;margin-left:auto;">
+                <button id="press-wiki-actions-btn" class="btn btn-primary press-wiki-actions-btn tool-create-action" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Wiki actions">
+                  +
+                </button>
+                <div id="press-wiki-actions-menu" class="sort-dropdown press-wiki-actions-menu">
+                  <button id="press-wiki-new-page-btn" class="sort-opt press-wiki-action-item" type="button">Create Entry</button>
+                  <button id="press-wiki-edit-btn" class="sort-opt press-wiki-action-item" type="button">Quick Edit</button>
+                  <button id="press-wiki-cms-btn" class="sort-opt press-wiki-action-item" type="button">Edit in CMS</button>
+                </div>
+              </div>
             </div>
-            <div id="press-wiki-press-picker-tree" class="press-wiki-press-picker-tree"></div>
-        </div>
-        <div class="press-wiki-picker-wrap" style="margin-top:8px;">
-          <label for="press-wiki-picker-btn" style="display:block;font-size:12px;color:var(--text3);white-space:nowrap;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px;">Select Page</label>
-          <button id="press-wiki-picker-btn" class="press-wiki-picker-btn" type="button" aria-haspopup="tree" aria-expanded="false">
-            <span class="press-wiki-picker-copy">
-              <span id="press-wiki-picker-title" class="press-wiki-picker-title">No page selected</span>
-              <span id="press-wiki-picker-path" class="press-wiki-picker-path">This Press</span>
-            </span>
-            <span class="press-wiki-picker-meta">
-              <span id="press-wiki-picker-count" class="press-wiki-picker-count">0 pages</span>
-              <svg class="press-wiki-picker-caret" width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </span>
-          </button>
-          <div id="press-wiki-picker-panel" class="press-wiki-picker-panel" aria-hidden="true">
-            <div class="press-wiki-picker-panel-head">
-              <div class="press-wiki-picker-panel-kicker">Hierarchy</div>
-              <div id="press-wiki-picker-panel-copy" class="press-wiki-picker-panel-copy">Choose a page to read or edit.</div>
+            <div class="press-wiki-picker-wrap" style="margin-top:8px;">
+              <label for="press-wiki-picker-btn" style="display:block;font-size:12px;color:var(--color-text-subtle, var(--text3));white-space:nowrap;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px;">Select Page</label>
+              <button id="press-wiki-picker-btn" class="press-wiki-picker-btn" type="button" aria-haspopup="tree" aria-expanded="false">
+                <span class="press-wiki-picker-copy">
+                  <span id="press-wiki-picker-title" class="press-wiki-picker-title">No page selected</span>
+                  <span id="press-wiki-picker-path" class="press-wiki-picker-path">This Press</span>
+                </span>
+                <span class="press-wiki-picker-meta">
+                  <span id="press-wiki-picker-count" class="press-wiki-picker-count">0 pages</span>
+                  <svg class="press-wiki-picker-caret" width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </span>
+              </button>
+              <div id="press-wiki-picker-panel" class="press-wiki-picker-panel" aria-hidden="true">
+                <div class="press-wiki-picker-panel-head">
+                  <div class="press-wiki-picker-panel-kicker">Hierarchy</div>
+                  <div id="press-wiki-picker-panel-copy" class="press-wiki-picker-panel-copy">Choose a page to read or edit.</div>
+                </div>
+                <div id="press-wiki-picker-tree" class="press-wiki-picker-tree"></div>
+              </div>
             </div>
-            <div id="press-wiki-picker-tree" class="press-wiki-picker-tree"></div>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px;">
+              <div id="press-wiki-title" style="display:none;font-size:18px;font-weight:700;line-height:1.1;">No page selected</div>
+            </div>
+          </div>
+          <div class="notes-editor-panel" style="flex:1;padding:8px 12px 12px;">
+            <div id="press-wiki-new-page-row" style="margin-top:0;display:none;gap:8px;align-items:center;">
+              <input id="press-wiki-new-page-id" class="input" type="text" placeholder="new-page-id" style="flex:1;">
+              <button id="press-wiki-create-page-btn" class="btn btn-blue" type="button">Create</button>
+              <button id="press-wiki-cancel-create-page-btn" class="btn btn-ghost" type="button">Cancel</button>
+            </div>
+            <div id="press-wiki-error" style="display:none;font-size:12px;color:var(--color-danger, var(--red));margin-top:6px;"></div>
+
+            <div id="press-wiki-body" style="margin-top:6px;white-space:normal;font-size:14px;line-height:1.45;"></div>
+            <div id="press-wiki-attachments" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:8px;"></div>
+
+            <div id="press-wiki-editor" style="margin-top:8px;display:none;">
+              <input id="press-wiki-edit-title" class="input" type="text" placeholder="Page title">
+              <div class="formatting-toolbar" style="display:flex;gap:4px;margin-top:6px;padding:4px;background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-bottom:none;border-radius:8px 8px 0 0;">
+                <button type="button" class="btn btn-ghost" style="padding:4px 8px;font-size:12px;" onclick="insertMarkdown('press-wiki-edit-body', '**', '**')"><b>B</b></button>
+                <button type="button" class="btn btn-ghost" style="padding:4px 8px;font-size:12px;font-style:italic;" onclick="insertMarkdown('press-wiki-edit-body', '*', '*')">I</button>
+                <button type="button" class="btn btn-ghost" style="padding:4px 8px;font-size:12px;text-decoration:underline;" onclick="insertMarkdown('press-wiki-edit-body', '<u>', '</u>')">U</button>
+                <input type="color" id="press-wiki-color-picker" style="width:28px;height:28px;padding:0;border:none;cursor:pointer;background:transparent;border-radius:4px;" onchange="insertMarkdown('press-wiki-edit-body', '<span style=\'color:'+this.value+'\'>', '</span>')">
+              </div>
+              <textarea id="press-wiki-edit-body" class="input" rows="6" placeholder="Write wiki content..." style="margin-top:0;border-radius:0 0 8px 8px;min-height:130px;"></textarea>
+              <input id="press-wiki-edit-change-note" class="input" type="text" placeholder="Change note (optional)" style="margin-top:6px;">
+              <div style="margin-top:6px;display:flex;gap:8px;">
+                <button id="press-wiki-insert-photo-btn" class="btn btn-ghost" type="button">Insert Photo</button>
+                <button id="press-wiki-save-btn" class="btn btn-blue" type="button">Save Revision</button>
+                <button id="press-wiki-delete-btn" class="btn btn-danger" type="button">Delete Page</button>
+                <button id="press-wiki-cancel-edit-btn" class="btn btn-ghost" type="button">Cancel</button>
+              </div>
+              <input type="file" id="press-wiki-file-input" accept="image/*" multiple style="display:none">
+              <div id="press-wiki-photo-picker" style="margin-top:6px;display:none;border:1px solid var(--color-border, var(--border));border-radius:10px;padding:8px;"></div>
+            </div>
+
+            <details style="margin-top:10px;border:1px solid var(--color-border, var(--border));border-radius:10px;padding:8px;">
+              <summary style="font-size:12px;font-weight:600;cursor:pointer;user-select:none;outline:none;">Revision History</summary>
+              <div id="press-wiki-revisions" style="margin-top:8px;max-height:220px;overflow:auto;"></div>
+            </details>
           </div>
         </div>
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px;">
-          <div id="press-wiki-title" style="display:none;font-size:18px;font-weight:700;line-height:1.1;">No page selected</div>
-        </div>
-        <div id="press-wiki-meta" style="font-size:12px;color:var(--text3);margin-top:3px;"></div>
-      </div>
-      <div class="notes-editor-panel" style="flex:1;overflow-y:auto;padding:8px 12px 12px;">
-        <div id="press-wiki-new-page-row" style="margin-top:0;display:none;gap:8px;align-items:center;">
-          <input id="press-wiki-new-page-id" class="input" type="text" placeholder="new-page-id" style="flex:1;">
-          <button id="press-wiki-create-page-btn" class="btn btn-blue" type="button">Create</button>
-          <button id="press-wiki-cancel-create-page-btn" class="btn btn-ghost" type="button">Cancel</button>
-        </div>
-        <div id="press-wiki-error" style="display:none;font-size:12px;color:var(--red);margin-top:6px;"></div>
-
-        <div id="press-wiki-body" style="margin-top:6px;white-space:normal;font-size:14px;line-height:1.45;"></div>
-        <div id="press-wiki-attachments" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:8px;"></div>
-
-        <div id="press-wiki-editor" style="margin-top:8px;display:none;">
-          <input id="press-wiki-edit-title" class="input" type="text" placeholder="Page title">
-          <div class="formatting-toolbar" style="display:flex;gap:4px;margin-top:6px;padding:4px;background:var(--bg3);border:1px solid var(--border);border-bottom:none;border-radius:8px 8px 0 0;">
-            <button type="button" class="btn btn-ghost" style="padding:4px 8px;font-size:12px;" onclick="insertMarkdown('press-wiki-edit-body', '**', '**')"><b>B</b></button>
-            <button type="button" class="btn btn-ghost" style="padding:4px 8px;font-size:12px;font-style:italic;" onclick="insertMarkdown('press-wiki-edit-body', '*', '*')">I</button>
-            <button type="button" class="btn btn-ghost" style="padding:4px 8px;font-size:12px;text-decoration:underline;" onclick="insertMarkdown('press-wiki-edit-body', '<u>', '</u>')">U</button>
-            <input type="color" id="press-wiki-color-picker" style="width:28px;height:28px;padding:0;border:none;cursor:pointer;background:transparent;border-radius:4px;" onchange="insertMarkdown('press-wiki-edit-body', '<span style=\'color:'+this.value+'\'>', '</span>')">
+        <div class="press-wiki-sidebar">
+          <div class="press-wiki-press-picker-wrap" style="margin-top:8px;display:none;">
+              <div class="press-wiki-press-picker-panel-head">
+                <div>
+                  <div class="press-wiki-press-picker-panel-kicker">Press Deck</div>
+                  <div id="press-wiki-press-picker-panel-copy" class="press-wiki-press-picker-panel-copy">Pick a press to load its wiki.</div>
+                </div>
+                <button id="press-wiki-press-picker-close" class="btn btn-ghost" type="button" style="padding:4px 10px;border-radius:999px;font-size:12px;">Close</button>
+              </div>
+              <div id="press-wiki-press-picker-tree" class="press-wiki-press-picker-tree"></div>
           </div>
-          <textarea id="press-wiki-edit-body" class="input" rows="6" placeholder="Write wiki content..." style="margin-top:0;border-radius:0 0 8px 8px;min-height:130px;"></textarea>
-          <input id="press-wiki-edit-change-note" class="input" type="text" placeholder="Change note (required)" style="margin-top:6px;">
-          <div style="margin-top:6px;display:flex;gap:8px;">
-            <button id="press-wiki-insert-photo-btn" class="btn btn-ghost" type="button">Insert Photo</button>
-            <button id="press-wiki-save-btn" class="btn btn-blue" type="button">Save Revision</button>
-            <button id="press-wiki-delete-btn" class="btn btn-danger" type="button">Delete Page</button>
-            <button id="press-wiki-cancel-edit-btn" class="btn btn-ghost" type="button">Cancel</button>
-          </div>
-          <input type="file" id="press-wiki-file-input" accept="image/*" multiple style="display:none">
-          <div id="press-wiki-photo-picker" style="margin-top:6px;display:none;border:1px solid var(--line);border-radius:10px;padding:8px;"></div>
+          <div id="press-wiki-meta" style="font-size:12px;color:var(--color-text-subtle, var(--text3));padding:12px;"></div>
         </div>
-
-        <details style="margin-top:10px;border:1px solid var(--line);border-radius:10px;padding:8px;">
-          <summary style="font-size:12px;font-weight:600;cursor:pointer;user-select:none;outline:none;">Revision History</summary>
-          <div id="press-wiki-revisions" style="margin-top:8px;max-height:220px;overflow:auto;"></div>
-        </details>
       </div>
     </div>
   </div>
@@ -829,8 +1095,8 @@
   <div class="phone" id="notes-phone-frame" onclick="event.stopPropagation()">
     <div class="notes-drag-handle" id="notes-drag-handle"></div>
 
-    <div class="app-container" id="notes-app-container">
-      <div class="header notes-list-header tool-modal-nav-shell">
+    <div class="app-container" id="notes-app-container" style="padding:0;display:flex;flex-direction:column;overflow:hidden;">
+      <div class="header notes-list-header tool-modal-nav-shell" style="flex-shrink:0;">
         <button class="tool-modal-nav-btn tool-modal-nav-prev" type="button" data-shell-action="cycle-tool-modal" data-shell-value="prev" aria-label="Previous tool" title="Previous tool">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M9.5 3.5L5 8l4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
@@ -840,145 +1106,170 @@
         </button>
       </div>
 
-      <div class="search-wrap">
-        <span class="search-icon">🔍</span>
-        <input type="text" class="search-box" id="notes-search" placeholder="Search notes...">
+      <div class="tool-create-row notes-create-row">
+        <div class="tool-create-copy">
+          <div class="tool-create-kicker">Notebook</div>
+          <div class="tool-create-subtitle">Capture handoffs and follow-ups.</div>
+        </div>
+        <button class="btn btn-primary tool-create-action" id="notes-create-btn" type="button" aria-label="Create note" title="Create note">+</button>
       </div>
 
-      <div class="filter-row" id="notes-filter-row">
-        <button class="filter-pill active" id="notes-filter-all" data-notes-filter="all">All</button>
-        <button class="filter-pill" id="notes-filter-pinned" data-notes-filter="pinned">Pinned</button>
-        <button class="filter-pill" id="notes-filter-linked" data-notes-filter="linked">Linked</button>
-        <button class="filter-pill" id="notes-filter-archived" data-notes-filter="archived">Archived</button>
-      </div>
+      <div class="notes-modal-body">
+        <div class="notes-list-panel">
+          <div class="notes-list-controls">
+            <div class="search-wrap">
+              <span class="search-icon">🔍</span>
+              <input type="text" class="search-box" id="notes-search" placeholder="Search notes...">
+            </div>
+            <div class="filter-row" id="notes-filter-row">
+              <button class="filter-pill active" id="notes-filter-all" data-notes-filter="all">All</button>
+              <button class="filter-pill" id="notes-filter-pinned" data-notes-filter="pinned">Pinned</button>
+              <button class="filter-pill" id="notes-filter-linked" data-notes-filter="linked">Linked</button>
+              <button class="filter-pill" id="notes-filter-archived" data-notes-filter="archived">Archived</button>
+            </div>
+          </div>
+          <div id="notes-list" class="notes-list"></div>
+        </div>
 
-      <div id="notes-list"></div>
+        <div class="notes-editor-panel" id="notes-phone-editor-panel">
+          <div class="notes-modal-header-actions tool-create-row" id="notes-editor-header-actions">
+            <button class="notes-modal-close" id="notes-editor-close-btn" type="button" onclick="closeNotesEditorModal()" aria-label="Close notes editor">✕</button>
+          </div>
+
+          <div class="notes-modal-header-copy note-card notes-editor-header-card">
+            <div class="notes-modal-header-top">
+              <div class="notes-modal-kicker">Shift log</div>
+              <div id="notes-editor-save-state" class="notes-editor-save-state"></div>
+            </div>
+            <div class="notes-modal-title-row">
+              <div class="notes-modal-title" id="notes-editor-title">New Note</div>
+              <div class="notes-modal-context" id="notes-modal-context">Plant-wide</div>
+            </div>
+            <div class="notes-modal-subtitle" id="notes-modal-subtitle">Press notes, handoffs, and issue follow-ups.</div>
+            <div class="notes-modal-meta-row">
+              <div id="notes-editor-updated" class="notes-editor-updated"></div>
+              <div class="notes-modal-sync-note">Cmd+S saves, Esc closes</div>
+            </div>
+          </div>
+          <div class="notes-editor-head">
+            <button class="btn btn-ghost notes-back-btn" id="notes-back-btn" type="button">← Notes</button>
+            <div class="notes-editor-actions">
+              <button class="btn btn-primary" id="notes-edit-btn" type="button">Edit</button>
+              <button class="btn btn-primary" id="notes-done-btn" type="button">Done</button>
+              <button class="btn btn-ghost" id="notes-pin-btn" type="button">Pin</button>
+              <button class="btn btn-ghost" id="notes-archive-btn" type="button">Archive</button>
+              <button class="btn btn-danger" id="notes-delete-btn" type="button">Delete</button>
+              <div class="notes-menu-wrap notes-mobile-actions-wrap">
+                <button class="btn btn-ghost notes-menu-trigger" id="notes-actions-menu-btn" type="button" aria-expanded="false" aria-haspopup="menu">More</button>
+                <div class="notes-menu" id="notes-actions-menu" role="menu" aria-label="Note actions and templates">
+                  <button type="button" data-note-template="blank" role="menuitem">Blank Note</button>
+                  <button type="button" data-note-template="follow_up" role="menuitem">Follow-up</button>
+                  <button type="button" data-note-template="parts_needed" role="menuitem">Parts Needed</button>
+                  <button type="button" data-note-template="shift_handoff" role="menuitem">Shift Handoff</button>
+                  <button type="button" data-note-template="issue_summary" role="menuitem">Issue Summary</button>
+                  <div class="notes-menu-divider" aria-hidden="true"></div>
+                  <button type="button" id="notes-actions-pin-btn" role="menuitem">Pin</button>
+                  <button type="button" id="notes-actions-archive-btn" role="menuitem">Archive</button>
+                  <button type="button" id="notes-actions-delete-btn" role="menuitem" class="danger">Delete</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="notes-viewer" id="notes-viewer" aria-live="polite">
+            <article class="notes-viewer-card note-card">
+              <div class="notes-viewer-title" id="notes-viewer-title">Select a note</div>
+              <div class="notes-viewer-meta" id="notes-viewer-meta">Choose a note from the list to read it.</div>
+              <div class="notes-viewer-tags" id="notes-viewer-tags"></div>
+              <div class="notes-viewer-body" id="notes-viewer-body"></div>
+            </article>
+
+            <section class="notes-viewer-card note-card" id="notes-viewer-checklist-card">
+              <div class="notes-section-head">
+                <div class="notes-section-title">Checklist</div>
+              </div>
+              <div id="notes-viewer-checklist" class="notes-checklist notes-viewer-checklist"></div>
+            </section>
+
+            <section class="notes-viewer-card note-card" id="notes-viewer-attachments-card">
+              <div class="notes-section-head">
+                <div class="notes-section-title">Attachments</div>
+                <div class="notes-editor-updated">Photos and screenshots</div>
+              </div>
+              <div id="notes-viewer-attachments" class="notes-attachments"></div>
+            </section>
+
+            <section class="notes-viewer-card note-card notes-context-card" id="notes-viewer-context-card">
+              <div class="notes-context-label">Linked Context</div>
+              <div class="notes-context-summary" id="notes-viewer-context-summary">Plant-wide note</div>
+              <div id="notes-viewer-context-chips" class="notes-context-chips"></div>
+            </section>
+          </div>
+
+          <div class="notes-editor-card note-card notes-editor-card-main">
+            <label for="notes-title">Title</label>
+            <input type="text" id="notes-title" class="notes-title" placeholder="Note title" maxlength="100">
+            <label for="notes-tags">Tags</label>
+            <input type="text" id="notes-tags" class="notes-tags" placeholder="Tags (comma separated)">
+            <div id="notes-tag-chips" class="notes-tag-chips"></div>
+            <div id="notes-tag-suggestions" class="notes-tag-suggestions" aria-label="Tag suggestions"></div>
+            <label for="notes-body">Content</label>
+            <div id="notes-body" class="notes-body" contenteditable="true" data-placeholder="Add the finding, action taken, next step, or handoff note..."></div>
+            <div id="notes-body-preview" class="notes-body-preview" aria-hidden="true"></div>
+            <div class="tag-hint">Type # anywhere to add a tag.</div>
+            <div class="notes-toolbar">
+              <button class="notes-toolbar-btn" id="notes-bold-btn" type="button" title="Bold">B</button>
+              <button class="notes-toolbar-btn" id="notes-italic-btn" type="button" title="Italic">I</button>
+              <button class="notes-toolbar-btn" id="notes-underline-btn" type="button" title="Underline">U</button>
+              <button class="notes-toolbar-btn" id="notes-bullet-btn" type="button">Bullets</button>
+              <button class="notes-toolbar-btn" id="notes-checklist-btn" type="button">Checklist</button>
+              <button class="notes-toolbar-btn" id="notes-preview-btn" type="button" aria-pressed="false">Preview</button>
+              <button class="notes-toolbar-btn" id="notes-photo-btn" type="button">Attach</button>
+            </div>
+          </div>
+
+          <div class="notes-editor-card note-card notes-editor-card-checklist">
+            <div class="notes-section-head">
+              <div class="notes-section-title">Checklist</div>
+              <button class="notes-toolbar-btn" id="notes-add-checklist-btn" type="button">+ Add</button>
+            </div>
+            <div id="notes-checklist" class="notes-checklist"></div>
+            <div class="add-checklist-row" id="notes-add-checklist-row">
+              <input type="text" id="notes-checklist-input" class="input" placeholder="Checklist item">
+              <button class="btn btn-primary" id="notes-add-checklist-inline-btn" type="button">Add</button>
+            </div>
+          </div>
+
+          <div class="notes-editor-card note-card notes-editor-card-attachments">
+            <div class="notes-section-head">
+              <div class="notes-section-title">Attachments</div>
+              <div class="notes-editor-updated">Photos and screenshots</div>
+            </div>
+            <div id="notes-drop-hint" class="notes-drop-hint">Drag images here or paste screenshots directly into the note.</div>
+            <div id="notes-attachments" class="notes-attachments"></div>
+          </div>
+
+          <div class="notes-context-box notes-editor-card note-card notes-context-card">
+            <div class="notes-context-label">Linked Context</div>
+            <div class="notes-context-summary" id="notes-context-summary">Plant-wide note</div>
+            <div class="notes-context-help" id="notes-context-help">Use these buttons to attach the note to the press or issue you are currently viewing.</div>
+            <div id="notes-context-chips" class="notes-context-chips"></div>
+            <div class="notes-context-actions">
+              <button class="notes-toolbar-btn" id="notes-link-press-btn" type="button">Link Open Press</button>
+              <button class="notes-toolbar-btn" id="notes-link-issue-btn" type="button">Link Open Issue</button>
+            </div>
+          </div>
+          <input type="file" id="notes-photo-input" accept="image/*" multiple hidden>
+        </div>
+      </div>
     </div>
 
     <button class="fab" id="notes-new-btn" type="button" aria-label="New note">+</button>
   </div>
 </div>
 
-<!-- Editor Modal -->
-<div class="modal-overlay" id="notes-editor-modal" onclick="if(event.target===this)closeNotesEditorModal()">
-  <div class="phone" id="notes-editor-frame" onclick="event.stopPropagation()">
-    <div class="notes-drag-handle" id="notes-editor-drag-handle"></div>
-
-    <div class="app-container" id="notes-editor-app-container" style="padding:0;display:flex;flex-direction:column;overflow:hidden;">
-      <div class="notes-modal-header tool-modal-nav-shell" style="flex-shrink:0;">
-        <button class="tool-modal-nav-btn tool-modal-nav-prev" type="button" data-shell-action="cycle-tool-modal" data-shell-value="prev" aria-label="Previous tool" title="Previous tool">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M9.5 3.5L5 8l4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
-        <div class="tool-modal-nav-title">Notes</div>
-        <button class="tool-modal-nav-btn tool-modal-nav-next" type="button" data-shell-action="cycle-tool-modal" data-shell-value="next" aria-label="Next tool" title="Next tool">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6.5 3.5L11 8l-4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
-      </div>
-      <div class="notes-modal-header-actions">
-        <button class="notes-modal-close" id="notes-editor-close-btn" type="button" onclick="closeNotesEditorModal()" aria-label="Close notes editor">✕</button>
-        <button class="btn btn-primary" id="notes-create-btn" type="button">+ New Note</button>
-        <div class="notes-menu-wrap notes-mobile-actions-wrap">
-          <button class="btn btn-ghost notes-menu-trigger" id="notes-actions-menu-btn" type="button" aria-expanded="false" aria-haspopup="menu">More</button>
-          <div class="notes-menu" id="notes-actions-menu" role="menu" aria-label="Note actions and templates">
-            <button type="button" data-note-template="blank" role="menuitem">Blank Note</button>
-            <button type="button" data-note-template="follow_up" role="menuitem">Follow-up</button>
-            <button type="button" data-note-template="parts_needed" role="menuitem">Parts Needed</button>
-            <button type="button" data-note-template="shift_handoff" role="menuitem">Shift Handoff</button>
-            <button type="button" data-note-template="issue_summary" role="menuitem">Issue Summary</button>
-            <div class="notes-menu-divider" aria-hidden="true"></div>
-            <button type="button" id="notes-actions-pin-btn" role="menuitem">Pin</button>
-            <button type="button" id="notes-actions-archive-btn" role="menuitem">Archive</button>
-            <button type="button" id="notes-actions-delete-btn" role="menuitem" class="danger">Delete</button>
-          </div>
-        </div>
-      </div>
-
-    <div class="notes-editor-panel">
-      <div class="notes-modal-header-copy note-card notes-editor-header-card">
-        <div class="notes-modal-header-top">
-          <div class="notes-modal-kicker">Quick capture</div>
-          <div id="notes-editor-save-state" class="notes-editor-save-state"></div>
-        </div>
-        <div class="notes-modal-title-row">
-          <div class="notes-modal-title" id="notes-editor-title">New Note</div>
-          <div class="notes-modal-context" id="notes-modal-context">Plant-wide</div>
-        </div>
-        <div class="notes-modal-subtitle" id="notes-modal-subtitle">Quick capture, mobile first, and saved as you type.</div>
-        <div class="notes-modal-meta-row">
-          <div id="notes-editor-updated" class="notes-editor-updated"></div>
-          <div class="notes-modal-sync-note">Cmd+S saves, Esc closes</div>
-        </div>
-      </div>
-      <div class="notes-editor-head">
-        <button class="btn btn-ghost notes-back-btn" id="notes-back-btn" type="button">← Notes</button>
-        <div class="notes-editor-actions">
-          <button class="btn btn-ghost" id="notes-pin-btn" type="button">📌 Pin</button>
-          <button class="btn btn-ghost" id="notes-archive-btn" type="button">📦 Archive</button>
-          <button class="btn btn-danger" id="notes-delete-btn" type="button">Delete</button>
-        </div>
-      </div>
-
-      <div class="notes-editor-card note-card notes-editor-card-main">
-        <label for="notes-title">Title</label>
-        <input type="text" id="notes-title" class="notes-title" placeholder="Note title" maxlength="100">
-
-        <label for="notes-tags">Tags</label>
-        <input type="text" id="notes-tags" class="notes-tags" placeholder="Tags (comma separated)">
-        <div id="notes-tag-chips" class="notes-tag-chips"></div>
-        <div id="notes-tag-suggestions" class="notes-tag-suggestions" aria-label="Tag suggestions"></div>
-
-        <label for="notes-body">Content</label>
-        <div id="notes-body" class="notes-body" contenteditable="true" data-placeholder="Write something useful... Use #hashtags for tags"></div>
-        <div id="notes-body-preview" class="notes-body-preview" aria-hidden="true"></div>
-        <div class="tag-hint">💡 Type # anywhere to add a tag</div>
-
-        <div class="notes-toolbar">
-          <button class="notes-toolbar-btn" id="notes-bold-btn" type="button">Bold</button>
-          <button class="notes-toolbar-btn" id="notes-italic-btn" type="button">Italic</button>
-          <button class="notes-toolbar-btn" id="notes-underline-btn" type="button">Underline</button>
-          <button class="notes-toolbar-btn" id="notes-bullet-btn" type="button">Bullets</button>
-          <button class="notes-toolbar-btn" id="notes-checklist-btn" type="button">☑ Checklist</button>
-          <button class="notes-toolbar-btn" id="notes-preview-btn" type="button" aria-pressed="false">Preview</button>
-          <button class="notes-toolbar-btn" id="notes-photo-btn" type="button">📷 Attach</button>
-        </div>
-      </div>
-
-      <div class="notes-editor-card note-card notes-editor-card-checklist">
-        <div class="notes-section-head">
-          <div class="notes-section-title">Checklist</div>
-          <button class="notes-toolbar-btn" id="notes-add-checklist-btn" type="button">+ Add</button>
-        </div>
-        <div id="notes-checklist" class="notes-checklist"></div>
-        <div class="add-checklist-row" id="notes-add-checklist-row">
-          <input type="text" id="notes-checklist-input" class="input" placeholder="Checklist item">
-          <button class="btn btn-primary" id="notes-add-checklist-inline-btn" type="button">Add</button>
-        </div>
-      </div>
-
-      <div class="notes-editor-card note-card notes-editor-card-attachments">
-        <div class="notes-section-head">
-          <div class="notes-section-title">Attachments</div>
-          <div class="notes-editor-updated">Drop photos here or tap Attach</div>
-        </div>
-        <div id="notes-drop-hint" class="notes-drop-hint">Drag images here, or paste screenshots directly into the note.</div>
-        <div id="notes-attachments" class="notes-attachments"></div>
-      </div>
-
-      <div class="notes-context-box notes-editor-card note-card notes-context-card">
-        <div class="notes-context-label">Linked Context</div>
-        <div class="notes-context-summary" id="notes-context-summary">Plant-wide note</div>
-        <div class="notes-context-help" id="notes-context-help">Use these buttons to attach the note to the press or issue you are currently viewing.</div>
-        <div id="notes-context-chips" class="notes-context-chips"></div>
-        <div class="notes-context-actions">
-          <button class="notes-toolbar-btn" id="notes-link-press-btn" type="button">Link Open Press</button>
-          <button class="notes-toolbar-btn" id="notes-link-issue-btn" type="button">Link Open Issue</button>
-        </div>
-      </div>
-      <input type="file" id="notes-photo-input" accept="image/*" multiple hidden>
-    </div>
-  </div>
-  </div>
-</div>
+<!-- Editor Modal (legacy shell — content moved into notes-phone-frame) -->
+<div class="modal-overlay" id="notes-editor-modal" style="display:none;"></div>
 
 <!-- TODOS MODAL -->
 <div class="modal-overlay" id="todos-modal" onclick="if(event.target===this)closeTodosModal()">
@@ -995,7 +1286,15 @@
         </button>
       </div>
 
-      <div class="todo-compose">
+      <div class="tool-create-row todo-create-row">
+        <div class="tool-create-copy">
+          <div class="tool-create-kicker">Tasks</div>
+          <div class="tool-create-subtitle">Create and track follow-ups.</div>
+        </div>
+        <button class="btn btn-primary tool-create-action" id="todo-create-btn" type="button" aria-label="Create todo" title="Create todo" aria-expanded="false" aria-controls="todo-compose">+</button>
+      </div>
+
+      <div class="todo-compose tool-create-panel" id="todo-compose">
         <input type="text" id="todo-quick-title" class="input" placeholder="New todo">
         <button class="btn btn-primary" id="todo-quick-add-btn" type="button">Add</button>
       </div>
@@ -1017,6 +1316,27 @@
         <button class="filter-pill active" data-todo-filter="open" type="button">Open</button>
         <button class="filter-pill" data-todo-filter="today" type="button">Today</button>
         <button class="filter-pill" data-todo-filter="done" type="button">Done</button>
+      </div>
+
+      <div class="todo-viewer note-card" id="todo-viewer" style="display:none;">
+        <div class="notes-section-head">
+          <div class="notes-section-title">Task</div>
+          <button class="notes-toolbar-btn" id="todo-viewer-close-btn" type="button">Close</button>
+        </div>
+        <div class="todo-viewer-title-row">
+          <div class="todo-viewer-check" id="todo-viewer-check" aria-hidden="true"></div>
+          <div class="todo-viewer-title" id="todo-viewer-title">Select a todo</div>
+        </div>
+        <div class="todo-viewer-meta" id="todo-viewer-meta"></div>
+        <div class="todo-viewer-notes" id="todo-viewer-notes"></div>
+        <div class="notes-context-box todo-link-box">
+          <div class="notes-context-label">Linked Context</div>
+          <div class="notes-context-summary" id="todo-viewer-context-summary">Standalone todo</div>
+        </div>
+        <div class="todo-viewer-actions">
+          <button class="btn btn-ghost" id="todo-viewer-toggle-complete-btn" type="button">Mark Done</button>
+          <button class="btn btn-primary" id="todo-viewer-edit-btn" type="button">Edit</button>
+        </div>
       </div>
 
       <div class="todo-editor note-card" id="todo-editor" style="display:none;">
@@ -1222,8 +1542,8 @@
   <div class="modal" style="max-width:340px;text-align:center;">
     <div class="store-confirm-icon" id="purchase-confirm-icon"></div>
     <div class="modal-title" style="justify-content:center;margin-bottom:8px;" id="purchase-confirm-title">Buy Theme?</div>
-    <p style="color:var(--text2);font-size:14px;margin:0 0 6px;" id="purchase-confirm-desc"></p>
-    <p style="color:var(--text3);font-size:12px;margin:0 0 20px;" id="purchase-confirm-remaining"></p>
+    <p style="color:var(--color-text-muted, var(--text2));font-size:14px;margin:0 0 6px;" id="purchase-confirm-desc"></p>
+    <p style="color:var(--color-text-subtle, var(--text3));font-size:12px;margin:0 0 20px;" id="purchase-confirm-remaining"></p>
     <div class="modal-actions" style="justify-content:center;gap:10px;">
       <button class="btn btn-ghost" onclick="closePurchaseConfirm()">Cancel</button>
       <button class="btn btn-primary" id="purchase-confirm-btn" onclick="confirmStorePurchase()">Confirm</button>
@@ -1234,56 +1554,345 @@
 <!-- THEME EDITOR MODAL -->
 <div class="modal-overlay" id="appearance-modal">
   <div class="modal theme-editor-modal" id="theme-editor-modal">
-    <div class="modal-title" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
-      <span>🎨 Appearance</span>
-      <button style="background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer;line-height:1;" onclick="closeThemeEditor()">✕</button>
-    </div>
-
-    <div class="te-section">
-      <div class="te-section-label">Built-in Themes</div>
-      <div class="appearance-theme-grid" id="appearance-theme-grid"></div>
-    </div>
-
-    <div class="te-section">
-      <div class="te-section-label">Saved Custom Themes</div>
-      <div class="appearance-custom-list" id="appearance-custom-list"></div>
-      <div class="appearance-empty" id="appearance-custom-empty" style="display:none;">No saved custom themes yet.</div>
-    </div>
-
-    <div class="te-section">
-      <div class="te-section-label">Theme Editor Base</div>
-      <select id="te-base-select" class="te-base-select"></select>
-    </div>
-
-    <div class="te-section">
-      <div class="te-section-label" style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
-        <span>Theme Variables</span>
-        <span id="te-var-count" class="te-var-count">0 vars</span>
+    <!-- Left Column: Phone Preview -->
+    <div class="te-preview-col" id="te-preview-col">
+      <div class="te-phone-casing">
+        <div class="te-phone-island"></div>
+        <div class="te-phone-screen" id="te-phone-screen">
+          <!-- Status Bar -->
+          <div class="te-phone-status-bar">
+            <span>09:41</span>
+            <div class="te-phone-status-icons">
+              <span>📶</span>
+              <span>📶</span>
+              <span>🔋</span>
+            </div>
+          </div>
+          <!-- App Header -->
+          <div class="te-phone-app-header">
+            <div>
+              <div class="te-phone-kicker" id="te-phone-kicker">Louisville Plant 🇺🇸</div>
+              <div class="te-phone-title">AP Tracker</div>
+            </div>
+            <div class="te-phone-avatar">JS</div>
+          </div>
+          
+          <!-- Screen Content (Scrollable) -->
+          <div class="te-phone-screen-content">
+            <!-- XP/Mascot Widget -->
+            <div class="te-phone-card te-phone-xp-card">
+              <div class="te-phone-xp-header">
+                <span class="te-phone-mascot-emoji">😸</span>
+                <div style="flex:1; min-width:0;">
+                  <div class="te-phone-mascot-name" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Midget (Mascot)</div>
+                  <div class="te-phone-xp-bar-wrap">
+                    <div class="te-phone-xp-bar" style="width: 65%;"></div>
+                  </div>
+                  <div class="te-phone-xp-label">Lvl 4 • 650/1000 XP</div>
+                </div>
+                <div class="te-phone-streak">🔥 5d</div>
+              </div>
+            </div>
+            
+            <!-- Press Grid Widget -->
+            <div class="te-phone-card">
+              <div class="te-phone-card-title">Press Deck Plan</div>
+              <div class="te-phone-press-grid">
+                <div class="te-phone-press-btn te-success">Press 1</div>
+                <div class="te-phone-press-btn te-danger">Press 2</div>
+                <div class="te-phone-press-btn te-info">Press 3</div>
+              </div>
+            </div>
+            
+            <!-- Issue Card Widget -->
+            <div class="te-phone-card te-phone-issue-card">
+              <div class="te-phone-issue-header">
+                <span class="te-phone-issue-badge te-warning">⚠️ NEEDS INK</span>
+                <span class="te-phone-issue-time">12m ago</span>
+              </div>
+              <div class="te-phone-issue-title">Press #2 — Ink leak on roller assembly</div>
+              <div class="te-phone-issue-reporter">Reported by Chris Scoggins</div>
+              <div class="te-phone-issue-attachment">
+                <div class="te-phone-attachment-placeholder">🖼️ attachment_01.jpg</div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Bottom Tab Navigation -->
+          <div class="te-phone-bottom-nav" id="te-phone-bottom-nav">
+            <div class="te-phone-nav-item active">
+              <span>🏠</span>
+              <span>Floor</span>
+            </div>
+            <div class="te-phone-nav-item">
+              <span>📖</span>
+              <span>Wiki</span>
+            </div>
+            <div class="te-phone-nav-item">
+              <span>📝</span>
+              <span>Notes</span>
+            </div>
+            <div class="te-phone-nav-item">
+              <span>💬</span>
+              <span>Chat</span>
+            </div>
+          </div>
+        </div>
+        <div class="te-phone-home-indicator"></div>
       </div>
-      <input id="te-theme-search" class="te-theme-search" type="search" placeholder="Search CSS variable (e.g. --accent)">
-      <div id="te-vars-list" class="te-vars-list"></div>
-    </div>
-
-    <div class="te-section">
-      <div class="te-section-label">SVG Background (Any Theme)</div>
-      <textarea id="te-bg-svg-input" style="width:100%;min-height:90px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text2);font-family:'Share Tech Mono',monospace;font-size:11px;" placeholder="Paste raw SVG markup (optional)."></textarea>
-    </div>
-
-    <div class="te-section">
-      <div class="te-section-label">Save / Update Theme</div>
-      <div style="display:flex;gap:8px;align-items:center;">
-        <input id="te-theme-name" class="te-theme-search" type="text" placeholder="Theme name" style="flex:1;">
-        <button id="te-save-btn" class="btn btn-primary" type="button" onclick="saveCustomTheme()">💾 Save</button>
+      <div class="te-preview-info">
+        <span>📱 Active Theme Live Preview</span>
       </div>
     </div>
+    
+    <!-- Right Column: Control Panel -->
+    <div class="te-control-col">
+      <div class="modal-title" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <span style="display:flex;align-items:center;gap:8px;">🎨 Appearance Studio</span>
+        <button style="background:none;border:none;color:var(--color-text-subtle, var(--text3));font-size:20px;cursor:pointer;line-height:1;" onclick="closeThemeEditor()">✕</button>
+      </div>
+      
+      <!-- Control Panel Tabs -->
+      <div class="te-tabs">
+        <button class="te-tab active" data-te-tab="design">Design</button>
+        <button class="te-tab" data-te-tab="presets">Presets</button>
+        <button class="te-tab" data-te-tab="advanced">Advanced</button>
+        <button class="te-tab" data-te-tab="background">Background</button>
+      </div>
+      
+      <div class="te-tab-panels">
+        <!-- Tab 1: Design Panel -->
+        <div class="te-tab-panel active" id="te-panel-design">
+          <!-- Color Customizer -->
+          <div class="te-panel-section">
+            <div class="te-panel-section-title">Color Palettes</div>
+            <div class="te-design-color-grid">
+              <!-- Accent Colors -->
+              <div class="te-color-picker-box">
+                <label for="te-color-accent">Primary Accent</label>
+                <div class="te-color-picker-row">
+                  <input type="color" data-var="--accent" id="te-color-accent">
+                  <span class="te-color-hex-label" id="te-hex-accent">#f97316</span>
+                </div>
+              </div>
+              <div class="te-color-picker-box">
+                <label for="te-color-accent2">Secondary Accent</label>
+                <div class="te-color-picker-row">
+                  <input type="color" data-var="--accent2" id="te-color-accent2">
+                  <span class="te-color-hex-label" id="te-hex-accent2">#fb923c</span>
+                </div>
+              </div>
+              <!-- Canvas Backgrounds -->
+              <div class="te-color-picker-box">
+                <label for="te-color-bg">App Background</label>
+                <div class="te-color-picker-row">
+                  <input type="color" data-var="--bg" id="te-color-bg">
+                  <span class="te-color-hex-label" id="te-hex-bg">#0d1117</span>
+                </div>
+              </div>
+              <div class="te-color-picker-box">
+                <label for="te-color-bg2">Card Surface</label>
+                <div class="te-color-picker-row">
+                  <input type="color" data-var="--bg2" id="te-color-bg2">
+                  <span class="te-color-hex-label" id="te-hex-bg2">#161b22</span>
+                </div>
+              </div>
+              <div class="te-color-picker-box">
+                <label for="te-color-bg3">Raised Surface</label>
+                <div class="te-color-picker-row">
+                  <input type="color" data-var="--bg3" id="te-color-bg3">
+                  <span class="te-color-hex-label" id="te-hex-bg3">#1c2333</span>
+                </div>
+              </div>
+              <div class="te-color-picker-box">
+                <label for="te-color-border">Border Line</label>
+                <div class="te-color-picker-row">
+                  <input type="color" data-var="--border" id="te-color-border">
+                  <span class="te-color-hex-label" id="te-hex-border">#30363d</span>
+                </div>
+              </div>
+              <div class="te-color-picker-box">
+                <label for="te-color-text">Primary Text</label>
+                <div class="te-color-picker-row">
+                  <input type="color" data-var="--text" id="te-color-text">
+                  <span class="te-color-hex-label" id="te-hex-text">#e6edf3</span>
+                </div>
+              </div>
+              <div class="te-color-picker-box">
+                <label for="te-color-text2">Muted Text</label>
+                <div class="te-color-picker-row">
+                  <input type="color" data-var="--text2" id="te-color-text2">
+                  <span class="te-color-hex-label" id="te-hex-text2">#8b949e</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Typography Customizer -->
+          <div class="te-panel-section">
+            <div class="te-panel-section-title">Typography & Layout Font</div>
+            <div class="te-font-pairing-grid">
+              <button class="te-font-btn" data-font="sans" type="button">
+                <div class="te-font-preview font-sans">Aa</div>
+                <div class="te-font-label">Inter / Nunito</div>
+                <div class="te-font-desc">UI Standard</div>
+              </button>
+              <button class="te-font-btn" data-font="grotesk" type="button">
+                <div class="te-font-preview font-grotesk">Aa</div>
+                <div class="te-font-label">Space Grotesk</div>
+                <div class="te-font-desc">Tech Headings</div>
+              </button>
+              <button class="te-font-btn" data-font="serif" type="button">
+                <div class="te-font-preview font-serif">Aa</div>
+                <div class="te-font-label">Playfair Serif</div>
+                <div class="te-font-desc">Elegant Serif</div>
+              </button>
+              <button class="te-font-btn" data-font="mono" type="button">
+                <div class="te-font-preview font-mono">Aa</div>
+                <div class="te-font-label">Share Tech Mono</div>
+                <div class="te-font-desc">Terminal Mono</div>
+              </button>
+            </div>
+          </div>
+          
+          <!-- Visual Finishes Customizer -->
+          <div class="te-panel-section">
+            <div class="te-panel-section-title">Visual Finishes</div>
+            
+            <!-- Border Radius -->
+            <div class="te-slider-row">
+              <div class="te-slider-label-row">
+                <span>Corner Roundness</span>
+                <span id="te-lbl-radius">Rounded</span>
+              </div>
+              <div class="te-btn-group" id="te-group-radius">
+                <button class="te-btn-grp-opt" data-val="none" type="button">None</button>
+                <button class="te-btn-grp-opt" data-val="sm" type="button">Slight</button>
+                <button class="te-btn-grp-opt active" data-val="md" type="button">Rounded</button>
+                <button class="te-btn-grp-opt" data-val="lg" type="button">Curvy</button>
+                <button class="te-btn-grp-opt" data-val="full" type="button">Extreme</button>
+              </div>
+            </div>
+            
+            <!-- Shadows -->
+            <div class="te-slider-row">
+              <div class="te-slider-label-row">
+                <span>Drop Shadows</span>
+                <span id="te-lbl-shadow">Elevated</span>
+              </div>
+              <div class="te-btn-group" id="te-group-shadow">
+                <button class="te-btn-grp-opt" data-val="none" type="button">None</button>
+                <button class="te-btn-grp-opt" data-val="sm" type="button">Aura</button>
+                <button class="te-btn-grp-opt active" data-val="md" type="button">Elevated</button>
+                <button class="te-btn-grp-opt" data-val="lg" type="button">Deep</button>
+                <button class="te-btn-grp-opt" data-val="colored" type="button">Glow</button>
+              </div>
+            </div>
+            
+            <!-- Glassmorphism -->
+            <div class="te-glass-toggle-row">
+              <div class="te-glass-info">
+                <div class="te-glass-title">Glassmorphism Frosted Cards</div>
+                <div class="te-glass-desc">Apply transparent backdrop blur filter</div>
+              </div>
+              <label class="te-switch">
+                <input type="checkbox" id="te-toggle-glass">
+                <span class="te-switch-slider"></span>
+              </label>
+            </div>
+            
+            <div class="te-slider-row" id="te-row-glass-strength" style="display:none;">
+              <div class="te-slider-label-row">
+                <span>Frost Strength</span>
+                <span id="te-lbl-glass-strength">4/10</span>
+              </div>
+              <input type="range" min="1" max="10" value="4" class="te-range-slider" id="te-slider-glass-strength">
+            </div>
 
-    <div class="te-section" id="te-saved-section" style="display:none;">
-      <div class="te-section-label">Editor Saved Themes</div>
-      <div id="te-saved-list" class="te-saved-list"></div>
-    </div>
-
-    <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeThemeEditor()">Close</button>
+            <!-- Nav Style (Bottom/Top Bar) -->
+            <div class="te-slider-row" style="margin-top: 14px;">
+              <div class="te-slider-label-row">
+                <span>Navigation Position</span>
+                <span id="te-lbl-nav">Bottom Bar</span>
+              </div>
+              <div class="te-btn-group" id="te-group-nav">
+                <button class="te-btn-grp-opt active" data-val="bottom" type="button">Bottom Bar</button>
+                <button class="te-btn-grp-opt" data-val="top" type="button">Top Header</button>
+                <button class="te-btn-grp-opt" data-val="floating" type="button">Floating Pill</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Tab 2: Presets Panel (Built-in + Saved Custom) -->
+        <div class="te-tab-panel" id="te-panel-presets">
+          <div class="te-panel-section">
+            <div class="te-panel-section-title">Built-in Presets</div>
+            <div class="appearance-theme-grid" id="appearance-theme-grid"></div>
+          </div>
+          <div class="te-panel-section">
+            <div class="te-panel-section-title" style="display:flex;align-items:center;justify-content:space-between;">
+              <span>Saved Custom Themes</span>
+              <button onclick="resetThemeToBase()" class="te-reset-link" type="button">↺ Reset variables to Base</button>
+            </div>
+            <div class="appearance-custom-list" id="appearance-custom-list"></div>
+            <div class="appearance-empty" id="appearance-custom-empty" style="display:none;">No saved custom themes yet.</div>
+          </div>
+          
+          <div class="te-panel-section">
+            <div class="te-panel-section-title">Theme Editor Base</div>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <select id="te-base-select" class="te-base-select" style="flex:1;"></select>
+              <span id="te-contrast-display" class="te-contrast-badge"></span>
+            </div>
+          </div>
+          
+          <div class="te-panel-section">
+            <div class="te-panel-section-title">Save Theme As</div>
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+              <input id="te-theme-name" class="te-theme-search" type="text" placeholder="Theme name" style="flex:1;">
+              <button id="te-save-btn" class="btn btn-primary" type="button" onclick="saveCustomTheme()">💾 Save</button>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <button class="btn btn-ghost" type="button" style="flex:1;font-size:11px;padding:6px 8px;" onclick="exportCurrentTheme()">📤 Export Code</button>
+              <button class="btn btn-ghost" type="button" style="flex:1;font-size:11px;padding:6px 8px;" onclick="importThemeCode()">📥 Import Code</button>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Tab 3: Advanced Variables (All variables scroll list) -->
+        <div class="te-tab-panel" id="te-panel-advanced">
+          <div class="te-panel-section" style="margin-bottom:0;">
+            <div class="te-panel-section-title" style="display:flex;justify-content:space-between;align-items:center;">
+              <span>Theme Variables</span>
+              <span id="te-var-count" class="te-var-count">0 vars</span>
+            </div>
+            <input id="te-theme-search" class="te-theme-search" type="search" placeholder="Search CSS variable (e.g. --accent)" style="margin-bottom:12px;">
+            <div id="te-vars-list" class="te-vars-list"></div>
+          </div>
+        </div>
+        
+        <!-- Tab 4: Background Patterns -->
+        <div class="te-tab-panel" id="te-panel-background">
+          <div class="te-panel-section">
+            <div class="te-panel-section-title" style="display:flex;align-items:center;justify-content:space-between;">
+              <span>SVG Background Pattern</span>
+              <select id="te-bg-svg-preset" style="cursor:pointer;">
+                <option value="">-- Choose Preset Pattern --</option>
+                <option value="grid">Fine Grid</option>
+                <option value="dots">Matrix Dots</option>
+                <option value="scanlines">Retro Scanlines</option>
+                <option value="diagonal">Slanted Lines</option>
+              </select>
+            </div>
+            <textarea id="te-bg-svg-input" style="width:100%;min-height:150px;background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:10px;color:var(--color-text-muted, var(--text2));font-family:'Share Tech Mono',monospace;font-size:11px;margin-top:6px;" placeholder="Paste raw SVG markup (optional)."></textarea>
+          </div>
+        </div>
+      </div>
+      
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeThemeEditor()" type="button">Close Appearance Studio</button>
+      </div>
     </div>
   </div>
 </div>
@@ -1291,9 +1900,9 @@
 <div class="modal-overlay" id="role-prefs-modal">
   <div class="modal" style="max-width:520px">
     <h3 style="margin:0 0 8px">My Alert Categories</h3>
-    <p style="margin:0 0 12px;color:var(--text2);font-size:13px">Subscribe to the categories you cover today. Alerts will notify everyone subscribed to that category.</p>
+    <p style="margin:0 0 12px;color:var(--color-text-muted, var(--text2));font-size:13px">Subscribe to the categories you cover today. Alerts will notify everyone subscribed to that category.</p>
     <div id="role-prefs-list" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:10px"></div>
-    <div id="role-prefs-msg" style="font-size:12px;color:var(--text3);min-height:16px;margin-bottom:8px"></div>
+    <div id="role-prefs-msg" style="font-size:12px;color:var(--color-text-subtle, var(--text3));min-height:16px;margin-bottom:8px"></div>
     <div class="modal-actions" style="justify-content:flex-end;">
       <button class="btn btn-ghost" type="button" onclick="closeRolePreferencesModal()">Cancel</button>
       <button class="btn btn-primary" type="button" onclick="saveRolePreferences()">Save Categories</button>
@@ -1314,13 +1923,21 @@
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6.5 3.5L11 8l-4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
       </div>
-      <div class="role-alerts-toolbar" style="padding:8px 12px;flex-shrink:0;">
-        <div class="role-alerts-toggle scope-toggle" role="group" aria-label="Accepted alerts visibility">
+      <div class="role-alerts-toolbar tool-modal-control-row" style="padding:8px 12px;flex-shrink:0;">
+        <div class="tool-modal-control-copy">
+          <div class="tool-modal-kicker">Category alerts</div>
+          <div class="tool-modal-subtitle">Workflow calls from your subscribed categories.</div>
+        </div>
+        <div class="role-alerts-toggle scope-toggle tool-modal-segmented" role="group" aria-label="Accepted alerts visibility">
           <button class="scope-btn" id="role-alerts-hide-accepted-btn" type="button" data-role-alert-action="hide-accepted">Hide accepted</button>
           <button class="scope-btn active" id="role-alerts-show-accepted-btn" type="button" data-role-alert-action="show-accepted">Show accepted</button>
         </div>
       </div>
-      <div id="role-alerts-list" class="role-alerts-list" style="flex:1;overflow-y:auto;padding:0 12px 72px;"></div>
+      <div id="role-alerts-list" class="role-alerts-list tool-modal-scroll-body" style="flex:1;overflow-y:auto;padding:0 12px 72px;"></div>
+      <div class="role-alerts-footer tool-modal-footer" id="role-alerts-footer">
+        <span class="tool-modal-footer-status" id="role-alerts-footer-status">0 active · 0 accepted shown</span>
+        <button class="btn btn-ghost role-alerts-close" type="button" data-role-alert-action="close">Close</button>
+      </div>
       <button class="notes-modal-close role-alerts-close role-alerts-close-fab" type="button" data-role-alert-action="close" aria-label="Close alerts">✕</button>
     </div>
   </div>
@@ -1367,7 +1984,7 @@
     <!-- Leaderboard card -->
     <div class="game-card">
       <div class="game-card-title">Leaderboard</div>
-      <div style="font-size:10px;color:var(--text3);margin-bottom:8px;" id="game-lb-period-label">This week</div>
+      <div style="font-size:10px;color:var(--color-text-subtle, var(--text3));margin-bottom:8px;" id="game-lb-period-label">This week</div>
       <div id="game-leaderboard-list"></div>
     </div>
     <!-- Badges card -->
@@ -1379,7 +1996,7 @@
     <div class="game-card">
       <div class="game-card-title" style="display:flex;align-items:center;justify-content:space-between;">
         <span>🛒 Store</span>
-        <span id="game-store-xp-label" style="font-size:10px;color:var(--yellow);font-weight:700;">0 XP</span>
+        <span id="game-store-xp-label" style="font-size:10px;color:var(--color-warning, var(--yellow));font-weight:700;">0 XP</span>
       </div>
       <div id="game-store-list"></div>
     </div>
@@ -1397,7 +2014,7 @@
   </div>
 </div>
 
-<script type="module" src="./app.js?v=3bb03c2"></script>
+<script type="module" src="./js/app.js?v=851d81b-013c4521"></script>
 
 <!-- MASCOT CHARACTER CARD POPOVER -->
 <div class="mascot-popover-backdrop" id="mascot-popover-backdrop" onclick="if(event.target===this)closeMascotPopover()">
@@ -1424,6 +2041,118 @@
     </div>
   </div>
   <div class="spt-caret spt-caret-down" id="spt-caret-down" style="display:none"></div>
+</div>
+
+<!-- KEYBOARD SHORTCUTS OVERLAY -->
+<div class="modal-overlay" id="shortcuts-overlay" onclick="if(event.target===this)closeShortcutsOverlay()">
+  <div class="shortcuts-panel" onclick="event.stopPropagation()">
+    <div class="shortcuts-head">
+      <div class="shortcuts-title">Keyboard Shortcuts</div>
+      <button class="shortcuts-close" type="button" onclick="closeShortcutsOverlay()">✕</button>
+    </div>
+    <div class="shortcuts-body">
+      <div class="shortcuts-group">
+        <div class="shortcuts-group-title">General</div>
+        <div class="shortcuts-row"><span class="shortcuts-key">?</span><span class="shortcuts-label">Toggle this overlay</span></div>
+        <div class="shortcuts-row"><span class="shortcuts-key">Esc</span><span class="shortcuts-label">Close current modal / overlay</span></div>
+        <div class="shortcuts-row"><span class="shortcuts-key">⌘K</span><span class="shortcuts-label">Open Messages</span></div>
+      </div>
+      <div class="shortcuts-group">
+        <div class="shortcuts-group-title">Messages</div>
+        <div class="shortcuts-row"><span class="shortcuts-key">⌘⏎</span><span class="shortcuts-label">Send message</span></div>
+      </div>
+      <div class="shortcuts-group">
+        <div class="shortcuts-group-title">Modals</div>
+        <div class="shortcuts-row"><span class="shortcuts-key">← →</span><span class="shortcuts-label">Cycle between tool modals (prev/next)</span></div>
+      </div>
+      <div class="shortcuts-group">
+        <div class="shortcuts-group-title">Notes</div>
+        <div class="shortcuts-row"><span class="shortcuts-key">⌘B</span><span class="shortcuts-label">Bold</span></div>
+        <div class="shortcuts-row"><span class="shortcuts-key">⌘I</span><span class="shortcuts-label">Italic</span></div>
+        <div class="shortcuts-row"><span class="shortcuts-key">⌘U</span><span class="shortcuts-label">Underline</span></div>
+        <div class="shortcuts-row"><span class="shortcuts-key">⏎</span><span class="shortcuts-label">Title: focus body</span></div>
+        <div class="shortcuts-row"><span class="shortcuts-key">Esc</span><span class="shortcuts-label">Close notes / return to list</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ANALYTICS MODAL -->
+<div class="modal-overlay" id="analytics-modal" onclick="if(event.target===this)closeAnalyticsModal()">
+  <div class="modal" style="max-width:800px; width:95%; height:85vh; display:flex; flex-direction:column;">
+    <div class="modal-title">📊 Analytics</div>
+    <div class="analytics-tabs" id="analytics-tabs" role="tablist" aria-label="Analytics views">
+      <button class="analytics-tab active" id="analytics-tab-doh" type="button" role="tab" aria-selected="true" aria-controls="analytics-panel-doh" data-analytics-tab="doh">DOH</button>
+      <button class="analytics-tab" id="analytics-tab-runs" type="button" role="tab" aria-selected="false" aria-controls="analytics-panel-runs" data-analytics-tab="runs">Runs</button>
+    </div>
+    <section class="analytics-panel active" id="analytics-panel-doh" role="tabpanel" aria-labelledby="analytics-tab-doh">
+      <div class="modal-subtitle">Compare inventory trends over time.</div>
+      <div class="time-filters" id="doh-time-filters" style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
+        <button class="btn btn-ghost" data-days="7">7D</button>
+        <button class="btn btn-ghost" data-days="30">30D</button>
+        <button class="btn btn-ghost" data-days="90">90D</button>
+        <button class="btn btn-primary" data-days="all">All Time</button>
+      </div>
+      <div class="analytics-part-picker" style="margin-bottom:12px; position:relative; z-index:10;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:4px;">
+          <label style="font-size:12px; font-weight:600; color:var(--color-text-subtle, var(--text3));">Selected Parts</label>
+          <div style="display:flex; align-items:center; gap:6px;">
+            <span style="font-size:11px; color:var(--color-text-subtle, var(--text3));">Sort by:</span>
+            <select id="doh-sort-select" style="font-size:11px; padding:2px 4px; border-radius:4px; background:var(--color-surface, var(--bg2)); color:var(--color-text, var(--text)); border:1px solid var(--color-border, var(--border)); outline:none;">
+              <option value="part">Part #</option>
+              <option value="name">Part Name</option>
+            </select>
+          </div>
+        </div>
+        <select id="doh-part-select" multiple></select>
+      </div>
+      <div class="analytics-chart-panel">
+        <canvas id="dohChart"></canvas>
+      </div>
+    </section>
+    <section class="analytics-panel" id="analytics-panel-runs" role="tabpanel" aria-labelledby="analytics-tab-runs" hidden>
+      <div class="modal-subtitle">Trace which parts and inferred molds have run through each press.</div>
+      <div class="runs-controls">
+        <input class="input" id="runs-search-input" type="search" placeholder="Search part, name, mold, or press..." autocomplete="off">
+        <div class="time-filters" id="runs-time-filters">
+          <button class="btn btn-ghost" data-days="7">7D</button>
+          <button class="btn btn-primary" data-days="30">30D</button>
+          <button class="btn btn-ghost" data-days="90">90D</button>
+          <button class="btn btn-ghost" data-days="all">All</button>
+        </div>
+      </div>
+      <div class="runs-layout">
+        <div class="runs-picker-shell">
+          <div class="runs-section-label">Matches</div>
+          <div class="runs-picker-list" id="runs-picker-list"></div>
+        </div>
+        <div class="runs-detail-shell">
+          <div class="runs-selected-card" id="runs-selected-card"></div>
+          <div class="analytics-chart-panel runs-chart-panel">
+            <canvas id="runsChart"></canvas>
+          </div>
+          <div class="runs-table-grid">
+            <div>
+              <div class="runs-section-label">Press Heatmap</div>
+              <div class="runs-table-wrap">
+                <table class="runs-table" id="runs-press-table"></table>
+              </div>
+            </div>
+            <div>
+              <div class="runs-section-label">Recent Runs</div>
+              <div class="runs-table-wrap">
+                <table class="runs-table" id="runs-recent-table"></table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="runs-empty" id="runs-empty" hidden>No schedule run history found for this plant yet.</div>
+    </section>
+    <div class="modal-actions" style="margin-top:16px;">
+      <button class="btn btn-ghost" onclick="closeAnalyticsModal()">Close</button>
+    </div>
+  </div>
 </div>
 
 </body>

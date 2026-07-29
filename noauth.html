@@ -21,7 +21,10 @@
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&family=Nunito:wght@300;400;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<link rel="stylesheet" href="./styles.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css" />
+<link rel="stylesheet" href="./css/styles.css">
 </head>
 <body>
 
@@ -39,7 +42,7 @@
     </div>
 
     <button class="sort-dropdown-btn" id="messages-btn-header" data-messages-trigger="true" data-shell-action="open-messages" style="gap:4px;" aria-label="Messages" title="Messages">
-      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;opacity:0.7;"><path d="M3 2h10a1 1 0 011 1v8a1 1 0 01-1 1H5l-3 2V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
+      <svg class="messages-btn-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 2h10a1 1 0 011 1v8a1 1 0 01-1 1H5l-3 2V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
       <span class="msg-btn-badge" data-messages-badge style="display:none;">0</span>
     </button>
 
@@ -95,6 +98,10 @@
             <span class="ud-item-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 2h10a1 1 0 011 1v8a1 1 0 01-1 1H5l-3 2V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg></span>
             Messages
             <span class="msg-btn-badge" data-messages-badge style="display:none;">0</span>
+          </button>
+          <button class="user-dropdown-item" id="analytics-btn-menu" type="button" data-shell-action="open-analytics">
+            <span class="ud-item-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 14h12M4 11V5M8 11V3M12 11V7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            Analytics
           </button>
           <!-- Dark/Light toggle -->
           <div class="ud-toggle-row">
@@ -375,22 +382,26 @@
 
 <div class="modal-overlay subcategory-sheet-overlay" id="subcategory-sheet-overlay">
   <div class="subcategory-sheet" id="subcategory-sheet" role="dialog" aria-modal="true" aria-labelledby="subcategory-sheet-title">
-    <div class="subcategory-sheet-handle"></div>
-    <div class="subcategory-sheet-head">
-      <div class="subcategory-sheet-copy">
-        <div class="subcategory-sheet-kicker">Subcategory</div>
-        <div class="subcategory-sheet-title" id="subcategory-sheet-title">Choose a subcategory</div>
-        <div class="subcategory-sheet-subtitle" id="subcategory-sheet-subtitle">Pick the closest match to log faster.</div>
+    <div class="subcategory-sheet-header">
+      <div class="subcategory-sheet-handle"></div>
+      <div class="subcategory-sheet-head">
+        <div class="subcategory-sheet-copy">
+          <div class="subcategory-sheet-kicker">Subcategory</div>
+          <div class="subcategory-sheet-title" id="subcategory-sheet-title">Choose a subcategory</div>
+          <div class="subcategory-sheet-subtitle" id="subcategory-sheet-subtitle">Pick the closest match to log faster.</div>
+        </div>
+        <button class="subcategory-sheet-close" type="button" id="subcategory-sheet-close" aria-label="Close subcategory picker">✕</button>
       </div>
-      <button class="subcategory-sheet-close" type="button" id="subcategory-sheet-close" aria-label="Close subcategory picker">✕</button>
+      <div class="subcategory-sheet-section" style="margin-bottom: 0;">
+        <div class="subcategory-sheet-label">Parent status</div>
+        <div class="subcategory-parent-row" id="subcategory-parent-row"></div>
+      </div>
     </div>
-    <div class="subcategory-sheet-section">
-      <div class="subcategory-sheet-label">Parent status</div>
-      <div class="subcategory-parent-row" id="subcategory-parent-row"></div>
-    </div>
-    <div class="subcategory-sheet-section">
-      <div class="subcategory-sheet-label">Subcategories</div>
-      <div class="subcategory-grid" id="subcategory-grid"></div>
+    <div class="subcategory-sheet-body">
+      <div class="subcategory-sheet-section" style="margin-bottom: 0;">
+        <div class="subcategory-sheet-label">Subcategories</div>
+        <div class="subcategory-grid" id="subcategory-grid"></div>
+      </div>
     </div>
     <div class="subcategory-sheet-footer">
       <button class="btn btn-ghost subcategory-sheet-secondary" id="subcategory-sheet-skip" type="button">Use no subcategory</button>
@@ -727,7 +738,7 @@
     <div id="press-wiki-editor" style="margin-top:10px;display:none;">
       <input id="press-wiki-edit-title" class="input" type="text" placeholder="Page title">
       <textarea id="press-wiki-edit-body" class="input" rows="6" placeholder="Write wiki content..." style="margin-top:8px;min-height:130px;"></textarea>
-      <input id="press-wiki-edit-change-note" class="input" type="text" placeholder="Change note (required)" style="margin-top:8px;">
+      <input id="press-wiki-edit-change-note" class="input" type="text" placeholder="Change note (optional)" style="margin-top:8px;">
       <div style="margin-top:8px;display:flex;gap:8px;">
         <button id="press-wiki-insert-photo-btn" class="btn btn-ghost" type="button">Insert Photo</button>
         <button id="press-wiki-save-btn" class="btn btn-blue" type="button">Save Revision</button>
@@ -918,8 +929,14 @@
     </div>
 
     <div class="te-section">
-      <div class="te-section-label">Theme Editor Base</div>
-      <select id="te-base-select" class="te-base-select"></select>
+      <div class="te-section-label" style="display:flex;align-items:center;justify-content:space-between;">
+        <span>Theme Editor Base</span>
+        <button onclick="resetThemeToBase()" style="font-size:11px;color:var(--color-accent, var(--accent));background:none;border:none;cursor:pointer;font-family:'Nunito',sans-serif;white-space:nowrap;padding:0;" title="Reset variables to base theme values">↺ Reset to Base</button>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <select id="te-base-select" class="te-base-select" style="flex:1;"></select>
+        <span id="te-contrast-display" class="te-contrast-badge"></span>
+      </div>
     </div>
 
     <div class="te-section">
@@ -932,15 +949,29 @@
     </div>
 
     <div class="te-section">
-      <div class="te-section-label">SVG Background (Any Theme)</div>
-      <textarea id="te-bg-svg-input" style="width:100%;min-height:90px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text2);font-family:'Share Tech Mono',monospace;font-size:11px;" placeholder="Paste raw SVG markup (optional)."></textarea>
+      <div class="te-section-label" style="display:flex;align-items:center;justify-content:space-between;">
+        <span>SVG Background (Any Theme)</span>
+        <select id="te-bg-svg-preset" style="background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:6px;padding:2px 6px;color:var(--color-text-muted, var(--text2));font-size:11px;font-family:'Nunito',sans-serif;outline:none;cursor:pointer;">
+          <option value="">-- Choose Preset Pattern --</option>
+          <option value="grid">Fine Grid</option>
+          <option value="dots">Matrix Dots</option>
+          <option value="scanlines">Retro Scanlines</option>
+          <option value="diagonal">Slanted Lines</option>
+        </select>
+      </div>
+      <textarea id="te-bg-svg-input" style="width:100%;min-height:90px;background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:10px;color:var(--color-text-muted, var(--text2));font-family:'Share Tech Mono',monospace;font-size:11px;margin-top:6px;" placeholder="Paste raw SVG markup (optional)."></textarea>
     </div>
 
     <div class="te-section">
       <div class="te-section-label">Save / Update Theme</div>
-      <div style="display:flex;gap:8px;align-items:center;">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
         <input id="te-theme-name" class="te-theme-search" type="text" placeholder="Theme name" style="flex:1;">
         <button id="te-save-btn" class="btn btn-primary" type="button" onclick="saveCustomTheme()">💾 Save</button>
+        <button id="te-save-new-btn" class="btn btn-ghost" type="button" onclick="saveCustomTheme(true)" title="Save as a new theme">➕ New</button>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="btn btn-ghost" type="button" style="flex:1;font-size:11px;padding:6px 8px;" onclick="exportCurrentTheme()">📤 Export Code</button>
+        <button class="btn btn-ghost" type="button" style="flex:1;font-size:11px;padding:6px 8px;" onclick="importThemeCode()">📥 Import Code</button>
       </div>
     </div>
 
@@ -1066,7 +1097,7 @@
   } else {
     const appScript = document.createElement('script');
     appScript.type = 'module';
-    appScript.src = './app.js';
+    appScript.src = './js/app.js';
     document.body.appendChild(appScript);
   }
 </script>
@@ -1096,6 +1127,39 @@
     </div>
   </div>
   <div class="spt-caret spt-caret-down" id="spt-caret-down" style="display:none"></div>
+</div>
+
+<!-- ANALYTICS MODAL -->
+<div class="modal-overlay" id="analytics-modal" onclick="if(event.target===this)closeAnalyticsModal()">
+  <div class="modal" style="max-width:800px; width:95%; height:85vh; display:flex; flex-direction:column;">
+    <div class="modal-title">📊 Analytics — Days on Hand</div>
+    <div class="modal-subtitle">Compare inventory trends over time.</div>
+    <div class="time-filters" id="doh-time-filters" style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
+      <button class="btn btn-ghost" data-days="7">7D</button>
+      <button class="btn btn-ghost" data-days="30">30D</button>
+      <button class="btn btn-ghost" data-days="90">90D</button>
+      <button class="btn btn-primary" data-days="all">All Time</button>
+    </div>
+    <div class="analytics-part-picker" style="margin-bottom:12px; position:relative; z-index:10;">
+      <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:4px;">
+        <label style="font-size:12px; font-weight:600; color:var(--color-text-subtle, var(--text3));">Selected Parts</label>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <span style="font-size:11px; color:var(--color-text-subtle, var(--text3));">Sort by:</span>
+          <select id="doh-sort-select" style="font-size:11px; padding:2px 4px; border-radius:4px; background:var(--color-surface, var(--bg2)); color:var(--color-text, var(--text)); border:1px solid var(--color-border, var(--border)); outline:none;">
+            <option value="part">Part #</option>
+            <option value="name">Part Name</option>
+          </select>
+        </div>
+      </div>
+      <select id="doh-part-select" multiple></select>
+    </div>
+    <div style="flex:1; position:relative; min-height:0; width:100%; border-radius:12px; background:var(--color-surface, var(--bg2)); padding:12px; border:1px solid var(--color-border, var(--border));">
+      <canvas id="dohChart"></canvas>
+    </div>
+    <div class="modal-actions" style="margin-top:16px;">
+      <button class="btn btn-ghost" onclick="closeAnalyticsModal()">Close</button>
+    </div>
+  </div>
 </div>
 
 </body>

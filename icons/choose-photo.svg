@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" aria-labelledby="title desc" role="img">
+  <title id="title">Choose Photo</title>
+  <desc id="desc">A compact gallery icon with a cyan-to-blue frame, luminous aqua landscape, and gold-gradient sun.</desc>
+  <defs>
+    <linearGradient id="frameStroke" x1="3.25" y1="4.25" x2="20.75" y2="19.75" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#35E7D7"/>
+      <stop offset="1" stop-color="#5B8CFF"/>
+    </linearGradient>
+    <linearGradient id="sceneStroke" x1="6.5" y1="11" x2="18" y2="17" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#C9FFFB"/>
+      <stop offset="1" stop-color="#37CFFF"/>
+    </linearGradient>
+    <linearGradient id="sunFill" x1="15.8" y1="7.1" x2="18.7" y2="10" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFE59A"/>
+      <stop offset=".48" stop-color="#FFD166"/>
+      <stop offset="1" stop-color="#EAA52E"/>
+    </linearGradient>
+    <radialGradient id="sceneFill" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(12 13.2) rotate(90) scale(6.4 8.5)">
+      <stop offset="0" stop-color="#66F4F0" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#5082FF" stop-opacity="0.04"/>
+    </radialGradient>
+  </defs>
+
+  <rect x="3.25" y="4.25" width="17.5" height="15.5" rx="2.75" fill="url(#sceneFill)" stroke="url(#frameStroke)" stroke-width="1.7"/>
+  <path d="M6.8 15.25 10.1 11.95l2.9 2.9 2.65-2.65 1.55 1.55" stroke="url(#sceneStroke)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M6.95 16.15h10.15" stroke="url(#sceneStroke)" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+  <circle cx="17.25" cy="8.55" r="1.45" fill="url(#sunFill)"/>
+</svg>
