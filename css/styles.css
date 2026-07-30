@@ -2812,6 +2812,7 @@
   .issue-created-at { color: var(--color-text-muted, var(--text2)); font-family: 'Share Tech Mono', monospace; }
   .issue-status { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 2px; font-size: 11px; font-weight: 700; padding: 4px 9px; border-radius: 9999px; flex: 0 1 auto; width: fit-content; min-width: 104px; max-width: 100%; overflow: hidden; text-transform: uppercase; letter-spacing: 0.04em; }
   .issue-status-main { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; max-width: 100%; min-width: 0; }
+  .issue-category-photo-icon { display: inline-flex; align-items: center; justify-content: center; font-size: 12px; line-height: 1; opacity: 0.9; }
   .issue-status-sub { display: block; max-width: 100%; font-size: 11.5px; font-weight: 600; opacity: 0.9; text-transform: none; letter-spacing: 0.02em; white-space: normal; overflow-wrap: anywhere; word-break: break-word; line-height: 1.35; margin-left: 12px; }
   /* ── SECONDARY STATUS DOTS (card header) ── */
   .secondary-status-dots { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
@@ -6252,7 +6253,7 @@
 .lightbox.visible .lightbox-counter { opacity: 1; transform: translateX(-50%) translateY(0); }
 .lightbox-meta {
   position: absolute;
-  bottom: 44px;
+  bottom: max(44px, calc(env(safe-area-inset-bottom, 0px) + 28px));
   left: 50%;
   transform: translateX(-50%) translateY(8px);
   color: rgba(255,255,255,0.88);
@@ -6266,6 +6267,8 @@
 
 @media (max-width: 480px) {
   .lightbox-download { top: 22px; right: 64px; padding: 6px 8px; font-size: 11px; }
+  .lightbox img { max-height: calc(100svh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 108px); }
+  .lightbox-meta { max-width: calc(100vw - 32px); padding: 4px 8px; border-radius: 6px; background: rgba(0,0,0,0.56); text-align: center; white-space: normal; }
 }
 
 @media (prefers-reduced-motion: reduce) {

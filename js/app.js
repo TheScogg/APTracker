@@ -453,6 +453,7 @@ function sqlAttachmentPayloads(photos = [], type = 'photo', solutionRevisionId =
     storageBucket: photo.storageBucket || '',
     downloadUrl: photo.downloadURL || photo.dataUrl || '',
     uploadedBy: currentActor(),
+    takenAt: photo.takenAt || photo.timestamp || '',
     uploadedAt: photo.uploadedAt || new Date().toISOString(),
     sizeBytes: Number(photo.sizeBytes || 0),
     schemaVersion: 2
@@ -2964,6 +2965,11 @@ function buildScheduleIndexFromSectionRows(rowsBySection) {
     });
   });
 
+  // BR-1 runs whenever either of its feeder presses is scheduled. It does not
+  // have its own schedule row, so include it in the derived running state used
+  // by the floor map and the scheduled/unscheduled filters.
+  if (scheduled.has('4.16') || scheduled.has('4.17')) scheduled.add('BR-1');
+
   lookupByPress.forEach(v => {
     v.main.sort(sortByOrder);
     v.changes.sort(sortByOrder);
@@ -3355,7 +3361,7 @@ async function fetchAttachmentPhotos(issueId) {
         storageBucket: att.storageBucket || '',
         contentType: att.contentType || '',
         sizeBytes: Number(att.sizeBytes || 0),
-        takenAt: '',
+        takenAt: att.takenAt || att.timestamp || '',
         uploadedAt: att.uploadedAt || ''
       });
     }
@@ -10093,7 +10099,10 @@ async function handleFiles(files, arr, previewId) {
   for (const file of Array.from(files)) {
     if (!file.type.startsWith('image/')) continue;
     const dataUrl = await resizeImage(file);
-    arr.push({ name: file.name, dataUrl });
+    // File inputs do not expose EXIF capture metadata consistently on mobile.
+    // Record the selection time so camera photos always have a usable "Taken"
+    // value when the attachment is opened later.
+    arr.push({ name: file.name, dataUrl, takenAt: new Date().toISOString() });
   }
   renderPreviews(arr, previewId);
 }
@@ -10332,7 +10341,16 @@ window.openEditModal = async id => {
     issue.photos = photoList;
   }
   editTargetId = id;
-  editPhotos = (photoList || []).map(p => ({ name: p.name, dataUrl: p.dataUrl, storagePath: p.storagePath || '', storageBucket: p.storageBucket || '', contentType: p.contentType || '', sizeBytes: Number(p.sizeBytes || 0) }));
+  editPhotos = (photoList || []).map(p => ({
+    name: p.name,
+    dataUrl: p.dataUrl,
+    storagePath: p.storagePath || '',
+    storageBucket: p.storageBucket || '',
+    contentType: p.contentType || '',
+    sizeBytes: Number(p.sizeBytes || 0),
+    takenAt: p.takenAt || p.timestamp || '',
+    uploadedAt: p.uploadedAt || p.createdAt || ''
+  }));
   const issueMachineCode = issue.machine || issue.machineCode || '';
   document.getElementById('edit-machine-name').textContent = issueMachineCode;
   populateEditMachineSelect(issueMachineCode);
@@ -11439,7 +11457,9 @@ window.saveEditStatusEntry = async () => {
     dataUrl: p.dataUrl || p.downloadURL || '',
     contentType: p.contentType || 'image/jpeg',
     sizeBytes: Number(p.sizeBytes || p.size || 0),
-    storageBucket: p.storageBucket || ''
+    storageBucket: p.storageBucket || '',
+    takenAt: p.takenAt || p.timestamp || '',
+    uploadedAt: p.uploadedAt || p.createdAt || ''
   }));
   const didSave = await updateStatusEntry(issueId, entryIndex, status, subStatus, note, dateTime, mergedStatusPhotos);
   closeEditStatusModal();
@@ -13114,6 +13134,11 @@ function renderIssues(options = {}) {
 
     // Secondary status keys (needed by workflow rows below)
     const secKeys = getSecondaryStatuses(issue).filter(k => k !== 'resolved');
+    // Category-level photos live on their status-history entry. Show the same
+    // camera marker used by the issue log whenever that category has one.
+    const categoryPhotoIconHtml = (entry) => Array.isArray(entry?.photos) && entry.photos.length
+      ? `<span class="issue-category-photo-icon" title="${entry.photos.length} photo${entry.photos.length === 1 ? '' : 's'} attached to this category" aria-label="${entry.photos.length} photo${entry.photos.length === 1 ? '' : 's'} attached">📷</span>`
+      : '';
 
     const getWorkflowResponseUi = (statusKey, subStatus, fallbackColor, entryIndex) => {
       const context = buildResponseTreeContext(statusKey, subStatus);
@@ -13223,7 +13248,7 @@ function renderIssues(options = {}) {
             <div class="wf-status-row-info">
               <div class="wf-status-header">
                 <div class="issue-status" style="color:${sColor};border-color:${sColor};background:${alphaColor(sColor, 0.12)}">
-                  <span class="issue-status-main">${sCfg.icon} ${esc(sCfg.label)}</span>
+                  <span class="issue-status-main">${sCfg.icon} ${esc(sCfg.label)}${categoryPhotoIconHtml(entry)}</span>
                 </div>
               </div>
               ${sSubLabel ? `<span class="issue-status-sub" style="color:${sColor};">${esc(sSubLabel)}</span>` : ''}
@@ -13290,7 +13315,7 @@ function renderIssues(options = {}) {
       <div class="wf-status-row-info">
         <div class="wf-status-header">
           <div class="issue-status" style="color:${sc.color};border-color:${sc.color};background:${alphaColor(sc.color, 0.12)}">
-            <span class="issue-status-main">${sc.icon} ${baseLabel}</span>
+            <span class="issue-status-main">${sc.icon} ${baseLabel}${categoryPhotoIconHtml(currentEntry)}</span>
           </div>
         </div>
         ${subLabelWithSerial ? `<span class="issue-status-sub" style="color:${sc.color};">${esc(subLabelWithSerial)}</span>` : ''}

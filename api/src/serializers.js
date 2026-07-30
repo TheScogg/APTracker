@@ -404,6 +404,7 @@ export function serializeIssueAttachment(row) {
     downloadUrl: row.download_url,
     uploadedByUid: row.uploaded_by_uid,
     uploadedByName: row.uploaded_by_name,
+    takenAt: toIso(row.taken_at),
     uploadedAt: toIso(row.uploaded_at),
     sizeBytes: row.size_bytes,
     schemaVersion: row.schema_version

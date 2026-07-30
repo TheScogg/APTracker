@@ -482,6 +482,7 @@ function buildAttachmentRowFromClient(plantId, issueId, attachment = {}, index =
     download_url: stringOrNull(attachment.downloadUrl || attachment.downloadURL || attachment.dataUrl || attachment.url),
     uploaded_by_uid: stringOrNull(attachment.uploadedBy?.uid || attachment.uploadedByUid),
     uploaded_by_name: stringOrNull(attachment.uploadedBy?.name || attachment.uploadedByName),
+    taken_at: asIso(attachment.takenAt || attachment.timestamp, null),
     uploaded_at: asIso(attachment.uploadedAt, nowIso()),
     size_bytes: numberOrNull(attachment.sizeBytes),
     schema_version: numberOrZero(attachment.schemaVersion || 2)
@@ -851,8 +852,8 @@ async function upsertIssueWriteBundle(db, plantId, body, user, { updateCreatedAt
       db.prepare(`
         INSERT INTO issue_attachments (
           attachment_id, issue_id, plant_id, type, solution_revision_id, file_name, content_type, storage_bucket, storage_path, thumbnail_path,
-          download_url, uploaded_by_uid, uploaded_by_name, uploaded_at, size_bytes, schema_version
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          download_url, uploaded_by_uid, uploaded_by_name, taken_at, uploaded_at, size_bytes, schema_version
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(attachment_id) DO UPDATE SET
           type = excluded.type,
           solution_revision_id = excluded.solution_revision_id,
@@ -864,12 +865,13 @@ async function upsertIssueWriteBundle(db, plantId, body, user, { updateCreatedAt
           download_url = excluded.download_url,
           uploaded_by_uid = excluded.uploaded_by_uid,
           uploaded_by_name = excluded.uploaded_by_name,
+          taken_at = excluded.taken_at,
           uploaded_at = excluded.uploaded_at,
           size_bytes = excluded.size_bytes,
           schema_version = excluded.schema_version
       `).bind(
         row.attachment_id, row.issue_id, row.plant_id, row.type, row.solution_revision_id, row.file_name, row.content_type, row.storage_bucket, row.storage_path, row.thumbnail_path,
-        row.download_url, row.uploaded_by_uid, row.uploaded_by_name, row.uploaded_at, row.size_bytes, row.schema_version
+        row.download_url, row.uploaded_by_uid, row.uploaded_by_name, row.taken_at, row.uploaded_at, row.size_bytes, row.schema_version
       )
     );
   });
