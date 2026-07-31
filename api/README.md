@@ -46,8 +46,9 @@ npx wrangler secret put BRAVE_SEARCH_API_KEY
 3. Apply `migrations/0002_d1_collab_content.sql` before importing notes, todos, conversations, leaderboard/XP, or wiki content into an existing D1 database.
 4. Apply `migrations/0003_d1_remaining_content.sql` before importing role-feed alerts or press notes into an existing D1 database.
 5. Apply `migrations/0004_d1_daily_schedules.sql` before importing `dailySchedules` or plant `config/store` docs into an existing D1 database.
-6. Use the updated import/parity scripts against D1 instead of SQL Server.
-7. Add D1-backed write endpoints once read parity is stable.
+6. Apply `migrations/0013_d1_normalize_daily_schedules.sql`, then `migrations/0018_d1_multi_shift_daily_schedules.sql`, before importing multiple shifts for the same plant/date. Schedule identity is `(plant_id, schedule_date, shift)`.
+7. Use the updated import/parity scripts against D1 instead of SQL Server.
+8. Add D1-backed write endpoints once read parity is stable.
 
 ## Current D1 script usage
 

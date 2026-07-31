@@ -185,8 +185,13 @@ export class SqlDataApi {
     return this.request(`/plants/${encodeURIComponent(plantId)}/bootstrap`);
   }
 
-  getDailySchedule(plantId, scheduleDate) {
-    return this.request(`/plants/${encodeURIComponent(plantId)}/daily-schedules/${encodeURIComponent(scheduleDate)}`);
+  getDailySchedule(plantId, scheduleDate, params = {}) {
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') query.set(key, String(value));
+    });
+    const suffix = query.toString() ? `?${query}` : '';
+    return this.request(`/plants/${encodeURIComponent(plantId)}/daily-schedules/${encodeURIComponent(scheduleDate)}${suffix}`);
   }
 
   listDailySchedules(plantId, params = {}) {

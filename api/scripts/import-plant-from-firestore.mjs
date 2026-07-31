@@ -13,6 +13,7 @@ import {
   resolveD1DatabaseName,
   resolveD1ExecutionMode
 } from './d1-cli.mjs';
+import { normalizeScheduleShift } from '../../js/schedule-shifts.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
@@ -342,12 +343,12 @@ function missionProgressRowId(plantIdValue, missionId, subjectId) {
   return `${plantIdValue}:${missionId}:${subjectId}`;
 }
 
-function dailyScheduleRowId(plantIdValue, scheduleDate) {
-  return `${plantIdValue}:${scheduleDate}`;
+function dailyScheduleRowId(plantIdValue, scheduleDate, shift) {
+  return `${plantIdValue}:${scheduleDate}:shift${shift}`;
 }
 
-function dailyScheduleItemRowId(plantIdValue, scheduleDate, sectionKey, rowId) {
-  return `${plantIdValue}:${scheduleDate}:${sectionKey}:${rowId}`;
+function dailyScheduleItemRowId(plantIdValue, scheduleDate, shift, sectionKey, rowId) {
+  return `${dailyScheduleRowId(plantIdValue, scheduleDate, shift)}:${sectionKey}:${rowId}`;
 }
 
 function dateMs(value) {
@@ -548,10 +549,15 @@ const TABLES = {
     keys: ['daily_schedule_row_id'],
     columns: [['daily_schedule_row_id'], ['plant_id'], ['schedule_date'], ['shift'], ['line_speed'], ['total_planned_pcs'], ['source_file_name'], ['source_file_type'], ['status'], ['notes'], ['page1_count'], ['page2_count'], ['north_bay_changes_count'], ['south_bay_changes_count'], ['raw_json'], ['created_at'], ['updated_at']]
   },
+  parts: {
+    name: 'parts',
+    keys: ['part_number'],
+    columns: [['part_number'], ['description'], ['created_at'], ['updated_at']]
+  },
   daily_schedule_rows: {
     name: 'daily_schedule_rows',
     keys: ['daily_schedule_item_row_id'],
-    columns: [['daily_schedule_item_row_id'], ['plant_id'], ['schedule_date'], ['section_key'], ['row_id'], ['press'], ['part_number'], ['description'], ['cavity'], ['doh'], ['labels_per_shift'], ['mc'], ['notes'], ['shift'], ['part_storage_location_json'], ['raw_json'], ['created_at'], ['updated_at']]
+    columns: [['daily_schedule_item_row_id'], ['daily_schedule_row_id'], ['plant_id'], ['schedule_date'], ['section_key'], ['row_id'], ['press'], ['part_number'], ['cavity'], ['doh'], ['labels_per_shift'], ['mc'], ['notes'], ['shift'], ['part_storage_location_json'], ['raw_json'], ['created_at'], ['updated_at']]
   }
 };
 
@@ -998,6 +1004,7 @@ function buildRows(snapshot, users) {
   const wikiAttachmentRows = [];
   const dailyScheduleRows = [];
   const dailyScheduleItemRows = [];
+  const partRowsByNumber = new Map();
 
   snapshot.issues.forEach(issueRecord => {
     issueRows.push(buildIssueRow(issueRecord.id, snapshot.plant.id, issueRecord.data, pressesMap));
@@ -1411,11 +1418,13 @@ function buildRows(snapshot, users) {
   snapshot.dailySchedules.forEach(scheduleRecord => {
     const schedule = scheduleRecord.data || {};
     const scheduleDate = stringOrNull(schedule.scheduleDate) || scheduleRecord.id;
+    const scheduleShift = normalizeScheduleShift(schedule.shift) || '1';
+    const scheduleRowId = dailyScheduleRowId(snapshot.plant.id, scheduleDate, scheduleShift);
     dailyScheduleRows.push({
-      daily_schedule_row_id: dailyScheduleRowId(snapshot.plant.id, scheduleDate),
+      daily_schedule_row_id: scheduleRowId,
       plant_id: snapshot.plant.id,
       schedule_date: scheduleDate,
-      shift: stringOrNull(schedule.shift),
+      shift: scheduleShift,
       line_speed: stringOrNull(schedule.lineSpeed),
       total_planned_pcs: stringOrNull(schedule.totalPlannedPcs),
       source_file_name: stringOrNull(schedule.sourceFileName),
@@ -1435,21 +1444,35 @@ function buildRows(snapshot, users) {
       (Array.isArray(rows) ? rows : []).forEach(rowRecord => {
         const row = rowRecord.data || {};
         const rowId = stringOrNull(row.rowId) || rowRecord.id;
+        const partNumber = stringOrNull(row.partNumber);
+        if (partNumber) {
+          const existingPart = partRowsByNumber.get(partNumber);
+          const createdAt = dateOrNow(row.createdAt || schedule.createdAt);
+          const updatedAt = dateOrNow(row.updatedAt || row.createdAt || schedule.updatedAt || schedule.createdAt);
+          if (!existingPart || dateMs(updatedAt) >= dateMs(existingPart.updated_at)) {
+            partRowsByNumber.set(partNumber, {
+              part_number: partNumber,
+              description: stringOrNull(row.description),
+              created_at: existingPart?.created_at || createdAt,
+              updated_at: updatedAt
+            });
+          }
+        }
         dailyScheduleItemRows.push({
-          daily_schedule_item_row_id: dailyScheduleItemRowId(snapshot.plant.id, scheduleDate, sectionKey, rowId),
+          daily_schedule_item_row_id: dailyScheduleItemRowId(snapshot.plant.id, scheduleDate, scheduleShift, sectionKey, rowId),
+          daily_schedule_row_id: scheduleRowId,
           plant_id: snapshot.plant.id,
           schedule_date: scheduleDate,
           section_key: sectionKey,
           row_id: rowId,
           press: stringOrNull(row.press),
-          part_number: stringOrNull(row.partNumber),
-          description: stringOrNull(row.description),
+          part_number: partNumber,
           cavity: stringOrNull(row.cavity),
           doh: stringOrNull(row.doh),
           labels_per_shift: stringOrNull(row.labelsPerShift),
           mc: stringOrNull(row.mc),
           notes: stringOrNull(row.notes),
-          shift: stringOrNull(row.shift),
+          shift: scheduleShift,
           part_storage_location_json: jsonOrNull(
             Array.isArray(row.partStorageLocation)
               ? row.partStorageLocation
@@ -1496,6 +1519,7 @@ function buildRows(snapshot, users) {
     wiki_revisions: wikiRevisionRows,
     wiki_attachments: wikiAttachmentRows,
     daily_schedules: dailyScheduleRows,
+    parts: [...partRowsByNumber.values()],
     daily_schedule_rows: dailyScheduleItemRows
   };
 }
@@ -1534,6 +1558,7 @@ function buildImportSql(rowsByTable) {
     'wiki_revisions',
     'wiki_attachments',
     'daily_schedules',
+    'parts',
     'daily_schedule_rows'
   ];
 

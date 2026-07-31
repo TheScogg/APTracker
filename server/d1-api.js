@@ -27,6 +27,10 @@ import {
   serializeWikiRevision,
   serializeTodo
 } from '../api/src/serializers.js';
+import {
+  requireScheduleShift,
+  scheduleShiftIssueKey
+} from '../js/schedule-shifts.mjs';
 
 function jsonResponse(body, init = {}) {
   return new Response(JSON.stringify(body), {
@@ -136,8 +140,12 @@ function wikiAttachmentRowId(scope, pressId, pageId, attachmentId) {
   return `${wikiPageRowId(scope, pressId, pageId)}:${attachmentId}`;
 }
 
-function scheduleIssueId(scheduleDate, section, rowId) {
-  return `schedule_${slugForId(scheduleDate)}_${slugForId(section)}_${slugForId(rowId)}`;
+function dailyScheduleRowId(plantId, scheduleDate, shift) {
+  return `${plantId}:${scheduleDate}:shift${requireScheduleShift(shift, 'Schedule shift')}`;
+}
+
+function scheduleIssueId(scheduleDate, shift, section, rowId) {
+  return `schedule_${slugForId(scheduleDate)}_shift${requireScheduleShift(shift, 'Schedule shift')}_${slugForId(section)}_${slugForId(rowId)}`;
 }
 
 function scheduleShiftStartTime(shift) {
@@ -195,10 +203,11 @@ function buildScheduleImportIssue(plantId, scheduleDate, shift, row) {
   const actor = { uid: 'schedule-import', name: 'Schedule Import' };
   const machineCode = String(row?.press || '').trim();
   const { statusKey, subStatus } = classifyScheduleChange(row);
-  const issueShift = row?.shift || shift || 1;
-  const dateTime = formatScheduleIssueDateTime(scheduleDate, issueShift);
-  const createdDate = scheduleIssueDate(scheduleDate, issueShift);
-  const workflowId = `wf_schedule_${slugForId(scheduleDate)}_${slugForId(row?.section)}_${slugForId(row?.rowId)}`;
+  const scheduleShift = requireScheduleShift(row?.shift || shift, 'Schedule shift');
+  const issueShift = scheduleShiftIssueKey(scheduleShift);
+  const dateTime = formatScheduleIssueDateTime(scheduleDate, scheduleShift);
+  const createdDate = scheduleIssueDate(scheduleDate, scheduleShift);
+  const workflowId = `wf_schedule_${slugForId(scheduleDate)}_shift${scheduleShift}_${slugForId(row?.section)}_${slugForId(row?.rowId)}`;
   const note = [
     `${subStatus} from schedule import.`,
     row?.partNumber ? `Part: ${row.partNumber}` : '',
@@ -209,7 +218,7 @@ function buildScheduleImportIssue(plantId, scheduleDate, shift, row) {
   ].filter(Boolean).join('\n');
 
   return {
-    issueId: scheduleIssueId(scheduleDate, row?.section, row?.rowId),
+    issueId: scheduleIssueId(scheduleDate, scheduleShift, row?.section, row?.rowId),
     issue: {
       machine: machineCode,
       machineCode,
@@ -259,6 +268,7 @@ function buildScheduleImportIssue(plantId, scheduleDate, shift, row) {
       },
       scheduleImport: {
         date: scheduleDate,
+        shift: scheduleShift,
         section: row?.section || '',
         rowId: row?.rowId || '',
         partNumber: row?.partNumber || '',
@@ -269,6 +279,7 @@ function buildScheduleImportIssue(plantId, scheduleDate, shift, row) {
       source: {
         type: 'schedule_import',
         scheduleDate,
+        scheduleShift,
         scheduleSection: row?.section || '',
         scheduleRowId: row?.rowId || ''
       },
@@ -279,7 +290,7 @@ function buildScheduleImportIssue(plantId, scheduleDate, shift, row) {
     },
     events: [
       {
-        eventId: `${scheduleIssueId(scheduleDate, row?.section, row?.rowId)}:created`,
+        eventId: `${scheduleIssueId(scheduleDate, scheduleShift, row?.section, row?.rowId)}:created`,
         eventType: 'issue_created',
         eventAt: createdDate.toISOString(),
         actorUid: actor.uid,
@@ -292,13 +303,14 @@ function buildScheduleImportIssue(plantId, scheduleDate, shift, row) {
           source: {
             type: 'schedule_import',
             scheduleDate,
+            scheduleShift,
             scheduleSection: row?.section || '',
             scheduleRowId: row?.rowId || ''
           }
         }
       },
       {
-        eventId: `${scheduleIssueId(scheduleDate, row?.section, row?.rowId)}:status_changed`,
+        eventId: `${scheduleIssueId(scheduleDate, scheduleShift, row?.section, row?.rowId)}:status_changed`,
         eventType: 'status_changed',
         eventAt: createdDate.toISOString(),
         actorUid: actor.uid,
@@ -515,6 +527,8 @@ export async function importDailyScheduleToD1(db, plantId, payload = {}) {
   if (!scheduleDate) {
     throw Object.assign(new Error('Missing scheduleDate.'), { status: 400 });
   }
+  const scheduleShift = requireScheduleShift(payload.shift);
+  const scheduleRowId = dailyScheduleRowId(plantId, scheduleDate, scheduleShift);
 
   const sectionKeys = ['page1', 'page2', 'northBayChanges', 'southBayChanges'];
   const sectionsInput = payload.sections && typeof payload.sections === 'object' ? payload.sections : {};
@@ -542,10 +556,10 @@ export async function importDailyScheduleToD1(db, plantId, payload = {}) {
         raw_json = excluded.raw_json,
         updated_at = excluded.updated_at
     `).bind(
-      `${plantId}:${scheduleDate}`,
+      scheduleRowId,
       plantId,
       scheduleDate,
-      stringOrNull(payload.shift),
+      scheduleShift,
       payload.lineSpeed == null ? null : String(payload.lineSpeed),
       payload.totalPlannedPcs == null ? null : String(payload.totalPlannedPcs),
       stringOrNull(payload.sourceFileName) || `batch-import-${scheduleDate}`,
@@ -559,7 +573,7 @@ export async function importDailyScheduleToD1(db, plantId, payload = {}) {
       jsonOrNull({
         scheduleDate,
         plantId,
-        shift: payload.shift,
+        shift: scheduleShift,
         lineSpeed: payload.lineSpeed,
         totalPlannedPcs: payload.totalPlannedPcs,
         sourceFileName: stringOrNull(payload.sourceFileName) || `batch-import-${scheduleDate}`,
@@ -574,16 +588,23 @@ export async function importDailyScheduleToD1(db, plantId, payload = {}) {
       now,
       now
     ),
-    db.prepare('DELETE FROM daily_schedule_rows WHERE plant_id = ? AND schedule_date = ?').bind(plantId, scheduleDate)
+    db.prepare('DELETE FROM daily_schedule_rows WHERE plant_id = ? AND schedule_date = ? AND shift = ?').bind(plantId, scheduleDate, scheduleShift)
   ];
 
   sectionKeys.forEach(sectionKey => {
     rowsBySection[sectionKey].forEach((row, index) => {
       const rowId = stringOrNull(row.rowId) || `${sectionKey}_${index + 1}`;
+      const rowShift = requireScheduleShift(row.shift ?? scheduleShift, `Schedule row ${rowId} shift`);
+      if (rowShift !== scheduleShift) {
+        throw Object.assign(
+          new Error(`Schedule row ${rowId} identifies Shift ${rowShift}, but its parent schedule identifies Shift ${scheduleShift}.`),
+          { status: 400 }
+        );
+      }
       const normalizedRow = {
         rowId,
         scheduleDate,
-        shift: row.shift ?? payload.shift ?? 1,
+        shift: rowShift,
         section: row.section || sectionKey,
         press: String(row.press || ''),
         partStorageLocation: Array.isArray(row.partStorageLocation) ? row.partStorageLocation : [],
@@ -633,8 +654,8 @@ export async function importDailyScheduleToD1(db, plantId, payload = {}) {
             raw_json = excluded.raw_json,
             updated_at = excluded.updated_at
         `).bind(
-          `${plantId}:${scheduleDate}:${sectionKey}:${rowId}`,
-          `${plantId}:${scheduleDate}`,
+          `${scheduleRowId}:${sectionKey}:${rowId}`,
+          scheduleRowId,
           plantId,
           scheduleDate,
           sectionKey,
@@ -661,7 +682,7 @@ export async function importDailyScheduleToD1(db, plantId, payload = {}) {
   let createdScheduleIssueCount = 0;
 
   for (const row of scheduleChangeRows) {
-    const bundle = buildScheduleImportIssue(plantId, scheduleDate, payload.shift, row);
+    const bundle = buildScheduleImportIssue(plantId, scheduleDate, scheduleShift, row);
     const existing = await first(db, 'SELECT issue_id FROM issues WHERE plant_id = ? AND issue_id = ? LIMIT 1', plantId, bundle.issueId);
     if (existing) continue;
 
@@ -704,7 +725,13 @@ export async function importDailyScheduleToD1(db, plantId, payload = {}) {
   await db.batch(statements);
 
   return {
-    schedule: serializeDailySchedule(await first(db, 'SELECT * FROM daily_schedules WHERE plant_id = ? AND schedule_date = ? LIMIT 1', plantId, scheduleDate)),
+    schedule: serializeDailySchedule(await first(
+      db,
+      'SELECT * FROM daily_schedules WHERE plant_id = ? AND schedule_date = ? AND shift = ? LIMIT 1',
+      plantId,
+      scheduleDate,
+      scheduleShift
+    )),
     rowCount: Object.values(rowsBySection).reduce((sum, rows) => sum + rows.length, 0),
     scheduleIssueCount: createdScheduleIssueCount
   };
@@ -847,32 +874,45 @@ async function upsertIssueWriteBundle(db, plantId, body, user, { updateCreatedAt
     statements.push(db.prepare('DELETE FROM issue_attachments WHERE plant_id = ? AND issue_id = ?').bind(plantId, issueId));
   }
 
+  // Deploys can update the Worker before a D1 migration has been applied. Keep
+  // attachment uploads functional during that window and start storing capture
+  // time automatically once the column is present.
+  const attachmentColumns = await all(db, 'PRAGMA table_info(issue_attachments)');
+  const hasTakenAt = attachmentColumns.some(column => column.name === 'taken_at');
+
   attachmentRows.forEach(row => {
-    statements.push(
-      db.prepare(`
+    const attachmentSql = hasTakenAt
+      ? `
         INSERT INTO issue_attachments (
           attachment_id, issue_id, plant_id, type, solution_revision_id, file_name, content_type, storage_bucket, storage_path, thumbnail_path,
           download_url, uploaded_by_uid, uploaded_by_name, taken_at, uploaded_at, size_bytes, schema_version
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(attachment_id) DO UPDATE SET
-          type = excluded.type,
-          solution_revision_id = excluded.solution_revision_id,
-          file_name = excluded.file_name,
-          content_type = excluded.content_type,
-          storage_bucket = excluded.storage_bucket,
-          storage_path = excluded.storage_path,
-          thumbnail_path = excluded.thumbnail_path,
-          download_url = excluded.download_url,
-          uploaded_by_uid = excluded.uploaded_by_uid,
-          uploaded_by_name = excluded.uploaded_by_name,
-          taken_at = excluded.taken_at,
-          uploaded_at = excluded.uploaded_at,
-          size_bytes = excluded.size_bytes,
+          type = excluded.type, solution_revision_id = excluded.solution_revision_id, file_name = excluded.file_name,
+          content_type = excluded.content_type, storage_bucket = excluded.storage_bucket, storage_path = excluded.storage_path,
+          thumbnail_path = excluded.thumbnail_path, download_url = excluded.download_url, uploaded_by_uid = excluded.uploaded_by_uid,
+          uploaded_by_name = excluded.uploaded_by_name, taken_at = excluded.taken_at, uploaded_at = excluded.uploaded_at,
+          size_bytes = excluded.size_bytes, schema_version = excluded.schema_version
+      `
+      : `
+        INSERT INTO issue_attachments (
+          attachment_id, issue_id, plant_id, type, solution_revision_id, file_name, content_type, storage_bucket, storage_path, thumbnail_path,
+          download_url, uploaded_by_uid, uploaded_by_name, uploaded_at, size_bytes, schema_version
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(attachment_id) DO UPDATE SET
+          type = excluded.type, solution_revision_id = excluded.solution_revision_id, file_name = excluded.file_name,
+          content_type = excluded.content_type, storage_bucket = excluded.storage_bucket, storage_path = excluded.storage_path,
+          thumbnail_path = excluded.thumbnail_path, download_url = excluded.download_url, uploaded_by_uid = excluded.uploaded_by_uid,
+          uploaded_by_name = excluded.uploaded_by_name, uploaded_at = excluded.uploaded_at, size_bytes = excluded.size_bytes,
           schema_version = excluded.schema_version
-      `).bind(
-        row.attachment_id, row.issue_id, row.plant_id, row.type, row.solution_revision_id, row.file_name, row.content_type, row.storage_bucket, row.storage_path, row.thumbnail_path,
-        row.download_url, row.uploaded_by_uid, row.uploaded_by_name, row.taken_at, row.uploaded_at, row.size_bytes, row.schema_version
-      )
+      `;
+    const attachmentParams = [
+      row.attachment_id, row.issue_id, row.plant_id, row.type, row.solution_revision_id, row.file_name, row.content_type, row.storage_bucket, row.storage_path, row.thumbnail_path,
+      row.download_url, row.uploaded_by_uid, row.uploaded_by_name,
+      ...(hasTakenAt ? [row.taken_at] : []), row.uploaded_at, row.size_bytes, row.schema_version
+    ];
+    statements.push(
+      db.prepare(attachmentSql).bind(...attachmentParams)
     );
   });
 
@@ -2368,16 +2408,22 @@ async function getPlantBootstrap(db, plantId, user) {
   });
 }
 
-async function getDailySchedule(db, plantId, scheduleDate, user) {
+async function getDailySchedule(db, request, plantId, scheduleDate, user) {
   await requirePlantPermission(db, plantId, user, 'canViewPlant');
-  const schedule = await first(
+  const url = new URL(request.url);
+  const requestedShiftValue = String(url.searchParams.get('shift') || '').trim();
+  const requestedShift = requestedShiftValue
+    ? requireScheduleShift(requestedShiftValue, 'shift query parameter')
+    : '';
+  const schedules = await all(
     db,
-    'SELECT * FROM daily_schedules WHERE plant_id = ? AND schedule_date = ? LIMIT 1',
-    plantId,
-    scheduleDate
+    requestedShift
+      ? 'SELECT * FROM daily_schedules WHERE plant_id = ? AND schedule_date = ? AND shift = ? ORDER BY shift ASC'
+      : 'SELECT * FROM daily_schedules WHERE plant_id = ? AND schedule_date = ? ORDER BY shift ASC',
+    ...(requestedShift ? [plantId, scheduleDate, requestedShift] : [plantId, scheduleDate])
   );
-  if (!schedule) {
-    return jsonResponse({ schedule: null, sections: {} });
+  if (!schedules.length) {
+    return jsonResponse({ schedule: null, schedules: [], sections: {} });
   }
   const rows = await all(
     db,
@@ -2386,10 +2432,10 @@ async function getDailySchedule(db, plantId, scheduleDate, user) {
       FROM daily_schedule_rows r
       LEFT JOIN parts p ON r.part_number = p.part_number
       WHERE r.plant_id = ? AND r.schedule_date = ?
-      ORDER BY r.section_key ASC, COALESCE(CAST(json_extract(r.raw_json, '$.displayOrder') AS INTEGER), 999999) ASC, r.row_id ASC
+        ${requestedShift ? 'AND r.shift = ?' : ''}
+      ORDER BY r.shift ASC, r.section_key ASC, COALESCE(CAST(json_extract(r.raw_json, '$.displayOrder') AS INTEGER), 999999) ASC, r.row_id ASC
     `,
-    plantId,
-    scheduleDate
+    ...(requestedShift ? [plantId, scheduleDate, requestedShift] : [plantId, scheduleDate])
   );
   const sections = {
     page1: [],
@@ -2403,7 +2449,8 @@ async function getDailySchedule(db, plantId, scheduleDate, user) {
     sections[key].push(serializeDailyScheduleRow(row));
   });
   return jsonResponse({
-    schedule: serializeDailySchedule(schedule),
+    schedule: serializeDailySchedule(schedules[0]),
+    schedules: schedules.map(serializeDailySchedule),
     sections
   });
 }
@@ -2424,7 +2471,7 @@ async function listDailySchedules(db, request, plantId, user) {
       WHERE plant_id = ?
         AND schedule_date >= ?
         AND schedule_date <= ?
-      ORDER BY schedule_date ASC
+      ORDER BY schedule_date ASC, shift ASC
     `,
     plantId,
     from,
@@ -3836,7 +3883,7 @@ export async function handleD1ApiRequest(request, env, { authenticateRequest } =
       return listDailySchedules(db, request, decodePathSegment(dailySchedulesMatch[1]), user);
     }
     if (dailyScheduleMatch) {
-      return getDailySchedule(db, decodePathSegment(dailyScheduleMatch[1]), decodePathSegment(dailyScheduleMatch[2]), user);
+      return getDailySchedule(db, request, decodePathSegment(dailyScheduleMatch[1]), decodePathSegment(dailyScheduleMatch[2]), user);
     }
     if (plantMembersMatch) {
       return listPlantMembers(db, request, decodePathSegment(plantMembersMatch[1]), user);

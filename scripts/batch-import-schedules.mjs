@@ -24,6 +24,7 @@ import { join, parse, extname, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import process from 'node:process';
+import { requireScheduleShift } from '../js/schedule-shifts.mjs';
 
 let pdfjsLib;
 
@@ -204,6 +205,7 @@ function normalizeSchemaPayload(raw) {
   const scheduleDate = String(info.date || '').trim();
   if (!scheduleDate) throw new Error('schedule_info.date is required (yyyy-mm-dd).');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(scheduleDate)) throw new Error('schedule_info.date must use yyyy-mm-dd format.');
+  const scheduleShift = requireScheduleShift(info.shift);
 
   const sections = {};
   for (const cfg of SCHEDULE_SECTIONS) {
@@ -212,7 +214,7 @@ function normalizeSchemaPayload(raw) {
     sections[cfg.section] = rows.map((row, idx) => ({
       rowId: normalizeRowId(row?.press, row?.cavity, usedIds),
       scheduleDate,
-      shift: Number(info.shift) || 1,
+      shift: scheduleShift,
       section: cfg.section,
       press: String(row?.press || ''),
       partStorageLocation: Array.isArray(row?.part_storage_location)
@@ -231,7 +233,7 @@ function normalizeSchemaPayload(raw) {
 
   return {
     scheduleDate,
-    shift: Number(info.shift) || 1,
+    shift: scheduleShift,
     lineSpeed: parseMaybeNumber(info.line_speed),
     totalPlannedPcs: parseMaybeNumber(info.total_planned_pcs),
     notes: String(info.note || ''),
@@ -436,8 +438,8 @@ async function callDeepSeek(workerUrl, ocrText, opts) {
 
 // ─── Worker D1 import helpers ─────────────────────────────────────────────
 
-async function checkScheduleExists(workerUrl, plantId, scheduleDate) {
-  const url = `${workerUrl.replace(/\/+$/, '')}/api/import-schedule?plant=${encodeURIComponent(plantId)}&date=${encodeURIComponent(scheduleDate)}`;
+async function checkScheduleExists(workerUrl, plantId, scheduleDate, shift) {
+  const url = `${workerUrl.replace(/\/+$/, '')}/api/import-schedule?plant=${encodeURIComponent(plantId)}&date=${encodeURIComponent(scheduleDate)}&shift=${encodeURIComponent(requireScheduleShift(shift))}`;
   const res = await fetch(url);
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `Schedule existence check failed (${res.status})`);
@@ -525,17 +527,12 @@ async function importToWorker(workerUrl, plantId, norm, sourceFileName, dryRun) 
 
 async function processFile(opts, filePath) {
   const filename = parse(filePath).base;
-  const result = { file: filename, date: null, status: 'failed', error: null, rows: 0, scheduleIssues: 0 };
+  const result = { file: filename, date: null, shift: null, status: 'failed', error: null, rows: 0, scheduleIssues: 0 };
 
   try {
     const date = extractDateFromFilename(filename, opts);
     if (!date) { result.error = 'Could not extract date from filename'; return result; }
     result.date = date;
-
-    if (opts.resume) {
-      const exists = await checkScheduleExists(opts.workerUrl, opts.plant, date);
-      if (exists) { result.status = 'skipped'; result.error = 'Already exists in D1'; return result; }
-    }
 
     if (opts.verbose) console.log(`  → OCR: ${filename}`);
     const pdfBytes = readFileSync(filePath);
@@ -549,6 +546,7 @@ async function processFile(opts, filePath) {
     const canonical = canonicalizeKeys(dsResult);
     const payload = extractSchedulePayload(canonical);
     const norm = normalizeSchemaPayload(payload);
+    result.shift = norm.shift;
 
     // Override schedule date with filename-derived date (source of truth)
     norm.scheduleDate = date;
@@ -556,12 +554,21 @@ async function processFile(opts, filePath) {
       for (const row of (norm.sections[cfg.section] || [])) row.scheduleDate = date;
     }
 
+    if (opts.resume) {
+      const exists = await checkScheduleExists(opts.workerUrl, opts.plant, date, norm.shift);
+      if (exists) {
+        result.status = 'skipped';
+        result.error = `Shift ${norm.shift} already exists in D1`;
+        return result;
+      }
+    }
+
     const importResult = await importToWorker(opts.workerUrl, opts.plant, norm, filename, opts.dryRun);
     result.rows = importResult.rowCount;
     result.scheduleIssues = importResult.issueCount;
     result.status = opts.dryRun ? 'would_import' : 'imported';
 
-    if (opts.verbose) console.log(`  ✓ ${date}: ${result.rows} rows; ${result.scheduleIssues} schedule issue(s)`);
+    if (opts.verbose) console.log(`  ✓ ${date} Shift ${norm.shift}: ${result.rows} rows; ${result.scheduleIssues} schedule issue(s)`);
   } catch (err) {
     result.error = err.message;
     console.error('Error details:', err);
@@ -646,7 +653,7 @@ async function main() {
     const result = await processFile(opts, file);
     results.push(result);
     const icon = result.status === 'imported' ? '✓' : result.status === 'would_import' ? '~' : result.status === 'skipped' ? '-' : '✗';
-    const detail = result.date ? result.date : '??';
+    const detail = result.date ? `${result.date}${result.shift ? ` Shift ${result.shift}` : ''}` : '??';
     const rowInfo = result.rows ? ` (${result.rows} rows, ${result.scheduleIssues || 0} schedule issue(s))` : '';
     const errInfo = result.error ? `  ${result.error}` : '';
     const dryTag = result.status === 'would_import' ? ' [dry-run]' : '';

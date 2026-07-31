@@ -151,6 +151,7 @@ export function serializeDailySchedule(row) {
   if (!row) return null;
   const raw = parseJson(row.raw_json, null) || {};
   return {
+    ...raw,
     plantId: row.plant_id,
     scheduleDate: row.schedule_date,
     shift: row.shift,
@@ -165,8 +166,7 @@ export function serializeDailySchedule(row) {
     northBayChangesCount: Number(row.north_bay_changes_count || 0),
     southBayChangesCount: Number(row.south_bay_changes_count || 0),
     createdAt: toIso(row.created_at),
-    updatedAt: toIso(row.updated_at),
-    ...raw
+    updatedAt: toIso(row.updated_at)
   };
 }
 
@@ -174,6 +174,7 @@ export function serializeDailyScheduleRow(row) {
   if (!row) return null;
   const raw = parseJson(row.raw_json, null) || {};
   return {
+    ...raw,
     plantId: row.plant_id,
     scheduleDate: row.schedule_date,
     section: row.section_key,
@@ -189,8 +190,7 @@ export function serializeDailyScheduleRow(row) {
     shift: row.shift,
     partStorageLocation: parseJson(row.part_storage_location_json, []),
     createdAt: toIso(row.created_at),
-    updatedAt: toIso(row.updated_at),
-    ...raw
+    updatedAt: toIso(row.updated_at)
   };
 }
 

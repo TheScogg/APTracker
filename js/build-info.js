@@ -1,11 +1,11 @@
 window.__APP_BUILD_INFO__ = {
-  "version": "c1cd352",
-  "assetVersion": "c1cd352-6584a924",
-  "commit": "c1cd352331953381e5faf1d442846cd21bce78ea",
-  "shortCommit": "c1cd352",
-  "branch": "codex/remove-text-after-log-issue-jjy4gc",
-  "commitDate": "2026-07-28T05:41:20-04:00",
-  "builtAt": "2026-07-30T01:52:44.839Z",
+  "version": "26a8d8a",
+  "assetVersion": "26a8d8a-0ac15511",
+  "commit": "26a8d8a621f87e5be2d3cb1835a3b9ff50fffe32",
+  "shortCommit": "26a8d8a",
+  "branch": "main",
+  "commitDate": "2026-07-30T13:27:57-04:00",
+  "builtAt": "2026-07-31T09:39:36.938Z",
   "dirty": true
 };
-window.__APP_VERSION__ = "c1cd352";
+window.__APP_VERSION__ = "26a8d8a";

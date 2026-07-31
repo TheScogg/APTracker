@@ -63,6 +63,11 @@ This plan keeps the current app behavior intact while moving the SQL migration t
 - `POST /api/plants/:plantId/issues/:issueId/events`
 - `GET /api/plants/:plantId/issues/:issueId/attachments`
 - `POST /api/plants/:plantId/issues/:issueId/attachments`
+- `GET /api/plants/:plantId/daily-schedules?from=YYYY-MM-DD&to=YYYY-MM-DD`
+- `GET /api/plants/:plantId/daily-schedules/:date` (all imported shifts)
+- `GET /api/plants/:plantId/daily-schedules/:date?shift=1|2|3`
+
+Daily production schedules are keyed by plant, schedule date, and shift. Import payloads must contain a shift that normalizes to `1`, `2`, or `3`; separate shifts for the same date coexist and re-importing one shift replaces only that shift's rows.
 
 Admin, wiki, notes, todos, messaging, schedules, and gamification should follow the same Worker API pattern after the core issue flow is stable.
 

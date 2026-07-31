@@ -1,6 +1,10 @@
 import { handleD1ApiRequest, importDailyScheduleToD1 } from './d1-api.js';
 import { signAppSessionToken, verifyAppSessionToken } from './session-auth.js';
 import { sendPushNotification } from '@mmmike/web-push/send';
+import {
+  ascertainScheduleShift,
+  requireScheduleShift
+} from '../js/schedule-shifts.mjs';
 
 const FIREBASE_AUTH_ORIGIN = 'https://press-tracker-9d9c9.firebaseapp.com';
 const FIREBASE_PROJECT_ID = 'press-tracker-9d9c9';
@@ -635,6 +639,7 @@ async function handleAiConvert(request, env) {
 
 Rules:
 - Extract date from the text if present (use YYYY-MM-DD format).
+- Read the schedule header and set schedule_info.shift to exactly "1", "2", or "3".
 - Each row in page_1 / page_2 represents one press/cavity entry from the schedule.
 - "doh" is Days on Hand (numeric).
 - "labels_per_shift" is numeric.
@@ -696,11 +701,18 @@ Rules:
         return new Response(JSON.stringify({ error: 'DeepSeek returned invalid JSON', content: content }), { status: 500, headers: { 'Content-Type': 'application/json' } });
       }
     }
+    const detectedShift = ascertainScheduleShift({
+      text: rawText,
+      reportedShift: parsed?.schedule_info?.shift ?? parsed?.shift,
+      override: shiftOverride
+    });
+    if (!parsed.schedule_info || typeof parsed.schedule_info !== 'object') parsed.schedule_info = {};
+    parsed.schedule_info.shift = detectedShift;
     return new Response(JSON.stringify(parsed), {
       headers: { 'Content-Type': 'application/json' }
     });
   } catch (e) {
-    return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ error: e.message }), { status: e?.status || 500, headers: { 'Content-Type': 'application/json' } });
   }
 }
 
@@ -889,7 +901,7 @@ async function handleScheduleScan(request, env) {
 }
 
 Rules:
-- Auto-detect shift (1, 2, or 3) from the schedule header or text.
+- Auto-detect shift (1, 2, or 3) from the schedule header or text and set schedule_info.shift to exactly "1", "2", or "3".
 - part_storage_location is an ARRAY of location strings (up to 3 values).
 - cavity is a string (e.g. "4" or "9-16").
 - doh is numeric.
@@ -953,6 +965,12 @@ Rules:
     }
 
     const rawOcrText = allOcrTexts.join('\n\n--- Page ---\n\n');
+    const detectedShift = ascertainScheduleShift({
+      text: rawOcrText,
+      reportedShift: parsed?.schedule_info?.shift ?? parsed?.shift
+    });
+    if (!parsed.schedule_info || typeof parsed.schedule_info !== 'object') parsed.schedule_info = {};
+    parsed.schedule_info.shift = detectedShift;
 
     // Step 4: If ?plant= is provided, write to Firestore
     const scanUrl = new URL(request.url);
@@ -986,7 +1004,7 @@ Rules:
 
   } catch (e) {
     return new Response(JSON.stringify({ error: e.message }), {
-      status: 500,
+      status: e?.status || 500,
       headers: { 'Content-Type': 'application/json' }
     });
   }
@@ -1129,6 +1147,7 @@ function normalizeSchedulePayload(raw) {
   const scheduleDate = String(info.date || '').trim();
   if (!scheduleDate) throw new Error('schedule_info.date is required (yyyy-mm-dd).');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(scheduleDate)) throw new Error('schedule_info.date must use yyyy-mm-dd format.');
+  const scheduleShift = requireScheduleShift(info.shift);
 
   const sections = {};
   for (const cfg of SCHEDULE_SECTIONS) {
@@ -1137,7 +1156,7 @@ function normalizeSchedulePayload(raw) {
     sections[cfg.section] = rows.map((row, index) => ({
       rowId: normalizeScheduleRowId(row?.press, row?.cavity, usedIds),
       scheduleDate,
-      shift: Number(info.shift) || 1,
+      shift: scheduleShift,
       section: cfg.section,
       press: String(row?.press || ''),
       partStorageLocation: Array.isArray(row?.part_storage_location)
@@ -1157,7 +1176,7 @@ function normalizeSchedulePayload(raw) {
 
   return {
     scheduleDate,
-    shift: Number(info.shift) || 1,
+    shift: scheduleShift,
     lineSpeed: parseMaybeNumber(info.line_speed),
     totalPlannedPcs: parseMaybeNumber(info.total_planned_pcs),
     notes: String(info.note || ''),
@@ -1172,6 +1191,7 @@ async function handleImportSchedule(request, env) {
     const url = new URL(request.url);
     plantId = url.searchParams.get('plant');
     scheduleDate = url.searchParams.get('date');
+    const shiftParam = String(url.searchParams.get('shift') || '').trim();
     if (!plantId) throw new Error('Missing ?plant= parameter');
 
     const db = env.APTRACKER_DB || env.DB;
@@ -1179,11 +1199,14 @@ async function handleImportSchedule(request, env) {
 
     if (request.method === 'GET') {
       if (!scheduleDate) throw new Error('Missing ?date= parameter');
+      const shift = shiftParam ? requireScheduleShift(shiftParam, 'shift query parameter') : '';
       const existing = await db
-        .prepare('SELECT schedule_date FROM daily_schedules WHERE plant_id = ? AND schedule_date = ? LIMIT 1')
-        .bind(plantId, scheduleDate)
+        .prepare(shift
+          ? 'SELECT schedule_date, shift FROM daily_schedules WHERE plant_id = ? AND schedule_date = ? AND shift = ? LIMIT 1'
+          : 'SELECT schedule_date, shift FROM daily_schedules WHERE plant_id = ? AND schedule_date = ? ORDER BY shift ASC LIMIT 1')
+        .bind(...(shift ? [plantId, scheduleDate, shift] : [plantId, scheduleDate]))
         .first();
-      return jsonResponse({ exists: Boolean(existing), plantId, date: scheduleDate });
+      return jsonResponse({ exists: Boolean(existing), plantId, date: scheduleDate, shift: shift || existing?.shift || null });
     }
 
     if (request.method !== 'POST') {
@@ -1204,6 +1227,7 @@ async function handleImportSchedule(request, env) {
       success: true,
       plantId,
       date: normalized.scheduleDate,
+      shift: normalized.shift,
       totalRows: imported.rowCount,
       scheduleIssues: imported.scheduleIssueCount
     });

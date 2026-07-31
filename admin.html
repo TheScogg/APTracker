@@ -89,7 +89,7 @@
     .btn-primary {
       background: var(--accent);
       border-color: var(--accent);
-      color: white;
+      color: var(--color-on-accent, #fff);
     }
 
     .card {
@@ -459,7 +459,7 @@
 
     .route-segmented button.active {
       background: var(--accent);
-      color: #04131d;
+      color: var(--color-on-accent, #fff);
     }
 
     .route-toolbar select {
@@ -2673,7 +2673,7 @@
       height: 22px;
       border-radius: 50%;
       background: var(--accent);
-      color: #fff;
+      color: var(--color-on-accent, #fff);
       font-size: 11px;
       font-weight: 700;
       margin-right: 7px;
@@ -2926,11 +2926,20 @@
           <!-- View / Edit Schedule -->
           <div class="card" style="margin-top:12px;">
             <h2><span class="step-num">V</span>View / Edit Schedule</h2>
-            <p class="muted" style="margin-bottom:8px;">Load an existing schedule from Firestore. Edit inline, then
+            <p class="muted" style="margin-bottom:8px;">Load an existing shift schedule from SQL. Edit inline, then
               click <strong>Import Daily Schedule</strong> (Step 3) to save changes.</p>
-            <label style="font-size:11px;color:var(--text2);flex:0 0 140px;">Date
-              <input id="view-date" type="date" style="margin-top:2px;font-size:12px;" />
-            </label>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <label style="font-size:11px;color:var(--text2);flex:0 0 140px;">Date
+                <input id="view-date" type="date" style="margin-top:2px;font-size:12px;" />
+              </label>
+              <label style="font-size:11px;color:var(--text2);flex:0 0 140px;">Shift
+                <select id="view-shift" style="margin-top:2px;font-size:12px;">
+                  <option value="1">Shift 1</option>
+                  <option value="2">Shift 2</option>
+                  <option value="3">Shift 3</option>
+                </select>
+              </label>
+            </div>
             <div id="view-schedule-feedback" class="feedback" style="margin-top:6px;"></div>
             <details style="margin-top:6px;">
               <summary id="schedule-preview-summary" style="cursor:pointer;font-size:12px;color:var(--text2);">Preview
@@ -3110,6 +3119,10 @@
       createBuiltInThemeStoreItems,
       normalizeThemeStoreItem
     } from "./js/theme-catalog.js";
+    import {
+      requireScheduleShift,
+      scheduleShiftLabel
+    } from "./js/schedule-shifts.mjs";
 
     const firebaseConfig = {
       apiKey: "AIzaSyABjasNBbJnsqq4M_UxKruKrN6-O2FXCwc",
@@ -3467,6 +3480,7 @@
       const scheduleDate = String(info.date || '').trim();
       if (!scheduleDate) throw new Error('schedule_info.date is required (yyyy-mm-dd).');
       if (!/^\d{4}-\d{2}-\d{2}$/.test(scheduleDate)) throw new Error('schedule_info.date must use yyyy-mm-dd format.');
+      const scheduleShift = requireScheduleShift(info.shift);
 
       const normalizedSections = {};
       for (const cfg of SCHEDULE_SECTIONS) {
@@ -3477,7 +3491,7 @@
           return {
             rowId,
             scheduleDate,
-            shift: Number(info.shift) || 1,
+            shift: scheduleShift,
             section: cfg.section,
             press: String(row?.press || ''),
             partStorageLocation: Array.isArray(row?.part_storage_location) ? row.part_storage_location.map(v => String(v ?? '')) : [],
@@ -3496,7 +3510,7 @@
 
       return {
         scheduleDate,
-        shift: Number(info.shift) || 1,
+        shift: scheduleShift,
         lineSpeed: parseMaybeNumber(info.line_speed),
         totalPlannedPcs: parseMaybeNumber(info.total_planned_pcs),
         notes: String(info.note || ''),
@@ -5605,7 +5619,7 @@
         });
 
         if (dateInput && !dateInput.value) dateInput.value = scheduleDate;
-        feedback('schedule-import-feedback', 'ok', `Imported ${scheduleDate} for ${plantId}: ${result.totalRows || 0} rows; created ${result.scheduleIssues || 0} schedule issue(s).`);
+        feedback('schedule-import-feedback', 'ok', `Imported ${scheduleDate} ${scheduleShiftLabel(normalized.shift)} for ${plantId}: ${result.totalRows || 0} rows; created ${result.scheduleIssues || 0} schedule issue(s).`);
       } catch (e) {
         console.error(e);
         feedback('schedule-import-feedback', 'error', e.message || 'Failed to import schedule JSON.');
@@ -5693,7 +5707,7 @@
         const file = fileArr[i];
         const nameNoExt = file.name.replace(/\.[^.]+$/, '');
         const date = extractDate(nameNoExt);
-        let icon = '⏳', statusText = 'Processing…', rowCount = 0, detail = '';
+        let icon = '⏳', statusText = 'Processing…', rowCount = 0, detail = '', detectedShift = '';
 
         try {
           if (fromDate && date && date < fromDate) { icon = '⏭️'; statusText = 'Skipped'; detail = 'Before From date'; skipCount++; }
@@ -5775,10 +5789,11 @@
             const canon = normalizeDeepSeekKeys(aiData);
             const payload = extractSchedulePayload(canon);
             const norm = normalizeSchedulePayload(payload);
+            detectedShift = norm.shift;
             norm.scheduleDate = date;
             for (const cfg of SCHEDULE_SECTIONS) { for (const row of (norm.sections[cfg.section] || [])) row.scheduleDate = date; }
 
-            feedback('batch-feedback', '', `[${i + 1}/${fileArr.length}] Importing: ${date}`);
+            feedback('batch-feedback', '', `[${i + 1}/${fileArr.length}] Importing: ${date} ${scheduleShiftLabel(norm.shift)}`);
             const result = await adminApiRequest(`/api/import-schedule?plant=${encodeURIComponent(plantId)}`, {
               method: 'POST',
               headers: {
@@ -5789,7 +5804,7 @@
             });
 
             rowCount = Object.values(norm.sections).reduce((s, r) => s + r.length, 0);
-            icon = '✅'; statusText = 'Imported'; detail = `${result.totalRows || rowCount} rows; ${result.scheduleIssues || 0} schedule issue(s)`;
+            icon = '✅'; statusText = 'Imported'; detail = `${scheduleShiftLabel(norm.shift)}; ${result.totalRows || rowCount} rows; ${result.scheduleIssues || 0} schedule issue(s)`;
             successCount++;
           }
         } catch (err) {
@@ -5798,10 +5813,11 @@
           failCount++;
         }
 
-        rows.push({ date: date || '??', file: file.name, icon, statusText, rows: rowCount, detail });
+        rows.push({ date: date || '??', shift: detectedShift, file: file.name, icon, statusText, rows: rowCount, detail });
         let html = `<table style="width:100%;font-size:11px;border-collapse:collapse;">
       <tr style="color:var(--text2);font-family:'Share Tech Mono',monospace;font-size:10px;">
         <th style="padding:4px;text-align:left;">Date</th>
+        <th style="padding:4px;text-align:center;">Shift</th>
         <th style="padding:4px;text-align:left;">File</th>
         <th style="padding:4px;text-align:center;">Status</th>
         <th style="padding:4px;text-align:right;">Rows</th>
@@ -5810,6 +5826,7 @@
         for (const r of rows) {
           html += `<tr style="border-top:1px solid var(--border);">
         <td style="padding:3px 4px;font-family:'Share Tech Mono',monospace;">${esc(r.date)}</td>
+        <td style="padding:3px 4px;text-align:center;">${esc(r.shift || '—')}</td>
         <td style="padding:3px 4px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.file)}</td>
         <td style="padding:3px 4px;text-align:center;">${r.icon}</td>
         <td style="padding:3px 4px;text-align:right;">${r.rows || '-'}</td>
@@ -5830,13 +5847,14 @@
 
     async function viewSchedule() {
       const date = document.getElementById('view-date')?.value;
+      const shift = requireScheduleShift(document.getElementById('view-shift')?.value, 'View shift');
       const plantId = String(document.getElementById('schedule-plant-id')?.value || '').trim();
       if (!date) { feedback('view-schedule-feedback', 'error', 'Select a date.'); return; }
       if (!plantId) { feedback('view-schedule-feedback', 'error', 'Select a plant in Step 3.'); return; }
 
       try {
-        const data = await adminApiRequest(`/api/plants/${encodeURIComponent(plantId)}/daily-schedules/${encodeURIComponent(date)}`);
-        if (!data?.schedule) throw new Error(`No schedule found for ${date} in plant ${plantId}.`);
+        const data = await adminApiRequest(`/api/plants/${encodeURIComponent(plantId)}/daily-schedules/${encodeURIComponent(date)}?shift=${encodeURIComponent(shift)}`);
+        if (!data?.schedule) throw new Error(`No ${scheduleShiftLabel(shift)} schedule found for ${date} in plant ${plantId}.`);
 
         const schedule = data.schedule || {};
         const result = {
@@ -5872,12 +5890,13 @@
 
         document.getElementById('schedule-json-text').value = JSON.stringify(result, null, 2);
         document.getElementById('schedule-date').value = date;
+        document.getElementById('view-shift').value = shift;
 
         renderSchedulePreview();
 
         const rowKeys = ['page_1', 'page_2', 'north_bay_changes', 'south_bay_changes'];
         const totalRows = rowKeys.reduce((s, k) => s + (result[k] || []).length, 0);
-        feedback('view-schedule-feedback', 'ok', `Loaded ${date}: ${totalRows} rows. Edit in the preview table, then click Import Daily Schedule to save.`);
+        feedback('view-schedule-feedback', 'ok', `Loaded ${date} ${scheduleShiftLabel(shift)}: ${totalRows} rows. Edit in the preview table, then click Import Daily Schedule to save.`);
       } catch (e) {
         console.error(e);
         feedback('view-schedule-feedback', 'error', e.message || 'Failed to load schedule.');
@@ -5938,7 +5957,8 @@
         if (sourceNameInput && !String(sourceNameInput.value || '').trim()) {
           sourceNameInput.value = `DeepSeek_${(adaptedPayload.schedule_info?.date || 'schedule')}.json`;
         }
-        feedback('schedule-gpt-feedback', 'ok', 'JSON generated via DeepSeek. Review, then click Import Daily Schedule.');
+        const detectedShift = requireScheduleShift(adaptedPayload.schedule_info?.shift);
+        feedback('schedule-gpt-feedback', 'ok', `JSON generated via DeepSeek; ${scheduleShiftLabel(detectedShift)} detected. Review, then click Import Daily Schedule.`);
       } catch (e) {
         console.error(e);
         feedback('schedule-gpt-feedback', 'error', e.message || 'DeepSeek conversion failed.');
@@ -8407,6 +8427,7 @@
     document.getElementById('deepseek-convert-btn').addEventListener('click', convertWithDeepSeek);
     document.getElementById('batch-start-btn').addEventListener('click', batchImportSchedules);
     document.getElementById('view-date').addEventListener('change', viewSchedule);
+    document.getElementById('view-shift').addEventListener('change', viewSchedule);
 
     // Schedule JSON preview
     document.getElementById('schedule-json-text').addEventListener('input', renderSchedulePreview);

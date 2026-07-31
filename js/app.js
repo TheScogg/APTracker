@@ -2768,10 +2768,12 @@ async function loadScheduleCalendarMonth(year = scheduleCalendarState.visibleYea
     (payload?.schedules || []).forEach(schedule => {
       const dateKey = String(schedule?.scheduleDate || '').trim();
       if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return;
-      markerMap.set(dateKey, {
-        schedule,
-        rowCount: scheduleCalendarRowCount(schedule)
-      });
+      const existing = markerMap.get(dateKey) || { schedules: [], shifts: [], rowCount: 0 };
+      existing.schedules.push(schedule);
+      const shift = String(schedule?.shift || '').trim();
+      if (shift && !existing.shifts.includes(shift)) existing.shifts.push(shift);
+      existing.rowCount += scheduleCalendarRowCount(schedule);
+      markerMap.set(dateKey, existing);
     });
     scheduleCalendarState.monthCache.set(cacheKey, markerMap);
     return markerMap;
@@ -2822,7 +2824,7 @@ function renderScheduleCalendarReadout(markerMap) {
   readoutChip.textContent = scheduleCalendarState.loading
     ? 'Loading'
     : marker
-      ? `${marker.rowCount || 0} rows`
+      ? `${marker.shifts?.length || 1} shift${marker.shifts?.length === 1 ? '' : 's'} · ${marker.rowCount || 0} rows`
       : 'No data';
   readoutChip.classList.toggle('empty', !marker);
 }
@@ -2865,7 +2867,8 @@ function renderScheduleCalendar() {
     if (dateKey === selected) btn.classList.add('selected');
     if (marker) {
       btn.classList.add('has-schedule');
-      btn.title = `${scheduleCalendarLabel(dateKey, { withYear: true })}: imported schedule (${marker.rowCount || 0} rows)`;
+      const shifts = (marker.shifts || []).map(shift => `Shift ${shift}`).join(', ');
+      btn.title = `${scheduleCalendarLabel(dateKey, { withYear: true })}: ${shifts || 'imported schedule'} (${marker.rowCount || 0} rows)`;
     }
     btn.addEventListener('click', () => {
       if (date.getMonth() !== month) return;
@@ -9065,6 +9068,10 @@ function loadSavedIssueSimilarFixes(issue) {
   return saved?.payload ? { queryKey: issueSimilarFixesQueryKey(issue), payload: saved.payload, loading: false, saved: true } : null;
 }
 
+function hasSavedIssueSimilarFixes(issue) {
+  return Boolean(issue?.similarFixes?.payload || issueSimilarFixes.get(issue?.id)?.saved);
+}
+
 async function hydrateSavedIssueSimilarFixes(issue) {
   if (!currentPlantId || !issue?.id || issueSimilarFixesHydrated.has(issue.id)) return false;
   issueSimilarFixesHydrated.add(issue.id);
@@ -13093,10 +13100,11 @@ function renderIssues(options = {}) {
       : '';
     const similarFixesState = issueSimilarFixes.get(issue.id);
     const similarFixesLoading = !!similarFixesState?.loading;
+    const hasSavedSimilarFixes = hasSavedIssueSimilarFixes(issue);
     const similarFixesHtml = `<section class="issue-similar-fixes" aria-label="Similar fixes">
       <div class="issue-similar-fixes-actions">
         <button class="issue-similar-fixes-trigger" id="similar-fixes-btn-${issue.id}" type="button" onclick="event.stopPropagation(); findSimilarFixesForIssue('${encodeURIComponent(issue.id)}')" ${similarFixesLoading ? 'disabled' : ''}>${similarFixesButtonContent(similarFixesLoading)}</button>
-        <button class="issue-similar-fixes-saved" type="button" onclick="event.stopPropagation(); viewSavedSimilarFixesForIssue('${encodeURIComponent(issue.id)}')"><span aria-hidden="true">▣</span> View saved research</button>
+        ${hasSavedSimilarFixes ? `<button class="issue-similar-fixes-saved" type="button" onclick="event.stopPropagation(); viewSavedSimilarFixesForIssue('${encodeURIComponent(issue.id)}')"><span aria-hidden="true">▣</span> View saved research</button>` : ''}
       </div>
       <div class="issue-similar-fixes-results" id="similar-fixes-results-${issue.id}" hidden></div>
     </section>`;
