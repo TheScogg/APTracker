@@ -340,6 +340,7 @@ export function serializeIssue(row) {
     legacyStatusHistory: parseJson(row.legacy_status_history_json, null),
     qualityDefect: parseJson(row.quality_defect_json, null),
     solution: parseJson(row.solution_current_json, null),
+    similarFixes: parseJson(row.similar_fixes_json, null),
     latestNotePreview: row.latest_note_preview,
     tags: parseJson(row.tags_json, []),
     photoCount: row.photo_count,
@@ -403,6 +404,7 @@ export function serializeIssueAttachment(row) {
     downloadUrl: row.download_url,
     uploadedByUid: row.uploaded_by_uid,
     uploadedByName: row.uploaded_by_name,
+    takenAt: toIso(row.taken_at),
     uploadedAt: toIso(row.uploaded_at),
     sizeBytes: row.size_bytes,
     schemaVersion: row.schema_version

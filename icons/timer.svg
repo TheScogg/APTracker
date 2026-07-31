@@ -1,28 +1,32 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" aria-labelledby="title desc" role="img">
-  <title id="title">Timer Multicolor</title>
-  <desc id="desc">A sleek multicolor timer icon with a cyan to blue gradient body, glowing aqua center, and a warm yellow crown accent.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">Timer</title>
+  <desc id="desc">A compact, high-contrast stopwatch with a cyan-to-blue dial, aqua hand, and gold-gradient controls.</desc>
   <defs>
-    <linearGradient id="timerStroke" x1="4.5" y1="4" x2="19.5" y2="20" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#2FE6D5"/>
-      <stop offset="1" stop-color="#5B8CFF"/>
+    <linearGradient id="timer-body" x1="5" y1="5" x2="19" y2="20" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#35E7D7"/>
+      <stop offset="1" stop-color="#5C83FF"/>
     </linearGradient>
-    <linearGradient id="handStroke" x1="10.5" y1="8.65" x2="13.3" y2="12.8" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#8AF7EC"/>
-      <stop offset="1" stop-color="#34C8FF"/>
+    <linearGradient id="timer-hand" x1="10" y1="8" x2="14" y2="14" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#C9FFFB"/>
+      <stop offset="1" stop-color="#37CFFF"/>
     </linearGradient>
-    <radialGradient id="dialGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(12 12) rotate(90) scale(8)">
-      <stop offset="0" stop-color="#7CF3FF" stop-opacity="0.16"/>
-      <stop offset="1" stop-color="#5B8CFF" stop-opacity="0.03"/>
+    <linearGradient id="timer-gold" x1="9" y1="3" x2="20" y2="6" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFE59A"/>
+      <stop offset=".48" stop-color="#FFD166"/>
+      <stop offset="1" stop-color="#EAA52E"/>
+    </linearGradient>
+    <radialGradient id="timer-face" cx="0" cy="0" r="1" gradientTransform="translate(12 12.5) rotate(90) scale(7.25)">
+      <stop stop-color="#66F4F0" stop-opacity=".22"/>
+      <stop offset="1" stop-color="#5082FF" stop-opacity=".04"/>
     </radialGradient>
   </defs>
 
-  <circle cx="12" cy="12" r="8.1" fill="url(#dialGlow)" opacity="0.6"/>
-  <path d="M12 3.75v1.75" stroke="#FFD166" stroke-width="1.45" stroke-linecap="round"/>
-  <path d="M16.95 5.8a8.5 8.5 0 1 1-7.6-.95" stroke="url(#timerStroke)" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M12 12V8.65" stroke="url(#handStroke)" stroke-width="1.45" stroke-linecap="round"/>
-  <circle cx="12" cy="12" r=".95" fill="#DDF8FF"/>
-  <path d="M19.2 10.1A7.25 7.25 0 0 1 19.25 12" stroke="url(#handStroke)" stroke-width="1.1" stroke-linecap="round" opacity="0.95"/>
-  <path d="M7.1 5.95 6.2 5.05" stroke="url(#timerStroke)" stroke-width="1.1" stroke-linecap="round"/>
-  <path d="M4.9 12H4.75" stroke="url(#timerStroke)" stroke-width="1.1" stroke-linecap="round"/>
-  <path d="M19.25 12h-.15" stroke="url(#timerStroke)" stroke-width="1.1" stroke-linecap="round"/>
+  <path d="M9.25 3.25h5.5" stroke="url(#timer-gold)" stroke-width="1.65" stroke-linecap="round"/>
+  <path d="M12 3.25v2.1" stroke="url(#timer-gold)" stroke-width="1.45" stroke-linecap="round"/>
+  <path d="m16.95 6.15.75-.75" stroke="#67DFF4" stroke-width="1.25" stroke-linecap="round"/>
+  <rect x="17.35" y="3.55" width="2.65" height="1.55" rx=".72" transform="rotate(45 17.35 3.55)" fill="url(#timer-gold)"/>
+  <circle cx="12" cy="12.5" r="7.65" fill="url(#timer-face)" stroke="url(#timer-body)" stroke-width="1.7"/>
+  <path d="M12 7.15v5.35l3.1 1.9" stroke="url(#timer-hand)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="12" cy="12.5" r="1.15" fill="#E5FFFF" stroke="#3CD9F1" stroke-width=".65"/>
+  <path d="M12 5.75v.8M18.75 12.5h-.8M5.25 12.5h.8M7.23 7.73l.57.57" stroke="#8BF8EF" stroke-width="1.05" stroke-linecap="round" opacity=".95"/>
 </svg>

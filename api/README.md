@@ -30,7 +30,7 @@ AP Tracker’s SQL migration now points at the existing Cloudflare Worker plus C
 
 ## Similar-fix research configuration
 
-The Worker endpoint `POST /api/plants/:plantId/similar-fixes` searches resolved D1 issues in the authorized plant, then asks DeepSeek to compare those results with optional external research. Configure secrets in the Cloudflare deployment; never expose them in browser code:
+The Worker endpoint `POST /api/plants/:plantId/similar-fixes` searches resolved D1 issues in the authorized plant, then asks DeepSeek to compare those results with optional external research. Its request accepts `description` and `machineCode`, plus optional `sourceIssueId` when researching an existing issue; the source issue is excluded from the resolved candidates so it cannot recommend itself. Configure secrets in the Cloudflare deployment; never expose them in browser code:
 
 ```sh
 npx wrangler secret put DEEPSEEK_API_KEY

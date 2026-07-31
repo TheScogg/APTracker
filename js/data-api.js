@@ -214,6 +214,17 @@ export class SqlDataApi {
     });
   }
 
+  saveIssueSimilarFixes(plantId, issueId, payload) {
+    return this.request(`/plants/${encodeURIComponent(plantId)}/issues/${encodeURIComponent(issueId)}/similar-fixes`, {
+      method: 'PUT',
+      body: { payload }
+    });
+  }
+
+  getIssueSimilarFixes(plantId, issueId) {
+    return this.request(`/plants/${encodeURIComponent(plantId)}/issues/${encodeURIComponent(issueId)}/similar-fixes`);
+  }
+
   deleteIssue(plantId, issueId) {
     return this.request(`/plants/${encodeURIComponent(plantId)}/issues/${encodeURIComponent(issueId)}`, {
       method: 'DELETE'

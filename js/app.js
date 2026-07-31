@@ -312,6 +312,10 @@ function formatIssueCreatedAtLabel(issue = {}) {
 }
 
 function normalizeSqlIssueForApp(issue = {}) {
+  let similarFixes = issue.similarFixes ?? issue.similar_fixes_json ?? null;
+  if (typeof similarFixes === 'string') {
+    try { similarFixes = JSON.parse(similarFixes); } catch (_) { similarFixes = null; }
+  }
   const currentStatus = {
     statusKey: issue.currentStatusKey || 'open',
     subStatusKey: issue.currentSubStatusKey || '',
@@ -358,6 +362,7 @@ function normalizeSqlIssueForApp(issue = {}) {
       reopenedCount: Number(issue.reopenedCount || 0)
     },
     resolved: !!issue.isResolved,
+    similarFixes,
     photos: attachmentPhotoCache.get(issue.issueId) || [],
     eventHistory: issueEventHistoryCache.get(issue.issueId) || []
   };
@@ -448,6 +453,7 @@ function sqlAttachmentPayloads(photos = [], type = 'photo', solutionRevisionId =
     storageBucket: photo.storageBucket || '',
     downloadUrl: photo.downloadURL || photo.dataUrl || '',
     uploadedBy: currentActor(),
+    takenAt: photo.takenAt || photo.timestamp || '',
     uploadedAt: photo.uploadedAt || new Date().toISOString(),
     sizeBytes: Number(photo.sizeBytes || 0),
     schemaVersion: 2
@@ -2959,6 +2965,11 @@ function buildScheduleIndexFromSectionRows(rowsBySection) {
     });
   });
 
+  // BR-1 runs whenever either of its feeder presses is scheduled. It does not
+  // have its own schedule row, so include it in the derived running state used
+  // by the floor map and the scheduled/unscheduled filters.
+  if (scheduled.has('4.16') || scheduled.has('4.17')) scheduled.add('BR-1');
+
   lookupByPress.forEach(v => {
     v.main.sort(sortByOrder);
     v.changes.sort(sortByOrder);
@@ -3166,6 +3177,11 @@ function getActiveStatuses(issue) {
 }
 
 // True if the issue has this status as display-summary OR secondary
+function issueHasSharedSolution(issue) {
+  const solution = issue?.solution?.current || issue?.solution || null;
+  return Boolean(String(solution?.text || '').trim());
+}
+
 function issueHasActiveStatus(issue, statusKey) {
   return getActiveStatuses(issue).some(s => s.statusKey === statusKey);
 }
@@ -3345,7 +3361,7 @@ async function fetchAttachmentPhotos(issueId) {
         storageBucket: att.storageBucket || '',
         contentType: att.contentType || '',
         sizeBytes: Number(att.sizeBytes || 0),
-        takenAt: '',
+        takenAt: att.takenAt || att.timestamp || '',
         uploadedAt: att.uploadedAt || ''
       });
     }
@@ -3830,7 +3846,10 @@ async function switchPlant(plantId) {
   stopRoleFeedAlertsWatcher();
   clearRoleAlertBadge();
   if (typeof closeNotesModal === 'function') closeNotesModal();
+  clearStoredIssueSimilarFixes(currentPlantId);
   currentPlantId = plantId;
+  issueSimilarFixes.clear();
+  issueSimilarFixesHydrated.clear();
   currentPlantName = (userPlants.find(p => p.id === plantId) || {}).name || plantId;
   document.getElementById('plant-name-display').textContent = currentPlantName;
   updateUserDropdownContext();
@@ -7962,6 +7981,32 @@ function populateIssueMachineSelect(selectedMachine = currentMachine) {
   updateAddModalMachineLabel(currentMachine);
 }
 
+function populateEditMachineSelect(selectedMachine = '') {
+  const select = document.getElementById('edit-machine-select');
+  if (!select) return;
+  const selected = String(selectedMachine || '').trim();
+  const availableMachines = new Set(ALL_MACHINES || []);
+  select.innerHTML = '';
+  if (selected && !availableMachines.has(selected)) {
+    const option = document.createElement('option');
+    option.value = selected;
+    option.textContent = `${selected} (unlisted)`;
+    select.appendChild(option);
+  }
+  Object.entries(PRESSES || {}).forEach(([rowName, machines]) => {
+    const group = document.createElement('optgroup');
+    group.label = rowName;
+    (machines || []).forEach(machineCode => {
+      const option = document.createElement('option');
+      option.value = machineCode;
+      option.textContent = machineCode;
+      group.appendChild(option);
+    });
+    if (group.children.length) select.appendChild(group);
+  });
+  select.value = selected;
+}
+
 function buildFloorMap() {
   // Populate machine filter dropdown
   const sel = document.getElementById('machine-filter');
@@ -8921,8 +8966,49 @@ window.openAddModal = (m = '') => {
   requestAnimationFrame(() => (currentMachine ? document.getElementById('issue-note') : document.getElementById('issue-machine-select'))?.focus());
 };
 
-function renderSimilarFixesResults(payload) {
-  const target = document.getElementById('similar-fixes-results');
+const issueSimilarFixes = new Map();
+const issueSimilarFixesHydrated = new Set();
+const ISSUE_SIMILAR_FIXES_STORAGE_PREFIX = 'apTracker:similar-fixes:';
+
+function issueSimilarFixesStorageKey(plantId, issueId) {
+  return `${ISSUE_SIMILAR_FIXES_STORAGE_PREFIX}${String(plantId || '')}:${String(issueId || '')}`;
+}
+
+function similarFixesButtonContent(isLoading = false) {
+  if (isLoading) return '<span class="spinner"></span><span>Researching fixes…</span>';
+  return '<span class="issue-similar-fixes-icon" aria-hidden="true">✨</span><span class="issue-similar-fixes-copy"><strong>Find similar fixes</strong><small>Search past resolutions and research</small></span><span class="issue-similar-fixes-arrow" aria-hidden="true">›</span>';
+}
+
+function storeIssueSimilarFixes(issueId, state) {
+  if (!currentPlantId || !state?.payload) return;
+  try {
+    sessionStorage.setItem(issueSimilarFixesStorageKey(currentPlantId, issueId), JSON.stringify({
+      queryKey: state.queryKey,
+      payload: state.payload
+    }));
+  } catch (_) { }
+}
+
+function loadStoredIssueSimilarFixes(issue) {
+  if (!currentPlantId || !issue?.id) return null;
+  try {
+    const stored = JSON.parse(sessionStorage.getItem(issueSimilarFixesStorageKey(currentPlantId, issue.id)) || 'null');
+    if (!stored?.payload || stored.queryKey !== issueSimilarFixesQueryKey(issue)) return null;
+    return { queryKey: stored.queryKey, payload: stored.payload, loading: false };
+  } catch (_) {
+    return null;
+  }
+}
+
+function clearStoredIssueSimilarFixes(plantId) {
+  if (!plantId) return;
+  try {
+    const prefix = `${ISSUE_SIMILAR_FIXES_STORAGE_PREFIX}${String(plantId)}:`;
+    Object.keys(sessionStorage).filter(key => key.startsWith(prefix)).forEach(key => sessionStorage.removeItem(key));
+  } catch (_) { }
+}
+
+function renderSimilarFixesResults(payload, target = document.getElementById('similar-fixes-results'), options = {}) {
   if (!target) return;
   const internal = Array.isArray(payload?.internalMatches) ? payload.internalMatches : [];
   const external = Array.isArray(payload?.externalResearch) ? payload.externalResearch : [];
@@ -8935,7 +9021,10 @@ function renderSimilarFixesResults(payload) {
     return `<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--color-border,var(--border));"><button type="button" class="quality-defect-link" onclick="openSimilarFixIssue('${encodeURIComponent(issueId)}')">Internal issue ${esc(issueId)}</button><div style="font-size:11px;color:var(--color-text-muted,var(--text2));margin-top:3px;">${esc(match.whySimilar || fallback.note || '')}</div><div style="font-size:12px;margin-top:4px;">${esc(fix)}</div></div>`;
   }).join('') : '<div style="font-size:12px;color:var(--color-text-muted,var(--text2));">No closely matching completed issues were found.</div>';
   const externalHtml = external.length ? external.map(result => `<div style="margin-top:7px;"><a href="${esc(result.url || '')}" target="_blank" rel="noopener noreferrer" style="font-size:12px;color:var(--color-accent,var(--accent));font-weight:700;">${esc(result.title || result.url || 'External research')}</a><div style="font-size:11px;color:var(--color-text-muted,var(--text2));margin-top:2px;">${esc(result.summary || result.applicability || '')}</div></div>`).join('') : `<div style="font-size:12px;color:var(--color-text-muted,var(--text2));">${payload?.externalSearchAvailable ? 'No external sources were selected.' : 'External search is not configured yet.'}</div>`;
-  target.innerHTML = `<div style="font-size:12px;font-weight:800;color:var(--color-text,var(--text));">Similar fixes</div>${internalHtml}<div style="font-size:12px;font-weight:800;color:var(--color-text,var(--text));margin-top:12px;">External research</div>${externalHtml}${steps.length ? `<div style="font-size:12px;font-weight:800;color:var(--color-text,var(--text));margin-top:12px;">Suggested next steps</div><ul style="margin:5px 0 0;padding-left:18px;font-size:12px;">${steps.map(step => `<li>${esc(step)}</li>`).join('')}</ul>` : ''}${safety.length ? `<div style="font-size:11px;color:var(--color-warning,var(--yellow));margin-top:10px;">${esc(safety.join(' '))}</div>` : ''}`;
+  const saveHtml = options.issueId
+    ? `<div style="margin-top:12px;display:flex;justify-content:flex-end;"><button class="btn btn-ghost" type="button" onclick="event.stopPropagation(); saveSimilarFixesForIssue('${encodeURIComponent(options.issueId)}')" ${options.saved ? 'disabled' : ''} style="padding:6px 10px;font-size:11px;">${options.saved ? '✓ Saved to issue' : 'Save to issue'}</button></div>`
+    : '';
+  target.innerHTML = `<div style="font-size:12px;font-weight:800;color:var(--color-text,var(--text));">Similar fixes</div>${internalHtml}<div style="font-size:12px;font-weight:800;color:var(--color-text,var(--text));margin-top:12px;">External research</div>${externalHtml}${steps.length ? `<div style="font-size:12px;font-weight:800;color:var(--color-text,var(--text));margin-top:12px;">Suggested next steps</div><ul style="margin:5px 0 0;padding-left:18px;font-size:12px;">${steps.map(step => `<li>${esc(step)}</li>`).join('')}</ul>` : ''}${safety.length ? `<div style="font-size:11px;color:var(--color-warning,var(--yellow));margin-top:10px;">${esc(safety.join(' '))}</div>` : ''}${saveHtml}`;
   target.hidden = false;
 }
 
@@ -8952,19 +9041,153 @@ window.findSimilarFixes = async () => {
   } catch (error) {
     showGameToast(error?.message || 'Could not research similar fixes.', 'error');
   } finally {
-    button.disabled = false; button.textContent = '✨ Find similar fixes';
+    button.disabled = false; button.textContent = '✨ Find fixes!';
+  }
+};
+
+function issueSimilarFixesQueryKey(issue) {
+  const historyKey = similarFixesStatusHistory(issue)
+    .map(entry => `${entry.status}\u0001${entry.subStatus}\u0001${entry.note}`)
+    .join('\u0002');
+  return `${String(issue?.machine || issue?.machineCode || '').trim()}\u0000${String(issue?.note || issue?.description || '').trim()}\u0000${historyKey}`;
+}
+
+function similarFixesStatusHistory(issue) {
+  return getMutableStatusHistory(issue).slice(-12).map(entry => ({
+    status: String(entry?.status || '').trim(),
+    subStatus: String(entry?.subStatus || '').trim(),
+    note: String(entry?.note || '').trim().slice(0, 600)
+  })).filter(entry => entry.status || entry.subStatus || entry.note);
+}
+
+function loadSavedIssueSimilarFixes(issue) {
+  const saved = issue?.similarFixes;
+  return saved?.payload ? { queryKey: issueSimilarFixesQueryKey(issue), payload: saved.payload, loading: false, saved: true } : null;
+}
+
+async function hydrateSavedIssueSimilarFixes(issue) {
+  if (!currentPlantId || !issue?.id || issueSimilarFixesHydrated.has(issue.id)) return false;
+  issueSimilarFixesHydrated.add(issue.id);
+  try {
+    const response = await dataApi.getIssueSimilarFixes(currentPlantId, issue.id);
+    const saved = response?.similarFixes;
+    if (!saved?.payload) return false;
+    issueSimilarFixes.set(issue.id, {
+      queryKey: issueSimilarFixesQueryKey(issue),
+      payload: saved.payload,
+      loading: false,
+      saved: true
+    });
+    issuesById.set(issue.id, { ...issue, similarFixes: saved });
+    rebuildIssuesArrayFromMap();
+    refreshVisibleData();
+    return true;
+  } catch (error) {
+    console.warn('Could not load saved Similar Fixes', error);
+    return false;
+  }
+}
+
+function restoreIssueSimilarFixes(issue) {
+  let state = issueSimilarFixes.get(issue.id);
+  if (!state) {
+    state = loadStoredIssueSimilarFixes(issue);
+    if (!state) state = loadSavedIssueSimilarFixes(issue);
+    if (state) issueSimilarFixes.set(issue.id, state);
+  }
+  if (!state) return;
+  const target = document.getElementById(`similar-fixes-results-${issue.id}`);
+  const button = document.getElementById(`similar-fixes-btn-${issue.id}`);
+  if (button) {
+    button.disabled = !!state.loading;
+    button.innerHTML = similarFixesButtonContent(state.loading);
+  }
+  if (!state.payload) {
+    if (target) { target.hidden = true; target.innerHTML = ''; }
+    return;
+  }
+  if (target) {
+    if (state.payload) renderSimilarFixesResults(state.payload, target, { issueId: issue.id, saved: state.saved });
+    else { target.hidden = true; target.innerHTML = ''; }
+  }
+}
+
+window.viewSavedSimilarFixesForIssue = async encodedIssueId => {
+  const issueId = decodeURIComponent(String(encodedIssueId || ''));
+  const issue = issuesById.get(issueId) || issues.find(candidate => candidate.id === issueId);
+  if (!issue || !currentPlantId) return;
+  const existing = issueSimilarFixes.get(issueId) || loadSavedIssueSimilarFixes(issue);
+  if (existing?.payload && existing.saved) {
+    issueSimilarFixes.set(issueId, existing);
+    restoreIssueSimilarFixes(issue);
+    return;
+  }
+  issueSimilarFixesHydrated.delete(issueId);
+  const restored = await hydrateSavedIssueSimilarFixes(issue);
+  if (!restored) showGameToast('No saved Similar Fixes research is available for this issue yet.', 'error');
+};
+
+window.findSimilarFixesForIssue = async encodedIssueId => {
+  const issueId = decodeURIComponent(String(encodedIssueId || ''));
+  const issue = issuesById.get(issueId) || issues.find(candidate => candidate.id === issueId);
+  if (!issue || !currentPlantId) return;
+  const description = String(issue.note || issue.description || '').trim();
+  const machineCode = String(issue.machine || '');
+  if (description.length < 8) {
+    showGameToast('This issue needs a longer description before finding similar fixes.', 'error');
+    return;
+  }
+  const queryKey = issueSimilarFixesQueryKey(issue);
+  const requestId = Symbol(issueId);
+  issueSimilarFixes.set(issueId, { queryKey, loading: true, requestId });
+  restoreIssueSimilarFixes(issue);
+  try {
+    const payload = await dataApi.findSimilarFixes(currentPlantId, {
+      description,
+      machineCode,
+      sourceIssueId: issueId,
+      statusHistory: similarFixesStatusHistory(issue)
+    });
+    const state = issueSimilarFixes.get(issueId);
+    if (state?.requestId !== requestId || state.queryKey !== queryKey) return;
+    issueSimilarFixes.set(issueId, { queryKey, payload, loading: false, saved: false });
+    storeIssueSimilarFixes(issueId, { queryKey, payload });
+    restoreIssueSimilarFixes(issue);
+  } catch (error) {
+    const state = issueSimilarFixes.get(issueId);
+    if (state?.requestId === requestId) issueSimilarFixes.set(issueId, { queryKey, loading: false });
+    restoreIssueSimilarFixes(issue);
+    showGameToast(error?.message || 'Could not research similar fixes.', 'error');
+  }
+};
+
+window.saveSimilarFixesForIssue = async encodedIssueId => {
+  const issueId = decodeURIComponent(String(encodedIssueId || ''));
+  const issue = issuesById.get(issueId) || issues.find(candidate => candidate.id === issueId);
+  const state = issueSimilarFixes.get(issueId);
+  if (!issue || !state?.payload || !currentPlantId) return;
+  try {
+    const response = await dataApi.saveIssueSimilarFixes(currentPlantId, issueId, state.payload);
+    const savedIssue = response?.issue ? normalizeSqlIssueForApp(response.issue) : { ...issue, similarFixes: { payload: state.payload } };
+    issuesById.set(issueId, savedIssue);
+    issueSimilarFixes.set(issueId, { ...state, saved: true, loading: false });
+    rebuildIssuesArrayFromMap();
+    refreshVisibleData();
+    showGameToast('Similar fixes saved to this issue.', 'success');
+  } catch (error) {
+    showGameToast(error?.message || 'Could not save Similar Fixes.', 'error');
   }
 };
 
 window.openSimilarFixIssue = issueId => {
   const decodedId = decodeURIComponent(String(issueId || ''));
-  closeModal();
+  if (document.getElementById('add-modal')?.classList.contains('visible')) closeModal();
   requestAnimationFrame(() => {
     const card = document.getElementById(`body-${decodedId}`)?.closest('.issue-card');
     if (!card) { showGameToast('That historical issue is not loaded in this view.', 'error'); return; }
     card.scrollIntoView({ behavior: 'smooth', block: 'center' });
     const body = document.getElementById(`body-${decodedId}`);
-    if (body?.classList.contains('collapsed')) toggleCard(decodedId);
+    if (body && !body.classList.contains('visible')) toggleCard(decodedId);
   });
 };
 
@@ -9876,7 +10099,10 @@ async function handleFiles(files, arr, previewId) {
   for (const file of Array.from(files)) {
     if (!file.type.startsWith('image/')) continue;
     const dataUrl = await resizeImage(file);
-    arr.push({ name: file.name, dataUrl });
+    // File inputs do not expose EXIF capture metadata consistently on mobile.
+    // Record the selection time so camera photos always have a usable "Taken"
+    // value when the attachment is opened later.
+    arr.push({ name: file.name, dataUrl, takenAt: new Date().toISOString() });
   }
   renderPreviews(arr, previewId);
 }
@@ -10115,8 +10341,22 @@ window.openEditModal = async id => {
     issue.photos = photoList;
   }
   editTargetId = id;
-  editPhotos = (photoList || []).map(p => ({ name: p.name, dataUrl: p.dataUrl, storagePath: p.storagePath || '', storageBucket: p.storageBucket || '', contentType: p.contentType || '', sizeBytes: Number(p.sizeBytes || 0) }));
-  document.getElementById('edit-machine-name').textContent = issue.machine;
+  editPhotos = (photoList || []).map(p => ({
+    name: p.name,
+    dataUrl: p.dataUrl,
+    storagePath: p.storagePath || '',
+    storageBucket: p.storageBucket || '',
+    contentType: p.contentType || '',
+    sizeBytes: Number(p.sizeBytes || 0),
+    takenAt: p.takenAt || p.timestamp || '',
+    uploadedAt: p.uploadedAt || p.createdAt || ''
+  }));
+  const issueMachineCode = issue.machine || issue.machineCode || '';
+  document.getElementById('edit-machine-name').textContent = issueMachineCode;
+  populateEditMachineSelect(issueMachineCode);
+  document.getElementById('edit-machine-select').onchange = event => {
+    document.getElementById('edit-machine-name').textContent = event.target.value;
+  };
   document.getElementById('edit-note').value = issue.note || '';
   // Parse existing date back into inputs
   try {
@@ -10140,6 +10380,8 @@ window.closeEditModal = () => { document.getElementById('edit-modal').classList.
 window.saveEdit = async () => {
   const note = document.getElementById('edit-note').value.trim();
   if (!note) { document.getElementById('edit-note').focus(); return; }
+  const machineCode = String(document.getElementById('edit-machine-select')?.value || '').trim();
+  if (!machineCode) { document.getElementById('edit-machine-select')?.focus(); return; }
   const btn = document.getElementById('edit-submit-btn');
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Saving…';
   try {
@@ -10148,6 +10390,8 @@ window.saveEdit = async () => {
       return;
     }
     const issue = issues.find(i => i.id === editTargetId);
+    const previousMachineCode = String(issue?.machine || issue?.machineCode || '').trim();
+    const machineChanged = machineCode !== previousMachineCode;
     const editedIssueDate = getIssueDateFromInputs('edit-date', 'edit-time-input');
     const last = currentStatus(issue || {});
     const shiftSel = document.getElementById('edit-shift').value;
@@ -10156,6 +10400,7 @@ window.saveEdit = async () => {
     const uploadedPhotos = await uploadIssuePhotosToStorage(editTargetId, editPhotos);
     if (shouldUseSqlStagingReads(currentPlantId)) {
       const issuePatch = {
+        machine: machineCode,
         note,
         shift,
         dateTime: fmtDate(editedIssueDate),
@@ -10166,7 +10411,7 @@ window.saveEdit = async () => {
         photoCount: uploadedPhotos.length,
         editedAt: fmtDate(new Date()), editedBy: currentUser.displayName || currentUser.email,
         ...buildIssueV2CompatLocal({
-          machineCode: issue?.machine || currentMachine,
+          machineCode,
           statusKey: last?.status || currentStatusKey(issue || {}),
           subStatus: last?.subStatus || issue?.subStatus || '',
           statusDateTime: last?.dateTime || issue?.dateTime || fmtDate(new Date()),
@@ -10181,7 +10426,7 @@ window.saveEdit = async () => {
       await commitSqlIssueWrite(editTargetId, nextIssue, {
         attachments: sqlAttachmentPayloads(uploadedPhotos),
         replaceAttachments: true,
-        events: [sqlEventPayload('issue_edited', { fieldsChanged: ['note', 'dateTime', 'photos'] })],
+        events: [sqlEventPayload('issue_edited', { fieldsChanged: ['press', 'note', 'dateTime', 'photos'].filter(field => field !== 'press' || machineChanged), previousMachineCode, machineCode })],
         updateCreatedAt: true
       });
       if (timerMinutes > 0) setIssueReminder(editTargetId, timerMinutes);
@@ -10195,6 +10440,7 @@ window.saveEdit = async () => {
       return;
     }
     const issuePatch = {
+      machine: machineCode,
       note,
       shift,
       dateTime: fmtDate(editedIssueDate),
@@ -10205,7 +10451,7 @@ window.saveEdit = async () => {
       photoCount: uploadedPhotos.length,
       editedAt: fmtDate(new Date()), editedBy: currentUser.displayName || currentUser.email,
       ...buildIssueV2Compat({
-        machineCode: issue?.machine || currentMachine,
+        machineCode,
         statusKey: last?.status || currentStatusKey(issue || {}),
         subStatus: last?.subStatus || issue?.subStatus || '',
         statusDateTime: last?.dateTime || issue?.dateTime || fmtDate(new Date()),
@@ -10218,7 +10464,9 @@ window.saveEdit = async () => {
     batch.update(plantDoc('issues', editTargetId), issuePatch);
     queueAttachmentDocs(batch, editTargetId, uploadedPhotos);
     queueIssueEvent(batch, editTargetId, 'issue_edited', {
-      fieldsChanged: ['note', 'dateTime', 'photos']
+      fieldsChanged: ['press', 'note', 'dateTime', 'photos'].filter(field => field !== 'press' || machineChanged),
+      previousMachineCode,
+      machineCode
     });
     await batch.commit();
     if (timerMinutes > 0) setIssueReminder(editTargetId, timerMinutes);
@@ -10277,6 +10525,16 @@ window.toggleInlineSolution = issueId => {
   const block = document.getElementById(`inline-solution-${issueId}`);
   if (!block) return;
   block.hidden = !block.hidden;
+};
+window.openInlineIssueSolution = issueId => {
+  const body = document.getElementById(`body-${issueId}`);
+  if (body && !body.classList.contains('visible')) toggleCard(issueId);
+  requestAnimationFrame(() => {
+    const block = document.getElementById(`inline-solution-${issueId}`);
+    if (!block) return;
+    block.hidden = false;
+    block.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  });
 };
 window.saveIssueSolution = async () => {
   const text = document.getElementById('solution-text').value.trim();
@@ -11050,37 +11308,38 @@ window.setStatusCurrentFromHistory = async (id, idx) => {
 
 // State for pending new entry per issue
 const pendingEntry = {};
-window.setPendingStatus = (id, key, val) => {
-  if (!pendingEntry[id]) pendingEntry[id] = {};
-  pendingEntry[id][key] = val;
-  // Only re-render when status changes (to update sub-status options) — NOT for note keystrokes
-  if (key === 'status') renderIssues();
+window.openPendingCategoryDrawer = id => {
+  pendingEntry[id] = { ...(pendingEntry[id] || {}), categoryPickerOpen: true };
+  renderIssues();
 };
-window.commitAddEntry = async (id) => {
-  const p = pendingEntry[id] || {};
-  if (!p.status) return;
-  // Read note, sub, and date/time directly from DOM
-  const noteEl = document.getElementById('pending-note-' + id);
-  const subEl = document.getElementById('pending-sub-' + id);
-  const dateEl = document.getElementById('pending-date-' + id);
-  const timeEl = document.getElementById('pending-time-' + id);
-  const note = noteEl ? noteEl.value.trim() : (p.note || '');
-  const sub = subEl ? subEl.value : (p.subStatus || '');
-  let dt = null;
-  if (dateEl?.value) {
-    const tVal = timeEl?.value || '00:00';
-    dt = fmtDate(new Date(dateEl.value + 'T' + tVal + ':00'));
-  }
-  // Check if serial number is required
-  if (requiresSerialNumber(p.status, sub)) {
-    openSerialModal(id, p.status, sub, dt);
+window.choosePendingCategory = async (id, status) => {
+  const hasSubcategories = getStatusSubs(status).length > 0;
+  if (!hasSubcategories) {
     delete pendingEntry[id];
     renderIssues();
+    await addStatusEntry(id, status, '', '');
     return;
   }
-  await addStatusEntry(id, p.status, sub, note, dt);
+  pendingEntry[id] = {
+    ...(pendingEntry[id] || {}),
+    status,
+    subStatus: '',
+    categoryPickerOpen: false,
+    subcategoryPickerOpen: hasSubcategories
+  };
+  renderIssues();
+};
+window.choosePendingSubcategory = async (id, encodedSubStatus = '') => {
+  const subStatus = decodeURIComponent(String(encodedSubStatus || ''));
+  const status = pendingEntry[id]?.status;
+  if (!status) return;
   delete pendingEntry[id];
   renderIssues();
+  if (subStatus && requiresSerialNumber(status, subStatus)) {
+    openSerialModal(id, status, subStatus);
+    return;
+  }
+  await addStatusEntry(id, status, subStatus, '');
 };
 window.cancelAddEntry = (id) => { delete pendingEntry[id]; renderIssues(); };
 
@@ -11198,7 +11457,9 @@ window.saveEditStatusEntry = async () => {
     dataUrl: p.dataUrl || p.downloadURL || '',
     contentType: p.contentType || 'image/jpeg',
     sizeBytes: Number(p.sizeBytes || p.size || 0),
-    storageBucket: p.storageBucket || ''
+    storageBucket: p.storageBucket || '',
+    takenAt: p.takenAt || p.timestamp || '',
+    uploadedAt: p.uploadedAt || p.createdAt || ''
   }));
   const didSave = await updateStatusEntry(issueId, entryIndex, status, subStatus, note, dateTime, mergedStatusPhotos);
   closeEditStatusModal();
@@ -12401,6 +12662,12 @@ function isUserInteracting() {
   if (selection && selection.toString().trim() !== '') {
     return true;
   }
+  // Similar Fixes is a read-heavy panel. Keep it mounted while the user is
+  // reviewing research instead of letting the periodic background redraw
+  // replace the card underneath them.
+  if (document.querySelector('.issue-similar-fixes-results:not([hidden])')) {
+    return true;
+  }
   const activeEl = document.activeElement;
   if (activeEl && document.getElementById('issues-list')?.contains(activeEl)) {
     const tagName = activeEl.tagName.toLowerCase();
@@ -12431,6 +12698,7 @@ function renderIssues(options = {}) {
   const search = document.getElementById('search-input').value.toLowerCase();
   const mf = document.getElementById('machine-filter').value;
   const sf = document.getElementById('status-filter').value;
+  const solutionFilter = document.getElementById('solution-filter')?.value || '';
   const sort = currentSort;
   const openSwipeSnapshot = captureOpenSwipeSnapshot();
   syncIssueViewToggle();
@@ -12451,6 +12719,7 @@ function renderIssues(options = {}) {
     if (issueRowScope === 'resolved' && currentStatusKey(i) !== 'resolved') return false;
     if (mf && i.machine !== mf) return false;
     if (sf && !issueHasActiveStatus(i, sf)) return false;
+    if (solutionFilter === 'shared' && !issueHasSharedSolution(i)) return false;
     if (search) {
       const machineText = String(i.machine || '').toLowerCase();
       const noteText = String(i.note || '').toLowerCase();
@@ -12489,7 +12758,7 @@ function renderIssues(options = {}) {
   }
 
   // Reset display limit when filter/sort parameters change
-  const filterKey = `${issueScope}|${issuePeriod}|${document.getElementById('date-filter')?.value}|${mf}|${sf}|${search}|${sort}|${issueRowScope}|${issueShiftFilter}`;
+  const filterKey = `${issueScope}|${issuePeriod}|${document.getElementById('date-filter')?.value}|${mf}|${sf}|${solutionFilter}|${search}|${sort}|${issueRowScope}|${issueShiftFilter}`;
   if (filterKey !== renderIssues._lastFilterKey) {
     issueDisplayLimit = PAGE_SIZE;
     renderIssues._lastFilterKey = filterKey;
@@ -12780,26 +13049,37 @@ function renderIssues(options = {}) {
 
     // Pending new entry for this issue
     const pend = pendingEntry[issue.id] || {};
-    const pendSubs = STATUS_CONFIG[pend.status]?.subs || [];
-    const pendNowDT = toLocalDTInputs(new Date());
-    const addRowHtml = !canEdit ? '' : pend.status !== undefined
-      ? `<div class="tl-add-row">
-          <select class="tl-mini-select" onchange="setPendingStatus('${issue.id}','status',this.value)">
-            <option value="">Status…</option>
-            ${getAlphabetizedStatusKeys().map(k => `<option value="${k}"${k === pend.status ? ' selected' : ''}>${STATUS_CONFIG[k].icon} ${STATUS_CONFIG[k].label}</option>`).join('')}
-          </select>
-          ${pendSubs.length ? `<select class="tl-mini-select" id="pending-sub-${issue.id}"><option value="">Sub-status…</option>${pendSubs.map(s => `<option value="${s}"${s === pend.subStatus ? ' selected' : ''}>${s}</option>`).join('')}</select>` : ''}
-          <input class="tl-mini-input" id="pending-note-${issue.id}" placeholder="Note (optional)…">
-          <div style="display:flex;gap:4px;align-items:center;width:100%;">
-            <input type="date" class="tl-mini-input" id="pending-date-${issue.id}" value="${pendNowDT.dateStr}" style="flex:1;min-width:110px;">
-            <input type="time" class="tl-mini-input" id="pending-time-${issue.id}" value="${pendNowDT.timeStr}" style="width:90px;">
+    const categoryPickerHtml = `<div class="tl-category-drawer" aria-label="Choose a category">
+      <div class="swipe-category-inner">
+        ${getAlphabetizedStatusKeys().map(key => {
+          const def = getStatusDef(key);
+          const color = getStatusColor(key);
+          return `<button type="button" class="swipe-status-tile" style="color:${color};" onclick="choosePendingCategory('${issue.id}','${key}')"><span class="swipe-tile-icon">${def.icon}</span><span class="swipe-tile-label">${esc(getStatusLabel(key, 'short'))}</span></button>`;
+        }).join('')}
+      </div>
+      <button type="button" class="tl-mini-btn tl-cancel-btn" onclick="cancelAddEntry('${issue.id}')">Cancel</button>
+    </div>`;
+    const subcategoryPickerHtml = (() => {
+      const statusColor = getStatusColor(pend.status);
+      const subs = toColumnMajorOrder(getStatusSubs(pend.status), 2);
+      return `<div class="tl-pending-subcategory-drawer" aria-label="Choose a subcategory">
+        <div class="swipe-sub-panel visible">
+          <div class="swipe-sub-inner subcategory-grid">
+            ${subs.map(sub => `<button type="button" class="subcategory-item swipe-sub-action" onclick="choosePendingSubcategory('${issue.id}','${encodeURIComponent(sub)}')" style="border-color:${alphaColor(statusColor, 0.32)};color:${statusColor};background:linear-gradient(180deg, rgba(255,255,255,0.03), transparent);"><span class="subcategory-item-label">${esc(sub)}</span></button>`).join('')}
+            <button type="button" class="subcategory-item swipe-sub-action skip" onclick="choosePendingSubcategory('${issue.id}','')" style="border-color:var(--color-border, var(--border));background:transparent;"><span class="subcategory-item-label" style="color:var(--color-text-subtle, var(--text3));font-style:italic;">Skip ›</span></button>
           </div>
-          <button class="tl-mini-btn tl-save-btn" onclick="commitAddEntry('${issue.id}')">+ Add</button>
-          <button class="tl-mini-btn tl-cancel-btn" onclick="cancelAddEntry('${issue.id}')">Cancel</button>
-        </div>`
-      : `<div class="tl-add-row">
-          <button class="tl-mini-btn tl-add-entry-btn" onclick="setPendingStatus('${issue.id}','status','')">+ Add status entry</button>
-        </div>`;
+        </div>
+        <div class="tl-subcategory-actions">
+          <button type="button" class="tl-back-category-btn" onclick="openPendingCategoryDrawer('${issue.id}')" aria-label="Back to categories" title="Back to categories"><span aria-hidden="true">←</span> Back</button>
+          <button type="button" class="tl-mini-btn tl-cancel-btn" onclick="cancelAddEntry('${issue.id}')">Cancel</button>
+        </div>
+      </div>`;
+    })();
+    const addRowHtml = !canEdit ? '' : pend.categoryPickerOpen
+      ? `<div class="tl-add-row tl-category-picker-row">${categoryPickerHtml}</div>`
+      : pend.subcategoryPickerOpen
+      ? `<div class="tl-add-row tl-category-picker-row">${subcategoryPickerHtml}</div>`
+      : '';
 
     const hasTimer = !!reminderState;
     const priorityButtonHtml = issue.highPriority
@@ -12808,6 +13088,33 @@ function renderIssues(options = {}) {
     const solutionActionHtml = currentKey === 'resolved' && canEdit && !isLocalIssue
       ? `<button class="btn btn-success" onclick="event.stopPropagation(); openSolutionModal('${issue.id}')">💡 ${solution?.text ? 'Edit Solution' : 'Solution'}</button>`
       : '';
+    const solutionHeaderButtonHtml = currentKey === 'resolved' && solution?.text
+      ? `<button class="tl-solution-icon issue-solution-header-icon" type="button" onclick="event.stopPropagation(); openInlineIssueSolution('${issue.id}')" title="View shared solution" aria-label="View shared solution">💡</button>`
+      : '';
+    const similarFixesState = issueSimilarFixes.get(issue.id);
+    const similarFixesLoading = !!similarFixesState?.loading;
+    const similarFixesHtml = `<section class="issue-similar-fixes" aria-label="Similar fixes">
+      <div class="issue-similar-fixes-actions">
+        <button class="issue-similar-fixes-trigger" id="similar-fixes-btn-${issue.id}" type="button" onclick="event.stopPropagation(); findSimilarFixesForIssue('${encodeURIComponent(issue.id)}')" ${similarFixesLoading ? 'disabled' : ''}>${similarFixesButtonContent(similarFixesLoading)}</button>
+        <button class="issue-similar-fixes-saved" type="button" onclick="event.stopPropagation(); viewSavedSimilarFixesForIssue('${encodeURIComponent(issue.id)}')"><span aria-hidden="true">▣</span> View saved research</button>
+      </div>
+      <div class="issue-similar-fixes-results" id="similar-fixes-results-${issue.id}" hidden></div>
+    </section>`;
+    const issueActionToolbarHtml = `<div class="issue-card-action-toolbar" aria-label="Issue actions">
+      <div class="issue-card-action-start">
+        <button class="issue-card-icon-btn timer${!hasTimer ? ' inactive' : reminderState?.isPaused ? ' paused' : isTimerOverdue ? ' overdue alarm-dismiss-btn' : ''}" type="button" onclick="event.stopPropagation(); ${isTimerOverdue ? `dismissOverdueIssueReminder('${issue.id}')` : `openIssueReminderModal('${issue.id}')`}" title="${isTimerOverdue ? 'Dismiss expired alarm' : hasTimer ? 'Modify check-back timer' : 'Set check-back timer'}" aria-label="${isTimerOverdue ? 'Dismiss expired alarm' : hasTimer ? 'Modify check-back timer' : 'Set check-back timer'}">
+          <img src="icons/timer.svg" alt="" aria-hidden="true">
+          ${hasTimer ? `<span class="issue-card-icon-badge" data-reminder-id="${issue.id}">${isTimerOverdue ? '!' : formatReminderClock(reminderState)}</span>` : ''}
+        </button>
+      </div>
+      <div class="issue-card-action-center">
+        ${canEdit && !pend.categoryPickerOpen && pend.status === undefined ? `<button class="issue-card-icon-btn add-category" type="button" onclick="openPendingCategoryDrawer('${issue.id}')" aria-label="Add category" title="Add category"><span aria-hidden="true">+</span></button>` : ''}
+      </div>
+      <div class="issue-card-action-end">
+        ${canEdit ? `<button class="issue-card-icon-btn edit" type="button" onclick="openEditModal('${issue.id}')" aria-label="Edit issue" title="Edit issue"><img src="icons/edit-note.svg" alt="" aria-hidden="true"></button>` : ''}
+        ${canEdit && !DEMO_MODE ? `<button class="issue-card-icon-btn delete" type="button" onclick="deleteIssue('${issue.id}')" aria-label="Delete issue" title="Delete issue"><img src="icons/trash-can.svg" alt="" aria-hidden="true"></button>` : ''}
+      </div>
+    </div>`;
     const resolveHtml = `<div class="status-timeline">
       <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--color-text-muted, var(--text2));margin-bottom:8px;">Status History</div>
       <div class="tl-list">
@@ -12815,21 +13122,9 @@ function renderIssues(options = {}) {
       </div>
       ${addRowHtml}
     </div>
-    <div class="action-row issue-footer-actions" style="margin-top:10px;">
-      <div class="issue-footer-actions-left">
-        ${solutionActionHtml}
-        <button class="issue-reminder-btn${!hasTimer ? ' inactive' : reminderState?.isPaused ? ' paused' : isTimerOverdue ? ' overdue alarm-dismiss-btn' : ''}" onclick="event.stopPropagation(); ${isTimerOverdue ? `dismissOverdueIssueReminder('${issue.id}')` : `openIssueReminderModal('${issue.id}')`}" title="${isTimerOverdue ? 'Dismiss expired alarm' : hasTimer ? 'Modify check-back timer' : 'Set check-back timer'}">
-          <span class="issue-reminder-icon">${isTimerOverdue ? '✓' : '⏱'}</span>
-          <span class="issue-reminder-copy">
-            <span class="issue-reminder-label">${!hasTimer ? 'Timer' : reminderState?.isPaused ? 'Paused' : isTimerOverdue ? 'Dismiss alarm' : 'Check back'}</span>
-            <span class="issue-reminder-time" data-reminder-id="${issue.id}">${hasTimer ? (isTimerOverdue ? 'Now' : formatReminderClock(reminderState)) : 'Off'}</span>
-          </span>
-        </button>
-      </div>
-      ${canEdit ? `<div class="issue-footer-actions-right">
-      <button class="btn btn-edit" onclick="openEditModal('${issue.id}')">✏️ Edit</button>
-      ${DEMO_MODE ? '' : `<button class="btn btn-danger" onclick="deleteIssue('${issue.id}')">🗑 Delete</button>`}
-      </div>` : ''}
+    <div class="issue-footer-actions" style="margin-top:10px;">
+      ${solutionActionHtml}
+      ${issueActionToolbarHtml}
     </div>`;
 
     const submitterHtml = issue.userName ? `<span class="issue-submitter">${esc(issue.userName.split(' ')[0])}${isMyIssue ? ' (you)' : ''}</span>` : '';
@@ -12839,6 +13134,11 @@ function renderIssues(options = {}) {
 
     // Secondary status keys (needed by workflow rows below)
     const secKeys = getSecondaryStatuses(issue).filter(k => k !== 'resolved');
+    // Category-level photos live on their status-history entry. Show the same
+    // camera marker used by the issue log whenever that category has one.
+    const categoryPhotoIconHtml = (entry) => Array.isArray(entry?.photos) && entry.photos.length
+      ? `<span class="issue-category-photo-icon" title="${entry.photos.length} photo${entry.photos.length === 1 ? '' : 's'} attached to this category" aria-label="${entry.photos.length} photo${entry.photos.length === 1 ? '' : 's'} attached">📷</span>`
+      : '';
 
     const getWorkflowResponseUi = (statusKey, subStatus, fallbackColor, entryIndex) => {
       const context = buildResponseTreeContext(statusKey, subStatus);
@@ -12948,7 +13248,7 @@ function renderIssues(options = {}) {
             <div class="wf-status-row-info">
               <div class="wf-status-header">
                 <div class="issue-status" style="color:${sColor};border-color:${sColor};background:${alphaColor(sColor, 0.12)}">
-                  <span class="issue-status-main">${sCfg.icon} ${esc(sCfg.label)}</span>
+                  <span class="issue-status-main">${sCfg.icon} ${esc(sCfg.label)}${categoryPhotoIconHtml(entry)}</span>
                 </div>
               </div>
               ${sSubLabel ? `<span class="issue-status-sub" style="color:${sColor};">${esc(sSubLabel)}</span>` : ''}
@@ -13015,7 +13315,7 @@ function renderIssues(options = {}) {
       <div class="wf-status-row-info">
         <div class="wf-status-header">
           <div class="issue-status" style="color:${sc.color};border-color:${sc.color};background:${alphaColor(sc.color, 0.12)}">
-            <span class="issue-status-main">${sc.icon} ${baseLabel}</span>
+            <span class="issue-status-main">${sc.icon} ${baseLabel}${categoryPhotoIconHtml(currentEntry)}</span>
           </div>
         </div>
         ${subLabelWithSerial ? `<span class="issue-status-sub" style="color:${sc.color};">${esc(subLabelWithSerial)}</span>` : ''}
@@ -13053,18 +13353,20 @@ function renderIssues(options = {}) {
             ${routeHtml}
           </div>
           ${priorityButtonHtml}
-          <div class="issue-expand-icon ${wasOpen ? 'open' : ''}" id="chevron-${issue.id}">▼</div>
+          ${solutionHeaderButtonHtml}
+          <button type="button" class="issue-expand-icon ${wasOpen ? 'open' : ''}" id="chevron-${issue.id}" onclick="toggleCardFromChevron('${issue.id}', event)" aria-label="${wasOpen ? 'Collapse' : 'Expand'} issue details">▼</button>
         </div>
         <div class="issue-note-preview">${esc(issue.note)}</div>
         <div class="issue-time">
-          ${(submitterHtml || (issue.photos || []).length || issue.editedAt) ? `<div class="issue-time-submitter">${submitterHtml ? `Created by ${submitterHtml}` : ''}${(issue.photos || []).length ? `<span class="photo-count-badge">📷 ${issue.photos.length}</span>` : ''}${issue.editedAt ? '<span style="color:var(--color-text-subtle, var(--text3))">(edited)</span>' : ''}</div>` : ''}
           <div class="issue-time-created">${createdAtHtml}${shiftBadgeHtml}${timerBadgeHtml}${localSyncBadgeHtml}</div>
+          ${(submitterHtml || (issue.photos || []).length || issue.editedAt) ? `<div class="issue-time-submitter">${submitterHtml ? `Created by ${submitterHtml}` : ''}${(issue.photos || []).length ? `<span class="photo-count-badge">📷 ${issue.photos.length}</span>` : ''}${issue.editedAt ? '<span style="color:var(--color-text-subtle, var(--text3))">(edited)</span>' : ''}</div>` : ''}
           ${alertFocusHtml}
         </div>
         ${wfStatusRowsHtml}
       </div>
       <div class="issue-body ${wasOpen ? 'visible' : ''}" id="body-${issue.id}">
         <!-- Full width content -->
+        ${similarFixesHtml}
         <div class="issue-full-note">${esc(issue.note)}</div>
         ${editedNote}
         ${issueQualityDefectHtml}
@@ -13073,6 +13375,7 @@ function renderIssues(options = {}) {
         ${resolveHtml}
       </div>
       </div>`;
+    restoreIssueSimilarFixes(issue);
     // Safety cleanup: remove any legacy "Workflow: ..." pill buttons from status history rows.
     card.querySelectorAll('.status-timeline button').forEach(btn => {
       if (/^workflow\s*:/i.test((btn.textContent || '').trim())) btn.remove();
@@ -13230,6 +13533,17 @@ function renderIssues(options = {}) {
       });
     };
 
+    const scrollPanelTopIntoView = (panelEl) => {
+      if (!panelEl) return;
+      requestAnimationFrame(() => {
+        const rect = panelEl.getBoundingClientRect();
+        const headerOffset = 84;
+        if (Math.abs(rect.top - headerOffset) > 8) {
+          window.scrollBy({ top: rect.top - headerOffset, behavior: 'smooth' });
+        }
+      });
+    };
+
     const openCategoryPanel = () => {
       if (!currentUserPermissions.canEditIssue) return;
       card.classList.remove('peeking', 'dragging');
@@ -13280,7 +13594,8 @@ function renderIssues(options = {}) {
       requestAnimationFrame(() => card.classList.add('quick-actions-open'));
       openSwipeRow = { card, catPanel, subPanel, quickPanel };
       scheduleIssueLogRelayout();
-      scrollPanelBottomIntoView(quickPanel);
+      scrollPanelTopIntoView(quickPanel);
+      setTimeout(() => scrollPanelTopIntoView(quickPanel), 280);
     };
 
     quickPanel.addEventListener('transitionend', event => {
@@ -13797,6 +14112,13 @@ window.closeWorkflowStatusDropdown = evt => {
 };
 
 let _swipeJustHappened = false;
+window.toggleCardFromChevron = (id, event) => {
+  event?.stopPropagation?.();
+  // The chevron is an explicit expand/collapse control. Close an open swipe
+  // drawer first so its state cannot prevent the card from being toggled.
+  if (openSwipeRow) closeSwipe();
+  window.toggleCard(id);
+};
 window.toggleCard = id => {
   // Don't toggle if a swipe gesture just completed or card is swiped open
   if (_swipeJustHappened) { _swipeJustHappened = false; return; }
@@ -16426,10 +16748,12 @@ window.toggleFilterDrawer = () => {
 function updateFilterBadge() {
   const mf = document.getElementById('machine-filter').value;
   const sf = document.getElementById('status-filter').value;
+  const solutionFilter = document.getElementById('solution-filter')?.value;
   const search = document.getElementById('search-input').value;
   let count = 0;
   if (mf) count++;
   if (sf) count++;
+  if (solutionFilter) count++;
   if (search) count++;
   if (issueShiftFilter !== 'all') count++;
   const badge = document.getElementById('filter-active-badge');
@@ -16462,10 +16786,12 @@ window.clearAllFilters = (options = {}) => {
 
   const machineFilter = document.getElementById('machine-filter');
   const statusFilter = document.getElementById('status-filter');
+  const solutionFilter = document.getElementById('solution-filter');
   const searchBox = document.getElementById('search-input');
   const sortSelect = document.getElementById('sort-select');
   if (machineFilter) machineFilter.value = '';
   if (statusFilter) statusFilter.value = '';
+  if (solutionFilter) solutionFilter.value = '';
   if (searchBox) searchBox.value = '';
   if (sortSelect) sortSelect.value = 'newest';
   const sortLabel = document.getElementById('sort-label');
@@ -16567,6 +16893,7 @@ document.getElementById('machine-filter').addEventListener('change', () => {
   completeDemoGuideStep('filters');
 });
 document.getElementById('status-filter').addEventListener('change', () => { updateStatPillStyles(); renderIssues(); updateFilterBadge(); completeDemoGuideStep('filters'); });
+document.getElementById('solution-filter')?.addEventListener('change', () => { renderIssues(); updateFilterBadge(); completeDemoGuideStep('filters'); });
 
 // ── SORT DROPDOWN ──
 const SORT_OPTIONS = [

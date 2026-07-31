@@ -456,7 +456,7 @@ const TABLES = {
   issue_attachments: {
     name: 'issue_attachments',
     keys: ['attachment_id'],
-    columns: [['attachment_id'], ['issue_id'], ['plant_id'], ['type'], ['file_name'], ['content_type'], ['storage_bucket'], ['storage_path'], ['thumbnail_path'], ['download_url'], ['uploaded_by_uid'], ['uploaded_by_name'], ['uploaded_at'], ['size_bytes'], ['schema_version']]
+    columns: [['attachment_id'], ['issue_id'], ['plant_id'], ['type'], ['file_name'], ['content_type'], ['storage_bucket'], ['storage_path'], ['thumbnail_path'], ['download_url'], ['uploaded_by_uid'], ['uploaded_by_name'], ['taken_at'], ['uploaded_at'], ['size_bytes'], ['schema_version']]
   },
   press_notes: {
     name: 'press_notes',
@@ -1034,6 +1034,7 @@ function buildRows(snapshot, users) {
         download_url: stringOrNull(attachment.downloadURL || attachment.url),
         uploaded_by_uid: stringOrNull(attachment.uploadedBy?.uid),
         uploaded_by_name: stringOrNull(attachment.uploadedBy?.name),
+        taken_at: toDate(attachment.takenAt || attachment.timestamp)?.toISOString() || null,
         uploaded_at: dateOrNow(attachment.uploadedAt || attachment.createdAt),
         size_bytes: intOrNull(attachment.sizeBytes),
         schema_version: intOrZero(attachment.schemaVersion || 1)
