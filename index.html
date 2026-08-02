@@ -28,10 +28,10 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css" />
-<script src="./js/build-info.js?v=26a8d8a-0ac15511"></script>
+<script src="./js/build-info.js?v=a1255de-156c1122"></script>
 <script src="./js/fcm-config.js?v=ae083d6"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<link rel="stylesheet" href="./css/styles.css?v=26a8d8a-0ac15511">
+<link rel="stylesheet" href="./css/styles.css?v=a1255de-156c1122">
 </head>
 <body>
 
@@ -86,7 +86,7 @@
   <div id="sync-banner" class="visible">
     <div class="sync-dot" id="sync-dot"></div>
     <span id="sync-text" aria-live="polite">Connecting…</span>
-    <span id="app-version-indicator" class="app-version-indicator" title="Current commit version">rev: 26a8d8a</span>
+    <span id="app-version-indicator" class="app-version-indicator" title="Current commit version">rev: a1255de</span>
     <span id="firestore-io-indicator" class="firestore-io-indicator" title="Estimated Firestore operations for this session">R:0 W:0</span>
   </div>
 
@@ -430,7 +430,7 @@
     <span id="floor-map-label">FLOOR MAP</span>
     <div class="map-controls">
       <div class="map-mode-toggle">
-        <button class="map-mode-btn active-log" id="mode-log" data-shell-action="set-map-mode" data-shell-value="log">+ Report</button>
+        <button class="map-mode-btn active-log" id="mode-log" data-shell-action="set-map-mode" data-shell-value="log">Map</button>
         <button class="map-mode-btn" id="mode-hist" data-shell-action="set-map-mode" data-shell-value="hist">Timeline</button>
         <button class="map-mode-btn" id="mode-notes" data-shell-action="set-map-mode" data-shell-value="notes">Wiki</button>
       </div>
@@ -454,8 +454,8 @@
           <button class="issue-view-btn" id="issue-view-list" type="button" data-shell-action="set-issue-view" data-shell-value="list" aria-pressed="false">List</button>
         </div>
         <div class="scope-toggle" id="issue-scope-toggle">
-          <button class="scope-btn active" id="scope-view-all" data-shell-action="set-issue-row-scope" data-shell-value="all"><span class="scope-label-wide">View All</span><span class="scope-label-phone">All</span></button>
-          <button class="scope-btn" id="scope-view-active" data-shell-action="set-issue-row-scope" data-shell-value="active"><span class="scope-label-wide">Active Rows</span><span class="scope-label-phone">Active</span></button>
+          <button class="scope-btn" id="scope-view-all" data-shell-action="set-issue-row-scope" data-shell-value="all"><span class="scope-label-wide">View All</span><span class="scope-label-phone">All</span></button>
+          <button class="scope-btn active" id="scope-view-active" data-shell-action="set-issue-row-scope" data-shell-value="active"><span class="scope-label-wide">Active Rows</span><span class="scope-label-phone">Active</span></button>
           <button class="scope-btn" id="scope-view-resolved" data-shell-action="set-issue-row-scope" data-shell-value="resolved">Resolved</button>
         </div>
         <div class="sort-dropdown-wrap" id="sort-dropdown-wrap">
@@ -500,6 +500,13 @@
   </div>
 
   <footer class="app-footer">© 2026 AP-Tracker. All rights reserved.</footer>
+
+  <button class="report-fab" id="report-fab" type="button" data-shell-action="open-report-composer" aria-label="Report an issue">
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path d="M10 4v12M4 10h12" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+    </svg>
+    <span id="report-fab-label">Report Issue</span>
+  </button>
 </div>
 
 <!-- ADD ISSUE MODAL -->
@@ -517,14 +524,6 @@
         </button>
       </div>
       
-      <div class="issue-urgent-row" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; background:var(--color-surface-raised, var(--bg3)); border:1px solid var(--color-border, var(--border)); border-radius:10px; padding:8px 12px; flex-shrink:0;">
-        <span style="font-family:'Nunito', sans-serif; font-size:13px; font-weight:700; color:var(--color-text, var(--text));">Mark as Urgent</span>
-        <label class="issue-urgent-toggle" for="issue-urgent" title="Mark as Urgent" style="margin:0; display:flex; align-items:center; justify-content:center;">
-          <input id="issue-urgent" type="checkbox" style="margin:0;">
-          <span class="issue-urgent-pill icon-only" style="width:32px; height:32px; font-size:16px; border-radius:8px;">🔥</span>
-        </label>
-      </div>
-
       <div class="issue-press-row">
         <label for="issue-machine-select">Press</label>
         <select id="issue-machine-select" class="issue-machine-select">
@@ -534,11 +533,6 @@
       
       <label id="issue-note-label">What happened?</label>
       <textarea id="issue-note" placeholder="Example: Hydraulic leak at press startup" rows="3"></textarea>
-      <div class="issue-quick-phrases" id="issue-quick-phrases"></div>
-      <div id="similar-fixes-panel" style="margin:0 0 12px;">
-        <button class="btn btn-ghost" id="similar-fixes-btn" type="button" onclick="findSimilarFixes()" style="padding:9px 12px;font-size:12px;">✨ Find fixes!</button>
-        <div id="similar-fixes-results" hidden style="margin-top:8px;padding:10px;border:1px solid var(--color-border, var(--border));border-radius:10px;background:var(--color-surface-raised, var(--bg3));font-family:'Nunito',sans-serif;"></div>
-      </div>
       <label>Photos <span style="color:var(--color-text-subtle, var(--text3));font-size:9px;letter-spacing:0;text-transform:none;font-family:'Nunito',sans-serif">(optional)</span></label>
       <div class="issue-attach-hint">Tap once for camera or library. Photos preview right here.</div>
       <div class="photo-stack">
@@ -548,43 +542,6 @@
         <div class="photo-source-row" id="log-photo-source-row">
           <button class="photo-pick-btn photo-source-btn" id="log-camera-btn" type="button">📷 Camera</button>
           <button class="photo-pick-btn photo-source-btn" id="log-library-btn" type="button">🖼️ Library</button>
-        </div>
-      </div>
-      <button class="issue-advanced-toggle" id="issue-advanced-toggle" type="button" onclick="toggleIssueAdvancedDetails()">
-        <span>More details</span>
-        <span class="issue-advanced-toggle-state" id="issue-advanced-toggle-state">Show</span>
-      </button>
-      <div class="issue-advanced-panel" id="issue-advanced-panel">
-        <div style="margin-bottom:14px">
-          <label style="margin-bottom:5px">When did it happen?</label>
-          <div style="display:flex;gap:8px;align-items:center">
-            <input type="date" id="issue-date" style="background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:7px 10px;color:var(--color-text, var(--text));font-family:'Nunito',sans-serif;font-size:13px;outline:none;flex:1;">
-            <input type="time" id="issue-time-input" style="background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:7px 10px;color:var(--color-text, var(--text));font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:120px;">
-            <button onclick="resetIssueDateTime()" style="font-size:11px;color:var(--color-accent, var(--accent));background:none;border:none;cursor:pointer;font-family:'Nunito',sans-serif;white-space:nowrap;padding:0;" title="Reset to now">↺ Now</button>
-          </div>
-        </div>
-        <div style="margin-bottom:14px">
-          <label style="margin-bottom:5px">Shift</label>
-          <select id="issue-shift" style="background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:7px 10px;color:var(--color-text, var(--text));font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:100%;">
-            <option value="auto">Auto-detect from time</option>
-            <option value="first">1st Shift (5:54 AM – 1:54 PM)</option>
-            <option value="second">2nd Shift (1:54 PM – 9:54 PM)</option>
-            <option value="third">3rd Shift (9:54 PM – 5:54 AM)</option>
-          </select>
-        </div>
-        <div style="margin-bottom:14px">
-          <label style="margin-bottom:5px">Check-back timer</label>
-          <select id="issue-timer-minutes" class="timer-select" style="background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:7px 10px;color:var(--color-text, var(--text));font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:100%;">
-            <option value="">No timer</option>
-            <option value="0.25">15 seconds</option>
-            <option value="0.5">30 seconds</option>
-            <option value="1">1 minute</option>
-            <option value="5">5 minutes</option>
-            <option value="15">15 minutes</option>
-            <option value="30">30 minutes</option>
-            <option value="60">1 hour</option>
-            <option value="120">2 hours</option>
-          </select>
         </div>
       </div>
       <div style="margin-bottom:4px">
@@ -854,6 +811,32 @@
       <button class="btn btn-primary timer-start-btn" onclick="setIssueReminderFromModalCustom()">Start Timer</button>
       <button class="btn btn-ghost" onclick="closeIssueReminderModal()">Cancel</button>
       <button class="btn btn-danger timer-clear-btn" id="issue-reminder-clear-btn" onclick="clearIssueReminderFromModal()">Clear</button>
+    </div>
+  </div>
+</div>
+
+<!-- SIMILAR FIXES MODAL -->
+<div class="modal-overlay" id="similar-fixes-modal" onclick="if (event.target === this) closeSimilarFixesModal()">
+  <div class="phone similar-fixes-modal-frame" id="similar-fixes-frame" role="dialog" aria-modal="true" aria-labelledby="similar-fixes-modal-title">
+    <div class="notes-drag-handle"></div>
+    <div class="app-container similar-fixes-modal-shell">
+      <div class="notes-modal-header tool-modal-nav-shell similar-fixes-modal-header">
+        <span class="similar-fixes-modal-header-icon" aria-hidden="true">✨</span>
+        <div class="tool-modal-nav-title" id="similar-fixes-modal-title">Similar Fixes</div>
+        <button class="notes-modal-close" type="button" onclick="closeSimilarFixesModal()" aria-label="Close Similar Fixes">✕</button>
+      </div>
+      <div class="tool-modal-control-row similar-fixes-modal-context">
+        <div class="tool-modal-control-copy">
+          <div class="tool-modal-kicker">Issue research</div>
+          <div class="tool-modal-subtitle" id="similar-fixes-modal-subtitle"></div>
+        </div>
+        <button class="btn btn-ghost similar-fixes-modal-rerun" id="similar-fixes-modal-rerun" type="button" onclick="researchSimilarFixesFromModal()">Research again</button>
+      </div>
+      <div class="tool-modal-scroll-body similar-fixes-modal-results" id="similar-fixes-modal-results"></div>
+      <div class="tool-modal-footer similar-fixes-modal-footer">
+        <span class="tool-modal-footer-status" id="similar-fixes-modal-status">Ready to research</span>
+        <button class="btn btn-ghost" type="button" onclick="closeSimilarFixesModal()">Close</button>
+      </div>
     </div>
   </div>
 </div>
@@ -2014,7 +1997,7 @@
   </div>
 </div>
 
-<script type="module" src="./js/app.js?v=26a8d8a-0ac15511"></script>
+<script type="module" src="./js/app.js?v=a1255de-156c1122"></script>
 
 <!-- MASCOT CHARACTER CARD POPOVER -->
 <div class="mascot-popover-backdrop" id="mascot-popover-backdrop" onclick="if(event.target===this)closeMascotPopover()">

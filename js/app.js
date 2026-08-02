@@ -3853,6 +3853,7 @@ async function switchPlant(plantId) {
   currentPlantId = plantId;
   issueSimilarFixes.clear();
   issueSimilarFixesHydrated.clear();
+  historicalIssueFocusId = '';
   currentPlantName = (userPlants.find(p => p.id === plantId) || {}).name || plantId;
   document.getElementById('plant-name-display').textContent = currentPlantName;
   updateUserDropdownContext();
@@ -4129,6 +4130,63 @@ function getAlphabetizedStatusKeys({ includeOpen = true, includeResolved = true 
   return Object.keys(STATUSES || {})
     .filter(key => (includeOpen || key !== 'open') && (includeResolved || key !== 'resolved'))
     .sort((a, b) => getStatusLabel(a, 'short').localeCompare(getStatusLabel(b, 'short'), undefined, { sensitivity: 'base' }));
+}
+
+const STATUS_PICKER_ROLE_IDENTITIES = new Set([
+  'abl',
+  'controlman',
+  'maintenance',
+  'processengineer',
+  'quality',
+  'tooldie',
+  'toolanddie'
+]);
+
+function normalizeStatusPickerIdentity(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]/g, '');
+}
+
+function getStatusPickerGroup(statusKey) {
+  const statusDef = getStatusDef(statusKey);
+  const configuredGroup = String(statusDef.pickerGroup || '').trim().toLowerCase();
+  if (configuredGroup === 'role' || configuredGroup === 'team') return 'role';
+  if (configuredGroup === 'situation' || configuredGroup === 'status') return 'situation';
+
+  const identities = [statusKey, statusDef.label, statusDef.shortLabel]
+    .map(normalizeStatusPickerIdentity);
+  return identities.some(identity => STATUS_PICKER_ROLE_IDENTITIES.has(identity)) ? 'role' : 'situation';
+}
+
+function groupStatusPickerKeys(statusKeys = getAlphabetizedStatusKeys()) {
+  return statusKeys.reduce((groups, statusKey) => {
+    groups[getStatusPickerGroup(statusKey)].push(statusKey);
+    return groups;
+  }, { situation: [], role: [] });
+}
+
+function createStatusPickerSection(group, title, hint, gridClass) {
+  const section = document.createElement('section');
+  section.className = `status-picker-section status-picker-section--${group}`;
+  section.setAttribute('aria-label', `${title} statuses`);
+
+  const heading = document.createElement('div');
+  heading.className = 'status-picker-section-heading';
+  const titleEl = document.createElement('span');
+  titleEl.className = 'status-picker-section-title';
+  titleEl.textContent = title;
+  const hintEl = document.createElement('span');
+  hintEl.className = 'status-picker-section-hint';
+  hintEl.textContent = hint;
+  heading.append(titleEl, hintEl);
+
+  const grid = document.createElement('div');
+  grid.className = gridClass;
+  section.append(heading, grid);
+  return { section, grid };
 }
 
 function toColumnMajorOrder(items, columnCount) {
@@ -5600,6 +5658,7 @@ function getShiftForTime(date, schedule) {
 
 let issues = [];
 const issuesById = new Map();
+let historicalIssueFocusId = '';
 const _deletedIssueIds = new Set();
 let issueHistoryCursor = null;
 let issueHistoryFetchInFlight = null;
@@ -5853,6 +5912,7 @@ async function doSignOut() {
   document.getElementById('app').classList.remove('visible');
   issues = [];
   issuesById.clear();
+  historicalIssueFocusId = '';
   _deletedIssueIds.clear();
   issueHistoryCursor = null;
   issueHistoryFetchInFlight = null;
@@ -7211,6 +7271,7 @@ async function refreshIssuesFromSql() {
     return true;
   }
   const normalized = normalizeSqlIssueList(payload.issues || []);
+  const focusedHistoricalIssue = historicalIssueFocusId ? issuesById.get(historicalIssueFocusId) : null;
   const preservePaginatedPressHistory = issuePeriod === 'all'
     && !!issueParams.machine
     && issuesById.size > normalized.length;
@@ -7222,6 +7283,9 @@ async function refreshIssuesFromSql() {
   normalized.forEach(issue => {
     issuesById.set(issue.id, issue);
   });
+  if (focusedHistoricalIssue && !issuesById.has(historicalIssueFocusId)) {
+    issuesById.set(historicalIssueFocusId, focusedHistoricalIssue);
+  }
   rebuildIssuesArrayFromMap();
   refreshVisibleData({ isBackground: true });
   void _refreshRoleAlertBadgeCount();
@@ -7345,8 +7409,12 @@ function startListener() {
     try {
       const snap = await getDocs(q);
       if (firstSnapshotReceived || !currentPlantId) return;
+      const focusedHistoricalIssue = historicalIssueFocusId ? issuesById.get(historicalIssueFocusId) : null;
       issuesById.clear();
       snap.docs.forEach(d => issuesById.set(d.id, buildIssueFromSnapshot(d)));
+      if (focusedHistoricalIssue && !issuesById.has(historicalIssueFocusId)) {
+        issuesById.set(historicalIssueFocusId, focusedHistoricalIssue);
+      }
       rebuildIssuesArrayFromMap();
       refreshVisibleData({ isBackground: true });
       void _refreshRoleAlertBadgeCount();
@@ -7639,7 +7707,7 @@ window.setMapMode = mode => {
   document.getElementById('mode-hist').className = 'map-mode-btn' + (mode === 'hist' ? ' active-hist' : '');
   document.getElementById('mode-notes').className = 'map-mode-btn' + (mode === 'notes' ? ' active-hist' : '');
   document.getElementById('floor-map-label').textContent = mode === 'log'
-    ? 'FLOOR MAP — CLICK A PRESS TO REPORT AN ISSUE'
+    ? 'FLOOR MAP — SELECT A PRESS FOR QUICK ACTIONS'
     : mode === 'hist'
       ? 'FLOOR MAP — CLICK A PRESS TO VIEW TIMELINE'
       : 'FLOOR MAP — USER WIKI CONTRIBUTIONS';
@@ -7664,10 +7732,30 @@ window.setMapMode = mode => {
     renderIssues(); updateFilterBadge();
   }
   renderRowTabs();
+  updateReportAction();
 };
 
 // ── PRESS MINI-CARD STATE ──
 let activeMiniCard = null; // { machine, rowName }
+
+function updateReportAction(machineCode = activeMiniCard?.machine || '') {
+  const button = document.getElementById('report-fab');
+  const label = document.getElementById('report-fab-label');
+  if (!button || !label) return;
+  const selectedMachine = ALL_MACHINES.includes(machineCode) ? machineCode : '';
+  button.hidden = !currentUserPermissions.canCreateIssue;
+  button.dataset.machine = selectedMachine;
+  button.classList.toggle('has-press', Boolean(selectedMachine));
+  label.textContent = selectedMachine ? `Report ${selectedMachine}` : 'Report Issue';
+  button.setAttribute('aria-label', selectedMachine ? `Report an issue for press ${selectedMachine}` : 'Report an issue');
+}
+
+window.openReportComposer = function () {
+  const machineCode = activeMiniCard?.machine || document.getElementById('report-fab')?.dataset.machine || '';
+  if (mapMode !== 'log') window.setMapMode?.('log');
+  closeMiniCard();
+  openAddModal(machineCode);
+};
 
 // ── FLOATING ACTIVE ISSUES HUB ──
 function updateActiveIssuesPill() {
@@ -7741,6 +7829,7 @@ window.handlePressClick = p => {
   if (_mcCloseTimer) { clearTimeout(_mcCloseTimer); _mcCloseTimer = null; }
 
   activeMiniCard = { machine: p, rowName: pressRow };
+  updateReportAction(p);
 
   // Build mini-card
   const card = document.createElement('div');
@@ -7897,7 +7986,7 @@ window.handlePressClick = p => {
 let _mcCloseTimer = null;
 function closeMiniCard() {
   if (_mcCloseTimer) { clearTimeout(_mcCloseTimer); _mcCloseTimer = null; }
-  if (!activeMiniCard) return;
+  if (!activeMiniCard) { updateReportAction(); return; }
   const areaId = 'mc-area-' + activeMiniCard.rowName.replace(/\s/g, '_');
   const area = document.getElementById(areaId);
   if (area) {
@@ -7907,6 +7996,7 @@ function closeMiniCard() {
   const btnEl = document.getElementById('press-' + activeMiniCard.machine.replace(/[\s.]/g, '_'));
   if (btnEl) btnEl.classList.remove('selected');
   activeMiniCard = null;
+  updateReportAction();
 }
 
 window.showMachineHistory = machine => {
@@ -7968,15 +8058,22 @@ function populateIssueMachineSelect(selectedMachine = currentMachine) {
   if (!select) return;
   const previous = String(selectedMachine || select.value || '').trim();
   select.innerHTML = '<option value="">Select a press</option>';
-  Object.entries(PRESSES || {}).forEach(([rowName, machines]) => {
+  const sortedPressRows = Object.entries(PRESSES || {}).sort(([rowA], [rowB]) => {
+    if (rowA === 'Other') return 1;
+    if (rowB === 'Other') return -1;
+    return String(rowA).localeCompare(String(rowB), undefined, { numeric: true, sensitivity: 'base' });
+  });
+  sortedPressRows.forEach(([rowName, machines]) => {
     const group = document.createElement('optgroup');
     group.label = rowName;
-    (machines || []).forEach(machineCode => {
-      const opt = document.createElement('option');
-      opt.value = machineCode;
-      opt.textContent = machineCode;
-      group.appendChild(opt);
-    });
+    [...(machines || [])]
+      .sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' }))
+      .forEach(machineCode => {
+        const opt = document.createElement('option');
+        opt.value = machineCode;
+        opt.textContent = machineCode;
+        group.appendChild(opt);
+      });
     if (group.children.length) select.appendChild(group);
   });
   select.value = previous && ALL_MACHINES.includes(previous) ? previous : '';
@@ -8577,8 +8674,6 @@ function resizeImage(file) {
 
 // ── ADD MODAL ──
 const ISSUE_LOG_PREFS_KEY = 'aptracker_issue_log_prefs_v1';
-const ISSUE_QUICK_PHRASES = ['Leak', 'Down', 'Needs parts', 'Waiting on maintenance', 'Quality check', 'Escalate'];
-let issueAdvancedExpanded = false;
 let subcategorySheetState = { open: false, statusKey: '', selectedSub: '' };
 let selectedQualityDefect = null;
 let qualityDefectModalState = { open: false, selectedKey: '', previousKey: '', filter: '', view: 'list', activeTab: 'actions' };
@@ -8836,15 +8931,11 @@ function loadIssueLogPrefs() {
   try {
     const parsed = JSON.parse(localStorage.getItem(ISSUE_LOG_PREFS_KEY) || '{}');
     return {
-      timerMinutes: String(parsed?.timerMinutes || ''),
-      urgent: Boolean(parsed?.urgent),
-      advancedOpen: Boolean(parsed?.advancedOpen),
-      lastShift: parsed?.lastShift || 'auto',
       lastStatusKey: parsed?.lastStatusKey || '',
       lastStatusSub: parsed?.lastStatusSub || ''
     };
   } catch (_) {
-    return { timerMinutes: '', urgent: false, advancedOpen: false, lastShift: 'auto', lastStatusKey: '', lastStatusSub: '' };
+    return { lastStatusKey: '', lastStatusSub: '' };
   }
 }
 
@@ -8856,44 +8947,6 @@ function saveIssueLogPrefs() {
   } catch (_) { }
 }
 
-function setIssueAdvancedDetailsExpanded(on) {
-  issueAdvancedExpanded = Boolean(on);
-  const panel = document.getElementById('issue-advanced-panel');
-  const state = document.getElementById('issue-advanced-toggle-state');
-  panel?.classList.toggle('visible', issueAdvancedExpanded);
-  if (state) state.textContent = issueAdvancedExpanded ? 'Hide' : 'Show';
-}
-
-window.toggleIssueAdvancedDetails = function () {
-  setIssueAdvancedDetailsExpanded(!issueAdvancedExpanded);
-  issueLogPrefs.advancedOpen = issueAdvancedExpanded;
-  saveIssueLogPrefs();
-};
-
-function renderIssueQuickPhrases() {
-  const row = document.getElementById('issue-quick-phrases');
-  if (!row) return;
-  row.innerHTML = '';
-  ISSUE_QUICK_PHRASES.forEach(phrase => {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'issue-quick-phrase';
-    btn.textContent = phrase;
-    addTapListener(btn, () => appendIssueNotePhrase(phrase));
-    row.appendChild(btn);
-  });
-}
-
-function appendIssueNotePhrase(phrase) {
-  const field = document.getElementById('issue-note');
-  if (!field) return;
-  const current = String(field.value || '').trim();
-  const next = current ? `${current}${current.endsWith('.') ? '' : ';'} ${phrase}` : phrase;
-  field.value = next;
-  field.focus();
-  field.setSelectionRange?.(field.value.length, field.value.length);
-}
-
 function openIssuePhotoSourceMenu(forceOpen) {
   const row = document.getElementById('log-photo-source-row');
   if (!row) return;
@@ -8903,41 +8956,7 @@ function openIssuePhotoSourceMenu(forceOpen) {
 }
 
 function syncIssueLogPrefsFromModal() {
-  const timer = document.getElementById('issue-timer-minutes');
-  const shift = document.getElementById('issue-shift');
-  issueLogPrefs.timerMinutes = String(timer?.value || '');
-  issueLogPrefs.urgent = false;
-  issueLogPrefs.advancedOpen = issueAdvancedExpanded;
-  if (shift?.dataset?.autoApplied === '1') {
-    issueLogPrefs.lastShift = 'auto';
-  } else if (shift?.value && shift.value !== 'auto') {
-    issueLogPrefs.lastShift = shift.value;
-  } else {
-    issueLogPrefs.lastShift = 'auto';
-  }
   saveIssueLogPrefs();
-}
-
-function applyIssueLogDefaults() {
-  const timer = document.getElementById('issue-timer-minutes');
-  const urgent = document.getElementById('issue-urgent');
-  const shift = document.getElementById('issue-shift');
-  const issueDate = document.getElementById('issue-date');
-  const issueTime = document.getElementById('issue-time-input');
-  if (timer) timer.value = issueLogPrefs.timerMinutes || '';
-  if (urgent) urgent.checked = false;
-  if (issueDate && issueTime) resetIssueDateTime();
-  if (shift) {
-    const d = getIssueDateFromInputs('issue-date', 'issue-time-input');
-    if (issueLogPrefs.lastShift === 'auto') {
-      shift.dataset.autoApplied = '1';
-      shift.value = getShiftForTime(d, getShiftSchedule(currentPlantId));
-    } else {
-      shift.dataset.autoApplied = '0';
-      shift.value = issueLogPrefs.lastShift || 'auto';
-    }
-  }
-  setIssueAdvancedDetailsExpanded(Boolean(issueLogPrefs.advancedOpen));
 }
 
 window.openAddModal = (m = '') => {
@@ -8953,13 +8972,9 @@ window.openAddModal = (m = '') => {
   logCatKey = issueLogPrefs.lastStatusKey || null;
   logCatSub = issueLogPrefs.lastStatusSub || null;
   document.getElementById('issue-note').value = '';
-  const similarFixesResults = document.getElementById('similar-fixes-results');
-  if (similarFixesResults) { similarFixesResults.hidden = true; similarFixesResults.innerHTML = ''; }
   document.getElementById('photo-previews').innerHTML = '';
   populateIssueMachineSelect(currentMachine);
   document.getElementById('log-photo-source-row')?.classList.remove('visible');
-  applyIssueLogDefaults();
-  renderIssueQuickPhrases();
   setSubmitting(false);
   renderLogCatButtons();
   renderLogSubChips();
@@ -8978,8 +8993,8 @@ function issueSimilarFixesStorageKey(plantId, issueId) {
 }
 
 function similarFixesButtonContent(isLoading = false) {
-  if (isLoading) return '<span class="spinner"></span><span>Researching fixes…</span>';
-  return '<span class="issue-similar-fixes-icon" aria-hidden="true">✨</span><span class="issue-similar-fixes-copy"><strong>Find similar fixes</strong><small>Search past resolutions and research</small></span><span class="issue-similar-fixes-arrow" aria-hidden="true">›</span>';
+  if (isLoading) return '<span class="spinner" aria-hidden="true"></span><span>Fix!</span>';
+  return '<span aria-hidden="true">✨</span><span>Fix!</span>';
 }
 
 function storeIssueSimilarFixes(issueId, state) {
@@ -9011,42 +9026,42 @@ function clearStoredIssueSimilarFixes(plantId) {
   } catch (_) { }
 }
 
-function renderSimilarFixesResults(payload, target = document.getElementById('similar-fixes-results'), options = {}) {
+function renderSimilarFixesResults(payload, target, options = {}) {
   if (!target) return;
   const internal = Array.isArray(payload?.internalMatches) ? payload.internalMatches : [];
   const external = Array.isArray(payload?.externalResearch) ? payload.externalResearch : [];
   const steps = Array.isArray(payload?.recommendedNextSteps) ? payload.recommendedNextSteps : [];
   const safety = Array.isArray(payload?.safetyNotes) ? payload.safetyNotes : [];
+  const candidateById = new Map((payload?.internalCandidates || []).map(candidate => [String(candidate.issueId || ''), candidate]));
+  const humanizeInternalIssueIds = value => {
+    let text = String(value || '');
+    candidateById.forEach((candidate, issueId) => {
+      if (!issueId || !text.includes(issueId)) return;
+      const reference = candidate.machineCode ? `the Press ${candidate.machineCode} issue` : 'the matched historical issue';
+      text = text.split(issueId).join(reference);
+    });
+    return text;
+  };
   const internalHtml = internal.length ? internal.map(match => {
     const issueId = String(match.issueId || '');
-    const fallback = (payload.internalCandidates || []).find(candidate => candidate.issueId === issueId) || {};
+    const fallback = candidateById.get(issueId) || {};
     const fix = match.fix || fallback.resolution || '';
-    return `<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--color-border,var(--border));"><button type="button" class="quality-defect-link" onclick="openSimilarFixIssue('${encodeURIComponent(issueId)}')">Internal issue ${esc(issueId)}</button><div style="font-size:11px;color:var(--color-text-muted,var(--text2));margin-top:3px;">${esc(match.whySimilar || fallback.note || '')}</div><div style="font-size:12px;margin-top:4px;">${esc(fix)}</div></div>`;
+    const resolvedDate = fallback.resolvedAt ? new Date(fallback.resolvedAt) : null;
+    const resolvedLabel = resolvedDate && !Number.isNaN(resolvedDate.getTime())
+      ? resolvedDate.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })
+      : '';
+    const matchLabel = [fallback.machineCode ? `Press ${fallback.machineCode}` : 'Matched issue', resolvedLabel ? `Resolved ${resolvedLabel}` : ''].filter(Boolean).join(' · ');
+    const description = fallback.note || fallback.issueType || '';
+    const whySimilar = humanizeInternalIssueIds(match.whySimilar || '');
+    return `<article class="similar-fix-match"><button type="button" class="quality-defect-link similar-fix-match-link" onclick="openSimilarFixIssue('${encodeURIComponent(issueId)}')">${esc(matchLabel)}</button>${description ? `<div class="similar-fix-match-description">${esc(description)}</div>` : ''}${whySimilar ? `<div class="similar-fix-match-reason"><strong>Why it matched:</strong> ${esc(whySimilar)}</div>` : ''}<div class="similar-fix-match-resolution"><strong>Fix used:</strong> ${esc(humanizeInternalIssueIds(fix))}</div></article>`;
   }).join('') : '<div style="font-size:12px;color:var(--color-text-muted,var(--text2));">No closely matching completed issues were found.</div>';
   const externalHtml = external.length ? external.map(result => `<div style="margin-top:7px;"><a href="${esc(result.url || '')}" target="_blank" rel="noopener noreferrer" style="font-size:12px;color:var(--color-accent,var(--accent));font-weight:700;">${esc(result.title || result.url || 'External research')}</a><div style="font-size:11px;color:var(--color-text-muted,var(--text2));margin-top:2px;">${esc(result.summary || result.applicability || '')}</div></div>`).join('') : `<div style="font-size:12px;color:var(--color-text-muted,var(--text2));">${payload?.externalSearchAvailable ? 'No external sources were selected.' : 'External search is not configured yet.'}</div>`;
   const saveHtml = options.issueId
     ? `<div style="margin-top:12px;display:flex;justify-content:flex-end;"><button class="btn btn-ghost" type="button" onclick="event.stopPropagation(); saveSimilarFixesForIssue('${encodeURIComponent(options.issueId)}')" ${options.saved ? 'disabled' : ''} style="padding:6px 10px;font-size:11px;">${options.saved ? '✓ Saved to issue' : 'Save to issue'}</button></div>`
     : '';
-  target.innerHTML = `<div style="font-size:12px;font-weight:800;color:var(--color-text,var(--text));">Similar fixes</div>${internalHtml}<div style="font-size:12px;font-weight:800;color:var(--color-text,var(--text));margin-top:12px;">External research</div>${externalHtml}${steps.length ? `<div style="font-size:12px;font-weight:800;color:var(--color-text,var(--text));margin-top:12px;">Suggested next steps</div><ul style="margin:5px 0 0;padding-left:18px;font-size:12px;">${steps.map(step => `<li>${esc(step)}</li>`).join('')}</ul>` : ''}${safety.length ? `<div style="font-size:11px;color:var(--color-warning,var(--yellow));margin-top:10px;">${esc(safety.join(' '))}</div>` : ''}${saveHtml}`;
+  target.innerHTML = `<div style="font-size:12px;font-weight:800;color:var(--color-text,var(--text));">Similar fixes</div>${internalHtml}<div style="font-size:12px;font-weight:800;color:var(--color-text,var(--text));margin-top:12px;">External research</div>${externalHtml}${steps.length ? `<div style="font-size:12px;font-weight:800;color:var(--color-text,var(--text));margin-top:12px;">Suggested next steps</div><ul style="margin:5px 0 0;padding-left:18px;font-size:12px;">${steps.map(step => `<li>${esc(humanizeInternalIssueIds(step))}</li>`).join('')}</ul>` : ''}${safety.length ? `<div style="font-size:11px;color:var(--color-warning,var(--yellow));margin-top:10px;">${esc(humanizeInternalIssueIds(safety.join(' ')))}</div>` : ''}${saveHtml}`;
   target.hidden = false;
 }
-
-window.findSimilarFixes = async () => {
-  const description = document.getElementById('issue-note')?.value.trim() || '';
-  const machineCode = document.getElementById('issue-machine-select')?.value || currentMachine || '';
-  if (description.length < 8) { showGameToast('Describe the issue before finding similar fixes.', 'error'); document.getElementById('issue-note')?.focus(); return; }
-  const button = document.getElementById('similar-fixes-btn');
-  if (!button || !currentPlantId) return;
-  button.disabled = true; button.innerHTML = '<span class="spinner"></span> Researching fixes…';
-  try {
-    const payload = await dataApi.findSimilarFixes(currentPlantId, { description, machineCode });
-    renderSimilarFixesResults(payload);
-  } catch (error) {
-    showGameToast(error?.message || 'Could not research similar fixes.', 'error');
-  } finally {
-    button.disabled = false; button.textContent = '✨ Find fixes!';
-  }
-};
 
 function issueSimilarFixesQueryKey(issue) {
   const historyKey = similarFixesStatusHistory(issue)
@@ -9103,21 +9118,69 @@ function restoreIssueSimilarFixes(issue) {
     if (state) issueSimilarFixes.set(issue.id, state);
   }
   if (!state) return;
-  const target = document.getElementById(`similar-fixes-results-${issue.id}`);
   const button = document.getElementById(`similar-fixes-btn-${issue.id}`);
   if (button) {
     button.disabled = !!state.loading;
     button.innerHTML = similarFixesButtonContent(state.loading);
+    button.classList.toggle('has-results', Boolean(state.payload));
   }
-  if (!state.payload) {
-    if (target) { target.hidden = true; target.innerHTML = ''; }
+  if (similarFixesModalIssueId === issue.id) renderSimilarFixesModal(issue);
+}
+
+let similarFixesModalIssueId = '';
+
+function renderSimilarFixesModal(issue) {
+  if (!issue || issue.id !== similarFixesModalIssueId) return;
+  const state = issueSimilarFixes.get(issue.id) || loadStoredIssueSimilarFixes(issue) || loadSavedIssueSimilarFixes(issue);
+  if (state && !issueSimilarFixes.has(issue.id)) issueSimilarFixes.set(issue.id, state);
+  const subtitle = document.getElementById('similar-fixes-modal-subtitle');
+  const target = document.getElementById('similar-fixes-modal-results');
+  const status = document.getElementById('similar-fixes-modal-status');
+  const rerun = document.getElementById('similar-fixes-modal-rerun');
+  if (subtitle) subtitle.textContent = `${issue.machine || 'Unassigned press'} · ${issue.note || 'No description'}`;
+  if (rerun) {
+    rerun.disabled = Boolean(state?.loading);
+    rerun.textContent = state?.loading ? 'Researching…' : state?.payload ? 'Research again' : 'Research fixes';
+  }
+  if (!target) return;
+  if (state?.loading) {
+    target.hidden = false;
+    target.innerHTML = '<div class="similar-fixes-modal-loading"><span class="spinner"></span><strong>Researching similar fixes…</strong><span>Reviewing past resolutions and available external research.</span></div>';
+    if (status) status.textContent = 'Research in progress';
     return;
   }
-  if (target) {
-    if (state.payload) renderSimilarFixesResults(state.payload, target, { issueId: issue.id, saved: state.saved });
-    else { target.hidden = true; target.innerHTML = ''; }
+  if (state?.payload) {
+    renderSimilarFixesResults(state.payload, target, { issueId: issue.id, saved: state.saved });
+    if (status) status.textContent = state.saved ? 'Saved research' : 'Research ready';
+    return;
   }
+  target.hidden = false;
+  target.innerHTML = '<div class="similar-fixes-modal-empty"><span aria-hidden="true">✨</span><strong>No research loaded yet</strong><span>Run Similar Fixes to search past resolutions and external sources.</span></div>';
+  if (status) status.textContent = 'Ready to research';
 }
+
+window.openSimilarFixesModal = async encodedIssueId => {
+  const issueId = decodeURIComponent(String(encodedIssueId || ''));
+  const issue = issuesById.get(issueId) || issues.find(candidate => candidate.id === issueId);
+  if (!issue || !currentPlantId) return;
+  similarFixesModalIssueId = issueId;
+  document.getElementById('similar-fixes-modal')?.classList.add('visible');
+  document.body.classList.add('similar-fixes-open');
+  renderSimilarFixesModal(issue);
+  const state = issueSimilarFixes.get(issueId) || loadStoredIssueSimilarFixes(issue) || loadSavedIssueSimilarFixes(issue);
+  if (!state?.payload && !state?.loading) await window.findSimilarFixesForIssue(encodeURIComponent(issueId));
+};
+
+window.closeSimilarFixesModal = () => {
+  document.getElementById('similar-fixes-modal')?.classList.remove('visible');
+  document.body.classList.remove('similar-fixes-open');
+  similarFixesModalIssueId = '';
+};
+
+window.researchSimilarFixesFromModal = () => {
+  if (!similarFixesModalIssueId) return;
+  window.findSimilarFixesForIssue(encodeURIComponent(similarFixesModalIssueId));
+};
 
 window.viewSavedSimilarFixesForIssue = async encodedIssueId => {
   const issueId = decodeURIComponent(String(encodedIssueId || ''));
@@ -9126,12 +9189,13 @@ window.viewSavedSimilarFixesForIssue = async encodedIssueId => {
   const existing = issueSimilarFixes.get(issueId) || loadSavedIssueSimilarFixes(issue);
   if (existing?.payload && existing.saved) {
     issueSimilarFixes.set(issueId, existing);
-    restoreIssueSimilarFixes(issue);
+    window.openSimilarFixesModal(encodedIssueId);
     return;
   }
   issueSimilarFixesHydrated.delete(issueId);
   const restored = await hydrateSavedIssueSimilarFixes(issue);
-  if (!restored) showGameToast('No saved Similar Fixes research is available for this issue yet.', 'error');
+  if (restored) window.openSimilarFixesModal(encodedIssueId);
+  else showGameToast('No saved Similar Fixes research is available for this issue yet.', 'error');
 };
 
 window.findSimilarFixesForIssue = async encodedIssueId => {
@@ -9186,15 +9250,54 @@ window.saveSimilarFixesForIssue = async encodedIssueId => {
   }
 };
 
-window.openSimilarFixIssue = issueId => {
+window.openSimilarFixIssue = async issueId => {
   const decodedId = decodeURIComponent(String(issueId || ''));
+  if (!decodedId || !currentPlantId) return;
   if (document.getElementById('add-modal')?.classList.contains('visible')) closeModal();
+  window.closeSimilarFixesModal?.();
+
+  const visibleCard = document.getElementById(`body-${decodedId}`)?.closest('.issue-card');
+  if (visibleCard) {
+    visibleCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const visibleBody = document.getElementById(`body-${decodedId}`);
+    if (visibleBody && !visibleBody.classList.contains('visible')) toggleCard(decodedId);
+    return;
+  }
+
+  const requestedPlantId = currentPlantId;
+  showGameToast('Loading historical issue…');
+  try {
+    let historicalIssue = issuesById.get(decodedId) || issues.find(candidate => candidate.id === decodedId) || null;
+    if (!historicalIssue) {
+      if (shouldUseSqlStagingReads(requestedPlantId)) {
+        const payload = await dataApi.getIssue(requestedPlantId, decodedId);
+        historicalIssue = payload?.issue ? normalizeSqlIssueForApp(payload.issue) : null;
+      } else {
+        const snapshot = await getDoc(doc(db, 'plants', requestedPlantId, 'issues', decodedId));
+        historicalIssue = snapshot.exists() ? buildIssueFromSnapshot(snapshot) : null;
+      }
+    }
+    if (currentPlantId !== requestedPlantId) return;
+    if (!historicalIssue) throw new Error('The historical issue could not be found.');
+    issuesById.set(decodedId, historicalIssue);
+    rebuildIssuesArrayFromMap();
+    historicalIssueFocusId = decodedId;
+    renderIssues();
+    await ensureIssueDetailsHydrated(decodedId);
+    requestAnimationFrame(() => {
+      const card = document.getElementById(`body-${decodedId}`)?.closest('.issue-card');
+      card?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  } catch (error) {
+    showGameToast(error?.message || 'Could not load that historical issue.', 'error');
+  }
+};
+
+window.closeHistoricalIssueView = () => {
+  historicalIssueFocusId = '';
+  renderIssues();
   requestAnimationFrame(() => {
-    const card = document.getElementById(`body-${decodedId}`)?.closest('.issue-card');
-    if (!card) { showGameToast('That historical issue is not loaded in this view.', 'error'); return; }
-    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    const body = document.getElementById(`body-${decodedId}`);
-    if (body && !body.classList.contains('visible')) toggleCard(decodedId);
+    document.getElementById('issues-list')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
 };
 
@@ -9203,31 +9306,44 @@ function renderLogCatButtons() {
   const row = document.getElementById('log-cat-all-row'); if (!row) return;
   row.innerHTML = '';
   const ordered = getAlphabetizedStatusKeys();
-  ordered.forEach(key => {
-    const st = getStatusDef(key);
-    const btn = document.createElement('button'); btn.className = 'log-cat-btn'; btn.dataset.key = key;
-    const col = getStatusColor(key);
-    btn.style.color = col;
-    if (logCatKey === key) {
-      btn.classList.add('selected');
-      btn.style.background = alphaColor(col, 0.13);
-    }
-    if (isSearchMode) {
-      if (addSearchActiveSub && getSubCats(addSearchActiveSub).includes(key)) {
-        btn.style.opacity = '1';
-        btn.style.pointerEvents = 'auto';
-        btn.classList.add('search-match');
-      } else {
-        btn.style.opacity = '0.5';
-        btn.style.pointerEvents = 'none';
+  const grouped = groupStatusPickerKeys(ordered);
+  const sections = [
+    ['situation', 'Situation', 'What is happening?'],
+    ['role', 'Team / Role', 'Who should respond?']
+  ];
+
+  sections.forEach(([group, title, hint]) => {
+    if (!grouped[group].length) return;
+    const { section, grid } = createStatusPickerSection(group, title, hint, 'log-cat-grid');
+    grouped[group].forEach(key => {
+      const st = getStatusDef(key);
+      const btn = document.createElement('button'); btn.className = 'log-cat-btn'; btn.dataset.key = key;
+      const col = getStatusColor(key);
+      btn.style.color = col;
+      if (logCatKey === key) {
+        btn.classList.add('selected');
+        btn.style.background = alphaColor(col, 0.13);
       }
-    }
-    btn.innerHTML = `<span class="log-cat-icon">${st.icon}</span><span class="log-cat-label">${getStatusLabel(key, 'short')}</span>`;
-    addTapListener(btn, () => logCatSelectStatus(key));
-    row.appendChild(btn);
+      if (isSearchMode) {
+        if (addSearchActiveSub && getSubCats(addSearchActiveSub).includes(key)) {
+          btn.style.opacity = '1';
+          btn.style.pointerEvents = 'auto';
+          btn.classList.add('search-match');
+        } else {
+          btn.style.opacity = '0.5';
+          btn.style.pointerEvents = 'none';
+        }
+      }
+      btn.innerHTML = `<span class="log-cat-icon">${st.icon}</span><span class="log-cat-label">${getStatusLabel(key, 'short')}</span>`;
+      addTapListener(btn, () => logCatSelectStatus(key));
+      grid.appendChild(btn);
+    });
+    row.appendChild(section);
   });
 
-  // Search button (always last)
+  // Search is a picker tool rather than a status, so it stays outside both groups.
+  const searchRow = document.createElement('div');
+  searchRow.className = 'status-picker-search-row log-cat-search-row';
   const searchBtn = document.createElement('button');
   searchBtn.className = 'log-cat-btn' + (isSearchMode ? ' selected' : '');
   searchBtn.dataset.key = '__search__';
@@ -9238,7 +9354,8 @@ function renderLogCatButtons() {
   }
   searchBtn.innerHTML = `<span class="log-cat-icon">🔍</span><span class="log-cat-label">Search</span>`;
   addTapListener(searchBtn, () => openSearch(searchApplyAddModal, null));
-  row.appendChild(searchBtn);
+  searchRow.appendChild(searchBtn);
+  row.appendChild(searchRow);
 }
 
 function renderLogSubChips() {
@@ -9872,16 +9989,6 @@ window.closeModal = () => {
   selectedQualityDefect = null;
 };
 
-window.resetIssueDateTime = function () {
-  const { dateStr, timeStr } = toLocalDTInputs(new Date());
-  document.getElementById('issue-date').value = dateStr;
-  document.getElementById('issue-time-input').value = timeStr;
-  const shift = document.getElementById('issue-shift');
-  if (shift && shift.dataset.autoApplied === '1') {
-    shift.value = getShiftForTime(new Date(), getShiftSchedule(currentPlantId));
-  }
-};
-
 function toLocalDTInputs(d) {
   const pad = n => String(n).padStart(2, '0');
   return { dateStr: d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()), timeStr: pad(d.getHours()) + ':' + pad(d.getMinutes()) };
@@ -10061,24 +10168,6 @@ document.getElementById('quality-defect-search')?.addEventListener('input', e =>
   renderQualityDefectList();
 });
 
-document.getElementById('issue-urgent')?.addEventListener('change', () => {
-  issueLogPrefs.urgent = false;
-  saveIssueLogPrefs();
-});
-document.getElementById('issue-timer-minutes')?.addEventListener('change', () => {
-  issueLogPrefs.timerMinutes = String(document.getElementById('issue-timer-minutes')?.value || '');
-  saveIssueLogPrefs();
-});
-document.getElementById('issue-shift')?.addEventListener('change', () => {
-  issueLogPrefs.lastShift = String(document.getElementById('issue-shift')?.value || 'auto');
-  const shift = document.getElementById('issue-shift');
-  if (shift) shift.dataset.autoApplied = '0';
-  saveIssueLogPrefs();
-});
-document.getElementById('issue-advanced-toggle')?.addEventListener('click', () => {
-  issueLogPrefs.advancedOpen = issueAdvancedExpanded;
-  saveIssueLogPrefs();
-});
 document.getElementById('log-photo-btn')?.addEventListener('click', () => openIssuePhotoSourceMenu());
 document.getElementById('log-camera-btn')?.addEventListener('touchend', e => { e.preventDefault(); openIssuePhotoSourceMenu(false); document.getElementById('log-camera-input').click(); }, { passive: false });
 document.getElementById('log-camera-btn')?.addEventListener('click', () => { openIssuePhotoSourceMenu(false); document.getElementById('log-camera-input').click(); });
@@ -10146,7 +10235,7 @@ window.submitIssue = async () => {
   }
   setSubmitting(true);
   try {
-    const d = getIssueDateFromInputs('issue-date', 'issue-time-input');
+    const d = new Date();
     const initialStatus = logCatKey || 'open';
     const initialSubStatus = logCatSub || '';
     if (isQualityDefectRoute(initialStatus, initialSubStatus) && !selectedQualityDefect) {
@@ -10158,13 +10247,17 @@ window.submitIssue = async () => {
     const qualityDefect = isQualityDefectRoute(initialStatus, initialSubStatus)
       ? sanitizeQualityDefectPayload(selectedQualityDefect)
       : null;
-    const note = document.getElementById('issue-note').value.trim() || 'No Description Provided';
+    const enteredNote = document.getElementById('issue-note').value.trim();
+    const inheritedRouteDescription = [getStatusLabel(initialStatus), initialSubStatus]
+      .map(value => String(value || '').trim())
+      .filter(Boolean)
+      .join(' › ');
+    const note = enteredNote || inheritedRouteDescription || 'No Description Provided';
     const loggedMachine = currentMachine;
     const initialWorkflowId = createWorkflowId(initialStatus);
-    const shiftSel = document.getElementById('issue-shift').value;
-    const shift = shiftSel === 'auto' ? getShiftForTime(d, getShiftSchedule(currentPlantId)) : shiftSel;
-    const timerMinutes = parseTimerMinutes(document.getElementById('issue-timer-minutes')?.value);
-    const isUrgent = Boolean(document.getElementById('issue-urgent')?.checked);
+    const shift = getShiftForTime(d, getShiftSchedule(currentPlantId));
+    const timerMinutes = 0;
+    const isUrgent = false;
     const useDemoLocal = DEMO_MODE;
     const useSql = shouldUseSqlStagingReads(currentPlantId);
     const issueRef = (useDemoLocal || useSql) ? { id: generateFirebaseLikeId() } : doc(plantCol('issues'));
@@ -10202,8 +10295,6 @@ window.submitIssue = async () => {
       refreshVisibleData();
       issueLogPrefs.lastStatusKey = initialStatus;
       issueLogPrefs.lastStatusSub = initialSubStatus;
-      issueLogPrefs.timerMinutes = String(document.getElementById('issue-timer-minutes')?.value || '');
-      issueLogPrefs.urgent = false;
       saveIssueLogPrefs();
       if (timerMinutes > 0) setIssueReminder(issueRef.id, timerMinutes);
       completeDemoGuideStep('log');
@@ -10217,7 +10308,7 @@ window.submitIssue = async () => {
       });
       if (localPhotos.length > 0) setTimeout(() => showPhotoActionFeedback(issueRef.id, createdIssue, localPhotos.length), 520);
       if (requiresSerialNumber(initialStatus, initialSubStatus)) {
-        setTimeout(() => openSerialModal(issueRef.id, initialStatus, initialSubStatus, fmtDate(d)), 50);
+        setTimeout(() => openSerialModal(issueRef.id, initialStatus, initialSubStatus, fmtDate(d), { updateInitialEntry: true }), 50);
       }
       return;
     }
@@ -10252,8 +10343,6 @@ window.submitIssue = async () => {
       refreshVisibleData();
       issueLogPrefs.lastStatusKey = initialStatus;
       issueLogPrefs.lastStatusSub = initialSubStatus;
-      issueLogPrefs.timerMinutes = String(document.getElementById('issue-timer-minutes')?.value || '');
-      issueLogPrefs.urgent = false;
       saveIssueLogPrefs();
       if (timerMinutes > 0) setIssueReminder(issueRef.id, timerMinutes);
       completeDemoGuideStep('log');
@@ -10272,7 +10361,7 @@ window.submitIssue = async () => {
       }
       awardGamification('issue_created_complete', { issueId: issueRef.id, dedupeSuffix: 'issue-created', tags: ['issue:create', `status:${initialStatus || 'open'}`] }).catch(e => console.warn('gamification issue-created award failed', e));
       if (requiresSerialNumber(initialStatus, initialSubStatus)) {
-        setTimeout(() => openSerialModal(issueRef.id, initialStatus, initialSubStatus, fmtDate(d)), 50);
+        setTimeout(() => openSerialModal(issueRef.id, initialStatus, initialSubStatus, fmtDate(d), { updateInitialEntry: true }), 50);
       }
       return;
     }
@@ -10302,8 +10391,6 @@ window.submitIssue = async () => {
     await saveLocalIssueOutboxItem(outboxItem);
     issueLogPrefs.lastStatusKey = initialStatus;
     issueLogPrefs.lastStatusSub = initialSubStatus;
-    issueLogPrefs.timerMinutes = String(document.getElementById('issue-timer-minutes')?.value || '');
-    issueLogPrefs.urgent = false;
     saveIssueLogPrefs();
     if (timerMinutes > 0) setIssueReminder(issueRef.id, timerMinutes);
     attachmentPhotoCache.set(issueRef.id, localPhotos);
@@ -10323,7 +10410,7 @@ window.submitIssue = async () => {
     scheduleIssueOutboxFlush();
     if (requiresSerialNumber(initialStatus, initialSubStatus)) {
       setTimeout(() => {
-        openSerialModal(issueRef.id, initialStatus, initialSubStatus, fmtDate(d));
+        openSerialModal(issueRef.id, initialStatus, initialSubStatus, fmtDate(d), { updateInitialEntry: true });
         if (!issues.find(i => i.id === issueRef.id)) {
           document.getElementById('serial-modal-machine').textContent = currentMachine;
         }
@@ -10880,11 +10967,16 @@ function buildAddStatusEntryMutation(baseIssue, fallbackIssue, entry, status, su
   };
 }
 
+// Prevent duplicate status writes from rapid taps or accidentally duplicated UI events.
+const statusEntryWritesInFlight = new Set();
+
 // Add a new status entry to history
 window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
   if (!currentUserPermissions.canEditIssue) return;
   const issue = issues.find(i => i.id === id);
   if (!issue) return;
+  if (statusEntryWritesInFlight.has(id)) return '';
+  statusEntryWritesInFlight.add(id);
   const workflowId = createWorkflowId(status);
   const entry = {
     status,
@@ -11036,7 +11128,11 @@ window.addStatusEntry = async (id, status, subStatus, note, dateTime) => {
     showStatusActionFeedback(id, issuesById.get(id) || issue, status, subStatus);
     if (status && status !== 'open') completeDemoGuideStep('route');
     return workflowId;
-  } catch (e) { setSyncStatus('err', 'Error: ' + e.message); }
+  } catch (e) {
+    setSyncStatus('err', 'Error: ' + e.message);
+  } finally {
+    statusEntryWritesInFlight.delete(id);
+  }
   return '';
 };
 
@@ -12672,7 +12768,7 @@ function isUserInteracting() {
   // Similar Fixes is a read-heavy panel. Keep it mounted while the user is
   // reviewing research instead of letting the periodic background redraw
   // replace the card underneath them.
-  if (document.querySelector('.issue-similar-fixes-results:not([hidden])')) {
+  if (document.getElementById('similar-fixes-modal')?.classList.contains('visible')) {
     return true;
   }
   const activeEl = document.activeElement;
@@ -12737,6 +12833,11 @@ function renderIssues(options = {}) {
     return true;
   });
 
+  if (historicalIssueFocusId) {
+    const historicalIssue = issuesById.get(historicalIssueFocusId) || issues.find(issue => issue.id === historicalIssueFocusId);
+    filtered = historicalIssue ? [{ ...historicalIssue, __historicalFocus: true }] : [];
+  }
+
   applySortOrder(filtered, sort);
   // Always float resolved issues to the bottom (unless sorting by status)
   if (issueLogView === 'cards' && sort !== 'status' && sort !== 'longest-open') {
@@ -12765,7 +12866,7 @@ function renderIssues(options = {}) {
   }
 
   // Reset display limit when filter/sort parameters change
-  const filterKey = `${issueScope}|${issuePeriod}|${document.getElementById('date-filter')?.value}|${mf}|${sf}|${solutionFilter}|${search}|${sort}|${issueRowScope}|${issueShiftFilter}`;
+  const filterKey = `${issueScope}|${issuePeriod}|${document.getElementById('date-filter')?.value}|${mf}|${sf}|${solutionFilter}|${search}|${sort}|${issueRowScope}|${issueShiftFilter}|${historicalIssueFocusId}`;
   if (filterKey !== renderIssues._lastFilterKey) {
     issueDisplayLimit = PAGE_SIZE;
     renderIssues._lastFilterKey = filterKey;
@@ -12776,9 +12877,11 @@ function renderIssues(options = {}) {
 
   const list = document.getElementById('issues-list');
   list.classList.toggle('ledger-view', issueLogView === 'list');
-  document.getElementById('issue-count').textContent = issueDisplayLimit < totalFiltered
-    ? `${issueDisplayLimit} of ${totalFiltered} issues`
-    : `${totalFiltered} issue${totalFiltered !== 1 ? 's' : ''}`;
+  document.getElementById('issue-count').textContent = historicalIssueFocusId
+    ? '1 historical issue'
+    : issueDisplayLimit < totalFiltered
+      ? `${issueDisplayLimit} of ${totalFiltered} issues`
+      : `${totalFiltered} issue${totalFiltered !== 1 ? 's' : ''}`;
 
   list.classList.remove('masonic-enabled');
   list.style.height = '';
@@ -12793,6 +12896,13 @@ function renderIssues(options = {}) {
   document.querySelectorAll('.issue-body.visible').forEach(el => expanded.add(el.id.replace('body-', '')));
   openSwipeRow = null;
   list.innerHTML = '';
+
+  if (historicalIssueFocusId) {
+    const focusBar = document.createElement('div');
+    focusBar.className = 'historical-issue-focus-bar';
+    focusBar.innerHTML = '<div><strong>Historical issue</strong><span>Showing this issue by itself. Current log filters are temporarily paused.</span></div><button type="button" onclick="closeHistoricalIssueView()">Return to issue log</button>';
+    list.appendChild(focusBar);
+  }
 
   const STATUS_CONFIG = Object.fromEntries(Object.entries(STATUSES).map(([k, v]) => [k, { label: v.label, cls: v.cls, icon: v.icon, color: v.cssColor, subs: v.subs }]));
   // Fallback for any orphaned status keys not in current STATUSES config
@@ -12836,7 +12946,7 @@ function renderIssues(options = {}) {
         list.appendChild(heading);
       }
     }
-    const wasOpen = expanded.has(issue.id);
+    const wasOpen = expanded.has(issue.id) || issue.id === historicalIssueFocusId;
     const isMyIssue = issue.userId === currentUser?.uid;
     const isAlertFocus = !!issue.__alertFocus;
     const isLocalIssue = !!(issue.__localPending || issue.__localSyncStatus);
@@ -13027,7 +13137,7 @@ function renderIssues(options = {}) {
         : '';
       const workflowHistoryButton = `<button class="tl-history-btn" type="button" data-workflow-history-key="${esc(historyKey)}" aria-expanded="${isHistoryOpen ? 'true' : 'false'}">History ${reachedWorkflowStates.length}/4</button>`;
 
-      return `<div class="tl-entry${entryWorkflowState === 'finished' ? ' finished-checkered' : ''}" style="border-left-color:${barColor};${entryBg}">
+      return `<div class="tl-entry${entryWorkflowState === 'finished' ? ' finished-checkered' : ''}" data-status-entry-index="${trueIdx}" style="border-left-color:${barColor};${entryBg}">
         ${wfBadge}
         <div>
           <div class="tl-header">
@@ -13101,15 +13211,9 @@ function renderIssues(options = {}) {
     const similarFixesState = issueSimilarFixes.get(issue.id);
     const similarFixesLoading = !!similarFixesState?.loading;
     const hasSavedSimilarFixes = hasSavedIssueSimilarFixes(issue);
-    const similarFixesHtml = `<section class="issue-similar-fixes" aria-label="Similar fixes">
-      <div class="issue-similar-fixes-actions">
-        <button class="issue-similar-fixes-trigger" id="similar-fixes-btn-${issue.id}" type="button" onclick="event.stopPropagation(); findSimilarFixesForIssue('${encodeURIComponent(issue.id)}')" ${similarFixesLoading ? 'disabled' : ''}>${similarFixesButtonContent(similarFixesLoading)}</button>
-        ${hasSavedSimilarFixes ? `<button class="issue-similar-fixes-saved" type="button" onclick="event.stopPropagation(); viewSavedSimilarFixesForIssue('${encodeURIComponent(issue.id)}')"><span aria-hidden="true">▣</span> View saved research</button>` : ''}
-      </div>
-      <div class="issue-similar-fixes-results" id="similar-fixes-results-${issue.id}" hidden></div>
-    </section>`;
     const issueActionToolbarHtml = `<div class="issue-card-action-toolbar" aria-label="Issue actions">
       <div class="issue-card-action-start">
+        <button class="issue-card-icon-btn similar-fixes${hasSavedSimilarFixes ? ' has-results' : ''}" id="similar-fixes-btn-${issue.id}" type="button" onclick="event.stopPropagation(); openSimilarFixesModal('${encodeURIComponent(issue.id)}')" ${similarFixesLoading ? 'disabled' : ''} title="${hasSavedSimilarFixes ? 'View similar fixes' : 'Find similar fixes'}" aria-label="${hasSavedSimilarFixes ? 'View similar fixes' : 'Find similar fixes'}">${similarFixesButtonContent(similarFixesLoading)}</button>
         <button class="issue-card-icon-btn timer${!hasTimer ? ' inactive' : reminderState?.isPaused ? ' paused' : isTimerOverdue ? ' overdue alarm-dismiss-btn' : ''}" type="button" onclick="event.stopPropagation(); ${isTimerOverdue ? `dismissOverdueIssueReminder('${issue.id}')` : `openIssueReminderModal('${issue.id}')`}" title="${isTimerOverdue ? 'Dismiss expired alarm' : hasTimer ? 'Modify check-back timer' : 'Set check-back timer'}" aria-label="${isTimerOverdue ? 'Dismiss expired alarm' : hasTimer ? 'Modify check-back timer' : 'Set check-back timer'}">
           <img src="icons/timer.svg" alt="" aria-hidden="true">
           ${hasTimer ? `<span class="issue-card-icon-badge" data-reminder-id="${issue.id}">${isTimerOverdue ? '!' : formatReminderClock(reminderState)}</span>` : ''}
@@ -13144,8 +13248,8 @@ function renderIssues(options = {}) {
     const secKeys = getSecondaryStatuses(issue).filter(k => k !== 'resolved');
     // Category-level photos live on their status-history entry. Show the same
     // camera marker used by the issue log whenever that category has one.
-    const categoryPhotoIconHtml = (entry) => Array.isArray(entry?.photos) && entry.photos.length
-      ? `<span class="issue-category-photo-icon" title="${entry.photos.length} photo${entry.photos.length === 1 ? '' : 's'} attached to this category" aria-label="${entry.photos.length} photo${entry.photos.length === 1 ? '' : 's'} attached">📷</span>`
+    const categoryPhotoIconHtml = (entry, entryIndex) => Array.isArray(entry?.photos) && entry.photos.length
+      ? `<button type="button" class="issue-category-photo-icon" onclick="openIssuePhotoSection('${issue.id}',${entryIndex},event)" title="Show ${entry.photos.length} photo${entry.photos.length === 1 ? '' : 's'} attached to this category" aria-label="Show ${entry.photos.length} photo${entry.photos.length === 1 ? '' : 's'} attached to this category">📷</button>`
       : '';
 
     const getWorkflowResponseUi = (statusKey, subStatus, fallbackColor, entryIndex) => {
@@ -13256,7 +13360,7 @@ function renderIssues(options = {}) {
             <div class="wf-status-row-info">
               <div class="wf-status-header">
                 <div class="issue-status" style="color:${sColor};border-color:${sColor};background:${alphaColor(sColor, 0.12)}">
-                  <span class="issue-status-main">${sCfg.icon} ${esc(sCfg.label)}${categoryPhotoIconHtml(entry)}</span>
+                  <span class="issue-status-main">${sCfg.icon} ${esc(sCfg.label)}${categoryPhotoIconHtml(entry, idx)}</span>
                 </div>
               </div>
               ${sSubLabel ? `<span class="issue-status-sub" style="color:${sColor};">${esc(sSubLabel)}</span>` : ''}
@@ -13323,7 +13427,7 @@ function renderIssues(options = {}) {
       <div class="wf-status-row-info">
         <div class="wf-status-header">
           <div class="issue-status" style="color:${sc.color};border-color:${sc.color};background:${alphaColor(sc.color, 0.12)}">
-            <span class="issue-status-main">${sc.icon} ${baseLabel}${categoryPhotoIconHtml(currentEntry)}</span>
+            <span class="issue-status-main">${sc.icon} ${baseLabel}${categoryPhotoIconHtml(currentEntry, currentEntryIndex)}</span>
           </div>
         </div>
         ${subLabelWithSerial ? `<span class="issue-status-sub" style="color:${sc.color};">${esc(subLabelWithSerial)}</span>` : ''}
@@ -13367,14 +13471,13 @@ function renderIssues(options = {}) {
         <div class="issue-note-preview">${esc(issue.note)}</div>
         <div class="issue-time">
           <div class="issue-time-created">${createdAtHtml}${shiftBadgeHtml}${timerBadgeHtml}${localSyncBadgeHtml}</div>
-          ${(submitterHtml || (issue.photos || []).length || issue.editedAt) ? `<div class="issue-time-submitter">${submitterHtml ? `Created by ${submitterHtml}` : ''}${(issue.photos || []).length ? `<span class="photo-count-badge">📷 ${issue.photos.length}</span>` : ''}${issue.editedAt ? '<span style="color:var(--color-text-subtle, var(--text3))">(edited)</span>' : ''}</div>` : ''}
+          ${(submitterHtml || (issue.photos || []).length || issue.editedAt) ? `<div class="issue-time-submitter">${submitterHtml ? `Created by ${submitterHtml}` : ''}${(issue.photos || []).length ? `<button type="button" class="photo-count-badge" onclick="openIssuePhotoSection('${issue.id}',null,event)" aria-label="Show ${issue.photos.length} issue photo${issue.photos.length === 1 ? '' : 's'}">📷 ${issue.photos.length}</button>` : ''}${issue.editedAt ? '<span style="color:var(--color-text-subtle, var(--text3))">(edited)</span>' : ''}</div>` : ''}
           ${alertFocusHtml}
         </div>
         ${wfStatusRowsHtml}
       </div>
       <div class="issue-body ${wasOpen ? 'visible' : ''}" id="body-${issue.id}">
         <!-- Full width content -->
-        ${similarFixesHtml}
         <div class="issue-full-note">${esc(issue.note)}</div>
         ${editedNote}
         ${issueQualityDefectHtml}
@@ -13425,9 +13528,13 @@ function renderIssues(options = {}) {
         <span class="ledger-state ${currentKey === 'resolved' ? 'resolved' : 'open'}">${esc(currentKey === 'resolved' ? 'Resolved' : statusLabel)}</span>
         <span class="ledger-duration">${esc(formatLedgerDuration(issue))}</span>
         <span class="ledger-person">${esc(issue.userName || 'Unknown')}</span>
-        <span class="ledger-counts"><span title="Updates">↻ ${updateCount}</span><span title="Photos">▧ ${photoCount}</span></span>
+        <span class="ledger-counts"><span title="Updates">↻ ${updateCount}</span><span class="ledger-photo-count" data-issue-photo-scroll="${issue.id}" title="Show photos">▧ ${photoCount}</span></span>
         <span class="ledger-chevron" aria-hidden="true">⌄</span>`;
       row.appendChild(summary);
+      summary.querySelector('[data-issue-photo-scroll]')?.addEventListener('click', event => {
+        event.stopPropagation();
+        window.openIssuePhotoSection(issue.id, null, event);
+      });
     }
     row.appendChild(card);
 
@@ -13449,27 +13556,38 @@ function renderIssues(options = {}) {
     const catPanel = document.createElement('div');
     catPanel.className = 'swipe-category-panel';
     const catInner = document.createElement('div');
-    catInner.className = 'swipe-category-inner';
+    catInner.className = 'swipe-category-inner status-picker-grouped';
 
-    // Build status tiles for ALL statuses (including open/resolved)
-    // Keep true alphabetic left-to-right order in the swipe category slider.
-    statusOrder.forEach(key => {
-      const st = getStatusDef(key);
-      const tile = document.createElement('div');
-      tile.className = 'swipe-status-tile' + (currentStatusKey(issue) === key ? ' current' : '');
-      tile.style.color = getStatusColor(key);
-      tile.dataset.status = key;
-      tile.innerHTML = `<span class="swipe-tile-icon">${st.icon}</span><span class="swipe-tile-label">${getStatusLabel(key, 'short')}</span>`;
-      catInner.appendChild(tile);
+    // Build all configured statuses in two visible, alphabetized groups.
+    const groupedStatusOrder = groupStatusPickerKeys(statusOrder);
+    [
+      ['situation', 'Situation', 'What is happening?'],
+      ['role', 'Team / Role', 'Who should respond?']
+    ].forEach(([group, title, hint]) => {
+      if (!groupedStatusOrder[group].length) return;
+      const { section, grid } = createStatusPickerSection(group, title, hint, 'swipe-status-grid');
+      groupedStatusOrder[group].forEach(key => {
+        const st = getStatusDef(key);
+        const tile = document.createElement('div');
+        tile.className = 'swipe-status-tile' + (currentStatusKey(issue) === key ? ' current' : '');
+        tile.style.color = getStatusColor(key);
+        tile.dataset.status = key;
+        tile.innerHTML = `<span class="swipe-tile-icon">${st.icon}</span><span class="swipe-tile-label">${getStatusLabel(key, 'short')}</span>`;
+        grid.appendChild(tile);
+      });
+      catInner.appendChild(section);
     });
 
-    // Search tile (always last)
+    // Search is a picker tool rather than a status, so it stays outside both groups.
+    const searchRow = document.createElement('div');
+    searchRow.className = 'status-picker-search-row swipe-picker-search-row';
     const searchTile = document.createElement('div');
     searchTile.className = 'swipe-status-tile swipe-search-tile';
     searchTile.style.color = 'var(--color-text-muted, var(--text2))';
     searchTile.dataset.status = '__search__';
     searchTile.innerHTML = `<span class="swipe-tile-icon">🔍</span><span class="swipe-tile-label">Search</span>`;
-    catInner.appendChild(searchTile);
+    searchRow.appendChild(searchTile);
+    catInner.appendChild(searchRow);
 
     catPanel.appendChild(catInner);
 
@@ -13791,7 +13909,6 @@ function renderIssues(options = {}) {
             };
 
             addTapListener(chip, handleSubClick);
-            chip.addEventListener('click', handleSubClick); // Mouse support
           });
 
           subPanel.classList.add('visible');
@@ -13809,7 +13926,6 @@ function renderIssues(options = {}) {
       };
 
       addTapListener(tile, handleTileClick);
-      tile.addEventListener('click', handleTileClick); // Mouse support
     });
 
     // Swipe gesture handling - Peek & Reveal with bidirectional close
@@ -14005,13 +14121,13 @@ function renderIssues(options = {}) {
     }
   });
 
-  if (issueDisplayLimit < totalFiltered) {
+  if (!historicalIssueFocusId && issueDisplayLimit < totalFiltered) {
     const remaining = totalFiltered - issueDisplayLimit;
     const loadMoreRow = document.createElement('div');
     loadMoreRow.className = 'load-more-row';
     loadMoreRow.innerHTML = `<button class="load-more-btn" onclick="loadMoreIssues()">Show ${Math.min(remaining, PAGE_SIZE)} more <span class="load-more-count">${remaining} remaining</span></button>`;
     list.appendChild(loadMoreRow);
-  } else if (issueLogView === 'list' && issuePeriod === 'all') {
+  } else if (!historicalIssueFocusId && issueLogView === 'list' && issuePeriod === 'all') {
     const hasOlder = shouldUseSqlStagingReads(currentPlantId)
       ? !sqlIssueHistoryExhausted
       : !!issueHistoryCursor;
@@ -14148,6 +14264,33 @@ window.toggleCard = id => {
   scheduleIssueLogRelayout();
 };
 
+window.openIssuePhotoSection = (id, entryIndex = null, event = null) => {
+  event?.preventDefault?.();
+  event?.stopPropagation?.();
+  if (openSwipeRow) closeSwipe();
+  const bodyEl = document.getElementById(`body-${id}`);
+  if (!bodyEl) return;
+  const chevronEl = document.getElementById(`chevron-${id}`);
+  const wasClosed = !bodyEl.classList.contains('visible');
+  bodyEl.classList.add('visible');
+  chevronEl?.classList.add('open');
+  if (wasClosed) ensureIssueDetailsHydrated(id).catch(() => { });
+
+  const scrollToPhotos = () => {
+    const target = entryIndex === null || entryIndex === undefined
+      ? bodyEl.querySelector(':scope > .issue-photos')
+      : bodyEl.querySelector(`[data-status-entry-index="${entryIndex}"] .issue-photos`);
+    if (!target) return;
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    target.classList.remove('photo-scroll-highlight');
+    requestAnimationFrame(() => target.classList.add('photo-scroll-highlight'));
+    setTimeout(() => target.classList.remove('photo-scroll-highlight'), 1400);
+  };
+
+  requestAnimationFrame(() => setTimeout(scrollToPhotos, wasClosed ? 80 : 0));
+  scheduleIssueLogRelayout(100);
+};
+
 function resetIssueLogLayoutStyles(list) {
   list.style.height = '';
   list.querySelectorAll(':scope > .issue-row').forEach(row => {
@@ -14216,7 +14359,7 @@ function applyIssueLogLayout() {
     return;
   }
 
-  if (issueLogView === 'list' || issueLogLayoutMode !== 'masonic' || window.innerWidth <= 480) {
+  if (historicalIssueFocusId || issueLogView === 'list' || issueLogLayoutMode !== 'masonic' || window.innerWidth <= 480) {
     list.classList.remove('masonic-enabled');
     if (issueLogResizeObserver) issueLogResizeObserver.disconnect();
     resetIssueLogLayoutStyles(list);
@@ -14257,7 +14400,7 @@ function applyIssueLogLayout() {
 }
 
 function scheduleIssueLogRelayout(delay = 0) {
-  if (issueLogView === 'list' || issueLogLayoutMode !== 'masonic') return;
+  if (historicalIssueFocusId || issueLogView === 'list' || issueLogLayoutMode !== 'masonic') return;
 
   if (issueLogDeferredRelayoutTimer) {
     clearTimeout(issueLogDeferredRelayoutTimer);
@@ -15294,6 +15437,9 @@ function handleShellAction(action, value, trigger, event) {
     case 'set-map-mode':
       window.setMapMode?.(value);
       completeDemoGuideStep('floor');
+      break;
+    case 'open-report-composer':
+      window.openReportComposer?.();
       break;
     case 'set-issue-view':
       window.setIssueLogView?.(value);
@@ -16775,6 +16921,7 @@ window.clearAllFilters = (options = {}) => {
   issueShiftFilter = 'all';
   issuePeriod = 'today';
   issueRowScope = 'all';
+  persistIssueRowScope(issueRowScope);
   currentSort = 'newest';
 
   ['all', 'mine'].forEach(x => document.getElementById('scope-' + x)?.classList.toggle('active', x === 'all'));
@@ -17003,13 +17150,34 @@ window.closeExportDropdown = exportDropdown.close;
 exportDropdown.bindOutsideClick();
 
 // ── ACTIVE ROWS TOGGLE ──
-let issueRowScope = 'all';
+const ISSUE_ROW_SCOPE_STORAGE_KEY = 'apTracker:issue-row-scope';
+
+function loadIssueRowScope() {
+  try {
+    const saved = localStorage.getItem(ISSUE_ROW_SCOPE_STORAGE_KEY);
+    return ['all', 'active', 'resolved'].includes(saved) ? saved : 'active';
+  } catch (_) {
+    return 'active';
+  }
+}
+
+function persistIssueRowScope(scope) {
+  try { localStorage.setItem(ISSUE_ROW_SCOPE_STORAGE_KEY, scope); } catch (_) { }
+}
+
+function syncIssueRowScopeButtons(scope) {
+  document.getElementById('scope-view-all')?.classList.toggle('active', scope === 'all');
+  document.getElementById('scope-view-active')?.classList.toggle('active', scope === 'active');
+  document.getElementById('scope-view-resolved')?.classList.toggle('active', scope === 'resolved');
+}
+
+let issueRowScope = loadIssueRowScope();
+syncIssueRowScopeButtons(issueRowScope);
 
 window.setIssueRowScope = s => {
-  issueRowScope = s;
-  document.getElementById('scope-view-all')?.classList.toggle('active', s === 'all');
-  document.getElementById('scope-view-active')?.classList.toggle('active', s === 'active');
-  document.getElementById('scope-view-resolved')?.classList.toggle('active', s === 'resolved');
+  issueRowScope = ['all', 'active', 'resolved'].includes(s) ? s : 'active';
+  persistIssueRowScope(issueRowScope);
+  syncIssueRowScopeButtons(issueRowScope);
   renderIssues(); updateStats();
 };
 
@@ -17390,7 +17558,7 @@ document.addEventListener('pointermove', _mobileModalSwipeMove, true);
 document.addEventListener('pointerup', _mobileModalSwipeEnd, true);
 document.addEventListener('pointercancel', _mobileModalSwipeEnd, true);
 
-document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeModal(); closeEditModal(); closeResolveModal(); closeReopenModal(); closeLightbox(); closeSortDropdown(); closeExportModal(); closeSerialModal(); closeEditStatusModal(); closeNotesModal(); closeResponseEscalationModal(); closeSmsComposer(true); window.closeMessagingModal?.(); window.closeConversation?.(); closeAppearanceModal(); closeThemeEditor(); closeRolePreferencesModal(); closeRoleAlertInboxModal(); closeShortcutsOverlay(); } });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeModal(); closeEditModal(); closeResolveModal(); closeReopenModal(); closeLightbox(); closeSortDropdown(); closeExportModal(); closeSerialModal(); closeEditStatusModal(); closeNotesModal(); closeResponseEscalationModal(); window.closeSimilarFixesModal?.(); closeSmsComposer(true); window.closeMessagingModal?.(); window.closeConversation?.(); closeAppearanceModal(); closeThemeEditor(); closeRolePreferencesModal(); closeRoleAlertInboxModal(); closeShortcutsOverlay(); } });
 
 document.getElementById('theme-editor-modal')?.addEventListener('click', e => {
   const modal = document.getElementById('theme-editor-modal');
@@ -17478,10 +17646,16 @@ function resolveSerialInputValue() {
   return customVal || selectVal;
 }
 
-let _serialPending = null; // { issueId, status, sub, dateTime }
+let _serialPending = null; // { issueId, status, sub, dateTime, updateInitialEntry }
 
-window.openSerialModal = (issueId, status, sub, dt) => {
-  _serialPending = { issueId, status, sub, dateTime: dt || null };
+window.openSerialModal = (issueId, status, sub, dt, options = {}) => {
+  _serialPending = {
+    issueId,
+    status,
+    sub,
+    dateTime: dt || null,
+    updateInitialEntry: options?.updateInitialEntry === true
+  };
   const issue = issues.find(i => i.id === issueId);
   document.getElementById('serial-modal-machine').textContent = issue ? issue.machine : '';
   const st = getStatusDef(status);
@@ -17525,8 +17699,37 @@ window.confirmSerialModal = async () => {
   }
   const locationText = getMaterialLocationText(sn);
   const note = locationText ? `S/N: ${sn} (${locationText})` : ('S/N: ' + sn);
-  await addStatusEntry(_serialPending.issueId, _serialPending.status, _serialPending.sub, note, _serialPending.dateTime);
-  await awardGamification('serial_captured_when_required', { issueId: _serialPending.issueId, dedupeSuffix: sn, tags: ['serial:captured'] });
+  const pending = { ..._serialPending };
+  let didSave = false;
+  if (pending.updateInitialEntry) {
+    const issue = issues.find(candidate => candidate.id === pending.issueId);
+    if (issue) {
+      const history = getMutableStatusHistory(issue);
+      let initialEntryIndex = -1;
+      for (let index = history.length - 1; index >= 0; index--) {
+        const entry = history[index];
+        if (String(entry?.status || '') !== String(pending.status || '')) continue;
+        if (String(entry?.subStatus || '') !== String(pending.sub || '')) continue;
+        initialEntryIndex = index;
+        break;
+      }
+      if (initialEntryIndex >= 0) {
+        didSave = await updateStatusEntry(
+          pending.issueId,
+          initialEntryIndex,
+          pending.status,
+          pending.sub,
+          note,
+          pending.dateTime
+        );
+      }
+    }
+  }
+  if (!didSave) {
+    didSave = Boolean(await addStatusEntry(pending.issueId, pending.status, pending.sub, note, pending.dateTime));
+  }
+  if (!didSave) return;
+  await awardGamification('serial_captured_when_required', { issueId: pending.issueId, dedupeSuffix: sn, tags: ['serial:captured'] });
   closeSerialModal();
 };
 
