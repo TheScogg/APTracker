@@ -3050,7 +3050,8 @@
   .wf-status-row-info .issue-status-sub { margin-left: 2px; color: var(--color-text-subtle, var(--text3)) !important; }
   .wf-status-dropdown { display: none; grid-column: 1 / -1; grid-row: 3; width: 100%; padding: 2px 0 0 0; cursor: default; }
   .wf-status-row.open .wf-status-dropdown { display: block; }
-  .wf-status-row .wf-state-line { align-self: flex-end; justify-content: flex-end; gap: 5px; min-height: 26px; padding: 4px 9px; border: 1px solid color-mix(in srgb, currentColor 28%, transparent); border-radius: 999px; background: color-mix(in srgb, currentColor 9%, var(--color-surface, var(--bg2))); color: var(--color-text-muted, var(--text2)); text-align: right; }
+  .wf-status-row .wf-state-line { align-self: flex-end; display: flex; flex-direction: column; align-items: flex-end; justify-content: center; gap: 2px; min-height: 26px; padding: 4px 9px 5px; border: 1px solid color-mix(in srgb, currentColor 28%, transparent); border-radius: 13px; background: color-mix(in srgb, currentColor 9%, var(--color-surface, var(--bg2))); color: var(--color-text-muted, var(--text2)); text-align: right; }
+  .wf-status-row .wf-state-primary { display: flex; align-items: baseline; justify-content: flex-end; gap: 5px; width: 100%; }
   .wf-status-row .wf-state-line.called { color: #eab308; }
   .wf-status-row .wf-state-line.accepted { color: #22c55e; }
   .wf-status-row .wf-state-line.in-progress { color: #3b82f6; }
@@ -3058,7 +3059,7 @@
   .wf-status-row .wf-state-line.not-started { color: var(--color-text-subtle, var(--text3)); }
   .wf-status-row .wf-state-label { color: inherit; font-size: 10px; font-weight: 800; letter-spacing: 0.01em; text-transform: none; }
   .wf-status-row .wf-state-age { color: inherit; font-size: 9px; }
-  .wf-status-row .wf-state-actor { display: block; width: 100%; max-width: 142px; overflow: hidden; color: var(--color-text-muted, var(--text2)); font-family: 'Nunito', sans-serif; font-size: 9px; font-weight: 700; letter-spacing: 0; line-height: 1.1; text-align: right; text-overflow: ellipsis; text-transform: none; white-space: nowrap; }
+  .wf-status-row .wf-state-actor { display: block; box-sizing: border-box; width: 100%; max-width: 142px; overflow: hidden; color: var(--color-text-muted, var(--text2)); font-family: 'Nunito', sans-serif; font-size: 8.5px; font-weight: 700; letter-spacing: 0; line-height: 1.1; text-align: right; text-overflow: ellipsis; text-transform: none; white-space: nowrap; }
 
   /* Connected four-stage progress rail for each issue workflow. */
   .wf-status-row .wf-stepper { position: relative; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); width: 100%; gap: 0; isolation: isolate; }

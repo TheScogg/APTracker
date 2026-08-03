@@ -13450,10 +13450,12 @@ function renderIssues(options = {}) {
       </div>
       <div class="wf-state-summary">
         <div class="wf-state-line ${workflowState ? workflowConfig[workflowState].cssState : 'not-started'}">
-          <div class="wf-state-label ${workflowState ? workflowConfig[workflowState].cssState : ''}">${workflowState ? workflowConfig[workflowState].label : 'Not started'}</div>
-          ${wfAge ? `<div class="wf-state-age ${workflowState ? workflowConfig[workflowState].cssState : ""}">${esc(wfAge)}</div>` : ''}
+          <div class="wf-state-primary">
+            <div class="wf-state-label ${workflowState ? workflowConfig[workflowState].cssState : ''}">${workflowState ? workflowConfig[workflowState].label : 'Not started'}</div>
+            ${wfAge ? `<div class="wf-state-age ${workflowState ? workflowConfig[workflowState].cssState : ""}">${esc(wfAge)}</div>` : ''}
+          </div>
+          ${wfActorName ? `<div class="wf-state-actor ${workflowState ? workflowConfig[workflowState].cssState : ''}" title="${esc(wfActorName)}">${esc(wfActorName)}</div>` : ''}
         </div>
-        ${wfActorName ? `<div class="wf-state-actor ${workflowState ? workflowConfig[workflowState].cssState : ''}" title="${esc(wfActorName)}">${esc(wfActorName)}</div>` : ''}
       </div>
     </div>`;
 
@@ -13506,10 +13508,12 @@ function renderIssues(options = {}) {
               <div class="wf-steps-row"><div class="wf-steps wf-stepper" style="--wf-progress:${sProgress}%">${btnHtml}</div></div>
               <div class="wf-state-summary">
                 <div class="wf-state-line ${sStateClass || 'not-started'}">
-                  <div class="wf-state-label ${sStateClass}">${sStateLabel}</div>
-                  ${sAge ? `<div class="wf-state-age ${sStateClass}">${esc(sAge)}</div>` : ''}
+                  <div class="wf-state-primary">
+                    <div class="wf-state-label ${sStateClass}">${sStateLabel}</div>
+                    ${sAge ? `<div class="wf-state-age ${sStateClass}">${esc(sAge)}</div>` : ''}
+                  </div>
+                  ${sActorName ? `<div class="wf-state-actor ${sStateClass}" title="${esc(sActorName)}">${esc(sActorName)}</div>` : ''}
                 </div>
-                ${sActorName ? `<div class="wf-state-actor ${sStateClass}" title="${esc(sActorName)}">${esc(sActorName)}</div>` : ''}
               </div>
             </div>
             ${rowDropdownHtml}
