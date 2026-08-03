@@ -4189,6 +4189,18 @@ function createStatusPickerSection(group, title, hint, gridClass) {
   return { section, grid };
 }
 
+function getCompactSwipeStatusLabel(statusKey) {
+  const label = getStatusLabel(statusKey, 'short');
+  const compactLabels = {
+    'controlman': 'Control',
+    'maintenance': 'Maint.',
+    'process eng.': 'Process',
+    'process engineer': 'Process',
+    'production': 'Prod.'
+  };
+  return compactLabels[String(label || '').trim().toLowerCase()] || label;
+}
+
 function toColumnMajorOrder(items, columnCount) {
   const source = Array.isArray(items) ? items : [];
   const cols = Math.max(1, Number(columnCount) || 1);
@@ -7705,7 +7717,6 @@ window.setMapMode = mode => {
   mapMode = mode;
   document.getElementById('mode-log').className = 'map-mode-btn' + (mode === 'log' ? ' active-log' : '');
   document.getElementById('mode-hist').className = 'map-mode-btn' + (mode === 'hist' ? ' active-hist' : '');
-  document.getElementById('mode-notes').className = 'map-mode-btn' + (mode === 'notes' ? ' active-hist' : '');
   document.getElementById('floor-map-label').textContent = mode === 'log'
     ? 'FLOOR MAP — SELECT A PRESS FOR QUICK ACTIONS'
     : mode === 'hist'
@@ -7740,13 +7751,11 @@ let activeMiniCard = null; // { machine, rowName }
 
 function updateReportAction(machineCode = activeMiniCard?.machine || '') {
   const button = document.getElementById('report-fab');
-  const label = document.getElementById('report-fab-label');
-  if (!button || !label) return;
+  if (!button) return;
   const selectedMachine = ALL_MACHINES.includes(machineCode) ? machineCode : '';
   button.hidden = !currentUserPermissions.canCreateIssue;
   button.dataset.machine = selectedMachine;
   button.classList.toggle('has-press', Boolean(selectedMachine));
-  label.textContent = selectedMachine ? `Report ${selectedMachine}` : 'Report Issue';
   button.setAttribute('aria-label', selectedMachine ? `Report an issue for press ${selectedMachine}` : 'Report an issue');
 }
 
@@ -8053,16 +8062,110 @@ function updateAddModalMachineLabel(machineCode = currentMachine) {
   if (label) label.textContent = machineCode || 'Select press';
 }
 
+function sortedPressRowEntries() {
+  return Object.entries(PRESSES || {}).sort(([rowA], [rowB]) => {
+    if (rowA === 'Other') return 1;
+    if (rowB === 'Other') return -1;
+    return String(rowA).localeCompare(String(rowB), undefined, { numeric: true, sensitivity: 'base' });
+  });
+}
+
+function compactPressRowLabel(rowName) {
+  const number = String(rowName || '').match(/\d+/)?.[0];
+  return number ? `R${number}` : String(rowName || 'Other');
+}
+
+function setIssueMachinePickerOpen(open) {
+  const trigger = document.getElementById('issue-machine-trigger');
+  const popup = document.getElementById('issue-machine-popup');
+  if (!trigger || !popup) return;
+  const shouldOpen = Boolean(open);
+  popup.hidden = !shouldOpen;
+  trigger.setAttribute('aria-expanded', String(shouldOpen));
+  if (shouldOpen) {
+    requestAnimationFrame(() => {
+      const selected = document.querySelector('#issue-machine-options .issue-machine-option[aria-selected="true"]');
+      selected?.scrollIntoView({ block: 'nearest' });
+    });
+  }
+}
+
+function updateIssueMachinePickerSelection(machineCode = '') {
+  const selected = String(machineCode || '').trim();
+  const trigger = document.getElementById('issue-machine-trigger');
+  const triggerLabel = document.getElementById('issue-machine-trigger-label');
+  if (triggerLabel) triggerLabel.textContent = selected || 'Select a press';
+  trigger?.classList.toggle('has-selection', Boolean(selected));
+  document.querySelectorAll('#issue-machine-options .issue-machine-option').forEach(button => {
+    button.setAttribute('aria-selected', String(button.dataset.machine === selected));
+  });
+  const selectedRow = sortedPressRowEntries().find(([, machines]) => (machines || []).includes(selected))?.[0] || '';
+  document.querySelectorAll('#issue-machine-row-jumps .issue-machine-row-jump').forEach(button => {
+    button.classList.toggle('active', button.dataset.row === selectedRow);
+  });
+}
+
+function renderIssueMachinePicker() {
+  const jumps = document.getElementById('issue-machine-row-jumps');
+  const options = document.getElementById('issue-machine-options');
+  if (!jumps || !options) return;
+  jumps.innerHTML = '';
+  options.innerHTML = '';
+  sortedPressRowEntries().forEach(([rowName, machines]) => {
+    const sortedMachines = [...(machines || [])]
+      .sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' }));
+    if (!sortedMachines.length) return;
+
+    const section = document.createElement('section');
+    section.className = 'issue-machine-option-group';
+    section.dataset.row = rowName;
+    const heading = document.createElement('div');
+    heading.className = 'issue-machine-option-heading';
+    heading.textContent = rowName;
+    const grid = document.createElement('div');
+    grid.className = 'issue-machine-option-grid';
+    sortedMachines.forEach(machineCode => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'issue-machine-option';
+      button.dataset.machine = machineCode;
+      button.setAttribute('role', 'option');
+      button.setAttribute('aria-selected', 'false');
+      button.textContent = machineCode;
+      button.addEventListener('click', () => {
+        const select = document.getElementById('issue-machine-select');
+        if (!select) return;
+        select.value = machineCode;
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        setIssueMachinePickerOpen(false);
+        document.getElementById('issue-note')?.focus();
+      });
+      grid.appendChild(button);
+    });
+    section.append(heading, grid);
+    options.appendChild(section);
+
+    const jump = document.createElement('button');
+    jump.type = 'button';
+    jump.className = 'issue-machine-row-jump';
+    jump.dataset.row = rowName;
+    jump.textContent = compactPressRowLabel(rowName);
+    jump.setAttribute('aria-label', `Jump to ${rowName}`);
+    jump.addEventListener('click', () => {
+      options.scrollTo({ top: section.offsetTop - options.offsetTop, behavior: 'smooth' });
+      jumps.querySelectorAll('.issue-machine-row-jump').forEach(button => button.classList.toggle('active', button === jump));
+    });
+    jumps.appendChild(jump);
+  });
+  updateIssueMachinePickerSelection(document.getElementById('issue-machine-select')?.value || '');
+}
+
 function populateIssueMachineSelect(selectedMachine = currentMachine) {
   const select = document.getElementById('issue-machine-select');
   if (!select) return;
   const previous = String(selectedMachine || select.value || '').trim();
   select.innerHTML = '<option value="">Select a press</option>';
-  const sortedPressRows = Object.entries(PRESSES || {}).sort(([rowA], [rowB]) => {
-    if (rowA === 'Other') return 1;
-    if (rowB === 'Other') return -1;
-    return String(rowA).localeCompare(String(rowB), undefined, { numeric: true, sensitivity: 'base' });
-  });
+  const sortedPressRows = sortedPressRowEntries();
   sortedPressRows.forEach(([rowName, machines]) => {
     const group = document.createElement('optgroup');
     group.label = rowName;
@@ -8079,6 +8182,7 @@ function populateIssueMachineSelect(selectedMachine = currentMachine) {
   select.value = previous && ALL_MACHINES.includes(previous) ? previous : '';
   currentMachine = select.value || '';
   updateAddModalMachineLabel(currentMachine);
+  renderIssueMachinePicker();
 }
 
 function populateEditMachineSelect(selectedMachine = '') {
@@ -8974,6 +9078,7 @@ window.openAddModal = (m = '') => {
   document.getElementById('issue-note').value = '';
   document.getElementById('photo-previews').innerHTML = '';
   populateIssueMachineSelect(currentMachine);
+  setIssueMachinePickerOpen(false);
   document.getElementById('log-photo-source-row')?.classList.remove('visible');
   setSubmitting(false);
   renderLogCatButtons();
@@ -8981,7 +9086,7 @@ window.openAddModal = (m = '') => {
   updateLogCatPill();
   document.getElementById('log-cat-selected').classList.toggle('visible', Boolean(logCatKey));
   document.getElementById('add-modal').classList.add('visible');
-  requestAnimationFrame(() => (currentMachine ? document.getElementById('issue-note') : document.getElementById('issue-machine-select'))?.focus());
+  requestAnimationFrame(() => (currentMachine ? document.getElementById('issue-note') : document.getElementById('issue-machine-trigger'))?.focus());
 };
 
 const issueSimilarFixes = new Map();
@@ -9302,14 +9407,18 @@ window.closeHistoricalIssueView = () => {
 };
 
 // ── LOG ISSUE CATEGORY PICKER ──
+function getLogSearchBarContainer() {
+  return document.getElementById('log-cat-inline-search') || document.getElementById('search-bar-row');
+}
+
 function renderLogCatButtons() {
   const row = document.getElementById('log-cat-all-row'); if (!row) return;
   row.innerHTML = '';
   const ordered = getAlphabetizedStatusKeys();
   const grouped = groupStatusPickerKeys(ordered);
   const sections = [
-    ['situation', 'Situation', 'What is happening?'],
-    ['role', 'Team / Role', 'Who should respond?']
+    ['role', 'Team / Role', 'Who should respond?'],
+    ['situation', 'Situation', 'What is happening?']
   ];
 
   sections.forEach(([group, title, hint]) => {
@@ -9344,17 +9453,18 @@ function renderLogCatButtons() {
   // Search is a picker tool rather than a status, so it stays outside both groups.
   const searchRow = document.createElement('div');
   searchRow.className = 'status-picker-search-row log-cat-search-row';
-  const searchBtn = document.createElement('button');
-  searchBtn.className = 'log-cat-btn' + (isSearchMode ? ' selected' : '');
-  searchBtn.dataset.key = '__search__';
-  const searchCol = 'var(--color-text-muted, var(--text2))';
-  searchBtn.style.color = searchCol;
   if (isSearchMode) {
-    searchBtn.style.background = alphaColor(searchCol, 0.13);
+    searchRow.id = 'log-cat-inline-search';
+    searchRow.classList.add('search-bar-row', 'visible');
+  } else {
+    const searchBtn = document.createElement('button');
+    searchBtn.className = 'log-cat-btn';
+    searchBtn.dataset.key = '__search__';
+    searchBtn.style.color = 'var(--color-text-muted, var(--text2))';
+    searchBtn.innerHTML = `<span class="log-cat-icon">🔍</span><span class="log-cat-label">Search</span>`;
+    addTapListener(searchBtn, () => openSearch(searchApplyAddModal, null));
+    searchRow.appendChild(searchBtn);
   }
-  searchBtn.innerHTML = `<span class="log-cat-icon">🔍</span><span class="log-cat-label">Search</span>`;
-  addTapListener(searchBtn, () => openSearch(searchApplyAddModal, null));
-  searchRow.appendChild(searchBtn);
   row.appendChild(searchRow);
 }
 
@@ -9362,7 +9472,7 @@ function renderLogSubChips() {
   const row = document.getElementById('log-sub-row'); if (!row) return;
   if (isSearchMode) {
     renderSharedSearchContent(
-      document.getElementById('search-bar-row'),
+      getLogSearchBarContainer(),
       row,
       handleSearchSubPick,
       addSearchActiveSub
@@ -9459,7 +9569,7 @@ function openSearch(applySelection, exitFn) {
   logCatSub = null;
   renderLogCatButtons();
   renderSharedSearchContent(
-    document.getElementById('search-bar-row'),
+    getLogSearchBarContainer(),
     document.getElementById('log-sub-row'),
     handleSearchSubPick,
     addSearchActiveSub
@@ -9577,7 +9687,7 @@ function handleSearchSubPick(sub) {
   renderLogCatButtons();
   if (addSearchActiveSub) {
     // Re-render with updated activeSub
-    const barContainer = document.getElementById('search-bar-row');
+    const barContainer = getLogSearchBarContainer();
     const gridContainer = document.getElementById('log-sub-row');
     renderSharedSearchContent(barContainer, gridContainer, handleSearchSubPick, addSearchActiveSub);
   }
@@ -9970,11 +10080,29 @@ document.getElementById('log-cat-selected')?.addEventListener('click', e => {
 document.getElementById('issue-machine-select')?.addEventListener('change', e => {
   currentMachine = String(e.target.value || '').trim();
   updateAddModalMachineLabel(currentMachine);
+  updateIssueMachinePickerSelection(currentMachine);
+});
+document.getElementById('issue-machine-trigger')?.addEventListener('click', () => {
+  const trigger = document.getElementById('issue-machine-trigger');
+  setIssueMachinePickerOpen(trigger?.getAttribute('aria-expanded') !== 'true');
+});
+document.addEventListener('click', event => {
+  const picker = document.getElementById('issue-machine-picker');
+  if (picker && !picker.contains(event.target)) setIssueMachinePickerOpen(false);
+});
+document.addEventListener('keydown', event => {
+  if (event.key !== 'Escape') return;
+  const trigger = document.getElementById('issue-machine-trigger');
+  if (trigger?.getAttribute('aria-expanded') === 'true') {
+    setIssueMachinePickerOpen(false);
+    trigger.focus();
+  }
 });
 
 window.closeModal = () => {
   if (isSearchMode) { closeSearch(); }
   syncIssueLogPrefsFromModal();
+  setIssueMachinePickerOpen(false);
   document.getElementById('add-modal').classList.remove('visible');
   document.getElementById('log-photo-source-row')?.classList.remove('visible');
   closeSubcategorySheet();
@@ -10230,7 +10358,7 @@ window.submitIssue = async () => {
   updateAddModalMachineLabel(currentMachine);
   if (!currentMachine) {
     showGameToast('⚠️ No press selected. Please select a press first.');
-    document.getElementById('issue-machine-select')?.focus();
+    document.getElementById('issue-machine-trigger')?.focus();
     return;
   }
   setSubmitting(true);
@@ -13046,12 +13174,11 @@ function renderIssues(options = {}) {
     const currentEntryIndex = displayHistory.length - 1;
     const currentEntry = displayHistory[currentEntryIndex] || {};
     const workflowState = workflowDisplayState(currentEntry, true);
-    const hasNoWorkflowState = !workflowState;
     const workflowConfig = {
       called: { icon: '🔔', label: 'Called', cssState: 'called' },
       accepted: { icon: '👋', label: 'Accepted', cssState: 'accepted' },
-      'in-progress': { icon: '🔧', label: 'In Progress', cssState: 'in-progress' },
-      finished: { icon: '✓', label: 'Finished', cssState: 'finished' }
+      'in-progress': { icon: '🔧', label: 'Working', cssState: 'in-progress' },
+      finished: { icon: '✓', label: 'Done', cssState: 'finished' }
     };
     const wfOrder = ['called', 'accepted', 'in-progress', 'finished'];
     const wfCurrentIdx = workflowState ? wfOrder.indexOf(workflowState) : -1;
@@ -13307,19 +13434,26 @@ function renderIssues(options = {}) {
     const wfAge = workflowState
       ? _relativeTimeCompact(getWorkflowStateTimestamp(issue, currentEntry, workflowState, true))
       : '';
+    const wfActor = workflowState
+      ? workflowDisplayActor(currentEntry, workflowState, true)
+      : null;
+    const wfActorName = String(wfActor?.name || wfActor?.email || wfActor || '').trim();
+    const wfProgress = wfCurrentIdx < 0 ? 0 : wfCurrentIdx * 25;
     const currentResponseUi = getWorkflowResponseUi(currentKey, currentSubKey, sc.color, currentEntryIndex);
     const wfHeaderHtml = `<div class="wf-steps-wrap" onclick="event.stopPropagation()">
       <div class="wf-steps-row">
-        ${hasNoWorkflowState ? `<div class="wf-prompt-arrow" id="wf-arrow-${issue.id}"></div>` : ''}
-        <div class="wf-steps">${wfOrder.map(state => {
+        <div class="wf-steps wf-stepper" style="--wf-progress:${wfProgress}%">${wfOrder.map(state => {
       const cfg = workflowConfig[state];
       const cls = state === workflowState ? `active ${cfg.cssState}` : isCompleted(state) ? 'completed' : 'pending';
-      return `<button class="wf-step-btn ${cls}" onclick="handleWfStepClick(event,'${issue.id}',${currentEntryIndex},'${state}')" title="${cfg.label}">${cfg.icon}</button>`;
+      return `<button class="wf-step-btn ${cls}" onclick="handleWfStepClick(event,'${issue.id}',${currentEntryIndex},'${state}')" title="${cfg.label}" aria-label="${cfg.label}"><span class="wf-step-icon">${cfg.icon}</span><span class="wf-step-label">${cfg.label}</span></button>`;
     }).join('')}</div>
       </div>
-      <div class="wf-state-line">
-        <div class="wf-state-label ${workflowState ? workflowConfig[workflowState].cssState : ''}">${workflowState ? workflowConfig[workflowState].label : ''}</div>
-        ${wfAge ? `<div class="wf-state-age ${workflowState ? workflowConfig[workflowState].cssState : ""}">${esc(wfAge)}</div>` : ''}
+      <div class="wf-state-summary">
+        <div class="wf-state-line ${workflowState ? workflowConfig[workflowState].cssState : 'not-started'}">
+          <div class="wf-state-label ${workflowState ? workflowConfig[workflowState].cssState : ''}">${workflowState ? workflowConfig[workflowState].label : 'Not started'}</div>
+          ${wfAge ? `<div class="wf-state-age ${workflowState ? workflowConfig[workflowState].cssState : ""}">${esc(wfAge)}</div>` : ''}
+        </div>
+        ${wfActorName ? `<div class="wf-state-actor ${workflowState ? workflowConfig[workflowState].cssState : ''}" title="${esc(wfActorName)}">${esc(wfActorName)}</div>` : ''}
       </div>
     </div>`;
 
@@ -13339,16 +13473,19 @@ function renderIssues(options = {}) {
       const sColor = getStatusColor(sKey);
       const sState = workflowDisplayState(entry, false);
       const sCurrentIdx = sState ? wfOrder.indexOf(sState) : -1;
+      const sProgress = sCurrentIdx < 0 ? 0 : sCurrentIdx * 25;
       const sSubLabel = entry.subStatus || '';
       const sAge = sState
         ? _relativeTimeCompact(getWorkflowStateTimestamp(issue, entry, sState, false))
         : '';
+      const sActor = sState ? workflowDisplayActor(entry, sState, false) : null;
+      const sActorName = String(sActor?.name || sActor?.email || sActor || '').trim();
       const btnHtml = wfOrder.map(st => {
         const cfg = workflowConfig[st];
         const cls = st === sState ? `active ${cfg.cssState}` : (sState && wfOrder.indexOf(st) < sCurrentIdx) ? 'completed' : 'pending';
-        return `<button class="wf-step-btn ${cls}" onclick="event.stopPropagation(); setWorkflowStateForEntry('${issue.id}',${idx},'${st}')" title="${cfg.label}">${cfg.icon}</button>`;
+        return `<button class="wf-step-btn ${cls}" onclick="event.stopPropagation(); setWorkflowStateForEntry('${issue.id}',${idx},'${st}')" title="${cfg.label}" aria-label="${cfg.label}"><span class="wf-step-icon">${cfg.icon}</span><span class="wf-step-label">${cfg.label}</span></button>`;
       }).join('');
-      const sStateLabel = sState ? workflowConfig[sState].label : 'Not Started';
+      const sStateLabel = sState ? workflowConfig[sState].label : 'Not started';
       const sStateClass = sState ? workflowConfig[sState].cssState : '';
       const sResponseUi = getWorkflowResponseUi(sKey, sSubLabel, sColor, idx);
       const rowDropdownKey = `${issue.id}:${idx}`;
@@ -13366,10 +13503,13 @@ function renderIssues(options = {}) {
               ${sSubLabel ? `<span class="issue-status-sub" style="color:${sColor};">${esc(sSubLabel)}</span>` : ''}
             </div>
             <div class="wf-steps-wrap" onclick="event.stopPropagation()">
-              <div class="wf-steps">${btnHtml}</div>
-              <div class="wf-state-line">
-                <div class="wf-state-label ${sStateClass}">${sStateLabel}</div>
-                ${sAge ? `<div class="wf-state-age ${sStateClass}">${esc(sAge)}</div>` : ''}
+              <div class="wf-steps-row"><div class="wf-steps wf-stepper" style="--wf-progress:${sProgress}%">${btnHtml}</div></div>
+              <div class="wf-state-summary">
+                <div class="wf-state-line ${sStateClass || 'not-started'}">
+                  <div class="wf-state-label ${sStateClass}">${sStateLabel}</div>
+                  ${sAge ? `<div class="wf-state-age ${sStateClass}">${esc(sAge)}</div>` : ''}
+                </div>
+                ${sActorName ? `<div class="wf-state-actor ${sStateClass}" title="${esc(sActorName)}">${esc(sActorName)}</div>` : ''}
               </div>
             </div>
             ${rowDropdownHtml}
@@ -13560,9 +13700,11 @@ function renderIssues(options = {}) {
 
     // Build all configured statuses in two visible, alphabetized groups.
     const groupedStatusOrder = groupStatusPickerKeys(statusOrder);
+    const sectionGroup = document.createElement('div');
+    sectionGroup.className = 'swipe-status-section-group';
     [
-      ['situation', 'Situation', 'What is happening?'],
-      ['role', 'Team / Role', 'Who should respond?']
+      ['role', 'Team / Role', 'Who should respond?'],
+      ['situation', 'Situation', 'What is happening?']
     ].forEach(([group, title, hint]) => {
       if (!groupedStatusOrder[group].length) return;
       const { section, grid } = createStatusPickerSection(group, title, hint, 'swipe-status-grid');
@@ -13572,11 +13714,12 @@ function renderIssues(options = {}) {
         tile.className = 'swipe-status-tile' + (currentStatusKey(issue) === key ? ' current' : '');
         tile.style.color = getStatusColor(key);
         tile.dataset.status = key;
-        tile.innerHTML = `<span class="swipe-tile-icon">${st.icon}</span><span class="swipe-tile-label">${getStatusLabel(key, 'short')}</span>`;
+        tile.innerHTML = `<span class="swipe-tile-icon">${st.icon}</span><span class="swipe-tile-label">${getCompactSwipeStatusLabel(key)}</span>`;
         grid.appendChild(tile);
       });
-      catInner.appendChild(section);
+      sectionGroup.appendChild(section);
     });
+    catInner.appendChild(sectionGroup);
 
     // Search is a picker tool rather than a status, so it stays outside both groups.
     const searchRow = document.createElement('div');
@@ -13700,6 +13843,9 @@ function renderIssues(options = {}) {
         swipeSearchBar.innerHTML = '';
         swipeSearchBar.classList.remove('visible');
       }
+      searchRow.classList.remove('search-bar-row', 'visible', 'swipe-search-inline-active');
+      searchRow.innerHTML = '';
+      searchRow.appendChild(searchTile);
       cp.querySelectorAll('.swipe-status-tile').forEach(t => {
         t.classList.remove('selected', 'search-match');
         t.style.opacity = '';
@@ -13764,6 +13910,9 @@ function renderIssues(options = {}) {
         swipeSearchBar.innerHTML = '';
         swipeSearchBar.classList.remove('visible');
       }
+      searchRow.classList.remove('search-bar-row', 'visible', 'swipe-search-inline-active');
+      searchRow.innerHTML = '';
+      searchRow.appendChild(searchTile);
       catInner.querySelectorAll('.swipe-status-tile').forEach(t => {
         t.classList.remove('selected', 'search-match');
         t.style.opacity = '';
@@ -13776,7 +13925,7 @@ function renderIssues(options = {}) {
       if (swipeSearchMode) { resetSwipeSearchMode(); return; }
 
       const subInner = subPanel.querySelector('.swipe-sub-inner');
-      const searchBar = subPanel.querySelector('.swipe-search-bar-row');
+      const searchBar = searchRow;
 
       // Set shared search state
       isSearchMode = true;
@@ -13795,7 +13944,8 @@ function renderIssues(options = {}) {
       // Swipe-specific state
       swipeSearchMode = true;
       swipeSearchActiveSub = '';
-      searchTile.classList.add('selected');
+      searchRow.classList.add('search-bar-row', 'visible', 'swipe-search-inline-active');
+      searchRow.innerHTML = '';
       catInner.classList.add('has-selection');
       catPanel.classList.add('has-subs', 'search-mode');
       dimSwipeTiles();

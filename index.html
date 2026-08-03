@@ -28,10 +28,10 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css" />
-<script src="./js/build-info.js?v=a1255de-156c1122"></script>
+<script src="./js/build-info.js?v=2c99f6c-8da26108"></script>
 <script src="./js/fcm-config.js?v=ae083d6"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<link rel="stylesheet" href="./css/styles.css?v=a1255de-156c1122">
+<link rel="stylesheet" href="./css/styles.css?v=2c99f6c-8da26108">
 </head>
 <body>
 
@@ -86,7 +86,7 @@
   <div id="sync-banner" class="visible">
     <div class="sync-dot" id="sync-dot"></div>
     <span id="sync-text" aria-live="polite">Connecting…</span>
-    <span id="app-version-indicator" class="app-version-indicator" title="Current commit version">rev: a1255de</span>
+    <span id="app-version-indicator" class="app-version-indicator" title="Current commit version">rev: 2c99f6c</span>
     <span id="firestore-io-indicator" class="firestore-io-indicator" title="Estimated Firestore operations for this session">R:0 W:0</span>
   </div>
 
@@ -432,7 +432,6 @@
       <div class="map-mode-toggle">
         <button class="map-mode-btn active-log" id="mode-log" data-shell-action="set-map-mode" data-shell-value="log">Map</button>
         <button class="map-mode-btn" id="mode-hist" data-shell-action="set-map-mode" data-shell-value="hist">Timeline</button>
-        <button class="map-mode-btn" id="mode-notes" data-shell-action="set-map-mode" data-shell-value="notes">Wiki</button>
       </div>
     </div>
   </div>
@@ -505,7 +504,6 @@
     <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
       <path d="M10 4v12M4 10h12" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
     </svg>
-    <span id="report-fab-label">Report Issue</span>
   </button>
 </div>
 
@@ -525,8 +523,18 @@
       </div>
       
       <div class="issue-press-row">
-        <label for="issue-machine-select">Press</label>
-        <select id="issue-machine-select" class="issue-machine-select">
+        <label id="issue-machine-label" for="issue-machine-trigger">Press</label>
+        <div class="issue-machine-picker" id="issue-machine-picker">
+          <button class="issue-machine-trigger" id="issue-machine-trigger" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="issue-machine-popup">
+            <span id="issue-machine-trigger-label">Select a press</span>
+            <span class="issue-machine-trigger-chevron" aria-hidden="true">⌄</span>
+          </button>
+          <div class="issue-machine-popup" id="issue-machine-popup" hidden>
+            <div class="issue-machine-row-jumps" id="issue-machine-row-jumps" role="toolbar" aria-label="Jump to press row"></div>
+            <div class="issue-machine-options" id="issue-machine-options" role="listbox" aria-label="Presses"></div>
+          </div>
+        </div>
+        <select id="issue-machine-select" class="issue-machine-select issue-machine-select-native" tabindex="-1" aria-hidden="true">
           <option value="">Select a press</option>
         </select>
       </div>
@@ -1997,7 +2005,7 @@
   </div>
 </div>
 
-<script type="module" src="./js/app.js?v=a1255de-156c1122"></script>
+<script type="module" src="./js/app.js?v=2c99f6c-8da26108"></script>
 
 <!-- MASCOT CHARACTER CARD POPOVER -->
 <div class="mascot-popover-backdrop" id="mascot-popover-backdrop" onclick="if(event.target===this)closeMascotPopover()">
