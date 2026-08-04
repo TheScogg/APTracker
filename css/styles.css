@@ -2603,21 +2603,21 @@
     border-top: 1px solid color-mix(in srgb, var(--color-border, var(--border)) 86%, transparent);
   }
   .swipe-status-section-group .swipe-status-grid {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 6px;
   }
   .swipe-status-section-group .swipe-status-tile {
-    height: 60px;
+    height: 64px;
     gap: 3px;
     padding: 5px 2px;
     border-radius: 10px;
   }
   .swipe-status-section-group .swipe-tile-icon {
-    width: 28px;
-    height: 28px;
-    font-size: 22px;
+    width: 32px;
+    height: 32px;
+    font-size: 24px;
   }
-  .swipe-status-section-group .swipe-tile-label { font-size: 9px; }
+  .swipe-status-section-group .swipe-tile-label { font-size: 10px; }
   .swipe-status-section-group .status-picker-section-heading {
     min-height: 20px;
     margin-bottom: 5px;
@@ -2633,8 +2633,6 @@
   @media (max-width: 430px) {
     .status-picker-section-hint { display: none; }
     .swipe-category-inner.status-picker-grouped { padding: 10px; }
-    .swipe-status-section-group .swipe-status-tile { height: 56px; }
-    .swipe-status-section-group .swipe-tile-icon { width: 24px; height: 24px; font-size: 20px; }
   }
 
   /* Status tiles - React design */
