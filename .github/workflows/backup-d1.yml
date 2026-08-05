@@ -22,7 +22,7 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
       # Change this to the exact D1 database name shown in Cloudflare.
-      D1_DATABASE_NAME: AP-Tracker
+      D1_DATABASE_NAME: coe_db
 
     steps:
       - name: Check out repository
