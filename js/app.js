@@ -1307,8 +1307,9 @@ function getWorkflowStateTimestamp(issue, entry, state, isCurrent = false) {
 function getWorkflowHistoryForEntry(issue, entry, isCurrent = false, allowStatusFallback = false) {
   const workflowId = getEntryWorkflowId(entry);
   if (workflowId) {
-    const entryHistory = issue?.workflowStateByEntryHistory?.[workflowId];
-    if (entryHistory && Object.keys(entryHistory).length) return entryHistory;
+    if (issue?.workflowStateByEntryHistory && Object.prototype.hasOwnProperty.call(issue.workflowStateByEntryHistory, workflowId)) {
+      return issue.workflowStateByEntryHistory[workflowId] || {};
+    }
     const statusKey = String(entry?.status || '').trim().toLowerCase();
     if (allowStatusFallback && statusKey && issue?.workflowStateByStatusHistory?.[statusKey]) {
       return issue.workflowStateByStatusHistory[statusKey] || {};
@@ -11999,6 +12000,111 @@ async function setWorkflowStateForEntryLocator(issueId, state, locateEntry) {
   return updatedWorkflowId;
 }
 
+async function clearWorkflowCallForEntryLocator(issueId, locateEntry) {
+  const actor = currentActor();
+  const issue = issues.find(i => i.id === issueId);
+  let clearedWorkflowId = '';
+  try {
+    const buildClearPatch = (base, history, entryIndex, workflowId) => {
+      const entry = history[entryIndex];
+      const isCurrentEntry = isCurrentWorkflowEntry(entryIndex, history.length, entry, base);
+      const patch = {
+        statusHistory: history,
+        workflowStateByEntry: { ...(base?.workflowStateByEntry || {}), [workflowId]: null },
+        workflowStateByEntryHistory: { ...(base?.workflowStateByEntryHistory || {}), [workflowId]: {} },
+        updatedAt: new Date().toISOString(),
+        updatedBy: actor
+      };
+      if (isCurrentEntry) {
+        patch.workflowState = null;
+        patch.workflowStateHistory = {};
+        if (entry.status) {
+          patch.workflowStateByStatus = { ...(base?.workflowStateByStatus || {}), [entry.status]: null };
+          patch.workflowStateByStatusHistory = { ...(base?.workflowStateByStatusHistory || {}), [entry.status]: {} };
+        }
+      }
+      return patch;
+    };
+
+    if (DEMO_MODE || shouldUseSqlStagingReads(currentPlantId)) {
+      if (!issue) return '';
+      const history = getMutableStatusHistory(issue);
+      const entryIndex = locateEntry(history, issue);
+      let entry = history[entryIndex];
+      if (entryIndex < 0 || !entry) return '';
+      const isCurrentEntry = isCurrentWorkflowEntry(entryIndex, history.length, entry, issue);
+      if (getWorkflowStateForEntry(issue, entry, isCurrentEntry) !== 'called') return getEntryWorkflowId(entry);
+      let workflowId = getEntryWorkflowId(entry);
+      if (!workflowId) {
+        workflowId = createWorkflowId(entry.status);
+        entry = { ...entry, workflowId };
+        history[entryIndex] = entry;
+      }
+      const nextIssue = applyIssuePatchLocally(issue, buildClearPatch(issue, history, entryIndex, workflowId));
+      nextIssue.id = issueId;
+      if (DEMO_MODE) {
+        issuesById.set(issueId, nextIssue);
+        rebuildIssuesArrayFromMap();
+        refreshVisibleData();
+      } else {
+        await commitSqlIssueWrite(issueId, nextIssue);
+      }
+      clearedWorkflowId = workflowId;
+    } else {
+      await runTransaction(db, async tx => {
+        const ref = plantDoc('issues', issueId);
+        const snap = await tx.get(ref);
+        const base = snap.exists() ? { ...(issue || {}), ...snap.data() } : issue;
+        if (!base) return;
+        const history = getMutableStatusHistory(base);
+        const entryIndex = locateEntry(history, base);
+        let entry = history[entryIndex];
+        if (entryIndex < 0 || !entry) return;
+        const isCurrentEntry = isCurrentWorkflowEntry(entryIndex, history.length, entry, base);
+        if (getWorkflowStateForEntry(base, entry, isCurrentEntry) !== 'called') {
+          clearedWorkflowId = getEntryWorkflowId(entry);
+          return;
+        }
+        let workflowId = getEntryWorkflowId(entry);
+        if (!workflowId) {
+          workflowId = createWorkflowId(entry.status);
+          entry = { ...entry, workflowId };
+          history[entryIndex] = entry;
+        }
+        const patch = {
+          statusHistory: history,
+          [`workflowStateByEntry.${workflowId}`]: null,
+          [`workflowStateByEntryHistory.${workflowId}`]: {},
+          updatedAt: serverTimestamp(),
+          updatedBy: actor
+        };
+        if (isCurrentEntry) {
+          patch.workflowState = null;
+          patch.workflowStateHistory = {};
+          if (entry.status) {
+            patch[`workflowStateByStatus.${entry.status}`] = null;
+            patch[`workflowStateByStatusHistory.${entry.status}`] = {};
+          }
+        }
+        tx.update(ref, patch);
+        clearedWorkflowId = workflowId;
+      });
+    }
+    if (clearedWorkflowId) {
+      showActionFeedback({
+        type: 'workflow',
+        issueId,
+        machine: issue?.machine || issue?.machineCode || '',
+        label: 'Call removed',
+        detail: 'Call removed'
+      });
+    }
+  } catch (e) {
+    setSyncStatus('err', 'Error removing call: ' + e.message);
+  }
+  return clearedWorkflowId;
+}
+
 window.setWorkflowStateForEntry = async (issueId, entryIndex, state) => {
   const idx = Number(entryIndex);
   if (!Number.isInteger(idx) || idx < 0) return '';
@@ -12011,6 +12117,12 @@ window.setWorkflowStateForWorkflowId = async (issueId, workflowId, state) => {
   return setWorkflowStateForEntryLocator(issueId, state, history =>
     history.findIndex(entry => getEntryWorkflowId(entry) === normalizedWorkflowId)
   );
+};
+
+window.clearWorkflowCallForEntry = async (issueId, entryIndex) => {
+  const idx = Number(entryIndex);
+  if (!Number.isInteger(idx) || idx < 0) return '';
+  return clearWorkflowCallForEntryLocator(issueId, history => idx < history.length ? idx : -1);
 };
 
 window.setWorkflowStateForStatus = async (issueId, statusKey, state) => {
@@ -12176,7 +12288,16 @@ window.handleWfStepClick = (evt, issueId, entryIndex, state) => {
     arrow.classList.add('wf-arrow-dismissed');
     setTimeout(() => arrow.remove(), 380);
   }
-  setWorkflowStateForEntry(issueId, Number(entryIndex), state);
+  const issue = issues.find(item => item.id === issueId);
+  const history = getMutableStatusHistory(issue || {});
+  const idx = Number(entryIndex);
+  const entry = history[idx];
+  const isCurrentEntry = !!entry && isCurrentWorkflowEntry(idx, history.length, entry, issue);
+  if (state === 'called' && entry && getWorkflowStateForEntry(issue, entry, isCurrentEntry) === 'called') {
+    void window.clearWorkflowCallForEntry(issueId, idx);
+    return;
+  }
+  void window.setWorkflowStateForEntry(issueId, idx, state);
 };
 
 // ── PRIORITY TOGGLE ──
@@ -13445,7 +13566,8 @@ function renderIssues(options = {}) {
         <div class="wf-steps wf-stepper" style="--wf-progress:${wfProgress}%">${wfOrder.map(state => {
       const cfg = workflowConfig[state];
       const cls = state === workflowState ? `active ${cfg.cssState}` : isCompleted(state) ? 'completed' : 'pending';
-      return `<button class="wf-step-btn ${cls}" onclick="handleWfStepClick(event,'${issue.id}',${currentEntryIndex},'${state}')" title="${cfg.label}" aria-label="${cfg.label}"><span class="wf-step-icon">${cfg.icon}</span><span class="wf-step-label">${cfg.label}</span></button>`;
+      const actionLabel = state === 'called' && workflowState === 'called' ? 'Un-call' : cfg.label;
+      return `<button class="wf-step-btn ${cls}" onclick="handleWfStepClick(event,'${issue.id}',${currentEntryIndex},'${state}')" title="${actionLabel}" aria-label="${actionLabel}"><span class="wf-step-icon">${cfg.icon}</span><span class="wf-step-label">${actionLabel}</span></button>`;
     }).join('')}</div>
       </div>
       <div class="wf-state-summary">
@@ -13485,7 +13607,8 @@ function renderIssues(options = {}) {
       const btnHtml = wfOrder.map(st => {
         const cfg = workflowConfig[st];
         const cls = st === sState ? `active ${cfg.cssState}` : (sState && wfOrder.indexOf(st) < sCurrentIdx) ? 'completed' : 'pending';
-        return `<button class="wf-step-btn ${cls}" onclick="event.stopPropagation(); setWorkflowStateForEntry('${issue.id}',${idx},'${st}')" title="${cfg.label}" aria-label="${cfg.label}"><span class="wf-step-icon">${cfg.icon}</span><span class="wf-step-label">${cfg.label}</span></button>`;
+        const actionLabel = st === 'called' && sState === 'called' ? 'Un-call' : cfg.label;
+        return `<button class="wf-step-btn ${cls}" onclick="handleWfStepClick(event,'${issue.id}',${idx},'${st}')" title="${actionLabel}" aria-label="${actionLabel}"><span class="wf-step-icon">${cfg.icon}</span><span class="wf-step-label">${actionLabel}</span></button>`;
       }).join('');
       const sStateLabel = sState ? workflowConfig[sState].label : 'Not started';
       const sStateClass = sState ? workflowConfig[sState].cssState : '';
