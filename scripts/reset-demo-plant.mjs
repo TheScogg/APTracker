@@ -22,14 +22,14 @@ const shouldCommit = args.has('--commit');
 const plantIdArg = process.argv.find(arg => arg.startsWith('--plant='));
 const plantId = plantIdArg ? plantIdArg.slice('--plant='.length) : 'plant_demo';
 
-const DEFAULT_PRESSES = {
-  'Row 1': ['1.01','1.02','1.03','1.04','1.05','1.06','1.07','1.08','1.09','1.10','1.11','1.12','1.13','1.14','1.15','1.16','1.17'],
-  'Row 2': ['2.01','2.02','2.03','2.04','2.05','2.06','2.07','2.08','2.09','2.10','2.11','2.12','2.13','2.14','2.15','2.16','2.17','2.18','2.19','2.20','2.21','2.22'],
-  'Row 3': ['3.01','3.02','3.03','3.04','3.05','3.06','3.07','3.08','3.09','3.10','3.12','3.13','3.14','3.15','3.16','3.17','3.18','3.19'],
-  'Row 4': ['4.01','4.02','4.03','4.04','4.05','4.06','4.07','4.08','4.09','4.10','4.11','4.12','4.13','4.14','4.15','4.16','4.17'],
-  'Row 5': ['5.01','5.02','5.03','5.04','5.05','5.06','5.07','5.08','5.09','5.10','5.11','5.12'],
-  'Row 6': ['6.01','6.02','6.03','6.05','6.06','6.07'],
-  Other: ['Auto Cell','BR-1','CR-1','CR-2']
+const DEMO_PRESSES = {
+  'Zone A': ['AX-101','AX-102','AX-103','AX-104','AX-105','AX-106','AX-107','AX-108','AX-109','AX-110','AX-111','AX-112','AX-113'],
+  'Zone B': ['BX-201','BX-202','BX-203','BX-204','BX-205','BX-206','BX-207','BX-208','BX-209','BX-210','BX-211','BX-212','BX-213','BX-214','BX-215','BX-216'],
+  'Zone C': ['CX-301','CX-302','CX-303','CX-304','CX-305','CX-306','CX-307','CX-308','CX-309','CX-310','CX-311','CX-312','CX-313','CX-314'],
+  'Zone D': ['DX-401','DX-402','DX-403','DX-404','DX-405','DX-406','DX-407','DX-408','DX-409','DX-410','DX-411','DX-412'],
+  'Zone E': ['EX-501','EX-502','EX-503','EX-504','EX-505','EX-506','EX-507','EX-508','EX-509'],
+  'Zone F': ['FX-601','FX-602','FX-603','FX-604','FX-605'],
+  Auxiliary: ['QC-LAB','MAT-HUB','CELL-Z9']
 };
 
 const STATUS_META = {
@@ -56,7 +56,7 @@ const DEMO_ACTORS = {
 const CURATED_DEMO_ISSUES = [
   {
     id: 'sample_alert_robot_estop',
-    machine: '1.07',
+    machine: 'AX-107',
     minutes: 18,
     note: 'Robot arm E-stop during part removal. Cell is safe and waiting for controlman review.',
     priority: 'critical',
@@ -67,7 +67,7 @@ const CURATED_DEMO_ISSUES = [
   },
   {
     id: 'sample_maintenance_leak',
-    machine: '3.04',
+    machine: 'CX-304',
     minutes: 42,
     note: 'Hydraulic leak at clamp unit. Oil is contained and maintenance is replacing a high-pressure hose.',
     history: [
@@ -77,7 +77,7 @@ const CURATED_DEMO_ISSUES = [
   },
   {
     id: 'sample_materials_serial',
-    machine: '4.09',
+    machine: 'DX-409',
     minutes: 68,
     note: 'Material lot needs verification before startup can continue.',
     history: [
@@ -87,7 +87,7 @@ const CURATED_DEMO_ISSUES = [
   },
   {
     id: 'sample_quality_review',
-    machine: '5.03',
+    machine: 'EX-503',
     minutes: 94,
     note: 'Part surface shows intermittent scuffing after mold clean. Quality is checking the last tray.',
     history: [
@@ -96,7 +96,7 @@ const CURATED_DEMO_ISSUES = [
   },
   {
     id: 'sample_resolved_calibration',
-    machine: '6.05',
+    machine: 'FX-605',
     minutes: 128,
     note: 'Gate sensor alignment drifted after tool swap. Offsets were corrected and verified.',
     history: [
@@ -158,7 +158,7 @@ function toPressId(machine) {
 }
 
 function findRowNameForMachine(machine) {
-  for (const [rowName, machines] of Object.entries(DEFAULT_PRESSES)) {
+  for (const [rowName, machines] of Object.entries(DEMO_PRESSES)) {
     if (machines.includes(machine)) return rowName;
   }
   return 'Other';
@@ -335,7 +335,7 @@ async function main() {
       isDemo: true,
       resetAt: FieldValue.serverTimestamp()
     }, { merge: true });
-    await plantRef.collection('config').doc('presses').set({ presses: DEFAULT_PRESSES }, { merge: true });
+    await plantRef.collection('config').doc('presses').set({ presses: DEMO_PRESSES }, { merge: true });
   }
   await seedCuratedDemoIssues();
 

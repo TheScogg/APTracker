@@ -2623,14 +2623,17 @@ window.saveRolePreferences = async function () {
 
 // Default press layout — used when creating a new plant or if Firestore has none
 const DEFAULT_PRESSES = {
-  "Row 1": ["1.01", "1.02", "1.03", "1.04", "1.05", "1.06", "1.07", "1.08", "1.09", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15", "1.16", "1.17"],
-  "Row 2": ["2.01", "2.02", "2.03", "2.04", "2.05", "2.06", "2.07", "2.08", "2.09", "2.10", "2.11", "2.12", "2.13", "2.14", "2.15", "2.16", "2.17", "2.18", "2.19", "2.20", "2.21", "2.22"],
-  "Row 3": ["3.01", "3.02", "3.03", "3.04", "3.05", "3.06", "3.07", "3.08", "3.09", "3.10", "3.12", "3.13", "3.14", "3.15", "3.16", "3.17", "3.18", "3.19"],
-  "Row 4": ["4.01", "4.02", "4.03", "4.04", "4.05", "4.06", "4.07", "4.08", "4.09", "4.10", "4.11", "4.12", "4.13", "4.14", "4.15", "4.16", "4.17"],
-  "Row 5": ["5.01", "5.02", "5.03", "5.04", "5.05", "5.06", "5.07", "5.08", "5.09", "5.10", "5.11", "5.12"],
-  "Row 6": ["6.01", "6.02", "6.03", "6.05", "6.06", "6.07"],
-  "Other": ["Auto Cell", "BR-1", "CR-1", "CR-2"]
+  "Zone A": ["AX-101", "AX-102", "AX-103", "AX-104", "AX-105", "AX-106", "AX-107", "AX-108", "AX-109", "AX-110", "AX-111", "AX-112", "AX-113"],
+  "Zone B": ["BX-201", "BX-202", "BX-203", "BX-204", "BX-205", "BX-206", "BX-207", "BX-208", "BX-209", "BX-210", "BX-211", "BX-212", "BX-213", "BX-214", "BX-215", "BX-216"],
+  "Zone C": ["CX-301", "CX-302", "CX-303", "CX-304", "CX-305", "CX-306", "CX-307", "CX-308", "CX-309", "CX-310", "CX-311", "CX-312", "CX-313", "CX-314"],
+  "Zone D": ["DX-401", "DX-402", "DX-403", "DX-404", "DX-405", "DX-406", "DX-407", "DX-408", "DX-409", "DX-410", "DX-411", "DX-412"],
+  "Zone E": ["EX-501", "EX-502", "EX-503", "EX-504", "EX-505", "EX-506", "EX-507", "EX-508", "EX-509"],
+  "Zone F": ["FX-601", "FX-602", "FX-603", "FX-604", "FX-605"],
+  "Auxiliary": ["QC-LAB", "MAT-HUB", "CELL-Z9"]
 };
+
+// Public demo layout is explicitly synthetic so it cannot reveal a real plant's naming scheme.
+const DEMO_PRESSES = DEFAULT_PRESSES;
 
 let PRESSES = { ...DEFAULT_PRESSES };
 let ALL_MACHINES = Object.values(PRESSES).flat();
@@ -3807,6 +3810,11 @@ function applyRoleUI() {
 
 // Load press layout for current plant
 async function loadPlantPresses() {
+  if (currentPlantId === DEMO_PLANT_ID) {
+    PRESSES = deepCopy(DEMO_PRESSES);
+    ALL_MACHINES = Object.values(PRESSES).flat();
+    return;
+  }
   const sqlBootstrap = await ensureSqlPlantBootstrap(currentPlantId);
   if (sqlBootstrap?.pressConfig?.presses) {
     PRESSES = sqlBootstrap.pressConfig.presses;
@@ -3832,12 +3840,12 @@ async function loadPlantPresses() {
     if (snap.exists() && snap.data().presses) {
       PRESSES = snap.data().presses;
     } else {
-      PRESSES = { ...DEFAULT_PRESSES };
+      PRESSES = deepCopy(currentPlantId === DEMO_PLANT_ID ? DEMO_PRESSES : DEFAULT_PRESSES);
     }
     ALL_MACHINES = Object.values(PRESSES).flat();
   } catch (e) {
     console.warn('Press layout load failed, using defaults', e);
-    PRESSES = { ...DEFAULT_PRESSES };
+    PRESSES = deepCopy(currentPlantId === DEMO_PLANT_ID ? DEMO_PRESSES : DEFAULT_PRESSES);
     ALL_MACHINES = Object.values(PRESSES).flat();
   }
 }
@@ -4511,6 +4519,13 @@ function renderGamePanel() {
   const udXpLevelEl = document.getElementById('ud-xp-level');
   if (udXpLevelEl) udXpLevelEl.textContent = `Lv.${level}`;
   if (streakEl) streakEl.textContent = String(streak);
+  const streakTile = streakEl?.closest('.game-stat-tile.streak');
+  if (streakTile) {
+    const streakTier = streak >= 30 ? 'plasma' : streak >= 10 ? 'electric' : streak >= 3 ? 'flame' : streak > 0 ? 'ember' : 'none';
+    streakTile.dataset.streakTier = streakTier;
+    streakTile.classList.toggle('streak-active', streak > 0);
+    streakTile.title = streak > 0 ? `${streak}-day streak • ${streakTier}` : 'Start a streak by completing floor actions';
+  }
   if (progressEl) progressEl.style.width = `${progressPct}%`;
   if (xpCurrentEl) xpCurrentEl.textContent = `${xpInLevel} / ${xpNeeded} XP`;
   if (xpToNextEl) xpToNextEl.textContent = `to Level ${level + 1}`;
@@ -4675,6 +4690,110 @@ function showActionMiniCelebration({ color = 'var(--color-success, var(--green))
   setTimeout(() => el.remove(), 1100);
 }
 
+function visualTreatsReducedMotion() {
+  return actionFeedbackReducedMotion() || document.visibilityState === 'hidden';
+}
+
+function animateResolutionEnergy(card, color = 'var(--color-success, var(--green))') {
+  const target = [document.getElementById('game-pill'), document.querySelector('.game-pill'), document.getElementById('user-pill')]
+    .filter(Boolean)
+    .find(candidate => {
+      const rect = candidate.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    });
+  if (!card || !target || visualTreatsReducedMotion()) return;
+  const start = card.getBoundingClientRect();
+  const end = target.getBoundingClientRect();
+  if (!start.width || !end.width) return;
+  const orb = document.createElement('div');
+  orb.className = 'visual-energy-orb';
+  orb.style.setProperty('--visual-treat-color', color);
+  orb.style.left = `${start.left + start.width * 0.72}px`;
+  orb.style.top = `${start.top + Math.min(start.height * 0.5, 90)}px`;
+  document.body.appendChild(orb);
+  const dx = end.left + end.width * 0.5 - (start.left + start.width * 0.72);
+  const dy = end.top + end.height * 0.5 - (start.top + Math.min(start.height * 0.5, 90));
+  const animation = orb.animate([
+    { transform: 'translate(-50%, -50%) scale(.55)', opacity: 0 },
+    { transform: 'translate(-50%, -50%) scale(1.15)', opacity: 1, offset: .14 },
+    { transform: `translate(calc(-50% + ${dx * .52}px), calc(-50% + ${dy * .34 - 34}px)) scale(.9)`, opacity: 1, offset: .58 },
+    { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(.25)`, opacity: 0 }
+  ], { duration: 820, easing: 'cubic-bezier(.2,.76,.2,1)', fill: 'forwards' });
+  animation.finished.then(() => {
+    orb.remove();
+    pulseClass(target, 'visual-xp-impact', 650);
+  }).catch(() => orb.remove());
+}
+
+function showPressRadarRipple(machine, color = 'var(--color-danger, var(--red))') {
+  const press = pressButtonForFeedback(machine);
+  if (!press || visualTreatsReducedMotion()) return;
+  press.style.setProperty('--visual-treat-color', color);
+  press.querySelectorAll('.press-radar-ripple').forEach(el => el.remove());
+  for (let i = 0; i < 2; i++) {
+    const ring = document.createElement('span');
+    ring.className = 'press-radar-ripple';
+    ring.style.animationDelay = `${i * 180}ms`;
+    press.appendChild(ring);
+    setTimeout(() => ring.remove(), 1300 + i * 180);
+  }
+}
+
+const visualTreatPlantOpenCounts = new Map();
+
+function showFloorClearCelebration() {
+  if (visualTreatsReducedMotion() || document.querySelector('.floor-clear-celebration')) return;
+  const overlay = document.createElement('div');
+  overlay.className = 'floor-clear-celebration';
+  overlay.innerHTML = `
+    <div class="floor-clear-glow" aria-hidden="true"></div>
+    <div class="floor-clear-banner" role="status">
+      <span class="floor-clear-check">✓</span>
+      <span><strong>Floor Clear</strong><small>All active issues resolved</small></span>
+    </div>`;
+  document.body.appendChild(overlay);
+  setTimeout(() => overlay.remove(), 2900);
+}
+
+function updateFloorClearTreat() {
+  if (!currentPlantId) return;
+  const openCount = issues.filter(issue => currentStatusKey(issue) !== 'resolved').length;
+  const previous = visualTreatPlantOpenCounts.get(currentPlantId);
+  visualTreatPlantOpenCounts.set(currentPlantId, openCount);
+  if (previous > 0 && openCount === 0) showFloorClearCelebration();
+}
+
+function animateWorkflowRail(issueId, state = '') {
+  if (visualTreatsReducedMotion()) return;
+  const card = issueCardForFeedback(issueId);
+  const stepper = card?.querySelector('.wf-status-row.is-latest .wf-stepper');
+  if (!stepper) return;
+  const order = ['called', 'accepted', 'in-progress', 'finished'];
+  const index = Math.max(0, order.indexOf(state));
+  stepper.style.setProperty('--wf-spark-target', `${12.5 + index * 25}%`);
+  pulseClass(stepper, 'wf-current-travel', 760);
+}
+
+function maybeShowMascotCameo(reason = 'milestone', statusKey = '') {
+  if (visualTreatsReducedMotion() || !MASCOTS) return;
+  const guaranteed = reason === 'level';
+  if (!guaranteed && Math.random() > 0.1) return;
+  const storageKey = `visualTreatMascot:${currentPlantId || 'plant'}`;
+  try {
+    const last = Number(localStorage.getItem(storageKey) || 0);
+    if (Date.now() - last < 30 * 60 * 1000) return;
+    localStorage.setItem(storageKey, String(Date.now()));
+  } catch (e) { /* A cameo can still appear when storage is unavailable. */ }
+  const mascot = MASCOTS[statusKey] || MASCOTS.processengineer || Object.values(MASCOTS)[0];
+  if (!mascot?.svg) return;
+  const cameo = document.createElement('div');
+  cameo.className = 'visual-mascot-cameo';
+  cameo.style.setProperty('--visual-treat-color', mascot.color || 'var(--color-accent, var(--accent))');
+  cameo.innerHTML = `<div class="visual-mascot-art">${mascot.svg(90, 90)}</div><div class="visual-mascot-copy">${reason === 'level' ? 'Level secured!' : 'Nice save!'}</div>`;
+  document.body.appendChild(cameo);
+  setTimeout(() => cameo.remove(), 3300);
+}
+
 function showActionFeedback({
   type = 'success',
   issueId = '',
@@ -4683,7 +4802,8 @@ function showActionFeedback({
   detail = '',
   color = '',
   celebrate = false,
-  toast = true
+  toast = true,
+  workflowState = ''
 } = {}) {
   const message = detail || label || 'Updated';
   const feedbackColor = color || (type === 'resolve' ? 'var(--color-success, var(--green))' : '');
@@ -4694,6 +4814,7 @@ function showActionFeedback({
   if (card) {
     if (feedbackColor) card.style.setProperty('--action-feedback-color', feedbackColor);
     pulseClass(card, cardClass, type === 'resolve' ? 1100 : 900);
+    if (type === 'resolve') setTimeout(() => animateResolutionEnergy(card, feedbackColor), 120);
   }
 
   const pressBtn = pressButtonForFeedback(machine);
@@ -4701,8 +4822,11 @@ function showActionFeedback({
     if (feedbackColor) pressBtn.style.setProperty('--action-feedback-color', feedbackColor);
     pulseClass(pressBtn, 'action-pulse', 950);
   }
+  if (type === 'create') setTimeout(() => showPressRadarRipple(machine, feedbackColor || 'var(--color-danger, var(--red))'), 80);
 
   if (celebrate) showActionMiniCelebration({ color: feedbackColor, label: label || 'Done' });
+  if (type === 'workflow') setTimeout(() => animateWorkflowRail(issueId, workflowState), 40);
+  if (type === 'resolve') maybeShowMascotCameo('resolve', 'resolved');
 }
 
 function showStatusActionFeedback(issueId, issue, statusKey, subStatus = '') {
@@ -4760,6 +4884,7 @@ function showLevelUpCelebration(level) {
     </div>`;
   document.body.appendChild(overlay);
   launchConfetti(overlay.querySelector('.confetti-container'));
+  maybeShowMascotCameo('level');
   showGameToast(`Level ${level} reached!`);
   setTimeout(() => overlay.remove(), 3000);
 }
@@ -4789,14 +4914,15 @@ function showMissionCompleteCelebration(mission) {
   overlay.innerHTML = `
     <div class="confetti-container" id="mission-confetti"></div>
     <div class="game-mission-complete-card">
+      <div class="mission-complete-stamp" aria-hidden="true">Complete</div>
       <div class="game-mission-complete-label">Mission Complete!</div>
       <div style="font-size:40px;line-height:1;margin:6px 0;">🎯</div>
       <div class="game-mission-complete-name">${esc(mission.name || 'Mission')}</div>
       ${xp ? `<div class="game-mission-complete-xp">+${xp} XP</div>` : ''}
     </div>`;
   document.body.appendChild(overlay);
-  launchConfetti(overlay.querySelector('.confetti-container'), 65);
-  showGameToast(`+${xp} XP • Mission complete!`);
+  setTimeout(() => launchConfetti(overlay.querySelector('.confetti-container'), 65), actionFeedbackReducedMotion() ? 0 : 720);
+  setTimeout(() => showGameToast(`+${xp} XP • Mission complete!`), actionFeedbackReducedMotion() ? 0 : 640);
   setTimeout(() => overlay.remove(), 3500);
 }
 
@@ -6353,7 +6479,7 @@ function isPermissionDeniedError(error) {
 }
 
 function hydrateOfflineDemoSandbox() {
-  PRESSES = { ...DEFAULT_PRESSES };
+  PRESSES = deepCopy(DEMO_PRESSES);
   ALL_MACHINES = Object.values(PRESSES).flat();
   STATUSES = deepCopy(DEFAULT_STATUSES);
   SUBCATEGORY_ROUTES = {};
@@ -6374,8 +6500,8 @@ function seedInMemoryDemoIssues() {
   const sampleIssues = [
     {
       id: 'sample_alert_robot_estop',
-      machine: '1.07',
-      machineCode: '1.07',
+      machine: 'AX-107',
+      machineCode: 'AX-107',
       note: 'Robot arm E-stop during part removal. Cell is safe and waiting for controlman review.',
       highPriority: true,
       priority: 'critical',
@@ -6405,8 +6531,8 @@ function seedInMemoryDemoIssues() {
     },
     {
       id: 'sample_maintenance_leak',
-      machine: '3.04',
-      machineCode: '3.04',
+      machine: 'CX-304',
+      machineCode: 'CX-304',
       note: 'Hydraulic leak at clamp unit. Oil is contained and maintenance is replacing a high-pressure hose.',
       shift: 'first',
       userId: 'demo_sample_operator',
@@ -6434,8 +6560,8 @@ function seedInMemoryDemoIssues() {
     },
     {
       id: 'sample_materials_serial',
-      machine: '4.09',
-      machineCode: '4.09',
+      machine: 'DX-409',
+      machineCode: 'DX-409',
       note: 'Material lot needs verification before startup can continue.',
       shift: 'first',
       userId: 'demo_sample_operator',
@@ -6616,51 +6742,51 @@ function showDemoAuthError(error) {
 const DEMO_GUIDE_STEPS = [
   {
     key: 'floor',
-    title: 'Floor map',
-    desc: 'See rows and press status colors.',
+    title: 'Explore the floor',
+    desc: 'Explore synthetic zones and see how press colors summarize active work.',
     action: 'floor',
     btn: 'View map'
   },
   {
     key: 'log',
     title: 'Log an issue',
-    desc: 'Open the issue form for a sample press.',
+    desc: 'Open a synthetic press and create a sample floor issue.',
     action: 'log',
-    btn: 'Try form'
+    btn: 'Log sample issue'
   },
   {
     key: 'route',
-    title: 'Route an issue',
-    desc: 'Send work to the right team.',
+    title: 'Route the work',
+    desc: 'Add a status entry and route the issue to the appropriate response team.',
     action: 'route',
-    btn: 'Show card',
+    btn: 'Show me how',
     visual: 'route'
   },
   {
     key: 'workflow',
-    title: 'Workflow',
-    desc: 'Use Called, Accepted, In Progress, Finished.',
+    title: 'Move the workflow',
+    desc: 'Progress routed work through Called, Accepted, In Progress, or Finished.',
     action: 'workflow',
-    btn: 'Highlight'
+    btn: 'Open workflow'
   },
   {
     key: 'filters',
-    title: 'Filters',
-    desc: 'Filter by shift, machine, status, or search.',
+    title: 'Narrow the view',
+    desc: 'Filter by zone, press, status, shift, owner, or text.',
     action: 'filters',
-    btn: 'Open'
+    btn: 'Open filters'
   },
   {
     key: 'export',
-    title: 'Export',
-    desc: 'Preview PDF or download XLS reports.',
+    title: 'Export a handoff',
+    desc: 'Preview or download the currently filtered issue report.',
     action: 'export',
-    btn: 'Open'
+    btn: 'Open exports'
   },
   {
     key: 'tools',
-    title: 'Tools',
-    desc: 'Explore Wiki, Notes, Todos, and Messages.',
+    title: 'Explore plant tools',
+    desc: 'Open Wiki, Notes, Todos, or Messages to keep context with the plant.',
     action: 'tools',
     btn: 'Show tools'
   }
@@ -6696,8 +6822,6 @@ function markDemoGuideStep(key) {
   done.add(key);
   saveDemoGuideDone(done);
 
-  try { triggerDemoTaskCelebration(); } catch (e) { console.error('Celebration failed:', e); }
-
   // Auto-advance if the completed step was the current active step
   const completedIdx = DEMO_GUIDE_STEPS.findIndex(step => step.key === key);
   if (completedIdx === window.currentDemoStepIndex) {
@@ -6712,10 +6836,14 @@ function markDemoGuideStep(key) {
     }
   }
   renderDemoGuideProgress(done);
+  if (done.size >= DEMO_GUIDE_STEPS.length && !prefersReducedMotion()) {
+    try { triggerDemoTaskCelebration(); } catch (e) { console.error('Celebration failed:', e); }
+  }
 }
 
 function completeDemoGuideStep(key) {
   if (!DEMO_MODE || !key) return;
+  if (key === 'filters' && !demoFiltersAreNonDefault()) return;
   markDemoGuideStep(key);
 }
 window.completeDemoGuideStep = completeDemoGuideStep;
@@ -6725,6 +6853,19 @@ function resetDemoGuideProgress() {
   try { localStorage.removeItem(DEMO_GUIDE_KEY); } catch (_) { }
   window.currentDemoStepIndex = 0;
   renderDemoGuideProgress(new Set());
+}
+
+function demoFiltersAreNonDefault() {
+  const machineFilter = document.getElementById('machine-filter')?.value || '';
+  const statusFilter = document.getElementById('status-filter')?.value || '';
+  const solutionFilter = document.getElementById('solution-filter')?.value || '';
+  const searchValue = document.getElementById('search-input')?.value?.trim() || '';
+  return issueScope !== 'all'
+    || issueShiftFilter !== 'all'
+    || issuePeriod !== 'today'
+    || issueRowScope !== 'all'
+    || Boolean(machineFilter || statusFilter || solutionFilter || searchValue)
+    ;
 }
 
 function renderDemoGuideProgress(done = readDemoGuideDone()) {
@@ -6758,7 +6899,13 @@ function renderDemoGuideProgress(done = readDemoGuideDone()) {
 
   const allComplete = done.size >= DEMO_GUIDE_STEPS.length;
   wrap.classList.toggle('complete', allComplete);
-  wrap.classList.toggle('show-onboarding', allComplete);
+  wrap.classList.toggle('show-completion', allComplete);
+  if (!allComplete) {
+    wrap.classList.remove('show-live-plant-form');
+    wrap.querySelector('[data-demo-guide-reveal-plant]')?.setAttribute('aria-expanded', 'false');
+  }
+  const live = wrap.querySelector('[data-demo-guide-live]');
+  if (live) live.textContent = allComplete ? 'All seven demo tasks complete.' : `${done.size} of ${DEMO_GUIDE_STEPS.length} demo tasks complete.`;
 }
 
 function demoGuideScrollTo(selector) {
@@ -6766,7 +6913,8 @@ function demoGuideScrollTo(selector) {
 }
 
 function firstDemoIssueCard() {
-  const openIssue = issues.find(issue => currentStatus(issue).status !== 'resolved') || issues[0];
+  const preferredIssue = issues.find(issue => issue.id === window.lastDemoCreatedIssueId);
+  const openIssue = preferredIssue || issues.find(issue => currentStatus(issue).status !== 'resolved') || issues[0];
   const escapedId = openIssue && window.CSS?.escape ? CSS.escape(openIssue.id) : String(openIssue?.id || '').replace(/"/g, '\\"');
   const row = openIssue ? document.querySelector(`.issue-row[data-id="${escapedId}"]`) : null;
   return row?.querySelector('.issue-card') || document.querySelector('.issue-card');
@@ -6782,14 +6930,14 @@ function flashDemoGuideTarget(el) {
 
 function demoGuideStepVisual(step) {
   if (step?.visual !== 'route') return '';
-  return `<div class="demo-guide-route-flow" aria-label="Swipe left or tap add status entry, then pick a category and subcategory">
+  return `<div class="demo-guide-route-flow" aria-label="Swipe left or tap add, then choose a response team and reason">
     <span class="demo-route-chip">Swipe left</span>
     <span class="demo-route-or">or</span>
     <span class="demo-route-chip">+ Add</span>
     <span class="demo-route-arrow">→</span>
-    <span class="demo-route-chip accent">Category</span>
+    <span class="demo-route-chip accent">Response team</span>
     <span class="demo-route-arrow">→</span>
-    <span class="demo-route-chip">Sub / Skip</span>
+    <span class="demo-route-chip">Reason / Skip</span>
   </div>`;
 }
 
@@ -6802,21 +6950,36 @@ function runDemoGuideAction(action, key) {
       break;
     case 'log': {
       window.setMapMode?.('log');
-      const machine = Object.values(PRESSES).flat()[0] || '1.01';
+      const machine = Object.values(PRESSES).flat()[0] || 'AX-101';
       window.openAddModal?.(machine);
+      const note = document.getElementById('issue-note');
+      if (note && !note.value.trim()) note.value = 'Demo: sensor check requested.';
       break;
     }
     case 'route': {
       demoGuideScrollTo('.issues-section');
       const card = firstDemoIssueCard();
-      flashDemoGuideTarget(card);
+      const row = card?.closest('.issue-row');
+      const issueId = row?.dataset.id;
+      if (issueId && !document.getElementById(`body-${issueId}`)?.classList.contains('visible')) window.toggleCard?.(issueId);
+      window.setTimeout(() => {
+        const addControl = card?.querySelector('.add-category') || card;
+        flashDemoGuideTarget(addControl);
+        addControl?.focus?.({ preventScroll: true });
+      }, 120);
       break;
     }
     case 'workflow': {
       demoGuideScrollTo('.issues-section');
       const card = firstDemoIssueCard();
-      const target = card?.querySelector('.wf-steps-wrap') || card;
-      flashDemoGuideTarget(target);
+      const row = card?.closest('.issue-row');
+      const issueId = row?.dataset.id;
+      if (issueId && !document.getElementById(`body-${issueId}`)?.classList.contains('visible')) window.toggleCard?.(issueId);
+      window.setTimeout(() => {
+        const target = card?.querySelector('.wf-steps-wrap') || card;
+        flashDemoGuideTarget(target);
+        target?.querySelector('button:not([disabled])')?.focus?.({ preventScroll: true });
+      }, 120);
       break;
     }
     case 'filters':
@@ -6854,7 +7017,8 @@ function buildDemoGuide() {
     <div class="demo-guide-head">
       <div>
         <div class="demo-guide-kicker">Demo Guide</div>
-        <div class="demo-guide-title">Explore AP Tracker at your own pace</div>
+        <div class="demo-guide-title">Learn AP Tracker with a hands-on sandbox</div>
+        <div class="demo-guide-privacy"><span aria-hidden="true">ⓘ</span> All plant names, equipment IDs, people, and issue data in this demo are fictional. Activity in the shared demo is temporary and may be cleared.</div>
       </div>
       <div class="demo-guide-actions">
         <div class="demo-guide-nav">
@@ -6880,9 +7044,14 @@ function buildDemoGuide() {
         </div>
       `).join('')}
       <div class="demo-guide-onboarding" id="demo-guide-onboarding">
-        <div class="demo-guide-onboarding-title">🎉 Mastered! Create Your Live Plant</div>
-        <div class="demo-guide-onboarding-desc">Ready to build your own AP Tracker? Enter your plant details below to initialize your live production workspace:</div>
-        <div class="demo-guide-onboarding-form">
+        <div class="demo-guide-onboarding-title">✓ You’ve completed the demo</div>
+        <div class="demo-guide-onboarding-desc">You explored the floor, logged and routed work, used workflow controls, filtered the issue log, and opened reporting and plant tools.</div>
+        <div class="demo-guide-completion-actions">
+          <button class="demo-guide-step-btn" type="button" data-demo-guide-explore-again>Explore again</button>
+          <button class="demo-guide-onboarding-btn" type="button" data-demo-guide-reveal-plant aria-expanded="false" aria-controls="demo-guide-live-plant-form">Create a live plant</button>
+        </div>
+        <div class="demo-guide-live-plant-explainer">A live plant creates a private production workspace with its own equipment layout, members, statuses, and issue history. Demo activity is not copied into it.</div>
+        <div class="demo-guide-onboarding-form" id="demo-guide-live-plant-form">
           <input type="text" id="demo-onboarding-plant-name" placeholder="Plant Name (e.g. Chicago Assembly Floor)" required>
           <select id="demo-onboarding-role">
             <option value="Production Lead">Production Lead</option>
@@ -6895,6 +7064,7 @@ function buildDemoGuide() {
         </div>
       </div>
     </div>
+    <div class="sr-only" aria-live="polite" data-demo-guide-live></div>
     <div class="demo-guide-progress-bar-wrap">
       <div class="demo-guide-progress-bar" id="demo-guide-progress-bar"></div>
     </div>`;
@@ -7136,14 +7306,33 @@ function buildIssueFromSnapshot(docSnap) {
   const data = docSnap.data() || {};
   const cachedPhotos = attachmentPhotoCache.get(docSnap.id);
   const cachedHistory = issueEventHistoryCache.get(docSnap.id);
+  const storedMachine = data.machine || data.machineCode || '';
+  const machine = currentPlantId === DEMO_PLANT_ID ? anonymizeDemoMachineCode(storedMachine) : storedMachine;
   return {
     id: docSnap.id,
     ...data,
-    machine: data.machine || data.machineCode || '',
+    machine,
+    machineCode: machine,
     resolved: typeof data.resolved === 'boolean' ? data.resolved : !!data.lifecycle?.isResolved,
     photos: Array.isArray(data.photos) && data.photos.length ? data.photos : (cachedPhotos || data.photos || []),
     eventHistory: cachedHistory || data.eventHistory || []
   };
+}
+
+function anonymizeDemoMachineCode(machineCode) {
+  const raw = String(machineCode || '').trim();
+  const demoMachines = Object.values(DEMO_PRESSES).flat();
+  if (!raw || demoMachines.includes(raw)) return raw;
+
+  const numeric = raw.match(/^([1-6])\.(\d{1,2})$/);
+  if (numeric) {
+    const zoneMachines = DEMO_PRESSES[`Zone ${String.fromCharCode(64 + Number(numeric[1]))}`] || demoMachines;
+    return zoneMachines[(Math.max(1, Number(numeric[2])) - 1) % zoneMachines.length];
+  }
+
+  let hash = 0;
+  for (const char of raw) hash = ((hash * 31) + char.charCodeAt(0)) >>> 0;
+  return demoMachines[hash % demoMachines.length];
 }
 
 function rebuildIssuesArrayFromMap() {
@@ -7363,6 +7552,7 @@ function startListener() {
   const q = query(plantCol('issues'), orderBy('createdAt', 'desc'), limit(MAX_LIVE_ISSUES));
   let firstSnapshotReceived = false;
   unsubscribe = onSnapshot(q, { includeMetadataChanges: true }, snap => {
+    const isInitialSnapshot = !firstSnapshotReceived;
     firstSnapshotReceived = true;
     observeSyncSnapshot(snap);
     if (!snap.metadata?.fromCache) {
@@ -7371,6 +7561,7 @@ function startListener() {
     }
     if (issueBootstrapTimeout) { clearTimeout(issueBootstrapTimeout); issueBootstrapTimeout = null; }
     retryCount = 0; // reset on success
+    const newlyArrivedIssues = [];
     snap.docChanges().forEach(change => {
       if (change.type === 'removed') {
         const removedIssueId = change.doc.id;
@@ -7379,10 +7570,16 @@ function startListener() {
         issueDetailsHydrationInFlight.delete(removedIssueId);
         return;
       }
-      issuesById.set(change.doc.id, buildIssueFromSnapshot(change.doc));
+      const wasKnown = issuesById.has(change.doc.id);
+      const nextIssue = buildIssueFromSnapshot(change.doc);
+      issuesById.set(change.doc.id, nextIssue);
+      if (!isInitialSnapshot && change.type === 'added' && !wasKnown) newlyArrivedIssues.push(nextIssue);
     });
     rebuildIssuesArrayFromMap();
     refreshVisibleData({ isBackground: true });
+    newlyArrivedIssues.slice(0, 3).forEach((issue, index) => {
+      setTimeout(() => showPressRadarRipple(issue.machine || issue.machineCode, getStatusColor(currentStatusKey(issue))), 100 + index * 160);
+    });
     void _refreshRoleAlertBadgeCount();
     if (!issueHistoryCursor && !issueHistoryExhausted && snap.docs.length) {
       issueHistoryCursor = snap.docs[snap.docs.length - 1];
@@ -7745,6 +7942,7 @@ window.setMapMode = mode => {
   }
   renderRowTabs();
   updateReportAction();
+  if (mode !== prevMode) completeDemoGuideStep('floor');
 };
 
 // ── PRESS MINI-CARD STATE ──
@@ -8723,6 +8921,17 @@ function renderRowPanels() {
       } else {
         // A press with no visible active or resolved issues should not resemble a category state.
         btn.classList.add('is-idle');
+      }
+
+      const latestPressUpdate = Math.max(0, ...mi.map(issue =>
+        compatTimestampMillis(issue.updatedAt)
+          || compatTimestampMillis(issue.currentStatus?.enteredAt)
+          || issueCreatedTime(issue)
+      ));
+      if (latestPressUpdate && Date.now() - latestPressUpdate < 2 * 60 * 1000) {
+        btn.classList.add('recent-activity');
+        const recentStatus = anyOpen[0] ? currentStatusKey(anyOpen[0]) : 'resolved';
+        btn.style.setProperty('--visual-treat-color', getStatusColor(recentStatus));
       }
 
       // hist-mode class if needed
@@ -10426,6 +10635,7 @@ window.submitIssue = async () => {
       issueLogPrefs.lastStatusSub = initialSubStatus;
       saveIssueLogPrefs();
       if (timerMinutes > 0) setIssueReminder(issueRef.id, timerMinutes);
+      window.lastDemoCreatedIssueId = issueRef.id;
       completeDemoGuideStep('log');
       closeModal();
       showActionFeedback({
@@ -11788,7 +11998,8 @@ window.setWorkflowState = async (id, state) => {
         issueId: id,
         machine: issue?.machine || issue?.machineCode || '',
         label: workflowFeedbackLabel(state),
-        detail: workflowFeedbackLabel(state)
+        detail: workflowFeedbackLabel(state),
+        workflowState: state
       });
       completeDemoGuideStep('workflow');
       return;
@@ -11808,7 +12019,8 @@ window.setWorkflowState = async (id, state) => {
         issueId: id,
         machine: issue?.machine || issue?.machineCode || '',
         label: workflowFeedbackLabel(state),
-        detail: workflowFeedbackLabel(state)
+        detail: workflowFeedbackLabel(state),
+        workflowState: state
       });
       completeDemoGuideStep('workflow');
       return;
@@ -11831,7 +12043,8 @@ window.setWorkflowState = async (id, state) => {
       issueId: id,
       machine: issue?.machine || issue?.machineCode || '',
       label: workflowFeedbackLabel(state),
-      detail: workflowFeedbackLabel(state)
+      detail: workflowFeedbackLabel(state),
+      workflowState: state
     });
     completeDemoGuideStep('workflow');
   } catch (e) {
@@ -11990,7 +12203,8 @@ async function setWorkflowStateForEntryLocator(issueId, state, locateEntry) {
         issueId,
         machine: issue?.machine || issue?.machineCode || '',
         label: workflowFeedbackLabel(state),
-        detail: workflowFeedbackLabel(state)
+        detail: workflowFeedbackLabel(state),
+        workflowState: state
       });
       completeDemoGuideStep('workflow');
     }
@@ -12175,7 +12389,8 @@ window.setWorkflowStateForStatus = async (issueId, statusKey, state) => {
         issueId,
         machine: issue?.machine || issue?.machineCode || '',
         label: workflowFeedbackLabel(state),
-        detail: workflowFeedbackLabel(state)
+        detail: workflowFeedbackLabel(state),
+        workflowState: state
       });
       completeDemoGuideStep('workflow');
       return;
@@ -12206,7 +12421,8 @@ window.setWorkflowStateForStatus = async (issueId, statusKey, state) => {
       issueId,
       machine: issue?.machine || issue?.machineCode || '',
       label: workflowFeedbackLabel(state),
-      detail: workflowFeedbackLabel(state)
+      detail: workflowFeedbackLabel(state),
+      workflowState: state
     });
     completeDemoGuideStep('workflow');
   } catch (e) {
@@ -12271,7 +12487,8 @@ window.cycleWorkflowState = async (id) => {
       issueId: id,
       machine: issue?.machine || issue?.machineCode || '',
       label: workflowFeedbackLabel(nextState),
-      detail: workflowFeedbackLabel(nextState)
+      detail: workflowFeedbackLabel(nextState),
+      workflowState: nextState
     });
     completeDemoGuideStep('workflow');
   } catch (e) {
@@ -13116,7 +13333,9 @@ function renderIssues(options = {}) {
 
   // Reset display limit when filter/sort parameters change
   const filterKey = `${issueScope}|${issuePeriod}|${document.getElementById('date-filter')?.value}|${mf}|${sf}|${solutionFilter}|${search}|${sort}|${issueRowScope}|${issueShiftFilter}|${historicalIssueFocusId}`;
-  if (filterKey !== renderIssues._lastFilterKey) {
+  const previousFilterKey = renderIssues._lastFilterKey;
+  const shouldAnimateReflow = Boolean(previousFilterKey && filterKey !== previousFilterKey && !options.isBackground && !visualTreatsReducedMotion());
+  if (filterKey !== previousFilterKey) {
     issueDisplayLimit = PAGE_SIZE;
     renderIssues._lastFilterKey = filterKey;
   }
@@ -13176,7 +13395,7 @@ function renderIssues(options = {}) {
   }
 
   let ledgerMonthKey = '';
-  visible.forEach(issue => {
+  visible.forEach((issue, visibleIndex) => {
     if (issueLogView === 'list' && (sort === 'newest' || sort === 'oldest')) {
       const createdMs = issueCreatedTime(issue);
       const createdDate = createdMs ? new Date(createdMs) : null;
@@ -13206,6 +13425,10 @@ function renderIssues(options = {}) {
     const hasPausedTimerProgress = !!reminderState?.isPaused && !isResolved;
     const row = document.createElement('div');
     row.className = `issue-row${issueLogView === 'list' ? ' ledger-row' : ''}${wasOpen ? ' ledger-expanded' : ''}`;
+    if (shouldAnimateReflow) {
+      row.classList.add('visual-reflow-in');
+      row.style.setProperty('--visual-reflow-delay', `${Math.min(visibleIndex, 10) * 34}ms`);
+    }
     row.dataset.id = issue.id;
     if (isAlertFocus) row.classList.add('alert-focus-issue');
     const card = document.createElement('div');
@@ -13217,12 +13440,13 @@ function renderIssues(options = {}) {
       url: p.dataUrl || p.downloadURL || p.url || '',
       takenAt: p.takenAt || p.timestamp || '',
       uploadedAt: p.uploadedAt || p.createdAt || '',
-      name: p.name || ''
+      name: p.name || '',
+      isFresh: Date.now() - compatTimestampMillis(p.uploadedAt || p.createdAt || p.takenAt || p.timestamp) < 15000
     })).filter(p => p.url);
     if (_photoList.length) window._issuePhotos = window._issuePhotos || {};
     if (_photoList.length) window._issuePhotos[issue.id] = _photoList;
     const photosHtml = _photoList.length
-      ? `<div class="issue-photos">${_photoList.map((photo, i) => `<img class="issue-photo-thumb" src="${photo.url}" loading="lazy" onclick="openLightbox(${i},'${issue.id}')">`).join('')}</div>` : '';
+      ? `<div class="issue-photos">${_photoList.map((photo, i) => `<img class="issue-photo-thumb${photo.isFresh ? ' photo-fresh' : ''}" src="${photo.url}" loading="lazy" onclick="openLightbox(${i},'${issue.id}')">`).join('')}</div>` : '';
 
     // Authoritative current status from issue.currentStatus (v2) or lifecycle fallback
     const currentKey = currentStatusKey(issue);
@@ -14745,6 +14969,7 @@ function updateStats() {
       el.textContent = `${count} ${getStatusLabel(key, 'stat')}`;
     }
   });
+  updateFloorClearTreat();
 }
 
 // ── MASCOT POPOVER ──
@@ -14853,7 +15078,7 @@ const SPOTLIGHT_STEPS = [
     padding: 8,
     mascotKey: 'open',
     headline: 'DEMO PLANT ORIENTATION',
-    body: "This demo plant is a hands-on sandbox. Use the checklist to try real actions; use this tour to learn where the main tools live.",
+    body: 'This is a fictional, shared sandbox. Use the checklist to try real actions, or continue this tour for a quick look at the main tools. Demo activity is temporary.',
   },
   {
     target: '#header-quick-inline',
@@ -14908,7 +15133,7 @@ const SPOTLIGHT_STEPS = [
     padding: 10,
     mascotKey: 'controlman',
     headline: 'READ THE FLOOR',
-    body: "Rows and presses mirror the plant. Press colors and row summaries show where attention is needed right now.",
+    body: 'Synthetic zones and presses model a plant floor without representing a real facility. Colors and zone summaries show where attention is needed.',
   },
   {
     target: '.issue-row .issue-card',
@@ -15713,7 +15938,6 @@ function handleShellAction(action, value, trigger, event) {
       break;
     case 'set-map-mode':
       window.setMapMode?.(value);
-      completeDemoGuideStep('floor');
       break;
     case 'open-report-composer':
       window.openReportComposer?.();
@@ -15792,6 +16016,22 @@ document.addEventListener('keydown', event => {
   if (event.key === 'Escape' && scheduleCalendarState.open) closeScheduleCalendar();
 });
 document.addEventListener('click', e => {
+  const guideExploreAgain = e.target.closest?.('[data-demo-guide-explore-again]');
+  if (guideExploreAgain) {
+    e.preventDefault();
+    resetDemoGuideProgress();
+    document.getElementById('demo-guide')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
+  const guideRevealPlant = e.target.closest?.('[data-demo-guide-reveal-plant]');
+  if (guideRevealPlant) {
+    e.preventDefault();
+    const guide = document.getElementById('demo-guide');
+    guide?.classList.add('show-live-plant-form');
+    guideRevealPlant.setAttribute('aria-expanded', 'true');
+    window.setTimeout(() => document.getElementById('demo-onboarding-plant-name')?.focus(), 0);
+    return;
+  }
   const guideReset = e.target.closest?.('[data-demo-guide-reset]');
   if (guideReset) {
     e.preventDefault();
