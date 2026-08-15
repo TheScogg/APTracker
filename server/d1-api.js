@@ -31,6 +31,7 @@ import {
   requireScheduleShift,
   scheduleShiftIssueKey
 } from '../js/schedule-shifts.mjs';
+import { groupScheduleChangeRows } from '../js/schedule-change-groups.mjs';
 
 function jsonResponse(body, init = {}) {
   return new Response(JSON.stringify(body), {
@@ -271,8 +272,12 @@ function buildScheduleImportIssue(plantId, scheduleDate, shift, row) {
         shift: scheduleShift,
         section: row?.section || '',
         rowId: row?.rowId || '',
+        rowIds: Array.isArray(row?.rowIds) ? row.rowIds : [row?.rowId || ''].filter(Boolean),
         partNumber: row?.partNumber || '',
+        partNumbers: Array.isArray(row?.partNumbers) ? row.partNumbers : [row?.partNumber || ''].filter(Boolean),
         description: row?.description || '',
+        descriptions: Array.isArray(row?.descriptions) ? row.descriptions : [row?.description || ''].filter(Boolean),
+        cavities: Array.isArray(row?.cavities) ? row.cavities : [row?.cavity || ''].filter(Boolean),
         notes: row?.notes || '',
         isChange: true
       },
@@ -281,7 +286,8 @@ function buildScheduleImportIssue(plantId, scheduleDate, shift, row) {
         scheduleDate,
         scheduleShift,
         scheduleSection: row?.section || '',
-        scheduleRowId: row?.rowId || ''
+        scheduleRowId: row?.rowId || '',
+        scheduleRowIds: Array.isArray(row?.rowIds) ? row.rowIds : [row?.rowId || ''].filter(Boolean)
       },
       createdAt: createdDate.toISOString(),
       createdBy: actor,
@@ -305,7 +311,8 @@ function buildScheduleImportIssue(plantId, scheduleDate, shift, row) {
             scheduleDate,
             scheduleShift,
             scheduleSection: row?.section || '',
-            scheduleRowId: row?.rowId || ''
+            scheduleRowId: row?.rowId || '',
+            scheduleRowIds: Array.isArray(row?.rowIds) ? row.rowIds : [row?.rowId || ''].filter(Boolean)
           }
         }
       },
@@ -677,8 +684,10 @@ export async function importDailyScheduleToD1(db, plantId, payload = {}) {
     });
   });
 
-  const scheduleChangeRows = [...rowsBySection.northBayChanges, ...rowsBySection.southBayChanges]
-    .filter(row => String(row?.press || '').trim());
+  const scheduleChangeRows = groupScheduleChangeRows([
+    ...rowsBySection.northBayChanges,
+    ...rowsBySection.southBayChanges
+  ]);
   let createdScheduleIssueCount = 0;
 
   for (const row of scheduleChangeRows) {

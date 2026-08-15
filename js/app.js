@@ -14771,10 +14771,15 @@ window.openIssuePhotoSection = (id, entryIndex = null, event = null) => {
   if (openSwipeRow) closeSwipe();
   const bodyEl = document.getElementById(`body-${id}`);
   if (!bodyEl) return;
+  const ledgerRow = bodyEl.closest('.issue-row.ledger-row');
   const chevronEl = document.getElementById(`chevron-${id}`);
   const wasClosed = !bodyEl.classList.contains('visible');
   bodyEl.classList.add('visible');
   chevronEl?.classList.add('open');
+  if (ledgerRow) {
+    ledgerRow.classList.add('ledger-expanded');
+    ledgerRow.querySelector('.ledger-summary')?.setAttribute('aria-expanded', 'true');
+  }
   if (wasClosed) ensureIssueDetailsHydrated(id).catch(() => { });
 
   const scrollToPhotos = () => {
@@ -14782,7 +14787,9 @@ window.openIssuePhotoSection = (id, entryIndex = null, event = null) => {
       ? bodyEl.querySelector(':scope > .issue-photos')
       : bodyEl.querySelector(`[data-status-entry-index="${entryIndex}"] .issue-photos`);
     if (!target) return;
-    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // A photo count in the condensed ledger should reveal its thumbnail in
+    // place. Scrolling here made the click appear to jump to another card.
+    if (!ledgerRow) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
     target.classList.remove('photo-scroll-highlight');
     requestAnimationFrame(() => target.classList.add('photo-scroll-highlight'));
     setTimeout(() => target.classList.remove('photo-scroll-highlight'), 1400);
@@ -15403,21 +15410,58 @@ window.closeLightbox = () => {
 
 window.lightboxNav = dir => _lbShow(_lbIndex + dir);
 
-window.downloadLightboxPhoto = () => {
+function _isIosStandaloneApp() {
+  const ua = navigator.userAgent || '';
+  const isiOS = /iPad|iPhone|iPod/.test(ua)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isStandalone = navigator.standalone === true
+    || window.matchMedia?.('(display-mode: standalone)').matches;
+  return isiOS && isStandalone;
+}
+
+function _safeDownloadName(name) {
+  return String(name || 'ap-tracker-photo.jpg').replace(/[\\/:*?"<>|]+/g, '_');
+}
+
+async function _tryIosPhotoSave(url, name) {
+  if (!_isIosStandaloneApp() || !navigator.share || typeof File !== 'function') return false;
+  try {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Photo download failed (${response.status})`);
+    const blob = await response.blob();
+    const file = new File([blob], name, { type: blob.type || 'image/jpeg' });
+    if (navigator.canShare && !navigator.canShare({ files: [file] })) return false;
+    await navigator.share({ files: [file], title: 'Save photo' });
+    return true;
+  } catch (error) {
+    // Cancelling the native sheet is a completed interaction: the app remains open.
+    if (error?.name === 'AbortError') return true;
+    console.warn('Native photo save failed; opening the download separately.', error);
+    return false;
+  }
+}
+
+window.downloadLightboxPhoto = async () => {
   const current = _lbPhotos[_lbIndex] || {};
   const src = typeof current === 'string' ? current : (current.url || current.downloadURL || current.dataUrl || '');
   if (!src) return;
-  const name = typeof current === 'object' && current.name ? current.name : `ap-tracker-photo-${_lbIndex + 1}.jpg`;
+  const name = _safeDownloadName(typeof current === 'object' && current.name ? current.name : `ap-tracker-photo-${_lbIndex + 1}.jpg`);
   const url = new URL(src, window.location.href);
   // R2 object URLs opt into an attachment response while retaining their signed path.
   if (url.pathname === '/api/storage/object') {
     url.searchParams.set('download', '1');
     url.searchParams.set('filename', String(name));
   }
+  // iOS standalone apps can replace the app with an undismissable Quick Look view
+  // when a download link is followed. The native share sheet keeps the app alive and
+  // offers Save Image / Save to Files instead.
+  if (await _tryIosPhotoSave(url.toString(), name)) return;
   const link = document.createElement('a');
   link.href = url.toString();
-  link.download = String(name).replace(/[\\/:*?"<>|]+/g, '_');
+  link.download = name;
   link.rel = 'noopener';
+  // If native file sharing is unavailable, keep iOS Quick Look out of the app window.
+  if (_isIosStandaloneApp()) link.target = '_blank';
   document.body.appendChild(link);
   link.click();
   link.remove();
