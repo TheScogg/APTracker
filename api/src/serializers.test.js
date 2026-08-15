@@ -20,6 +20,7 @@ test('serializeUserContextRows groups memberships under one user', () => {
       display_name: 'Pat',
       photo_url: 'https://example.com/pat.png',
       last_plant_id: 'p2',
+      language_prefs_json: '{"locale":"fr","schemaVersion":1}',
       plant_id: 'p1',
       plant_name: 'Plant 1',
       role: 'admin',
@@ -41,6 +42,7 @@ test('serializeUserContextRows groups memberships under one user', () => {
   ]);
 
   assert.equal(result.user.uid, 'u1');
+  assert.deepEqual(result.user.languagePrefs, { locale: 'fr', schemaVersion: 1 });
   assert.equal(result.plants.length, 2);
   assert.deepEqual(result.plants[1].permissions, {
     canViewPlant: true,

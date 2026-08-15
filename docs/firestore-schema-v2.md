@@ -70,6 +70,11 @@ Keep this document lightweight and user-centric.
     "activeTheme": "midnight",
     "customThemes": []
   },
+  "languagePrefs": {
+    "locale": "en",
+    "schemaVersion": 1,
+    "updatedAt": "serverTimestamp"
+  },
   "defaultPlantId": "plant_jef",
   "recentPlantIds": ["plant_jef", "plant_lou"],
   "createdAt": "serverTimestamp",
@@ -82,6 +87,7 @@ Keep this document lightweight and user-centric.
 
 - Store identity and preferences here.
 - `themePrefs` mirrors the active theme and user-owned local custom themes; see `docs/theme-system.md`.
+- `languagePrefs.locale` stores the employee UI language (`en`, `fr`, `es`, or `ar`). The same versioned object is stored as `users.language_prefs_json` in D1.
 - Do not use this document as the source of truth for plant authorization.
 - Plant access should be derived from `plants/{plantId}/members/{userId}`.
 

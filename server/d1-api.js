@@ -1060,6 +1060,7 @@ async function getCurrentUserContext(db, user) {
         u.photo_url,
         u.last_plant_id,
         u.theme_prefs_json,
+        u.language_prefs_json,
         u.requested_plant_ids_json,
         u.profile_onboarding_json,
         u.global_lifetime_xp,
@@ -1112,6 +1113,14 @@ async function updateCurrentUserContext(db, user, patch = {}) {
   if (Object.prototype.hasOwnProperty.call(patch, 'themePrefs')) {
     updates.push('theme_prefs_json = ?');
     values.push(jsonOrNull(patch.themePrefs && typeof patch.themePrefs === 'object' ? patch.themePrefs : null));
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'languagePrefs')) {
+    const locale = String(patch.languagePrefs?.locale || '').trim().toLowerCase();
+    if (!['en', 'fr', 'es', 'ar'].includes(locale)) {
+      throw Object.assign(new Error('languagePrefs.locale must be en, fr, es, or ar.'), { status: 400 });
+    }
+    updates.push('language_prefs_json = ?');
+    values.push(jsonOrNull({ locale, schemaVersion: 1, updatedAt: nowIso() }));
   }
   if (Object.prototype.hasOwnProperty.call(patch, 'profileOnboarding')) {
     updates.push('profile_onboarding_json = ?');

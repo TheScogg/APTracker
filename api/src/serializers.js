@@ -51,6 +51,7 @@ export function serializeUserContextRows(rows = []) {
       photoUrl: first.photo_url,
       lastPlantId: first.last_plant_id,
       themePrefs: parseJson(first.theme_prefs_json, null),
+      languagePrefs: parseJson(first.language_prefs_json, null),
       requestedPlantIds: parseJson(first.requested_plant_ids_json, []),
       profileOnboarding: parseJson(first.profile_onboarding_json, null),
       globalLifetimeXp: Number(first.global_lifetime_xp || 0),

@@ -76,6 +76,11 @@ await ensureColumn(
 );
 await ensureColumn(
   'users',
+  'language_prefs_json',
+  'ALTER TABLE users ADD COLUMN language_prefs_json TEXT CHECK (language_prefs_json IS NULL OR json_valid(language_prefs_json));'
+);
+await ensureColumn(
+  'users',
   'global_xp_spent',
   'ALTER TABLE users ADD COLUMN global_xp_spent INTEGER NOT NULL DEFAULT 0;'
 );

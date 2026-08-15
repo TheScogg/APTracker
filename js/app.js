@@ -13,6 +13,16 @@ import { initWikiTool } from "./wiki-tool.js";
 import { initNotesTool } from "./notes-tool.js";
 import { initAnalyticsTool } from "./analytics-tool.js";
 import {
+  SUPPORTED_LOCALES,
+  applyTranslations,
+  detectInitialLocale,
+  getLocale,
+  languagePrefs,
+  normalizeLanguagePrefs,
+  setLocale,
+  t
+} from "./i18n.js";
+import {
   normalizeChecklistItems,
   noteTextFromHtml as _noteTextFromHtml,
   sanitizeNoteHtml
@@ -56,6 +66,8 @@ import {
   stripResponseTreeFromStatuses,
   syncStatusesFromSubcategoryRoutes as syncSharedStatusesFromSubcategoryRoutes
 } from "./shared-config.js";
+
+setLocale(detectInitialLocale(), { persistLocal: true, emit: false });
 
 const firebaseConfig = {
   apiKey: "AIzaSyABjasNBbJnsqq4M_UxKruKrN6-O2FXCwc",
@@ -1329,7 +1341,7 @@ function getWorkflowHistoryForEntry(issue, entry, isCurrent = false, allowStatus
 function workflowHistoryTimestampLabel(ts) {
   const ms = compatTimestampMillis(ts);
   if (!Number.isFinite(ms) || ms <= 0) return String(ts || '').trim();
-  return new Date(ms).toLocaleString(undefined, {
+  return new Date(ms).toLocaleString(getLocale(), {
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
@@ -1435,7 +1447,7 @@ function updateUserDropdownContext() {
   const roleEl = document.getElementById('ud-role-label');
   const plantEl = document.getElementById('ud-plant-label');
   if (roleEl) roleEl.textContent = formatMemberRoleLabel(currentUserRole);
-  if (plantEl) plantEl.textContent = currentPlantName || 'No plant';
+  if (plantEl) plantEl.textContent = currentPlantName || t('nav.noPlant');
 }
 
 // ── ROLE-BASED ALERT FEEDS ──
@@ -2118,7 +2130,7 @@ async function _loadActiveRoleAlertsForCurrentUser() {
         : (_getRoleAlertWorkflowState(issue || null, alertStatusKey, alertWorkflowId) || null);
       const createdAt = toCompatTimestamp(alert.createdAt);
       const createdAtLabel = createdAt?.toDate
-        ? createdAt.toDate().toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+        ? createdAt.toDate().toLocaleString(getLocale(), { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
         : '';
       const issueMachine = issue && (issue.machine || issue.machineCode) ? (issue.machine || issue.machineCode) : 'Unknown';
       const issueCurrentStatus = issue?.currentStatus || null;
@@ -2192,7 +2204,7 @@ async function _loadActiveRoleAlertsForCurrentUser() {
     const pathMeta = getAlertResponsePathMeta(data, alertStatusKey, data.subStatus || issueSubStatus);
     const createdAt = data.createdAt || null;
     const createdAtLabel = createdAt && typeof createdAt.toDate === 'function'
-      ? createdAt.toDate().toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+      ? createdAt.toDate().toLocaleString(getLocale(), { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
       : '';
     const workflowAcceptedBy = workflowState === 'accepted'
       ? (
@@ -2750,7 +2762,7 @@ function scheduleCalendarRowCount(schedule) {
 function scheduleCalendarLabel(dateKey, options = {}) {
   const date = new Date(`${dateKey}T00:00:00`);
   if (isNaN(date.getTime())) return dateKey || 'Date';
-  return date.toLocaleDateString('en-US', options.withYear
+  return date.toLocaleDateString(getLocale(), options.withYear
     ? { month: 'short', day: 'numeric', year: 'numeric' }
     : { month: 'short', day: 'numeric' });
 }
@@ -2840,10 +2852,11 @@ function renderScheduleCalendar() {
 
   const { visibleYear: year, visibleMonth: month } = scheduleCalendarState;
   const monthDate = new Date(year, month, 1);
-  title.textContent = monthDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  title.textContent = monthDate.toLocaleDateString(getLocale(), { month: 'long', year: 'numeric' });
   grid.innerHTML = '';
 
-  ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].forEach(day => {
+  Array.from({ length: 7 }, (_, index) => new Intl.DateTimeFormat(getLocale(), { weekday: 'short' })
+    .format(new Date(2026, 7, 2 + index))).forEach(day => {
     const cell = document.createElement('div');
     cell.className = 'schedule-cal-dow';
     cell.textContent = day;
@@ -3550,6 +3563,7 @@ async function loadUserPlants() {
         ssoNumber: sqlContext.user.ssoNumber || '',
         lastPlant: sqlContext.user.lastPlantId || '',
         themePrefs: sqlContext.user.themePrefs || null,
+        languagePrefs: sqlContext.user.languagePrefs || null,
         requestedPlantIds: Array.isArray(sqlContext.user.requestedPlantIds) ? sqlContext.user.requestedPlantIds : [],
         profileOnboarding: sqlContext.user.profileOnboarding || null,
         globalLifetimeXp: Number(sqlContext.user.globalLifetimeXp || 0),
@@ -3561,6 +3575,9 @@ async function loadUserPlants() {
       userData = userSnap.exists() ? userSnap.data() : {};
     }
     currentUserProfileData = userData || {};
+    const savedLanguagePrefs = normalizeLanguagePrefs(userData.languagePrefs);
+    if (savedLanguagePrefs) setLocale(savedLanguagePrefs.locale, { persistLocal: true });
+    else applyTranslations();
     availablePlantsForOnboarding = await loadAvailablePlantsForOnboarding();
     _applyFirestoreThemePrefs(userData.themePrefs);
     userLifetimeXp = Number(userData.globalLifetimeXp || 0);
@@ -4124,9 +4141,19 @@ function getAllSubs() {
 
 function getStatusLabel(statusKey, mode = 'label') {
   const st = getStatusDef(statusKey);
-  if (mode === 'short') return st.shortLabel || st.label || STATUS_FALLBACK.shortLabel;
-  if (mode === 'stat') return st.statLabel || st.shortLabel || st.label || STATUS_FALLBACK.statLabel;
-  return st.label || STATUS_FALLBACK.label;
+  const defaultStatus = DEFAULT_STATUSES[statusKey];
+  const field = mode === 'short' ? 'shortLabel' : (mode === 'stat' ? 'statLabel' : 'label');
+  const fallback = mode === 'short'
+    ? (st.shortLabel || st.label || STATUS_FALLBACK.shortLabel)
+    : mode === 'stat'
+      ? (st.statLabel || st.shortLabel || st.label || STATUS_FALLBACK.statLabel)
+      : (st.label || STATUS_FALLBACK.label);
+  if (!defaultStatus) return statusKey ? fallback : t('status.unknown.label', {}, { fallback });
+  const defaultValue = defaultStatus[field] || defaultStatus.shortLabel || defaultStatus.label;
+  const configuredValue = st[field] || st.shortLabel || st.label;
+  if (configuredValue !== defaultValue) return fallback;
+  const translationMode = mode === 'label' ? 'label' : 'short';
+  return t(`status.${statusKey}.${translationMode}`, {}, { fallback });
 }
 
 function getStatusSubs(statusKey) {
@@ -5821,6 +5848,52 @@ let currentMachine = null;
 let resolveTargetId = null;
 let reopenTargetId = null;
 let currentUser = null;
+
+function languageDisplayName(locale) {
+  const supported = SUPPORTED_LOCALES[locale] || SUPPORTED_LOCALES.en;
+  return t(supported.labelKey);
+}
+
+async function persistCurrentUserLanguage(locale) {
+  const prefs = { ...languagePrefs(locale), updatedAt: new Date().toISOString() };
+  currentUserProfileData = { ...currentUserProfileData, languagePrefs: prefs };
+  if (!currentUser?.uid || DEMO_MODE || NO_AUTH_MODE) return;
+  if (shouldUseSqlBootstrap()) {
+    await dataApi.updateCurrentUserContext({ languagePrefs: prefs });
+    return;
+  }
+  await setDoc(doc(db, 'users', currentUser.uid), {
+    languagePrefs: { ...prefs, updatedAt: serverTimestamp() }
+  }, { merge: true });
+}
+
+function bindLanguageSelector() {
+  const select = document.getElementById('language-select');
+  if (!select || select.dataset.bound === 'true') return;
+  select.dataset.bound = 'true';
+  select.value = getLocale();
+  select.addEventListener('change', async () => {
+    const locale = select.value;
+    setLocale(locale, { persistLocal: true });
+    try {
+      await persistCurrentUserLanguage(locale);
+      showGameToast(t('language.saved', { language: languageDisplayName(locale) }));
+    } catch (error) {
+      console.warn('Could not sync language preference; local preference remains active.', error);
+      showGameToast(t('language.localOnly'));
+    }
+  });
+}
+
+bindLanguageSelector();
+document.addEventListener('aptracker:localechange', () => {
+  updateUserDropdownContext();
+  updatePeriodTriggerLabel(issuePeriod);
+  if (scheduleCalendarState.open) renderScheduleCalendar();
+  if (Array.isArray(issues)) renderIssues();
+  updateStats();
+});
+
 let issueScope = 'all';
 let issueShiftFilter = 'all';
 let mapMode = 'log'; // 'log' | 'hist' | 'notes'
@@ -5980,7 +6053,10 @@ async function handleGoogleSignInResponse(response) {
 
   const container = document.getElementById('google-signin-btn');
   if (container) {
-    container.innerHTML = '<div style="color:var(--color-text-muted, var(--text2)); font-size:14px; margin-top:10px;">Signing in...</div>';
+    const progress = document.createElement('div');
+    progress.style.cssText = 'color:var(--color-text-muted, var(--text2)); font-size:14px; margin-top:10px;';
+    progress.textContent = t('login.signingIn');
+    container.replaceChildren(progress);
   }
 
   try {
@@ -9363,7 +9439,7 @@ function renderSimilarFixesResults(payload, target, options = {}) {
     const fix = match.fix || fallback.resolution || '';
     const resolvedDate = fallback.resolvedAt ? new Date(fallback.resolvedAt) : null;
     const resolvedLabel = resolvedDate && !Number.isNaN(resolvedDate.getTime())
-      ? resolvedDate.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })
+        ? resolvedDate.toLocaleDateString(getLocale(), { month: 'short', day: 'numeric', year: 'numeric' })
       : '';
     const matchLabel = [fallback.machineCode ? `Press ${fallback.machineCode}` : 'Matched issue', resolvedLabel ? `Resolved ${resolvedLabel}` : ''].filter(Boolean).join(' · ');
     const description = fallback.note || fallback.issueType || '';
@@ -10567,7 +10643,7 @@ window.submitIssue = async () => {
   if (selectedMachine) currentMachine = selectedMachine;
   updateAddModalMachineLabel(currentMachine);
   if (!currentMachine) {
-    showGameToast('⚠️ No press selected. Please select a press first.');
+    showGameToast(`⚠️ ${t('issue.selectPressError')}`);
     document.getElementById('issue-machine-trigger')?.focus();
     return;
   }
@@ -13410,7 +13486,7 @@ function renderIssues(options = {}) {
         }).length;
         const heading = document.createElement('div');
         heading.className = 'ledger-month-heading';
-        heading.innerHTML = `<span>${createdDate ? createdDate.toLocaleDateString([], { month: 'long', year: 'numeric' }) : 'Date unknown'}</span><span>${monthCount} issue${monthCount === 1 ? '' : 's'}</span>`;
+        heading.innerHTML = `<span>${createdDate ? createdDate.toLocaleDateString(getLocale(), { month: 'long', year: 'numeric' }) : 'Date unknown'}</span><span>${monthCount} issue${monthCount === 1 ? '' : 's'}</span>`;
         list.appendChild(heading);
       }
     }
@@ -14002,7 +14078,7 @@ function renderIssues(options = {}) {
       const createdMs = issueCreatedTime(issue);
       const createdDate = createdMs ? new Date(createdMs) : null;
       const createdDateLabel = createdDate
-        ? createdDate.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })
+        ? createdDate.toLocaleDateString(getLocale(), { month: 'short', day: 'numeric', year: 'numeric' })
         : 'Date unknown';
       const createdTimeLabel = createdDate
         ? createdDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
@@ -14940,8 +15016,7 @@ function formatIssueSmsBody(issue, issueLink = '') {
   if (!issue) return '';
 
   const statusKey = currentStatusKey(issue);
-  const statusDef = getStatusDef(statusKey);
-  const statusText = statusDef?.label || statusKey || 'Unknown';
+  const statusText = getStatusLabel(statusKey);
   const subStatus = issue.currentStatus?.subLabel || issue.currentStatus?.subStatusKey || '';
   const noteText = issue.currentStatus?.notePreview || issue.note || 'N/A';
   const loggedAt = issue.dateTime || (issue.timestamp ? formatDate(issue.timestamp) : 'Unknown time');
@@ -14988,7 +15063,6 @@ function openMascotPopover(e, statusKey, contextType, issueId) {
   const backdrop = document.getElementById('mascot-popover-backdrop');
   if (!popover || !backdrop) return;
   popover.style.setProperty('--mascot-accent', m.color);
-  const statusDef = getStatusDef(statusKey);
   let badgeLabel = '', contextHtml = '';
   if (contextType === 'stat') {
     let scoped = issueScope === 'mine' ? issues.filter(i => i.userId === currentUser?.uid) : issues;
@@ -15038,7 +15112,7 @@ function openMascotPopover(e, statusKey, contextType, issueId) {
     <button class="mascot-popover-close" onclick="closeMascotPopover()">✕</button>
     <div style="margin-bottom:2px">${m.svg(120, 120)}</div>
     <div class="mascot-popover-name" style="color:${m.color}">${m.name}</div>
-    <div class="mascot-popover-role">${statusDef.label}</div>
+    <div class="mascot-popover-role">${getStatusLabel(statusKey)}</div>
     <div class="mascot-popover-tagline">${m.tagline}</div>
     <div class="mascot-popover-divider"></div>
     <div class="mascot-popover-badge-label">${badgeLabel}</div>
@@ -15367,7 +15441,7 @@ function _formatLightboxPhotoMeta(photo) {
   const d = raw?.toDate ? raw.toDate() : new Date(raw);
   if (Number.isNaN(d.getTime())) return '';
   const label = photo.takenAt ? 'Taken' : 'Uploaded';
-  return `${label}: ${d.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}`;
+  return `${label}: ${d.toLocaleString(getLocale(), { dateStyle: 'medium', timeStyle: 'short' })}`;
 }
 
 function _lbShow(idx) {
@@ -15500,7 +15574,7 @@ document.addEventListener('keydown', e => {
 function fmtShortDate(val) {
   const d = new Date(val + 'T00:00:00');
   if (isNaN(d.getTime())) return val || 'Date';
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return d.toLocaleDateString(getLocale(), { month: 'short', day: 'numeric' });
 }
 
 function updateCalLabel(val, isActive) {
@@ -15514,13 +15588,13 @@ function updatePeriodTriggerLabel(modeOrValue) {
   const lbl = document.getElementById('period-trigger-label');
   if (!lbl) return;
   const presetLabels = {
-    today: 'Today',
+    today: t('common.today'),
     '24h': '24h',
-    week: 'Week',
-    month: 'Month',
-    all: 'All',
+    week: t('common.week'),
+    month: t('common.month'),
+    all: t('common.all'),
   };
-  lbl.textContent = presetLabels[modeOrValue] || (modeOrValue ? fmtShortDate(modeOrValue) : 'Date');
+  lbl.textContent = presetLabels[modeOrValue] || (modeOrValue ? fmtShortDate(modeOrValue) : t('common.date'));
 }
 
 function closeMobilePeriodMenu() {
@@ -15530,8 +15604,8 @@ function closeMobilePeriodMenu() {
 }
 
 function fmtDate(d) {
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' ' +
-    d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  return d.toLocaleDateString(getLocale(), { month: 'short', day: 'numeric', year: 'numeric' }) + ' ' +
+    d.toLocaleTimeString(getLocale(), { hour: 'numeric', minute: '2-digit' });
 }
 
 function toggleUserDropdown() {
@@ -18576,7 +18650,7 @@ function _relativeTime(ts) {
   if (hrs < 24) return hrs + 'h ago';
   const days = Math.floor(hrs / 24);
   if (days < 7) return days + 'd ago';
-  return new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  return new Date(ms).toLocaleDateString(getLocale(), { month: 'short', day: 'numeric' });
 }
 
 function _relativeTimeCompact(ts) {

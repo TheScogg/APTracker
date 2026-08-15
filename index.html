@@ -22,16 +22,16 @@
     }
   }
 </script>
-<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&family=Nunito:wght@300;400;600;700&family=Space+Grotesk:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,400..700;1,400..700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&family=Nunito:wght@300;400;600;700&family=Noto+Sans+Arabic:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,400..700;1,400..700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css" />
-<script src="./js/build-info.js?v=fef69ba-aafa5503"></script>
+<script src="./js/build-info.js?v=ae6b313-3694434d"></script>
 <script src="./js/fcm-config.js?v=ae083d6"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<link rel="stylesheet" href="./css/styles.css?v=fef69ba-aafa5503">
+<link rel="stylesheet" href="./css/styles.css?v=ae6b313-3694434d">
 </head>
 <body>
 
@@ -40,43 +40,43 @@
   <div class="login-card">
     <div class="login-icon">⚙</div>
     <div class="login-title">AP <span>TRACKER</span></div>
-    <div class="login-sub">Sign in to log and track issues</div>
+    <div class="login-sub" data-i18n="login.subtitle">Sign in to log and track issues</div>
     <div id="google-signin-btn" class="google-btn-container" style="display:flex; justify-content:center; width:100%; min-height:44px; margin-top:10px;"></div>
-    <button class="demo-login-btn" id="demo-login-btn" type="button">Open Demo Plant</button>
+    <button class="demo-login-btn" id="demo-login-btn" type="button" data-i18n="login.demo">Open Demo Plant</button>
   </div>
 </div>
 
 <div class="modal-overlay profile-onboarding-overlay" id="profile-onboarding-modal">
   <div class="modal profile-onboarding-modal" role="dialog" aria-modal="true" aria-labelledby="profile-onboarding-title">
-    <div class="modal-kicker">Profile setup</div>
-    <div class="modal-title" id="profile-onboarding-title">Request plant access</div>
-    <div class="modal-subtitle">Confirm your identity and choose the plants you need. An admin will review and approve access.</div>
+    <div class="modal-kicker" data-i18n="onboarding.kicker">Profile setup</div>
+    <div class="modal-title" id="profile-onboarding-title" data-i18n="onboarding.title">Request plant access</div>
+    <div class="modal-subtitle" data-i18n="onboarding.subtitle">Confirm your identity and choose the plants you need. An admin will review and approve access.</div>
 
     <label class="onboarding-field">
-      <span>Full name</span>
-      <input type="text" id="profile-onboarding-full-name" autocomplete="name" placeholder="First and last name">
+      <span data-i18n="onboarding.fullName">Full name</span>
+      <input type="text" id="profile-onboarding-full-name" autocomplete="name" placeholder="First and last name" data-i18n-placeholder="onboarding.fullNamePlaceholder">
     </label>
 
     <label class="onboarding-field">
-      <span>SSO number</span>
-      <input type="text" id="profile-onboarding-sso" inputmode="numeric" autocomplete="off" placeholder="Employee SSO">
+      <span data-i18n="onboarding.sso">SSO number</span>
+      <input type="text" id="profile-onboarding-sso" inputmode="numeric" autocomplete="off" placeholder="Employee SSO" data-i18n-placeholder="onboarding.ssoPlaceholder">
     </label>
 
     <div class="onboarding-field">
-      <span>Plants</span>
+      <span data-i18n="onboarding.plants">Plants</span>
       <div class="onboarding-plant-picker" id="profile-onboarding-plant-picker">
         <button class="onboarding-plant-toggle" id="profile-onboarding-plant-toggle" type="button" aria-haspopup="listbox" aria-expanded="false">
-          <span id="profile-onboarding-plant-label">Select plants</span>
+          <span id="profile-onboarding-plant-label" data-i18n="onboarding.selectPlants">Select plants</span>
           <span aria-hidden="true">▾</span>
         </button>
         <div class="onboarding-plant-menu" id="profile-onboarding-plant-menu" role="listbox" aria-multiselectable="true"></div>
       </div>
-      <div class="onboarding-help">This sends an access request. It does not grant access until an admin approves it.</div>
+      <div class="onboarding-help" data-i18n="onboarding.help">This sends an access request. It does not grant access until an admin approves it.</div>
     </div>
 
     <div class="onboarding-error" id="profile-onboarding-error" role="alert"></div>
     <div class="modal-actions">
-      <button class="btn btn-primary" id="profile-onboarding-submit" type="button">Continue</button>
+      <button class="btn btn-primary" id="profile-onboarding-submit" type="button" data-i18n="onboarding.continue">Continue</button>
     </div>
   </div>
 </div>
@@ -86,12 +86,12 @@
   <div id="sync-banner" class="visible">
     <div class="sync-dot" id="sync-dot"></div>
     <span id="sync-text" aria-live="polite">Connecting…</span>
-    <span id="app-version-indicator" class="app-version-indicator" title="Current commit version">rev: fef69ba</span>
+    <span id="app-version-indicator" class="app-version-indicator" title="Current commit version">rev: ae6b313</span>
     <span id="firestore-io-indicator" class="firestore-io-indicator" title="Estimated Firestore operations for this session">R:0 W:0</span>
   </div>
 
   <header>
-    <button class="logo" id="home-logo-btn" type="button" data-shell-action="go-home" aria-label="Home" title="Home">
+    <button class="logo" id="home-logo-btn" type="button" data-shell-action="go-home" aria-label="Home" title="Home" data-i18n-aria-label="nav.home" data-i18n-title="nav.home">
       <div class="logo-icon">⚙</div>
       <div class="logo-text">AP-<span>TRACKER</span></div>
     </button>
@@ -207,7 +207,7 @@
         </div>
 
         <div class="user-dropdown-section ud-plant-section">
-          <div class="user-dropdown-section-label">Current Plant</div>
+          <div class="user-dropdown-section-label" data-i18n="nav.currentPlant">Current Plant</div>
           <div class="plant-switcher-wrap" id="plant-switcher-wrap">
             <button class="plant-switcher-btn" id="plant-switcher-btn" data-shell-action="toggle-plant-dropdown">
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;opacity:0.7;"><path d="M2 3h12v10H2z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M6 3V1h4v2" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M2 7h12" stroke="currentColor" stroke-width="1.3"/></svg>
@@ -219,24 +219,34 @@
         </div>
 
         <div class="user-dropdown-section">
-          <div class="user-dropdown-section-label">Tools</div>
+          <div class="user-dropdown-section-label" data-i18n="nav.tools">Tools</div>
           <button class="user-dropdown-item" id="messages-btn-menu" data-messages-trigger="true" type="button" data-shell-action="open-messages">
             <span class="ud-item-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 2h10a1 1 0 011 1v8a1 1 0 01-1 1H5l-3 2V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg></span>
-            Messages
+            <span data-i18n="nav.messages">Messages</span>
             <span class="msg-btn-badge" data-messages-badge style="display:none;">0</span>
           </button>
           <button class="user-dropdown-item" id="analytics-btn-menu" type="button" data-shell-action="open-analytics">
             <span class="ud-item-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 14h12M4 11V5M8 11V3M12 11V7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-            Analytics
+            <span data-i18n="nav.analytics">Analytics</span>
           </button>
           <button class="user-dropdown-item" id="role-prefs-btn" type="button" data-shell-action="open-role-prefs">
             <span class="ud-item-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2.2 13 4.5v3.2c0 3-2 5.3-5 6.1-3-.8-5-3.1-5-6.1V4.5l5-2.3Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M6 8.1 7.3 9.4 10.2 6.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-            Alert Categories
+            <span data-i18n="nav.alertCategories">Alert Categories</span>
           </button>
         </div>
 
+        <div class="user-dropdown-section ud-language-section">
+          <label class="user-dropdown-section-label" for="language-select" data-i18n="language.label">Language</label>
+          <select class="language-select" id="language-select" aria-label="Language" data-i18n-aria-label="language.label">
+            <option value="en" data-language-option="en">English</option>
+            <option value="fr" data-language-option="fr">Français</option>
+            <option value="es" data-language-option="es">Español</option>
+            <option value="ar" data-language-option="ar">العربية</option>
+          </select>
+        </div>
+
         <div class="user-dropdown-section ud-appearance-section">
-          <div class="user-dropdown-section-label">Appearance</div>
+          <div class="user-dropdown-section-label" data-i18n="nav.appearance">Appearance</div>
           <div class="ud-toggle-row">
             <span class="ud-item-icon" id="ud-mode-icon">
               <svg id="ud-moon-icon" width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M12.5 9.5A6 6 0 0 1 5.5 2.5a6 6 0 1 0 7 7Z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -275,14 +285,14 @@
         </div>
 
         <div class="user-dropdown-section">
-          <div class="user-dropdown-section-label">Admin & Help</div>
+          <div class="user-dropdown-section-label" data-i18n="nav.adminHelp">Admin & Help</div>
           <button class="user-dropdown-item" id="admin-page-btn" style="display:none">
             <span class="ud-item-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 1L10 5H14L11 8L12.5 12L8 9.5L3.5 12L5 8L2 5H6L8 1Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" fill="none"/></svg></span>
-            Admin Panel
+            <span data-i18n="nav.adminPanel">Admin Panel</span>
           </button>
           <button class="user-dropdown-item" id="tutorial-btn" data-shell-action="open-tutorial">
             <span class="ud-item-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.3"/><path d="M8 7v4M8 5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>
-            Tutorial
+            <span data-i18n="nav.tutorial">Tutorial</span>
           </button>
         </div>
 
@@ -301,7 +311,7 @@
         <div class="user-dropdown-section ud-session-section">
           <button class="user-dropdown-item danger" id="signout-btn">
             <span class="ud-item-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 2H3a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3M11 11l3-3-3-3M14 8H6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-            Sign Out
+            <span data-i18n="nav.signOut">Sign Out</span>
           </button>
         </div>
       </div>
@@ -316,14 +326,14 @@
           <path d="M1 7h14" stroke="currentColor" stroke-width="1.4"/>
           <path d="M5 1v4M11 1v4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
         </svg>
-        <span id="period-trigger-label">Date</span>
+        <span id="period-trigger-label" data-i18n="common.date">Date</span>
       </div>
       <div class="scope-toggle period-toggle-group">
-        <button class="scope-btn active" id="period-today"  data-shell-action="set-period" data-shell-value="today">Today</button>
+        <button class="scope-btn active" id="period-today"  data-shell-action="set-period" data-shell-value="today" data-i18n="common.today">Today</button>
         <button class="scope-btn"        id="period-24h"    data-shell-action="set-period" data-shell-value="24h">24h</button>
-        <button class="scope-btn"        id="period-week"   data-shell-action="set-period" data-shell-value="week">Week</button>
-        <button class="scope-btn"        id="period-month"  data-shell-action="set-period" data-shell-value="month">Month</button>
-        <button class="scope-btn"        id="period-all"    data-shell-action="set-period" data-shell-value="all">All</button>
+        <button class="scope-btn"        id="period-week"   data-shell-action="set-period" data-shell-value="week" data-i18n="common.week">Week</button>
+        <button class="scope-btn"        id="period-month"  data-shell-action="set-period" data-shell-value="month" data-i18n="common.month">Month</button>
+        <button class="scope-btn"        id="period-all"    data-shell-action="set-period" data-shell-value="all" data-i18n="common.all">All</button>
         <button class="scope-btn cal-btn" id="period-date" type="button" title="Pick a date" aria-haspopup="dialog" aria-expanded="false" data-shell-action="toggle-schedule-calendar">
           <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="pointer-events:none;flex-shrink:0;opacity:0.7;">
             <rect x="1" y="3" width="14" height="12" rx="2" stroke="currentColor" stroke-width="1.4"/>
@@ -357,14 +367,14 @@
       </div>
     </div>
     <div class="scope-toggle">
-      <button class="scope-btn active" id="scope-all"  data-shell-action="set-scope" data-shell-value="all">All Issues</button>
-      <button class="scope-btn"        id="scope-mine" data-shell-action="set-scope" data-shell-value="mine">My Issues</button>
+      <button class="scope-btn active" id="scope-all"  data-shell-action="set-scope" data-shell-value="all" data-i18n="filter.allIssues">All Issues</button>
+      <button class="scope-btn"        id="scope-mine" data-shell-action="set-scope" data-shell-value="mine" data-i18n="filter.myIssues">My Issues</button>
     </div>
     <button class="filter-toggle-btn" id="filter-toggle-btn" data-shell-action="toggle-filter-drawer">
       <svg style="width:13px;height:13px;flex-shrink:0;" viewBox="0 0 16 16" fill="none">
         <path d="M2 4h12M4 8h8M6 12h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
       </svg>
-      Filters
+      <span data-i18n="filter.filters">Filters</span>
       <span class="filter-arrow">
         <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
           <path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -379,7 +389,7 @@
       <div class="shift-filter-row">
         <div class="shift-dropdown-wrap" id="shift-dropdown-wrap">
           <button class="shift-filter-pill shift-dropdown-btn active" id="shift-dropdown-btn" type="button" data-shell-action="toggle-shift-dropdown" aria-haspopup="menu" aria-expanded="false" aria-controls="shift-dropdown">
-            <span id="shift-filter-label">All Shifts</span>
+            <span id="shift-filter-label" data-i18n="filter.allShifts">All Shifts</span>
             <span class="shift-dropdown-arrow" aria-hidden="true">
               <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
                 <path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -387,51 +397,51 @@
             </span>
           </button>
           <div class="sort-dropdown shift-dropdown" id="shift-dropdown" role="menu" aria-label="Shift filter">
-            <button class="sort-opt active" type="button" data-shell-action="set-shift-filter" data-shell-value="all" role="menuitem"><span class="sort-opt-check">✓</span>All Shifts</button>
-            <button class="sort-opt" type="button" data-shell-action="set-shift-filter" data-shell-value="first" role="menuitem"><span class="sort-opt-check"></span>1st Shift</button>
-            <button class="sort-opt" type="button" data-shell-action="set-shift-filter" data-shell-value="second" role="menuitem"><span class="sort-opt-check"></span>2nd Shift</button>
-            <button class="sort-opt" type="button" data-shell-action="set-shift-filter" data-shell-value="third" role="menuitem"><span class="sort-opt-check"></span>3rd Shift</button>
+            <button class="sort-opt active" type="button" data-shell-action="set-shift-filter" data-shell-value="all" role="menuitem"><span class="sort-opt-check">✓</span><span data-i18n="filter.allShifts">All Shifts</span></button>
+            <button class="sort-opt" type="button" data-shell-action="set-shift-filter" data-shell-value="first" role="menuitem"><span class="sort-opt-check"></span><span data-i18n="filter.firstShift">1st Shift</span></button>
+            <button class="sort-opt" type="button" data-shell-action="set-shift-filter" data-shell-value="second" role="menuitem"><span class="sort-opt-check"></span><span data-i18n="filter.secondShift">2nd Shift</span></button>
+            <button class="sort-opt" type="button" data-shell-action="set-shift-filter" data-shell-value="third" role="menuitem"><span class="sort-opt-check"></span><span data-i18n="filter.thirdShift">3rd Shift</span></button>
           </div>
         </div>
-        <button class="shift-filter-pill filter-clear-pill" type="button" data-shell-action="clear-all-filters">Clear</button>
+        <button class="shift-filter-pill filter-clear-pill" type="button" data-shell-action="clear-all-filters" data-i18n="common.clear">Clear</button>
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:6px;" id="stat-pills-row">
         <div class="stat-pill" id="pill-open"            data-shell-action="toggle-stat-filter" data-shell-value="open">           <div class="dot" style="background:var(--color-danger, var(--red))"></div>      <span id="stat-open">0 Open</span></div>
         <div class="stat-pill" id="pill-resolved"        data-shell-action="toggle-stat-filter" data-shell-value="resolved">       <div class="dot" style="background:var(--color-success, var(--green))"></div>    <span id="stat-resolved">0 Resolved</span></div>
       </div>
       <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;">
-        <select id="machine-filter"><option value="">All Machines</option></select>
+        <select id="machine-filter"><option value="" data-i18n="filter.allMachines">All Machines</option></select>
         <select id="status-filter">
-          <option value="">All Status</option>
+          <option value="" data-i18n="filter.allStatus">All Status</option>
         </select>
         <select id="solution-filter" aria-label="Solution filter">
-          <option value="">All Solutions</option>
-          <option value="shared">Has User Solution</option>
+          <option value="" data-i18n="filter.allSolutions">All Solutions</option>
+          <option value="shared" data-i18n="filter.hasSolution">Has User Solution</option>
         </select>
         <select id="sort-select">
-          <option value="newest">Newest First</option>
-          <option value="oldest">Oldest First</option>
-          <option value="machine">By Machine</option>
-          <option value="status">By Status</option>
-          <option value="longest-open">Longest Open</option>
-          <option value="submitter">By Submitter</option>
-          <option value="most-updates">Most Updates</option>
-          <option value="recently-updated">Recently Updated</option>
+          <option value="newest" data-i18n="filter.newest">Newest First</option>
+          <option value="oldest" data-i18n="filter.oldest">Oldest First</option>
+          <option value="machine" data-i18n="filter.byMachine">By Machine</option>
+          <option value="status" data-i18n="filter.byStatus">By Status</option>
+          <option value="longest-open" data-i18n="filter.longestOpen">Longest Open</option>
+          <option value="submitter" data-i18n="filter.bySubmitter">By Submitter</option>
+          <option value="most-updates" data-i18n="filter.mostUpdates">Most Updates</option>
+          <option value="recently-updated" data-i18n="filter.recentlyUpdated">Recently Updated</option>
         </select>
       </div>
       <div class="search-wrap">
         <span class="search-icon">🔍</span>
-        <input class="search-box" type="text" id="search-input" placeholder="Search issues…">
+        <input class="search-box" type="text" id="search-input" placeholder="Search issues…" data-i18n-placeholder="filter.searchPlaceholder">
       </div>
     </div>
   </div>
 
   <div class="section-header">
-    <span id="floor-map-label">FLOOR MAP</span>
+    <span id="floor-map-label" data-i18n="floor.title">FLOOR MAP</span>
     <div class="map-controls">
       <div class="map-mode-toggle">
-        <button class="map-mode-btn active-log" id="mode-log" data-shell-action="set-map-mode" data-shell-value="log">Map</button>
-        <button class="map-mode-btn" id="mode-hist" data-shell-action="set-map-mode" data-shell-value="hist">Timeline</button>
+        <button class="map-mode-btn active-log" id="mode-log" data-shell-action="set-map-mode" data-shell-value="log" data-i18n="floor.map">Map</button>
+        <button class="map-mode-btn" id="mode-hist" data-shell-action="set-map-mode" data-shell-value="hist" data-i18n="floor.timeline">Timeline</button>
       </div>
     </div>
   </div>
@@ -444,25 +454,25 @@
   <div class="issues-section">
     <div class="issues-header">
       <div class="issues-title-wrap">
-        <div class="issues-title">ISSUE LOG</div>
+        <div class="issues-title" data-i18n="issues.title">ISSUE LOG</div>
         <div class="issue-count" id="issue-count">—</div>
       </div>
       <div class="issues-header-controls">
         <div class="issue-view-toggle" role="group" aria-label="Issue log view">
-          <button class="issue-view-btn active" id="issue-view-cards" type="button" data-shell-action="set-issue-view" data-shell-value="cards" aria-pressed="true">Cards</button>
-          <button class="issue-view-btn" id="issue-view-list" type="button" data-shell-action="set-issue-view" data-shell-value="list" aria-pressed="false">List</button>
+          <button class="issue-view-btn active" id="issue-view-cards" type="button" data-shell-action="set-issue-view" data-shell-value="cards" aria-pressed="true" data-i18n="issues.cards">Cards</button>
+          <button class="issue-view-btn" id="issue-view-list" type="button" data-shell-action="set-issue-view" data-shell-value="list" aria-pressed="false" data-i18n="issues.list">List</button>
         </div>
         <div class="scope-toggle" id="issue-scope-toggle">
-          <button class="scope-btn" id="scope-view-all" data-shell-action="set-issue-row-scope" data-shell-value="all"><span class="scope-label-wide">View All</span><span class="scope-label-phone">All</span></button>
-          <button class="scope-btn active" id="scope-view-active" data-shell-action="set-issue-row-scope" data-shell-value="active"><span class="scope-label-wide">Active Rows</span><span class="scope-label-phone">Active</span></button>
-          <button class="scope-btn" id="scope-view-resolved" data-shell-action="set-issue-row-scope" data-shell-value="resolved">Resolved</button>
+          <button class="scope-btn" id="scope-view-all" data-shell-action="set-issue-row-scope" data-shell-value="all"><span class="scope-label-wide" data-i18n="issues.viewAll">View All</span><span class="scope-label-phone" data-i18n="common.all">All</span></button>
+          <button class="scope-btn active" id="scope-view-active" data-shell-action="set-issue-row-scope" data-shell-value="active"><span class="scope-label-wide" data-i18n="issues.activeRows">Active Rows</span><span class="scope-label-phone" data-i18n="issues.active">Active</span></button>
+          <button class="scope-btn" id="scope-view-resolved" data-shell-action="set-issue-row-scope" data-shell-value="resolved" data-i18n="issues.resolved">Resolved</button>
         </div>
         <div class="sort-dropdown-wrap" id="sort-dropdown-wrap">
-          <button class="sort-dropdown-btn" id="sort-dropdown-btn" data-shell-action="toggle-sort-dropdown" aria-label="Sort issues" aria-expanded="false">
+          <button class="sort-dropdown-btn" id="sort-dropdown-btn" data-shell-action="toggle-sort-dropdown" aria-label="Sort issues" aria-expanded="false" data-i18n-aria-label="issues.sort">
             <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;opacity:0.7;">
               <path d="M2 4h12M4 8h8M6 12h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
             </svg>
-            <span id="sort-label">Newest</span>
+            <span id="sort-label" data-i18n="issues.newest">Newest</span>
             <svg class="sort-chevron" width="10" height="10" viewBox="0 0 12 12" fill="none">
               <path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
@@ -472,7 +482,7 @@
         <div class="sort-dropdown-wrap" id="export-dropdown-wrap">
           <button class="sort-dropdown-btn" id="export-menu-btn" data-shell-action="toggle-export-dropdown" style="gap:4px;">
             <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;opacity:0.7;"><path d="M8 2v8M5 7l3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 12v1a1 1 0 001 1h8a1 1 0 001-1v-1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-            Export
+            <span data-i18n="issues.export">Export</span>
             <svg class="sort-chevron" width="10" height="10" viewBox="0 0 12 12" fill="none">
               <path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
@@ -489,18 +499,18 @@
       </div>
     </div>
     <div class="machine-breadcrumb" id="machine-breadcrumb">
-      <span class="breadcrumb-label">Showing:</span>
+      <span class="breadcrumb-label" data-i18n="issues.showing">Showing:</span>
       <span class="breadcrumb-machine" id="breadcrumb-machine">Press —</span>
       <button class="breadcrumb-clear" id="breadcrumb-clear" data-shell-action="clear-machine-breadcrumb">✕</button>
     </div>
     <div class="issues-list" id="issues-list">
-      <div class="empty-state"><div class="empty-state-icon">🔄</div><div class="empty-state-text">Connecting…</div></div>
+      <div class="empty-state"><div class="empty-state-icon">🔄</div><div class="empty-state-text" data-i18n="issues.connecting">Connecting…</div></div>
     </div>
   </div>
 
   <footer class="app-footer">© 2026 AP-Tracker. All rights reserved.</footer>
 
-  <button class="report-fab" id="report-fab" type="button" data-shell-action="open-report-composer" aria-label="Report an issue">
+  <button class="report-fab" id="report-fab" type="button" data-shell-action="open-report-composer" aria-label="Report an issue" data-i18n-aria-label="issues.report">
     <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
       <path d="M10 4v12M4 10h12" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
     </svg>
@@ -516,17 +526,17 @@
         <button class="tool-modal-nav-btn tool-modal-nav-prev" type="button" data-shell-action="cycle-tool-modal" data-shell-value="prev" aria-label="Previous tool" title="Previous tool">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M9.5 3.5L5 8l4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
-        <div class="tool-modal-nav-title"><span id="add-modal-title-action">Log Issue</span> — <span class="modal-machine" id="modal-machine-name"></span></div>
+        <div class="tool-modal-nav-title"><span id="add-modal-title-action" data-i18n="issue.logTitle">Log Issue</span> — <span class="modal-machine" id="modal-machine-name" dir="ltr"></span></div>
         <button class="tool-modal-nav-btn tool-modal-nav-next" type="button" data-shell-action="cycle-tool-modal" data-shell-value="next" aria-label="Next tool" title="Next tool">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6.5 3.5L11 8l-4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
       </div>
       
       <div class="issue-press-row">
-        <label id="issue-machine-label" for="issue-machine-trigger">Press</label>
+        <label id="issue-machine-label" for="issue-machine-trigger" data-i18n="issue.press">Press</label>
         <div class="issue-machine-picker" id="issue-machine-picker">
           <button class="issue-machine-trigger" id="issue-machine-trigger" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="issue-machine-popup">
-            <span id="issue-machine-trigger-label">Select a press</span>
+            <span id="issue-machine-trigger-label" data-i18n="issue.selectPress">Select a press</span>
             <span class="issue-machine-trigger-chevron" aria-hidden="true">⌄</span>
           </button>
           <div class="issue-machine-popup" id="issue-machine-popup" hidden>
@@ -535,28 +545,28 @@
           </div>
         </div>
         <select id="issue-machine-select" class="issue-machine-select issue-machine-select-native" tabindex="-1" aria-hidden="true">
-          <option value="">Select a press</option>
+          <option value="" data-i18n="issue.selectPress">Select a press</option>
         </select>
       </div>
       
-      <label id="issue-note-label">What happened?</label>
-      <textarea id="issue-note" placeholder="Example: Hydraulic leak at press startup" rows="3"></textarea>
-      <label>Photos <span style="color:var(--color-text-subtle, var(--text3));font-size:9px;letter-spacing:0;text-transform:none;font-family:'Nunito',sans-serif">(optional)</span></label>
-      <div class="issue-attach-hint">Tap once for camera or library. Photos preview right here.</div>
+      <label id="issue-note-label" data-i18n="issue.whatHappened">What happened?</label>
+      <textarea id="issue-note" placeholder="Example: Hydraulic leak at press startup" rows="3" data-i18n-placeholder="issue.descriptionPlaceholder" dir="auto"></textarea>
+      <label><span data-i18n="issue.photos">Photos</span> <span style="color:var(--color-text-subtle, var(--text3));font-size:9px;letter-spacing:0;text-transform:none;font-family:'Nunito',sans-serif">(<span data-i18n="common.optional">optional</span>)</span></label>
+      <div class="issue-attach-hint" data-i18n="issue.photosHint">Tap once for camera or library. Photos preview right here.</div>
       <div class="photo-stack">
         <div class="photo-btn-row">
-          <button class="photo-pick-btn photo-add-btn" id="log-photo-btn" type="button">➕ Add Photo</button>
+          <button class="photo-pick-btn photo-add-btn" id="log-photo-btn" type="button">➕ <span data-i18n="issue.addPhoto">Add Photo</span></button>
         </div>
         <div class="photo-source-row" id="log-photo-source-row">
-          <button class="photo-pick-btn photo-source-btn" id="log-camera-btn" type="button">📷 Camera</button>
-          <button class="photo-pick-btn photo-source-btn" id="log-library-btn" type="button">🖼️ Library</button>
+          <button class="photo-pick-btn photo-source-btn" id="log-camera-btn" type="button">📷 <span data-i18n="issue.camera">Camera</span></button>
+          <button class="photo-pick-btn photo-source-btn" id="log-library-btn" type="button">🖼️ <span data-i18n="issue.library">Library</span></button>
         </div>
       </div>
       <div style="margin-bottom:4px">
-        <label style="margin-bottom:6px">Status <span style="color:var(--color-text-subtle, var(--text3));font-size:9px;letter-spacing:0;text-transform:none;font-family:'Nunito',sans-serif">(optional — defaults to Open)</span></label>
+        <label style="margin-bottom:6px"><span data-i18n="issue.status">Status</span> <span style="color:var(--color-text-subtle, var(--text3));font-size:9px;letter-spacing:0;text-transform:none;font-family:'Nunito',sans-serif">(<span data-i18n="issue.statusOptional">optional — defaults to Open</span>)</span></label>
         <div class="log-cat-selected" id="log-cat-selected">
           <span class="log-cat-pill" id="log-cat-pill"></span>
-          <button class="log-cat-clear" id="log-cat-clear">✕ clear</button>
+          <button class="log-cat-clear" id="log-cat-clear">✕ <span data-i18n="issue.clearStatus">clear</span></button>
         </div>
         <div class="log-cat-all-row" id="log-cat-all-row"></div>
         <div class="search-bar-row" id="search-bar-row"></div>
@@ -577,8 +587,8 @@
       <input type="file" id="log-library-input" accept="image/*" multiple style="display:none">
       <div class="photo-previews" id="photo-previews"></div>
       <div class="modal-actions" style="margin-top:auto; padding-top:16px;">
-        <button class="btn btn-ghost" id="cancel-btn" onclick="closeModal()">Cancel</button>
-        <button class="btn btn-primary" id="submit-btn" onclick="submitIssue()">⚠ Log Issue</button>
+        <button class="btn btn-ghost" id="cancel-btn" onclick="closeModal()" data-i18n="common.cancel">Cancel</button>
+        <button class="btn btn-primary" id="submit-btn" onclick="submitIssue()">⚠ <span data-i18n="issue.submit">Log Issue</span></button>
       </div>
     </div>
   </div>
@@ -590,30 +600,30 @@
       <div class="subcategory-sheet-handle"></div>
       <div class="subcategory-sheet-head">
         <div class="subcategory-sheet-copy">
-          <div class="subcategory-sheet-kicker">Subcategory</div>
-          <div class="subcategory-sheet-title" id="subcategory-sheet-title">Choose a subcategory</div>
-          <div class="subcategory-sheet-subtitle" id="subcategory-sheet-subtitle">Pick the closest match to log faster.</div>
+          <div class="subcategory-sheet-kicker" data-i18n="issue.subcategory">Subcategory</div>
+          <div class="subcategory-sheet-title" id="subcategory-sheet-title" data-i18n="issue.chooseSubcategory">Choose a subcategory</div>
+          <div class="subcategory-sheet-subtitle" id="subcategory-sheet-subtitle" data-i18n="issue.subcategoryHint">Pick the closest match to log faster.</div>
         </div>
         <button class="subcategory-sheet-close" type="button" id="subcategory-sheet-close" aria-label="Close subcategory picker">✕</button>
       </div>
       <div class="subcategory-sheet-section" style="margin-bottom: 0;">
-        <div class="subcategory-sheet-label">Parent status</div>
+        <div class="subcategory-sheet-label" data-i18n="issue.parentStatus">Parent status</div>
         <div class="subcategory-parent-row" id="subcategory-parent-row"></div>
       </div>
     </div>
     <div class="subcategory-sheet-body">
       <div class="subcategory-sheet-section" style="margin-bottom: 0;">
-        <div class="subcategory-sheet-label">Subcategories</div>
+        <div class="subcategory-sheet-label" data-i18n="issue.subcategories">Subcategories</div>
         <div class="subcategory-grid" id="subcategory-grid"></div>
       </div>
       <div class="subcategory-sheet-section response-path-section" id="subcategory-response-path-section" hidden>
-        <div class="subcategory-sheet-label">Suggested response path</div>
+        <div class="subcategory-sheet-label" data-i18n="issue.suggestedPath">Suggested response path</div>
         <div class="response-path-list" id="subcategory-response-path-list"></div>
       </div>
     </div>
     <div class="subcategory-sheet-footer">
-      <button class="btn btn-ghost subcategory-sheet-secondary" id="subcategory-sheet-skip" type="button">Use no subcategory</button>
-      <button class="btn btn-primary subcategory-sheet-primary" id="subcategory-sheet-apply" type="button">Use Subcategory</button>
+      <button class="btn btn-ghost subcategory-sheet-secondary" id="subcategory-sheet-skip" type="button" data-i18n="issue.noSubcategory">Use no subcategory</button>
+      <button class="btn btn-primary subcategory-sheet-primary" id="subcategory-sheet-apply" type="button" data-i18n="issue.useSubcategory">Use Subcategory</button>
     </div>
   </div>
 </div>
@@ -665,9 +675,9 @@
 <!-- EDIT ISSUE MODAL -->
 <div class="modal-overlay" id="edit-modal">
   <div class="modal">
-    <div class="modal-title">✏️ Edit Issue — <span class="modal-machine" id="edit-machine-name"></span></div>
+    <div class="modal-title">✏️ <span data-i18n="issue.editTitle">Edit Issue</span> — <span class="modal-machine" id="edit-machine-name"></span></div>
     <div style="margin-bottom:14px">
-      <label for="edit-machine-select" style="margin-bottom:5px">Press</label>
+      <label for="edit-machine-select" style="margin-bottom:5px" data-i18n="issue.press">Press</label>
       <select id="edit-machine-select" style="background:var(--color-surface-raised, var(--bg3));border:1px solid var(--color-border, var(--border));border-radius:8px;padding:7px 10px;color:var(--color-text, var(--text));font-family:'Nunito',sans-serif;font-size:13px;outline:none;width:100%;"></select>
     </div>
     <div style="margin-bottom:14px">
@@ -700,9 +710,9 @@
         <option value="120">2 hours</option>
       </select>
     </div>
-    <label>Issue Description</label>
-    <textarea id="edit-note" placeholder="Describe the issue…"></textarea>
-    <label>Photos</label>
+    <label data-i18n="issue.description">Issue Description</label>
+    <textarea id="edit-note" placeholder="Describe the issue…" dir="auto"></textarea>
+    <label data-i18n="issue.photos">Photos</label>
     <div class="photo-upload-area" id="edit-drop-zone">
       <input type="file" id="edit-photo-input" accept="image/*" multiple>
       <input type="file" id="edit-photo-camera-input" accept="image/*" capture="environment" hidden>
@@ -712,8 +722,8 @@
     </div>
     <div class="photo-previews" id="edit-photo-previews"></div>
     <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeEditModal()">Cancel</button>
-      <button class="btn btn-primary" id="edit-submit-btn" onclick="saveEdit()">💾 Save Changes</button>
+      <button class="btn btn-ghost" onclick="closeEditModal()" data-i18n="common.cancel">Cancel</button>
+      <button class="btn btn-primary" id="edit-submit-btn" onclick="saveEdit()">💾 <span data-i18n="issue.saveChanges">Save Changes</span></button>
     </div>
   </div>
 </div>
@@ -721,13 +731,13 @@
 <!-- RESOLVE MODAL -->
 <div class="modal-overlay" id="resolve-modal">
   <div class="modal">
-    <div class="modal-title">✅ Resolve Issue</div>
+    <div class="modal-title">✅ <span data-i18n="issue.resolveTitle">Resolve Issue</span></div>
     <div class="modal-subtitle" id="resolve-machine-label"></div>
-    <label>How was this resolved?</label>
-    <textarea id="resolve-note" placeholder="Describe how the issue was addressed…"></textarea>
+    <label data-i18n="issue.resolvePrompt">How was this resolved?</label>
+    <textarea id="resolve-note" placeholder="Describe how the issue was addressed…" data-i18n-placeholder="issue.resolvePlaceholder" dir="auto"></textarea>
     <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeResolveModal()">Cancel</button>
-      <button class="btn btn-success" id="resolve-confirm-btn" onclick="confirmResolve()">Mark Resolved</button>
+      <button class="btn btn-ghost" onclick="closeResolveModal()" data-i18n="common.cancel">Cancel</button>
+      <button class="btn btn-success" id="resolve-confirm-btn" onclick="confirmResolve()" data-i18n="issue.markResolved">Mark Resolved</button>
     </div>
   </div>
 </div>
@@ -752,13 +762,13 @@
 <!-- REOPEN MODAL -->
 <div class="modal-overlay" id="reopen-modal">
   <div class="modal">
-    <div class="modal-title">🔄 Re-open Issue</div>
+    <div class="modal-title">🔄 <span data-i18n="issue.reopenTitle">Re-open Issue</span></div>
     <div class="modal-subtitle" id="reopen-machine-label"></div>
-    <label>Reason for re-opening (optional)</label>
-    <textarea id="reopen-note" placeholder="e.g. Issue recurred after adjustment…"></textarea>
+    <label data-i18n="issue.reopenReason">Reason for re-opening (optional)</label>
+    <textarea id="reopen-note" placeholder="e.g. Issue recurred after adjustment…" data-i18n-placeholder="issue.reopenPlaceholder" dir="auto"></textarea>
     <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeReopenModal()">Cancel</button>
-      <button class="btn btn-blue" id="reopen-confirm-btn" onclick="confirmReopen()">Re-open Issue</button>
+      <button class="btn btn-ghost" onclick="closeReopenModal()" data-i18n="common.cancel">Cancel</button>
+      <button class="btn btn-blue" id="reopen-confirm-btn" onclick="confirmReopen()" data-i18n="issue.reopenAction">Re-open Issue</button>
     </div>
   </div>
 </div>
@@ -2005,7 +2015,7 @@
   </div>
 </div>
 
-<script type="module" src="./js/app.js?v=fef69ba-aafa5503"></script>
+<script type="module" src="./js/app.js?v=ae6b313-3694434d"></script>
 
 <!-- MASCOT CHARACTER CARD POPOVER -->
 <div class="mascot-popover-backdrop" id="mascot-popover-backdrop" onclick="if(event.target===this)closeMascotPopover()">
